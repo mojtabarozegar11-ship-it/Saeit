@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateSceneSnapshot } from '../scripts/living_cities_canvas_gate.mjs';
+import { evaluateSceneSnapshot, compareEditionSnapshots } from '../scripts/living_cities_canvas_gate.mjs';
 
 const healthy = {
   hasOriginalGameTitle: true,
@@ -36,4 +36,22 @@ test('failure is explicit when the build section is missing', () => {
 
 test('empty observations fail closed', () => {
   assert.deepEqual(evaluateSceneSnapshot(null), ['missing_scene_snapshot']);
+});
+
+test('two matching world editions have no feature drift', () => {
+  const edition = { languageOptions: 20, hasWorldTour: true, hasJourney: false, hasQuests: true };
+  assert.deepEqual(compareEditionSnapshots(edition, { ...edition }), []);
+});
+
+test('actual reported differences between the two original editions are visible', () => {
+  const z = { languageOptions: 0, hasWorldTour: false, hasJourney: true, hasQuests: false };
+  const m = { languageOptions: 20, hasWorldTour: true, hasJourney: false, hasQuests: true };
+  assert.deepEqual(compareEditionSnapshots(z, m).map((item) => item.field),
+    ['languageOptions', 'hasWorldTour', 'hasJourney', 'hasQuests']);
+});
+
+test('localized branding differences alone are not declared a defect', () => {
+  const core = { languageOptions: 20, hasWorldTour: true, hasJourney: false, hasQuests: true };
+  assert.deepEqual(compareEditionSnapshots({ ...core, documentTitle: 'Worlds' },
+    { ...core, documentTitle: 'Moj Coin' }), []);
 });
