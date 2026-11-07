@@ -85,7 +85,7 @@
     },
     "04": {
       "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
-      "sequence": 4,
+      "sequence": 5,
       "legacy_report_last_verified": null,
       "primary_output": "accepted playable game build"
     },
@@ -362,6 +362,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "Private DOCX/PDF uploaded; PDF 609 pages and no text-empty pages; DOCX SHA256 f3bfa372a9cf7422759e689237d8425bc2e89d7a670992b21c24c85c406fafbe; PDF SHA256 ec01c4266d7461e78d678c20c5451fc8158a75760e2159a39ba08793d2ca8881; author and legal HOLD",
       "impact": "Clarified total-harvest denominator under changing inventory; no accepted book or revenue"
+    },
+    {
+      "registry_id": "R04-0005",
+      "cycle_id": "04",
+      "run_id": "ZM50-G04-20261107T102142+0330-turn11",
+      "deliverable_key": "trx-sun-amount-strict-node-validation",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/0d7cca1b09ca821eb33327e2c7ac0ca18e115d60",
+      "acceptance_result": "Verifier code and six regression cases committed and read back; no executed CI/Django/MariaDB gate",
+      "impact": "Malformed fractional, boolean and nonpositive TRON SUN amounts now rejected in source; release remains HOLD"
     }
   ],
   "report_reservations": [],
