@@ -339,20 +339,22 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        from django.conf import settings
-        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
-            from services.mpw_trx_email_recovery import (
-                recovery_request, recovery_verify, recovery_orders, recovery_download,
-            )
-            extra = (
-                ("commerce/trx-easy/recover/", recovery_request),
-                ("commerce/trx-easy/recover/verify/", recovery_verify),
-                ("commerce/trx-easy/recover/orders/", recovery_orders),
-                ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
-            )
-            existing = {route for route, _ in rebuilt}
-            if any(route in existing for route, _ in extra):
-                raise RuntimeError("Recovery URL collision")
-            rebuilt.extend(extra)
+        # Register recovery routes on every import.  The views remain gated by
+        # MPW_GUEST_RECOVERY_EMAIL_APPROVED, so disabled mode is safe; unconditional
+        # registration prevents a Passenger import race when the feature flag is
+        # enabled after the commerce module has already been loaded.
+        from services.mpw_trx_email_recovery import (
+            recovery_request, recovery_verify, recovery_orders, recovery_download,
+        )
+        extra = (
+            ("commerce/trx-easy/recover/", recovery_request),
+            ("commerce/trx-easy/recover/verify/", recovery_verify),
+            ("commerce/trx-easy/recover/orders/", recovery_orders),
+            ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+        )
+        existing = {route for route, _ in rebuilt}
+        if any(route in existing for route, _ in extra):
+            raise RuntimeError("Recovery URL collision")
+        rebuilt.extend(extra)
         namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
