@@ -228,6 +228,69 @@ jobs:
           set -euo pipefail
           curl -fsSI -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/ | tr -d '\r' | grep -Eiq 'content-encoding: gzip'
           echo LIVE_ROOT_GZIP_PASS
+      - name: Apply guarded MojPlayWin static store fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ROOT=/home/zomorod2/mojplaywin.com
+          HT="$ROOT/.htaccess"
+          STORE="$ROOT/store"
+          test -d "$ROOT" && test ! -L "$ROOT"
+          test -f "$HT" && test ! -L "$HT"
+          if grep -Fq 'MPW_STATIC_STORE_FALLBACK_V1' "$HT"; then
+            echo MPW_STATIC_STORE_FALLBACK_ALREADY_PRESENT
+            exit 0
+          fi
+          backup="$HOME/.backups/mojplaywin-static-store/$(date +%Y%m%d-%H%M%S)"
+          install -d -m 700 "$backup"
+          cp -p "$HT" "$backup/.htaccess.before"
+          sha256sum "$HT" > "$backup/.htaccess.before.sha256"
+          if test -e "$STORE" || test -L "$STORE"; then
+            test -d "$STORE" && test ! -L "$STORE"
+            if test -e "$STORE/index.html"; then
+              cp -p "$STORE/index.html" "$backup/store-index.before"
+              sha256sum "$STORE/index.html" > "$backup/store-index.before.sha256"
+            fi
+          else
+            install -d -m 755 "$STORE"
+          fi
+          if test -e "$STORE/index.html"; then
+            grep -Fq 'MPW_STATIC_STORE_FALLBACK_V1' "$STORE/index.html" || { echo EXISTING_STORE_INDEX_NOT_OWNED; exit 1; }
+          else
+            cat > "$STORE/index.html" <<'HTML'
+          <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Digital Store | MojPlayWin</title><meta name="description" content="Original digital books and a client-ready website kit from MojPlayWin."><style>
+          :root{color-scheme:dark;--bg:#080807;--panel:#15140f;--line:#d6ad55;--text:#f5f0e4;--muted:#c5c0b4}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -10%,#3b2f16 0,transparent 45%),var(--bg);color:var(--text);font:16px/1.7 system-ui,-apple-system,Segoe UI,sans-serif}main{width:min(1180px,100%);margin:auto;padding:24px 18px 60px}nav{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 16px;border:1px solid #d6ad5580;border-radius:14px;background:#11110e}a{color:#f0cf82}h1{font-size:clamp(2.3rem,6vw,5rem);line-height:1.05;margin:56px 0 12px}h2{font-size:1.25rem;margin:0 0 8px;color:#f0cf82}p{color:var(--muted)}.lead{max-width:760px;font-size:1.08rem}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:28px}.card{display:flex;flex-direction:column;min-height:290px;padding:22px;border:1px solid #d6ad5580;border-radius:16px;background:linear-gradient(155deg,#1b1912,#0e0e0c)}.price{margin-top:auto;color:#f0cf82;font-size:1.2rem;font-weight:800}.button{display:inline-block;margin-top:14px;padding:10px 13px;border:1px solid #f0cf82;border-radius:9px;text-decoration:none;font-weight:700}.info{margin-top:24px;padding:18px;border-left:3px solid #d6ad55;background:#12120f;border-radius:8px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+          </style></head><body><main><nav><strong>MOJPLAYWIN</strong><a href="/">Home</a></nav><h1>Digital products with a clear purpose.</h1><p class="lead">Explore three original digital products. Review the details, then use the secure checkout route for a guest TRX invoice.</p><section class="grid" aria-label="MojPlayWin products"><article class="card"><h2>The Science and Practice of Chess Improvement</h2><p>English PDF · 415 pages · 84-day training plan, worksheets and game-review guidance.</p><div class="price">US $7.50</div><a class="button" href="/store/product/72/">View details</a><a class="button" href="/store/product/72/checkout/">Guest checkout with TRX</a></article><article class="card"><h2>Taniya and the Little Baker Worms</h2><p>English illustrated PDF · 40 pages · landscape-format storybook for young readers and families.</p><div class="price">US $4.00</div><a class="button" href="/store/product/225/">View details</a><a class="button" href="/store/product/225/checkout/">Guest checkout with TRX</a></article><article class="card"><h2>Atelier Interior — Client-Ready Website Kit</h2><p>Responsive HTML/CSS/JavaScript website kit with gallery, editable details and inquiry handoff.</p><div class="price">US $6.80</div><a class="button" href="/store/product/879/">View details</a><a class="button" href="/store/product/879/checkout/">Guest checkout with TRX</a></article></section><aside class="info"><strong>How payment works:</strong> enter your email, create the order-specific native TRX invoice, and send only the exact amount shown on the invoice. No wallet connection is required. The file unlocks only after server-confirmed on-chain payment.</aside><p><small>MPW_STATIC_STORE_FALLBACK_V1 · Product details, payment verification and delivery remain server-controlled.</small></p></main></body></html>
+          HTML
+            chmod 644 "$STORE/index.html"
+          fi
+          tmp="$(mktemp "$HOME/.mpw-htaccess.XXXXXX")"
+          trap 'rm -f "$tmp"' EXIT
+          cat > "$tmp" <<'RULES'
+          # MPW_STATIC_STORE_FALLBACK_V1
+          RewriteEngine On
+          RewriteCond %{REQUEST_METHOD} ^GET$
+          RewriteCond %{REQUEST_URI} ^/store/?$
+          RewriteRule ^store/?$ store/index.html [END]
+          
+          RULES
+          cat "$HT" >> "$tmp"
+          install -m 0644 "$tmp" "$HT"
+          grep -Fq 'MPW_STATIC_STORE_FALLBACK_V1' "$HT"
+          grep -Fq 'MPW_STATIC_STORE_FALLBACK_V1' "$STORE/index.html"
+          echo MPW_STATIC_STORE_FALLBACK_APPLIED backup="$backup"
+          REMOTE
+      - name: Verify MojPlayWin static store and live checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --compressed --max-time 30 https://mojplaywin.com/store/ | grep -Fq 'MPW_STATIC_STORE_FALLBACK_V1'
+          for url in https://mojplaywin.com/store/product/72/checkout/ https://mojplaywin.com/store/product/225/checkout/ https://mojplaywin.com/store/product/879/checkout/; do
+            curl -fsSL --compressed --max-time 30 "$url" | grep -Eiq 'name="email"|type="email"'
+          done
+          echo MPW_STATIC_STORE_AND_GUEST_CHECKOUT=PASS
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
