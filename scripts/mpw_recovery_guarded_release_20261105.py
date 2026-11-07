@@ -602,6 +602,34 @@ print("MPW_RECOVERY_LOCAL_RESOLVER=" + repr({"target": target, "hits": hits[:40]
         raise
     print("MPW_RECOVERY01_ACTIVE;PUBLIC_RECOVERY_ENABLED=TRUE;OUTBOUND_EMAIL=TRUE;PAYMENTS_CREATED=0;ORDERS_CREATED=0")
 
+def disable_flags(run):
+    """Fail-closed disable of recovery/email flags only."""
+    guard_host()
+    if not re.fullmatch(r"[0-9]{8,20}", run):
+        fail("INVALID_RUN_ID")
+    path = APP / FILES["settings"]
+    old = _safe_file(path).read_bytes()
+    text = old.decode("utf-8")
+    if text.count(SETTING_MARKER) != 1:
+        fail("RELEASE_SOURCE_PATCH_MISSING:settings")
+    if "MPW_GUEST_RECOVERY_ENABLED = True" not in text or "MPW_GUEST_RECOVERY_EMAIL_APPROVED = True" not in text:
+        fail("RECOVERY_FLAGS_NOT_ACTIVE")
+    new = text.replace("MPW_GUEST_RECOVERY_ENABLED = True", "MPW_GUEST_RECOVERY_ENABLED = False", 1)
+    new = new.replace("MPW_GUEST_RECOVERY_EMAIL_APPROVED = True", "MPW_GUEST_RECOVERY_EMAIL_APPROVED = False", 1).encode("utf-8")
+    folder, manifest = private_backup(run, {"settings": old}, {"settings": new})
+    try:
+        _atomic(path, new, expected=manifest["before"]["settings"])
+        restart()
+        report = db_state()
+        if report["enabled"] or report["mail"]:
+            fail("RECOVERY_FLAGS_NOT_DISABLED")
+    except BaseException:
+        restore(folder, manifest, changed=["settings"])
+        restart()
+        raise
+    print("MPW_RECOVERY01_DISABLED;PUBLIC_RECOVERY_ENABLED=FALSE;OUTBOUND_EMAIL=FALSE;PAYMENTS_CREATED=0;ORDERS_CREATED=0")
+
+
 def verify():
     guard_host()
     report = db_state()
@@ -651,6 +679,8 @@ def main(argv):
         publish(Path(argv[2]), argv[3], argv[4])
     elif len(argv) == 3 and argv[1] == "activate":
         activate(argv[2])
+    elif len(argv) == 3 and argv[1] == "disable_flags":
+        disable_flags(argv[2])
     elif len(argv) == 2 and argv[1] == "verify":
         verify()
     elif len(argv) == 3 and argv[1] == "rollback":
