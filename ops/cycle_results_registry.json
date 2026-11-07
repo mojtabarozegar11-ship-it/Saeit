@@ -43,9 +43,23 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 6,
+      "sequence": 7,
       "legacy_report_last_verified": null,
-      "primary_output": "accepted publication-ready book"
+      "primary_output": "accepted publication-ready book",
+      "zm50": {
+        "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+        "counter": 1,
+        "runs": [
+          {
+            "slot": "C01",
+            "run_id": "ZM50-B02-20261107T084319+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected dispatch versus production denominator; DOCX/PDF readback hashes verified; author/legal/scientific gates remain open"
+          }
+        ]
+      }
     },
     "03": {
       "automation_id": "6ae7484cd8a88191ba55377a41096912",
@@ -292,6 +306,16 @@
       "evidence_url": "https://docs.google.com/document/d/1ixKL_FH1DUzJi406t-GKTIk9gYJ6qpVjcZ_vFeQYuPc/edit",
       "acceptance_result": "Private Library /ZM-50/R01 holds revised 270-paragraph 5-table DOCX and 25-page PDF; displayed-cell F7 dimensional arithmetic independently recalculated; DOCX SHA256 34d54ed5b97dece84558ebc28ff10cea252d983fde850d844f48cda1fe354619; PDF SHA256 dbb4c14b921bc90674a043a532d90012356142e2738a00855b2ab7888d324872; no source-level discrepancy resolved",
       "impact": "Full private author-review files persist; reproducibility improved; no journal submission, acceptance, publication or revenue"
+    },
+    {
+      "registry_id": "R02-0007",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T084319+0330-turn11",
+      "deliverable_key": "C113-dispatch-production-denominator-boundary",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Full private 609-page DOCX/PDF uploaded, independently re-fetched, SHA256 matched; dispatch-vs-production water denominator corrected; no author approval",
+      "impact": "One material accounting interpretation correction; no accepted publication, sale or revenue"
     }
   ],
   "report_reservations": [],
