@@ -56,6 +56,7 @@ EXPECTED_GUEST_BASES = {
     "8f16a9095cee3d39c7178d0d39d99f82e89d26ff05bcaef36019398cbf89625c",
     "151feafba4ec61c171920db79691d6dfca0dc3b6aef8f0326c22628b59ac46b9",
     "5b03b156464d631b8c543932bd9022f1177794e6ec46bf6c0f2955f6a19d10f2",
+    "1740bb949311349e643adac10f524466e1bde8148a55149bc21d8016d9d55b40",
 }
 EXPECTED_LIVE_CORE_MIGRATIONS = ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"]
 MODEL_MARKER = "# MPW_RECOVERY01_MODELS_20261105"
