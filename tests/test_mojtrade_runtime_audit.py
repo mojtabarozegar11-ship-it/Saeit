@@ -41,6 +41,7 @@ class MojTradeRuntimeAuditTests(unittest.TestCase):
         observer.write_bytes(source)
         os.chmod(observer, 0o600)
         receipt = {
+            "schema": "mojtrade.vps-observer-activation-receipt.v1",
             "source_sha256": hashlib.sha256(source).hexdigest(),
             "execution": "disabled", "orders": 0,
             "publication_enabled": False,
