@@ -59,12 +59,12 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 9,
+      "sequence": 10,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 3,
+        "counter": 4,
         "runs": [
           {
             "slot": "C01",
@@ -89,6 +89,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
             "note": "Corrected cold-room event sequence and peak physical stock; full 609-page private DOCX/PDF uploaded; no author/legal/scientific acceptance"
+          },
+          {
+            "slot": "C04",
+            "run_id": "ZM50-B02-20261107T154604+0330-turn11",
+            "stage": "private-review",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Added substantive measurement-uncertainty worked exercise to complete C113 private review; 611-page DOCX/PDF and SHA256 receipt uploaded to Library; no publication authorization"
           }
         ]
       }
@@ -408,6 +416,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "8/8 mounted DOCX/PDF files read and SHA-256 inventoried; local manifest hash ec300eb36c87efdd4891e519a9b022cf09245143a18da24a6c25dbadcb3b85e2; private artifact not uploaded; manuscript not accepted",
       "impact": "Provenance and file integrity baseline for four existing manuscript versions; no publication, sale, or revenue"
+    },
+    {
+      "registry_id": "R02-0010",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T154604+0330-turn11",
+      "deliverable_key": "C113-measurement-uncertainty-worst-case-bound",
+      "stage": "private-review",
+      "evidence_url": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/B01_C113_measurement_uncertainty_receipt.json",
+      "acceptance_result": "Complete private DOCX/PDF 611 pages, zero text-empty pages; DOCX SHA256 1849aa9c1dfa7ec93510257f1e6cc5189fa722b2bd0c715929e45d715eee5bf6; PDF SHA256 7010e9226df00dfd7876936ca967ea92976f9dc011601bce13f4e5502ad6fb14; author/scientific/rights HOLD",
+      "impact": "New technical exercise on measurement tolerance and 2 kg residual; no approved sale, delivery, or revenue"
     }
   ],
   "report_reservations": [],
