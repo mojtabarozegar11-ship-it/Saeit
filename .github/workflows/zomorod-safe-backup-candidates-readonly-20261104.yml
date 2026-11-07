@@ -288,6 +288,39 @@ jobs:
               print("CPANEL_DEDUP_NO_CRON_CHANGED=1",flush=True)
           PY
 
+      - name: Remove only empty cPanel backup directories once
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import fcntl, os, stat
+          from pathlib import Path
+          root=Path.home()
+          backup=root/".backups"
+          marker=backup/".empty-directory-cleanup-20261107.done"
+          if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_EMPTY_ABORT_UNSAFE_ROOT")
+          with (root/".empty-directory-cleanup-20261107.lock").open("a+") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+              if marker.exists():
+                  print("CPANEL_EMPTY_ALREADY_APPLIED=1",flush=True)
+              else:
+                  removed=0
+                  for p in sorted((x for x in backup.rglob("*") if x.is_dir() and not x.is_symlink()), key=lambda x:len(x.parts), reverse=True):
+                      try:
+                          if any(p.iterdir()): continue
+                          p.rmdir()
+                          removed+=1
+                          print("CPANEL_EMPTY_DIR_REMOVED="+str(p.relative_to(root)),flush=True)
+                      except (OSError,FileNotFoundError): pass
+                  marker.write_text("empty directory cleanup completed 2026-11-07\\n")
+                  os.chmod(marker,0o600)
+                  print("CPANEL_EMPTY_DIR_REMOVED_COUNT="+str(removed),flush=True)
+              print("CPANEL_EMPTY_NO_SERVICE_RESTART=1",flush=True)
+              print("CPANEL_EMPTY_NO_CRON_CHANGED=1",flush=True)
+          PY
+
       - name: Remove runner-only SSH files
         if: always()
         run: |
