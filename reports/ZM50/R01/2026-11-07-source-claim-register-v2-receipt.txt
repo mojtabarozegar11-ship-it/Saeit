@@ -1,0 +1,8 @@
+ZM-50 R01 | 2026-11-07 | source claim register v2
+Source: MR-2026-001_C144_sampling-frame-corrected_AUTHOR-REVIEW.docx
+Source SHA256: 059ada839e4bf7bc0b62394c636332fc3a8a3b18a7b8188a3a479411baff7069
+Output: ZM50_R01_C144_source_claim_register_v2.csv
+Output SHA256: a8baae7bc872fc88becf12503b3ea0e7a36dd254b22577fa7774c0db1eaa449d
+6 verified paragraph-located source/author release gates; CSV parsing and source excerpt match passed.
+No journal submission, public release, email, payment, or Foundation 39 communication.
+Income verified: 0. Counter unchanged: ledger not identified independently.
