@@ -373,6 +373,19 @@ def patch_public(namespace):
                     registered = True
                     break
     if not registered:
+        # Some live revisions expose only view functions and let Django consume
+        # the module-level urlpatterns directly. Build a standard Django URL
+        # pattern list as a bounded fallback instead of failing module import.
+        from django.urls import path
+        namespace["urlpatterns"] = [
+            path("recover/", recovery_request, name="mpw_recovery_request"),
+            path("recover/verify/", recovery_verify, name="mpw_recovery_verify"),
+            path("recover/orders/", recovery_orders, name="mpw_recovery_orders"),
+            path("recover/download/<int:invoice_id>/", recovery_download,
+                 name="mpw_recovery_download"),
+        ]
+        registered = True
+    if not registered:
         raise RuntimeError("Recovery URL registry not found")
 
 def patch_commercial(namespace):
