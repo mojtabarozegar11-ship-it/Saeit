@@ -11,6 +11,17 @@ class LiveStoreRepairTests(unittest.TestCase):
         self.assertNotIn(OLD.encode(), data)
         compile(data, "synthetic-mpw-store", "exec")
 
+
+    def test_owner_comment_authority_does_not_depend_on_app_actor(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] /
+                  ".github/workflows/mpw-store-source-repair-20261107.yml").read_text()
+        self.assertIn("github.event.comment.user.login == 'mojtabarozegar11-ship-it'", source)
+        self.assertIn("github.event.comment.author_association == 'OWNER'", source)
+        self.assertIn("github.event.issue.number == 1600", source)
+        self.assertIn("github.event.comment.body == 'MPW-STORE-SURGICAL-REPAIR-20261107'", source)
+        self.assertNotIn("github.actor == ", source)
+
     def test_refuse_modified_or_ambiguous_source(self):
         original = (OLD+"\n"+OLD).encode()
         with self.assertRaisesRegex(RuntimeError, "AMBIGUOUS"):

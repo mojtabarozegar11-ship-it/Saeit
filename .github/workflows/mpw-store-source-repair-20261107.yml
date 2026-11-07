@@ -9,11 +9,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   repair:
+    # Verify GitHub's OWNER-authored comment; the event delivery actor may be the connector app.
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.ref == 'refs/heads/main' &&
       github.event_name == 'issue_comment' &&
-      github.actor == 'mojtabarozegar11-ship-it' &&
       github.event.issue.number == 1600 &&
       !github.event.issue.pull_request &&
       github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
