@@ -125,6 +125,8 @@ class PrivateAuction(models.Model):
 
 class CycleReport(models.Model):
     """Durable, staff-only result record for the C01-C50 operating ledger."""
+    DOMAIN_CHOICES = (("command", "فرمان و چرخه‌ها"), ("virtual", "سایت‌ها و کسب‌وکار مجازی"), ("physical", "شرکت و کسب‌وکار فیزیکی"))
+    domain = models.CharField(max_length=12, choices=DOMAIN_CHOICES, default="command", db_index=True)
     cycle = models.CharField(max_length=3, db_index=True)
     project_key = models.CharField(max_length=80, db_index=True)
     project_name = models.CharField(max_length=200)
@@ -147,6 +149,8 @@ class CycleReport(models.Model):
 
 
 class CycleIssue(models.Model):
+    DOMAIN_CHOICES = (("command", "فرمان و چرخه‌ها"), ("virtual", "سایت‌ها و کسب‌وکار مجازی"), ("physical", "شرکت و کسب‌وکار فیزیکی"))
+    domain = models.CharField(max_length=12, choices=DOMAIN_CHOICES, default="command", db_index=True)
     CERTAINTY_CHOICES = (("unverified", "نیازمند تأیید"), ("verified", "تأییدشده"))
     STATUS_CHOICES = (("open", "باز"), ("resolved", "رفع‌شده"))
     cycle = models.CharField(max_length=3, db_index=True)
