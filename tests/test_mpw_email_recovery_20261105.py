@@ -172,6 +172,81 @@ class RecoveryIsolationTests(TransactionTestCase):
         issued.assert_not_called()
         self.assertFalse(GuestRecoveryToken.objects.exists())
 
+    def _verification_request(self, code):
+        req = self.rf.post(module.ROOT + "verify/", {"code": code},
+                           secure=True, HTTP_HOST="mojplaywin.com",
+                           REMOTE_ADDR="192.0.2.88")
+        from django.middleware.csrf import get_token
+        req.META["CSRF_COOKIE"] = "C" * 32
+        req.COOKIES["csrftoken"] = "C" * 32
+        data = req.POST.copy()
+        data["csrfmiddlewaretoken"] = get_token(req)
+        req._post = data
+        return req
+
+    def test_both_release_gates_deny_verification_without_side_effects(self):
+        from django.core import signing
+        for enabled, approved in ((False, True), (True, False)):
+            with self.subTest(feature=enabled, email=approved), override_settings(
+                    MPW_GUEST_RECOVERY_ENABLED=enabled,
+                    MPW_GUEST_RECOVERY_EMAIL_APPROVED=approved):
+                code = secrets.token_urlsafe(32)
+                token = GuestRecoveryToken.objects.create(
+                    token_digest=hashlib.sha256(code.encode("ascii")).hexdigest(),
+                    email_digest="a" * 64,
+                    expires_at=timezone.now() + timedelta(minutes=15))
+                response = module.recovery_verify(self._verification_request(code))
+                self.assertEqual(response.status_code, 503)
+                self.assertNotIn(module.SESSION_COOKIE, response.cookies)
+                token.refresh_from_db()
+                self.assertIsNone(token.consumed_at)
+                self.assertFalse(GuestRecoveryRate.objects.exists())
+                req = self.rf.get(module.ROOT + "orders/", secure=True,
+                                  HTTP_HOST="mojplaywin.com")
+                req.COOKIES[module.SESSION_COOKIE] = signing.dumps(
+                    {"e": "a" * 64, "n": "test"}, salt=module.SESSION_SALT)
+                with self.assertRaises(Http404):
+                    module.recovery_orders(req)
+                token.delete()
+
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=False,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    def test_disabled_feature_prevents_recovery_request_activity(self):
+        req = self.rf.post(module.ROOT, {"email": "buyer@example.com"},
+                           secure=True, HTTP_HOST="mojplaywin.com")
+        from django.middleware.csrf import get_token
+        req.META["CSRF_COOKIE"] = "D" * 32
+        req.COOKIES["csrftoken"] = "D" * 32
+        data = req.POST.copy()
+        data["csrfmiddlewaretoken"] = get_token(req)
+        req._post = data
+        with patch.object(module, "_allowed") as allowed, patch.object(module, "_issue") as issue:
+            response = module.recovery_request(req)
+        self.assertEqual(response.status_code, 200)
+        allowed.assert_not_called()
+        issue.assert_not_called()
+        self.assertFalse(GuestRecoveryRate.objects.exists())
+
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    def test_enabled_verification_consumes_once_and_scopes_securely(self):
+        code = secrets.token_urlsafe(32)
+        token = GuestRecoveryToken.objects.create(
+            token_digest=hashlib.sha256(code.encode("ascii")).hexdigest(),
+            email_digest="b" * 64,
+            expires_at=timezone.now() + timedelta(minutes=15))
+        response = module.recovery_verify(self._verification_request(code))
+        self.assertEqual(response.status_code, 302)
+        cookie = response.cookies[module.SESSION_COOKIE]
+        self.assertTrue(cookie["secure"])
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        token.refresh_from_db()
+        self.assertIsNotNone(token.consumed_at)
+        replay = module.recovery_verify(self._verification_request(code))
+        self.assertEqual(replay.status_code, 400)
+        self.assertNotIn(module.SESSION_COOKIE, replay.cookies)
+
     def test_recovery_throttle_persists_and_denies_abuse(self):
         req = self.rf.post(module.ROOT, secure=True, REMOTE_ADDR="192.0.2.55")
         for _ in range(8):
@@ -252,6 +327,7 @@ class RecoveryIsolationTests(TransactionTestCase):
         self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
         self.assertIs(names["_start_order"], handler)
 
+    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_positive_delegation_uses_existing_download_checks(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
@@ -281,6 +357,7 @@ class RecoveryIsolationTests(TransactionTestCase):
         self.assertEqual(called, [(self.user.pk, intent.pk)])
         self.assertIn("no-store", res["Cache-Control"])
 
+    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_missing_private_download_handler_denies_recovery(self):
         from types import ModuleType
         from django.core import signing
@@ -299,6 +376,7 @@ class RecoveryIsolationTests(TransactionTestCase):
             with self.assertRaises(Http404):
                 module.recovery_download(req, intent.pk)
 
+    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_claim_does_not_grant_download_for_other_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
