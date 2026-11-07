@@ -25,6 +25,7 @@ import mojtrade_observe_market as observer
 
 SCHEMA = "mojtrade.vps-capture-guard.v1"
 MIN_FREE_BYTES = 2 * 1024 ** 3 + 16 * 1024 ** 2
+MIN_FREE_INODES = 16
 FIRST_CAPTURE_MINUTE = 5
 LAST_CAPTURE_MINUTE = 25
 O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
@@ -125,12 +126,35 @@ def _last_evidence(journal, venue, symbol):
     }
 
 
+def _existing_lock_is_private(journal):
+    """Inspect an old lock without creating or acquiring it during --check.
+
+    Active-writer exclusion remains the responsibility of _singleton in --run.
+    """
+    lock_path = Path(str(journal) + ".lock")
+    _no_symlink_ancestors(lock_path)
+    try:
+        fd = os.open(lock_path, os.O_RDONLY | os.O_NONBLOCK | O_NOFOLLOW)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise GuardReject("existing_lock_cannot_be_inspected") from exc
+    try:
+        meta = os.fstat(fd)
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_uid != os.geteuid()
+                or meta.st_nlink != 1 or stat.S_IMODE(meta.st_mode) != 0o600):
+            raise GuardReject("existing_lock_permissions_invalid")
+    finally:
+        os.close(fd)
+    return True
+
+
 def preflight(journal, symbol, venue, *, source_dir=None, now=None,
-              free_bytes=None, require_capture_window=False):
+              free_bytes=None, free_inodes=None, require_capture_window=False):
     """Check disk/runtime/evidence with zero writes or market-data requests.
 
-    ``now`` and ``free_bytes`` are only injectable for offline test fixtures;
-    CLI always measures the real system clock and filesystem headroom.
+    Clock and free-space overrides are only injectable for offline test fixtures;
+    CLI always measures the real clock, filesystem bytes and free inodes.
     """
     if symbol not in observer.PRODUCTS or venue not in PUBLIC_VENUES:
         raise GuardReject("only_supported_public_symbol_and_quoted_venue")
@@ -144,11 +168,15 @@ def preflight(journal, symbol, venue, *, source_dir=None, now=None,
     target = Path(journal)
     _no_symlink_ancestors(target)
     _owner_private_dir(target.parent)
-    filesystem = os.statvfs(target.parent) if free_bytes is None else None
+    filesystem = os.statvfs(target.parent) if free_bytes is None or free_inodes is None else None
     available = (filesystem.f_bavail * filesystem.f_frsize
-                 if filesystem is not None else free_bytes)
+                 if free_bytes is None else free_bytes)
+    available_inodes = filesystem.f_favail if free_inodes is None else free_inodes
     if type(available) is not int or available < MIN_FREE_BYTES:
         raise GuardReject("insufficient_disk_reserve_2gib_plus_16mib")
+    if type(available_inodes) is not int or available_inodes < MIN_FREE_INODES:
+        raise GuardReject("insufficient_free_inodes")
+    lock_exists = _existing_lock_is_private(target)
     package = Path(__file__).resolve().parent if source_dir is None else Path(source_dir)
     fingerprints = _file_fingerprints(package)
     evidence = _last_evidence(target, venue, symbol.replace("-", "/"))
@@ -159,6 +187,9 @@ def preflight(journal, symbol, venue, *, source_dir=None, now=None,
         "venue_claim": venue,
         "free_bytes": available,
         "required_free_bytes": MIN_FREE_BYTES,
+        "free_inodes": available_inodes,
+        "required_free_inodes": MIN_FREE_INODES,
+        "existing_private_lock": lock_exists,
         "capture_window_utc_minutes": [FIRST_CAPTURE_MINUTE, LAST_CAPTURE_MINUTE],
         "observed_source_sha256": fingerprints,
         **evidence,

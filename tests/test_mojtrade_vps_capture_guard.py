@@ -36,7 +36,8 @@ class VPSCaptureGuardTests(unittest.TestCase):
         self.venue = guard.observer.SOURCE
 
     def check(self, **changes):
-        kwargs = {"source_dir": SOURCE.parent, "now": NOW, "free_bytes": EXCESS}
+        kwargs = {"source_dir": SOURCE.parent, "now": NOW, "free_bytes": EXCESS,
+                  "free_inodes": guard.MIN_FREE_INODES + 20}
         kwargs.update(changes)
         return guard.preflight(self.journal, "BTC-USD", self.venue, **kwargs)
 
@@ -53,6 +54,40 @@ class VPSCaptureGuardTests(unittest.TestCase):
     def test_2gib_plus_headroom_is_mandatory(self):
         with self.assertRaisesRegex(guard.GuardReject, "insufficient_disk"):
             self.check(free_bytes=2 * 1024 ** 3)
+
+    def test_inode_reserve_blocks_before_any_lock_creation(self):
+        with self.assertRaisesRegex(guard.GuardReject, "insufficient_free_inodes"):
+            self.check(free_inodes=guard.MIN_FREE_INODES - 1)
+        self.assertFalse(Path(str(self.journal) + ".lock").exists())
+
+    def test_existing_lock_is_reported_without_modification(self):
+        lock = Path(str(self.journal) + ".lock")
+        lock.touch(mode=0o600)
+        before = lock.stat().st_mtime_ns
+        result = self.check()
+        self.assertTrue(result["existing_private_lock"])
+        self.assertEqual(lock.stat().st_mtime_ns, before)
+
+    def test_existing_unsafe_lock_blocks_read_only_preflight(self):
+        lock = Path(str(self.journal) + ".lock")
+        lock.touch(mode=0o600)
+        lock.chmod(0o644)
+        with self.assertRaisesRegex(guard.GuardReject, "existing_lock_permissions"):
+            self.check()
+
+    def test_existing_symlink_lock_blocks_read_only_preflight(self):
+        lock = Path(str(self.journal) + ".lock")
+        lock.symlink_to(self.root / "nowhere")
+        with self.assertRaisesRegex(guard.GuardReject, "symlink"):
+            self.check()
+
+    def test_existing_hardlinked_lock_blocks_read_only_preflight(self):
+        lock = Path(str(self.journal) + ".lock")
+        lock.touch(mode=0o600)
+        alias = self.folder / "alias.lock"
+        alias.hardlink_to(lock)
+        with self.assertRaisesRegex(guard.GuardReject, "existing_lock_permissions"):
+            self.check()
 
     def test_disk_rejection_creates_no_lock_even_in_run_mode(self):
         with self.assertRaisesRegex(guard.GuardReject, "insufficient_disk"):
@@ -120,7 +155,7 @@ class VPSCaptureGuardTests(unittest.TestCase):
         lock.touch(mode=0o666)
         lock.chmod(0o666)
         with patch.object(guard.capture, "capture_public_once") as captured:
-            with self.assertRaisesRegex(guard.GuardReject, "singleton_lock_unsafe"):
+            with self.assertRaisesRegex(guard.GuardReject, "existing_lock_permissions_invalid"):
                 guard.capture_once(self.journal, "BTC-USD", self.venue,
                                    source_dir=SOURCE.parent, now=NOW, free_bytes=EXCESS)
             captured.assert_not_called()

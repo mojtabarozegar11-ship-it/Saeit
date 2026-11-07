@@ -25,7 +25,12 @@ directory; existing owner-only 0600 single-hardlink journal; intact hash-linked
 observation history; **one and only one** symbol and quote-capable venue;
 all observations having same-venue public quote receipts; owner-controlled,
 non-group-writable local source code; measured fingerprints for four required
-scripts; **minimum 2 GiB plus 16 MiB free on the journal filesystem**.
+scripts; **minimum 2 GiB plus 16 MiB free and at least 16 available inodes on
+the journal filesystem**. A pre-existing capture lock must itself be a
+single-hardlink, owner-only 0600 regular file; an unsafe lock blocks even
+the read-only preflight. The check reports whether a private lock file exists,
+but does **not** treat lock-file existence as proof a process is running.
+Exclusive lock acquisition remains mandatory in the explicitly invoked run mode.
 
 Fingerprints report local observed bytes; they do not prove a source archive was
 deployed, the VPS was running, provider provenance, research success or live
