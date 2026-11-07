@@ -328,7 +328,8 @@ def patch_commercial(namespace):
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
+    if isinstance(patterns, (tuple, list)):
+        pattern_type = type(patterns)
         rebuilt = []
         route_names = (
             ("/start/", "start_order"), ("/invoice/", "show_invoice"),
@@ -356,5 +357,5 @@ def patch_commercial(namespace):
         if any(route in existing for route, _ in extra):
             raise RuntimeError("Recovery URL collision")
         rebuilt.extend(extra)
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+        namespace["COMMERCIAL_URLPATTERNS"] = pattern_type(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
