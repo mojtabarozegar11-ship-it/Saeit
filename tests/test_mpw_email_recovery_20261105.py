@@ -290,13 +290,21 @@ class RecoveryIsolationTests(TransactionTestCase):
             _meta=SimpleNamespace(fields=[fake_field, state_field]),
             objects=MagicMock(),
         )
-        fulfillment.objects.filter.return_value.count.return_value = 1
+        ready = fulfillment.objects.filter.return_value
+        ready.count.return_value = 1
+        ready.values.return_value.distinct.return_value.count.return_value = 1
         fake_items = MagicMock()
         fake_items.objects.filter.return_value.count.return_value = 2
         with patch.object(module.apps, "get_model", return_value=fulfillment), \
              patch.object(module, "OrderItem", fake_items):
+            # Partial delivery remains ineligible.
             self.assertFalse(module._ready(SimpleNamespace(pk=123)))
-            fulfillment.objects.filter.return_value.count.return_value = 2
+            # Duplicate ready rows for a single item must not mask
+            # a different item that has never been fulfilled.
+            ready.count.return_value = 2
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            # Two different ready order items are eligible.
+            ready.values.return_value.distinct.return_value.count.return_value = 2
             self.assertTrue(module._ready(SimpleNamespace(pk=123)))
 
     def test_prune_removes_no_persistent_order_claims(self):
