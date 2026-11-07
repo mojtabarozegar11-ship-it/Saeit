@@ -8,7 +8,6 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 from unittest.mock import MagicMock
-import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.mpw_recovery_test_settings")
 
@@ -19,7 +18,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
-from django.test import RequestFactory, override_settings
+from django.test import RequestFactory, TransactionTestCase, override_settings
 from django.utils import timezone
 from core.models import (GuestOrderEmail, GuestRecoveryRate, GuestRecoveryToken,
                          LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent)
@@ -27,12 +26,7 @@ from services import mpw_trx_email_recovery as module
 from services import mpw_trx_guest_commerce as guest_adapter
 
 
-@pytest.mark.django_db(transaction=True)
-class RecoveryIsolationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        call_command("migrate", run_syncdb=True, verbosity=0, interactive=False)
+class RecoveryIsolationTests(TransactionTestCase):
 
     def setUp(self):
         GuestRecoveryToken.objects.all().delete()
