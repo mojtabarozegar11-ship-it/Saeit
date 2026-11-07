@@ -81,7 +81,7 @@ def manifest_summary(app):
             "state": "readable",
             "header_image_source_present": (
                 source.is_file() and not source.is_symlink() and
-                not source_dir.is_symlink() and not source_dir.parent.is_symlink()
+                not source_dir.is_symlink() and not source_dir.parent.is_symlink() and not source_dir.parent.parent.is_symlink()
             ),
             "free_space_above_512mib": os.statvfs(app).f_bavail * os.statvfs(app).f_frsize >= 512 * 1024 * 1024,
             "css_recorded": STATIC_KEYS["css"] in mapping,
