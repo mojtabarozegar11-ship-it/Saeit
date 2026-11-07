@@ -147,13 +147,34 @@ def _owned_workers():
 
 
 def inspect_store_sources(*, public=PUBLIC, app=APP):
-    """Redacted file-presence and source-contract probe; no Django import or DB IO."""
+    """Redacted store and guest-recovery source probe; no Django import or DB IO.
+
+    All targets are fixed repository-relative names. Absence or a source hash
+    mismatch must not be interpreted as proof of the effective Passenger worker
+    or the production database; this is metadata only, never release approval.
+    """
     targets = {
         "view": ("core/mojplaywin_views.py", ("def store(request):", "record_funnel_event(request", "except Exception as exc")),
         "funnel": ("core/commerce_funnel.py", ("def record_funnel_event(", "class CommerceFunnelEvent")),
         "models": ("core/models.py", ("class CommerceFunnelEvent(",)),
         "store_template": ("core/templates/mojplaywin/store.html", ('{% extends "mojplaywin/site_base.html" %}',)),
         "main_template_tag": ("command_center/templatetags/mpw_main.py", ("def mpw_main_data(",)),
+        # Fixed, bounded metadata only: no .env, private files or customer rows.
+        "guest_adapter": ("services/mpw_trx_guest_commerce.py", ()),
+        "guest_recovery": ("services/mpw_trx_email_recovery.py", (
+            "def _recovery_enabled(", "MPW_GUEST_RECOVERY_EMAIL_APPROVED",
+            "def recovery_verify(", "def recovery_download(")),
+        "recovery_migration": ("core/migrations/0049_mpw_guest_email_recovery.py", ()),
+        "commercial_web": ("services/mpw_trx_commercial_web.py", ()),
+        "commercial_context": ("services/mpw_trx_commercial_context.py", ()),
+        "public_pages": ("services/mpw_trx_public_pages.py", ()),
+        "commerce_app": ("mpw_commerce/apps.py", ()),
+        "commerce_models": ("mpw_commerce/models.py", ()),
+        "commerce_migration": ("mpw_commerce/migrations/0001_initial.py", ()),
+        "commerce_downloads": ("mpw_commerce/downloads.py", ()),
+        "commerce_buyer_orders": ("mpw_commerce/buyer_orders.py", ()),
+        "settings_source": ("config/settings.py", ("INSTALLED_APPS",)),
+        "url_source": ("config/urls.py", ()),
     }
     output = {}
     for label, root in (("public", public), ("staging", app)):
@@ -179,6 +200,7 @@ def inspect_store_sources(*, public=PUBLIC, app=APP):
             found[name] = {
                 "present": True,
                 "bytes": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
                 "sha256_prefix": hashlib.sha256(payload).hexdigest()[:16],
                 "marker_presence": [needle in content for needle in markers],
             }
