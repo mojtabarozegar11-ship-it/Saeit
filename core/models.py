@@ -213,6 +213,35 @@ class Product(T):
     metadata = models.JSONField(default=dict)
 
 
+class CommerceFunnelEvent(T):
+    EVENT_CHOICES = (
+        ("view_store", "Store view"),
+        ("view_item", "Product view"),
+        ("begin_checkout", "Checkout opened"),
+        ("invoice_created", "Invoice created"),
+        ("payment_confirmed", "Payment confirmed"),
+        ("delivery_success", "Delivery succeeded"),
+        ("delivery_failure", "Delivery failed"),
+    )
+    event_name = models.CharField(max_length=32, choices=EVENT_CHOICES)
+    source = models.CharField(max_length=40, blank=True, default="")
+    medium = models.CharField(max_length=40, blank=True, default="")
+    campaign = models.CharField(max_length=80, blank=True, default="")
+    product = models.ForeignKey(
+        "Product",
+        on_delete=models.PROTECT,
+        related_name="funnel_events",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["event_name", "created_at"]),
+            models.Index(fields=["product", "event_name", "created_at"]),
+        ]
+
+
 class Order(T):
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
