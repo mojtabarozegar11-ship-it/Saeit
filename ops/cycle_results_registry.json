@@ -59,7 +59,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 10,
+      "sequence": 11,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book",
       "zm50": {
@@ -99,6 +99,16 @@
             "note": "Added substantive measurement-uncertainty worked exercise to complete C113 private review; 611-page DOCX/PDF and SHA256 receipt uploaded to Library; no publication authorization"
           }
         ]
+      },
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE02_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": null,
+        "change_percentage_points": null,
+        "minimum_2pp_met": false,
+        "reason": "First accepted fixed WBS baseline; no product acceptance in this run"
       }
     },
     "03": {
@@ -426,6 +436,16 @@
       "evidence_url": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/B01_C113_measurement_uncertainty_receipt.json",
       "acceptance_result": "Complete private DOCX/PDF 611 pages, zero text-empty pages; DOCX SHA256 1849aa9c1dfa7ec93510257f1e6cc5189fa722b2bd0c715929e45d715eee5bf6; PDF SHA256 7010e9226df00dfd7876936ca967ea92976f9dc011601bce13f4e5502ad6fb14; author/scientific/rights HOLD",
       "impact": "New technical exercise on measurement tolerance and 2 kg residual; no approved sale, delivery, or revenue"
+    },
+    {
+      "registry_id": "R02-0011",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T204319+0330-WBS-v1",
+      "deliverable_key": "cycle02-fixed-wbs-baseline-v1",
+      "stage": "baseline",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE02_WBS_v1.json",
+      "acceptance_result": "Fixed 100-weight evidence-based WBS v1 recorded; no product accepted and no retroactive progress assigned",
+      "impact": "Progress accounting now defined; no publication, orders, delivery or revenue"
     }
   ],
   "report_reservations": [],
