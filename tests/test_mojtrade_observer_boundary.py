@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import tempfile
 import unittest
-from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-import mojtrade_observer_boundary as boundary
+
+REPO_SOURCE = Path(__file__).resolve().parents[1] / "scripts" / "mojtrade_observer_boundary.py"
+SOURCE = REPO_SOURCE if REPO_SOURCE.is_file() else Path(__file__).with_name("mojtrade_observer_boundary.py")
+spec = importlib.util.spec_from_file_location("mojtrade_observer_boundary", SOURCE)
+boundary = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(boundary)
 
 
 GENERATED = "2026-11-07T12:30:00+00:00"
