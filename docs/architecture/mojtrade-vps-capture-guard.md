@@ -53,13 +53,38 @@ Missing hours can reset a research-eligibility streak. The separate forward
 dataset gate additionally requires all receipt timestamps and quote evidence.
 No data are backfilled as if observed earlier.
 
-**No schedule has been installed**. A future operator-owned scheduler must run
-at a fixed UTC time inside the observation window (for example minute 07 of
-each hour); time-zone handling, disk recovery, monitoring, backups and actual
-server credentials are release gates. The disk warning in PR #1976 (~1.06 GB
-free in the previous observation) would fail this guard until independently
-verified safe space is restored. This script must not be invoked in `--run`
-mode on an unverified VPS.
+**No schedule has been installed**. Two independent, *review-only* systemd
+unit templates are supplied at `deploy/systemd/mojtrade-forward-capture.service`
+and `deploy/systemd/mojtrade-forward-capture.timer`. The timer is pinned to
+`07` minutes past each UTC hour, with `Persistent=false`, no random delay and
+one-second accuracy. A server outage or service failure therefore cannot
+trigger an artificial catch-up run for missed observations. The service has a
+read-only preflight, explicitly runs this guard with `--run`, uses a private
+dedicated journal, disallows restarts and bounds a stuck fetch to 120 seconds.
+Its systemd filesystem sandbox allows writes only inside the designated
+private journal directory. Source writes and Python bytecode generation are
+disabled. These templates **do not deploy, enable or start themselves**.
+
+The template hard-codes *proposed* `githubops` paths and one Coinbase BTC-USD
+venue; these paths are **not evidence that the actual VPS has matching files**.
+Do not blindly install. Before any future activation, independently confirm
+all four source SHA-256 values, 0700/0600 permissions, absolute path ownership,
+mount-local free bytes/inodes, NTP/UTC clock, systemd version and sandbox
+compatibility, provider connectivity, recovery/backup policy, and whether
+legacy observer timers, cron, or the active GitHub relay could write or compete.
+Inspect with `systemd-analyze verify` and `systemd-analyze calendar`, then use
+the guard's read-only `--check`. The current VPS health/run evidence is not
+equivalent to confirming the journal filesystem. A stopped/disabled timer does
+not kill a currently running oneshot service: in a future approved cutover,
+stop both the `.timer` and `.service`, verify no capture process remains, and
+retain the private journal without deletion. No scheduled run counts as a
+valid observation unless a fresh same-venue quote receipt is appended.
+
+Time-zone handling, disk recovery, monitoring, backups and actual server
+credentials remain release gates. The historical PR #1976 disk warning was
+approximately 1.06 GiB free, although newer VPS root evidence has shown more
+space; neither observation replaces checking the actual journal mount. This
+script must not be invoked in `--run` mode on an unverified VPS.
 
 No rollout, merge, GitHub Actions deployment, payment, real order, public
 signal, restart or email is included. All tests are offline fixtures.

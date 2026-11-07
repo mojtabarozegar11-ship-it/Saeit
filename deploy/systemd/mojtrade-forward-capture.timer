@@ -1,0 +1,13 @@
+[Unit]
+Description=Schedule MojTrade forward research capture at minute 07 UTC (NO BACKFILL)
+
+# REVIEW TEMPLATE ONLY: no installation or activation is part of this PR.
+[Timer]
+OnCalendar=*-*-* *:07:00 UTC
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=false
+Unit=mojtrade-forward-capture.service
+
+[Install]
+WantedBy=timers.target

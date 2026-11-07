@@ -1,0 +1,32 @@
+[Unit]
+Description=MojTrade quote-backed prospective hourly research capture (NO ORDERS)
+Wants=network-online.target
+After=network-online.target
+
+# REVIEW TEMPLATE ONLY: never enable until the actual VPS runtime, source
+# fingerprints, mount capacity, clock and conflicting schedules are verified.
+[Service]
+Type=oneshot
+User=githubops
+Group=githubops
+WorkingDirectory=/home/githubops/factory-runtime/operations/mojtrade/forward-capture
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/usr/bin/python3 /home/githubops/factory-runtime/operations/mojtrade/forward-capture/mojtrade_vps_capture_guard.py --symbol BTC-USD --venue coinbase-exchange-public-candles --private-journal /home/githubops/factory-runtime/private/mojtrade/forward-btc-coinbase.jsonl
+ExecStart=/usr/bin/python3 /home/githubops/factory-runtime/operations/mojtrade/forward-capture/mojtrade_vps_capture_guard.py --symbol BTC-USD --venue coinbase-exchange-public-candles --private-journal /home/githubops/factory-runtime/private/mojtrade/forward-btc-coinbase.jsonl --run
+TimeoutStartSec=120s
+TimeoutStopSec=20s
+KillMode=control-group
+Restart=no
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ReadWritePaths=/home/githubops/factory-runtime/private/mojtrade
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=

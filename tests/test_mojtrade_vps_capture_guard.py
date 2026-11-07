@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import configparser
 import importlib.util
 import contextlib
 import io
@@ -303,6 +304,67 @@ class VPSLegacyInstallerBoundaryTests(unittest.TestCase):
         self.assertNotIn("free_mb >= 500", installer)
         self.assertLess(installer.index("MOJTRADE_INSUFFICIENT_FREE_SPACE_2GIB_PLUS_16MIB"),
                         installer.index('install -d -m 700 "$operations" "$private"'))
+
+
+class ForwardCaptureSystemdReviewTests(unittest.TestCase):
+    """A proposed, never-auto-enabled timer must remain a guarded collector."""
+
+    def units(self):
+        folder = Path(__file__).resolve().parents[1] / "deploy/systemd"
+        service = configparser.ConfigParser(interpolation=None)
+        timer = configparser.ConfigParser(interpolation=None)
+        self.assertTrue(service.read(folder / "mojtrade-forward-capture.service"))
+        self.assertTrue(timer.read(folder / "mojtrade-forward-capture.timer"))
+        return service, timer
+
+    def test_timer_pinned_to_utc_window_with_no_outage_backfill(self):
+        _, timer = self.units()
+        schedule = timer["Timer"]
+        self.assertEqual(schedule["OnCalendar"], "*-*-* *:07:00 UTC")
+        self.assertEqual(schedule["AccuracySec"], "1s")
+        self.assertEqual(schedule["RandomizedDelaySec"], "0")
+        self.assertEqual(schedule["Persistent"], "false")
+        self.assertEqual(schedule["Unit"], "mojtrade-forward-capture.service")
+        self.assertFalse(any(key.lower().startswith("onboot") for key in schedule))
+
+    def test_exactly_one_preflight_then_one_explicit_private_capture(self):
+        service, _ = self.units()
+        unit = service["Service"]
+        preflight = unit["ExecStartPre"]
+        capture_run = unit["ExecStart"]
+        self.assertTrue(preflight.startswith("/usr/bin/python3 "))
+        self.assertTrue(capture_run.endswith(" --run"))
+        self.assertEqual(capture_run.removesuffix(" --run"), preflight)
+        self.assertIn("mojtrade_vps_capture_guard.py", capture_run)
+        self.assertIn("--symbol BTC-USD", capture_run)
+        self.assertIn("--venue coinbase-exchange-public-candles", capture_run)
+        self.assertIn("--private-journal /home/githubops/factory-runtime/private/", capture_run)
+        for forbidden in ("mojtrade_observe_market.py", "validated-payload.json",
+                          "--publish", "--trade", "github.com"):
+            self.assertNotIn(forbidden, capture_run)
+
+    def test_oneshot_fail_closed_and_filesystem_sandboxed(self):
+        service, _ = self.units()
+        unit = service["Service"]
+        for setting, expected in {
+            "Type": "oneshot", "User": "githubops", "Group": "githubops",
+            "TimeoutStartSec": "120s", "Restart": "no", "UMask": "0077",
+            "NoNewPrivileges": "true", "ProtectSystem": "strict",
+            "ReadWritePaths": "/home/githubops/factory-runtime/private/mojtrade",
+            "Environment": "PYTHONDONTWRITEBYTECODE=1",
+            "CapabilityBoundingSet": "",
+        }.items():
+            self.assertEqual(unit[setting], expected)
+        self.assertNotIn("[Install]", (Path(__file__).resolve().parents[1] /
+                        "deploy/systemd/mojtrade-forward-capture.service").read_text())
+
+    def test_research_template_is_not_legacy_observer_schedule(self):
+        _, timer = self.units()
+        old = (Path(__file__).resolve().parents[1] /
+               "deploy/systemd/mojtrade-forward-capture.timer").read_text()
+        self.assertNotIn("mojtrade-observer.service", old)
+        self.assertNotIn("Persistent=true", old)
+        self.assertEqual(timer["Install"]["WantedBy"], "timers.target")
 
 
 if __name__ == "__main__":
