@@ -1,0 +1,137 @@
+name: Restore archived complete V12 About page only
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-restore-original-about-v12-20261107.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-exact-about-archive-recovery
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel host identity through existing relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-about-v12"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Replace only About with byte-identical later historical archived source
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 210s ssh -T -F "$RUNNER_TEMP/zm-about-v12/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,re,stat,sys,tempfile,time,urllib.request
+          runid=sys.argv[1]
+          assert re.fullmatch(r'[0-9]{5,20}',runid)
+          home=Path('/home/zomorod2');web=home/'public_html'
+          target=web/'about/index.html'
+          source=home/'.backups/zomorod-v12-contact/dcf6ce733aa95770954d6a6103730c1017089c6a/candidate/about/index.html'
+          recovery=home/'.private/zm-about-v12-recovery-20261107'/runid
+          sha=lambda b:hashlib.sha256(b).hexdigest()
+          before='af19a953022bb8bf52b7934e9cedba8d82d1be4fcfe9e390c51d3f746d4a5f6'
+          historical='cd980f1497190cd86ec9fd09e4794a699563894c529358fef39d63810e3ef107'
+          homepage='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          assert os.geteuid()!=0 and os.geteuid()==web.stat().st_uid
+          assert target.is_file() and source.is_file() and not target.is_symlink() and not source.is_symlink()
+          assert not recovery.exists() and (home/'.private').is_dir()
+          old=target.read_bytes();authentic=source.read_bytes()
+          assert sha(old)==before and sha(authentic)==historical
+          assert sha((web/'index.html').read_bytes())==homepage
+          css=lambda b:re.findall(rb'<link[^>]+stylesheet[^>]*>',b,re.I)
+          assert css(authentic)==css(old),'THEME_STYLESHEETS_DIFFER_ABORT'
+          for marker in (b'zm-unified-v7-20261018',b'zm-v7-header',b'zm-v7-footer-copyright',b'zm-v10'):
+              assert marker in authentic and marker in old,('MISSING_ORIGINAL_THEME_MARKER',marker)
+          protect=['index.html','company/index.html','agriculture/index.html','research/projects/index.html','services/index.html','industry/index.html','knowledge/index.html']
+          preserved={rel:sha((web/rel).read_bytes()) for rel in protect}
+          def atomic(data,mode):
+              fd,tmp=tempfile.mkstemp(prefix='.archived-v12-about-',dir=str(target.parent))
+              try:
+                  with os.fdopen(fd,'wb') as file:
+                      file.write(data);file.flush();os.fsync(file.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,target)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+          mode=stat.S_IMODE(target.stat().st_mode)
+          recovery.mkdir(parents=True,mode=0o700)
+          f=recovery/'about.before.html'
+          with f.open('xb') as file:
+              file.write(old);file.flush();os.fsync(file.fileno())
+          f.chmod(0o600)
+          assert sha(f.read_bytes())==before
+          (recovery/'manifest.json').write_text(json.dumps({'source':str(source.relative_to(home)),'before_sha256':before,'restored_sha256':historical,'homepage_sha256':homepage},indent=2),encoding='utf-8')
+          success=False
+          try:
+              assert sha(target.read_bytes())==before,'CONCURRENT_ABOUT_EDIT_ABORT'
+              atomic(authentic,mode)
+              assert sha(target.read_bytes())==historical
+              req=urllib.request.Request('https://zomorodmelal.ir/about/?original_v12_restore='+runid+'-'+str(time.monotonic_ns()),headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=27) as response:
+                  data=response.read(600000)
+                  assert response.status==200 and sha(data)==historical,('LIVE_ABOUT_IS_NOT_ARCHIVED_SOURCE',response.status,len(data))
+              for rel,digest in preserved.items():
+                  assert sha((web/rel).read_bytes())==digest,('PROTECTED_PAGE_CHANGED',rel)
+              success=True
+              (recovery/'success.txt').write_text('V12 full About page restored exactly; approved homepage unchanged.\n',encoding='utf-8')
+              print('COMPLETE_HISTORICAL_ABOUT_V12_RESTORED=yes bytes='+str(len(authentic)))
+              print('PROTECTED_HOMEPAGE_AND_RESTORED_RESEARCH_UNCHANGED=yes')
+          finally:
+              if not success and target.is_file() and sha(target.read_bytes())==historical:
+                  atomic(old,mode)
+                  print('ABOUT_ROLLBACK_EXACT=yes')
+          PY
+
+      - name: Remove ephemeral SSH identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-about-v12"
