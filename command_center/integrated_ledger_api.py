@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.db import IntegrityError
-from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction
+from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent
 from accounting.models import JournalEntry
 from core.models import ApprovalRequest, ResearchProject
 
@@ -39,6 +39,14 @@ def _issue(row):
             "source": row.source, "next": row.next_action, "status": row.status,
             "resolution_evidence": row.resolution_evidence, "created_at": row.created_at.isoformat()}
 
+def _audit(action, entity, entity_id, summary, actor, evidence=""):
+    LedgerAuditEvent.objects.create(action=action, entity=entity, entity_id=str(entity_id), summary=summary, evidence=evidence, actor=actor)
+
+def _audit_row(row):
+    return {"id": row.id, "action": row.action, "entity": row.entity, "entity_id": row.entity_id,
+            "summary": row.summary, "evidence": row.evidence, "actor": row.actor.get_username(),
+            "created_at": row.created_at.isoformat()}
+
 def _decision(row):
     return {"id": row.id, "kind": row.kind, "status": row.status, "approver": row.approver,
             "evidence": row.evidence, "created_at": row.created_at.isoformat()}
@@ -51,6 +59,7 @@ def integrated_ledger_api(request):
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
             "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
+            "audit": [_audit_row(x) for x in LedgerAuditEvent.objects.select_related("actor")[:100]],
             "live_summary": {
                 "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
                                "draft": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count()},
@@ -89,6 +98,7 @@ def integrated_ledger_api(request):
                 action_date=action_date, readonly=bool(payload.get("readonly")), created_by=request.user)
         except IntegrityError:
             return JsonResponse({"error": "گزارش تکراری است و ذخیره نشد."}, status=409)
+        _audit("create", "report", row.id, f"گزارش {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, evidence)
         return JsonResponse({"report": _report(row)}, status=201)
     if kind == "issue":
         cycle, project, title = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("title"))
@@ -103,6 +113,7 @@ def integrated_ledger_api(request):
         except ValueError: return JsonResponse({"error": "تاریخ مشاهده معتبر نیست."}, status=400)
         row = CycleIssue.objects.create(cycle=cycle, project_key=project, title=title, owner=owner,
             observed_on=observed_on, certainty=certainty, source=source, next_action=next_action, created_by=request.user)
+        _audit("create", "issue", row.id, f"مانع {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, source)
         return JsonResponse({"issue": _issue(row)}, status=201)
     if kind == "issue_update":
         try: row = CycleIssue.objects.get(pk=int(payload.get("id")))
@@ -112,11 +123,14 @@ def integrated_ledger_api(request):
         if _text(payload.get("action")) == "resolve": row.status, row.resolution_evidence, row.resolved_at = "resolved", evidence, timezone.now()
         else: row.certainty, row.source = "verified", evidence
         row.save(update_fields=["status", "resolution_evidence", "resolved_at", "certainty", "source"])
+        event_action = "resolve" if _text(payload.get("action")) == "resolve" else "verify"
+        _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
     if kind == "approval":
         decision = _text(payload.get("status"))
         if _text(payload.get("kind")) not in {"email", "deploy", "cost"} or decision not in {"approved", "rejected"} or not _text(payload.get("approver")):
             return JsonResponse({"error": "نوع تصمیم، وضعیت و نام تأییدکننده الزامی است."}, status=400)
         row = ApprovalDecision.objects.create(kind=_text(payload.get("kind")), status=decision, approver=_text(payload.get("approver")), evidence=_text(payload.get("evidence")), created_by=request.user)
+        _audit("approve", "approval", row.id, f"تصمیم {row.kind} با وضعیت {row.status} ثبت شد.", request.user, row.evidence)
         return JsonResponse({"decision": _decision(row)}, status=201)
     return JsonResponse({"error": "نوع عملیات شناخته نشد."}, status=400)
