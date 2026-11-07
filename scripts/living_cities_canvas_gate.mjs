@@ -8,6 +8,7 @@
  *
  * Usage: node scripts/living_cities_canvas_gate.mjs
  *        node scripts/living_cities_canvas_gate.mjs --url https://zomorodmelal.ir/living-cities/play/
+ *        node scripts/living_cities_canvas_gate.mjs --compare
  */
 
 import { resolve } from 'node:path';
@@ -33,6 +34,15 @@ export function evaluateSceneSnapshot(snapshot) {
   return issues;
 }
 
+/** Diagnostic differences only: localization/branding may be intentional. */
+export function compareEditionSnapshots(left, right) {
+  const differences = [];
+  for (const field of ['languageOptions', 'hasWorldTour', 'hasJourney', 'hasQuests']) {
+    if (left[field] !== right[field]) differences.push({ field, left: left[field], right: right[field] });
+  }
+  return differences;
+}
+
 export async function inspectOriginalWorld(page, target) {
   await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.getByRole('tab', { name: /Build/i }).click({ timeout: 10000 });
@@ -51,29 +61,48 @@ export async function inspectOriginalWorld(page, target) {
       width: rect?.width ?? 0,
       height: rect?.height ?? 0,
       inlineStyle: canvas?.getAttribute('style') ?? null,
+      documentTitle: document.title,
+      languageOptions: document.querySelectorAll('#lcLanguage option').length,
+      hasWorldTour: [...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('World Tour')),
+      hasJourney: [...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('Journey')),
+      hasQuests: [...document.querySelectorAll('[role="tab"]')].some((tab) => /quests/i.test(tab.textContent ?? '')),
     };
   });
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 0 && !(args.length === 2 && args[0] === '--url')) {
-    throw new Error('usage: node scripts/living_cities_canvas_gate.mjs [--url APPROVED_URL]');
+  if (args.length !== 0 && !(args.length === 1 && args[0] === '--compare') &&
+      !(args.length === 2 && args[0] === '--url')) {
+    throw new Error('usage: node scripts/living_cities_canvas_gate.mjs [--url APPROVED_URL | --compare]');
   }
-  const target = args.length ? args[1] : 'https://mojplaywin.com/living-cities/play/';
-  if (!TARGETS.has(target)) throw new Error('unapproved_game_origin');
+  const selected = args[0] === '--compare' ? [...TARGETS] :
+    [args.length ? args[1] : 'https://mojplaywin.com/living-cities/play/'];
+  if (!selected.every((target) => TARGETS.has(target))) throw new Error('unapproved_game_origin');
   const { chromium } = await import('playwright');
   const browser = await chromium.launch({ headless: true, args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   try {
-    const context = await browser.newContext({ viewport: { width: 1365, height: 920 }, reducedMotion: 'reduce' });
-    const page = await context.newPage();
-    const exceptions = [];
-    page.on('pageerror', (error) => exceptions.push(String(error).slice(0, 500)));
-    const snapshot = await inspectOriginalWorld(page, target);
-    const issues = evaluateSceneSnapshot(snapshot);
-    console.log(JSON.stringify({ target, snapshot, issues, pageErrors: exceptions }, null, 2));
-    if (issues.length || exceptions.length) process.exitCode = 1;
-    await context.close();
+    const reports = [];
+    for (const target of selected) {
+      // Separate ephemeral context; never read or rewrite a player's stored save.
+      const context = await browser.newContext({ viewport: { width: 1365, height: 920 }, reducedMotion: 'reduce' });
+      try {
+        const page = await context.newPage();
+        const exceptions = [];
+        page.on('pageerror', (error) => exceptions.push(String(error).slice(0, 500)));
+        const snapshot = await inspectOriginalWorld(page, target);
+        const issues = evaluateSceneSnapshot(snapshot);
+        reports.push({ target, snapshot, issues, pageErrors: exceptions });
+        if (issues.length || exceptions.length) process.exitCode = 1;
+      } finally {
+        await context.close();
+      }
+    }
+    const differences = reports.length === 2 ?
+      compareEditionSnapshots(reports[0].snapshot, reports[1].snapshot) : [];
+    console.log(JSON.stringify({ reports, observedEditionDifferences: differences,
+      note: 'Feature differences need a release decision; titles/localization are not assumed identical.' }, null, 2));
+    if (differences.length) process.exitCode = 1;
   } finally {
     await browser.close();
   }
