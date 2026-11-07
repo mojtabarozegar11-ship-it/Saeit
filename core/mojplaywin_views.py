@@ -105,3 +105,6 @@ def platform_section(request, section):
 
 
 # Production deployment verification marker: store and IndexNow smoke coverage.
+
+
+# Live store recovery release marker: 20261107
