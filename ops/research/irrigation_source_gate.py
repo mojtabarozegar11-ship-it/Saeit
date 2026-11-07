@@ -3,7 +3,7 @@
 
 Usage: python ops/research/irrigation_source_gate.py measurements.json
 Input: {"source_id":"DOI-or-archived-source","verified_by":"reviewer","rows":[
- {"id":"DSS","yield_kg":1,"water_m3":1}],"expected_wue":{}}
+ {"id":"DSS","yield_kg":1,"water_m3":1}]}
 No network, no writes, no implicit conversion. Source metadata is a declaration,
 not independent proof of provenance. Exit nonzero on invalid input.
 """
