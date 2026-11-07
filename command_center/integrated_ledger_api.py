@@ -8,7 +8,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.db import IntegrityError, transaction
-from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent
+from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent, CommandRequest
 from accounting.models import JournalEntry
 from core.models import ApprovalRequest, ResearchProject
 from .zomorod_status import read_zomorod_health
@@ -53,6 +53,12 @@ def _decision(row):
     return {"id": row.id, "kind": row.kind, "status": row.status, "approver": row.approver,
             "evidence": row.evidence, "created_at": row.created_at.isoformat()}
 
+def _command(row):
+    return {"id": row.id, "domain": row.domain, "domain_name": DOMAINS.get(row.domain, row.domain),
+            "command": row.command, "status": row.status, "read_only": row.read_only,
+            "result": row.result, "requested_by": row.requested_by.get_username(),
+            "created_at": row.created_at.isoformat()}
+
 def _system_status(request):
     names = {
         "iran_site": "سایت زمرد ملل", "cpanel": "هاست و cPanel", "factory": "کارخانه",
@@ -89,6 +95,7 @@ def integrated_ledger_api(request):
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
             "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
             "audit": [_audit_row(x) for x in LedgerAuditEvent.objects.select_related("actor")[:100]],
+            "commands": [_command(x) for x in CommandRequest.objects.select_related("requested_by")[:100]],
             "systems": _system_status(request),
             "live_summary": {
                 "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
@@ -108,6 +115,14 @@ def integrated_ledger_api(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "بدنهٔ درخواست معتبر نیست."}, status=400)
     kind = _text(payload.get("kind"))
+    if kind == "command":
+        domain, command_text = _text(payload.get("domain")) or "command", _text(payload.get("command"))
+        if domain not in DOMAINS or not command_text:
+            return JsonResponse({"error": "قلمرو و متن فرمان الزامی است."}, status=400)
+        row = CommandRequest.objects.create(domain=domain, command=command_text, read_only=True, requested_by=request.user)
+        _audit("create", "command", row.id, "فرمان جدید در صف بررسی ثبت شد.", request.user)
+        return JsonResponse({"command": _command(row)}, status=201)
+
     if kind == "report":
         domain = _text(payload.get("domain")) or "command"
         cycle, project, action = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("action"))
