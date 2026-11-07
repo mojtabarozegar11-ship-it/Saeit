@@ -50,6 +50,28 @@ class JournalEntryAdmin(admin.ModelAdmin):
     search_fields = ("reference", "memo")
     inlines = (JournalLineInline,)
 
+    def has_change_permission(self, request, obj=None):
+        # Posted journals are immutable. Corrections require a new reversing
+        # journal; changing status back to draft would bypass line safeguards.
+        return super().has_change_permission(request, obj) and not (
+            obj and obj.status == JournalEntry.Status.POSTED
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and not (
+            obj and obj.status == JournalEntry.Status.POSTED
+        )
+
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(status=JournalEntry.Status.POSTED).exists():
+            raise ValidationError("حذف گروهی اسناد قطعی مجاز نیست.")
+        super().delete_queryset(request, queryset)
+
+    def delete_model(self, request, obj):
+        if obj.status == JournalEntry.Status.POSTED:
+            raise ValidationError("حذف سند قطعی مجاز نیست.")
+        super().delete_model(request, obj)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         if form.instance.status == JournalEntry.Status.POSTED:
