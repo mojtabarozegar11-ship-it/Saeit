@@ -86,6 +86,9 @@ jobs:
           assert target.is_file() and source.is_file() and not target.is_symlink() and not source.is_symlink()
           assert not recovery.exists() and (home/'.private').is_dir()
           old=target.read_bytes();authentic=source.read_bytes()
+          print('ABOUT_PREFLIGHT_CURRENT',len(old),sha(old),flush=True)
+          print('ABOUT_PREFLIGHT_ARCHIVE',len(authentic),sha(authentic),flush=True)
+          print('ABOUT_PREFLIGHT_EXPECTED',before,historical,flush=True)
           assert sha(old)==before and sha(authentic)==historical
           assert sha((web/'index.html').read_bytes())==homepage
           css=lambda b:re.findall(rb'<link[^>]+stylesheet[^>]*>',b,re.I)
