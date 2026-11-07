@@ -57,5 +57,11 @@ jobs:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          python3 -m unittest -q scripts.tests.test_management_bridge_route_contract
           bash -n scripts/cpanel_management_runtime_probe.sh
-          bash deploy/cpanel_direct_command.sh management_runtime_fingerprint
+          receipt="$(bash deploy/cpanel_direct_command.sh management_runtime_fingerprint)"
+          if ! printf '%s\n' "$receipt" | grep -qx 'RECEIPT_CLASS=MANAGEMENT_RUNTIME_READONLY_V1'; then
+            echo 'MANAGEMENT_RUNTIME_RECEIPT_MISSING_OR_INVALID' >&2
+            exit 74
+          fi
+          printf '%s\n' "$receipt" | grep -E '^(RECEIPT_CLASS|PRODUCTION_MUTATION|APP_ROOT_ATTESTED|DEPLOYED_GIT_HEAD|SOURCE_SHA256_[A-Za-z0-9_]+|PASSENGER_PYTHON_HINT_[A-Z_]+|MATCHED_PASSENGER_PROCESS_COUNT|PASSENGER_PROCESS_PYTHON_VERSION|PASSENGER_PROCESS_VERSION_ATTESTED|ACTIVE_INTERPRETER_ATTESTED|SOURCE_RUNTIME_MATCH_ATTESTED|MIGRATIONS_ATTESTED|RECOVERABLE_BACKUP_ATTESTED|RELEASE_PERMITTED)=[A-Za-z0-9_.-]+$'

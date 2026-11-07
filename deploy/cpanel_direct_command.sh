@@ -93,6 +93,10 @@ case "$operation" in
       'uapi --output=json DomainInfo single_domain_data domain=zomorodmelal.ir 2>/dev/null' |
       python3 scripts/management_domain_docroot_readonly.py
     ;;
+  management_runtime_fingerprint)
+    # Execute the bounded read-only probe via stdin; never install on cPanel.
+    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'bash -s' < scripts/cpanel_management_runtime_probe.sh
+    ;;
   runtime_path_diagnostics)
     # Exact-path booleans only. No file contents, directory traversal, app
     # imports, Django commands, environment values or production mutations.
