@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "cycle_id": "04",
+  "version": "v1",
+  "scope": "Moj Coin integrated playable product; technical acceptance separate from commercial activation",
+  "total_weight": 100,
+  "scoring": "All-or-nothing per item only after independently executed end-to-end tests, persisted state, source readback, and acceptance evidence; partial commits score zero.",
+  "items": [
+    {
+      "id": "CORE",
+      "weight": 12,
+      "owner": "cycle-04",
+      "acceptance": "Playable deterministic core, progression and persisted game state",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "CATALOG",
+      "weight": 10,
+      "owner": "cycle-04",
+      "acceptance": "100 jobs, 500 distinct characters, 269 functional buildings with behavioral acceptance",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "ECON",
+      "weight": 12,
+      "owner": "cycle-04",
+      "acceptance": "Economy, bank, manager, orders and supply chain end-to-end",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "WORLD",
+      "weight": 9,
+      "owner": "cycle-04",
+      "acceptance": "Citizens, four seasons, 48-minute clock, mining and world simulation",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "STORY",
+      "weight": 9,
+      "owner": "cycle-04",
+      "acceptance": "23:17, Truth Trap and nonrepeating puzzle generation with persistence",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "CARDS",
+      "weight": 7,
+      "owner": "cycle-04",
+      "acceptance": "19 heroes, 56 cards and tarot mechanics end-to-end",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "BOARD",
+      "weight": 7,
+      "owner": "cycle-04",
+      "acceptance": "Chess and backgammon rule-correct multiplayer",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "SOCIAL",
+      "weight": 7,
+      "owner": "cycle-04",
+      "acceptance": "Diplomacy, guilds, mafia and moderated secure chat",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "COMBAT",
+      "weight": 7,
+      "owner": "cycle-04",
+      "acceptance": "Army, animals, weapons and balanced conflict mechanics",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "CLIENT",
+      "weight": 8,
+      "owner": "cycle-04",
+      "acceptance": "Responsive mobile/web UI, accessible rendering and API contract",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "SECURITY",
+      "weight": 7,
+      "owner": "cycle-04",
+      "acceptance": "Authentication, authorization, TRX sandbox settlement, replay and MariaDB concurrency gates",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    },
+    {
+      "id": "RELEASE",
+      "weight": 5,
+      "owner": "cycle-04",
+      "acceptance": "Reproducible build, CI, performance, recovery and independent commercial readiness gates",
+      "required_evidence": "Exact-head passing automated tests plus integration/persistence verification and independent receipt",
+      "accepted": false
+    }
+  ],
+  "baseline_progress_percent": 0
+}
