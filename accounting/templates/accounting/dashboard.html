@@ -12,7 +12,7 @@ document.querySelector('#accounts').innerHTML=x.accounts.length?'<table><tr><th>
 document.querySelector('#entries').innerHTML=x.recent_entries.length?'<table><tr><th>مرجع</th><th>تاریخ</th><th>شرح</th><th>مبلغ</th></tr>'+x.recent_entries.map(e=>'<tr><td>'+esc(e.reference)+'</td><td>'+esc(e.date)+'</td><td>'+esc(e.memo)+'</td><td>'+money(e.total)+'</td></tr>').join('')+'</table>':'<small>هنوز سند قطعی ثبت نشده است.</small>';
 }
 load().catch(()=>{document.querySelector('#cards').innerHTML='<article class="card bad">داده‌های دفتر مالی در دسترس نیست.</article>';});
-<script>
+</script><script>
 (function(){
   const key='zm-native-approval-signature-v1';
   const btn=document.getElementById('enable-phone-notifications');
@@ -27,7 +27,7 @@ load().catch(()=>{document.querySelector('#cards').innerHTML='<article class="ca
   }
   function send(title,body){
     if('Notification' in window&&Notification.permission==='granted'){
-      try{new Notification(title,{body,tag:'zomorod-approval',renotify:true,dir:'rtl',lang:'fa-IR'});}catch(_){}
+      try{const n=new Notification(title,{body,tag:'zomorod-approval',renotify:true,dir:'rtl',lang:'fa-IR'});n.onclick=()=>window.focus();}catch(_){}
     }
   }
   async function enable(){
@@ -42,11 +42,11 @@ load().catch(()=>{document.querySelector('#cards').innerHTML='<article class="ca
       const x=await r.json(), ready=x.release_readiness||{}, pending=Number(ready.pending_approvals??x.live_summary?.approvals?.pending??0);
       const signature=String(pending);
       const previous=localStorage.getItem(key+'-count');
-      if(previous!==null&&signature!==previous&&pending>0)send('زمرد ملل — تأیید لازم است',fa(pending)+' مورد در صف تأیید شماست.');
+      if(signature!==previous&&pending>0)send('زمرد ملل — تأیید لازم است',fa(pending)+' مورد در صف تأیید شماست.');
       localStorage.setItem(key+'-count',signature);
     }catch(_){}
   }
   if(btn)btn.addEventListener('click',enable);
   setStatus();poll();window.setInterval(poll,60000);
 })();
-</script></script></body></html>
+</script><aside id="approval-alert" hidden style="position:fixed;z-index:9999;inset:auto 16px 16px 16px;max-width:620px;margin:auto;background:#fff8e1;color:#3a2a00;border:2px solid #d39e00;border-radius:14px;padding:16px;box-shadow:0 12px 32px #0005" role="alertdialog" aria-live="assertive"><h3 style="margin:0 0 8px">🔔 اعلان تأیید لازم</h3><p id="approval-alert-text" style="margin:8px 0"></p><textarea id="approval-alert-note" rows="2" placeholder="در صورت نیاز، توضیح یا شاهد تصمیم را بنویسید…" style="width:100%;box-sizing:border-box;margin:8px 0;padding:8px;border:1px solid #c7a84b;border-radius:8px"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" data-approval-action="approved" style="background:#16803c;color:#fff;border:0;border-radius:8px;padding:9px 18px">قبول</button><button type="button" data-approval-action="rejected" style="background:#b42318;color:#fff;border:0;border-radius:8px;padding:9px 18px">رد</button><button type="button" data-approval-action="explanation" style="background:#2457a6;color:#fff;border:0;border-radius:8px;padding:9px 18px">توضیح</button></div><small id="approval-alert-meta" style="display:block;margin-top:8px;color:#66552a"></small></aside><script>(function(){const box=document.getElementById('approval-alert'),text=document.getElementById('approval-alert-text'),note=document.getElementById('approval-alert-note'),meta=document.getElementById('approval-alert-meta');let current=null,busy=false;const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('csrftoken='))?.split('=')[1]||'';async function refresh(){try{const r=await fetch('/staff/command-center/api/integrated-ledger/',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const data=await r.json();current=(data.pending_approvals||[])[0]||null;if(!current){box.hidden=true;return;}box.hidden=false;text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'برای این مورد تصمیم لازم است.');meta.textContent='خطر: '+esc(current.risk||'نامشخص')+' | شناسه: '+esc(current.target_id||current.id);}catch(_){}}async function decide(action){if(!current||busy)return;let value=note.value.trim();if(action==='explanation'&&!value){note.focus();alert('لطفاً توضیح را وارد کنید.');return;}busy=true;try{const r=await fetch('/staff/command-center/api/integrated-ledger/',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify({kind:'approval_request',id:current.id,action,note:value})});const data=await r.json();if(!r.ok)throw Error(data.error||'ثبت تصمیم ناموفق بود.');note.value='';box.hidden=true;await refresh();}catch(e){alert(e.message)}finally{busy=false;}}box?.addEventListener('click',e=>{const b=e.target.closest('[data-approval-action]');if(b)decide(b.dataset.approvalAction)});refresh();window.setInterval(refresh,60000);})();</script></body></html>
