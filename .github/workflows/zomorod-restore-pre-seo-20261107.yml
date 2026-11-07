@@ -129,16 +129,21 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os, time
+          import hashlib, os, time
           from urllib.request import Request,urlopen
           runid=os.environ['GITHUB_RUN_ID']
+          restored_sha='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
           for attempt in range(5):
               try:
                   url='https://zomorodmelal.ir/?restore_before_seo='+runid+'-'+str(attempt)
                   with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=23) as response:
-                      page=response.read(2_000_000).decode('utf-8','replace')
+                      raw=response.read(2_000_000)
                       assert response.status==200
-                  assert 'زمرد ملل | پیوند پژوهش، تولید و بازار' in page, 'OLD_TITLE_MISSING'
+                  page=raw.decode('utf-8','replace')
+                  received_sha=hashlib.sha256(raw).hexdigest()
+                  print('PUBLIC_HOME_SHA256='+received_sha)
+                  print('PUBLIC_HOME_BYTES='+str(len(raw)))
+                  assert received_sha==restored_sha, 'PUBLIC_BYTES_NOT_RESTORED_YET'
                   assert '/ask-master/index.php?service=1' in page, 'OLD_LEAD_LINK_MISSING'
                   assert 'zm-nova-home-2026-v1' not in page, 'NOVA_STILL_LIVE'
                   break
