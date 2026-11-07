@@ -43,8 +43,10 @@ class SafeDiagnosticTests(unittest.TestCase):
                 "private_secret": "must-not-be-printed",
             }), encoding="utf-8")
             result = manifest_summary(root)
+            self.assertIsInstance(result.pop("free_space_above_512mib"), bool)
             self.assertEqual(result, {
                 "state": "readable",
+                "header_image_source_present": False,
                 "css_recorded": True,
                 "header_image_recorded": False,
                 "css_collected": True,
@@ -53,6 +55,21 @@ class SafeDiagnosticTests(unittest.TestCase):
                 "header_image_manifest_target_collected": False,
             })
             self.assertNotIn("must-not-be-printed", json.dumps(result))
+
+    def test_source_asset_detected_without_following_symlink(self):
+        with tempfile.TemporaryDirectory() as root:
+            static = Path(root) / "staticfiles"
+            static.mkdir()
+            (static / "staticfiles.json").write_text('{"paths":{}}', encoding="utf-8")
+            source = Path(root) / "core/static/site/mojplaywin-header-emblem.jpg"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"original-image")
+            self.assertTrue(manifest_summary(root)["header_image_source_present"])
+            source.unlink()
+            external = Path(root) / "outside.jpg"
+            external.write_bytes(b"another-image")
+            source.symlink_to(external)
+            self.assertFalse(manifest_summary(root)["header_image_source_present"])
 
     def test_manifest_targets_distinguish_collected_hashes_from_originals(self):
         with tempfile.TemporaryDirectory() as root:
