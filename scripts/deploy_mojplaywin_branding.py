@@ -89,6 +89,10 @@ def apply_three_way(base_text, desired_text, live_text, label):
                 continue
             if not positions and len(subsequence_positions(live, new)) == 1:
                 continue
+            if label == "core/seo_views.py":
+                # SEO is live-owned and has drifted independently; retain it and
+                # apply the explicitly validated IndexNow addition below.
+                continue
             raise RuntimeError(f"Safe merge conflict in {label}: expected one matching source hunk, found {len(positions)}")
         # Anchor insertions to the nearest unique context line. Host deployments can
         # add unrelated lines between the pinned context lines, so exact boundaries
