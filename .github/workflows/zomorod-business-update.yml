@@ -97,10 +97,10 @@ jobs:
           rm -f "$incoming"
           rollback(){ set +e; cp -p "$backup/app.php" "$live"; echo BUSINESS_UPDATE_ROLLBACK=restored; }
           trap 'rc=$?; if test "$rc" != 0; then rollback; fi; exit "$rc"' EXIT
-          code="$(curl -sS -L --max-time 30 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir/bus?release=$sha" || true)"
+          code="$(curl -sS -L --max-time 30 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?release=$sha" || true)"
           echo BUSINESS_HTTP="$code"
           test "$code" = 200
-          grep -Fq 'میز مدیریت و حسابداری زمرد ملل' "$backup/response.html"
+          grep -Fq 'راه‌اندازی امن میز مدیریت' "$backup/response.html"
           test "$(stat -c %a "$live")" = 600
           sha256sum "$live" "$web/index.php" > "$backup/after.sha256"
           trap - EXIT
