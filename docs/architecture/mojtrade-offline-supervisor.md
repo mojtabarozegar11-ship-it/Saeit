@@ -25,6 +25,15 @@ It cannot issue orders or public signals, even if all its inputs are present.
 - A private `0600` hash-chained, lock-protected state-transition journal.
   **Identical polls are not counted as new actions or reports.** Status flips,
   tampered data, stop/resume or changed evidence create one unique transition.
+- A single-instance exclusive advisory lock (`supervisor.lock`, mode `0600`):
+  a second local monitor is rejected, including simultaneous one-shot and
+  watch invocations. The lock is released when the process exits, without
+  deleting the reusable lock file.
+- An **independent atomic liveness heartbeat** (`health.json`, mode `0600`)
+  updated on each successful inspection. It does **not** create a duplicate
+  material state transition. A read-only status command classifies a missing,
+  altered, stale or future-dated heartbeat as blocked/stale and never assumes
+  that a fresh timestamp conclusively proves the process is still running.
 - On error, output is `BLOCKED_EVIDENCE`; with complete but unauthenticated
   local data, output is `RESEARCH_EVIDENCE_OBSERVED_UNVERIFIED`. There is **no
   READY_TO_TRADE state** in this implementation.
@@ -67,6 +76,21 @@ python3 scripts/mojtrade_offline_supervisor.py \
   --state-dir /private/absolute/path/operator-state \
   --watch --interval-seconds 60
 ```
+
+Read only the latest heartbeat and its age, with the default stale threshold
+of three observation intervals (180 seconds for the default 60-second cycle):
+
+```bash
+python3 scripts/mojtrade_offline_supervisor.py \
+  --status --state-dir /private/absolute/path/operator-state \
+  --interval-seconds 60
+```
+
+The status command needs no broker credential, GitHub connection or even the
+original market-data config. It does not modify the event journal or heartbeat.
+Possible states are `MISSING_OR_CORRUPT_HEARTBEAT`, `CLOCK_SKEW_BLOCKED`,
+`STALE_HEARTBEAT`, `OPERATOR_STOPPED`, and
+`RECENT_HEARTBEAT_NOT_PROOF_RUNNING`. **None** enables trading or publishing.
 
 Create `operator-state/STOP` to halt the watch loop; remove only that explicit
 operator stop entry to resume a **research-status** observer. A stop is never
