@@ -25,11 +25,10 @@ class ManagementBridgeRouteContractTests(unittest.TestCase):
         self.assertIn("CPANEL_DJANGO_PROBE_BLOCKED_UNATTESTED_ACTIVE_INTERPRETER", source)
         self.assertNotIn("/virtualenv/Saeit/3.11/bin/python;", source)
 
-    def test_workflow_demands_runtime_receipt(self):
-        source = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("MANAGEMENT_RUNTIME_RECEIPT_MISSING_OR_INVALID", source)
-        self.assertIn("grep -qx 'RECEIPT_CLASS=MANAGEMENT_RUNTIME_READONLY_V1'", source)
-        self.assertIn("PASSENGER_PYTHON_[A-Z_]+", source)
+    def test_one_time_diagnostic_workflow_is_retired(self):
+        # Receipts remain in Actions history, but this temporary push trigger
+        # must never ship as a permanent production workflow.
+        self.assertFalse(WORKFLOW.exists())
 
     def test_identity_probe_never_executes_configured_python(self):
         probe = (BRIDGE.parents[1] / "scripts/cpanel_management_runtime_probe.sh").read_text(encoding="utf-8")
