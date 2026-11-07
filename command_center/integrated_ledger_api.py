@@ -20,6 +20,7 @@ PROJECTS = {
     "profile": "وب‌سایت و معرفی مجتبی روزگار",
 }
 CYCLES = {f"C{i:02d}" for i in range(1, 51)}
+DOMAINS = {"command": "فرمان و چرخه‌ها", "virtual": "سایت‌ها و کسب‌وکار مجازی", "physical": "شرکت و کسب‌وکار فیزیکی"}
 
 def _text(value):
     return str(value or "").strip()
@@ -29,13 +30,13 @@ def _action_key(value):
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 def _report(row):
-    return {"id": row.id, "cycle": row.cycle, "project": row.project_key, "project_name": row.project_name,
+    return {"id": row.id, "domain": row.domain, "domain_name": DOMAINS.get(row.domain, row.domain), "cycle": row.cycle, "project": row.project_key, "project_name": row.project_name,
             "action": row.action, "result": row.result, "measure": row.measure, "blocker": row.blocker,
             "next": row.next_action, "evidence": row.evidence, "owner": row.owner,
             "date": row.action_date.isoformat(), "readonly": row.readonly, "created_at": row.created_at.isoformat()}
 
 def _issue(row):
-    return {"id": row.id, "cycle": row.cycle, "project": row.project_key, "title": row.title,
+    return {"id": row.id, "domain": row.domain, "domain_name": DOMAINS.get(row.domain, row.domain), "cycle": row.cycle, "project": row.project_key, "title": row.title,
             "owner": row.owner, "date": row.observed_on.isoformat(), "verified": row.certainty == "verified",
             "source": row.source, "next": row.next_action, "status": row.status,
             "resolution_evidence": row.resolution_evidence, "created_at": row.created_at.isoformat()}
@@ -108,10 +109,11 @@ def integrated_ledger_api(request):
         return JsonResponse({"error": "بدنهٔ درخواست معتبر نیست."}, status=400)
     kind = _text(payload.get("kind"))
     if kind == "report":
+        domain = _text(payload.get("domain")) or "command"
         cycle, project, action = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("action"))
         result, measure, evidence = _text(payload.get("result")), _text(payload.get("measure")), _text(payload.get("evidence"))
         owner, next_action = _text(payload.get("owner")), _text(payload.get("next"))
-        if cycle not in CYCLES or project not in PROJECTS or not all((action, result, measure, evidence, owner, next_action)):
+        if domain not in DOMAINS or cycle not in CYCLES or project not in PROJECTS or not all((action, result, measure, evidence, owner, next_action)):
             return JsonResponse({"error": "چرخه، پروژه، اقدام، نتیجه، واحد سنجش، شاهد، مسئول و اقدام بعدی الزامی است."}, status=400)
         if len(result) > 240 or len(measure) > 160 or len(owner) > 160 or len(next_action) > 240:
             return JsonResponse({"error": "یکی از فیلدهای گزارش بیش از حد مجاز طولانی است."}, status=400)
@@ -121,7 +123,7 @@ def integrated_ledger_api(request):
         try: action_date = date.fromisoformat(_text(payload.get("date")))
         except ValueError: return JsonResponse({"error": "تاریخ اقدام معتبر نیست."}, status=400)
         try:
-            row = CycleReport.objects.create(cycle=cycle, project_key=project, project_name=PROJECTS[project], action=action,
+            row = CycleReport.objects.create(domain=domain, cycle=cycle, project_key=project, project_name=PROJECTS[project], action=action,
                 action_key=key, result=result, measure=measure, blocker=_text(payload.get("blocker")),
                 next_action=next_action, evidence=evidence, owner=owner,
                 action_date=action_date, readonly=bool(payload.get("readonly")), created_by=request.user)
@@ -130,17 +132,18 @@ def integrated_ledger_api(request):
         _audit("create", "report", row.id, f"گزارش {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, evidence)
         return JsonResponse({"report": _report(row)}, status=201)
     if kind == "issue":
+        domain = _text(payload.get("domain")) or "command"
         cycle, project, title = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("title"))
         certainty, source = _text(payload.get("certainty")) or "unverified", _text(payload.get("source"))
         owner, next_action = _text(payload.get("owner")), _text(payload.get("next"))
-        if cycle not in CYCLES or project not in PROJECTS or not title or not owner or not next_action or certainty not in ("verified", "unverified"):
+        if domain not in DOMAINS or cycle not in CYCLES or project not in PROJECTS or not title or not owner or not next_action or certainty not in ("verified", "unverified"):
             return JsonResponse({"error": "چرخه، پروژه، شرح مشکل، مسئول و اقدام بعدی الزامی است."}, status=400)
         if len(owner) > 160 or len(next_action) > 240:
             return JsonResponse({"error": "مسئول یا اقدام بعدی بیش از حد مجاز طولانی است."}, status=400)
         if certainty == "verified" and not source: return JsonResponse({"error": "برای مانع تأییدشده، منبع الزامی است."}, status=400)
         try: observed_on = date.fromisoformat(_text(payload.get("date")))
         except ValueError: return JsonResponse({"error": "تاریخ مشاهده معتبر نیست."}, status=400)
-        row = CycleIssue.objects.create(cycle=cycle, project_key=project, title=title, owner=owner,
+        row = CycleIssue.objects.create(domain=domain, cycle=cycle, project_key=project, title=title, owner=owner,
             observed_on=observed_on, certainty=certainty, source=source, next_action=next_action, created_by=request.user)
         _audit("create", "issue", row.id, f"مانع {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, source)
         return JsonResponse({"issue": _issue(row)}, status=201)
