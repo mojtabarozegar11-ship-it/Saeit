@@ -88,7 +88,7 @@ function layoutStart(string $page,?array $user=null):void {
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
     if($user)echo <<<'HTML'
 <section id="zm-approval-widget" style="margin:14px 4%;padding:14px 18px;border:2px solid #d9b85f;border-radius:14px;background:#182d1d;color:#f3e4b0">
-  <strong>🔔 اعلان و تأیید مدیریتی</strong> <button type="button" id="zm-enable-phone">فعال‌سازی اعلان گوشی</button>
+  <strong>🔔 اعلان و تأیید مدیریتی</strong> <button type="button" id="zm-enable-phone">فعال‌سازی اعلان گوشی</button> <a href="/staff/command-center/integrated/" style="color:#f3d584;margin-right:10px">بازکردن مرکز تأییدها</a>
   <span id="zm-approval-status" style="margin-right:12px">در حال بررسی صف تأیید…</span>
   <div id="zm-approval-request" hidden style="margin-top:10px;padding:12px;border-top:1px solid #806a37">
     <div id="zm-approval-text"></div>
@@ -106,7 +106,7 @@ function layoutStart(string $page,?array $user=null):void {
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const phone=document.getElementById('zm-enable-phone');
   function phoneStatus(){if(!phone)return;if(!('Notification' in window)){phone.disabled=true;phone.textContent='اعلان وب پشتیبانی نمی‌شود';return;}phone.textContent=Notification.permission==='granted'?'🔔 اعلان گوشی فعال است':'🔔 فعال‌سازی اعلان گوشی';}
-  phone?.addEventListener('click',async()=>{if('Notification' in window){const p=await Notification.requestPermission();phoneStatus();if(p==='granted')new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});}});
+  phone?.addEventListener('click',async()=>{if(!('Notification' in window)){phoneStatus();return;}const p=await Notification.requestPermission();phoneStatus();if(p==='granted'){const n=new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});n.onclick=()=>window.focus();}else if(p==='denied'){status.textContent='اعلان گوشی در Chrome مسدود است؛ از تنظیمات سایت اجازه اعلان را فعال کنید.';}});
   phoneStatus();
   async function refresh(){
     try{
@@ -116,7 +116,7 @@ function layoutStart(string $page,?array $user=null):void {
       status.textContent=current?'یک درخواست تأیید در انتظار است.':'صف تأیید فعلاً خالی است.';
       req.hidden=!current;
       if(current)text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'تصمیم مالک لازم است.');
-    }catch(_){status.textContent='برای دریافت اعلان، داشبورد یکپارچه را نیز باز نگه دارید.';req.hidden=true;}
+    }catch(_){status.innerHTML='اتصال صف این صفحه برقرار نیست؛ <a href="/staff/command-center/integrated/" style="color:#f3d584">مرکز تأییدها را باز کنید</a>.';req.hidden=true;}
   }
   async function decide(action){
     if(!current)return;
