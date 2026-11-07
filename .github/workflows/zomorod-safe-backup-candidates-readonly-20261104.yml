@@ -142,6 +142,33 @@ jobs:
                   age=max(0,int((time.time()-p.stat().st_mtime)/86400))
                   print("BACKUP_DUPLICATE_PATH=age_days:"+str(age)+":path:"+str(p.relative_to(Path("/home/zomorod2"))),flush=True)
           PY
+      - name: Audit npm cache and active processes read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat,time,subprocess
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          for rel in (".npm/_cacache",".npm/_npx",".npm/_logs"):
+              target=root/rel
+              count=total=old=0
+              if target.is_dir() and not target.is_symlink():
+                  cutoff=time.time()-7*86400
+                  for p in target.rglob("*"):
+                      try:
+                          s=p.lstat()
+                          if stat.S_ISREG(s.st_mode) and s.st_uid==os.geteuid():
+                              count+=1; total+=s.st_size
+                              if s.st_mtime<cutoff: old+=s.st_size
+                      except (OSError,FileNotFoundError): pass
+              print("NPM_CACHE="+rel+":FILES="+str(count)+":BYTES="+str(total)+":OLDER_7D_BYTES="+str(old),flush=True)
+          p=subprocess.run(["ps","-eo","pid,etime,args"],capture_output=True,text=True,timeout=15)
+          hits=[line for line in p.stdout.splitlines() if any(token in line.lower() for token in ("npm","npx","node")) and "grep" not in line.lower()]
+          print("NPM_ACTIVE_PROCESS_LINES="+str(len(hits)),flush=True)
+          for line in hits[:20]: print("NPM_PROCESS="+line,flush=True)
+          PY
       - name: Remove runner-only SSH files
         if: always()
         run: |
