@@ -16,3 +16,7 @@ Static target: public_html/faremah/index.html
 Current store release: 7f6047329706502d6a41edbadbc0048b71367235
 Public target: /store/
 Change: add leather, family clothing, herbalist, and direct agricultural supply storefront links alongside the existing perfume/beauty and toys/models stores.
+
+
+Live store theme repair: 538e2debcccc91fd14a05e60c6524c7794a7b224
+Change: add the six specialty storefront cards inside the existing green/gold responsive Zomorod store layout; no replacement template.
