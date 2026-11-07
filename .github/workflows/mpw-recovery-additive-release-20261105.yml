@@ -13,6 +13,7 @@ on:
           - publish_additive
           - verify
           - chain_audit
+          - activate
 
 permissions:
   contents: read
@@ -122,6 +123,9 @@ jobs:
               ;;
             chain_audit)
               timeout 85s ssh -T -F "$d/config" saeit-cpanel "MPW_READONLY_CHAIN_ACK=mpw-existing-paid-trx-readonly-20261105 PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_paid_chain_recheck_readonly_20261105.py'"
+              ;;
+            activate)
+              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' activate '$GITHUB_RUN_ID'"
               ;;
           esac
 
