@@ -23,7 +23,7 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 6,
+      "sequence": 7,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript",
       "zm50": {
@@ -61,10 +61,10 @@
         "path": "ops/ZM50_CYCLE01_WBS_v1.json",
         "accepted_weight": 0,
         "progress_percent": 0,
-        "previous_progress_percent": null,
-        "change_percentage_points": null,
+        "previous_progress_percent": 0,
+        "change_percentage_points": 0,
         "minimum_2pp_met": false,
-        "reason": "Initial WBS baseline; no accepted deliverable"
+        "reason": "Original QA protocol persisted, but no WBS deliverable met acceptance gates"
       }
     },
     "02": {
@@ -516,6 +516,16 @@
       "acceptance_result": "Versioned fixed 12-item WBS totaling 100 established; no functional deliverable accepted",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE03_WBS_v1.json",
       "impact": "Enables auditable progress measurement; no live sale, payment, delivery or revenue verified"
+    },
+    {
+      "registry_id": "R01-0007",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T220936+0330-denominator-protocol",
+      "deliverable_key": "c144-denominator-reconciliation-protocol-v1",
+      "stage": "research-QA",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/research/MR-C144_denominator_reconciliation_protocol_20261107.md",
+      "acceptance_result": "Original complete source-gated methodological protocol created and read back; not independently source-verified or accepted as manuscript",
+      "impact": "Explicitly prevents treating 74 category responses vs 72 respondents as proven source error; WBS accepted weight unchanged at zero"
     }
   ],
   "report_reservations": [],
