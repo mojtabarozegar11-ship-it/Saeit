@@ -4,6 +4,11 @@ import ast
 
 def patch_financial_urls(source):
     if "_finance_routes" in source:
+        if 'path(f"{_brand_slug}/game/",' not in source:
+            source = source.replace(
+                'path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),',
+                'path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),\n        path(f"{_brand_slug}/game/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="game"), name=f"game_{_brand_slug}"),',
+            )
         # Migrate a previously installed finance block in place. This keeps
         # repeated deployments safe while correcting an older store segment.
         return source.replace(
