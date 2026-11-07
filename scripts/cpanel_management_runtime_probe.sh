@@ -51,18 +51,31 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
   fi
   count=0
   hint=none
+  executable=unknown
   while read -r directive value _ || [[ -n "${directive:-}" ]]; do
     if [[ "${directive:-}" != PassengerPython ]]; then continue; fi
     count=$((count + 1))
+    # Directives may quote their path. Strip only surrounding quote marks;
+    # never evaluate or execute an untrusted configuration value.
+    value=${value#\"}
+    value=${value%\"}
+    value=${value#\'}
+    value=${value%\'}
     case "${value:-}" in
       /home/zomorod2/virtualenv/Saeit/3.10/bin/python) hint=prod_3_10 ;;
       /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python) hint=staging_3_11 ;;
       /home/zomorod2/Saeit/.venv/bin/python) hint=project_venv_unverified ;;
+      /home/zomorod2/virtualenv/Saeit/3.11/bin/python) hint=legacy_prod_3_11_previously_missing ;;
+      /home/zomorod2/virtualenv/Saeit/3.10/bin/python3*) hint=prod_3_10_alt_binary ;;
+      /home/zomorod2/virtualenv/Saeit/*) hint=other_saeit_virtualenv ;;
+      /usr/bin/python*) hint=system_python ;;
       *) hint=other_unverified ;;
     esac
+    if [[ "${value:-}" == /* && -x "$value" ]]; then executable=yes; else executable=no; fi
   done < "$site"
-  if (( count > 1 )); then hint=multiple_ambiguous; fi
+  if (( count > 1 )); then hint=multiple_ambiguous; executable=ambiguous; fi
   printf 'PASSENGER_PYTHON_HINT_%s=%s\n' "$label" "$hint"
+  printf 'PASSENGER_PYTHON_HINT_EXECUTABLE_%s=%s\n' "$label" "$executable"
 done
 
 # Bind a process to this app only if its process title explicitly names this

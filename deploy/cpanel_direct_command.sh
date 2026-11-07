@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates|management_runtime_fingerprint) ;;
+  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates|management_runtime_fingerprint|management_domain_docroot) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -80,16 +80,18 @@ case "$operation" in
   cpanel_preflight)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'
     ;;
-  django_check)
-    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py check'
+  django_check|django_migrations)
+    # The former hard-coded Python path was proved nonexistent. Until the
+    # active Passenger interpreter and DB binding are attested, do not run
+    # Django from a guessed venv (even for nominally read-only commands).
+    echo 'CPANEL_DJANGO_PROBE_BLOCKED_UNATTESTED_ACTIVE_INTERPRETER' >&2
+    exit 78
     ;;
-  django_migrations)
-    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
-    ;;
-  management_runtime_fingerprint)
-    # Bounded, local source fingerprints + sanitized Passenger process hints.
-    # The host receives a one-time read-only script via stdin; no installation.
-    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'bash -s' < scripts/cpanel_management_runtime_probe.sh
+  management_domain_docroot)
+    # UAPI metadata is filtered on the runner; no raw host JSON is logged.
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel \
+      'uapi --output=json DomainInfo single_domain_data domain=zomorodmelal.ir 2>/dev/null' |
+      python3 scripts/management_domain_docroot_readonly.py
     ;;
   runtime_path_diagnostics)
     # Exact-path booleans only. No file contents, directory traversal, app

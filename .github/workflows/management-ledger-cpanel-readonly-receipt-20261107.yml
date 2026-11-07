@@ -9,6 +9,8 @@ on:
     paths:
       - .github/workflows/management-ledger-cpanel-readonly-receipt-20261107.yml
       - scripts/management_passenger_binding_readonly.py
+      - scripts/management_domain_docroot_readonly.py
+      - scripts/cpanel_management_runtime_probe.sh
 
 permissions:
   contents: read
@@ -39,6 +41,15 @@ jobs:
           test -n "$VPS_KEY"
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh management_passenger_binding
+
+      - name: Attest domain document root without logging raw cPanel metadata
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest -q scripts.tests.test_management_domain_docroot_readonly
+          bash deploy/cpanel_direct_command.sh management_domain_docroot
 
       - name: Collect redacted Passenger process and source fingerprints
         env:
