@@ -18,9 +18,16 @@ class MojPlayWinTemplateSourceGuards(unittest.TestCase):
         template = (ROOT / "core/templates/brands/mojplaywin/base.html").read_text(encoding="utf-8")
         self.assertIn('{% extends "mojplaywin/site_base.html" %}', template)
 
-    def test_protected_shared_passenger_deploy_remains_off(self):
+    def test_main_passenger_release_retains_verified_rollback(self):
         source = (ROOT / ".github/workflows/mojplaywin-main-deploy.yml").read_text(encoding="utf-8")
-        self.assertIn('if: ${{ false }}', source)
+        self.assertIn("PINNED_RELAY_READY", source)
+        self.assertIn("MOJPLAYWIN_SAFE_MERGE_CHECK=passed", source)
+        self.assertIn("Smoke-test MojPlayWin pages", source)
+        self.assertIn("Roll back if smoke checks fail", source)
+        for legacy in ("mojplaywin-active-home-editorials.yml",
+                       "mojplaywin-legacy-content-deploy.yml"):
+            locked = (ROOT / ".github/workflows" / legacy).read_text(encoding="utf-8")
+            self.assertIn('if: ${{ false }}', locked)
 
     def test_logo_is_a_real_cacheable_static_asset(self):
         template = (ROOT / "core/templates/mojplaywin/theme.html").read_text(encoding="utf-8")
