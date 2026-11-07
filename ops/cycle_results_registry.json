@@ -589,7 +589,7 @@
         "acceptance": "independently playable accepted build"
       },
       "05": {
-        "deliverable": "business command, accounting, agents, MOJ7-MOJ38 technical packages",
+        "deliverable": "business command, accounting, agents, MOJ7-MOJ36 technical packages",
         "priority": "P0",
         "gate": "DB identity, MFA, backup restore, deduplicated receipts, no unapproved on-chain activity",
         "acceptance": "verified operations and independently reconciled real revenue"
