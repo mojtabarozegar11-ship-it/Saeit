@@ -59,6 +59,8 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
+ from .commerce_funnel import record_funnel_event
+ record_funnel_event(request, "view_store")
  return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
 
 def venture(request, slug):
