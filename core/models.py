@@ -2,6 +2,9 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+# Explicit per-order buyer-email binding; legacy orders are never backfilled.
+from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate
+
 
 class T(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -468,3 +471,31 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommerceFunnelEvent(T):
+    """Server-side commerce funnel event used by the management dashboard."""
+
+    EVENT_CHOICES = (
+        ("view_store", "Store view"),
+        ("view_item", "Product view"),
+        ("begin_checkout", "Checkout opened"),
+        ("invoice_created", "Invoice created"),
+        ("payment_confirmed", "Payment confirmed"),
+        ("delivery_success", "Delivery succeeded"),
+        ("delivery_failure", "Delivery failed"),
+    )
+    event_name = models.CharField(max_length=32, choices=EVENT_CHOICES)
+    source = models.CharField(max_length=40, blank=True, default="")
+    medium = models.CharField(max_length=40, blank=True, default="")
+    campaign = models.CharField(max_length=80, blank=True, default="")
+    product = models.ForeignKey(
+        "Product", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="funnel_events",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["event_name", "created_at"]),
+            models.Index(fields=["product", "event_name", "created_at"]),
+        ]
