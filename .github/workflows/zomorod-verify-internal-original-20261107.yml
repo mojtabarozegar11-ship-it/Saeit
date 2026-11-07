@@ -188,6 +188,47 @@ jobs:
           print('RESCUE_COMPARE_READ_ONLY=yes')
           PY
 
+      - name: Identify authentic internal-page archive candidates without changing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import hashlib,os,re
+          home=Path('/home/zomorod2');web=home/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          slugs=('about','contact','agriculture','topics','business','apps','agents','news','blog','economy','market','weather')
+          bases=[]
+          for root in (home/'.backups',home/'.private'):
+              if not root.is_dir():continue
+              for category in root.iterdir():
+                  if not category.is_dir():continue
+                  for version in category.iterdir():
+                      if not version.is_dir():continue
+                      for sub in ('candidate','static-pages','staging','pages'):
+                          base=version/sub
+                          if base.is_dir():bases.append(base)
+          print('ARCHIVE_BASES_REVIEWED',len(bases))
+          for slug in slugs:
+              live=web/slug/'index.html'
+              if not live.is_file():continue
+              b=live.read_bytes(); hash=lambda data:hashlib.sha256(data).hexdigest()
+              link=lambda data:[x.decode(errors='replace') for x in re.findall(rb'<link[^>]+stylesheet[^>]*>',data,re.I)]
+              print('CURRENT_PAGE',slug,'bytes',len(b),'sha',hash(b),'css',link(b)[:4])
+              candidates=[]
+              for base in bases:
+                  f=base/slug/'index.html'
+                  if not f.is_file() or f.stat().st_size>1000000:continue
+                  contents=f.read_bytes()
+                  candidates.append((str(f.relative_to(home)),len(contents),hash(contents),link(contents)[:3],datetime.fromtimestamp(f.stat().st_mtime,timezone.utc).strftime('%Y-%m-%dT%H:%MZ')))
+              for c in candidates[:35]:print('ARCHIVE_CANDIDATE',slug,*c)
+              print('ARCHIVE_CANDIDATE_COUNT',slug,len(candidates))
+          homepage=(web/'index.html').read_bytes()
+          assert hashlib.sha256(homepage).hexdigest()=='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          print('ARCHIVE_INVENTORY_READ_ONLY_AND_HOMEPAGE_UNCHANGED=yes')
+          PY
+
       - name: Verify all recovered research URLs and protect homepage read only
         shell: bash
         run: |
