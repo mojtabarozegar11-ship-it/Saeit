@@ -431,10 +431,153 @@ def inventory_factory_finished(root: Path = FACTORY_FINISHED_ROOT) -> dict:
                 largest_protected_packages=largest)
 
 
+
+# Optional content-identity pass. Distinct from SQLite quick_check: this proves
+# exact byte equivalence without classifying any copy as safe for deletion.
+HASH_SCAN_SECONDS = 180
+HASH_READ_CHUNK = 1024 * 1024
+
+
+def backup_hash_identity(root: Path, seconds: float = HASH_SCAN_SECONDS) -> dict:
+    root = Path(root)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("BACKUP_HASH_ROOT_UNSAFE")
+    base = root.resolve(strict=True)
+    device = os.lstat(base).st_dev
+    paths = []
+    seen = 0
+    for directory, folders, files in os.walk(base, topdown=True, followlinks=False):
+        here = Path(directory)
+        if len(here.relative_to(base).parts) > MAX_DEPTH:
+            raise ValueError("BACKUP_HASH_TREE_TOO_DEEP")
+        folders[:] = sorted(
+            name for name in folders
+            if not (here / name).is_symlink()
+            and os.lstat(here / name).st_dev == device
+        )
+        for name in sorted(files):
+            seen += 1
+            if seen > MAX_WALK_FILES:
+                raise ValueError("BACKUP_HASH_TREE_LIMIT_EXCEEDED")
+            path = here / name
+            info = os.lstat(path)
+            if (name.endswith(".sqlite3") and stat.S_ISREG(info.st_mode)
+                    and info.st_dev == device and info.st_nlink == 1):
+                paths.append((info.st_mtime_ns, path))
+    paths.sort(reverse=True)
+    started = time.monotonic()
+    groups = {}
+    observations = []
+    for _, path in paths:
+        relative = path.relative_to(base).as_posix()
+        entry = {
+            "path_sha256_prefix": hashlib.sha256(relative.encode()).hexdigest()[:16],
+            "filename": path.name if path.parent == base and
+                        EXACT_SNAPSHOT.fullmatch(path.name) else "(redacted)",
+            "sha256": None,
+            "hash_status": "not_checked",
+            "bytes": None,
+        }
+        if time.monotonic() - started >= seconds:
+            entry["hash_status"] = "global_hash_budget_exhausted"
+            observations.append(entry)
+            continue
+        fd = None
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            before = os.fstat(fd)
+            digest = hashlib.sha256()
+            completed = False
+            while time.monotonic() - started < seconds:
+                block = os.read(fd, HASH_READ_CHUNK)
+                if not block:
+                    completed = True
+                    break
+                digest.update(block)
+            after = os.fstat(fd)
+            current = os.lstat(path)
+            keys = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink")
+            stable = (completed and stat.S_ISREG(before.st_mode)
+                      and before.st_nlink == 1
+                      and all(getattr(before, key) == getattr(after, key) ==
+                              getattr(current, key) for key in keys))
+            entry["bytes"] = before.st_size
+            if stable:
+                key = digest.hexdigest()
+                entry["sha256"] = key
+                entry["hash_status"] = "stable_full_sha256"
+                groups.setdefault(key, []).append(entry)
+            else:
+                entry["hash_status"] = (
+                    "global_hash_budget_exhausted" if not completed
+                    else "changed_during_hash"
+                )
+        except OSError as exc:
+            entry["hash_status"] = type(exc).__name__
+        finally:
+            if fd is not None:
+                os.close(fd)
+        observations.append(entry)
+    same_content = [
+        {
+            "sha256": key,
+            "bytes_each": values[0]["bytes"],
+            "members": [{"path_sha256_prefix": item["path_sha256_prefix"],
+                         "filename": item["filename"]} for item in values],
+            "byte_identical_extra_bytes_not_authorized": (
+                len(values) - 1) * values[0]["bytes"],
+            "approved_for_deletion": False,
+        }
+        for key, values in sorted(groups.items()) if len(values) > 1
+    ]
+    return {
+        "schema": "factory.vps.sqlite.hash.identity.v1",
+        "read_only": True,
+        "files_changed_or_deleted": 0,
+        "hashed_count": sum(x["hash_status"] == "stable_full_sha256"
+                            for x in observations),
+        "sqlite_files_seen": len(paths),
+        "full_hash_coverage": all(x["hash_status"] == "stable_full_sha256"
+                                  for x in observations),
+        "identical_content_groups": same_content,
+        "deletion_gate": "BLOCKED_PENDING_INDEPENDENT_RESTORE_AND_OWNER_APPROVAL",
+        "records": observations,
+    }
+
+
+def backup_snapshot_space_gate(root: Path) -> dict:
+    """Estimate the reserve required before making another local DB snapshot."""
+    runtime = Path(root).parent.parent
+    if runtime.name != "factory-runtime" or runtime.is_symlink():
+        return {"status": "not_factory_runtime_root"}
+    info = os.statvfs(runtime)
+    free = info.f_bavail * info.f_frsize
+    reserve = max(2 * 1024**3, (info.f_blocks * info.f_frsize + 19) // 20)
+    db = runtime / "django-app" / "db.sqlite3"
+    try:
+        db_stat = db.lstat()
+    except FileNotFoundError:
+        return {"status": "missing_live_db", "free_bytes": free}
+    if not stat.S_ISREG(db_stat.st_mode) or stat.S_ISLNK(db_stat.st_mode):
+        return {"status": "unsafe_live_db", "free_bytes": free}
+    needed = reserve + db_stat.st_size
+    return {
+        "status": "observed",
+        "free_bytes": free,
+        "reserve_bytes": reserve,
+        "live_database_bytes": db_stat.st_size,
+        "required_before_new_snapshot_bytes": needed,
+        "shortfall_bytes": max(0, needed - free),
+        "safe_new_snapshot_space": free >= needed,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT,
                         help="Read-only source directory; no files are modified.")
+    parser.add_argument("--hash", action="store_true",
+                        help="Read full SQLite backup contents for exact SHA-256 identity.")
     args = parser.parse_args()
     result = audit(args.root)
     print("FACTORY_BACKUP_AUDIT=" + json.dumps(public_report(result), sort_keys=True))
@@ -443,6 +586,11 @@ def main() -> None:
             inventory_factory_operations(), sort_keys=True))
         print("FACTORY_FINISHED_PRODUCT_INVENTORY=" + json.dumps(
             inventory_factory_finished(), sort_keys=True))
+    if args.hash:
+        print("FACTORY_BACKUP_HASH_IDENTITY=" + json.dumps(
+            backup_hash_identity(args.root), sort_keys=True))
+    print("FACTORY_BACKUP_SNAPSHOT_SPACE_GATE=" + json.dumps(
+        backup_snapshot_space_gate(args.root), sort_keys=True))
     if not result["sqlite_count"]:
         raise SystemExit("NO_SQLITE_BACKUPS_FOUND")
 
