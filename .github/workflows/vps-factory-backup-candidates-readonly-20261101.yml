@@ -7,6 +7,9 @@ on:
       - tests/test_factory_vps_backup_retention_audit_20261101.py
       - .github/workflows/vps-factory-backup-candidates-readonly-20261101.yml
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-factory-backup-candidates-readonly-20261101.yml"]
 
 permissions:
   contents: read
