@@ -160,9 +160,16 @@ def _ready(order):
     count = OrderItem.objects.filter(order_id=order.pk).count()
     if count < 1:
         return False
-    return Fulfillment.objects.filter(
+    # Count alone is insufficient: two ready rows for one item could mask
+    # another order item with no fulfillment. Require one distinct ready
+    # item per purchased item before granting any recovery download.
+    ready = Fulfillment.objects.filter(
         item__order_id=order.pk, status__iexact="ready"
-    ).count() == count
+    )
+    return (
+        ready.count() == count
+        and ready.values("item_id").distinct().count() == count
+    )
 
 
 def _eligible_orders(email_digest):
