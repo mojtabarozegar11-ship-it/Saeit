@@ -138,18 +138,49 @@ def verify_public(home: bytes, js: bytes, asset_name: str) -> None:
                 raise RuntimeError(f"Public content SHA mismatch: {url}")
 
 
+def restore_from_backup(source: Path, backup: Path) -> None:
+    if source != LIVE_ROOT / "index.html" or backup.parent != PRIVATE_BACKUPS:
+        raise ValueError("Rollback paths are outside the pinned cPanel scope")
+    if backup.is_symlink() or not backup.is_file():
+        raise ValueError("Private backup is missing or is a symlink")
+    original = backup.read_bytes()
+    if sha(original) != APPROVED_HOME_SHA256:
+        raise ValueError("Private backup hash does not match approved original")
+    candidate, _, _ = transform(original)
+    current_hash = sha(source.read_bytes())
+    if current_hash != sha(candidate):
+        if current_hash == APPROVED_HOME_SHA256:
+            print(json.dumps({"mode": "already_rolled_back", "source_sha256": current_hash}))
+            return
+        raise RuntimeError("Refusing rollback: a different publisher changed the homepage")
+    atomic_replace(source, original)
+    if sha(source.read_bytes()) != APPROVED_HOME_SHA256:
+        raise RuntimeError("Rollback local verification failed")
+    print(json.dumps({"mode": "rolled_back", "source_sha256": APPROVED_HOME_SHA256,
+                      "public_recheck_required": True}))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--stage", type=Path, help="Write candidate files to this non-production directory")
     parser.add_argument("--publish", action="store_true", help="Explicit guarded live cPanel publication")
+    parser.add_argument("--rollback", action="store_true", help="Restore an exact verified private backup")
+    parser.add_argument("--backup", type=Path, help="Private backup path for --rollback")
     args = parser.parse_args()
-    if args.stage and args.publish:
-        parser.error("--stage and --publish are mutually exclusive")
+    if sum(bool(v) for v in (args.stage, args.publish, args.rollback)) > 1:
+        parser.error("--stage, --publish and --rollback are mutually exclusive")
 
     if args.source.is_symlink():
         raise ValueError("Symlink source refused")
     source = args.source.resolve(strict=True)
+    if args.rollback:
+        if args.backup is None:
+            parser.error("--rollback requires --backup")
+        restore_from_backup(source, args.backup.absolute())
+        return
+    if args.backup is not None:
+        parser.error("--backup is only valid with --rollback")
     original = source.read_bytes()
     page, asset, asset_name = transform(original)
     summary = {"approved_source_sha256": sha(original), "candidate_html_sha256": sha(page),
