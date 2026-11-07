@@ -388,6 +388,30 @@ def patch_public(namespace):
     if not registered:
         raise RuntimeError("Recovery URL registry not found")
 
+    # Ensure Django's actual module URLconf receives the routes. Some live
+    # revisions keep a separate commerce registry that the root include does
+    # not consume; direct urlpatterns registration is therefore authoritative.
+    from django.urls import path
+    direct_recovery = [
+        path("recover/", recovery_request, name="mpw_recovery_request"),
+        path("recover/verify/", recovery_verify, name="mpw_recovery_verify"),
+        path("recover/orders/", recovery_orders, name="mpw_recovery_orders"),
+        path("recover/download/<int:invoice_id>/", recovery_download,
+             name="mpw_recovery_download"),
+    ]
+    existing_urlpatterns = namespace.get("urlpatterns")
+    if isinstance(existing_urlpatterns, (tuple, list)):
+        existing_urlpatterns = list(existing_urlpatterns)
+        existing_text = {str(getattr(item, "pattern", item))
+                         for item in existing_urlpatterns}
+        direct_recovery = [
+            item for item in direct_recovery
+            if str(item.pattern) not in existing_text
+        ]
+        namespace["urlpatterns"] = existing_urlpatterns + direct_recovery
+    else:
+        namespace["urlpatterns"] = direct_recovery
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
