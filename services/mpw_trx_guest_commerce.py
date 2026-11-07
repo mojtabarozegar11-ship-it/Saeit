@@ -432,6 +432,28 @@ def patch_public(namespace):
                 + root_patterns
             )
 
+    # Legacy public_pages registries may catch the whole commerce prefix before
+    # Django sees appended URL patterns. Wrap the public entry once so recovery
+    # is dispatched before that legacy catch-all, without changing other pages.
+    import sys as _sys
+    _public_module = _sys.modules.get("services.mpw_trx_public_pages")
+    if _public_module is not None and not getattr(_public_module, "_mpw_recovery_dispatch_installed", False):
+        for _name in ("public_shop", "product_checkout", "purchases"):
+            _old_public = getattr(_public_module, _name, None)
+            if not callable(_old_public):
+                continue
+            def _recovery_first(request, *args, _old=_old_public, **kwargs):
+                _path = str(getattr(request, "path_info", "")).rstrip("/")
+                if _path in (
+                    "/commerce/trx-easy/recover",
+                    "/commerce/trx-easy/recover/verify",
+                    "/commerce/trx-easy/recover/orders",
+                ) or _path.startswith("/commerce/trx-easy/recover/download/"):
+                    return recovery_request(request)
+                return _old(request, *args, **kwargs)
+            setattr(_public_module, _name, _recovery_first)
+        _public_module._mpw_recovery_dispatch_installed = True
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
