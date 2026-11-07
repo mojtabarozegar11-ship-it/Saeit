@@ -88,7 +88,7 @@ function layoutStart(string $page,?array $user=null):void {
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
     if($user)echo <<<'HTML'
 <section id="zm-approval-widget" style="margin:14px 4%;padding:14px 18px;border:2px solid #d9b85f;border-radius:14px;background:#182d1d;color:#f3e4b0">
-  <strong>🔔 اعلان و تأیید مدیریتی</strong>
+  <strong>🔔 اعلان و تأیید مدیریتی</strong> <button type="button" id="zm-enable-phone">فعال‌سازی اعلان گوشی</button>
   <span id="zm-approval-status" style="margin-right:12px">در حال بررسی صف تأیید…</span>
   <div id="zm-approval-request" hidden style="margin-top:10px;padding:12px;border-top:1px solid #806a37">
     <div id="zm-approval-text"></div>
@@ -104,6 +104,10 @@ function layoutStart(string $page,?array $user=null):void {
   const status=document.getElementById('zm-approval-status'), req=document.getElementById('zm-approval-request'), text=document.getElementById('zm-approval-text'), note=document.getElementById('zm-approval-note');
   let current=null;
   const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const phone=document.getElementById('zm-enable-phone');
+  function phoneStatus(){if(!phone)return;if(!('Notification' in window)){phone.disabled=true;phone.textContent='اعلان وب پشتیبانی نمی‌شود';return;}phone.textContent=Notification.permission==='granted'?'🔔 اعلان گوشی فعال است':'🔔 فعال‌سازی اعلان گوشی';}
+  phone?.addEventListener('click',async()=>{if('Notification' in window){const p=await Notification.requestPermission();phoneStatus();if(p==='granted')new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});}});
+  phoneStatus();
   async function refresh(){
     try{
       const r=await fetch('/staff/command-center/api/integrated-ledger/',{credentials:'include',cache:'no-store'});
