@@ -26,10 +26,16 @@ export function evaluateSceneSnapshot(snapshot) {
   if (!snapshot.hasBuildTab) issues.push('build_tab_missing');
   if (!snapshot.hasWorldCanvas) issues.push('world_canvas_missing');
   else {
-    if (snapshot.display === 'none' || snapshot.visibility === 'hidden')
-      issues.push('world_canvas_hidden');
-    if (!(snapshot.width >= 320 && snapshot.height >= 240))
-      issues.push('world_canvas_zero_or_too_small');
+    const visible3d = snapshot.display !== 'none' && snapshot.visibility !== 'hidden' &&
+      snapshot.width >= 320 && snapshot.height >= 240;
+    const accessible2d = snapshot.hasAccessibleFallback === true && snapshot.fallbackTileCount >= 81;
+    if (!visible3d && !accessible2d) {
+      if (snapshot.display === 'none' || snapshot.visibility === 'hidden')
+        issues.push('world_canvas_hidden');
+      if (!(snapshot.width >= 320 && snapshot.height >= 240))
+        issues.push('world_canvas_zero_or_too_small');
+      issues.push('no_playable_accessible_world_fallback');
+    }
   }
   return issues;
 }
@@ -61,6 +67,9 @@ export async function inspectOriginalWorld(page, target) {
       width: rect?.width ?? 0,
       height: rect?.height ?? 0,
       inlineStyle: canvas?.getAttribute('style') ?? null,
+      webgl2ApiPresent: typeof WebGL2RenderingContext !== 'undefined',
+      hasAccessibleFallback: Boolean(document.querySelector('#worldFallback[role="region"]')),
+      fallbackTileCount: document.querySelectorAll('#worldFallback button[aria-label]').length,
       documentTitle: document.title,
       languageOptions: document.querySelectorAll('#lcLanguage option').length,
       hasWorldTour: [...document.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent?.includes('World Tour')),

@@ -20,6 +20,20 @@ test('regression: hidden scene fails even when the build tab is visible', () => 
   assert.deepEqual(evaluateSceneSnapshot({ ...healthy, display: 'none', width: 0, height: 0 }), [
     'world_canvas_hidden',
     'world_canvas_zero_or_too_small',
+    'no_playable_accessible_world_fallback',
+  ]);
+});
+
+test('original world remains playable on a WebGL-unsupported device using 81 keyboard-friendly tiles', () => {
+  assert.deepEqual(evaluateSceneSnapshot({ ...healthy, display: 'none', width: 0, height: 0,
+    webgl2ApiPresent: false, hasAccessibleFallback: true, fallbackTileCount: 81 }), []);
+});
+
+test('an incomplete or decorative fallback cannot conceal a missing original world', () => {
+  const snapshot = { ...healthy, display: 'none', width: 0, height: 0,
+    webgl2ApiPresent: false, hasAccessibleFallback: true, fallbackTileCount: 3 };
+  assert.deepEqual(evaluateSceneSnapshot(snapshot), [
+    'world_canvas_hidden', 'world_canvas_zero_or_too_small', 'no_playable_accessible_world_fallback',
   ]);
 });
 
