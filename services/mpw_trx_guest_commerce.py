@@ -301,6 +301,43 @@ def patch_public(namespace):
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
 
+    # The live root URLconf includes services.mpw_trx_public_pages for the
+    # commerce/trx-easy/ prefix. Register recovery routes in that public
+    # registry as relative paths; patch_commercial is a different include.
+    from services.mpw_trx_email_recovery import (
+        recovery_request, recovery_verify, recovery_orders, recovery_download,
+    )
+    recovery_extra = (
+        ("recover/", recovery_request),
+        ("recover/verify/", recovery_verify),
+        ("recover/orders/", recovery_orders),
+        ("recover/download/<int:invoice_id>/", recovery_download),
+    )
+    from collections.abc import Mapping
+    for key, patterns in list(namespace.items()):
+        if "PATTERN" not in str(key).upper() and key != "urlpatterns":
+            continue
+        if isinstance(patterns, Mapping):
+            items = list(patterns.items())
+            if not any("trx-easy" in str(route) or "start/" in str(route)
+                       for route, _ in items):
+                continue
+            existing = set(patterns)
+            if any(route in existing for route, _ in recovery_extra):
+                raise RuntimeError("Recovery URL collision")
+            updated = dict(items)
+            updated.update(dict(recovery_extra))
+            namespace[key] = updated
+        elif isinstance(patterns, (tuple, list)):
+            items = list(patterns)
+            if not any("trx-easy" in str(route) or "start/" in str(route)
+                       for route, _ in items):
+                continue
+            existing = {route for route, _ in items}
+            if any(route in existing for route, _ in recovery_extra):
+                raise RuntimeError("Recovery URL collision")
+            items.extend(recovery_extra)
+            namespace[key] = type(patterns)(items)
 
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
