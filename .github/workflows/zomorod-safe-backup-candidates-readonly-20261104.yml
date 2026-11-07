@@ -142,6 +142,39 @@ jobs:
                   age=max(0,int((time.time()-p.stat().st_mtime)/86400))
                   print("BACKUP_DUPLICATE_PATH=age_days:"+str(age)+":path:"+str(p.relative_to(Path("/home/zomorod2"))),flush=True)
           PY
+      - name: Classify old cPanel backup groups read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat,time
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          now=time.time()
+          keywords=("old","preview","quarantine","candidate","snapshot","release","restore","before","v6","v8","v9","v11","v12")
+          rows=[]
+          for group in sorted(root.iterdir()):
+              try:
+                  if not group.is_dir() or group.is_symlink(): continue
+                  total=files=0; oldest=now; newest=0
+                  for p in group.rglob("*"):
+                      try:
+                          s=p.lstat()
+                          if not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid(): continue
+                          files+=1; total+=s.st_size; oldest=min(oldest,s.st_mtime); newest=max(newest,s.st_mtime)
+                      except (OSError,FileNotFoundError): pass
+                  age=max(0,int((now-newest)/86400)) if newest else -1
+                  label="keyword" if any(k in group.name.lower() for k in keywords) else "ordinary"
+                  rows.append((total,files,age,label,group.name))
+              except (OSError,FileNotFoundError): pass
+          rows.sort(reverse=True)
+          print("BACKUP_GROUPS="+str(len(rows)),flush=True)
+          for total,files,age,label,name in rows[:80]:
+              print("BACKUP_GROUP=bytes:"+str(total)+":files:"+str(files)+":age_days:"+str(age)+":class:"+label+":name:"+name,flush=True)
+          print("BACKUP_KEYWORD_GROUPS="+str(sum(1 for r in rows if r[3]=="keyword")),flush=True)
+          print("BACKUP_KEYWORD_BYTES="+str(sum(r[0] for r in rows if r[3]=="keyword")),flush=True)
+          PY
       - name: Audit npm cache and active processes read-only
         shell: bash
         run: |
