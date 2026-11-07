@@ -102,6 +102,34 @@ function emit(key,val){console.log(key+'='+JSON.stringify(val))}
   delete res.firstInternalURLs;
   out.results.push(res);
   emit('HOME_AUDIT_VIEWPORT',{width,status:res.status,rows:res.rowCount,shelves:res.shelfCount,cards:res.cardCount,uniqueNames:res.uniqueCardNames,uniqueDestinations:res.uniqueCardURLs,images:res.images,badImages:res.badImages,overflowX:res.overflowX,escaped:res.escapedCount,h1:res.h1,h2:res.h2,errors:res.errors.length,failed:res.failed.length,frames:res.frames,perf:res.perf,bodyHeight:res.bodyHeight,cssStyles:res.cssStyleTags,nav:res.navSample.slice(0,10)});
+  if(width===1440||width===1920){
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.waitForTimeout(400);
+    const sample=async label=>{
+      const frames=await page.evaluate(async()=>new Promise(done=>{
+        const xs=[];let last=0;
+        function tick(t){if(last)xs.push(t-last);last=t;
+          if(xs.length<120)requestAnimationFrame(tick);
+          else {const sorted=[...xs].sort((a,b)=>a-b);
+            done({mean:Math.round(xs.reduce((a,b)=>a+b,0)/xs.length*10)/10,
+              p95:Math.round(sorted[Math.floor(sorted.length*.95)]*10)/10,
+              max:Math.round(sorted[sorted.length-1]*10)/10})}}
+        requestAnimationFrame(tick);
+      }));
+      console.log('HOME_RENDER_COMPARE='+JSON.stringify({width,label,...frames,
+        activeAnimations:await page.evaluate(()=>document.getAnimations().length)}));
+    };
+    await sample('baseline');
+    await page.addStyleTag({content:'.topic-card{animation:none!important}'});
+    await page.waitForTimeout(400);
+    await sample('no_card_float');
+    await page.addStyleTag({content:'.topic-card,.topic-card::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}'});
+    await page.waitForTimeout(400);
+    await sample('no_card_float_or_blur');
+    await page.locator('#motion-toggle').check({force:true});
+    await page.waitForTimeout(400);
+    await sample('paused_decorative_motion');
+  }
   await context.close();
  }
  const context=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
