@@ -146,3 +146,5 @@ jobs:
           stage="/home/zomorod2/.local/share/mpw-recovery-01-stage-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
           rm -rf -- "$d"
+
+# one-shot rollback retry
