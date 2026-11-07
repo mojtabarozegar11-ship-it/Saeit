@@ -2,7 +2,7 @@
 
 **Status: research-only, offline, not a trading product, not deployable.**
 
-This independent integration assembles four research engines without a broker
+This independent integration assembles five research engines without a broker
 connection or network request:
 
 1. **Strategy Foundry:** deterministic training-only candidate birth certificates,
@@ -19,6 +19,11 @@ connection or network request:
 4. **Depth execution twin:** validates the synthetic replay *before* acquiring a
    risk slot and then runs a deterministic IOC/FOK depth and latency simulation.
    Returned fills are hypothetical receipts only.
+5. **Replay reconciliation:** cryptographically hash-links the research risk
+   decision to exactly one simulated execution receipt. An owner-only append-only
+   journal records whether the hypothetical intent was filled, partially filled,
+   or unfilled. It **never** releases risk reservations automatically, even
+   after a zero-fill simulation; broker-verified exposure remains unknown.
 
 Every result hard-codes `real_orders = 0`, `public_signals = 0`,
 `broker_eligible = false`, and `execution = disabled`. The code has no exchange
@@ -67,10 +72,12 @@ python3 -m unittest -q \
   tests/test_mojtrade_portfolio_risk_gate.py \
   tests/test_mojtrade_research_handoff.py \
   tests/test_mojtrade_execution_twin.py \
-  tests/test_mojtrade_unified_shadow.py
+  tests/test_mojtrade_unified_shadow.py \
+  tests/test_mojtrade_replay_reconciliation.py
 ```
 
-At creation, **71 synthetic/local unit tests** pass (18 + 15 + 12 + 15 + 11).
+At this revision, **79 synthetic/local unit tests** pass
+(18 + 15 + 12 + 15 + 11 + 8).
 These test software invariants, not economic validity or positive expected PnL.
 
 ## Non-negotiable release blockers
@@ -80,7 +87,9 @@ These test software invariants, not economic validity or positive expected PnL.
 - Independent out-of-sample and walk-forward validation, multiple-testing
   correction, leakage checks, cost/latency stress, and realistic no-trade baselines.
 - Reconciliation of quoted liquidity, real fills and fees with broker records
-  using an approved isolated demo account; adverse selection measurement.
+  using an approved isolated demo account; adverse selection measurement. The
+  new offline reconciliation journal is **not** broker reconciliation, and
+  automated reservation release remains prohibited.
 - Review of concurrency, account-state recovery, rollback, operational controls,
   incident handling, and regulatory/compliance requirements.
 - Explicit owner approval for any broker integration, live payment, deployment,
