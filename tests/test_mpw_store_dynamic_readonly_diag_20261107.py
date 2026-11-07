@@ -8,6 +8,7 @@ from scripts.mpw_store_dynamic_readonly_diag_20261107 import (
     classify_frame,
     manifest_target_collected,
     manifest_summary,
+    static_root_matches_expected,
     safe_error,
 )
 
@@ -43,8 +44,10 @@ class SafeDiagnosticTests(unittest.TestCase):
                 "private_secret": "must-not-be-printed",
             }), encoding="utf-8")
             result = manifest_summary(root)
+            self.assertIsInstance(result.pop("free_space_above_512mib"), bool)
             self.assertEqual(result, {
                 "state": "readable",
+                "header_image_source_present": False,
                 "css_recorded": True,
                 "header_image_recorded": False,
                 "css_collected": True,
@@ -53,6 +56,32 @@ class SafeDiagnosticTests(unittest.TestCase):
                 "header_image_manifest_target_collected": False,
             })
             self.assertNotIn("must-not-be-printed", json.dumps(result))
+
+    def test_source_asset_detected_without_following_symlink(self):
+        with tempfile.TemporaryDirectory() as root:
+            static = Path(root) / "staticfiles"
+            static.mkdir()
+            (static / "staticfiles.json").write_text('{"paths":{}}', encoding="utf-8")
+            source = Path(root) / "core/static/site/mojplaywin-header-emblem.jpg"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"original-image")
+            self.assertTrue(manifest_summary(root)["header_image_source_present"])
+            source.unlink()
+            external = Path(root) / "outside.jpg"
+            external.write_bytes(b"another-image")
+            source.symlink_to(external)
+            self.assertFalse(manifest_summary(root)["header_image_source_present"])
+
+    def test_effective_static_root_guard(self):
+        with tempfile.TemporaryDirectory() as root:
+            expected = Path(root) / "staticfiles"
+            expected.mkdir()
+            self.assertTrue(static_root_matches_expected(expected, root))
+            self.assertFalse(static_root_matches_expected(None, root))
+            self.assertFalse(static_root_matches_expected(Path(root) / "other", root))
+            link = Path(root) / "linked"
+            link.symlink_to(expected, target_is_directory=True)
+            self.assertFalse(static_root_matches_expected(link, root))
 
     def test_manifest_targets_distinguish_collected_hashes_from_originals(self):
         with tempfile.TemporaryDirectory() as root:

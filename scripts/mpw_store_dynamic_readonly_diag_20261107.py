@@ -60,10 +60,24 @@ def exception_origin(exc):
     return next((location for location in reversed(locations) if location != "unknown"), "unknown")
 
 
+def static_root_matches_expected(configured, app):
+    """Boolean-only guard against diagnosing a different static collection root."""
+    try:
+        if not configured:
+            return False
+        root = Path(configured)
+        expected = Path(app) / "staticfiles"
+        return root.is_absolute() and root == expected and not root.is_symlink()
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def manifest_summary(app):
     """Read bounded static metadata only; no Django calls or manifest mutation."""
     root = Path(app) / "staticfiles"
     manifest = root / "staticfiles.json"
+    source_dir = Path(app) / "core/static/site"
+    source = source_dir / "mojplaywin-header-emblem.jpg"
     if root.is_symlink() or manifest.is_symlink():
         return {"state": "symlink_refused"}
     if not manifest.is_file():
@@ -77,6 +91,11 @@ def manifest_summary(app):
             return {"state": "invalid_shape"}
         return {
             "state": "readable",
+            "header_image_source_present": (
+                source.is_file() and not source.is_symlink() and
+                not source_dir.is_symlink() and not source_dir.parent.is_symlink() and not source_dir.parent.parent.is_symlink()
+            ),
+            "free_space_above_512mib": os.statvfs(app).f_bavail * os.statvfs(app).f_frsize >= 512 * 1024 * 1024,
             "css_recorded": STATIC_KEYS["css"] in mapping,
             "header_image_recorded": STATIC_KEYS["header_image"] in mapping,
             "css_collected": (root / STATIC_KEYS["css"]).is_file(),
@@ -129,6 +148,11 @@ def main():
         phase = "django_setup"
         import django
         django.setup()
+        from django.conf import settings
+        if isinstance(manifest, dict):
+            manifest["runtime_static_root_matches_expected"] = static_root_matches_expected(
+                getattr(settings, "STATIC_ROOT", None), APP
+            )
         phase = "import_view"
         from core.mojplaywin_views import store
         phase = "request_factory"
