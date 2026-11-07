@@ -314,12 +314,6 @@ def patch_public(namespace):
         ("recover/download/<int:invoice_id>/", recovery_download),
     )
     from collections.abc import Mapping
-    recovery_extra = (
-        ("recover/", recovery_request),
-        ("recover/verify/", recovery_verify),
-        ("recover/orders/", recovery_orders),
-        ("recover/download/<int:invoice_id>/", recovery_download),
-    )
 
     def _register_recovery_patterns(patterns):
         """Register relative recovery routes in the live public URL registry."""
