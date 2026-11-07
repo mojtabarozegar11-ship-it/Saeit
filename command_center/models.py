@@ -199,3 +199,19 @@ class LedgerAuditEvent(models.Model):
     class Meta:
         ordering = ("-created_at",)
         indexes = [models.Index(fields=("entity", "entity_id"), name="ledger_audit_entity")]
+
+
+class CommandRequest(models.Model):
+    STATUS_CHOICES = (("pending", "در انتظار بررسی"), ("approved", "تأییدشده"), ("executed", "اجراشده"), ("blocked", "مسدود"))
+    domain = models.CharField(max_length=12, choices=CycleReport.DOMAIN_CHOICES, default="command", db_index=True)
+    command = models.TextField()
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="pending", db_index=True)
+    read_only = models.BooleanField(default=True)
+    result = models.TextField(blank=True)
+    requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="ledger_command_requests")
+    approved_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT, related_name="ledger_approved_commands")
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("status", "-created_at")
