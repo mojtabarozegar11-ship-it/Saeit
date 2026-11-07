@@ -207,7 +207,7 @@ jobs:
           }
           from core.financial_brand_pages import BRANDS
           for slug, fa_name, en_name, ar_name in BRANDS:
-              for kind in ("market-signals", "digital-products"):
+              for kind in ("market-signals", "digital-products", "game"):
                   routes[f"/{slug}/{kind}/"] = "financial_brand_page"
                   routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
@@ -332,6 +332,19 @@ jobs:
           done
           [[ "$count" -eq 102 ]]
           echo "VERIFIED_FINANCE_PAGES=$count"
+          game_count=0
+          for slug in "${slugs[@]}"; do
+            for url in "https://zomorodmelal.ir/$slug/game/" "https://mojplaywin.com/$slug/game/"; do
+              body="$RUNNER_TEMP/game-page.html"
+              status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
+              [[ "$status" == "200" ]] || { echo "Game page failed: $url HTTP $status"; exit 1; }
+              grep -Eq '<title>.*</title>' "$body" || { echo "Missing game page title: $url"; exit 1; }
+              grep -Eq '© .* · MojPlayWin / Zomorod Melal' "$body" || { echo "Missing game footer: $url"; exit 1; }
+              game_count=$((game_count+1))
+            done
+          done
+          [[ "$game_count" -eq 34 ]]
+          echo "VERIFIED_GAME_SUBSITES=$game_count"
 
       - name: Roll back failed live check
         if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.finance_check.outcome == 'failure')
