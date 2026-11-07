@@ -18,10 +18,18 @@ data-source parsers** to retain one *latest closed* OHLCV bar per execution.
   owner-owned 0700 directory. Duplicate polls do not add entries. Changed
   values for the same bar, corrupted journals and out-of-order observations
   fail closed. Network or data-quality failures do not create observations.
-- Bid/ask snapshots are **not yet captured**: `spread_bps: null`. Consequently
-  `research_dataset_eligible: false`, `execution: disabled`,
-  `publication: disabled` and `real_orders: 0` are unconditional. Do **not**
-  transform null spreads into zero or invented fixed trading fees.
+- When the candle provider is Coinbase Exchange or Kraken Spot, a **public,
+  same-venue** bid/ask request is attempted. Coinbase uses the official
+  level-1 order book; Kraken uses public Ticker bid/ask. The quote receipt
+  timestamp is measured after the HTTPS response. Stale, crossed, negative,
+  abnormally wide, slow or mismatched quotes are rejected. Invalid/unavailable
+  quotes **never turn into a made-up spread**: the bar is retained with
+  `spread_bps: null` and without `quote_receipt`. Other candle venues have no
+  supported matching quote adapter in this revision and also retain null.
+- Even a good same-venue quote is not a signed venue receipt or a transaction
+  fee estimate. `research_dataset_eligible: false`, `execution: disabled`,
+  `publication: disabled` and `real_orders: 0` remain unconditional. An observed
+  spread is not the entire execution cost.
 - Provider fallbacks may use different venues across hours. A single coherent
   research series requires a proven venue/source policy and appropriate
   reconciliation before conversion to Strategy Foundry.
@@ -43,13 +51,18 @@ Each market must use its own journal. First-hand forward evidence needs at
 least 100 correctly spaced hourly observations per symbol over actual time;
 this cannot be accelerated by retrieving a historical candle snapshot.
 
-Even after 100 hours, observed spreads/fees, forward performance, signed data
-custody and release controls are separate unresolved gates. No profit claim
-follows from capture success.
+Even after 100 hours, incomplete quote coverage, commissions, slippage,
+forward performance, independent venue authentication, signed custody and
+release controls remain separate unresolved gates. No profit claim follows
+from capture success.
 
 No-network regression tests:
 
 ```bash
 python3 -m unittest -q test_mojtrade_forward_bar_capture.py \
-  test_mojtrade_observer_contract.py test_mojtrade_observer_boundary.py
+  test_mojtrade_observer_contract.py test_mojtrade_observer_boundary.py \
+  test_mojtrade_market_quote_evidence.py
 ```
+
+Provider documentation: https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-book
+and https://docs.kraken.com/api-reference/market-data/get-ticker-information
