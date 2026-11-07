@@ -1,0 +1,42 @@
+name: Management ledger cPanel read-only receipt 2026-11-07
+
+# One-time evidence collection for PR #2127. No production writes or restarts.
+# Only a push which adds/changes this exact workflow on the audit branch runs it.
+on:
+  push:
+    branches:
+      - feature/management-ledger-autopilot-safe-20261107
+    paths:
+      - .github/workflows/management-ledger-cpanel-readonly-receipt-20261107.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: management-ledger-cpanel-readonly-receipt-20261107
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout existing trusted read-only bridge (pinned main commit)
+        uses: actions/checkout@v4
+        with:
+          ref: 79338d3657abf9a64ac20a5c08e64f24cec657c7
+          fetch-depth: 1
+
+      - name: Read cPanel and Passenger state without production mutation
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY"
+          test -n "$HOST_KEY"
+          bash deploy/cpanel_direct_command.sh passenger_inventory
+          bash deploy/cpanel_direct_command.sh cpanel_preflight
+          bash deploy/cpanel_direct_command.sh django_check
+          bash deploy/cpanel_direct_command.sh django_migrations
