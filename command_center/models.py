@@ -179,3 +179,19 @@ class ApprovalDecision(models.Model):
 
     class Meta:
         ordering = ("-created_at",)
+
+
+class LedgerAuditEvent(models.Model):
+    """Immutable audit trail for every central-ledger mutation."""
+    ACTION_CHOICES = (("create", "ایجاد"), ("verify", "تأیید"), ("resolve", "رفع"), ("approve", "تصمیم"))
+    action = models.CharField(max_length=12, choices=ACTION_CHOICES, db_index=True)
+    entity = models.CharField(max_length=40, db_index=True)
+    entity_id = models.CharField(max_length=80)
+    summary = models.TextField()
+    evidence = models.TextField(blank=True)
+    actor = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="ledger_audit_events")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("entity", "entity_id"), name="ledger_audit_entity")]
