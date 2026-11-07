@@ -138,7 +138,7 @@ def ensure_indexnow_route(urlconf):
     if "mojplaywin_indexnow_key" not in line:
         urlconf = urlconf.replace(line, line.rstrip() + ", mojplaywin_indexnow_key", 1)
     import re
-    route_pattern = r'    path\("<str:key>\\.txt", [^,]+, name="indexnow_key"\),\\n'
+    route_pattern = r'    path\("<str:key>\.txt", [^,]+, name="indexnow_key"\),\n'
     urlconf = re.sub(route_pattern, "", urlconf)
     marker = "urlpatterns = [\n"
     if marker not in urlconf:
