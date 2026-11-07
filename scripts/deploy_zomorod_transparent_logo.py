@@ -1,8 +1,9 @@
-"""Atomic, asset-only Zomorod approved logo deployment.
+"""Atomic, asset-only Zomorod logo deployment that preserves live page edits.
 
-Only the root homepage, six already-created Nova company pages and the
-site-local Django Admin branding are modified. Everything else is
-treated as immutable. Caller has already staged source files privately.
+Approved templates validate logo adoption, but are NEVER copied wholesale
+onto a live site. Only a legacy logo URL in an existing page may be replaced.
+This prevents a later branding release from discarding newer service links,
+contact text, or other independent production changes.
 """
 import hashlib
 import os
@@ -55,6 +56,25 @@ def atomic_copy(src,dest):
     finally:
         if temp.exists():temp.unlink()
 
+def atomic_bytes(data,dest):
+    temp=dest.with_name(dest.name+".zm-logo-stage")
+    if temp.exists():raise RuntimeError("Temporary file exists; refusing overwrite")
+    try:
+        with temp.open("xb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp,dest.stat().st_mode & 0o777)
+        os.replace(temp,dest)
+    finally:
+        if temp.exists():temp.unlink()
+
+def logo_only(source):
+    """Replace only the retired logo URL, never an approved page snapshot."""
+    if NEW_PATH not in source and OLD_PATH not in source:
+        raise RuntimeError("Live page has no known company logo URL")
+    return source.replace(OLD_PATH,NEW_PATH)
+
 def request(path,required=None):
     url="https://zomorodmelal.ir"+path
     q="?logo_release="+STAGE.parent.name
@@ -97,9 +117,11 @@ def main():
         old=target.read_bytes()
         if NEW_PATH not in approved:
             raise RuntimeError("Approved source is missing the required logo reference: "+name)
-        prepared[name]=approved
-        if approved != old:
-            print("ZM_APPROVED_CONTENT_UPDATE="+name,flush=True)
+        prepared[name]=logo_only(old)
+        if prepared[name]!=old:
+            print("ZM_LOGO_URL_UPDATE_REQUIRED="+name,flush=True)
+        else:
+            print("ZM_LOGO_PAGE_CONTENT_PRESERVED="+name,flush=True)
         previous=ORIGINAL/(name+".html")
         if previous.exists():raise RuntimeError("Backup file already exists: "+name)
         shutil.copy2(target,previous)
@@ -119,9 +141,10 @@ def main():
         for name,target in PAGES.items():
             if target.read_bytes()!=(ORIGINAL/(name+".html")).read_bytes():
                 raise RuntimeError("Concurrent content edit: "+name)
-            atomic_copy(STAGE/(name+".html"),target)
-            changed.append(name)
-            print("ZM_LOGO_BRANDING_UPDATED="+name,flush=True)
+            if target.read_bytes()!=prepared[name]:
+                atomic_bytes(prepared[name],target)
+                changed.append(name)
+                print("ZM_LOGO_BRANDING_UPDATED="+name,flush=True)
         image=request("/static/site/company/company-logo-transparent.png")
         if image!=png:raise RuntimeError("Public image is different from approved image")
         for path in ("/","/company/","/about/","/services/",
