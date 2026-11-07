@@ -100,3 +100,5 @@ jobs:
         run: |
           d="$RUNNER_TEMP/vps-transient-cleanup"
           if test -d "$d"; then rm -rf -- "$d"; fi
+
+# Fresh re-audit requested 2026-11-07; guarded/idempotent execution.
