@@ -187,6 +187,52 @@ jobs:
           sed -n '1,220p' "$ROOT/.htaccess"
           echo LIVE_HTACCESS_END
           REMOTE
+      - name: Apply guarded root compression fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ROOT=/home/zomorod2/public_html
+          HT="$ROOT/.htaccess"
+          EXPECTED=b2562f36aec90bac80fbf3bc40173bf5b416adc2e22c0736a907ae532914f3a1
+          test -f "$HT" && test ! -L "$HT"
+          test "$(sha256sum "$HT" | awk '{print $1}')" = "$EXPECTED"
+          if grep -Fq 'ZM-COMPRESSION-V1' "$HT"; then
+            echo LIVE_COMPRESSION_ALREADY_MARKED
+            exit 0
+          fi
+          backup="$HOME/.backups/zomorod-root-compression/$(date +%Y%m%d-%H%M%S)"
+          install -d -m 700 "$backup"
+          cp -p "$HT" "$backup/.htaccess.before"
+          sha256sum "$HT" > "$backup/.htaccess.before.sha256"
+          tmp="$(mktemp "$HOME/.htaccess.zm.XXXXXX")"
+          trap 'rm -f "$tmp"' EXIT
+          cat "$HT" > "$tmp"
+          cat >> "$tmp" <<'BLOCK'
+          
+          # ZM-COMPRESSION-V1
+          <IfModule mod_deflate.c>
+              AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
+              AddOutputFilterByType DEFLATE application/javascript application/json application/xml application/xhtml+xml application/rss+xml image/svg+xml
+          </IfModule>
+          BLOCK
+          test "$(wc -c < "$tmp")" -gt "$(wc -c < "$HT")"
+          install -m 0644 "$tmp" "$HT"
+          test "$(sha256sum "$HT" | awk '{print $1}')" != "$EXPECTED"
+          echo LIVE_COMPRESSION_FIX_APPLIED backup="$backup"
+          REMOTE
+      - name: Verify live root compression
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSIL --compressed -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/ | tr -d '\r' | grep -Ei '^(HTTP/|content-encoding:|content-length:|vary:)' || true
+          headers="$(curl -fsSI -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/)"
+          printf '%s\n' "$headers" | tr -d '\r' | grep -iq '^content-encoding: gzip
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
+
+          echo LIVE_ROOT_GZIP=PASS
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
