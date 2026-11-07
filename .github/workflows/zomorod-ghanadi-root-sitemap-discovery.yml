@@ -1,0 +1,112 @@
+name: Register Zomorod Ghanadi canonical pages in root sitemap
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-ghanadi-root-sitemap-discovery.yml"
+      - "scripts/zm_ghanadi_sitemap_live_20261107.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-ghanadi-root-sitemap-discovery
+  cancel-in-progress: false
+jobs:
+  register:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate guarded patch and two public canonical pages
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zm_ghanadi_sitemap_live_20261107.py
+          python3 - <<'PY'
+          import urllib.request
+          for route in ('ghanadi/','ghanadi/cafe-shiraz/'):
+              url='https://zomorodmelal.ir/'+route
+              with urllib.request.urlopen(url,timeout=25) as result:
+                  html=result.read(120000).decode('utf-8','replace')
+                  assert result.status==200 and '<link rel="canonical" href="'+url+'"' in html,url
+              print('CANONICAL_PAGE_200',url)
+          PY
+      - name: Prepare fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-ghanadi-sitemap-ssh"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Add only two missing URLs atomically with independent backup
+        id: install
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-ghanadi-sitemap-ssh/config" saeit-cpanel "python3 - apply '$GITHUB_RUN_ID'" < scripts/zm_ghanadi_sitemap_live_20261107.py
+      - name: Confirm canonical URL inclusion in live root sitemap
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,xml.etree.ElementTree as ET,time
+          with urllib.request.urlopen('https://zomorodmelal.ir/sitemap.xml?verify='+str(time.time_ns()),timeout=25) as result:
+              source=result.read(2000000)
+              assert result.status==200
+          root=ET.fromstring(source)
+          assert root.tag.endswith('urlset')
+          locs=[el.text for el in root.iter() if el.tag.endswith('loc')]
+          assert len(locs)==len(set(locs))
+          for route in ('ghanadi/','ghanadi/cafe-shiraz/'):
+              url='https://zomorodmelal.ir/'+route
+              assert locs.count(url)==1,url
+              print('PUBLIC_ROOT_SITEMAP_HAS',url)
+          with urllib.request.urlopen('https://zomorodmelal.ir/',timeout=20) as result:
+              assert result.status==200
+          PY
+      - name: Roll back only this run if live verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-ghanadi-sitemap-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/zm_ghanadi_sitemap_live_20261107.py
+      - name: Remove temporary relay credentials
+        if: always()
+        run: |
+          if test -d "$RUNNER_TEMP/zm-ghanadi-sitemap-ssh"; then
+            find "$RUNNER_TEMP/zm-ghanadi-sitemap-ssh" -maxdepth 1 -type f -delete
+            rmdir "$RUNNER_TEMP/zm-ghanadi-sitemap-ssh"
+          fi
