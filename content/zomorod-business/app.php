@@ -11,7 +11,7 @@ header('X-Robots-Tag: noindex, nofollow');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
+header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; connect-src \'self\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
 if (extension_loaded('session')) {
     session_name('ZM_BUSINESS');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
@@ -86,6 +86,48 @@ function layoutStart(string $page,?array $user=null):void {
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
     echo '</div></header>';
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
+    if($user)echo <<<'HTML'
+<section id="zm-approval-widget" style="margin:14px 4%;padding:14px 18px;border:2px solid #d9b85f;border-radius:14px;background:#182d1d;color:#f3e4b0">
+  <strong>🔔 اعلان و تأیید مدیریتی</strong>
+  <span id="zm-approval-status" style="margin-right:12px">در حال بررسی صف تأیید…</span>
+  <div id="zm-approval-request" hidden style="margin-top:10px;padding:12px;border-top:1px solid #806a37">
+    <div id="zm-approval-text"></div>
+    <textarea id="zm-approval-note" rows="2" placeholder="توضیح یا شاهد تصمیم" style="width:100%;margin-top:8px;background:#0c1a12;color:#fff;border:1px solid #806a37;border-radius:8px;padding:8px"></textarea>
+    <button type="button" data-zm-approval="approved">قبول</button>
+    <button type="button" data-zm-approval="rejected">رد</button>
+    <button type="button" data-zm-approval="explanation">توضیح</button>
+  </div>
+  <small style="display:block;margin-top:7px">در صورت بازبودن صف، هر درخواست با سه گزینهٔ قبول، رد و توضیح تعیین‌تکلیف می‌شود.</small>
+</section>
+<script>
+(function(){
+  const status=document.getElementById('zm-approval-status'), req=document.getElementById('zm-approval-request'), text=document.getElementById('zm-approval-text'), note=document.getElementById('zm-approval-note');
+  let current=null;
+  const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  async function refresh(){
+    try{
+      const r=await fetch('/staff/command-center/api/integrated-ledger/',{credentials:'include',cache:'no-store'});
+      if(!r.ok)throw 0;
+      const x=await r.json(); current=(x.pending_approvals||[])[0]||null;
+      status.textContent=current?'یک درخواست تأیید در انتظار است.':'صف تأیید فعلاً خالی است.';
+      req.hidden=!current;
+      if(current)text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'تصمیم مالک لازم است.');
+    }catch(_){status.textContent='برای دریافت اعلان، داشبورد یکپارچه را نیز باز نگه دارید.';req.hidden=true;}
+  }
+  async function decide(action){
+    if(!current)return;
+    const value=note.value.trim();
+    if(action==='explanation'&&!value){note.focus();alert('لطفاً توضیح را وارد کنید.');return;}
+    const token=document.cookie.split('; ').find(x=>x.startsWith('csrftoken='))?.split('=')[1]||'';
+    const r=await fetch('/staff/command-center/api/integrated-ledger/',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify({kind:'approval_request',id:current.id,action,note:value})});
+    if(!r.ok){location.href='/staff/command-center/integrated/';return;}
+    note.value='';await refresh();
+  }
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-zm-approval]');if(b)decide(b.dataset.zmApproval)});
+  refresh();setInterval(refresh,60000);
+})();
+</script>
+HTML;
     echo '<main>';
 }
 function layoutEnd():void {echo '</main><footer>تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</footer></body></html>';}
