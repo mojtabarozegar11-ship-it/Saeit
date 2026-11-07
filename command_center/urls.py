@@ -16,7 +16,8 @@ from .mpw_two_books_panel import dashboard as mpw_two_books_dashboard
 from .operations import operations_summary
 from .management_report import management_report
 from .controls import controls_summary
-from .integrated_views import integrated_dashboard, integrated_ledger_api
+from .integrated_views import integrated_dashboard
+from .integrated_ledger_api import integrated_ledger_api
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
