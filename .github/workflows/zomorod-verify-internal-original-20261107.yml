@@ -149,6 +149,45 @@ jobs:
           print('PRE_ROLLBACK_AUDIT_READ_ONLY=yes')
           PY
 
+      - name: Compare rescue stash with last complete pre-SEO snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib,os,re
+          h=Path('/home/zomorod2');w=h/'public_html'
+          assert os.geteuid()==w.stat().st_uid
+          stash=h/'.private/zm-internal-pre-seo-restore-20261107'
+          pages=('company','about','services','industry','research','knowledge','agriculture')
+          refs={
+            'pre-seo-20261106':h/'.backups/zomorod-live-inpage/158204fe725b5ec8f46cefc7a4d18e34f22fda67/static-pages',
+            'v12-20261018':h/'.backups/zomorod-v12-contact/dcf6ce733aa95770954d6a6103730c1017089c6a/candidate',
+            'v10-20261018':h/'.backups/zomorod-v10-content-restore/39611e09708ac8a4e5df1aac0209e03f44e06ad1/candidate',
+          }
+          for d in sorted(stash.glob('*')):
+              for sub in ('original-static-pages','agriculture'):
+                  x=d/sub
+                  if x.is_dir():
+                      names=[str(f.relative_to(x)) for f in x.rglob('*') if f.is_file()]
+                      print('STASH_TREE',d.name,sub,'count',len(names),'first',names[:90])
+              f=d/'manifest.json'
+              if f.is_file():
+                  try:
+                      m=json.loads(f.read_text())
+                      print('STASH_MANIFEST',d.name,str(m)[:1600])
+                  except Exception as e:print('STASH_MANIFEST_ERROR',type(e).__name__)
+          for slug in pages:
+              print('PAGE_BASELINE',slug)
+              for key,base in refs.items():
+                  f=base/slug/'index.html'
+                  if not f.is_file():
+                      print('SUGGESTED_SOURCE_ABSENT',slug,key);continue
+                  b=f.read_bytes();links=[u.decode(errors='replace') for u in re.findall(rb'<link[^>]+stylesheet[^>]*>',b,re.I)]
+                  print('SUGGESTED_SOURCE',slug,key,'bytes',len(b),'sha',hashlib.sha256(b).hexdigest(),'links',links[:5])
+          print('RESCUE_COMPARE_READ_ONLY=yes')
+          PY
+
       - name: Remove ephemeral SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
