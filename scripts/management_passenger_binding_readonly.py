@@ -17,7 +17,10 @@ EXPECTED_MAIN_ROOT = "/home/zomorod2/Saeit"
 
 def _entries(node):
     if isinstance(node, dict):
-        if any(key in node for key in ("app_root", "app_path", "application_root")):
+        if any(key in node for key in (
+            "app_root", "app_path", "application_root",
+            "base_uri", "app_uri", "application_uri",
+        )):
             yield node
         for value in node.values():
             yield from _entries(value)
@@ -49,7 +52,7 @@ def sanitize(raw):
     dedupe = set()
     for app in _entries(raw.get("result", raw)):
         domain = str(app.get("domain") or "").strip().lower()
-        root = str(app.get("app_root") or app.get("app_path") or app.get("application_root") or "").strip()
+        root = str(app.get("app_root") or app.get("app_path") or app.get("application_root") or app.get("path") or "").strip()
         if not domain or not root:
             continue
         uri = str(app.get("base_uri") or app.get("app_uri") or app.get("application_uri") or "/")

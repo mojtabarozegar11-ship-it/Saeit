@@ -34,6 +34,15 @@ class BindingReceiptTests(unittest.TestCase):
         self.assertFalse(result["exact_source_root_mapping_present"])
         self.assertFalse(result["release_permitted"])
 
+    def test_uapi_uri_with_path_fallback_matches_existing_inventory_contract(self):
+        result = sanitize({"result": {"data": [
+            {"domain": "zomorodmelal.ir", "base_uri": "/", "path": "/home/zomorod2/Saeit"},
+            {"domain": "mojplaywin.com", "base_uri": "/", "path": "/home/zomorod2/elsewhere"},
+        ]}})
+        self.assertEqual(result["uapi_records_discovered"], 2)
+        self.assertEqual(result["target_domain_mapping_count"], 1)
+        self.assertTrue(result["exact_source_root_mapping_present"])
+
     def test_explicit_uapi_failure_rejected(self):
         with self.assertRaises(ValueError):
             sanitize({"result": {"status": 0, "data": []}})

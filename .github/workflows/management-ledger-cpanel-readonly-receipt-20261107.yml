@@ -1,13 +1,14 @@
 name: Management ledger cPanel read-only receipt 2026-11-07
 
 # One-time evidence collection for PR #2127. No production writes or restarts.
-# Only a push which adds/changes this exact workflow on the audit branch runs it.
+# Only a push which changes this bounded receipt or its sanitizer on the audit branch runs it.
 on:
   push:
     branches:
       - feature/management-ledger-autopilot-safe-20261107
     paths:
       - .github/workflows/management-ledger-cpanel-readonly-receipt-20261107.yml
+      - scripts/management_passenger_binding_readonly.py
 
 permissions:
   contents: read
