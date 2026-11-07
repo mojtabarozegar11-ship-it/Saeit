@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with independent Kraken Spot OHLC and Bitfinex public-candle fallbacks. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
+- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with Binance's unauthenticated market-data endpoint as the first fallback, followed by independent Kraken Spot OHLC and Bitfinex public-candle fallbacks. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
 - Uses only finished hourly candles; rejects data gaps, duplicate or invalid prices, and stale observations.
 - Calculates reproducible SMA20/SMA50/momentum10 *research watch states*; these are **not** verified profitable strategies or personalized recommendations.
 - Emits exactly the schema required by the separate signed-feed interface in PR #1892 (`schema_version=1`, `source=mojtrade-vps`, `signals[]`). The output is private, atomically replaced, and expires in 90 minutes.
@@ -16,7 +16,7 @@
 ## Independent VPS execution path
 
 1. Provision a dedicated unprivileged service account and a *private* directory (permissions 0700) outside any site document root, e.g. `/var/lib/mojtrade/private`.
-2. On the VPS, with Python 3.11 or newer and outbound HTTPS to `api.exchange.coinbase.com`, run:
+2. On the VPS, with Python 3.11 or newer and outbound HTTPS to the public market-data endpoints (`api.exchange.coinbase.com` and `data-api.binance.vision`), run:
 
    `python3 scripts/mojtrade_observe_market.py --output /var/lib/mojtrade/private/validated-payload.json`
 
@@ -34,6 +34,8 @@
 - If both official APIs return incomplete data or fail, the proper outcome is a visible data-quality failure, not a fabricated signal. This includes an explicit short HTTP/network failure classification in the private installation log.
 
 Provider reference: https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles
+
+Binance public market-data reference: https://developers.binance.com/en/docs/products/spot/rest-api
 
 Fallback provider reference: https://docs.kraken.com/api-reference/market-data/get-ohlc-data
 
