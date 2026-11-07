@@ -26,6 +26,8 @@ def positive(value, field):
 def validate(data):
     if not isinstance(data, dict) or not all(isinstance(data.get(k), str) and data[k].strip() for k in ("source_id", "verified_by")):
         raise ValueError("nonempty source_id and verified_by required; not proof of source verification")
+    if "expected_wue" in data:
+        raise ValueError("expected_wue is unsupported: silent comparison would misrepresent validation")
     rows = data.get("rows")
     if not isinstance(rows, list) or not rows:
         raise ValueError("nonempty rows required")
@@ -33,12 +35,13 @@ def validate(data):
     for row in rows:
         if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"].strip():
             raise ValueError("each row needs an id")
-        if row["id"] in seen:
-            raise ValueError("duplicate row id")
-        seen.add(row["id"])
+        canonical_id = row["id"].strip()
+        if canonical_id in seen:
+            raise ValueError("duplicate row id after whitespace normalization")
+        seen.add(canonical_id)
         y = positive(row.get("yield_kg"), "yield_kg")
         w = positive(row.get("water_m3"), "water_m3")
-        result.append({"id":row["id"], "wue_kg_per_m3":str(y/w)})
+        result.append({"id":canonical_id, "wue_kg_per_m3":str(y/w)})
     return {"source_id":data["source_id"], "reviewer_claim":data["verified_by"], "computed":result,
             "source_authenticity_independently_verified":False}
 
