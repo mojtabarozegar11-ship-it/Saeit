@@ -120,33 +120,30 @@ def apply_three_way(base_text, desired_text, live_text, label):
     return "".join(live)
 
 def ensure_indexnow_seo(source_text):
-    """Add the public IndexNow verification endpoint without replacing live-only SEO code."""
-    if "def indexnow_key(" in source_text:
+    """Add a collision-safe public IndexNow endpoint without replacing live-only SEO code."""
+    if "def mojplaywin_indexnow_key(" in source_text:
         return source_text
-    block = '''\nINDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"\n\n\n@require_GET\ndef indexnow_key(request, key):\n    """Public IndexNow verification file for the MojPlayWin host only."""\n    host = request.get_host().split(":")[0].lower()\n    if host not in {"mojplaywin.com", "www.mojplaywin.com"} or key != INDEXNOW_KEY:\n        return HttpResponse(status=404)\n    return HttpResponse(INDEXNOW_KEY + "\\n", content_type="text/plain; charset=utf-8")\n\n'''
+    block = '''\n\n@require_GET\ndef mojplaywin_indexnow_key(request, key):\n    """Public IndexNow verification file for MojPlayWin."""\n    host = request.get_host().split(":")[0].lower()\n    if host not in {"mojplaywin.com", "www.mojplaywin.com"} or key != "f5e9e3dccc5c2511c452f26b011ec43e":\n        return HttpResponse(status=404)\n    return HttpResponse("f5e9e3dccc5c2511c452f26b011ec43e\\n", content_type="text/plain; charset=utf-8")\n\n'''
     anchor = "\ndef _norm(value):\n"
     if anchor not in source_text:
-        raise RuntimeError("Unable to anchor IndexNow SEO addition")
+        raise RuntimeError("Unable to anchor collision-safe IndexNow SEO addition")
     return source_text.replace(anchor, block + anchor, 1)
 
 def ensure_indexnow_route(urlconf):
-    """Add the IndexNow import and route while preserving live-only URL patterns."""
-    if 'path("<str:key>.txt", indexnow_key, name="indexnow_key")' in urlconf:
-        return urlconf
+    """Bind the public key route to the collision-safe handler."""
     import_anchor = "from core.seo_views import "
     line = next((x for x in urlconf.splitlines() if x.startswith(import_anchor)), None)
     if line is None:
         raise RuntimeError("Unable to locate SEO import for IndexNow route")
-    if "indexnow_key" not in line:
-        replacement = line.rstrip() + ", indexnow_key"
-        urlconf = urlconf.replace(line, replacement, 1)
-    anchor = '    path("robots.txt", robots_txt, name="robots_txt"),\n'
-    if anchor in urlconf:
-        return urlconf.replace(anchor, anchor + '    path("<str:key>.txt", indexnow_key, name="indexnow_key"),\n', 1)
+    if "mojplaywin_indexnow_key" not in line:
+        urlconf = urlconf.replace(line, line.rstrip() + ", mojplaywin_indexnow_key", 1)
+    import re
+    route_pattern = r'    path\("<str:key>\\.txt", [^,]+, name="indexnow_key"\),\\n'
+    urlconf = re.sub(route_pattern, "", urlconf)
     marker = "urlpatterns = [\n"
     if marker not in urlconf:
         raise RuntimeError("Unable to anchor IndexNow URL route")
-    return urlconf.replace(marker, marker + '    path("<str:key>.txt", indexnow_key, name="indexnow_key"),\n', 1)
+    return urlconf.replace(marker, marker + '    path("<str:key>.txt", mojplaywin_indexnow_key, name="indexnow_key"),\n', 1)
 
 def route_mojplaywin_brand_home(urlconf):
     old_route = 'path("", branded_home, name="home"),'
