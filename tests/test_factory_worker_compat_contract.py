@@ -110,6 +110,27 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(error, "schema lacks required run/product binding"):
             worker._preflight(task)
 
+    def test_django_model_schema_checked_before_orm_relation_fetch(self):
+        worker, error = extract_class()
+        worker._require_runtime_schema.__globals__["AgentTask"] = SimpleNamespace(
+            _meta=SimpleNamespace(get_fields=lambda: [
+                SimpleNamespace(name="agent"), SimpleNamespace(name="status")
+            ])
+        )
+        with self.assertRaisesRegex(error, "AgentTask model lacks run/product/environment"):
+            worker._require_runtime_schema()
+        worker._require_runtime_schema.__globals__["AgentTask"] = SimpleNamespace(
+            _meta=SimpleNamespace(get_fields=lambda: [
+                SimpleNamespace(name=name)
+                for name in ("agent", "factory_run", "product", "environment")
+            ])
+        )
+        worker._require_runtime_schema()
+        source = (ROOT / "core/factory_worker_compat.py").read_text(encoding="utf-8")
+        assert source.index("self._require_runtime_schema()", source.index("def run(self, task_id)")) < source.index(
+            'select_related("factory_run", "product")', source.index("def run(self, task_id)")
+        )
+
     def test_binding_rejects_unsafe_or_multiple_native_slots(self):
         worker, error = extract_class()
         slot = self._native_slot(worker, active=[
