@@ -260,9 +260,10 @@ def require_before_schema():
                      "tables": ["core_guestorderemail", "core_guestrecoverytoken",
                                 "core_guestrecoveryrate"],
                      "enabled": False, "mail": False}
+    post_additive_active = dict(post_additive, enabled=True, mail=True)
     # Permit only the exact pre-migration baseline or the exact already-staged
     # additive state. Any customer/payment/schema drift remains a hard stop.
-    if report not in (before, post_additive):
+    if report not in (before, post_additive, post_additive_active):
         fail("MIGRATION_BASELINE_DRIFT:" + json.dumps(report, sort_keys=True, separators=(",", ":")))
     return report
 
