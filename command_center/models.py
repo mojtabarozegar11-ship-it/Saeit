@@ -121,3 +121,61 @@ class PrivateAuction(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class CycleReport(models.Model):
+    """Durable, staff-only result record for the C01-C50 operating ledger."""
+    cycle = models.CharField(max_length=3, db_index=True)
+    project_key = models.CharField(max_length=80, db_index=True)
+    project_name = models.CharField(max_length=200)
+    action = models.TextField()
+    action_key = models.CharField(max_length=64)
+    result = models.CharField(max_length=240)
+    measure = models.CharField(max_length=160)
+    blocker = models.CharField(max_length=240, blank=True)
+    next_action = models.CharField(max_length=240)
+    evidence = models.TextField()
+    owner = models.CharField(max_length=160)
+    action_date = models.DateField()
+    readonly = models.BooleanField(default=False)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="cycle_reports")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-action_date", "-created_at")
+        constraints = [models.UniqueConstraint(fields=("cycle", "project_key", "action_key"), name="uniq_cycle_project_action")]
+
+
+class CycleIssue(models.Model):
+    CERTAINTY_CHOICES = (("unverified", "نیازمند تأیید"), ("verified", "تأییدشده"))
+    STATUS_CHOICES = (("open", "باز"), ("resolved", "رفع‌شده"))
+    cycle = models.CharField(max_length=3, db_index=True)
+    project_key = models.CharField(max_length=80, db_index=True)
+    title = models.TextField()
+    owner = models.CharField(max_length=160)
+    observed_on = models.DateField()
+    certainty = models.CharField(max_length=12, choices=CERTAINTY_CHOICES, default="unverified")
+    source = models.TextField(blank=True)
+    next_action = models.CharField(max_length=240)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="open", db_index=True)
+    resolution_evidence = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="cycle_issues")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("status", "-created_at")
+
+
+class ApprovalDecision(models.Model):
+    KIND_CHOICES = (("email", "ارسال ایمیل"), ("deploy", "استقرار و انتشار"), ("cost", "هزینه یا تعهد مالی"))
+    STATUS_CHOICES = (("approved", "تأیید شد"), ("rejected", "رد شد"))
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, db_index=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    approver = models.CharField(max_length=160)
+    evidence = models.TextField(blank=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="approval_decisions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
