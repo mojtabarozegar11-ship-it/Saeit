@@ -59,6 +59,19 @@ def _command(row):
             "result": row.result, "requested_by": row.requested_by.get_username(),
             "created_at": row.created_at.isoformat()}
 
+def _auto_execute_command(request, domain, command_text):
+    text = command_text.lower()
+    sensitive = ("ارسال", "ایمیل", "استقرار", "انتشار", "هزینه", "خرید", "پرداخت", "حذف", "تغییر رمز", "برداشت")
+    readonly = ("وضعیت", "گزارش", "پایش", "ممیزی", "بررسی", "تعداد", "سلامت")
+    if any(term in text for term in sensitive):
+        return "pending", False, "این فرمان حساس است و برای اجرا به تأیید موردی نیاز دارد."
+    if any(term in text for term in readonly):
+        systems = _system_status(request)
+        connected = sum(1 for item in systems if item["state"] in ("connected", "healthy"))
+        open_work = WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).count()
+        return "executed", True, f"پایش read-only خودکار انجام شد؛ {connected} اتصال دارای شاهد و {open_work} کار باز/درحال اجرا/متوقف ثبت شده است."
+    return "pending", True, "فرمان در صف تحلیل قرار گرفت؛ الگوی اجرایی امن برای آن شناسایی نشد."
+
 def _system_status(request):
     names = {
         "iran_site": "سایت زمرد ملل", "cpanel": "هاست و cPanel", "factory": "کارخانه",
@@ -119,8 +132,10 @@ def integrated_ledger_api(request):
         domain, command_text = _text(payload.get("domain")) or "command", _text(payload.get("command"))
         if domain not in DOMAINS or not command_text:
             return JsonResponse({"error": "قلمرو و متن فرمان الزامی است."}, status=400)
-        row = CommandRequest.objects.create(domain=domain, command=command_text, read_only=True, requested_by=request.user)
-        _audit("create", "command", row.id, "فرمان جدید در صف بررسی ثبت شد.", request.user)
+        status, read_only, result = _auto_execute_command(request, domain, command_text)
+        row = CommandRequest.objects.create(domain=domain, command=command_text, status=status, read_only=read_only,
+            result=result, requested_by=request.user, executed_at=timezone.now() if status == "executed" else None)
+        _audit("create", "command", row.id, "فرمان خودکار ثبت و ارزیابی شد.", request.user, result)
         return JsonResponse({"command": _command(row)}, status=201)
 
     if kind == "report":
