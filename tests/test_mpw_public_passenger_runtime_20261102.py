@@ -43,6 +43,26 @@ class PassengerDiagnosticTests(unittest.TestCase):
         self.assertFalse(result["staging_root"])
         self.assertNotIn("other-app", json.dumps(result))
 
+    def test_store_source_probe_reports_only_safe_file_metadata(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_store_sources
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "public"
+            app = Path(td) / "staging"
+            public.mkdir()
+            (app / "core").mkdir(parents=True)
+            (app / "core" / "mojplaywin_views.py").write_text(
+                "def store(request):\\n  record_funnel_event(request, 'view_store')\\n"
+                "  # synthetic confidential marker must never be printed\\n"
+            )
+            info = inspect_store_sources(public=public, app=app)
+            self.assertEqual(info["classification"], "MPW_STORE_SOURCE_METADATA_ONLY")
+            self.assertFalse(info["roots"]["public"]["view"]["present"])
+            self.assertTrue(info["roots"]["staging"]["view"]["present"])
+            self.assertFalse(info["database_read"])
+            self.assertFalse(info["files_modified"])
+            self.assertNotIn("confidential marker", json.dumps(info))
+            self.assertNotIn(str(app), json.dumps(info))
+
     def test_synthetic_public_app_contract_and_no_mutation(self):
         with tempfile.TemporaryDirectory() as td:
             public = Path(td) / "public"
