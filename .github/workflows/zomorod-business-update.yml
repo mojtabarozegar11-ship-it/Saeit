@@ -31,7 +31,6 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/zomorod-business-update"
           install -d -m 700 "$d"
-          trap 'rm -rf -- "$d"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
           chmod 600 "$d"/*.key
