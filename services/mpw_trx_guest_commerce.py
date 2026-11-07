@@ -314,28 +314,72 @@ def patch_public(namespace):
         ("recover/download/<int:invoice_id>/", recovery_download),
     )
     from collections.abc import Mapping
-    for key, patterns in list(namespace.items()):
+    recovery_extra = (
+        ("recover/", recovery_request),
+        ("recover/verify/", recovery_verify),
+        ("recover/orders/", recovery_orders),
+        ("recover/download/<int:invoice_id>/", recovery_download),
+    )
+
+    def _register_recovery_patterns(patterns):
+        """Register relative recovery routes in the live public URL registry."""
         if isinstance(patterns, Mapping):
             items = list(patterns.items())
-            if not any("trx-easy" in str(route) or "start/" in str(route)
-                       for route, _ in items):
-                continue
-            existing = set(patterns)
-            if any(route in existing for route, _ in recovery_extra):
+            existing = {str(route) for route, _ in items}
+            if any(str(route) in existing for route, _ in recovery_extra):
                 raise RuntimeError("Recovery URL collision")
             updated = dict(items)
             updated.update(dict(recovery_extra))
-            namespace[key] = updated
-        elif isinstance(patterns, (tuple, list)):
+            return updated
+        if isinstance(patterns, (tuple, list)):
             items = list(patterns)
-            if not any("trx-easy" in str(route) or "start/" in str(route)
-                       for route, _ in items):
-                continue
-            existing = {route for route, _ in items}
-            if any(route in existing for route, _ in recovery_extra):
+            existing = {str(route) for route, _ in items}
+            if any(str(route) in existing for route, _ in recovery_extra):
                 raise RuntimeError("Recovery URL collision")
             items.extend(recovery_extra)
-            namespace[key] = type(patterns)(items)
+            return type(patterns)(items)
+        return None
+
+    registered = False
+    for key, patterns in list(namespace.items()):
+        if isinstance(patterns, Mapping):
+            items = list(patterns.items())
+        elif isinstance(patterns, (tuple, list)):
+            items = list(patterns)
+        else:
+            continue
+        route_text = " ".join(str(route) for route, _ in items)
+        view_text = " ".join(
+            str(getattr(view, "__name__", "")) for _, view in items
+        )
+        # The live module has used both a prefixed route registry and a
+        # compact product_checkout/purchases registry. Accept either shape.
+        looks_like_public_registry = (
+            "trx-easy" in route_text or "start/" in route_text or
+            "product_checkout" in view_text or "purchases" in view_text
+        )
+        if not looks_like_public_registry:
+            continue
+        updated = _register_recovery_patterns(patterns)
+        if updated is not None:
+            namespace[key] = updated
+            registered = True
+
+    # Older live revisions expose the registry under a neutral name and do
+    # not contain a recognizable route literal. Use the conventional names
+    # only as a bounded fallback; never invent a new global URLconf.
+    if not registered:
+        for key in ("urlpatterns", "URLPATTERNS", "URL_PATTERNS",
+                    "PUBLIC_URLPATTERNS"):
+            patterns = namespace.get(key)
+            if isinstance(patterns, (Mapping, tuple, list)):
+                updated = _register_recovery_patterns(patterns)
+                if updated is not None:
+                    namespace[key] = updated
+                    registered = True
+                    break
+    if not registered:
+        raise RuntimeError("Recovery URL registry not found")
 
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
