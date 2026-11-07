@@ -973,6 +973,9 @@ import hashlib
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+import stat
 
 cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=12)
 if cron.returncode not in (0, 1):
@@ -994,6 +997,7 @@ for line in cron.stdout.splitlines():
         "factory_staging_tick": "factory_staging_tick" in command,
         "stage4_due_dispatch": "stage4-due-dispatch" in command or "stage4_due_dispatch" in command,
         "economic_worker": "economic_worker" in command,
+        "mojtrade_observer": "SAEIT_MOJTRADE_OBSERVER_V1" in command,
     }
     entries.append({"schedule": schedule, "marker": markers[-1] if markers else None,
                     "command_sha256": hashlib.sha256(command.encode()).hexdigest()[:16],
@@ -1010,5 +1014,79 @@ for command in ps.stdout.splitlines():
         if name in command:
             counts[name] += 1
 print("AGENT_FLEET_PROCESS_MATCH_COUNTS=" + json.dumps(counts, sort_keys=True, separators=(",", ":")))
+
+# A cron-launched observer normally runs for seconds, so process counts alone
+# cannot prove that it is absent or healthy. Check its private receipt, source,
+# scheduled entry and unexpired payload without emitting market or wallet data.
+operations = Path.home() / "factory-runtime/operations/mojtrade"
+private = Path.home() / "factory-runtime/private/mojtrade"
+tagged = sum(bool(entry["route_flags"]["mojtrade_observer"]) for entry in entries)
+
+def private_file(path, limit=96000):
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        metadata = path.stat()
+        if stat.S_IMODE(metadata.st_mode) & 0o077 or not 0 < metadata.st_size <= limit:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+def timestamp(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+
+try:
+    safe_private = (private.is_dir() and not private.is_symlink()
+                    and stat.S_IMODE(private.stat().st_mode) == 0o700)
+except OSError:
+    safe_private = False
+source = (private_file(operations / "observer.py", limit=200000)
+          if operations.is_dir() and not operations.is_symlink() else None)
+receipt = payload = None
+if safe_private:
+    try:
+        receipt_bytes = private_file(private / "activation-receipt.json")
+        payload_bytes = private_file(private / "validated-payload.json")
+        receipt = json.loads(receipt_bytes) if receipt_bytes else None
+        payload = json.loads(payload_bytes) if payload_bytes else None
+    except (OSError, UnicodeError, ValueError, TypeError):
+        pass
+
+source_matches = bool(
+    isinstance(receipt, dict) and source is not None
+    and receipt.get("source_sha256") == hashlib.sha256(source).hexdigest()
+    and receipt.get("execution") == "disabled"
+    and receipt.get("orders") == 0
+    and receipt.get("publication_enabled") is False
+)
+now = datetime.now(timezone.utc)
+generated = timestamp(payload.get("generated_at")) if isinstance(payload, dict) else None
+expires = timestamp(payload.get("expires_at")) if isinstance(payload, dict) else None
+signals = payload.get("signals") if isinstance(payload, dict) else None
+payload_fresh = bool(
+    generated and expires and generated <= now <= expires
+    and isinstance(signals, list) and len(signals) == 2
+    and [signal.get("symbol") for signal in signals if isinstance(signal, dict)]
+        == ["BTC/USD", "ETH/USD"]
+    and payload.get("schema_version") == 1
+    and payload.get("source") == "mojtrade-vps"
+)
+print("AGENT_FLEET_MOJTRADE_RUNTIME=" + json.dumps({
+    "read_only": True,
+    "cron_entries": tagged,
+    "private_directory_secure": safe_private,
+    "source_matches_receipt": source_matches,
+    "payload_fresh": payload_fresh,
+    "observer_operational_evidence": tagged == 1 and source_matches and payload_fresh,
+    "orders_executed_by_audit": 0,
+    "real_trading_supported_by_observer": False,
+}, sort_keys=True, separators=(",", ":")))
 PY
 echo AGENT_FLEET_AUDIT_READ_ONLY_COMPLETE
