@@ -13,7 +13,9 @@ import fcntl
 import json
 import os
 import stat
+import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +29,7 @@ CONFIG_KEYS = {"schema", "foundry_report", "training_data", "unseen_data",
 MAX_INPUT_BYTES = 3_000_000
 MAX_EVENT_BYTES = 5_000_000
 MAX_EVENTS = 500
+MAX_HEALTH_BYTES = 4096
 O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
@@ -213,9 +216,114 @@ def record_if_changed(event, state_dir, *, now=None):
             os.close(fd)
 
 
+@contextmanager
+def _single_instance(state_dir):
+    """One monitoring writer at a time, without PID-file race assumptions."""
+    folder = _private_dir(state_dir)
+    lock_path = folder / "supervisor.lock"
+    if lock_path.is_symlink():
+        raise SupervisorReject("unsafe_supervisor_lock_symlink")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | O_NOFOLLOW, 0o600)
+    try:
+        s = os.fstat(fd)
+        if (not stat.S_ISREG(s.st_mode) or s.st_nlink != 1 or
+                s.st_uid != os.geteuid() or stat.S_IMODE(s.st_mode) != 0o600):
+            raise SupervisorReject("supervisor_lock_permissions_invalid")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SupervisorReject("another_supervisor_already_active") from exc
+        yield
+    finally:
+        os.close(fd)
+
+
+def _write_health(event, state_dir, sequence, *, now=None):
+    """Atomic liveness timestamp, separate from non-duplicating event reports."""
+    folder = _private_dir(state_dir)
+    target = folder / "health.json"
+    if target.is_symlink():
+        raise SupervisorReject("unsafe_heartbeat_symlink")
+    if target.exists():
+        # Never replace a non-private, linked or modified status file.
+        _regular_bytes(target, MAX_HEALTH_BYTES, private=True)
+    timestamp = now or datetime.now(timezone.utc)
+    if not isinstance(timestamp, datetime) or timestamp.tzinfo is None:
+        raise SupervisorReject("heartbeat_timestamp_not_timezone_aware")
+    snapshot = {"schema": SCHEMA,
+                "checked_at_utc": timestamp.astimezone(timezone.utc).isoformat(),
+                "observed_state": event["state"], "journal_sequence": sequence,
+                "evidence_receipt_sha256": event["evidence_receipt_sha256"],
+                "real_orders": 0, "public_signals": 0,
+                "commercial_ready": False, "broker_eligible": False}
+    snapshot["receipt_sha256"] = oos.foundry.digest(snapshot)
+    data = (oos.foundry.canonical(snapshot) + "\n").encode()
+    if len(data) > MAX_HEALTH_BYTES:
+        raise SupervisorReject("health_payload_too_large")
+    fd, temp_path = tempfile.mkstemp(prefix="health-", suffix=".tmp", dir=folder)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, target)
+        folder_fd = os.open(folder, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(folder_fd)
+        finally:
+            os.close(folder_fd)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+    return snapshot
+
+
+def read_health(state_dir, *, max_age_seconds=180, now=None):
+    """A fresh timestamp is *not* proof that the observer remains running."""
+    folder = _private_dir(state_dir)
+    base = {"schema": SCHEMA, "mode": "LOCAL_RESEARCH_STATUS_ONLY",
+            "real_orders": 0, "public_signals": 0, "commercial_ready": False,
+            "broker_eligible": False}
+    if _stop_flag(folder):
+        return {**base, "health_state": "OPERATOR_STOPPED", "age_seconds": None}
+    if type(max_age_seconds) is not int or not 30 <= max_age_seconds <= 10_800:
+        raise SupervisorReject("invalid_health_age_limit")
+    try:
+        data = json.loads(_regular_bytes(folder / "health.json", MAX_HEALTH_BYTES,
+                                        private=True))
+        if (not isinstance(data, dict) or
+                set(data) != {"schema", "checked_at_utc", "observed_state",
+                              "journal_sequence", "evidence_receipt_sha256", "real_orders",
+                              "public_signals", "commercial_ready", "broker_eligible",
+                              "receipt_sha256"} or data["schema"] != SCHEMA or
+                data["real_orders"] != 0 or data["public_signals"] != 0 or
+                data["commercial_ready"] is not False or
+                data["broker_eligible"] is not False or
+                data["receipt_sha256"] != oos.foundry.digest(
+                    {k: v for k, v in data.items() if k != "receipt_sha256"})):
+            raise SupervisorReject("invalid_health_receipt")
+        checked = datetime.fromisoformat(data["checked_at_utc"])
+        if checked.tzinfo is None:
+            raise SupervisorReject("health_timestamp_not_timezone_aware")
+        moment = now or datetime.now(timezone.utc)
+        if not isinstance(moment, datetime) or moment.tzinfo is None:
+            raise SupervisorReject("health_check_clock_invalid")
+        age = (moment.astimezone(timezone.utc) - checked.astimezone(timezone.utc)).total_seconds()
+        health = ("CLOCK_SKEW_BLOCKED" if age < -5 else
+                  "STALE_HEARTBEAT" if age > max_age_seconds else
+                  "RECENT_HEARTBEAT_NOT_PROOF_RUNNING")
+        return {**base, "health_state": health, "age_seconds": round(age, 2),
+                "last_observed_state": data["observed_state"],
+                "journal_sequence": data["journal_sequence"]}
+    except (SupervisorReject, ValueError, TypeError, KeyError):
+        return {**base, "health_state": "MISSING_OR_CORRUPT_HEARTBEAT",
+                "age_seconds": None}
+
+
 def inspect_and_record(config_path, state_dir):
     event = inspect(config_path, state_dir)
     record = record_if_changed(event, state_dir)
+    _write_health(event, state_dir, record["sequence"])
     return {"state": event["state"], "new_material_transition": record["transition_written"],
             "journal_sequence": record["sequence"], "real_orders": 0,
             "public_signals": 0, "commercial_ready": False,
@@ -224,22 +332,32 @@ def inspect_and_record(config_path, state_dir):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Zero-network local research evidence monitor")
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--config", type=Path)
     parser.add_argument("--state-dir", required=True, type=Path)
     parser.add_argument("--watch", action="store_true", help="Poll until operator STOP or Ctrl-C")
+    parser.add_argument("--status", action="store_true", help="Read-only local heartbeat age")
     parser.add_argument("--interval-seconds", type=int, default=60)
     args = parser.parse_args(argv)
     if not 30 <= args.interval_seconds <= 3600:
         parser.error("interval_seconds must be 30..3600")
-    while True:
-        result = inspect_and_record(args.config, args.state_dir)
-        print(json.dumps(result, ensure_ascii=False, sort_keys=True), flush=True)
-        if not args.watch or result["state"] == "OPERATOR_STOPPED":
-            break
-        try:
-            time.sleep(args.interval_seconds)
-        except KeyboardInterrupt:
-            break
+    if args.status:
+        if args.watch:
+            parser.error("--status and --watch are mutually exclusive")
+        print(json.dumps(read_health(args.state_dir, max_age_seconds=3 * args.interval_seconds),
+                         ensure_ascii=False, sort_keys=True))
+        return 0
+    if args.config is None:
+        parser.error("--config is required unless --status is given")
+    with _single_instance(args.state_dir):
+        while True:
+            result = inspect_and_record(args.config, args.state_dir)
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True), flush=True)
+            if not args.watch or result["state"] == "OPERATOR_STOPPED":
+                break
+            try:
+                time.sleep(args.interval_seconds)
+            except KeyboardInterrupt:
+                break
     return 0
 
 
