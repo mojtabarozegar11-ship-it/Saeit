@@ -12,7 +12,7 @@ jobs:
   restore-proof:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 28
     steps:
       - name: Prepare pinned VPS and cPanel relay
         shell: bash
