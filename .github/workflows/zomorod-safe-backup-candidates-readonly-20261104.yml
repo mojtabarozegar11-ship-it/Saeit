@@ -334,6 +334,47 @@ jobs:
               print("CPANEL_QUARANTINE_NO_CRON_CHANGED=1",flush=True)
           PY
 
+      - name: Remove only verified obsolete preview versions once
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import fcntl, os, shutil, time
+          from pathlib import Path
+          root=Path.home(); backup=root/".backups"
+          marker=backup/".obsolete-preview-versions-cleanup-20261107.done"
+          targets=[backup/"zomorod-v6-preview", backup/"zomorod-v8-root-26"]
+          forbidden={".py",".pyc",".sqlite",".sqlite3",".db",".db3",".env",".zip",".tar",".gz",".bz2",".7z",".pdf",".docx",".xlsx",".xls"}
+          if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_PREVIEW_ABORT_UNSAFE_ROOT")
+          with (root/".obsolete-preview-versions-cleanup-20261107.lock").open("a+") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+              if marker.exists():
+                  print("CPANEL_PREVIEW_ALREADY_APPLIED=1",flush=True)
+              else:
+                  for target in targets:
+                      if target.is_symlink() or not target.is_dir():
+                          raise SystemExit("CPANEL_PREVIEW_ABORT_TARGET="+str(target))
+                      newest=0; files=[]
+                      for p in target.rglob("*"):
+                          if p.is_symlink(): raise SystemExit("CPANEL_PREVIEW_ABORT_SYMLINK="+str(p))
+                          if p.is_file():
+                              s=p.stat(); newest=max(newest,s.st_mtime); files.append(p)
+                              if p.suffix.lower() in forbidden:
+                                  raise SystemExit("CPANEL_PREVIEW_ABORT_PROTECTED_FILE="+str(p))
+                      if not files or newest >= time.time()-7*86400:
+                          raise SystemExit("CPANEL_PREVIEW_ABORT_AGE_OR_EMPTY="+target.name)
+                      size=sum(p.stat().st_size for p in files)
+                      shutil.rmtree(target)
+                      print("CPANEL_PREVIEW_GROUP_REMOVED="+str(target.relative_to(root))+":FILES="+str(len(files))+":BYTES="+str(size),flush=True)
+                  marker.write_text("verified obsolete preview versions cleanup completed 2026-11-07\\n")
+                  os.chmod(marker,0o600)
+                  print("CPANEL_PREVIEW_GROUP_REMOVED_COUNT=2",flush=True)
+              print("CPANEL_PREVIEW_NO_SERVICE_RESTART=1",flush=True)
+              print("CPANEL_PREVIEW_NO_CRON_CHANGED=1",flush=True)
+          PY
+
       - name: Remove only empty cPanel backup directories once
         shell: bash
         run: |
