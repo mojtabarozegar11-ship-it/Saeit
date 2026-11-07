@@ -514,9 +514,13 @@ def walk(patterns, prefix=""):
         text = str(route) if route is not None else ""
         full = prefix + text
         if hasattr(p, "url_patterns"):
+            module = getattr(getattr(p, "urlconf_module", None), "__file__", None)
+            if "trx-easy" in full:
+                hits.append({"include": full, "module": module,
+                             "patterns": [str(getattr(x, "pattern", "")) for x in p.url_patterns[:30]]})
             walk(p.url_patterns, full)
         elif "recover" in full or "trx-easy" in full:
-            hits.append(full)
+            hits.append({"route": full, "callback": getattr(getattr(p, "callback", None), "__module__", None)})
 walk(get_resolver().url_patterns)
 print("MPW_RECOVERY_LOCAL_RESOLVER=" + repr({"target": target, "hits": hits[:40]}))
 '''
