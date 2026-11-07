@@ -1,11 +1,13 @@
 """Durable, staff-only API for the unified C01-C50 management ledger."""
 import hashlib
 import json
+import re
 from datetime import date
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.db import IntegrityError
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction
 from accounting.models import JournalEntry
 from core.models import ApprovalRequest, ResearchProject
@@ -22,7 +24,7 @@ def _text(value):
     return str(value or "").strip()
 
 def _action_key(value):
-    normalized = " ".join(_text(value).lower().split())
+    normalized = re.sub(r"[\W_]+", " ", _text(value).lower(), flags=re.UNICODE).strip()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 def _report(row):
@@ -70,28 +72,37 @@ def integrated_ledger_api(request):
     if kind == "report":
         cycle, project, action = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("action"))
         result, measure, evidence = _text(payload.get("result")), _text(payload.get("measure")), _text(payload.get("evidence"))
-        if cycle not in CYCLES or project not in PROJECTS or not all((action, result, measure, evidence)):
-            return JsonResponse({"error": "چرخه، پروژه، اقدام، نتیجه، واحد سنجش و شاهد الزامی است."}, status=400)
+        owner, next_action = _text(payload.get("owner")), _text(payload.get("next"))
+        if cycle not in CYCLES or project not in PROJECTS or not all((action, result, measure, evidence, owner, next_action)):
+            return JsonResponse({"error": "چرخه، پروژه، اقدام، نتیجه، واحد سنجش، شاهد، مسئول و اقدام بعدی الزامی است."}, status=400)
+        if len(result) > 240 or len(measure) > 160 or len(owner) > 160 or len(next_action) > 240:
+            return JsonResponse({"error": "یکی از فیلدهای گزارش بیش از حد مجاز طولانی است."}, status=400)
         key = _action_key(action)
         if CycleReport.objects.filter(cycle=cycle, project_key=project, action_key=key).exists():
             return JsonResponse({"error": "گزارش تکراری است و ذخیره نشد."}, status=409)
         try: action_date = date.fromisoformat(_text(payload.get("date")))
         except ValueError: return JsonResponse({"error": "تاریخ اقدام معتبر نیست."}, status=400)
-        row = CycleReport.objects.create(cycle=cycle, project_key=project, project_name=PROJECTS[project], action=action,
-            action_key=key, result=result, measure=measure, blocker=_text(payload.get("blocker")),
-            next_action=_text(payload.get("next")), evidence=evidence, owner=_text(payload.get("owner")),
-            action_date=action_date, readonly=bool(payload.get("readonly")), created_by=request.user)
+        try:
+            row = CycleReport.objects.create(cycle=cycle, project_key=project, project_name=PROJECTS[project], action=action,
+                action_key=key, result=result, measure=measure, blocker=_text(payload.get("blocker")),
+                next_action=next_action, evidence=evidence, owner=owner,
+                action_date=action_date, readonly=bool(payload.get("readonly")), created_by=request.user)
+        except IntegrityError:
+            return JsonResponse({"error": "گزارش تکراری است و ذخیره نشد."}, status=409)
         return JsonResponse({"report": _report(row)}, status=201)
     if kind == "issue":
         cycle, project, title = _text(payload.get("cycle")), _text(payload.get("project")), _text(payload.get("title"))
         certainty, source = _text(payload.get("certainty")) or "unverified", _text(payload.get("source"))
-        if cycle not in CYCLES or project not in PROJECTS or not title or certainty not in ("verified", "unverified"):
-            return JsonResponse({"error": "چرخه، پروژه، شرح مشکل و وضعیت شواهد الزامی است."}, status=400)
+        owner, next_action = _text(payload.get("owner")), _text(payload.get("next"))
+        if cycle not in CYCLES or project not in PROJECTS or not title or not owner or not next_action or certainty not in ("verified", "unverified"):
+            return JsonResponse({"error": "چرخه، پروژه، شرح مشکل، مسئول و اقدام بعدی الزامی است."}, status=400)
+        if len(owner) > 160 or len(next_action) > 240:
+            return JsonResponse({"error": "مسئول یا اقدام بعدی بیش از حد مجاز طولانی است."}, status=400)
         if certainty == "verified" and not source: return JsonResponse({"error": "برای مانع تأییدشده، منبع الزامی است."}, status=400)
         try: observed_on = date.fromisoformat(_text(payload.get("date")))
         except ValueError: return JsonResponse({"error": "تاریخ مشاهده معتبر نیست."}, status=400)
-        row = CycleIssue.objects.create(cycle=cycle, project_key=project, title=title, owner=_text(payload.get("owner")),
-            observed_on=observed_on, certainty=certainty, source=source, next_action=_text(payload.get("next")), created_by=request.user)
+        row = CycleIssue.objects.create(cycle=cycle, project_key=project, title=title, owner=owner,
+            observed_on=observed_on, certainty=certainty, source=source, next_action=next_action, created_by=request.user)
         return JsonResponse({"issue": _issue(row)}, status=201)
     if kind == "issue_update":
         try: row = CycleIssue.objects.get(pk=int(payload.get("id")))
