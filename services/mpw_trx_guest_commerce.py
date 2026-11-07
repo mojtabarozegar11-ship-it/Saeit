@@ -408,7 +408,7 @@ def patch_public(namespace):
             item for item in direct_recovery
             if str(item.pattern) not in existing_text
         ]
-        namespace["urlpatterns"] = existing_urlpatterns + direct_recovery
+        namespace["urlpatterns"] = direct_recovery + existing_urlpatterns
     else:
         namespace["urlpatterns"] = direct_recovery
 
@@ -433,9 +433,9 @@ def patch_public(namespace):
                            recovery_download, name="mpw_root_recovery_download"),
             ]
             root_urls.urlpatterns = (
-                root_patterns
-                + [item for item in absolute_recovery
+                [item for item in absolute_recovery
                    if str(item.pattern) not in root_text]
+                + root_patterns
             )
 
 def patch_commercial(namespace):
