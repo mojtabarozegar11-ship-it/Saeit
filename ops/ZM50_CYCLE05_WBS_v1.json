@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "version": "v1",
+  "cycle_id": "05",
+  "baseline_date": "2026-11-07",
+  "scope": "Fixed coordination/operational acceptance WBS, not revenue estimate",
+  "weight_total": 100,
+  "items": [
+    {
+      "id": "05-01",
+      "title": "Cross-cycle evidence registry and independent reconciliation",
+      "weight": 10,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-02",
+      "title": "Production source and Passenger/DB identity acceptance",
+      "weight": 15,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-03",
+      "title": "VPS disk safety and independently recoverable restore/rollback",
+      "weight": 15,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-04",
+      "title": "MojPlayWin end-to-end verified checkout/payment/delivery gate",
+      "weight": 20,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-05",
+      "title": "Factory intake and accepted single product production gate",
+      "weight": 12,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-06",
+      "title": "Trader research-only observer and validated owned-site signal/report contract",
+      "weight": 10,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-07",
+      "title": "Management/accounting dual posting and reconciliation",
+      "weight": 8,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-08",
+      "title": "MOJ7-MOJ36 technical/legal/security readiness package",
+      "weight": 5,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    },
+    {
+      "id": "05-09",
+      "title": "Commercial order-to-cash and settlement reconciliation",
+      "weight": 5,
+      "owner": "05",
+      "accepted": false,
+      "acceptance_criteria": "Independent versioned receipt demonstrating complete named deliverable, reproducible readback, and required safety approvals; no PR-only or narrative-only credit",
+      "evidence": []
+    }
+  ],
+  "note": "No item is accepted at baseline. Existing receipts remain source/code evidence, not full WBS acceptance. Deploy/order/payment/delivery/revenue separately verified."
+}
