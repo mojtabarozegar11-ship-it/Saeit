@@ -17,6 +17,7 @@ from pathlib import Path
 
 import mojtrade_execution_twin as twin
 import mojtrade_portfolio_risk_gate as risk
+import mojtrade_replay_reconciliation as reconciliation
 import mojtrade_research_handoff as handoff
 import mojtrade_strategy_foundry as foundry
 
@@ -166,24 +167,30 @@ def run_shadow(request, private_dir, *, now=None):
         raise ShadowReject("risk_handoff:" + str(exc)) from exc
     risk_decision = risk_result["risk_response"]["decisions"][0]
     if risk_decision["status"] != "RESEARCH_SLOT_RESERVED":
-        return _result(report, birth_receipt, cert, risk_result, None,
+        return _result(report, birth_receipt, cert, risk_result, None, None,
                        "RESEARCH_RISK_REFUSED")
     # No order can originate from this code. It hands a pre-specified
     # HYPOTHETICAL intent to a no-network event replay.
     scenario = {**book, "hypothetical_intents": [
         {"intent_id": risk_decision["request_id"], **intent_fields}]}
     twin_result = twin.replay(scenario)
-    return _result(report, birth_receipt, cert, risk_result, twin_result,
+    try:
+        reconciled = reconciliation.record_receipt(
+            risk_result, twin_result, parent / "unified-replay-reconciliation.jsonl")
+    except reconciliation.ReconciliationReject as exc:
+        raise ShadowReject("research_reconciliation_failed_reserved_slot_not_released:" + str(exc)) from exc
+    return _result(report, birth_receipt, cert, risk_result, twin_result, reconciled,
                    "RESEARCH_EXECUTION_REPLAYED")
 
 
-def _result(report, birth_receipt, cert, risk_result, twin_result, status):
+def _result(report, birth_receipt, cert, risk_result, twin_result, reconciled, status):
     result = {"schema": SCHEMA, "mode": "RESEARCH_ONLY", "status": status,
               "execution": "disabled", "real_orders": 0, "public_signals": 0,
               "broker_eligible": False, "foundry_report_sha256": report["report_sha256"],
               "foundry_registry_sequence": birth_receipt["sequence"],
               "strategy_id": cert["strategy_id"], "strategy_state": cert["state"],
               "risk_handoff": risk_result, "execution_twin": twin_result,
+              "reconciliation": reconciled,
               "limitations": ["input market and account data not independently authenticated",
                               "no independent financial edge proven",
                               "historical research slot never an order permission"]}
@@ -198,7 +205,7 @@ def _no_signal(report, receipt):
               "foundry_report_sha256": report["report_sha256"],
               "foundry_registry_sequence": receipt["sequence"],
               "strategy_id": None, "strategy_state": None,
-              "risk_handoff": None, "execution_twin": None,
+              "risk_handoff": None, "execution_twin": None, "reconciliation": None,
               "limitations": ["no eligible closed-bar signal",
                               "strategy not independently statistically validated"]}
     result["report_sha256"] = _hash(result)
