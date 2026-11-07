@@ -138,6 +138,9 @@ jobs:
           print("BACKUP_DUPLICATE_BYTES_EXCESS="+str(sum(size*(len(paths)-1) for size,digest,paths in dup_groups)),flush=True)
           for size,digest,paths in dup_groups[:20]:
               print("BACKUP_DUPLICATE=size:"+str(size)+":count:"+str(len(paths))+":sha256_prefix:"+digest[:16],flush=True)
+              for p in sorted(paths, key=lambda q:(q.stat().st_mtime, str(q))):
+                  age=max(0,int((time.time()-p.stat().st_mtime)/86400))
+                  print("BACKUP_DUPLICATE_PATH=age_days:"+str(age)+":path:"+str(p.relative_to(Path("/home/zomorod2"))),flush=True)
           PY
       - name: Remove runner-only SSH files
         if: always()
