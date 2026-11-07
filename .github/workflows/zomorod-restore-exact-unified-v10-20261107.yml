@@ -1,0 +1,216 @@
+name: Restore seven exact archived pages to unified original theme
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-restore-exact-unified-v10-20261107.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-unified-exact-archive-restoration
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Prepare validated pinned cPanel access via VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-exact-unified"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Byte-exact restore from verified historical unified archive, no generation
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 480s ssh -T -F "$RUNNER_TEMP/zm-exact-unified/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          import concurrent.futures
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          import stat
+          import sys
+          import tempfile
+          import time
+          import urllib.request
+          from pathlib import Path
+
+          runid=sys.argv[1]
+          assert re.fullmatch('[0-9]{5,20}',runid)
+          home=Path('/home/zomorod2')
+          web=home/'public_html'
+          private=home/'.private'
+          archive=home/'.backups/zomorod-v10-content-restore/39611e09708ac8a4e5df1aac0209e03f44e06ad1'
+          previous=private/'zm-internal-pre-seo-restore-20261107/42325682473/original-static-pages'
+          recovery=private/'zm-restore-exact-unified-v10-20261107'/runid
+          six=('company','about','services','industry','research','knowledge')
+          seven={
+              'company/index.html':'f48739ee4068ee',
+              'about/index.html':'af19a953022bb8',
+              'services/index.html':'2ad796bda10eb3',
+              'industry/index.html':'0a15fda1aad11a',
+              'research/index.html':'a94004b5e0d8e2',
+              'knowledge/index.html':'8df5761355a06f',
+              'agriculture/index.html':'d842c74262d254',
+          }
+          sha=lambda b:hashlib.sha256(b).hexdigest()
+          root_expected='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          created=[]
+          agri_changed=False
+          success=False
+
+          def atomic(path,data,mode):
+              fd,tmp=tempfile.mkstemp(prefix='.restore-archived-v10-',dir=str(path.parent))
+              try:
+                  with os.fdopen(fd,'wb') as out:
+                      out.write(data)
+                      out.flush()
+                      os.fsync(out.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,path)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+
+          def public(route):
+              q='?exact_archive_restore='+runid+'-'+str(time.monotonic_ns())
+              req=urllib.request.Request('https://zomorodmelal.ir'+route+q,headers={'Cache-Control':'no-cache','Pragma':'no-cache'})
+              with urllib.request.urlopen(req,timeout=27) as response:
+                  assert response.status==200,(route,response.status)
+                  return route,response.read(650000)
+
+          assert os.geteuid()!=0 and os.geteuid()==web.stat().st_uid,'UNEXPECTED_HOST_USER'
+          assert not recovery.exists() and private.is_dir() and not private.is_symlink() and not web.is_symlink()
+          assert sha((web/'index.html').read_bytes())==root_expected,'HOMEPAGE_IS_NOT_VERIFIED_UNIFIED_V7'
+          assert (archive/'page-list.txt').is_file() and len((archive/'page-list.txt').read_text().splitlines())==45
+          for rel in ('static/site/zomorod-v7/inner-v7.css','static/site/zomorod-v10/inner-v10.css','static/site/zomorod-v7/company-logo.webp'):
+              assert (web/rel).is_file() and (web/rel).stat().st_size>3000,('THEME_ASSET_MISSING',rel)
+          for rel,prefix in seven.items():
+              src=archive/'candidate'/rel
+              assert src.is_file() and not src.is_symlink(),('ARCHIVE_PAGE_MISSING',rel)
+              raw=src.read_bytes()
+              assert sha(raw).startswith(prefix) and len(raw)>5000,('ARCHIVE_HASH_INVALID',rel)
+              assert raw.count(b'zm-unified-v7-20261018')>=1 and b'zm-v7-header' in raw and b'zm-v7-footer-copyright' in raw and b'zm-v10' in raw,('NOT_UNIFIED_ARCHIVED_PAGE',rel)
+          for slug in six:
+              assert not (web/slug).exists() and not (web/slug).is_symlink(),('DIRECTORY_WAS_RECREATED_ABORT',slug)
+              htaccess=previous/slug/'.htaccess'
+              assert htaccess.is_file() and not htaccess.is_symlink() and b'PassengerEnabled off' in htaccess.read_bytes(),('HISTORICAL_ROUTING_CONFIG_MISSING',slug)
+          agriculture=web/'agriculture/index.html'
+          assert agriculture.is_file() and not agriculture.is_symlink()
+          current_agriculture=agriculture.read_bytes()
+          assert len(current_agriculture)==12377 and b'zm-unified-v7-20261018' not in current_agriculture,'AGRICULTURE_LANDING_CHANGED_ABORT'
+          mode=stat.S_IMODE(agriculture.stat().st_mode)
+          for rel in (archive/'page-list.txt').read_text().splitlines():
+              if rel in seven:continue
+              page=web/rel
+              assert page.is_file() and not page.is_symlink() and b'zm-unified-v7-20261018' in page.read_bytes(),('ANOTHER_PAGE_NEEDS_SEPARATE_RESTORATION',rel)
+          preserved={rel:sha((web/rel).read_bytes()) for rel in ('index.html','mohammad/index.html','ghanadi/index.html','amozeshgah/index.html')}
+
+          recovery.mkdir(parents=True,mode=0o700)
+          (recovery/'previous').mkdir(mode=0o700)
+          agriculture_backup=recovery/'previous/agriculture.index.before.html'
+          with agriculture_backup.open('xb') as out:
+              out.write(current_agriculture);out.flush();os.fsync(out.fileno())
+          agriculture_backup.chmod(0o600)
+          assert sha(agriculture_backup.read_bytes())==sha(current_agriculture)
+          (recovery/'manifest.json').write_text(json.dumps({'archived_source':str(archive.relative_to(home)),'paths':list(seven),'root_sha256':root_expected,'before_agriculture_sha256':sha(current_agriculture)},indent=2),encoding='utf-8')
+          print('SEVEN_ARCHIVED_ORIGINAL_FILES_VERIFIED=yes')
+
+          try:
+              for slug in six:
+                  folder=web/slug
+                  folder.mkdir(mode=0o755)
+                  created.append(slug)
+                  shutil.copy2(archive/'candidate'/slug/'index.html',folder/'index.html')
+                  shutil.copy2(previous/slug/'.htaccess',folder/'.htaccess')
+                  assert sha((folder/'index.html').read_bytes())==sha((archive/'candidate'/slug/'index.html').read_bytes()),('STATIC_COPY_MISMATCH',slug)
+                  print('EXACT_UNIFIED_PAGE_RESTORED='+slug)
+              assert sha(agriculture.read_bytes())==sha(current_agriculture),'AGRICULTURE_RACE_ABORT'
+              source_agriculture=(archive/'candidate/agriculture/index.html').read_bytes()
+              atomic(agriculture,source_agriculture,mode)
+              agri_changed=True
+              assert sha(agriculture.read_bytes())==sha(source_agriculture)
+              routes=['/'+rel.removesuffix('index.html') for rel in seven]
+              with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
+                  for route,page in pool.map(public,routes):
+                      rel=route.strip('/')+'/index.html'
+                      expected=(archive/'candidate'/rel).read_bytes()
+                      assert sha(page)==sha(expected),('PUBLIC_PAGE_NOT_EXACT_ARCHIVE',route,sha(page)[:12])
+                      print('EXACT_ARCHIVED_THEME_LIVE_OK='+route+' bytes='+str(len(page)))
+              for rel,digest in preserved.items():
+                  assert sha((web/rel).read_bytes())==digest,('PROTECTED_CHANGED',rel)
+              for route in ('/','/ghanadi/','/mohammad/','/amozeshgah/'):
+                  public(route)
+              success=True
+              (recovery/'success.txt').write_text('Seven historically archived V7/V10 unified pages restored byte-for-byte.\n',encoding='utf-8')
+              print('MAIN_SITE_EXACT_HISTORIC_UNIFIED_THEME_RESTORED=yes')
+          finally:
+              if not success:
+                  print('SAFE_RESTORE_ROLLBACK_STARTED=yes')
+                  if agri_changed and agriculture.is_file() and sha(agriculture.read_bytes())==sha((archive/'candidate/agriculture/index.html').read_bytes()):
+                      atomic(agriculture,current_agriculture,mode)
+                      print('ROLLBACK_AGRICULTURE_EXACT=yes')
+                  for slug in reversed(created):
+                      folder=web/slug
+                      if not folder.is_dir():continue
+                      html=folder/'index.html'
+                      if html.is_file() and sha(html.read_bytes())==sha((archive/'candidate'/slug/'index.html').read_bytes()):
+                          # Move, do not delete, every newly created static directory.
+                          os.rename(folder,recovery/('reverted-'+slug))
+                          print('ROLLBACK_CORPORATE_MOVED='+slug)
+                      elif not any(folder.iterdir()):
+                          os.rename(folder,recovery/('reverted-empty-'+slug))
+                      else:print('ROLLBACK_REFUSED_NEW_CONCURRENT_CONTENT='+slug)
+                  print('SAFE_RESTORE_ROLLBACK_FINISHED=yes')
+          PY
+
+      - name: Remove ephemeral SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-exact-unified"
