@@ -51,12 +51,12 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 8,
+      "sequence": 9,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 2,
+        "counter": 3,
         "runs": [
           {
             "slot": "C01",
@@ -73,6 +73,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
             "note": "Corrected mixed inventory scenarios in harvested-mass denominator; 609-page DOCX/PDF private review uploaded, no scientific/legal acceptance"
+          },
+          {
+            "slot": "C03",
+            "run_id": "ZM50-B02-20261107T105056+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected cold-room event sequence and peak physical stock; full 609-page private DOCX/PDF uploaded; no author/legal/scientific acceptance"
           }
         ]
       }
@@ -372,6 +380,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/0d7cca1b09ca821eb33327e2c7ac0ca18e115d60",
       "acceptance_result": "Verifier code and six regression cases committed and read back; no executed CI/Django/MariaDB gate",
       "impact": "Malformed fractional, boolean and nonpositive TRON SUN amounts now rejected in source; release remains HOLD"
+    },
+    {
+      "registry_id": "R02-0009",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T105056+0330-turn11",
+      "deliverable_key": "C113-coldroom-time-ordered-peak-inventory",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Full DOCX/PDF saved privately; 609 PDF pages, 0 text-empty pages; SHA256 DOCX 31e2ca03aabd4a3754a37b898bc682cd5902efa7804e0fd0da826ba89c901c5e PDF 23444141174d95c24d2fa1f5c21a4dec4cc0250d817cf7c8101804566bc7330c; review only",
+      "impact": "One technical teaching correction, no approved book, deployment, order or revenue"
     }
   ],
   "report_reservations": [],
