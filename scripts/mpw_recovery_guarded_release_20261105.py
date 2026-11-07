@@ -550,7 +550,7 @@ try:
                               "invoice", "download", "def "))]
     print("MPW_PUBLIC_PAGES_SOURCE_HINT=" + repr(selected[:120]))
 except Exception as exc:
-    print("MPW_PUBLIC_PAGES_SOURCE_HINT_ERROR=" + type(exc).__name__)
+    print("MPW_PUBLIC_PAGES_SOURCE_HINT_ERROR=" + type(exc).__name__ + ":" + str(exc)[:240])
 hits = []
 def walk(patterns, prefix=""):
     for p in patterns:
