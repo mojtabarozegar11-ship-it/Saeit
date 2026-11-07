@@ -146,6 +146,54 @@ def _owned_workers():
     return result
 
 
+def inspect_store_sources(*, public=PUBLIC, app=APP):
+    """Redacted file-presence and source-contract probe; no Django import or DB IO."""
+    targets = {
+        "view": ("core/mojplaywin_views.py", ("def store(request):", "record_funnel_event(request", "except Exception as exc")),
+        "funnel": ("core/commerce_funnel.py", ("def record_funnel_event(", "class CommerceFunnelEvent")),
+        "models": ("core/models.py", ("class CommerceFunnelEvent(",)),
+        "store_template": ("core/templates/mojplaywin/store.html", ('{% extends "mojplaywin/site_base.html" %}',)),
+        "main_template_tag": ("command_center/templatetags/mpw_main.py", ("def mpw_main_data(",)),
+    }
+    output = {}
+    for label, root in (("public", public), ("staging", app)):
+        if root.is_symlink() or not root.is_dir():
+            raise RuntimeError("UNSAFE_STORE_SOURCE_ROOT")
+        found = {}
+        for name, (relative, markers) in targets.items():
+            target = root / relative
+            ancestor = target
+            while ancestor != root:
+                if ancestor.is_symlink():
+                    raise RuntimeError("STORE_SOURCE_SYMLINK_REFUSED")
+                ancestor = ancestor.parent
+            if not target.is_file():
+                found[name] = {"present": False}
+                continue
+            size = target.stat().st_size
+            if size > 800000:
+                found[name] = {"present": True, "size_limit_exceeded": True}
+                continue
+            payload = target.read_bytes()
+            content = payload.decode("utf-8", "replace")
+            found[name] = {
+                "present": True,
+                "bytes": len(payload),
+                "sha256_prefix": hashlib.sha256(payload).hexdigest()[:16],
+                "marker_presence": [needle in content for needle in markers],
+            }
+        output[label] = found
+    return {
+        "classification": "MPW_STORE_SOURCE_METADATA_ONLY",
+        "roots": output,
+        "client_or_customer_data_read": False,
+        "environment_values_read": False,
+        "application_imported": False,
+        "database_read": False,
+        "files_modified": False,
+    }
+
+
 def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_payload=None):
     if public == PUBLIC and app == APP and pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise RuntimeError("WRONG_CPANEL_ACCOUNT")
@@ -193,7 +241,8 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_p
             "effective_public_worker_proven": False,
             "database_or_customer_data_read": False,
             "files_modified": False,
-            "release_permitted": False}
+            "release_permitted": False,
+            "store_source_readonly": inspect_store_sources(public=public, app=app)}
 
 
 if __name__ == "__main__":
