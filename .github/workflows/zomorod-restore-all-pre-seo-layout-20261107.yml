@@ -1,0 +1,218 @@
+name: Restore original layout across Zomorod inner pages
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-restore-all-pre-seo-layout-20261107.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-pre-seo-internal-layout
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned and verified SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-internal-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Restore original Django corporate pages and historic agriculture CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 540s ssh -T -F "$RUNNER_TEMP/zm-internal-restore/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          import concurrent.futures
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          import stat
+          import sys
+          import tempfile
+          import time
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          runid=sys.argv[1]
+          assert re.fullmatch('[0-9]{5,20}',runid)
+          home=Path('/home/zomorod2')
+          web=home/'public_html'
+          private=home/'.private'
+          saved=private/'zm-internal-pre-seo-restore-20261107'/runid
+          corp=['company','about','services','industry','research','knowledge']
+          agriculture=['livestock','horticulture','greenhouse','poultry','aquaculture','inputs','seeds','fertilizers','pesticides','offices','water-soil','machinery','market','tools','gardening-tools','genetics']
+          corp_prefix={'company':'bb587e7ad25778dd','about':'00362731e853188e','services':'ad93a76314d5194d','industry':'bad388095ef33079','research':'034043a2ebadfece','knowledge':'c4381674659d772f'}
+          agri_prefix={'livestock':'d4c9472c9afe36e7','horticulture':'0d28343eeae25a71','greenhouse':'1bbf3a56867787f8','poultry':'068a9d1d72172f7a','aquaculture':'1eab7052c094f789','inputs':'08500c9045a1e87f','seeds':'5b1f64f662b504f6','fertilizers':'fa308f87901f7a4a','pesticides':'3e8e4b7f5f683f90','offices':'e82a4a1459483cc7','water-soil':'8176e43290cfce39','machinery':'2baa77852f912eca','market':'8f00b833a08d5c55','tools':'7ab309c67142ebe9','gardening-tools':'060d07a5bd39d651','genetics':'ddd50799fd6b4b01'}
+          old=b'<!-- zm-agri-design-v3 --><link rel="stylesheet" href="/agriculture/assets/zm-agritech-luxe-v3.css">'
+          nova=b'<!-- zm-nova-agriculture-v1 --><link rel="stylesheet" href="/agriculture/assets/zm-nova-agriculture-v1.css">'
+          sha=lambda d: hashlib.sha256(d).hexdigest()
+          originals={}
+          changed_agri={}
+          moved_corp=[]
+          success=False
+
+          def atomic(path,data,mode):
+              fd,tmp=tempfile.mkstemp(prefix='.restoring-original-layout-',dir=str(path.parent))
+              try:
+                  with os.fdopen(fd,'wb') as f:
+                      f.write(data);f.flush();os.fsync(f.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,path)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+
+          def get(route):
+              url='https://zomorodmelal.ir'+route+('?rollback_style='+runid+'-'+str(time.monotonic_ns()))
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache','Pragma':'no-cache'}),timeout=26) as response:
+                  assert response.status==200,('BAD_STATUS',route,response.status)
+                  data=response.read(600000)
+              return route,data
+
+          assert os.geteuid()!=0 and os.geteuid()==web.stat().st_uid,'UNEXPECTED_HOST_IDENTITY'
+          assert private.is_dir() and not saved.exists() and not web.is_symlink() and not private.is_symlink()
+          assert sha((web/'index.html').read_bytes())=='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585','HOMEPAGE_CHANGED_ABORT'
+          css=web/'agriculture/assets/zm-agritech-luxe-v3.css'
+          assert css.is_file() and css.stat().st_size>7000 and not css.is_symlink(),'HISTORIC_CSS_MISSING'
+          for slug in corp:
+              folder=web/slug;f=folder/'index.html';h=folder/'.htaccess'
+              assert folder.is_dir() and not folder.is_symlink() and f.is_file() and not f.is_symlink() and h.is_file()
+              data=f.read_bytes()
+              assert sha(data).startswith(corp_prefix[slug]) and data.count(b'zm-nova-subpage-v1')==1,('CORP_CONCURRENT_EDIT',slug)
+          for slug in agriculture:
+              f=web/'agriculture'/slug/'index.html'
+              assert f.is_file() and not f.is_symlink(),('AGRI_MISSING',slug)
+              data=f.read_bytes()
+              assert sha(data).startswith(agri_prefix[slug]) and data.count(nova)==1 and old not in data,('AGRI_CONCURRENT_EDIT',slug)
+              originals[slug]=(data,stat.S_IMODE(f.stat().st_mode))
+          assert not (web/'agriculture').is_symlink()
+          assert (web/'mohammad/index.html').is_file() and (web/'ghanadi/index.html').is_file() and (web/'amozeshgah/index.html').is_file()
+          preserved={path:sha((web/path).read_bytes()) for path in ('index.html','mohammad/index.html','ghanadi/index.html','amozeshgah/index.html')}
+
+          saved.mkdir(parents=True,mode=0o700)
+          (saved/'agriculture').mkdir(mode=0o700)
+          (saved/'original-static-pages').mkdir(mode=0o700)
+          manifest={'runid':runid,'corporate':corp,'agriculture':agriculture,'root_sha256':preserved['index.html'],'purpose':'Visual/layout restoration only; full recent pages retained in private backup'}
+          for slug in agriculture:
+              data,mode=originals[slug]
+              f=saved/'agriculture'/(slug+'.html')
+              with f.open('xb') as handle:
+                  handle.write(data);handle.flush();os.fsync(handle.fileno())
+              f.chmod(0o600)
+              assert sha(f.read_bytes())==sha(data)
+          for slug in corp:
+              original=web/slug; backup=saved/'original-static-pages'/slug
+              shutil.copytree(original,backup,symlinks=True)
+              assert sha((backup/'index.html').read_bytes())==sha((original/'index.html').read_bytes()),('BACKUP_INCOMPLETE',slug)
+          (saved/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+          (saved/'manifest.json').chmod(0o600)
+          print('PRE_RESTORE_BACKUPS_VERIFIED=22')
+
+          try:
+              # One-page production canary: real Django handler must serve old visual template.
+              slug='industry'
+              os.rename(web/slug,saved/'moved-'+slug)
+              moved_corp.append(slug)
+              route,data=get('/industry/')
+              assert b'zm-nova-subpage-v1' not in data and b'<html' in data.lower() and len(data)>1800, 'OLD_DYNAMIC_INDUSTRY_HANDLER_UNHEALTHY'
+              print('ORIGINAL_INDUSTRY_CANARY_OK=yes bytes='+str(len(data)))
+              for slug in corp:
+                  if slug=='industry':continue
+                  os.rename(web/slug,saved/'moved-'+slug)
+                  moved_corp.append(slug)
+              for slug in agriculture:
+                  f=web/'agriculture'/slug/'index.html';data,mode=originals[slug]
+                  assert sha(f.read_bytes())==sha(data),'CONCURRENT_AGRI_WRITE_ABORT:'+slug
+                  restored=data.replace(nova,old)
+                  assert restored.replace(old,nova)==data
+                  atomic(f,restored,mode)
+                  changed_agri[slug]=sha(restored)
+              routes=['/'+s+'/' for s in corp]+['/agriculture/'+s+'/' for s in agriculture]
+              with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
+                  for route,data in pool.map(get,routes):
+                      assert len(data)>1000,('EMPTY_PUBLIC_PAGE',route)
+                      assert b'zm-nova-subpage-v1' not in data,('CORP_NOVA_STILL_LIVE',route)
+                      assert b'zm-nova-agriculture-v1' not in data,('AGRI_NOVA_STILL_LIVE',route)
+                      if route.startswith('/agriculture/'):
+                          assert b'zm-agri-design-v3' in data,('OLD_AGRI_CSS_NOT_VISIBLE',route)
+                      print('RESTORED_PUBLIC_PAGE_OK='+route+' bytes='+str(len(data)))
+              for path,digest in preserved.items():
+                  assert sha((web/path).read_bytes())==digest,('PROTECTED_PAGE_CHANGED',path)
+              for route in ('/','/agriculture/','/mohammad/','/ghanadi/','/amozeshgah/'):
+                  get(route)
+              success=True
+              (saved/'success.txt').write_text('Restored 6 corporate dynamic routes and 16 original agriculture styles; public verified.\n',encoding='utf-8')
+              print('ALL_22_INTERNAL_PAGES_ORIGINAL_LAYOUT_VERIFIED=yes')
+          finally:
+              if not success:
+                  print('RESTORATION_INCOMPLETE_STARTING_SAFE_ROLLBACK=yes')
+                  for slug in reversed(agriculture):
+                      if slug not in changed_agri:continue
+                      f=web/'agriculture'/slug/'index.html'
+                      original,mode=originals[slug]
+                      if f.is_file() and sha(f.read_bytes())==changed_agri[slug]:
+                          atomic(f,original,mode)
+                          print('ROLLBACK_AGRICULTURE='+slug)
+                      else:print('ROLLBACK_REFUSED_CONCURRENT_CHANGE_AGRICULTURE='+slug)
+                  for slug in reversed(moved_corp):
+                      target=web/slug;source=saved/'moved-'+slug
+                      if source.is_dir() and not target.exists():
+                          os.rename(source,target)
+                          print('ROLLBACK_CORPORATE='+slug)
+                      else:print('ROLLBACK_REFUSED_CONCURRENT_CHANGE_CORPORATE='+slug)
+                  print('SAFE_ROLLBACK_FINISHED=yes')
+          PY
+
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-internal-restore"
