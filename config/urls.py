@@ -10,7 +10,7 @@ from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
-from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile
+from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
 from core.academy_views import (
     academy, education, education_course_detail, education_enroll,
@@ -55,6 +55,7 @@ urlpatterns = [
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
+    path("<str:key>.txt", indexnow_key, name="indexnow_key"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
     path("store/", store_home, name="store"),
     path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
