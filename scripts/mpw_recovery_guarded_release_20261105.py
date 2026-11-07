@@ -2,7 +2,7 @@
 """Guarded cPanel source stage for MPW-RECOVERY-01; email stays disabled.
 
 Commands: preflight STAGE, publish STAGE RUN_ID DB_BACKUP_SHA256,
-publish_additive STAGE RUN_ID, verify, rollback RUN_ID.
+publish_additive STAGE RUN_ID, activate RUN_ID, verify, rollback RUN_ID.
 Requires the existing cPanel Python 3.11 venv and trusted SSH relay. A dry-run
 is read-only. The publish command writes ONLY reviewed code plus three new
 tables after confirming migration 0039 is applied. Rollback restores code;
@@ -44,7 +44,7 @@ FILES = {
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 SOURCE_DIGESTS = {
     "guest": "a9ea2dfc98809dc8991a5d8faf9a431d95b1c10cf4b33f174e69f9456a723d12",
-    "recovery": "8f5f4716ff4f2bb7b357a1dc634a01b3ac58349683d733d4ee3dca42fabd868a",
+    "recovery": "d5fa82201ca9c58f8436ff2239c6154dd607db30",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "c1d209a97a4f3ab6e5f4fde9a9fa1904d7f8856ef38ba8e3afddabf89bb55240",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
@@ -464,6 +464,37 @@ def rollback(run):
     print("MPW_RECOVERY01_CODE_ROLLED_BACK;SCHEMA_TABLES_RETAINED=TRUE")
 
 
+def activate(run):
+    """Open the already staged recovery route after explicit owner approval."""
+    guard_host()
+    if not re.fullmatch(r"[0-9]{8,20}", run):
+        fail("INVALID_RUN_ID")
+    path = APP / FILES["settings"]
+    old = _safe_file(path).read_bytes()
+    text = old.decode("utf-8")
+    if text.count(SETTING_MARKER) != 1:
+        fail("RELEASE_SOURCE_PATCH_MISSING:settings")
+    if "MPW_GUEST_RECOVERY_ENABLED = False" not in text or "MPW_GUEST_RECOVERY_EMAIL_APPROVED = False" not in text:
+        fail("RECOVERY_FLAGS_NOT_OFF")
+    new = text.replace("MPW_GUEST_RECOVERY_ENABLED = False", "MPW_GUEST_RECOVERY_ENABLED = True", 1)
+    new = new.replace("MPW_GUEST_RECOVERY_EMAIL_APPROVED = False", "MPW_GUEST_RECOVERY_EMAIL_APPROVED = True", 1).encode("utf-8")
+    folder, manifest = private_backup(run, {"settings": old}, {"settings": new})
+    try:
+        _atomic(path, new, expected=manifest["before"]["settings"])
+        restart()
+        report = db_state()
+        if not (report["enabled"] and report["mail"]):
+            fail("RECOVERY_FLAGS_NOT_ACTIVE")
+        import urllib.request
+        with urllib.request.urlopen("https://mojplaywin.com/commerce/trx-easy/recover/", timeout=25) as response:
+            if response.status != 200:
+                fail("RECOVERY_ROUTE_NOT_READY:" + str(response.status))
+    except BaseException:
+        restore(folder, manifest, changed=["settings"])
+        restart()
+        raise
+    print("MPW_RECOVERY01_ACTIVE;PUBLIC_RECOVERY_ENABLED=TRUE;OUTBOUND_EMAIL=TRUE;PAYMENTS_CREATED=0;ORDERS_CREATED=0")
+
 def verify():
     guard_host()
     report = db_state()
@@ -511,12 +542,14 @@ def main(argv):
         publish_additive(Path(argv[2]), argv[3])
     elif len(argv) == 5 and argv[1] == "publish":
         publish(Path(argv[2]), argv[3], argv[4])
+    elif len(argv) == 3 and argv[1] == "activate":
+        activate(argv[2])
     elif len(argv) == 2 and argv[1] == "verify":
         verify()
     elif len(argv) == 3 and argv[1] == "rollback":
         rollback(argv[2])
     else:
-        raise SystemExit("Usage: release.py preflight STAGE | publish_additive STAGE RUN_ID | publish STAGE RUN_ID DB_BACKUP_SHA256 | verify | rollback RUN_ID")
+        raise SystemExit("Usage: release.py preflight STAGE | publish_additive STAGE RUN_ID | publish STAGE RUN_ID DB_BACKUP_SHA256 | activate RUN_ID | verify | rollback RUN_ID")
 
 
 if __name__ == "__main__":
