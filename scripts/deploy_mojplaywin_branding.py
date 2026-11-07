@@ -32,6 +32,9 @@ OWNED_FILES = (
     Path("core/templates/mojplaywin/footer.html"),
 )
 FILES = MERGED_FILES + OWNED_FILES
+INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
+INDEXNOW_FILE = DOCROOT / f"{INDEXNOW_KEY}.txt"
+
 ASSETS = (
     "site/heroes/research.webp", "site/heroes/game-studio.webp",
     "site/heroes/education-detail.webp", "site/heroes/store.webp",
@@ -201,6 +204,18 @@ def rollback(run_id):
         print("NO_MOJPLAYWIN_BACKUP_TO_RESTORE")
         return
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    key_entry = manifest.get("__indexnow_key_file__")
+    if key_entry:
+        ensure_safe_path(INDEXNOW_FILE)
+        saved_key = backup / "indexnow-key.txt"
+        if key_entry["existed"]:
+            if not saved_key.is_file() or saved_key.is_symlink():
+                raise RuntimeError("Missing or unsafe IndexNow backup")
+            atomic_write(INDEXNOW_FILE, saved_key.read_text(encoding="utf-8"), key_entry["mode"])
+        elif INDEXNOW_FILE.exists():
+            if INDEXNOW_FILE.is_dir():
+                raise RuntimeError("Unexpected directory at IndexNow key path")
+            INDEXNOW_FILE.unlink()
     for relative in FILES:
         target = APP_ROOT / relative
         ensure_safe_path(target)
@@ -231,6 +246,7 @@ def deploy(run_id, commit_sha, stage_arg):
     for required in (DOCROOT / ".htaccess", DOCROOT / "passenger_wsgi.py"):
         if not required.is_file() or required.is_symlink():
             raise RuntimeError(f"Missing or unsafe MojPlayWin routing file: {required}")
+    ensure_safe_path(INDEXNOW_FILE)
     if "Saeit-staging" not in (DOCROOT / "passenger_wsgi.py").read_text(encoding="utf-8", errors="replace"):
         raise RuntimeError("Passenger no longer points to the verified Saeit-staging app")
 
@@ -286,6 +302,9 @@ def deploy(run_id, commit_sha, stage_arg):
         raise RuntimeError("Deployment backup already exists")
     backup.mkdir(mode=0o700, parents=True)
     manifest = {}
+    manifest["__indexnow_key_file__"] = {"existed": INDEXNOW_FILE.is_file(), "mode": INDEXNOW_FILE.stat().st_mode & 0o777 if INDEXNOW_FILE.is_file() else 0o644}
+    if INDEXNOW_FILE.is_file():
+        shutil.copy2(INDEXNOW_FILE, backup / "indexnow-key.txt")
     for relative in FILES:
         target = APP_ROOT / relative
         existed = target.is_file()
@@ -301,6 +320,7 @@ def deploy(run_id, commit_sha, stage_arg):
         for relative in FILES:
             target = APP_ROOT / relative
             atomic_write(target, outputs[relative], manifest[str(relative)]["mode"])
+        atomic_write(INDEXNOW_FILE, INDEXNOW_KEY + "\n", manifest["__indexnow_key_file__"]["mode"])
         restart_passenger()
     except Exception:
         rollback(run_id)
