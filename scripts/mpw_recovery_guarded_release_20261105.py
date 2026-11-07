@@ -440,7 +440,7 @@ def publish_additive(stage, run):
     """
     guard_host()
     old, new = build_plan(stage)
-    require_before_schema()
+    baseline = require_before_schema()
     folder, manifest = private_backup(run, old, new)
     changed = []
     order = ("recovery", "recovery_models", "migration", "cleanup",
@@ -449,12 +449,14 @@ def publish_additive(stage, run):
         for key in order:
             _atomic(APP / FILES[key], new[key], expected=manifest["before"][key])
             changed.append(key)
-        migrate_new_tables()
+        if baseline["m49"] is False:
+            migrate_new_tables()
         report = db_state()
+        flags_off = report["enabled"] is False and report["mail"] is False
+        flags_active = report["enabled"] is True and report["mail"] is True
         if not (report["vendor"] == "mysql" and report["m49"] is True and
                 report["unreviewed_core_migrations"] == EXPECTED_LIVE_CORE_MIGRATIONS and
-                len(report["tables"]) == 3 and
-                report["enabled"] is False and report["mail"] is False):
+                len(report["tables"]) == 3 and (flags_off or flags_active)):
             fail("POST_ADDITIVE_MIGRATION_STATE_DRIFT")
         restart()
     except BaseException:
