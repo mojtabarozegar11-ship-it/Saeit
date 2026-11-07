@@ -11,6 +11,7 @@ header('X-Robots-Tag: noindex, nofollow');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; connect-src \'self\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
 if (extension_loaded('session')) {
     session_name('ZM_BUSINESS');
@@ -108,6 +109,7 @@ function layoutStart(string $page,?array $user=null):void {
   const phone=document.getElementById('zm-enable-phone');
   function phoneStatus(){if(!phone)return;if(!('Notification' in window)){phone.disabled=true;phone.textContent='اعلان وب پشتیبانی نمی‌شود';return;}phone.textContent=Notification.permission==='granted'?'🔔 اعلان گوشی فعال است':'🔔 فعال‌سازی اعلان گوشی';}
   phone?.addEventListener('click',async()=>{if(!('Notification' in window)){phoneStatus();return;}const p=await Notification.requestPermission();phoneStatus();if(p==='granted'){const n=new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});n.onclick=()=>window.focus();}else if(p==='denied'){status.textContent='اعلان گوشی در Chrome مسدود است؛ از تنظیمات سایت اجازه اعلان را فعال کنید.';}});
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('/business/notification-sw.js',{scope:'/business/'}).catch(()=>{});}
   phoneStatus();
   async function refresh(){
     try{
@@ -116,7 +118,14 @@ function layoutStart(string $page,?array $user=null):void {
       const x=await r.json(); current=(x.pending_approvals||[])[0]||null;
       status.textContent=current?'یک درخواست تأیید در انتظار است.':'صف تأیید فعلاً خالی است.';
       req.hidden=!current;
-      if(current)text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'تصمیم مالک لازم است.');
+      if(current){
+        text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'تصمیم مالک لازم است.');
+        const noticeKey='zm-approval-notified-'+String(current.id||'unknown');
+        if('Notification' in window && Notification.permission==='granted' && !sessionStorage.getItem(noticeKey) && navigator.serviceWorker){
+          navigator.serviceWorker.ready.then(reg=>reg.showNotification('زمرد ملل — تأیید لازم است',{body:String(current.reason||'یک درخواست مدیریتی در انتظار تصمیم است.'),dir:'rtl',lang:'fa-IR',tag:'zm-approval-'+String(current.id||'unknown'),renotify:false,actions:[{action:'approved',title:'قبول'},{action:'rejected',title:'رد'},{action:'explanation',title:'توضیح'}],data:{url:'/staff/command-center/integrated/'}})).catch(()=>{});
+          sessionStorage.setItem(noticeKey,'1');
+        }
+      }
     }catch(_){status.innerHTML='اتصال صف این صفحه برقرار نیست؛ <a href="/staff/command-center/integrated/" style="color:#f3d584">مرکز تأییدها را باز کنید</a>.';req.hidden=true;}
   }
   async function decide(action){
