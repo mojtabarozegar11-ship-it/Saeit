@@ -69,7 +69,7 @@ jobs:
           ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
           import os,signal,stat,subprocess,time
           from pathlib import Path
-          exact_tokens=("npm exec @wonderwhy-er/desktop-commander@0.2.51 remote","/desktop-commander/dist/index.js")
+          exact_tokens=("npm exec @wonderwhy-er/desktop-commander@0.2.51 remote","/desktop-commander/dist/index.js","lsnode:/home/zomorod2/desktop-commander/")
           def matches():
               out=[]
               for ent in Path("/proc").glob("[0-9]*"):
