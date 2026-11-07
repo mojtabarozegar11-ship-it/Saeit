@@ -161,14 +161,14 @@ jobs:
           try:
               # One-page production canary: real Django handler must serve old visual template.
               slug='industry'
-              os.rename(web/slug,saved/'moved-'+slug)
+              os.rename(web/slug,saved/('moved-'+slug))
               moved_corp.append(slug)
               route,data=get('/industry/')
               assert b'zm-nova-subpage-v1' not in data and b'<html' in data.lower() and len(data)>1800, 'OLD_DYNAMIC_INDUSTRY_HANDLER_UNHEALTHY'
               print('ORIGINAL_INDUSTRY_CANARY_OK=yes bytes='+str(len(data)))
               for slug in corp:
                   if slug=='industry':continue
-                  os.rename(web/slug,saved/'moved-'+slug)
+                  os.rename(web/slug,saved/('moved-'+slug))
                   moved_corp.append(slug)
               for slug in agriculture:
                   f=web/'agriculture'/slug/'index.html';data,mode=originals[slug]
@@ -205,7 +205,7 @@ jobs:
                           print('ROLLBACK_AGRICULTURE='+slug)
                       else:print('ROLLBACK_REFUSED_CONCURRENT_CHANGE_AGRICULTURE='+slug)
                   for slug in reversed(moved_corp):
-                      target=web/slug;source=saved/'moved-'+slug
+                      target=web/slug;source=saved/('moved-'+slug)
                       if source.is_dir() and not target.exists():
                           os.rename(source,target)
                           print('ROLLBACK_CORPORATE='+slug)
