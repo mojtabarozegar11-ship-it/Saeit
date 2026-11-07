@@ -54,6 +54,8 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
   executable=unknown
   resolved_version=unverified
   binary_match=unverified
+  target_file_kind=unverified
+  pyvenv_version=unverified
   while read -r directive value _ || [[ -n "${directive:-}" ]]; do
     if [[ "${directive:-}" != PassengerPython ]]; then continue; fi
     count=$((count + 1))
@@ -78,6 +80,16 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
       # Resolving a symlink and comparing device/inode never invokes Python.
       # This identifies an executable binary, NOT sys.prefix or a live worker.
       resolved=$(readlink -f -- "$value" 2>/dev/null || true)
+      # Four-byte magic inspection is read-only and never starts the target.
+      magic=''
+      if [[ -f "$value" ]]; then
+        magic=$(head -c 4 -- "$value" 2>/dev/null | od -An -tx1 | tr -d '[:space:]' || true)
+      fi
+      case "$magic" in
+        7f454c46*) target_file_kind=elf_binary ;;
+        2321*) target_file_kind=shebang_script ;;
+        *) target_file_kind=other_or_unreadable ;;
+      esac
       case "${resolved##*/}" in
         python3.9) resolved_version=3.9 ;;
         python3.10) resolved_version=3.10 ;;
@@ -86,6 +98,16 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
         python3.13) resolved_version=3.13 ;;
         *) resolved_version=unverified ;;
       esac
+      # An adjacent pyvenv.cfg is only a version hint; its `home` and other
+      # contents are never printed. Limit inspection to the target account.
+      if [[ "$value" == /home/zomorod2/*/bin/python* ]]; then
+        candidate_venv=$(dirname -- "$(dirname -- "$value")")
+        candidate_venv=$(cd -P -- "$candidate_venv" 2>/dev/null && pwd -P || true)
+        if [[ "$candidate_venv" == /home/zomorod2/* && -f "$candidate_venv/pyvenv.cfg" && ! -L "$candidate_venv/pyvenv.cfg" ]]; then
+          cfg_version=$(awk -F= 'tolower($1) ~ /^[[:space:]]*version[[:space:]]*$/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$candidate_venv/pyvenv.cfg" 2>/dev/null || true)
+          if [[ "$cfg_version" =~ ^3\.(9|10|11|12|13)(\.[0-9]+)?$ ]]; then pyvenv_version="$cfg_version"; fi
+        fi
+      fi
       configured_inode=$(stat -Lc '%d:%i' -- "$value" 2>/dev/null || true)
       matches=''
       for candidate in \
@@ -118,11 +140,15 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
     executable=ambiguous
     resolved_version=unverified
     binary_match=unverified
+    target_file_kind=unverified
+    pyvenv_version=unverified
   fi
   printf 'PASSENGER_PYTHON_HINT_%s=%s\n' "$label" "$hint"
   printf 'PASSENGER_PYTHON_HINT_EXECUTABLE_%s=%s\n' "$label" "$executable"
   printf 'PASSENGER_PYTHON_RESOLVED_VERSION_HINT_%s=%s\n' "$label" "$resolved_version"
   printf 'PASSENGER_PYTHON_BINARY_MATCH_%s=%s\n' "$label" "$binary_match"
+  printf 'PASSENGER_PYTHON_TARGET_KIND_%s=%s\n' "$label" "$target_file_kind"
+  printf 'PASSENGER_PYTHON_PYVENV_VERSION_HINT_%s=%s\n' "$label" "$pyvenv_version"
 done
 
 # Bind a process to this app only if its process title explicitly names this

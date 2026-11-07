@@ -35,6 +35,9 @@ class ManagementBridgeRouteContractTests(unittest.TestCase):
         probe = (BRIDGE.parents[1] / "scripts/cpanel_management_runtime_probe.sh").read_text(encoding="utf-8")
         self.assertIn("PASSENGER_PYTHON_RESOLVED_VERSION_HINT_", probe)
         self.assertIn("PASSENGER_PYTHON_BINARY_MATCH_", probe)
+        self.assertIn("PASSENGER_PYTHON_TARGET_KIND_", probe)
+        self.assertIn("PASSENGER_PYTHON_PYVENV_VERSION_HINT_", probe)
+        self.assertIn("head -c 4 --", probe)
         self.assertIn("readlink -f --", probe)
         self.assertIn("stat -Lc '%d:%i'", probe)
 
