@@ -167,16 +167,37 @@ def build_plan(stage):
     new["guest"] = _source(stage, "guest")
     models = old["models"].decode("utf-8")
     settings = old["settings"].decode("utf-8")
-    if (MODEL_MARKER in models or SETTING_MARKER in settings or
-            "from .guest_recovery_models import" in models or
-            "MPW_GUEST_RECOVERY_ENABLED" in settings):
-        fail("EXISTING_RECOVERY_PATCH")
-    if (models.count("class Order(") != 1 or
-            models.count("class PaymentIntent(") != 1 or
-            "env.bool" not in settings or "DEFAULT_FROM_EMAIL" not in settings):
-        fail("DJANGO_MODEL_OR_SETTINGS_DRIFT")
-    new["models"] = (models.rstrip() + MODEL_APPEND).encode("utf-8")
-    new["settings"] = (settings.rstrip() + SETTING_APPEND).encode("utf-8")
+    exact_models_patch = (
+        models.count(MODEL_MARKER) == 1
+        and models.count("from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate") == 1
+        and models.rstrip().endswith(MODEL_APPEND.rstrip())
+    )
+    exact_settings_patch = (
+        settings.count(SETTING_MARKER) == 1
+        and settings.count("MPW_GUEST_RECOVERY_ENABLED = False") == 1
+        and settings.count("MPW_GUEST_RECOVERY_EMAIL_APPROVED = False") == 1
+        and "MPW_GUEST_RECOVERY_ENABLED = True" not in settings
+        and "MPW_GUEST_RECOVERY_EMAIL_APPROVED = True" not in settings
+    )
+    has_any_recovery_patch = (
+        MODEL_MARKER in models or SETTING_MARKER in settings
+        or "from .guest_recovery_models import" in models
+        or "MPW_GUEST_RECOVERY_ENABLED" in settings
+    )
+    if has_any_recovery_patch:
+        # Idempotent continuation is allowed only for the exact reviewed,
+        # disabled patch already present on the live tree.
+        if not (exact_models_patch and exact_settings_patch):
+            fail("EXISTING_RECOVERY_PATCH_DRIFT")
+        new["models"] = old["models"]
+        new["settings"] = old["settings"]
+    else:
+        if (models.count("class Order(") != 1 or
+                models.count("class PaymentIntent(") != 1 or
+                "env.bool" not in settings or "DEFAULT_FROM_EMAIL" not in settings):
+            fail("DJANGO_MODEL_OR_SETTINGS_DRIFT")
+        new["models"] = (models.rstrip() + MODEL_APPEND).encode("utf-8")
+        new["settings"] = (settings.rstrip() + SETTING_APPEND).encode("utf-8")
     for key in ("models", "settings"):
         compile(new[key].decode("utf-8"), key, "exec")
     return old, new
