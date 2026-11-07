@@ -60,6 +60,18 @@ def exception_origin(exc):
     return next((location for location in reversed(locations) if location != "unknown"), "unknown")
 
 
+def static_root_matches_expected(configured, app):
+    """Boolean-only guard against diagnosing a different static collection root."""
+    try:
+        if not configured:
+            return False
+        root = Path(configured)
+        expected = Path(app) / "staticfiles"
+        return root.is_absolute() and root == expected and not root.is_symlink()
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def manifest_summary(app):
     """Read bounded static metadata only; no Django calls or manifest mutation."""
     root = Path(app) / "staticfiles"
@@ -136,6 +148,11 @@ def main():
         phase = "django_setup"
         import django
         django.setup()
+        from django.conf import settings
+        if isinstance(manifest, dict):
+            manifest["runtime_static_root_matches_expected"] = static_root_matches_expected(
+                getattr(settings, "STATIC_ROOT", None), APP
+            )
         phase = "import_view"
         from core.mojplaywin_views import store
         phase = "request_factory"
