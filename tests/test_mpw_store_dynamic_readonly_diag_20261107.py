@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.mpw_store_dynamic_readonly_diag_20261107 import (
     classify_frame,
+    manifest_target_collected,
     manifest_summary,
     safe_error,
 )
@@ -48,8 +49,38 @@ class SafeDiagnosticTests(unittest.TestCase):
                 "header_image_recorded": False,
                 "css_collected": True,
                 "header_image_collected": False,
+                "css_manifest_target_collected": False,
+                "header_image_manifest_target_collected": False,
             })
             self.assertNotIn("must-not-be-printed", json.dumps(result))
+
+    def test_manifest_targets_distinguish_collected_hashes_from_originals(self):
+        with tempfile.TemporaryDirectory() as root:
+            static = Path(root) / "staticfiles"
+            (static / "site").mkdir(parents=True)
+            (static / "site/mojplaywin.abc123.css").write_text("body{}", encoding="utf-8")
+            (static / "site/mojplaywin-header-emblem.a1b2c3.jpg").write_bytes(b"jpeg")
+            (static / "staticfiles.json").write_text(json.dumps({"paths": {
+                "site/mojplaywin.css": "site/mojplaywin.abc123.css",
+                "site/mojplaywin-header-emblem.jpg": "site/mojplaywin-header-emblem.a1b2c3.jpg",
+            }}), encoding="utf-8")
+            result = manifest_summary(root)
+            self.assertTrue(result["css_manifest_target_collected"])
+            self.assertTrue(result["header_image_manifest_target_collected"])
+            self.assertFalse(result["css_collected"])
+            self.assertFalse(result["header_image_collected"])
+
+    def test_manifest_targets_refuse_unsafe_or_symlinked_paths(self):
+        with tempfile.TemporaryDirectory() as root:
+            static = Path(root) / "staticfiles"
+            (static / "site").mkdir(parents=True)
+            (static / "site/mojplaywin.actual.css").write_text("ok", encoding="utf-8")
+            key = "site/mojplaywin.css"
+            for invalid in ("../secret", "/etc/passwd", "site/../../secret", "site/other.css",
+                            "site/mojplaywin\\bad.css", "site/mojplaywin.png"):
+                self.assertFalse(manifest_target_collected(static, {key: invalid}, key))
+            (static / "site/mojplaywin.link.css").symlink_to(static / "site/mojplaywin.actual.css")
+            self.assertFalse(manifest_target_collected(static, {key: "site/mojplaywin.link.css"}, key))
 
 
 if __name__ == "__main__":
