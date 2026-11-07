@@ -29,6 +29,7 @@ MAX_RESPONSE_BYTES = 160_000
 MAX_CANDLE_AGE_SECONDS = 3 * GRANULARITY
 METHOD = "sma20-sma50-momentum10-v1-closed-1h"
 SOURCE = "coinbase-exchange-public-candles"
+BINANCE_SOURCE = "binance-public-klines"
 KRAKEN_SOURCE = "kraken-spot-public-ohlc"
 BITFINEX_SOURCE = "bitfinex-public-candles"
 
@@ -68,6 +69,32 @@ def _fetch_candles(product: str) -> list:
     if not isinstance(result, list):
         raise MarketDataError("coinbase_invalid_response")
     return result
+
+
+def _fetch_binance_candles(product: str) -> list:
+    symbols = {"BTC-USD": "BTCUSDT", "ETH-USD": "ETHUSDT"}
+    if product not in symbols:
+        raise MarketDataError("Unsupported market product")
+    result = _fetch_json(
+        f"https://data-api.binance.vision/api/v3/klines?symbol={symbols[product]}&interval=1h&limit=120",
+        "binance",
+    )
+    if not isinstance(result, list):
+        raise MarketDataError("binance_invalid_response")
+    rows = []
+    for candle in result:
+        if not isinstance(candle, list) or len(candle) < 6:
+            raise MarketDataError("binance_invalid_candle_shape")
+        try:
+            stamp_ms = int(candle[0])
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise MarketDataError("binance_invalid_candle_time") from exc
+        if stamp_ms % 1000:
+            raise MarketDataError("binance_invalid_candle_time")
+        # Binance: open time/open/high/low/close/volume/...;
+        # normalized: seconds/low/high/open/close/volume.
+        rows.append([stamp_ms // 1000, candle[3], candle[2], candle[1], candle[4], candle[5]])
+    return rows
 
 
 def _fetch_kraken_candles(product: str) -> list:
@@ -177,7 +204,7 @@ def _signal(product: str, rows: list, now: datetime, data_source: str = SOURCE) 
 
 def _observed_signal(product: str, now: datetime) -> dict:
     failures = []
-    for source, fetcher in ((SOURCE, _fetch_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
+    for source, fetcher in ((SOURCE, _fetch_candles), (BINANCE_SOURCE, _fetch_binance_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
         try:
             return _signal(product, fetcher(product), now, source)
         except MarketDataError as exc:
