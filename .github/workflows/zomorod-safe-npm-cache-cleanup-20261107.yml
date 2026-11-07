@@ -95,9 +95,9 @@ jobs:
           print("COMMANDER_AFTER=0",flush=True)
           targets=[Path("/home/zomorod2/.npm/_npx"),Path("/home/zomorod2/.npm/_cacache")]
           for target in targets:
-              if target.is_symlink() or not target.is_dir(): raise SystemExit("unexpected cache target: "+str(target))
+              if target.is_symlink(): raise SystemExit("unexpected symlink cache target: "+str(target))
           for target in targets:
-              subprocess.run(["rm","-rf","--",str(target)],check=True)
+              if target.is_dir(): subprocess.run(["rm","-rf","--",str(target)],check=True)
           logs=Path("/home/zomorod2/.npm/_logs")
           removed=0
           if logs.is_dir() and not logs.is_symlink():
