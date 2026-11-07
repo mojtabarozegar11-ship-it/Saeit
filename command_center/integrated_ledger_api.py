@@ -59,7 +59,13 @@ def _system_status(request):
         "research": "مقاله و پژوهش", "books": "کتاب و محصولات نوشتاری",
         "trade": "تجارت و ارزها", "accounting": "حسابداری",
     }
-    rows = {key: {"id": key, "name": label, "state": "unknown", "detail": "آداپتور زنده برای این بخش ثبت نشده است.", "observed_at": None}
+    links = {
+        "iran_site": "https://zomorodmelal.ir/", "mojplaywin": "https://mojplaywin.com/",
+        "accounting": "/staff/command-center/accounting/", "research": "/research/projects/",
+        "trade": "/business/", "factory": "/staff/command-center/",
+    }
+    rows = {key: {"id": key, "name": label, "url": links.get(key), "state": "unknown",
+                  "detail": "آداپتور زنده برای این بخش ثبت نشده است.", "observed_at": None}
             for key, label in names.items()}
     host = request.get_host().split(":")[0].lower()
     if host in ("zomorodmelal.ir", "www.zomorodmelal.ir"):
