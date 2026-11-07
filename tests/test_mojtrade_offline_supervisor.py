@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,6 +80,69 @@ class OfflineSupervisorTests(unittest.TestCase):
         self.assertEqual(first["journal_sequence"], 1)
         self.assertEqual(second["journal_sequence"], 1)
         self.assertEqual(len((self.state / "state-changes.jsonl").read_text().splitlines()), 1)
+        self.assertTrue((self.state / "health.json").is_file())
+        self.assertEqual(stat.S_IMODE((self.state / "health.json").stat().st_mode), 0o600)
+
+    def test_health_age_separately_detects_staleness(self):
+        supervisor.inspect_and_record(self.config, self.state)
+        status_file = self.state / "health.json"
+        source = json.loads(status_file.read_text())
+        recorded = datetime.fromisoformat(source["checked_at_utc"])
+        fresh = supervisor.read_health(self.state, now=recorded + timedelta(seconds=50))
+        stale = supervisor.read_health(self.state, now=recorded + timedelta(seconds=181))
+        self.assertEqual(fresh["health_state"], "RECENT_HEARTBEAT_NOT_PROOF_RUNNING")
+        self.assertEqual(stale["health_state"], "STALE_HEARTBEAT")
+        self.assertFalse(fresh["commercial_ready"])
+        self.assertFalse(stale["broker_eligible"])
+
+    def test_missing_or_corrupt_health_is_never_healthy(self):
+        self.assertEqual(supervisor.read_health(self.state)["health_state"],
+                         "MISSING_OR_CORRUPT_HEARTBEAT")
+        supervisor.inspect_and_record(self.config, self.state)
+        heartbeat = self.state / "health.json"
+        raw = json.loads(heartbeat.read_text())
+        raw["commercial_ready"] = True
+        heartbeat.write_text(json.dumps(raw))
+        self.assertEqual(supervisor.read_health(self.state)["health_state"],
+                         "MISSING_OR_CORRUPT_HEARTBEAT")
+
+    def test_future_heartbeat_is_clock_skew_blocked(self):
+        supervisor.inspect_and_record(self.config, self.state)
+        checked = datetime.fromisoformat(json.loads(
+            (self.state / "health.json").read_text())["checked_at_utc"])
+        result = supervisor.read_health(self.state, now=checked - timedelta(seconds=15))
+        self.assertEqual(result["health_state"], "CLOCK_SKEW_BLOCKED")
+
+    def test_second_supervisor_cannot_acquire_process_lock(self):
+        with supervisor._single_instance(self.state):
+            with self.assertRaisesRegex(supervisor.SupervisorReject,
+                                        "another_supervisor_already_active"):
+                with supervisor._single_instance(self.state):
+                    self.fail("a second active supervisor was permitted")
+        with supervisor._single_instance(self.state):
+            pass
+
+    def test_symlinked_process_lock_and_heartbeat_rejected(self):
+        (self.state / "supervisor.lock").symlink_to(self.root / "missing-lock")
+        with self.assertRaisesRegex(supervisor.SupervisorReject, "unsafe_supervisor_lock_symlink"):
+            with supervisor._single_instance(self.state):
+                pass
+        (self.state / "supervisor.lock").unlink()
+        (self.state / "health.json").symlink_to(self.root / "missing-health")
+        with self.assertRaisesRegex(supervisor.SupervisorReject, "unsafe_heartbeat_symlink"):
+            supervisor.inspect_and_record(self.config, self.state)
+
+    def test_read_only_status_cli_needs_no_config_or_network(self):
+        supervisor.inspect_and_record(self.config, self.state)
+        before = (self.state / "state-changes.jsonl").read_text()
+        stream = io.StringIO()
+        with patch("socket.socket", side_effect=AssertionError("unexpected network")):
+            with redirect_stdout(stream):
+                self.assertEqual(supervisor.main(["--status", "--state-dir",
+                                                  str(self.state)]), 0)
+        status = json.loads(stream.getvalue())
+        self.assertEqual(status["health_state"], "RECENT_HEARTBEAT_NOT_PROOF_RUNNING")
+        self.assertEqual(before, (self.state / "state-changes.jsonl").read_text())
 
     def test_stop_and_resume_are_two_distinct_transitions(self):
         supervisor.inspect_and_record(self.config, self.state)
