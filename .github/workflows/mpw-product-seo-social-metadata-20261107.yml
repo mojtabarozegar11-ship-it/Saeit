@@ -1,0 +1,64 @@
+name: MojPlayWin product SEO social metadata
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-product-seo-social-metadata-20261107.yml"]
+permissions: {contents: read}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
+          chmod 600 "$d/"*; ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null
+          printf 'Host v\n HostName 178.239.147.150\n User githubops\n IdentityFile %s\n UserKnownHostsFile %s\nHost h\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s\n UserKnownHostsFile %s\n ProxyJump v\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n RequestTTY no\n' "$d/v" "$d/vk" "$d/h" "$d/hk" > "$d/c"
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hk" 2>/dev/null
+      - name: Add product discovery metadata
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,hashlib,stat
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');T=A/'core/templates/brands/mojplaywin/product.html'
+          if A.is_symlink() or W.is_symlink() or not T.is_file() or T.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text(errors='replace'): raise RuntimeError('UNTRUSTED_TARGET')
+          s=T.read_text('utf8')
+          marker='<link rel="canonical" href="https://mojplaywin.com/store/product/{{ product.pk }}/">'
+          if s.count(marker)!=1: raise RuntimeError('CANONICAL_MARKER_NOT_EXACTLY_ONCE')
+          if 'property="og:title"' in s: raise RuntimeError('SEO_METADATA_ALREADY_PRESENT')
+          insert=marker+'<meta name="robots" content="index,follow"><meta property="og:type" content="product"><meta property="og:site_name" content="MojPlayWin"><meta property="og:title" content="{{ product.title }} - MojPlayWin"><meta property="og:description" content="Buy {{ product.title }} with secure native TRX checkout and private digital delivery."><meta property="og:url" content="https://mojplaywin.com/store/product/{{ product.pk }}/"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="{{ product.title }} - MojPlayWin"><meta name="twitter:description" content="Secure native TRX checkout and private digital delivery.">'
+          backup=T.with_name('product.html.mpw-seo-pre-'+hashlib.sha256(s.encode()).hexdigest()[:12]);backup.write_text(s,'utf8');n=s.replace(marker,insert,1)
+          tmp=T.with_name('.mpw-seo-product');fd=os.open(str(tmp),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o640)
+          try:
+              with os.fdopen(fd,'w',encoding='utf8') as f:f.write(n);f.flush();os.fsync(f.fileno())
+              os.replace(tmp,T)
+          finally:
+              if tmp.exists():tmp.unlink()
+          for folder in (A/'tmp',W.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True);flag=folder/'restart.txt';fd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600);os.close(fd);os.utime(flag,None)
+          os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.template.loader import get_template
+          get_template('brands/mojplaywin/product.html');print('MPW_PRODUCT_SEO=PASS')
+          PY
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          ps=('/store/product/72/','/store/product/225/','/store/product/879/','/commerce/book/72/','/commerce/book/225/','/commerce/book/879/')
+          o={}
+          for p in ps:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=30) as r:o[p]=r.status
+              except urllib.error.HTTPError as e:o[p]=e.code
+          print('MPW_PRODUCT_SEO_ROUTES='+json.dumps(o,sort_keys=True))
+          if any(v!=200 for v in o.values()):raise RuntimeError('PRODUCT_SEO_ROUTE_QA_FAILED')
+          PY
+      - name: Clean
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"
