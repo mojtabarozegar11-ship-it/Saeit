@@ -109,6 +109,10 @@ jobs:
           echo BUSINESS_HTTP="$code"
           test "$code" = 200
           grep -Eq 'ورود مدیر و حسابدار|میز مدیریت و حسابداری' "$backup/response.html"
+          sw_code="$(curl -sS -L --max-time 20 -o "$backup/notification-sw.js.response" -w '%{http_code}' "https://zomorodmelal.ir/business/notification-sw.js" || true)"
+          echo BUSINESS_SW_HTTP="$sw_code"
+          test "$sw_code" = 200
+          grep -q "notificationclick" "$backup/notification-sw.js.response"
           test "$(stat -c %a "$live")" = 600
           sha256sum "$live" "$web/index.php" "$sw" > "$backup/after.sha256"
           trap - EXIT
