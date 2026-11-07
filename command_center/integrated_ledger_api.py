@@ -6,7 +6,9 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from .models import CycleReport, CycleIssue, ApprovalDecision
+from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction
+from accounting.models import JournalEntry
+from core.models import ApprovalRequest, ResearchProject
 
 PROJECTS = {
     "management": "مدیریت یکپارچه زمرد ملل", "zomorod-web": "وب‌سایت و فروشگاه‌های زمرد ملل",
@@ -46,7 +48,20 @@ def integrated_ledger_api(request):
         return JsonResponse({"captured_at": timezone.now().isoformat(),
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
-            "decisions": [_decision(x) for x in ApprovalDecision.objects.all()]})
+            "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
+            "live_summary": {
+                "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
+                               "draft": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count()},
+                "work": {"open": WorkItem.objects.filter(status="open").count(),
+                         "in_progress": WorkItem.objects.filter(status="in_progress").count(),
+                         "blocked": WorkItem.objects.filter(status="blocked").count(),
+                         "done": WorkItem.objects.filter(status="done").count()},
+                "communications": {"unread_for_me": InternalMessage.objects.filter(recipient=request.user, read_at__isnull=True).count()},
+                "auctions": {"draft": PrivateAuction.objects.filter(status="draft").count(),
+                             "open": PrivateAuction.objects.filter(status="open").count()},
+                "approvals": {"pending": ApprovalRequest.objects.filter(status="pending").count()},
+                "projects": {"active_or_draft": ResearchProject.objects.exclude(status__in=["done", "closed", "archived"]).count()},
+            }})
     try:
         payload = json.loads(request.body or "{}")
     except json.JSONDecodeError:
