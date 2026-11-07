@@ -237,12 +237,24 @@ def main():
     stage = HOME / (".mpw-header-static-stage-" + args.run_id)
     jpeg = stage / "mojplaywin-header-emblem.jpg"
     backup_root = HOME / ".mpw-header-static-backups"
-    if args.mode == "rollback":
-        result = rollback(APP, backup_root / args.run_id)
-    elif args.mode == "audit":
+    if args.mode == "audit":
         result = audit(APP, jpeg)
     else:
-        result = apply(APP, jpeg, backup_root / args.run_id)
+        if backup_root.is_symlink() or (backup_root.exists() and not backup_root.is_dir()):
+            raise SystemExit("Unsafe backup root")
+        backup_root.mkdir(mode=0o700, exist_ok=True)
+        lock_path = backup_root / ".header-static.lock"
+        if lock_path.is_symlink():
+            raise SystemExit("Unsafe operation lock")
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if args.mode == "rollback":
+                result = rollback(APP, backup_root / args.run_id)
+            else:
+                result = apply(APP, jpeg, backup_root / args.run_id)
+        finally:
+            os.close(fd)
     print(json.dumps(result, sort_keys=True))
 
 
