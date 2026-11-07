@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import tempfile
 from datetime import datetime, timezone
+from urllib.request import Request, urlopen
 
 
 APPROVED_HOME_SHA256 = "0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585"
@@ -118,6 +119,25 @@ def atomic_replace(path: Path, data: bytes) -> None:
         pending.unlink(missing_ok=True)
 
 
+def verify_public(home: bytes, js: bytes, asset_name: str) -> None:
+    """A local write is not a release: prove the real public bytes too."""
+    checks = (
+        (f"https://zomorodmelal.ir/?zm_perf_verify={sha(home)[:16]}",
+         home, "text/html"),
+        (f"https://zomorodmelal.ir/static/site/zomorod-perf/{asset_name}",
+         js, "javascript"),
+    )
+    for url, expected, content_type in checks:
+        request = Request(url, headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
+        with urlopen(request, timeout=18) as response:
+            actual = response.read(len(expected) + 1)
+            mime = response.headers.get("Content-Type", "").lower()
+            if response.status != 200 or content_type not in mime:
+                raise RuntimeError(f"Public response or MIME mismatch: {url}")
+            if sha(actual) != sha(expected):
+                raise RuntimeError(f"Public content SHA mismatch: {url}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
@@ -170,13 +190,14 @@ def main() -> None:
         atomic_replace(source, page)
         if sha(source.read_bytes()) != sha(page) or asset_path.read_bytes() != asset:
             raise RuntimeError("Post-publication local parity check failed")
+        verify_public(page, asset, asset_name)
     except Exception:
         # Only restore if our candidate is present; never overwrite a third party edit.
         if source.exists() and sha(source.read_bytes()) == sha(page):
             atomic_replace(source, original)
         raise
-    print(json.dumps({**summary, "mode": "published_local_checks_only",
-                      "backup": str(backup), "needs_origin_and_public_http_verification": True}, indent=2))
+    print(json.dumps({**summary, "mode": "published_and_public_sha_verified",
+                      "backup": str(backup), "public_http_sha_verified": True}, indent=2))
 
 
 if __name__ == "__main__":
