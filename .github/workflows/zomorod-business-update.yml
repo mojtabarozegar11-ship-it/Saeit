@@ -97,7 +97,7 @@ jobs:
           cp -p "$live" "$backup/app.php"
           cp -p "$web/index.php" "$backup/index.php"
           test ! -e "$sw" || cp -p "$sw" "$backup/notification-sw.js"
-          sha256sum "$live" "$web/index.php" ${sw:+\"$sw\"} > "$backup/before.sha256"
+          sha256sum "$live" "$web/index.php" "$sw" > "$backup/before.sha256"
           install -m 600 "$incoming" "$live.new"
           install -m 644 "$incoming_sw" "$web/notification-sw.js.new"
           mv -f "$live.new" "$live"
