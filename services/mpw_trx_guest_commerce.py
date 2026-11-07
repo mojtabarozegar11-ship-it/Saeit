@@ -184,6 +184,8 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
+    from core.commerce_funnel import record_funnel_event
+    record_funnel_event(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
@@ -265,7 +267,15 @@ def patch_commercial(namespace):
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
-                return _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                if view_name == "start_order":
+                    from core.commerce_funnel import record_funnel_event
+                    from core.models import Product
+                    product_id = kwargs.get("product_id")
+                    product = Product.objects.filter(pk=product_id, active=True).first()
+                    if product is not None:
+                        record_funnel_event(request, "invoice_created", product)
+                return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
