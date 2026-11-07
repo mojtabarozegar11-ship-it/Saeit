@@ -48,7 +48,7 @@ jobs:
               prefixes=(".qa1000-supply-",".stage4-due-",".primary-acquisition-",".stage4-readonly-",".factory-audit-")
               cutoff=time.time()-48*3600
               cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8).stdout
-              proc=subprocess.run(["ps","-u",os.getuid(),"-o","args="],capture_output=True,text=True,timeout=8).stdout
+              proc=subprocess.run(["ps","-u",str(os.getuid()),"-o","args="],capture_output=True,text=True,timeout=8).stdout
               candidates=[]
               for item in ops.iterdir():
                   try:
