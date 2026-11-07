@@ -51,12 +51,12 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 7,
+      "sequence": 8,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 1,
+        "counter": 2,
         "runs": [
           {
             "slot": "C01",
@@ -65,6 +65,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
             "note": "Corrected dispatch versus production denominator; DOCX/PDF readback hashes verified; author/legal/scientific gates remain open"
+          },
+          {
+            "slot": "C02",
+            "run_id": "ZM50-B02-20261107T095312+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected mixed inventory scenarios in harvested-mass denominator; 609-page DOCX/PDF private review uploaded, no scientific/legal acceptance"
           }
         ]
       }
@@ -344,6 +352,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/d3d028fca67ea0362597969e1adf542b2d3a7631",
       "acceptance_result": "Verifier requires positive solidity receipt block and rejects mismatched transaction block; three regression cases added but not executed against Django/MariaDB",
       "impact": "Fail-closed on inconsistent TRON confirmation metadata; no production payment or release"
+    },
+    {
+      "registry_id": "R02-0008",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T095312+0330-turn11",
+      "deliverable_key": "C113-harvest-inventory-denominator-consistency",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Private DOCX/PDF uploaded; PDF 609 pages and no text-empty pages; DOCX SHA256 f3bfa372a9cf7422759e689237d8425bc2e89d7a670992b21c24c85c406fafbe; PDF SHA256 ec01c4266d7461e78d678c20c5451fc8158a75760e2159a39ba08793d2ca8881; author and legal HOLD",
+      "impact": "Clarified total-harvest denominator under changing inventory; no accepted book or revenue"
     }
   ],
   "report_reservations": [],
