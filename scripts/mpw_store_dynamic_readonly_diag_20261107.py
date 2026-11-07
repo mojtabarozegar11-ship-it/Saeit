@@ -18,6 +18,23 @@ STATIC_KEYS = {
 }
 
 
+def manifest_target_collected(root, mapping, key):
+    """Check only the recorded static target; never follow a manifest path outside root."""
+    target = mapping.get(key)
+    if not isinstance(target, str) or "\\" in target or "\x00" in target:
+        return False
+    parts = target.split("/")
+    if (len(parts) != 2 or parts[0] != "site" or
+            not parts[1] or parts[1] in (".", "..") or
+            not parts[1].startswith(Path(key).stem + ".") or
+            not parts[1].endswith(Path(key).suffix)):
+        return False
+    target_path = Path(root) / parts[0] / parts[1]
+    if target_path.parent.is_symlink() or target_path.is_symlink():
+        return False
+    return target_path.is_file()
+
+
 def classify_frame(filename):
     """Use fixed labels, never disclose runtime paths or traceback source lines."""
     path = str(filename).replace("\\", "/")
@@ -64,6 +81,10 @@ def manifest_summary(app):
             "header_image_recorded": STATIC_KEYS["header_image"] in mapping,
             "css_collected": (root / STATIC_KEYS["css"]).is_file(),
             "header_image_collected": (root / STATIC_KEYS["header_image"]).is_file(),
+            "css_manifest_target_collected": manifest_target_collected(root, mapping, STATIC_KEYS["css"]),
+            "header_image_manifest_target_collected": manifest_target_collected(
+                root, mapping, STATIC_KEYS["header_image"]
+            ),
         }
     except (OSError, ValueError, TypeError, UnicodeError):
         return {"state": "unreadable_or_invalid"}
