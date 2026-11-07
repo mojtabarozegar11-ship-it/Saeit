@@ -1,3 +1,4 @@
+from django import forms
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
@@ -26,20 +27,25 @@ def company_content_feed(request, slug):
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})
 
 
+class CompanyInquiryForm(forms.ModelForm):
+    """Validate public inquiries before adding a sales lead to the CRM."""
+
+    message = forms.CharField(max_length=5000, strip=True)
+
+    class Meta:
+        model = CompanyInquiry
+        fields = ("kind", "name", "organization", "email", "phone", "subject", "message")
+
+
 def company_portal_home(request):
     from django.shortcuts import redirect
     from django.contrib import messages
     if request.method == "POST":
-        required = ["kind", "name", "email", "subject", "message"]
-        if all(request.POST.get(x, "").strip() for x in required):
-            CompanyInquiry.objects.create(
-                kind=request.POST["kind"].strip(), name=request.POST["name"].strip(),
-                organization=request.POST.get("organization", "").strip(), email=request.POST["email"].strip(),
-                phone=request.POST.get("phone", "").strip(), subject=request.POST["subject"].strip(),
-                message=request.POST["message"].strip(),
-            )
+        form = CompanyInquiryForm(request.POST)
+        if form.is_valid():
+            form.save()
             messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
         else:
-            messages.error(request, "لطفاً تمام فیلدهای الزامی را تکمیل کنید.")
+            messages.error(request, "اطلاعات درخواست معتبر نیست؛ فیلدهای الزامی، نوع همکاری و نشانی ایمیل را بررسی کنید.")
         return redirect("company")
     return None
