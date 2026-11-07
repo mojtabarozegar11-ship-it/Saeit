@@ -1,0 +1,146 @@
+name: MojPlayWin pinned one-asset staging manifest repair
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-production
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MPW-STAGING-HEADER-MANIFEST-REPAIR-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate bounded repair and exact Git image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_staging_header_manifest_repair_20261107.py' -v
+          python3 -B -m py_compile scripts/mpw_staging_header_manifest_repair_20261107.py
+          test "$(git hash-object core/static/site/mojplaywin-header-emblem.jpg)" = 'bfd6977e82b6623b67edbbbc00a60e25cd56f810'
+      - name: Establish fingerprint-pinned owner relay with direct cPanel fallback
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-header-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          command_host=''
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -d /home/zomorod2/Saeit-staging' >/dev/null; then
+              command_host=saeit-cpanel
+              break
+            fi
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test -z "$command_host"; then
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -d /home/zomorod2/Saeit-staging' >/dev/null; then
+              command_host=saeit-cpanel-direct
+            else
+              echo 'PINNED_CPANEL_AUTHENTICATION_UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Apply exactly one source JPEG and manifest entry, with retained rollback journal
+        id: apply
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/mpw-header-ssh"
+          image_b64="$(base64 -w0 core/static/site/mojplaywin-header-emblem.jpg)"
+          timeout 130s ssh -T -F "$d/config" "$COMMAND_HOST" \
+            "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - apply '$GITHUB_RUN_ID' '$image_b64'" \
+            < scripts/mpw_staging_header_manifest_repair_20261107.py
+      - name: Attempt safe recorded rollback if the scoped apply step fails
+        if: failure() && steps.link.outcome == 'success' && steps.apply.outcome == 'failure'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/mpw-header-ssh"
+          backup="/home/zomorod2/.backups/mpw-staging-header-manifest-20261107/$GITHUB_RUN_ID/journal.json"
+          if timeout 45s ssh -T -F "$d/config" "$COMMAND_HOST" "test -f '$backup'"; then
+            timeout 100s ssh -T -F "$d/config" "$COMMAND_HOST" \
+              "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - rollback '$GITHUB_RUN_ID'" \
+              < scripts/mpw_staging_header_manifest_repair_20261107.py
+          fi
+      - name: Remove ephemeral runner SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-header-ssh"
+          if test -d "$d"; then
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config" "$d/cpanel.sock" "$d/direct.sock"
+            rmdir "$d" || true
+          fi
