@@ -1,0 +1,217 @@
+name: Restore actual pre-SEO internal pages and research descendants
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-restore-real-internal-pages-20261107.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-internal-source-only-recovery
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Prepare strictly pinned cPanel access through existing VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-source-page-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Recover authentic full pages and previously existing research descendants
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 500s ssh -T -F "$RUNNER_TEMP/zm-source-page-restore/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          from pathlib import Path
+          import concurrent.futures,hashlib,json,os,re,stat,sys,tempfile,time,urllib.request
+
+          runid=sys.argv[1]
+          assert re.fullmatch(r'[0-9]{5,20}',runid)
+          home=Path('/home/zomorod2'); web=home/'public_html'; private=home/'.private'
+          pre=home/'.backups/zomorod-live-inpage/158204fe725b5ec8f46cefc7a4d18e34f22fda67/static-pages'
+          original=private/'zm-internal-pre-seo-restore-20261107/42325682473/original-static-pages'
+          rollback=private/'zm-restore-real-inner-pages-20261107'/runid
+          expected_home='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          old={
+            'company':'f48739ee4068eee0dd407619c315e82e74a1f7c0cc624d63a22c65b9f5ed4844',
+            'services':'2ad796bda10eb3c6e0f716af2d58181eacb1ad4c66f2b6471e07709576719dcf',
+            'industry':'0a15fda1aad11af6a8bfc41a90bb99bb4b06ce2042f29ea694fa791a63bdf9ba',
+            'research':'a94004b5e0d8e2dee934127bf953309950d96754db405ede7f491c1a5600d7d2',
+            'knowledge':'8df5761355a06f0c9e1bc6464c6a8238c4adc13d8e60ccc49e7da2e27a348373',
+          }
+          expected={
+            'company':'75e9c3cb8387494fc25a67b5561af1853a478fbaca96d73e96a7a48ae0cd5281',
+            'services':'189997166683646b29743a8f328cbc822c5ffeb68732f12cf999fecff0fcdcc0',
+            'industry':'aa71ad70e6d01066800bf63cd8ea791dddebbbbcc07df13aae0aaa054889c039',
+            'research':'e53fea2b0d7f1dc82c19b09fd246aef9107cbae7b812ab17e1c69c87f79b0ef7',
+            'knowledge':'b489d29011e38c3a7bdf52340b8bedd75fbdb824eee7c83d2b8f47924aba5856',
+          }
+          sha=lambda x:hashlib.sha256(x).hexdigest()
+          changed=[];added=[];success=False
+
+          def atomic(path,data,mode):
+              fd,tmp=tempfile.mkstemp(prefix='.authentic-page-restore-',dir=str(path.parent))
+              try:
+                  with os.fdopen(fd,'wb') as fh:
+                      fh.write(data);fh.flush();os.fsync(fh.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,path)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+
+          def public(route):
+              nonce='?restore_existing_pages='+runid+'-'+str(time.monotonic_ns())
+              req=urllib.request.Request('https://zomorodmelal.ir'+route+nonce,headers={'Pragma':'no-cache','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=27) as res:
+                  assert res.status==200,(route,res.status)
+                  return route,res.read(800000)
+
+          assert os.geteuid()!=0 and os.geteuid()==web.stat().st_uid
+          assert private.is_dir() and not private.is_symlink() and not web.is_symlink()
+          assert pre.is_dir() and original.is_dir() and not rollback.exists()
+          assert sha((web/'index.html').read_bytes())==expected_home,'APPROVED_HOMEPAGE_CHANGED_ABORT'
+          protect=['index.html','ghanadi/index.html','amozeshgah/index.html','mohammad/index.html','about/index.html','agriculture/index.html']
+          protected={rel:sha((web/rel).read_bytes()) for rel in protect}
+          replacements={}
+          for slug in old:
+              target=web/slug/'index.html';src=pre/slug/'index.html'
+              assert target.is_file() and not target.is_symlink() and src.is_file() and not src.is_symlink()
+              assert sha(target.read_bytes())==old[slug],('CONCURRENT_PAGE_CHANGE_ABORT',slug)
+              b=src.read_bytes()
+              assert sha(b)==expected[slug],('PRE_SEO_SOURCE_TAMPERED_ABORT',slug)
+              assert b'zm-unified-v7-20261018' in b and b'zm-v7-header' in b and b'zm-v10' in b
+              replacements[slug]=(target,b,stat.S_IMODE(target.stat().st_mode))
+
+          research_root=original/'research'
+          nested=[]
+          for f in research_root.rglob('*'):
+              if not f.is_file() or f.is_symlink() or f.name not in ('index.html','projects.json'):continue
+              rel=f.relative_to(original)
+              if rel==Path('research/index.html'):continue
+              assert rel.parts[0]=='research' and len(rel.parts)>=3 and len(f.read_bytes())<700000
+              dst=web/rel
+              assert not dst.is_symlink()
+              if dst.is_file():
+                  assert sha(dst.read_bytes())==sha(f.read_bytes()),('EXISTING_NESTED_PAGE_DIFFERS_ABORT',str(rel))
+              else:
+                  assert not dst.exists(),('UNEXPECTED_NESTED_PATH_ABORT',str(rel))
+                  nested.append((f,rel))
+          assert len(nested)>=45,('MISSING_RESEARCH_PAGES_NOT_FOUND',len(nested))
+          assert any(str(rel)=='research/projects/index.html' for _,rel in nested)
+          assert any(str(rel)=='research/directory/laboratories/biochemistry/index.html' for _,rel in nested)
+          assert any(str(rel)=='research/updates/20261022/index.html' for _,rel in nested)
+          for rel in ('static/site/zomorod-v7/inner-v7.css','static/site/zomorod-v10/inner-v10.css','assets/zm-nova-detail-v1.css'):
+              assert (web/rel).is_file() and (web/rel).stat().st_size>1000,('ORIGINAL_THEME_ASSET_MISSING',rel)
+
+          rollback.mkdir(parents=True,mode=0o700)
+          (rollback/'previous').mkdir(mode=0o700)
+          for slug,(target,_,_) in replacements.items():
+              data=target.read_bytes();save=rollback/'previous'/(slug+'.index.html')
+              with save.open('xb') as out:
+                  out.write(data);out.flush();os.fsync(out.fileno())
+              save.chmod(0o600)
+              assert sha(save.read_bytes())==old[slug]
+          manifest={'source':'pre-SEO 2026-11-06 snapshot plus exact pre-first-restore nested files','replaced':list(replacements),'missing_nested':[str(rel) for _,rel in nested],'protected':protected}
+          (rollback/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('BACKUPS_VERIFIED_AND_STORED=yes','nested_count',len(nested))
+          try:
+              for f,rel in nested:
+                  dst=web/rel
+                  for parent in list(dst.parents)[:-1]:
+                      if parent==web:break
+                      assert not parent.is_symlink(),('SYMLINK_IN_TARGET_PATH',str(parent))
+                  dst.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
+                  assert not dst.exists()
+                  atomic(dst,f.read_bytes(),stat.S_IMODE(f.stat().st_mode))
+                  added.append((dst,f,rel))
+              for slug,(target,b,mode) in replacements.items():
+                  assert sha(target.read_bytes())==old[slug]
+                  atomic(target,b,mode)
+                  changed.append(slug)
+                  assert sha(target.read_bytes())==expected[slug]
+                  print('PRE_SEO_COMPLETE_PAGE_RESTORED',slug,'bytes',len(b))
+
+              checks=['/'+slug+'/' for slug in replacements]
+              checks+=['/research/projects/','/research/directory/laboratories/biochemistry/','/research/updates/20261022/']
+              with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+                  for route,data in pool.map(public,checks):
+                      if route in ('/'+s+'/' for s in replacements):
+                          source=pre/route.strip('/')/'index.html'
+                      else:source=original/route.strip('/')/'index.html'
+                      assert sha(data)==sha(source.read_bytes()),('PUBLIC_PAGE_CONTENT_MISMATCH',route)
+                      print('PUBLIC_ORIGINAL_PAGE_OK',route,'bytes',len(data))
+              for rel,digest in protected.items():
+                  assert sha((web/rel).read_bytes())==digest,('PROTECTED_PAGE_CHANGED',rel)
+              for route in ('/','/ghanadi/','/amozeshgah/','/mohammad/'):
+                  public(route)
+              success=True
+              (rollback/'success.txt').write_text('Original pre-SEO corporate pages and their previously existing nested research files restored and verified.\n',encoding='utf-8')
+              print('AUTHENTIC_INNER_PAGES_AND_RESEARCH_TREE_RESTORED=yes','nested',len(added),'top_pages',len(changed))
+          finally:
+              if not success:
+                  print('AUTOMATIC_ROLLBACK_START=yes')
+                  for slug in reversed(changed):
+                      target=web/slug/'index.html'
+                      if target.is_file() and sha(target.read_bytes())==expected[slug]:
+                          atomic(target,(rollback/'previous'/(slug+'.index.html')).read_bytes(),replacements[slug][2])
+                          print('ROLLBACK_TOP_PAGE',slug)
+                  for target,f,rel in reversed(added):
+                      if target.is_file() and sha(target.read_bytes())==sha(f.read_bytes()):
+                          moved=rollback/'rollback-added'/rel
+                          moved.parent.mkdir(parents=True,exist_ok=True)
+                          os.replace(target,moved)
+                          print('ROLLBACK_ADDED_PAGE',rel)
+                  print('AUTOMATIC_ROLLBACK_DONE=yes')
+          PY
+
+      - name: Remove ephemeral SSH identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-source-page-restore"
