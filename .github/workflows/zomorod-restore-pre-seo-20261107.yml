@@ -1,0 +1,196 @@
+name: Restore verified pre-SEO Zomorod homepage 2026-11-07
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-restore-pre-seo-20261107.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare verified VPS to cPanel SSH connection
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-home-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Restore only main HTML from exact verified before-change backup
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/zm-home-restore/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          import hashlib, json, os, re, stat, sys, tempfile
+          from pathlib import Path
+
+          runid = sys.argv[1]
+          assert re.fullmatch(r'[0-9]{5,20}', runid)
+          home = Path('/home/zomorod2')
+          web = home / 'public_html'
+          target = web / 'index.html'
+          private = home / '.private'
+          source = private / 'zm-home-services-seo-backups' / '42267821867' / 'index.html'
+          backup_dir = private / 'zm-home-pre-seo-recovery-20261107' / runid
+          sha = lambda data: hashlib.sha256(data).hexdigest()
+          expected_original = '0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          expected_nova_prefix = '0cd0c48169cf14bca4f6'
+          assert os.geteuid() != 0 and os.geteuid() == web.stat().st_uid, 'WRONG_HOST_OWNER'
+          for path in (home, web, target, private, source, backup_dir.parent):
+              assert not path.is_symlink(), 'SYMLINK_BOUNDARY'
+          assert target.is_file() and source.is_file() and private.is_dir(), 'MISSING_FILES'
+          assert not backup_dir.exists(), 'RECOVERY_FOLDER_ALREADY_EXISTS'
+          original = source.read_bytes()
+          current = target.read_bytes()
+          assert sha(original) == expected_original and len(original) > 100000, 'ORIGINAL_BACKUP_INVALID'
+          assert b'href="/ask-master/index.php?service=1"' in original, 'ORIGINAL_CTA_MISSING'
+          assert b'zm-nova-home-2026-v1' not in original, 'SOURCE_IS_NEW_THEME'
+          assert sha(current).startswith(expected_nova_prefix), 'CURRENT_HOMEPAGE_CHANGED_ABORT'
+          assert b'zm-nova-home-2026-v1' in current, 'CURRENT_NOT_NOVA_ABORT'
+          mode = stat.S_IMODE(target.stat().st_mode)
+          backup_dir.mkdir(parents=True, mode=0o700)
+          saved = backup_dir / 'index.nova-before-restore.html'
+          with saved.open('xb') as file:
+              file.write(current)
+              file.flush()
+              os.fsync(file.fileno())
+          saved.chmod(0o600)
+          assert sha(saved.read_bytes()) == sha(current), 'ROLLBACK_BACKUP_INCOMPLETE'
+          (backup_dir / 'manifest.json').write_text(json.dumps({'old_theme_sha256':sha(current),'restored_sha256':expected_original,'mode':mode}),encoding='utf-8')
+          assert sha(target.read_bytes()) == sha(current), 'CONCURRENT_CHANGE_ABORT'
+          fd, temp = tempfile.mkstemp(prefix='.restore-pre-seo-',dir=str(web))
+          try:
+              with os.fdopen(fd,'wb') as out:
+                  out.write(original)
+                  out.flush()
+                  os.fsync(out.fileno())
+              os.chmod(temp,mode)
+              os.replace(temp,target)
+          finally:
+              if os.path.exists(temp): os.unlink(temp)
+          assert sha(target.read_bytes()) == expected_original, 'POST_WRITE_DIGEST_MISMATCH'
+          print('ZOMOROD_RESTORED_ORIGINAL_SHA256='+expected_original)
+          print('ZOMOROD_ROLLBACK_BACKUP_SHA256='+sha(current))
+          print('ZOMOROD_RESTORED_HTML_BYTES='+str(len(original)))
+          PY
+
+      - name: Verify public old template and protected sibling routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, time
+          from urllib.request import Request,urlopen
+          runid=os.environ['GITHUB_RUN_ID']
+          for attempt in range(5):
+              try:
+                  url='https://zomorodmelal.ir/?restore_before_seo='+runid+'-'+str(attempt)
+                  with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=23) as response:
+                      page=response.read(2_000_000).decode('utf-8','replace')
+                      assert response.status==200
+                  assert 'زمرد ملل | پیوند پژوهش، تولید و بازار' in page, 'OLD_TITLE_MISSING'
+                  assert '/ask-master/index.php?service=1' in page, 'OLD_LEAD_LINK_MISSING'
+                  assert 'zm-nova-home-2026-v1' not in page, 'NOVA_STILL_LIVE'
+                  break
+              except Exception:
+                  if attempt==4: raise
+                  time.sleep(3)
+          for path in ('/agriculture/','/services/','/amozeshgah/','/ghanadi/','/mohammad/'):
+              with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache'}),timeout=23) as response:
+                  assert response.status==200, 'BROKEN_PROTECTED_ROUTE:'+path
+              print('PROTECTED_ROUTE_OK='+path)
+          print('PUBLIC_PRE_SEO_TEMPLATE_VERIFIED=yes')
+          PY
+
+      - name: Automatic exact rollback if any verification fails
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/zm-home-restore/config" || exit 0
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-home-restore/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'PY'
+          import hashlib,json,os,stat,sys,tempfile
+          from pathlib import Path
+          base=Path('/home/zomorod2')
+          target=base/'public_html/index.html'
+          recovery=base/'.private/zm-home-pre-seo-recovery-20261107'/sys.argv[1]
+          manifest_path=recovery/'manifest.json'
+          saved=recovery/'index.nova-before-restore.html'
+          if not (manifest_path.is_file() and saved.is_file()):
+              print('NO_RESTORE_WAS_APPLIED');sys.exit(0)
+          assert not any(p.is_symlink() for p in (target,recovery,saved,manifest_path))
+          assert os.geteuid()==target.parent.stat().st_uid
+          manifest=json.loads(manifest_path.read_text())
+          sha=lambda b:hashlib.sha256(b).hexdigest()
+          original=saved.read_bytes()
+          assert sha(original)==manifest['old_theme_sha256']
+          current=target.read_bytes()
+          if sha(current)==manifest['old_theme_sha256']:
+              print('ALREADY_ROLLED_BACK');sys.exit(0)
+          assert sha(current)==manifest['restored_sha256'],'REFUSE_ROLLBACK_OVER_CONCURRENT_EDIT'
+          fd,temp=tempfile.mkstemp(prefix='.restore-nova-back-',dir=str(target.parent))
+          try:
+              with os.fdopen(fd,'wb') as file:
+                  file.write(original);file.flush();os.fsync(file.fileno())
+              os.chmod(temp,int(manifest['mode']))
+              os.replace(temp,target)
+          finally:
+              if os.path.exists(temp):os.unlink(temp)
+          assert sha(target.read_bytes())==manifest['old_theme_sha256']
+          print('AUTOMATIC_ROLLBACK_VERIFIED=yes')
+          PY
+
+      - name: Remove temporary SSH identity files
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-home-restore"
