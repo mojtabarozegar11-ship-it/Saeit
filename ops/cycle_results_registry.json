@@ -23,12 +23,12 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 7,
+      "sequence": 8,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 3,
+        "counter": 4,
         "runs": [
           {
             "slot": "C01",
@@ -53,6 +53,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "local conversation attachment only",
             "note": "Eight existing manuscript artifacts inventoried with independently computed SHA-256 and structure; private JSON manifest generated locally; no persistent private upload or scientific acceptance"
+          },
+          {
+            "slot": "C04",
+            "run_id": "ZM50-R01-20261107T231523+0330-auto11",
+            "stage": "research-QA",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "none; public-safe generic decision record",
+            "note": "Source-gated correction decision record committed and read back; all manuscript scientific/author gates open"
           }
         ]
       },
@@ -64,7 +72,7 @@
         "previous_progress_percent": 0,
         "change_percentage_points": 0,
         "minimum_2pp_met": false,
-        "reason": "Original QA protocol persisted, but no WBS deliverable met acceptance gates"
+        "reason": "Decision record persisted; no primary-source reconciliation or author-approved manuscript accepted"
       }
     },
     "02": {
@@ -526,6 +534,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/research/MR-C144_denominator_reconciliation_protocol_20261107.md",
       "acceptance_result": "Original complete source-gated methodological protocol created and read back; not independently source-verified or accepted as manuscript",
       "impact": "Explicitly prevents treating 74 category responses vs 72 respondents as proven source error; WBS accepted weight unchanged at zero"
+    },
+    {
+      "registry_id": "R01-0008",
+      "cycle_id": "01",
+      "run_id": "ZM50-R01-20261107T231523+0330-auto11",
+      "deliverable_key": "mr-c144-source-gated-correction-decisions-v1",
+      "stage": "research-QA",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/4dd6ee264eb6d50a1c18214a91e9c56055b975ac",
+      "acceptance_result": "Public-safe source-gated correction decision record committed and read back; original sources and author approval remain unverified",
+      "impact": "New editorial decision artifact; no accepted WBS deliverable, publication or verified revenue"
     }
   ],
   "report_reservations": [],
