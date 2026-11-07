@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -101,6 +101,30 @@ case "$operation" in
       for interpreter in /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; do
         if test -x "$interpreter"; then value=executable; else value=missing_or_not_executable; fi
         printf "PYTHON_EXECUTABLE=%s|%s\n" "$interpreter" "$value"
+      done
+    '
+    ;;
+  runtime_python_candidates)
+    # Look only at precise, previously documented CloudLinux/application
+    # interpreter locations. Never read config, import Python or traverse home.
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel '
+      set -eu
+      for interpreter in \
+        /home/zomorod2/virtualenv/Saeit/3.9/bin/python \
+        /home/zomorod2/virtualenv/Saeit/3.10/bin/python \
+        /home/zomorod2/virtualenv/Saeit/3.11/bin/python3 \
+        /home/zomorod2/virtualenv/Saeit/3.12/bin/python \
+        /home/zomorod2/virtualenv/Saeit/3.13/bin/python \
+        /home/zomorod2/virtualenv/repositories/Saeit/3.10/bin/python \
+        /home/zomorod2/virtualenv/repositories/Saeit/3.11/bin/python \
+        /home/zomorod2/virtualenv/repositories/Saeit/3.12/bin/python \
+        /home/zomorod2/virtualenv/Saeit-staging/3.10/bin/python \
+        /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python \
+        /home/zomorod2/virtualenv/Saeit-staging/3.12/bin/python \
+        /home/zomorod2/Saeit/.venv/bin/python \
+        /home/zomorod2/Saeit/venv/bin/python; do
+        if test -x "$interpreter"; then value=executable; else value=missing_or_not_executable; fi
+        printf "CANDIDATE_PYTHON=%s|%s\n" "$interpreter" "$value"
       done
     '
     ;;
