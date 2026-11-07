@@ -13,7 +13,6 @@ from .newsletter_models import NewsletterStory
 from .blog_models import BlogPage
 
 INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
-# audit-release-trigger-2026-11-07: keep live SEO verification tied to the verified source path.
 
 
 def _norm(value):
