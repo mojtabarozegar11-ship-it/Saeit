@@ -94,3 +94,5 @@ jobs:
                           if needle in s: refs.setdefault(needle,[]).append(str(q.relative_to(root))[:200])
           print("FACTORY_DEEP_CANDIDATE_AUDIT="+json.dumps({"read_only":True,"candidates":out,"text_references":{k:v[:30] for k,v in refs.items()}},sort_keys=True))
           PY
+
+# Fresh re-audit requested 2026-11-07; guarded/idempotent execution.
