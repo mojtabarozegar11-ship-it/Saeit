@@ -106,6 +106,55 @@ jobs:
           print('INVENTORY_READ_ONLY_COMPLETE=yes')
           PY
 
+      - name: Inspect dated complete archived theme versions without modifying site
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-internal-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import hashlib, os, tarfile
+          base=Path('/home/zomorod2')
+          root=base/'.backups'
+          assert os.geteuid()==(base/'public_html').stat().st_uid
+          stamp=lambda t:datetime.fromtimestamp(t,timezone.utc).strftime('%Y-%m-%dT%H:%MZ')
+          print('LATEST_BACKUPS_BY_MTIME_START')
+          for p in sorted((x for x in root.iterdir() if x.is_dir()),key=lambda p:p.stat().st_mtime,reverse=True)[:65]:
+              print('BACKUP_DATED',stamp(p.stat().st_mtime),p.name)
+          print('LATEST_BACKUPS_BY_MTIME_END')
+          names=['company/index.html','about/index.html','services/index.html','industry/index.html','research/index.html','knowledge/index.html','agriculture/index.html']
+          markers=['zm-unified-v7-20261018','zm-v7-header','zm-v7-footer-copyright','zm-v10','zm-nova-subpage-v1']
+          def describe(tag,name,data,mtime=''):
+              flags=','.join(m for m in markers if m.encode() in data) or 'NO_MARKERS'
+              print('THEME_ARCHIVE',tag,name,'bytes',len(data),'sha',hashlib.sha256(data).hexdigest()[:18],'mtime',mtime,'flags',flags)
+          for key in ('zomorod-v7-unify','zomorod-v10-content-restore','zomorod-v11','zomorod-v6-root-release','zomorod-nova-six-pages'):
+              parent=root/key
+              if not parent.is_dir():continue
+              for version in sorted((p for p in parent.iterdir() if p.is_dir()),key=lambda p:p.stat().st_mtime,reverse=True)[:3]:
+                  print('THEME_VERSION',key,version.name,'at',stamp(version.stat().st_mtime))
+                  for tarname in ('original-pages.tar',):
+                      p=version/tarname
+                      if p.is_file():
+                          with tarfile.open(p,'r:') as tf:
+                              allnames=set(tf.getnames())
+                              print('THEME_TAR',key,tarname,'members',len(allnames),'expected_present',len(allnames.intersection(names)))
+                              for name in names:
+                                  if name in allnames:
+                                      data=tf.extractfile(name).read()
+                                      describe(key+'/original',name,data)
+                  for folder in ('candidate','staging'):
+                      for name in names:
+                          p=version/folder/name
+                          if p.is_file() and p.stat().st_size<600000:
+                              describe(key+'/'+folder,name,p.read_bytes(),stamp(p.stat().st_mtime))
+          for k in ('.private/zm-home-pre-seo-recovery-20261107','.private/zm-internal-pre-seo-restore-20261107'):
+              p=base/k
+              if not p.is_dir():continue
+              for version in p.iterdir():
+                  print('RECENT_PRIVATE_RESTORE',k,version.name,'at',stamp(version.stat().st_mtime))
+          print('THEME_BACKUP_INVENTORY_READ_ONLY_COMPLETE=yes')
+          PY
+
       - name: Remove temporary SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-internal-inventory"
