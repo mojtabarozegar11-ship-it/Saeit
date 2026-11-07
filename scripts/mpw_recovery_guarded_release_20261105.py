@@ -241,9 +241,17 @@ def db_state():
 
 def require_before_schema():
     report = db_state()
-    if (report != {"vendor": "mysql", "m39": True, "m49": False,
-                   "unreviewed_core_migrations": EXPECTED_LIVE_CORE_MIGRATIONS, "tables": [],
-                   "enabled": False, "mail": False}):
+    before = {"vendor": "mysql", "m39": True, "m49": False,
+              "unreviewed_core_migrations": EXPECTED_LIVE_CORE_MIGRATIONS, "tables": [],
+              "enabled": False, "mail": False}
+    post_additive = {"vendor": "mysql", "m39": True, "m49": True,
+                     "unreviewed_core_migrations": EXPECTED_LIVE_CORE_MIGRATIONS,
+                     "tables": ["core_guestorderemail", "core_guestrecoverytoken",
+                                "core_guestrecoveryrate"],
+                     "enabled": False, "mail": False}
+    # Permit only the exact pre-migration baseline or the exact already-staged
+    # additive state. Any customer/payment/schema drift remains a hard stop.
+    if report not in (before, post_additive):
         fail("MIGRATION_BASELINE_DRIFT:" + json.dumps(report, sort_keys=True, separators=(",", ":")))
     return report
 
