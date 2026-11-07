@@ -1,0 +1,90 @@
+{
+  "schema": "ZM50-B02-WBS-v1",
+  "date": "2026-11-07",
+  "cycle": "02",
+  "scope": "Publication-ready, independently accepted written products; first target C113 volume 2, then C92 and subsequent catalog. No score for drafts, audits, commits or checklists alone.",
+  "scoring": "Binary acceptance of independently evidenced deliverables; no partial credit. Commercial outcomes tracked separately. Baseline accepted=0 pending evidence.",
+  "items": [
+    {
+      "id": "B02-01",
+      "weight": 12,
+      "owner": "editorial",
+      "acceptance": "Complete C113 content frozen with verified chapter inventory and no missing sections",
+      "evidence": "approved complete manuscript and chapter reconciliation"
+    },
+    {
+      "id": "B02-02",
+      "weight": 15,
+      "owner": "scientific reviewer",
+      "acceptance": "Independent scientific review issues resolved and signed off",
+      "evidence": "review disposition and accepted revised manuscript"
+    },
+    {
+      "id": "B02-03",
+      "weight": 12,
+      "owner": "editorial",
+      "acceptance": "Full language/copyedit accepted with consistency audit",
+      "evidence": "accepted edited master and comparison"
+    },
+    {
+      "id": "B02-04",
+      "weight": 10,
+      "owner": "production",
+      "acceptance": "C113 final print/digital layout passes page-by-page visual QA",
+      "evidence": "render inspection and signed QA record"
+    },
+    {
+      "id": "B02-05",
+      "weight": 10,
+      "owner": "rights/author",
+      "acceptance": "Author approval, rights, source attribution and legal gate completed",
+      "evidence": "author and rights clearance"
+    },
+    {
+      "id": "B02-06",
+      "weight": 8,
+      "owner": "production",
+      "acceptance": "Final C113 DOCX/PDF bundle independently downloaded, reopened, hashed and accepted",
+      "evidence": "reproducible SHA256 and download receipts"
+    },
+    {
+      "id": "B02-07",
+      "weight": 10,
+      "owner": "editorial",
+      "acceptance": "C92 complete text and independent scientific acceptance",
+      "evidence": "accepted C92 manuscript and reviewer disposition"
+    },
+    {
+      "id": "B02-08",
+      "weight": 8,
+      "owner": "production",
+      "acceptance": "C92 final layout, rights and download-ready package accepted",
+      "evidence": "C92 final artifacts, QA and clearance"
+    },
+    {
+      "id": "B02-09",
+      "weight": 8,
+      "owner": "catalog",
+      "acceptance": "Additional highest-priority written SKU completed and author/rights approved",
+      "evidence": "accepted final product bundle"
+    },
+    {
+      "id": "B02-10",
+      "weight": 7,
+      "owner": "commerce",
+      "acceptance": "Authorized catalog listing and end-to-end real customer delivery verified",
+      "evidence": "authorized live listing and verified order/delivery; funds tracked separately"
+    }
+  ],
+  "total_weight": 100,
+  "accepted_item_ids": [],
+  "accepted_weight": 0,
+  "progress_percent": 0,
+  "commercial": {
+    "publication": "not authorized",
+    "orders": "unverified",
+    "delivery": "unverified",
+    "funds_received": "unverified"
+  },
+  "notes": "Prior C01-C04 edits remain real technical work but are not retroactively marked accepted against this WBS without item-level acceptance evidence."
+}
