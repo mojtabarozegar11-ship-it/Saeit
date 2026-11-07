@@ -92,3 +92,6 @@ def platform_section(request, section):
  title,lead,image,cards=data
  related_url, related_label = RELATED_SECTION_LINKS.get(section, ("/store/", "Browse related resources"))
  return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES,"related_url":related_url,"related_label":related_label})
+
+
+# Production deployment verification marker: store and IndexNow smoke coverage.
