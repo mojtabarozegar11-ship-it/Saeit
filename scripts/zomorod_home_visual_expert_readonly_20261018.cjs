@@ -117,7 +117,8 @@ function emit(key,val){console.log(key+'='+JSON.stringify(val))}
         requestAnimationFrame(tick);
       }));
       console.log('HOME_RENDER_COMPARE='+JSON.stringify({width,label,...frames,
-        activeAnimations:await page.evaluate(()=>document.getAnimations().length),\n        computed:await page.evaluate(()=>{const e=document.querySelector('.topic-card');const s=getComputedStyle(e);return {animation:s.animationName,backdrop:s.backdropFilter}})}));
+        activeAnimations:await page.evaluate(()=>document.getAnimations().length),
+        computed:await page.evaluate(()=>{const e=document.querySelector('.topic-card');const s=getComputedStyle(e);return {animation:s.animationName,backdrop:s.backdropFilter}})}));
     };
     await sample('baseline');
     await page.addStyleTag({content:'html body #orbit-shelves .orbit-shelf .topic-card{animation:none!important}'});
