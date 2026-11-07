@@ -7,7 +7,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent
 from accounting.models import JournalEntry
 from core.models import ApprovalRequest, ResearchProject
@@ -53,6 +53,7 @@ def _decision(row):
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
+@transaction.atomic
 def integrated_ledger_api(request):
     if request.method == "GET":
         return JsonResponse({"captured_at": timezone.now().isoformat(),
