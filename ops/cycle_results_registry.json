@@ -29,7 +29,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 4,
+      "sequence": 5,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book"
     },
@@ -238,6 +238,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
       "acceptance_result": "Private C113 DOCX/PDF with worked 9800L water balance uploaded to Library; 608 PDF pages, zero blank; author/science/legal approval pending",
       "impact": "Replaced non-reproducible example gap with calculated instructional answer; no publication or revenue"
+    },
+    {
+      "registry_id": "R02-0005",
+      "cycle_id": "02",
+      "run_id": "B02-20261107T064711+0330-storage-reconciliation",
+      "deliverable_key": "C113-water-storage-boundary-correction",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "اصلاح واقعی موازنه آب با تغییر موجودی مخزن؛ DOCX/PDF خصوصی ۶۰۸ صفحه؛ بازیابی مستقل و تطبیق SHA256؛ داوری و مجوز نشر باز",
+      "impact": "کاهش ابهام محاسبه تراز آب از اختلاف خام ۱۰۰۰ لیتر به مانده مشروط ۷۰۰ لیتر؛ بدون فروش یا نشر"
     }
   ],
   "report_reservations": [],
