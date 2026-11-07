@@ -397,6 +397,8 @@ def restore(folder, manifest, *, changed):
     # Restore only our exact still-present release bytes. Never overwrite a
     # newer administrator edit, even when recovering a partial failure.
     for key in reversed(changed):
+        if key not in manifest.get("after", {}):
+            continue
         path = APP / FILES[key]
         current = _safe_file(path).read_bytes()
         if digest(current) != manifest["after"][key]:
