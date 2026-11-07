@@ -54,6 +54,12 @@ INVOICE_RE = re.compile(r"\A/commerce/trx-easy/invoice/([1-9][0-9]*)/\Z")
 GENERIC = "If eligible paid orders exist for that address, recovery instructions will be sent."
 
 
+def _recovery_enabled():
+    """Require both release and outbound-delivery approvals at every entry point."""
+    return (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+            and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
+
+
 def _host(request):
     return request.is_secure() and request.get_host().split(":")[0].lower() in (
         "mojplaywin.com", "www.mojplaywin.com"
@@ -239,7 +245,7 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
-    if getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is not True:
+    if not _recovery_enabled():
         return _page("Email recovery is not yet available",
                      '<p>Do not make another payment. If you already paid, '
                      'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
@@ -287,6 +293,8 @@ def _consume(code):
 def recovery_verify(request):
     if not _host(request):
         raise Http404
+    if not _recovery_enabled():
+        return _page("Recovery unavailable", "<p>Recovery is not currently available.</p>", status=503)
     if request.method == "GET":
         return _page("Enter recovery code", _form(request, ROOT + "verify/",
                      [("Code from email", "code", "text")], "Verify"), request)
@@ -307,6 +315,8 @@ def recovery_verify(request):
 
 
 def _scope(request):
+    if not _recovery_enabled():
+        raise Http404
     raw = request.COOKIES.get(SESSION_COOKIE, "")
     if not isinstance(raw, str) or len(raw) > 512:
         raise Http404
