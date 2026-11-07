@@ -328,15 +328,24 @@ def patch_commercial(namespace):
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, (tuple, list)):
+    from collections.abc import Mapping
+    if isinstance(patterns, Mapping):
+        pattern_type = dict
+        pattern_items = list(patterns.items())
+    elif isinstance(patterns, (tuple, list)):
         pattern_type = type(patterns)
+        pattern_items = list(patterns)
+    else:
+        pattern_type = None
+        pattern_items = []
+    if pattern_type is not None:
         rebuilt = []
         route_names = (
             ("/start/", "start_order"), ("/invoice/", "show_invoice"),
             ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
             ("/download/", "download_paid"),
         )
-        for route, view in patterns:
+        for route, view in pattern_items:
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
@@ -357,5 +366,8 @@ def patch_commercial(namespace):
         if any(route in existing for route, _ in extra):
             raise RuntimeError("Recovery URL collision")
         rebuilt.extend(extra)
-        namespace["COMMERCIAL_URLPATTERNS"] = pattern_type(rebuilt)
+        namespace["COMMERCIAL_URLPATTERNS"] = (
+            {route: view for route, view in rebuilt} if pattern_type is dict
+            else pattern_type(rebuilt)
+        )
     namespace["_mpw_guest_checkout_installed"] = True
