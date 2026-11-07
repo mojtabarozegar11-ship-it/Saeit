@@ -20,6 +20,7 @@ on:
           - chain_audit
           - activate
           - rollback
+          - disable_flags
 
 permissions:
   contents: read
@@ -100,7 +101,7 @@ jobs:
 
       - name: Transfer reviewed release bundle to private temporary staging
         env:
-          OPERATION: ${{ inputs.operation || 'rollback' }}
+          OPERATION: ${{ inputs.operation || 'disable_flags' }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-recovery-release-ssh"
@@ -136,6 +137,9 @@ jobs:
             rollback)
               timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' rollback '42346897461'"
               ;;
+            disable_flags)
+              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' disable_flags '$GITHUB_RUN_ID'"
+              ;;
           esac
 
       - name: Remove temporary release bundle only
@@ -148,3 +152,5 @@ jobs:
           rm -rf -- "$d"
 
 # one-shot rollback retry
+
+# one-shot fail-closed disable
