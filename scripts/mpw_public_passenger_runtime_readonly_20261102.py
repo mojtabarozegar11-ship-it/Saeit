@@ -194,6 +194,41 @@ def inspect_store_sources(*, public=PUBLIC, app=APP):
     }
 
 
+
+STORE_FALLBACK_PREFIX = (
+    "# MPW_STATIC_STORE_FALLBACK_V1\n"
+    "RewriteEngine On\n"
+    "RewriteCond %{REQUEST_METHOD} ^GET$\n"
+    "RewriteCond %{REQUEST_URI} ^/store/?$\n"
+    "RewriteRule ^store/?$ store/index.html [END]\n\n"
+)
+
+
+def inspect_public_store_fallback(public, conf):
+    """Bounded, names-redacted file and exact leading-rule preflight."""
+    from itertools import islice
+    store = public / "store"
+    index = store / "index.html"
+    valid_dir = store.is_dir() and not store.is_symlink()
+    entries = list(islice(store.iterdir(), 33)) if valid_dir else []
+    valid_index = valid_dir and index.is_file() and not index.is_symlink()
+    marker = False
+    if valid_index and index.stat().st_size <= 200_000:
+        marker = b"MPW_STATIC_STORE_FALLBACK_V1" in index.read_bytes()
+    return {
+        "exact_leading_rule": conf.startswith(STORE_FALLBACK_PREFIX),
+        "rule_marker_once": conf.count("MPW_STATIC_STORE_FALLBACK_V1") == 1,
+        "store_directory_regular": valid_dir,
+        "index_file_regular": valid_index,
+        "index_owner_marker": marker,
+        "store_index_only": len(entries) == 1 and entries[0].name == "index.html" and valid_index,
+        "entry_count_capped": min(len(entries), 32),
+        "directory_has_more_than_32_entries": len(entries) > 32,
+        "files_modified": False,
+    }
+
+
+
 def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_payload=None):
     if public == PUBLIC and app == APP and pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise RuntimeError("WRONG_CPANEL_ACCOUNT")
@@ -220,6 +255,7 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_p
             "public_app_root_directive_count": len(roots),
             "htaccess_public_root": len(roots) == 1 and _as_target_root(roots[0]) == "public",
             "htaccess_staging_root": len(roots) == 1 and _as_target_root(roots[0]) == "staging",
+            "store_fallback_readonly": inspect_public_store_fallback(public, conf),
             "public_wsgi_references_staging": str(APP) in wsgi_text,
             "guest_module_restored_to_known_prior": guest_prior,
             "public_restart_marker_present": bool(marker_ok),

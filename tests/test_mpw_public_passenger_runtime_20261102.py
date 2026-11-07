@@ -93,5 +93,31 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertFalse(report["release_permitted"])
 
 
+    def test_exact_static_fallback_inventory_without_printing_names(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import (
+            STORE_FALLBACK_PREFIX, inspect_public_store_fallback,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td)
+            store = public / "store"
+            store.mkdir()
+            (store / "index.html").write_text(
+                "<h1>Static fallback</h1>MPW_STATIC_STORE_FALLBACK_V1"
+            )
+            result = inspect_public_store_fallback(public, STORE_FALLBACK_PREFIX + "PassengerAppRoot public\n")
+            self.assertTrue(result["exact_leading_rule"])
+            self.assertTrue(result["rule_marker_once"])
+            self.assertTrue(result["store_index_only"])
+            self.assertTrue(result["index_owner_marker"])
+            self.assertEqual(result["entry_count_capped"], 1)
+            (store / "other-unrelated-file.txt").write_text("private-synthetic")
+            later = inspect_public_store_fallback(public, STORE_FALLBACK_PREFIX)
+            self.assertFalse(later["store_index_only"])
+            self.assertEqual(later["entry_count_capped"], 2)
+            self.assertNotIn("private-synthetic", json.dumps(later))
+            self.assertNotIn("other-unrelated-file", json.dumps(later))
+
+
+
 if __name__ == "__main__":
     unittest.main()
