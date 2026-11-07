@@ -149,6 +149,33 @@ jobs:
           done
           echo STORE_IDENTITY_PROBE_DONE
           REMOTE
+      - name: Inspect live Zomorod document-root performance and routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ROOT=/home/zomorod2/public_html
+          APP=/home/zomorod2/Saeit-staging
+          for item in "$ROOT/index.html" "$ROOT/.htaccess" "$ROOT/passenger_wsgi.py"; do
+            if test -f "$item" && test ! -L "$item"; then
+              stat -c 'LIVE_FILE path=%n bytes=%s mode=%a sha256=%n' "$item"
+              sha256sum "$item" | awk '{print "LIVE_SHA256 path='"$item"' value="$1}'
+            else
+              echo "LIVE_FILE_MISSING_OR_UNSAFE=$item"
+            fi
+          done
+          if test -f "$ROOT/.htaccess"; then
+            grep -Eiq 'deflate|brotli|expires|cache-control|compression' "$ROOT/.htaccess" && echo LIVE_COMPRESSION_DIRECTIVE_PRESENT || echo LIVE_COMPRESSION_DIRECTIVE_NOT_FOUND
+          fi
+          if test -f "$ROOT/passenger_wsgi.py"; then
+            grep -Fq 'Saeit-staging' "$ROOT/passenger_wsgi.py" && echo LIVE_PASSENGER_TARGET=SAEIT_STAGING || echo LIVE_PASSENGER_TARGET=UNCONFIRMED
+          fi
+          if test -f "$APP/manage.py"; then
+            echo LIVE_APP_SOURCE_PRESENT
+            stat -c 'APP_SOURCE_BYTES=%s APP_SOURCE_MTIME=%y' "$APP/manage.py"
+          fi
+          REMOTE
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
