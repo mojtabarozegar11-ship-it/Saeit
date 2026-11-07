@@ -76,3 +76,10 @@ rechecks capacity before its local changes. None of this proves the legacy
 observer is installed or safe to activate. Existing GitHub relay writes and
 local scheduler collisions still require an independent cutover review;
 legacy payloads must never be counted toward the 100-hour research dataset.
+
+The manual legacy activation workflow also fails closed before SSH unless
+the owner gives an explicit acknowledgement and GitHub's read-only Actions
+API confirms the existing hourly relay is `disabled_manually` and no recent
+relay run remains pending. This is a deployment-only check; it introduces
+no GitHub runtime dependency for the future VPS process. The relay has
+**not** been disabled in this PR. A separately approved cutover is required.

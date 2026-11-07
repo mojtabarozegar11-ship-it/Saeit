@@ -2,9 +2,15 @@ name: MojTrade read-only VPS observer activation
 
 on:
   workflow_dispatch:
+    inputs:
+      relay_retirement_ack:
+        description: "Type RELAY_DISABLED_AND_REVIEWED after independent relay retirement approval"
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: mojtrade-readonly-vps-observer
@@ -15,6 +21,42 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
+      - name: Fail closed while GitHub relay is enabled or running
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_ACK: ${{ inputs.relay_retirement_ack }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTOR" = mojtabarozegar11-ship-it
+          test "$OWNER_ACK" = RELAY_DISABLED_AND_REVIEWED
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+
+          root = "https://api.github.com/repos/mojtabarozegar11-ship-it/Saeit/actions/workflows/mojtrade-readonly-relay.yml"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          def fetch(url):
+              with urlopen(Request(url, headers=headers), timeout=15) as response:
+                  data = response.read(1_000_001)
+                  if len(data) > 1_000_000:
+                      raise RuntimeError("relay_metadata_oversized")
+                  return json.loads(data)
+
+          workflow = fetch(root)
+          if workflow.get("state") != "disabled_manually":
+              raise SystemExit("MOJTRADE_RELAY_NOT_MANUALLY_DISABLED")
+          runs = fetch(root + "/runs?per_page=100")
+          rows = runs.get("workflow_runs")
+          if not isinstance(rows, list) or any(row.get("status") != "completed" for row in rows):
+              raise SystemExit("MOJTRADE_RELAY_IN_FLIGHT_OR_UNVERIFIABLE")
+          print("MOJTRADE_RELAY_RETIREMENT_GATE_PASS")
+          PY
       - uses: actions/checkout@v4
       - name: Install isolated read-only market observer after actual market data preflight
         shell: bash

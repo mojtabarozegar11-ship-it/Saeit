@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
+import json
+import os
 import sys
 import tempfile
 import unittest
@@ -230,6 +234,66 @@ class VPSLegacyInstallerBoundaryTests(unittest.TestCase):
                         workflow.index("scp \"${opts[@]}\" scripts/mojtrade_observe_market.py"))
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("\n  push:", workflow)
+
+    def test_manual_activation_rejects_active_relay_before_ssh(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/mojtrade-vps-observer-activate.yml").read_text()
+        self.assertIn("actions: read", workflow)
+        self.assertIn("relay_retirement_ack:", workflow)
+        self.assertIn("RELAY_DISABLED_AND_REVIEWED", workflow)
+        self.assertIn('workflow.get("state") != "disabled_manually"', workflow)
+        self.assertIn('row.get("status") != "completed"', workflow)
+        self.assertIn("MOJTRADE_RELAY_RETIREMENT_GATE_PASS", workflow)
+        self.assertLess(workflow.index("MOJTRADE_RELAY_RETIREMENT_GATE_PASS"),
+                        workflow.index("ssh \"${opts[@]}\""))
+
+    def run_relay_gate(self, relay_state, run_status):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/mojtrade-vps-observer-activate.yml").read_text()
+        embedded = workflow.split("          python3 - <<'PY'\n", 1)[1].split(
+            "\n          PY", 1)[0]
+        code = "\n".join(line[10:] for line in embedded.splitlines())
+        compiled = compile(code, "mojtrade-relay-retirement-gate", "exec")
+
+        class Response:
+            def __init__(self, body):
+                self.body = json.dumps(body).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self, _limit):
+                return self.body
+
+        def fake_urlopen(request, timeout):
+            self.assertEqual(timeout, 15)
+            self.assertEqual(request.headers["Authorization"], "Bearer offline-fixture")
+            if request.full_url.endswith("mojtrade-readonly-relay.yml"):
+                return Response({"state": relay_state})
+            if request.full_url.endswith("runs?per_page=100"):
+                return Response({"workflow_runs": [{"status": run_status}]})
+            raise AssertionError("unexpected outbound URL")
+
+        with patch.dict(os.environ, {"GH_TOKEN": "offline-fixture"}), \
+             patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            exec(compiled, {"__name__": "__main__"})
+        return output.getvalue()
+
+    def test_active_relay_blocks_manual_activation(self):
+        with self.assertRaisesRegex(SystemExit, "MOJTRADE_RELAY_NOT_MANUALLY_DISABLED"):
+            self.run_relay_gate("active", "completed")
+
+    def test_inflight_relay_blocks_manual_activation(self):
+        with self.assertRaisesRegex(SystemExit, "MOJTRADE_RELAY_IN_FLIGHT"):
+            self.run_relay_gate("disabled_manually", "in_progress")
+
+    def test_retired_relay_with_completed_runs_passes_offline_gate(self):
+        self.assertIn("MOJTRADE_RELAY_RETIREMENT_GATE_PASS",
+                      self.run_relay_gate("disabled_manually", "completed"))
 
     def test_legacy_installer_has_matching_second_capacity_gate(self):
         root = Path(__file__).resolve().parents[1]
