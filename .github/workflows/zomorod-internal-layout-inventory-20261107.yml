@@ -155,6 +155,44 @@ jobs:
           print('THEME_BACKUP_INVENTORY_READ_ONLY_COMPLETE=yes')
           PY
 
+      - name: Preflight exact archived unified page set and latest partial snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 130s ssh -T -F "$RUNNER_TEMP/zm-internal-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,os
+          home=Path('/home/zomorod2');web=home/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          source=home/'.backups/zomorod-v10-content-restore/39611e09708ac8a4e5df1aac0209e03f44e06ad1'
+          page_list=source/'page-list.txt'
+          rels=page_list.read_text().splitlines()
+          print('UNIFIED_ARCHIVE_PAGE_COUNT',len(rels),'unique',len(set(rels)))
+          for rel in rels:
+              p=source/'candidate'/rel;t=web/rel
+              if not p.is_file():
+                  print('UNIFIED_ARCHIVE_SOURCE_MISSING',rel);continue
+              a=p.read_bytes()
+              b=t.read_bytes() if t.is_file() else b''
+              if b and a==b: status='IDENTICAL'
+              elif b: status='CURRENT_DIFFERS'
+              else:status='CURRENT_ABSENT'
+              mark='V7' if b'zm-unified-v7-20261018' in a else 'NO_V7'
+              script='V10' if b'zm-v10' in a else 'NO_V10'
+              print('UNIFIED_ARCHIVE_PAGE',rel,'archive_bytes',len(a),'current_bytes',len(b),'state',status,'theme',mark,script,'archive_sha',hashlib.sha256(a).hexdigest()[:14])
+          for rel in ['static/site/zomorod-v7/inner-v7.css','static/site/zomorod-v10/inner-v10.css','static/site/zomorod-v7/company-logo.webp','agriculture/assets/zm-agritech-luxe-v3.css']:
+              f=web/rel
+              print('UNIFIED_OLD_ASSET',rel,'exists',f.is_file(),'bytes',f.stat().st_size if f.is_file() else 0)
+          recent=home/'.backups/zomorod-live-inpage'
+          if recent.is_dir():
+              for sub in sorted(recent.iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:6]:
+                  print('LATEST_PARTIAL_SNAPSHOT',sub.name,'is_directory',sub.is_dir())
+                  if sub.is_dir():
+                      for file in sorted((f for f in sub.rglob('*') if f.is_file()),key=lambda f:str(f))[:22]:
+                          print('LATEST_PARTIAL_FILE',file.relative_to(recent),'bytes',file.stat().st_size)
+          print('UNIFIED_ARCHIVE_READ_ONLY_PREFLIGHT_COMPLETE=yes')
+          PY
+
       - name: Remove temporary SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-internal-inventory"
