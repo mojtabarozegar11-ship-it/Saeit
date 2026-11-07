@@ -135,7 +135,7 @@ jobs:
                   raise SystemExit(f"Restored site check failed: {url}")
           PY
       - name: Diagnose MojPlayWin public routes
-        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107')
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -163,7 +163,7 @@ jobs:
               print(f"PUBLIC_DIAG_TEXT {plain[:500]}")
           PY
       - name: Read recent MojPlayWin application errors
-        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107')
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107')
         shell: bash
         run: |
           set -euo pipefail
@@ -215,7 +215,7 @@ jobs:
               print("SERVER_LOG no matching known log files")
           PY
       - name: Inspect live MojPlayWin route mappings
-        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107')
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107')
         shell: bash
         run: |
           set -euo pipefail
@@ -237,8 +237,36 @@ jobs:
                   if any(token in line for token in ("branded_", 'path("store/', 'path("agriculture/', 'path("ventures/')):
                       print(f"LIVE_URLS_LINE {number}: {line[:300]}")
           PY
+      - name: Trace live MojPlayWin failing routes
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107')
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os, sys, traceback
+          from pathlib import Path
+          APP=Path("/home/zomorod2/Saeit-staging")
+          sys.path.insert(0,str(APP))
+          os.chdir(APP)
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import Client
+          client=Client(HTTP_HOST="mojplaywin.com", secure=True)
+          for route in ("/store/","/agriculture/"):
+              print("TRACE_ROUTE_BEGIN",route)
+              try:
+                  response=client.get(route)
+                  print("TRACE_ROUTE_STATUS",route,response.status_code)
+                  print("TRACE_ROUTE_BODY",response.content[:500].decode("utf-8","replace"))
+              except BaseException as exc:
+                  print("TRACE_ROUTE_EXCEPTION",route,type(exc).__name__,str(exc))
+                  traceback.print_exc()
+              print("TRACE_ROUTE_END",route)
+          PY
       - name: Package application changes with merge baselines
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -275,7 +303,7 @@ jobs:
           PY
           tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/seo_views.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html core/templates/mojplaywin/footer.html deploy_baseline
       - name: Stage and install on the verified cPanel app
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         id: deploy
         shell: bash
         run: |
@@ -309,7 +337,7 @@ jobs:
           PY
           python3 '$stage/scripts/deploy_mojplaywin_branding.py' deploy '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
       - name: Smoke-test MojPlayWin pages
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_TRACE_20261107') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         id: smoke
         shell: bash
         run: |
@@ -441,6 +469,6 @@ jobs:
 
 # Recovery marker for failed smoke run 38827723099
 
-# MOJPLAYWIN_DIAG_20261107
+# MOJPLAYWIN_TRACE_20261107
 
 # Diagnostic content refresh 20261107
