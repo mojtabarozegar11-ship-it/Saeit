@@ -215,7 +215,13 @@ def inspect_public_store_fallback(public, conf):
     marker = False
     if valid_index and index.stat().st_size <= 200_000:
         marker = b"MPW_STATIC_STORE_FALLBACK_V1" in index.read_bytes()
+    normalized_conf = conf.replace("\r\n", "\n").lstrip("\ufeff\n")
+    marker_lines = [i for i, line in enumerate(conf.splitlines()) if "MPW_STATIC_STORE_FALLBACK_V1" in line]
     return {
+        "exact_block_once": conf.count(STORE_FALLBACK_PREFIX) == 1,
+        "normalized_block_once": normalized_conf.count(STORE_FALLBACK_PREFIX) == 1,
+        "marker_at_first_line": marker_lines == [0],
+        "marker_line_capped": min(marker_lines[0], 1000) if len(marker_lines) == 1 else None,
         "exact_leading_rule": conf.startswith(STORE_FALLBACK_PREFIX),
         "rule_marker_once": conf.count("MPW_STATIC_STORE_FALLBACK_V1") == 1,
         "store_directory_regular": valid_dir,
