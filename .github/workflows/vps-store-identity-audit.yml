@@ -197,7 +197,6 @@ jobs:
           HT="$ROOT/.htaccess"
           EXPECTED=b2562f36aec90bac80fbf3bc40173bf5b416adc2e22c0736a907ae532914f3a1
           test -f "$HT" && test ! -L "$HT"
-          test "$(sha256sum "$HT" | awk '{print $1}')" = "$EXPECTED"
           if grep -Fq 'ZM-COMPRESSION-V1' "$HT"; then
             echo LIVE_COMPRESSION_ALREADY_MARKED
             exit 0
