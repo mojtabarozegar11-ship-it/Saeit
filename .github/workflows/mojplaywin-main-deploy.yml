@@ -34,11 +34,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           required = {
-              "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO", "CONNECTED VENTURES", 'id="site-directory"', "All MojPlayWin pages"),
-              "core/templates/mojplaywin/store.html": ("INITIAL COLLECTION", "{{ product.title }}"),
-              "core/templates/mojplaywin/section.html": ("{{ section_title }}", "mw-page-hero"),
-              "core/templates/mojplaywin/theme.html": ("mw-site-nav", "mw-gold", 'id="mw-all-pages-menu"'),
-              "core/templates/mojplaywin/footer.html": ("mw-site-footer", "/privacy/"),
+              "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "mw-hero", "mw-actions"),
+              "core/templates/mojplaywin/store.html": ("MOJPLAYWIN · DIGITAL STORE", "mpw-shop-kicker"),
+              "core/templates/mojplaywin/section.html": ("{{ section_title }}", "mw-page-hero", "mw-grid"),
+              "core/templates/mojplaywin/theme.html": ("mojplaywin-matte-gold-theme", "mw-gold", "mw-shell"),
+              "core/templates/mojplaywin/footer.html": ("mw-site-footer", "/privacy/", "All Rights Reserved"),
           }
           for name, markers in required.items():
               source = Path(name).read_text(encoding="utf-8")
@@ -372,7 +372,7 @@ jobs:
               raise SystemExit("MojPlayWin homepage menu/directory missing: " + repr(missing))
           print("LIVE_HOME_MENU_AND_ALL_PAGES_OK=yes")
           PY
-          check https://mojplaywin.com/store/ "INITIAL COLLECTION"
+          check https://mojplaywin.com/store/ "MOJPLAYWIN · DIGITAL STORE"
           check https://mojplaywin.com/agriculture/ "Agriculture"
           check https://mojplaywin.com/ventures/cafe-restaurant/ "Cafes"
           check https://mojplaywin.com/ventures/currency-crypto/ "Currency"
