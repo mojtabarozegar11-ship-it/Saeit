@@ -111,6 +111,7 @@ function layoutStart(string $page,?array $user=null):void {
   phone?.addEventListener('click',async()=>{if(!('Notification' in window)){phoneStatus();return;}const p=await Notification.requestPermission();phoneStatus();if(p==='granted'){const n=new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});n.onclick=()=>window.focus();}else if(p==='denied'){status.textContent='اعلان گوشی در Chrome مسدود است؛ از تنظیمات سایت اجازه اعلان را فعال کنید.';}});
   if('serviceWorker' in navigator){navigator.serviceWorker.register('/business/notification-sw.js',{scope:'/business/'}).catch(()=>{});}
   phoneStatus();
+  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='zm-approval-action'){if(event.data.action==='explanation'){req.hidden=false;note.focus();status.textContent='توضیح تصمیم را وارد کنید و دکمهٔ توضیح را بزنید.';}else{decide(event.data.action);}}});
   async function refresh(){
     try{
       const r=await fetch('/staff/command-center/api/integrated-ledger/',{credentials:'include',cache:'no-store'});
