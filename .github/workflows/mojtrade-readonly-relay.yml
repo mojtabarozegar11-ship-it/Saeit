@@ -1,0 +1,57 @@
+name: MojTrade read-only relay snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7 * * * *"
+  push:
+    paths:
+      - scripts/mojtrade_observe_market.py
+      - .github/workflows/mojtrade-readonly-relay.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtrade-readonly-relay
+  cancel-in-progress: false
+
+jobs:
+  relay:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate and deliver private read-only snapshot
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/mojtrade-relay"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","\\n").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          python3 scripts/mojtrade_observe_market.py --output "$d/payload.json"
+          python3 - "$d/payload.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text())
+          assert p["schema_version"] == 1
+          assert p["source"] == "mojtrade-vps"
+          assert [x["symbol"] for x in p["signals"]] == ["BTC/USD","ETH/USD"]
+          assert all(x["market"] == "crypto" and x["timeframe"] == "1h" for x in p["signals"])
+          print("MOJTRADE_RELAY_PAYLOAD_VALIDATED")
+          PY
+          sha256sum "$d/payload.json"
+          ssh "${opts[@]}" githubops@178.239.147.150 'set -euo pipefail; base="$HOME/factory-runtime"; private="$base/private/mojtrade"; install -d -m 700 "$private"; test "$(stat -c %a "$private")" = 700'
+          scp "${opts[@]}" "$d/payload.json" githubops@178.239.147.150:/home/githubops/factory-runtime/private/mojtrade/.validated-payload.json.new
+          ssh "${opts[@]}" githubops@178.239.147.150 'set -euo pipefail; base="$HOME/factory-runtime"; private="$base/private/mojtrade"; test ! -L "$private/.validated-payload.json.new"; chmod 600 "$private/.validated-payload.json.new"; mv -f "$private/.validated-payload.json.new" "$private/validated-payload.json"; printf "%s\\n" "MOJTRADE_RELAY_SNAPSHOT_DELIVERED" "MOJTRADE_REAL_ORDERS_ZERO" "MOJTRADE_PUBLICATION_DISABLED"'
