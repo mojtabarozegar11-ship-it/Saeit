@@ -27,7 +27,7 @@ def digest(data):
 def checked_file(path):
     if not ROOT.is_dir() or ROOT.is_symlink():
         raise RuntimeError('UNSAFE_DOMAIN_ROOT')
-    if not path.is_relative_to(ROOT):
+    if os.path.commonpath((str(ROOT), str(path))) != str(ROOT):
         raise RuntimeError('PATH_OUTSIDE_DOMAIN_ROOT')
     current = path
     while current != ROOT:
