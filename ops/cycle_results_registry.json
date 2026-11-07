@@ -145,7 +145,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 9,
+      "sequence": 10,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -163,6 +163,16 @@
           44
         ],
         "scope_note": "This verifies only the numbered public issue source, not unobserved private reports. New numbers must still be reserved with CAS and cross-checked against issue before publication."
+      },
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE05_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": null,
+        "change_percentage_points": null,
+        "minimum_2pp_met": false,
+        "reason": "First fixed WBS baseline; no independently accepted operational deliverable"
       }
     }
   },
@@ -476,6 +486,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE01_WBS_v1.json",
       "acceptance_result": "Fixed 100-weight WBS created; no deliverables accepted",
       "impact": "Progress baseline only, no revenue"
+    },
+    {
+      "registry_id": "R05-0010",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261107T213754+0330-turn11",
+      "deliverable_key": "cycle05-fixed-wbs-baseline-v1",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/b6619fd0127b6c4a13b972c55324fc3146c3ac88",
+      "acceptance_result": "Fixed 100-weight WBS created and readback pending; no accepted operational item",
+      "impact": "Enables evidence-based progress accounting; no product deployment or revenue"
     }
   ],
   "report_reservations": [],
