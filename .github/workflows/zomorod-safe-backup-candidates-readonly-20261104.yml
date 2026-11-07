@@ -344,7 +344,7 @@ jobs:
           from pathlib import Path
           root=Path.home()
           backup=root/".backups"
-          targets=[backup/"mojtaba-personal-visible-notes", backup/"mojtaba-personal-v18-snapshot", backup/"mojtaba-personal-complete-release", backup/"mojtaba-personal-standard-release", backup/"zomorod-about-real-owner-photo", backup/"mojtaba-editorial-description"]
+          targets=[backup/"zomorod-one-stage-p0p3-20261019", backup/"zm-gold-title-pair-20261020", backup/"zm-dual-frame-brightgold-20261020", backup/"zm-dual-gold-frames-20261020", backup/"zm-home-layer-perf-20261019", backup/"zomorod-official-contacts-20261019", backup/"zomorod-home-header-footer-glass-20261019", backup/"zomorod-home-copy-glass-20261019", backup/"zomorod-home-template-fixes-20261018", backup/"zomorod-glass-row-headers-20261018", backup/"zomorod-glass-cards-20261018", backup/"zomorod-fixed-background-20261018"]
           forbidden={".py",".pyc",".sqlite",".sqlite3",".db",".db3",".env",".zip",".tar",".gz",".bz2",".7z",".pdf",".docx",".xlsx",".xls",".json",".yaml",".yml",".txt",".csv",".html",".htm",".css",".js",".png",".jpg",".jpeg",".webp",".svg"}
           if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
               raise SystemExit("CPANEL_PREVIEW_AUDIT_ABORT_UNSAFE_ROOT")
