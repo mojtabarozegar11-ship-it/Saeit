@@ -412,6 +412,32 @@ def patch_public(namespace):
     else:
         namespace["urlpatterns"] = direct_recovery
 
+    # The live root resolver consumes the public module through a legacy
+    # callable registry rather than module-level urlpatterns. Attach the
+    # recovery routes to the actual config URLconf as well, once it is present.
+    import sys
+    root_urls = sys.modules.get("config.urls")
+    if root_urls is not None:
+        root_patterns = getattr(root_urls, "urlpatterns", None)
+        if isinstance(root_patterns, list):
+            root_text = {str(getattr(item, "pattern", item)) for item in root_patterns}
+            from django.urls import path as _root_path
+            absolute_recovery = [
+                _root_path("commerce/trx-easy/recover/", recovery_request,
+                           name="mpw_root_recovery_request"),
+                _root_path("commerce/trx-easy/recover/verify/", recovery_verify,
+                           name="mpw_root_recovery_verify"),
+                _root_path("commerce/trx-easy/recover/orders/", recovery_orders,
+                           name="mpw_root_recovery_orders"),
+                _root_path("commerce/trx-easy/recover/download/<int:invoice_id>/",
+                           recovery_download, name="mpw_root_recovery_download"),
+            ]
+            root_urls.urlpatterns = (
+                root_patterns
+                + [item for item in absolute_recovery
+                   if str(item.pattern) not in root_text]
+            )
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
