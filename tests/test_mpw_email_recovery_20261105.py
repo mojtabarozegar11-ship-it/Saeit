@@ -8,6 +8,9 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 from unittest.mock import MagicMock
+from pytest import mark
+
+pytestmark = mark.django_db(transaction=True)
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.mpw_recovery_test_settings")
 
