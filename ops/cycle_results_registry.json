@@ -123,9 +123,19 @@
     },
     "03": {
       "automation_id": "6ae7484cd8a88191ba55377a41096912",
-      "sequence": 0,
+      "sequence": 1,
       "legacy_report_last_verified": null,
-      "primary_output": "accepted guest checkout and delivery"
+      "primary_output": "accepted guest checkout and delivery",
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE03_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": null,
+        "change_percentage_points": 0,
+        "minimum_2pp_met": false,
+        "reason": "First fixed baseline; no independently accepted product or commercial deliverable"
+      }
     },
     "04": {
       "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
@@ -496,6 +506,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/b6619fd0127b6c4a13b972c55324fc3146c3ac88",
       "acceptance_result": "Fixed 100-weight WBS created and readback pending; no accepted operational item",
       "impact": "Enables evidence-based progress accounting; no product deployment or revenue"
+    },
+    {
+      "registry_id": "R03-0001",
+      "cycle_id": "03",
+      "run_id": "ZM50-C03-20261107T215852+0330-turn11",
+      "deliverable_key": "fixed-wbs-baseline-v1",
+      "stage": "governance-baseline",
+      "acceptance_result": "Versioned fixed 12-item WBS totaling 100 established; no functional deliverable accepted",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE03_WBS_v1.json",
+      "impact": "Enables auditable progress measurement; no live sale, payment, delivery or revenue verified"
     }
   ],
   "report_reservations": [],
