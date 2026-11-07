@@ -23,6 +23,29 @@ COOKIE_PATH = "/commerce/trx-easy/"
 MAX_COOKIE = 512
 
 
+def _record_optional_funnel_event(request, event_name, product=None, product_id=None):
+    """Analytics must never turn a valid guest checkout/created invoice into a 500.
+
+    This helper handles only optional telemetry; invoice, chain and entitlement
+    checks continue through their existing authoritative handlers.
+    """
+    try:
+        if product is None and product_id is not None:
+            from core.models import Product
+            product = Product.objects.filter(pk=product_id, active=True).first()
+        if product is None:
+            return
+        from core.commerce_funnel import record_funnel_event
+        record_funnel_event(request, event_name, product)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "MojPlayWin guest funnel telemetry unavailable: %s",
+            type(exc).__name__,
+        )
+
+
+
 def _host_ok(request):
     return (request.is_secure() and request.get_host().split(":")[0].lower()
             in ("mojplaywin.com", "www.mojplaywin.com"))
@@ -184,8 +207,7 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
-    from core.commerce_funnel import record_funnel_event
-    record_funnel_event(request, "begin_checkout", product)
+    _record_optional_funnel_event(request, "begin_checkout", product=product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
@@ -269,12 +291,9 @@ def patch_commercial(namespace):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    from core.commerce_funnel import record_funnel_event
-                    from core.models import Product
-                    product_id = kwargs.get("product_id")
-                    product = Product.objects.filter(pk=product_id, active=True).first()
-                    if product is not None:
-                        record_funnel_event(request, "invoice_created", product)
+                    _record_optional_funnel_event(
+                        request, "invoice_created", product_id=kwargs.get("product_id")
+                    )
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
