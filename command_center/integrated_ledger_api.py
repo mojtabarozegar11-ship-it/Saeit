@@ -7,6 +7,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import never_cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum, F, Count
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent, CommandRequest
@@ -160,10 +161,21 @@ def _system_status(request):
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
+@never_cache
 @transaction.atomic
 def integrated_ledger_api(request):
     if request.method == "GET":
         # GET must not acknowledge, execute, or mutate queued work.
+        if request.GET.get("view") == "approvals":
+            pending = ApprovalRequest.objects.filter(status="pending", requested_by=request.user)
+            pending_count = pending.count()
+            response = JsonResponse({
+                "pending_count": pending_count,
+                "pending_approvals": [_approval_request(x) for x in pending.select_related("requested_by").order_by("created_at")[:100]],
+                "truncated": pending_count > 100,
+            })
+            response["Cache-Control"] = "private, no-store"
+            return response
         systems = _system_status(request)
         integrity = _finance_integrity()
         return JsonResponse({"captured_at": timezone.now().isoformat(),

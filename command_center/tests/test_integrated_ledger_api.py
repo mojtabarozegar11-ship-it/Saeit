@@ -120,6 +120,24 @@ class IntegratedLedgerSafetyTests(TestCase):
         response = self.client.get(reverse("command_center_integrated_ledger_api"))
         self.assertFalse(response.json()["finance_integrity"]["balanced_posted_entries"])
 
+    def test_lightweight_approval_poll_exposes_only_owners_queue(self):
+        approval = ApprovalRequest.objects.create(
+            action_type="system_change", target_type="agent", target_id="88",
+            reason="Owner only", requested_by=self.owner, status="pending",
+        )
+        url = reverse("command_center_integrated_ledger_api") + "?view=approvals"
+        self.client.force_login(self.staff)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertEqual(response.json()["pending_count"], 0)
+        self.assertNotIn("finance", response.json())
+        self.assertNotIn("reports", response.json())
+        self.client.force_login(self.owner)
+        response = self.client.get(url)
+        self.assertEqual(response.json()["pending_count"], 1)
+        self.assertEqual(response.json()["pending_approvals"][0]["id"], approval.pk)
+
     def test_sensitive_decision_record_cannot_impersonate_approver(self):
         payload = {"kind": "approval", "approval_kind": "cost", "status": "approved",
                    "approver": "a different person", "evidence": "Owner reviewed"}
