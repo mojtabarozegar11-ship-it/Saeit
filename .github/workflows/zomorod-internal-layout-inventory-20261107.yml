@@ -1,0 +1,111 @@
+name: Read-only pre-SEO internal page and backup inventory
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-internal-layout-inventory-20261107.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned VPS relay and host identity
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-internal-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Inventory only target page identities and historic versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-internal-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os, re
+          home=Path('/home/zomorod2')
+          web=home/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          slugs=('company','about','services','industry','research','knowledge')
+          agri=('livestock','horticulture','greenhouse','poultry','aquaculture','inputs','seeds','fertilizers','pesticides','offices','water-soil','machinery','market','tools','gardening-tools','genetics')
+          old=b'<!-- zm-agri-design-v3 --><link rel="stylesheet" href="/agriculture/assets/zm-agritech-luxe-v3.css">'
+          new=b'<!-- zm-nova-agriculture-v1 --><link rel="stylesheet" href="/agriculture/assets/zm-nova-agriculture-v1.css">'
+          for path in (web/'index.html',web/'agriculture/index.html',web/'agriculture/assets/zm-agritech-luxe-v3.css',web/'assets/zm-nova-detail-v1.css'):
+              print('ROOT_ASSET',path.relative_to(home),'exists',path.is_file(),'bytes',path.stat().st_size if path.is_file() else 0)
+          for slug in slugs:
+              f=web/slug/'index.html'; h=web/slug/'.htaccess'
+              if f.is_file():
+                  data=f.read_bytes()
+                  print('CORPORATE',slug,'bytes',len(data),'sha',hashlib.sha256(data).hexdigest()[:16],'nova',data.count(b'zm-nova-subpage-v1'),'htaccess',h.read_text().strip().replace('\n','|')[:120] if h.is_file() else 'absent')
+              else:print('CORPORATE',slug,'missing')
+          for slug in agri:
+              f=web/'agriculture'/slug/'index.html'
+              if f.is_file():
+                  data=f.read_bytes()
+                  print('AGRI',slug,'bytes',len(data),'old',data.count(old),'new',data.count(new),'sha',hashlib.sha256(data).hexdigest()[:16])
+              else:print('AGRI',slug,'missing')
+          for root in (home/'.backups/zomorod-nova-agriculture-all',home/'.backups/zomorod-nova-agri-canary',home/'.backups/zomorod-nova-six-pages',home/'.private/zm-home-services-seo-backups',web/'site-heritage',home/'.backups'):
+              if not root.is_dir():
+                  print('BACKUP_ROOT_ABSENT',root.relative_to(home));continue
+              print('BACKUP_ROOT_EXISTS',root.relative_to(home))
+              for child in sorted(root.iterdir(),key=lambda p:p.name,reverse=True)[:30]:
+                  print('BACKUP_CHILD',str(child.relative_to(home))[:200], 'directory' if child.is_dir() else 'file')
+          for parent in (home/'.backups/zomorod-nova-agriculture-all',home/'.backups/zomorod-nova-agri-canary'):
+              if not parent.is_dir():continue
+              for version in list(parent.iterdir())[:5]:
+                  for name in ('pages/livestock.original.html','genetics.original.html'):
+                      f=version/name
+                      if f.is_file():
+                          data=f.read_bytes()
+                          print('REFERENCE_BACKUP',f.relative_to(home),'bytes',len(data),'old',data.count(old),'new',data.count(new))
+          print('INVENTORY_READ_ONLY_COMPLETE=yes')
+          PY
+
+      - name: Remove temporary SSH identity files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-internal-inventory"
