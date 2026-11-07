@@ -23,12 +23,12 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 3,
+      "sequence": 4,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 1,
+        "counter": 2,
         "runs": [
           {
             "slot": "C01",
@@ -37,6 +37,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "/ZM-50/R01/",
             "note": "Dimensional reproducibility paragraph added to full private manuscript; no independent scientific acceptance"
+          },
+          {
+            "slot": "C02",
+            "run_id": "R01-20261107T091036+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/ZM-50/R01/",
+            "note": "F7 rounding extrema independently computed; public-safe reproducibility note committed; private DOCX/PDF generated locally but persistent upload failed (container session unavailable)"
           }
         ]
       }
@@ -316,6 +324,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "Full private 609-page DOCX/PDF uploaded, independently re-fetched, SHA256 matched; dispatch-vs-production water denominator corrected; no author approval",
       "impact": "One material accounting interpretation correction; no accepted publication, sale or revenue"
+    },
+    {
+      "registry_id": "R01-0004",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T091036+0330-turn11",
+      "deliverable_key": "mr-c144-f7-displayed-cell-rounding-envelope",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/7908a7a78e2179a977790a98fad366b0b4c2d0cc",
+      "acceptance_result": "Independent dimensional and rounding-extrema computation; source-data discrepancy remains unresolved; private artifact persistence failed",
+      "impact": "Improved audit reproducibility; no independently accepted manuscript, submission, publication or revenue"
     }
   ],
   "report_reservations": [],
