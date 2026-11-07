@@ -1,11 +1,6 @@
 name: MPW recovery additive release (guarded)
 
 on:
-  push:
-    branches:
-      - feature/mpw-recovery-01-20261105
-    paths:
-      - .github/workflows/mpw-recovery-additive-release-20261105.yml
   workflow_dispatch:
     inputs:
       operation:
@@ -99,7 +94,7 @@ jobs:
 
       - name: Transfer reviewed release bundle to private temporary staging
         env:
-          OPERATION: ${{ inputs.operation || 'activate' }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-recovery-release-ssh"
