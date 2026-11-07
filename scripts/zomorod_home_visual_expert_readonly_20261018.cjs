@@ -117,16 +117,16 @@ function emit(key,val){console.log(key+'='+JSON.stringify(val))}
         requestAnimationFrame(tick);
       }));
       console.log('HOME_RENDER_COMPARE='+JSON.stringify({width,label,...frames,
-        activeAnimations:await page.evaluate(()=>document.getAnimations().length)}));
+        activeAnimations:await page.evaluate(()=>document.getAnimations().length),\n        computed:await page.evaluate(()=>{const e=document.querySelector('.topic-card');const s=getComputedStyle(e);return {animation:s.animationName,backdrop:s.backdropFilter}})}));
     };
     await sample('baseline');
-    await page.addStyleTag({content:'.topic-card{animation:none!important}'});
+    await page.addStyleTag({content:'html body #orbit-shelves .orbit-shelf .topic-card{animation:none!important}'});
     await page.waitForTimeout(400);
     await sample('no_card_float');
-    await page.addStyleTag({content:'.topic-card,.topic-card::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}'});
+    await page.addStyleTag({content:'html body #orbit-shelves .orbit-shelf .topic-card,html body #orbit-shelves .orbit-shelf .topic-card::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}'});
     await page.waitForTimeout(400);
     await sample('no_card_float_or_blur');
-    await page.locator('#motion-toggle').check({force:true});
+    await page.locator('#motion-toggle').click({force:true});
     await page.waitForTimeout(400);
     await sample('paused_decorative_motion');
   }
