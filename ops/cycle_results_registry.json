@@ -1,1 +1,670 @@
-{"schema_version":1,"created_at_utc":"2026-11-05","kind":"non_sensitive_cross_cycle_result_index","scope":"coordination metadata only; not production financial records, not factory runtime","repository":"mojtabarozegar11-ship-it/Saeit","branch":"ops/zm-cycle-outcome-ledger","registry_id_rule":"R{cycle_id}-{sequence_4_digits}; separate from historical report numbers","write_protocol":["Fetch this exact file from this branch and keep returned blob SHA.","Read existing receipts and per-cycle sequence; reject duplicate (cycle_id,run_id,deliverable_key) before any write.","Only for material verified change, reserve next per-cycle sequence and append one redacted receipt in a single JSON update_file call using the observed blob SHA.","If GitHub rejects the update due to a stale SHA or concurrency, do not claim success; re-fetch, recheck duplicates, recompute sequence, retry at most 3 times.","After success, re-fetch and ensure exact receipt exists once with the assigned registry_id.","Never use this index alone as proof of live deployment, accepted output, customer payment, or revenue."],"report_numbering":"Existing 01-NNNN..05-NNNN numbering remains independent and unverified until a conflict-safe legacy migration. Never infer legacy numbers from this registry.","security":["Public-safe metadata only; no names of clients, emails, account or wallet addresses, secrets, financial amounts, private documents, contract contents, or personal information.","No messages on project 39. No payments, external sending, publishing, deployment, factory startup, or Remote Desktop Commander.","GitHub is not a runtime dependency of the VPS single-product factory."],"cycles":{"01":{"automation_id":"6adcb348d5388191b11dfcde9edb8ee3","sequence":6,"legacy_report_last_verified":null,"primary_output":"validated manuscript","zm50":{"mission_id":"ZM-50CYCLE-DELIVERY-20261106","counter":3,"runs":[{"slot":"C01","run_id":"R01-20261107T081023+0330-turn11","stage":"code","accepted_deliverables":0,"private_artifact_path":"/ZM-50/R01/","note":"Dimensional reproducibility paragraph added to full private manuscript; no independent scientific acceptance"},{"slot":"C02","run_id":"R01-20261107T091036+0330-turn11","stage":"code","accepted_deliverables":0,"private_artifact_path":"/ZM-50/R01/","note":"F7 rounding extrema independently computed; public-safe reproducibility note committed; private DOCX/PDF generated locally but persistent upload failed (container session unavailable)"},{"slot":"C03","run_id":"R01-20261107T110930+0330-integrity-manifest","stage":"code","accepted_deliverables":0,"private_artifact_path":"local conversation attachment only","note":"Eight existing manuscript artifacts inventoried with independently computed SHA-256 and structure; private JSON manifest generated locally; no persistent private upload or scientific acceptance"}]},"progress_wbs":{"version":"v1","path":"ops/ZM50_CYCLE01_WBS_v1.json","accepted_weight":0,"progress_percent":0,"previous_progress_percent":null,"change_percentage_points":null,"minimum_2pp_met":false,"reason":"Initial WBS baseline; no accepted deliverable"}},"02":{"automation_id":"6adde91161708191b6e89b01870a092b","sequence":11,"legacy_report_last_verified":null,"primary_output":"accepted publication-ready book","zm50":{"mission_id":"ZM-50CYCLE-DELIVERY-20261106","counter":4,"runs":[{"slot":"C01","run_id":"ZM50-B02-20261107T084319+0330-turn11","stage":"code","accepted_deliverables":0,"private_artifact_path":"/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/","note":"Corrected dispatch versus production denominator; DOCX/PDF readback hashes verified; author/legal/scientific gates remain open"},{"slot":"C02","run_id":"ZM50-B02-20261107T095312+0330-turn11","stage":"code","accepted_deliverables":0,"private_artifact_path":"/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/","note":"Corrected mixed inventory scenarios in harvested-mass denominator; 609-page DOCX/PDF private review uploaded, no scientific/legal acceptance"},{"slot":"C03","run_id":"ZM50-B02-20261107T105056+0330-turn11","stage":"code","accepted_deliverables":0,"private_artifact_path":"/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/","note":"Corrected cold-room event sequence and peak physical stock; full 609-page private DOCX/PDF uploaded; no author/legal/scientific acceptance"},{"slot":"C04","run_id":"ZM50-B02-20261107T154604+0330-turn11","stage":"private-review","accepted_deliverables":0,"private_artifact_path":"/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/","note":"Added substantive measurement-uncertainty worked exercise to complete C113 private review; 611-page DOCX/PDF and SHA256 receipt uploaded to Library; no publication authorization"}]},"progress_wbs":{"version":"v1","path":"ops/ZM50_CYCLE02_WBS_v1.json","accepted_weight":0,"progress_percent":0,"previous_progress_percent":null,"change_percentage_points":null,"minimum_2pp_met":false,"reason":"First accepted fixed WBS baseline; no product acceptance in this run"}},"03":{"automation_id":"6ae7484cd8a88191ba55377a41096912","sequence":0,"legacy_report_last_verified":null,"primary_output":"accepted guest checkout and delivery"},"04":{"automation_id":"6ade4fc089588191ad08b8a8f03bbab7","sequence":5,"legacy_report_last_verified":null,"primary_output":"accepted playable game build"},"05":{"automation_id":"6ae7471b3c5c8191b3020829e9c1877e","sequence":9,"legacy_report_last_verified":57,"primary_output":"accepted operational business gate","legacy_source_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725","legacy_number_audit":{"source_scope":"all current 67 comments on issue 1725","numbered_reports":57,"range_start":1,"range_end":57,"duplicates":0,"missing":0,"noncanonical_headers":[41,42,43,44],"scope_note":"This verifies only the numbered public issue source, not unobserved private reports. New numbers must still be reserved with CAS and cross-checked against issue before publication."}}},"receipts":[{"registry_id":"R05-0001","cycle_id":"05","run_id":"implementation-20261105-branch-e19d43c0","deliverable_key":"central-outcome-registry","stage":"code","acceptance_result":"GitHub ledger file created on dedicated branch and exact content read back","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/commit/e19d43c0c6c2bfe211837ff5cbd801345f9084c4","impact":"Collision-aware non-sensitive result index initialized; no product or revenue claim"},{"registry_id":"R05-0002","cycle_id":"05","run_id":"manual-20261105-pr1837-local-test-12","deliverable_key":"receipt-validator-test-execution","stage":"code","acceptance_result":"12/12 unit tests passed on exact PR #1837 head using independent Python 3.12.14; importer integration and live acceptance not verified","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1837#issuecomment-6649575610","impact":"Removed unverified-local-test blocker only; no deployment, sales or product acceptance"},{"registry_id":"R05-0003","cycle_id":"05","run_id":"manual-20261105-pr1880-ci-41967804873","deliverable_key":"guarded-import-action-receipt-integration","stage":"code","acceptance_result":"PR #1880 draft source with new receipt pre-import gate; 16 new tests included in successful exact-head Django CI run 41967804873; no live deployment","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41967804873","impact":"A source/CI blocker in management report integrity was closed; operational acceptance and revenue remain unverified"},{"registry_id":"R05-0004","cycle_id":"05","run_id":"manual-20261105-pr1880-ci-41968659233","deliverable_key":"receipt-header-normalization-and-atomic-django-regression","stage":"code","acceptance_result":"Parser and validator accept matching Persian/Latin headers, reject mismatched receipt numbers; 19 validator tests plus 2 Django integration regressions on exact head 8f4dc143; workflow 41968659233 all steps successful","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41968659233","impact":"Resolved verified false-rejection bug and verified fail-closed DB staging in isolated CI; no live deployment, product acceptance or collected revenue"},{"registry_id":"R05-0005","cycle_id":"05","run_id":"manual-20261105-sixdomain-fivecycle-scope-verified","deliverable_key":"six-domain-task-scope-and-ownership","stage":"code","acceptance_result":"All five automation update calls succeeded; re-peek confirmed all five enabled, all task scopes present, all schedule strings unchanged; sixth automation rejected by plan limit 5","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845","impact":"Six owner-mandated operational domains now explicitly assigned across five existing hourly automations; no delivery or revenue evidence"},{"registry_id":"R05-0006","cycle_id":"05","run_id":"ZM20DAY-20261106T110852Z-C05","deliverable_key":"20day-mission-gate-baseline","stage":"code","acceptance_result":"20-day milestone and gate ownership baseline recorded in shared coordination ledger; no operational gate accepted","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","impact":"Cross-cycle deadline, owner and stage separation recorded; no product acceptance or revenue"},{"registry_id":"R05-0007","cycle_id":"05","run_id":"ZM50-C05-20261106T170454Z","deliverable_key":"50cycle-mission-baseline","stage":"code","acceptance_result":"C01 coordination baseline recorded; no product or revenue acceptance","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","impact":"Replaced obsolete 20-day milestones with C01-C50 owner and gate registry; no revenue"},{"registry_id":"R01-0001","cycle_id":"01","run_id":"r01-20261106-211610-commit-d1e53bbd","deliverable_key":"irrigation-pytest-collection-import","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/commit/d1e53bbd818d75b4bc23ef2f54634614c0333383","acceptance_result":"Exact CI logs 42242506241 and 42242506224 identify missing module during pytest collection; repository-qualified import patched; post-fix CI not yet confirmed","impact":"Source-level collection blocker addressed, manuscript acceptance and revenue unverified"},{"registry_id":"R05-0008","cycle_id":"05","run_id":"ZM50-C05-20261106T180501Z","deliverable_key":"production-release-hold-evidence-linkage-42263164434","stage":"blocked","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434","acceptance_result":"Read-only cPanel inventory workflow completed successfully; user-supplied gate findings remain false: isolation and recoverable backups; no P0 closure or deployment","impact":"Release HOLD linked to exact workflow and delegated to cycle 03; no accepted product or collected revenue"},{"registry_id":"R02-0001","cycle_id":"02","run_id":"B01-20261106T235220+0330-turn11","deliverable_key":"C113-source-integrity-private-review-91ab4d43","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514","acceptance_result":"One unverified source attribution explicitly flagged in C113 DOCX and matching 608-page PDF; SHA readback of both private Library files succeeded; not author approved","impact":"Removed misleading implied citation verification; no approved book, live SKU or revenue"},{"registry_id":"R01-0002","cycle_id":"01","run_id":"github-42264835596-head-d1e53bbd","deliverable_key":"irrigation-import-fix-postchange-ci-42264835596","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42264835596","acceptance_result":"CI and Django CI on exact corrected commit d1e53bbd succeeded; earlier CI 42242506241 failed on ModuleNotFoundError paired_scenario_audit during collection","impact":"Import/collection regression closed at CI level; manuscript scientific acceptance and income not verified"},{"registry_id":"R02-0002","cycle_id":"02","run_id":"automation-02-20261107T004419+0330-turn11","deliverable_key":"C113-regulatory-scope-clarification-private-docx-pdf","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514","acceptance_result":"Private DOCX/PDF uploaded and independently re-fetched; 608 PDF pages, zero blank; SHA256 DOCX b818060022deddc83b0cfaf5440c54dd4caaa09ad16f5cae92b40c7e7fa65307, PDF 8fce1dd7e72de114f1f9c3e097b9b57edf6d8aabab0dd81a3560c3fc4b66cd03; editorial review only","impact":"Corrected regulatory-scope teaching paragraph in C113; publication and revenue gates remain HOLD"},{"registry_id":"R05-0009","cycle_id":"05","run_id":"ZM50-C05-20261106T220123Z-turn11","deliverable_key":"pr2066-closed-unmerged-and-conflict-gates","stage":"blocked","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066","acceptance_result":"Live GitHub PR metadata: #2066 closed, unmerged, draft at head 97bde3eb; #2053 and #1976 open but mergeable=false. No deployment or runtime/DB/restore proof.","impact":"CI-passed source #2066 cannot be treated as pending deployable PR; conflict gates on #2053/#1976 remain. No revenue."},{"registry_id":"R04-0001","cycle_id":"04","run_id":"ZM50-C02-20261107T022553+0330","deliverable_key":"mojcoin-tron-network-tx-atomic-claim","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Bazei/commit/7aafff3ab32ecbd51ac546bb2b0bff2b8777ad03","acceptance_result":"MariaDB-compatible unique network/tx model, migration, atomic settlement call and two Django tests committed; no DB integration or concurrency execution","impact":"Source-level replay defense added; production, acceptance and revenue remain unverified"},{"registry_id":"R04-0002","cycle_id":"04","run_id":"ZM50-04-20261107T032036+0330","deliverable_key":"mojcoin-state-poll-replay-integrity-error","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Bazei/commit/5c85d62cf7fe0531c034686aaaaf7c0678f75bee","acceptance_result":"Source readback verified; GET settlement replay IntegrityError now returns 409; Django/MariaDB concurrency gate not executed","impact":"Avoids uncaught 500 on concurrent duplicate settlement; no accepted game or revenue"},{"registry_id":"R02-0003","cycle_id":"02","run_id":"B02-20261107T044519+0330-automation11","deliverable_key":"C113-lot-balance-massflow-clarification","stage":"code","evidence_url":"/B01-Private-Editorial/B01_C113_lot_balance_corrected_PRIVATE_REVIEW.docx","acceptance_result":"Full 609-page PDF and DOCX saved privately; downloaded and SHA-256 verified; scientific/legal/author acceptance pending","impact":"Clarified physical inflow versus status reclassification; no publication or revenue"},{"registry_id":"R02-0004","cycle_id":"02","run_id":"B01-20261107T054454+0330-waterbudget","deliverable_key":"C113-reproducible-water-budget","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514","acceptance_result":"Private C113 DOCX/PDF with worked 9800L water balance uploaded to Library; 608 PDF pages, zero blank; author/science/legal approval pending","impact":"Replaced non-reproducible example gap with calculated instructional answer; no publication or revenue"},{"registry_id":"R02-0005","cycle_id":"02","run_id":"B02-20261107T064711+0330-storage-reconciliation","deliverable_key":"C113-water-storage-boundary-correction","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"اصلاح واقعی موازنه آب با تغییر موجودی مخزن؛ DOCX/PDF خصوصی ۶۰۸ صفحه؛ بازیابی مستقل و تطبیق SHA256؛ داوری و مجوز نشر باز","impact":"کاهش ابهام محاسبه تراز آب از اختلاف خام ۱۰۰۰ لیتر به مانده مشروط ۷۰۰ لیتر؛ بدون فروش یا نشر"},{"registry_id":"R04-0003","cycle_id":"04","run_id":"mojcoin-20261107T072154+0330-guard-fc361ece","deliverable_key":"ambiguous-receipt-settlement-guard","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Bazei/commit/fc361ece22d104c9cd826929b997fa08093db84d","acceptance_result":"Source guard and Django regression test committed and read back; Django/MariaDB execution not verified","impact":"Ambiguous duplicate receipt or tx identifiers are rejected before entitlement capture; no deployment or revenue"},{"registry_id":"R02-0006","cycle_id":"02","run_id":"B01-20261107T074824+0330-turn11-meter-boundary","deliverable_key":"C113-meter-topology-doublecount-609page","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"C113 DOCX/PDF revised to prevent internal-transfer double counting; 609 PDF pages, zero text-empty pages; private Library upload confirmed; author/scientific/legal gates remain open","impact":"One accounting-method ambiguity corrected in private review manuscript; no accepted book, live SKU, or revenue"},{"registry_id":"R01-0003","cycle_id":"01","run_id":"R01-20261107T081023+0330-turn11","deliverable_key":"mr-c144-dimensional-audit-private-package","stage":"code","evidence_url":"https://docs.google.com/document/d/1ixKL_FH1DUzJi406t-GKTIk9gYJ6qpVjcZ_vFeQYuPc/edit","acceptance_result":"Private Library /ZM-50/R01 holds revised 270-paragraph 5-table DOCX and 25-page PDF; displayed-cell F7 dimensional arithmetic independently recalculated; DOCX SHA256 34d54ed5b97dece84558ebc28ff10cea252d983fde850d844f48cda1fe354619; PDF SHA256 dbb4c14b921bc90674a043a532d90012356142e2738a00855b2ab7888d324872; no source-level discrepancy resolved","impact":"Full private author-review files persist; reproducibility improved; no journal submission, acceptance, publication or revenue"},{"registry_id":"R02-0007","cycle_id":"02","run_id":"ZM50-B02-20261107T084319+0330-turn11","deliverable_key":"C113-dispatch-production-denominator-boundary","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"Full private 609-page DOCX/PDF uploaded, independently re-fetched, SHA256 matched; dispatch-vs-production water denominator corrected; no author approval","impact":"One material accounting interpretation correction; no accepted publication, sale or revenue"},{"registry_id":"R01-0004","cycle_id":"01","run_id":"R01-20261107T091036+0330-turn11","deliverable_key":"mr-c144-f7-displayed-cell-rounding-envelope","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/commit/7908a7a78e2179a977790a98fad366b0b4c2d0cc","acceptance_result":"Independent dimensional and rounding-extrema computation; source-data discrepancy remains unresolved; private artifact persistence failed","impact":"Improved audit reproducibility; no independently accepted manuscript, submission, publication or revenue"},{"registry_id":"R04-0004","cycle_id":"04","run_id":"G04-20261107T092636+0330-turn11","deliverable_key":"tron-confirmed-block-consistency","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Bazei/commit/d3d028fca67ea0362597969e1adf542b2d3a7631","acceptance_result":"Verifier requires positive solidity receipt block and rejects mismatched transaction block; three regression cases added but not executed against Django/MariaDB","impact":"Fail-closed on inconsistent TRON confirmation metadata; no production payment or release"},{"registry_id":"R02-0008","cycle_id":"02","run_id":"ZM50-B02-20261107T095312+0330-turn11","deliverable_key":"C113-harvest-inventory-denominator-consistency","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"Private DOCX/PDF uploaded; PDF 609 pages and no text-empty pages; DOCX SHA256 f3bfa372a9cf7422759e689237d8425bc2e89d7a670992b21c24c85c406fafbe; PDF SHA256 ec01c4266d7461e78d678c20c5451fc8158a75760e2159a39ba08793d2ca8881; author and legal HOLD","impact":"Clarified total-harvest denominator under changing inventory; no accepted book or revenue"},{"registry_id":"R04-0005","cycle_id":"04","run_id":"ZM50-G04-20261107T102142+0330-turn11","deliverable_key":"trx-sun-amount-strict-node-validation","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Bazei/commit/0d7cca1b09ca821eb33327e2c7ac0ca18e115d60","acceptance_result":"Verifier code and six regression cases committed and read back; no executed CI/Django/MariaDB gate","impact":"Malformed fractional, boolean and nonpositive TRON SUN amounts now rejected in source; release remains HOLD"},{"registry_id":"R02-0009","cycle_id":"02","run_id":"ZM50-B02-20261107T105056+0330-turn11","deliverable_key":"C113-coldroom-time-ordered-peak-inventory","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"Full DOCX/PDF saved privately; 609 PDF pages, 0 text-empty pages; SHA256 DOCX 31e2ca03aabd4a3754a37b898bc682cd5902efa7804e0fd0da826ba89c901c5e PDF 23444141174d95c24d2fa1f5c21a4dec4cc0250d817cf7c8101804566bc7330c; review only","impact":"One technical teaching correction, no approved book, deployment, order or revenue"},{"registry_id":"R01-0005","cycle_id":"01","run_id":"R01-20261107T110930+0330-integrity-manifest","deliverable_key":"c144-eight-artifact-sha256-inventory","stage":"code","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json","acceptance_result":"8/8 mounted DOCX/PDF files read and SHA-256 inventoried; local manifest hash ec300eb36c87efdd4891e519a9b022cf09245143a18da24a6c25dbadcb3b85e2; private artifact not uploaded; manuscript not accepted","impact":"Provenance and file integrity baseline for four existing manuscript versions; no publication, sale, or revenue"},{"registry_id":"R02-0010","cycle_id":"02","run_id":"ZM50-B02-20261107T154604+0330-turn11","deliverable_key":"C113-measurement-uncertainty-worst-case-bound","stage":"private-review","evidence_url":"/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/B01_C113_measurement_uncertainty_receipt.json","acceptance_result":"Complete private DOCX/PDF 611 pages, zero text-empty pages; DOCX SHA256 1849aa9c1dfa7ec93510257f1e6cc5189fa722b2bd0c715929e45d715eee5bf6; PDF SHA256 7010e9226df00dfd7876936ca967ea92976f9dc011601bce13f4e5502ad6fb14; author/scientific/rights HOLD","impact":"New technical exercise on measurement tolerance and 2 kg residual; no approved sale, delivery, or revenue"},{"registry_id":"R02-0011","cycle_id":"02","run_id":"ZM50-B02-20261107T204319+0330-WBS-v1","deliverable_key":"cycle02-fixed-wbs-baseline-v1","stage":"baseline","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE02_WBS_v1.json","acceptance_result":"Fixed 100-weight evidence-based WBS v1 recorded; no product accepted and no retroactive progress assigned","impact":"Progress accounting now defined; no publication, orders, delivery or revenue"},{"registry_id":"R01-0006","cycle_id":"01","run_id":"ZM50-R01-20261107T211242-WBS","deliverable_key":"cycle01-fixed-wbs-baseline-v1","stage":"baseline","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE01_WBS_v1.json","acceptance_result":"Fixed 100-weight WBS created; no deliverables accepted","impact":"Progress baseline only, no revenue"}],"report_reservations":[],"legacy_reporting_protocol":["Applicable only to cycles with a non-null verified historical last number and an audited canonical issue source.","Do not reserve a historical report number unless a new substantive result with independent evidence is ready to publish.","First fetch canonical issue comments and this registry; if the maximum valid issue report number exceeds the stored verified counter or conflicts exist, halt numbering and reconcile, not guess.","Check the run_id is not already reserved. If reserved, resume exactly that number; never reserve twice for the same run_id.","Atomically increment legacy_report_last_verified and append {cycle_id,run_id,number,state:'reserved'} via GitHub update_file with observed blob SHA; on stale version re-fetch/recheck/retry at most three times.","Only after successfully reading back the reservation, publish the numbered report to the canonical issue, including run_id; if issue write fails leave reservation pending and repair it later. Never reuse reserved number.","Upon success, update reservation to state:'published' with the comment link using another SHA-checked update. A published report is not independently accepted revenue or product."],"scope_assignment_2026_11_05":{"active_scheduled_automations":5,"domains":6,"extra_cycle_create_error":"too_many_active_automations: plan limit 5","owners":{"01":"Scientific papers, research and content","02":"Books, guides and written products","03":"Digital tools and products; live sites and subsites services/defects; factory, store and sales operations","04":"Game development and quality","05":"Business, sites and commerce command; operational oversight, accounting and cross-cycle result verification"},"source_issue_comment":"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845","schedules_changed":false,"disabled_automations":0},"mission_20day_20261106":{"mission_id":"ZM-20DAY-COMMERCIAL-MISSION-20261106","start_date":"2026-11-06","deadline":"2026-11-26","milestones":[{"day":3,"date":"2026-11-08","acceptance":"Baseline, evidence-backed ownership and P0/backup/license gates; unresolved gates explicitly HOLD"},{"day":7,"date":"2026-11-12","acceptance":"Verified fixes and legally saleable product packages; no publication without approval"},{"day":14,"date":"2026-11-19","acceptance":"Exact-version integrated acceptance with independent evidence; reconcile real orders and settlement"},{"day":20,"date":"2026-11-26","acceptance":"Only approved accepted outputs released; report independent sales and profit evidence or unknown"}],"owners":{"01":{"output":"scientific manuscript","gate":"scientific/rights acceptance"},"02":{"output":"written product","gate":"rights and finished delivery package"},"03":{"output":"store/guest checkout and one-product factory","gate":"legal payment acceptance, server-side payment confirmation, backup/rollback; factory HOLD"},"04":{"output":"Moj Coin","gate":"playability, security, minors' safety and approved release"},"05":{"output":"commerce, accounting, governance and token technical packages","gate":"P0 security, DB identity, independent acceptance and no unapproved chain deployment"}},"measurement_contract":{"stages":["code","deployment","accepted","order","payment_confirmed","delivered","revenue_settled","cost","profit"],"default":"unknown_unless_independently_verified","dedupe":"one deliverable owner and unique evidence; financial truth requires private independent ledger","restrictions":["no project39 correspondence","no Remote Desktop Commander","no factory startup","no financial transactions or public releases without specific authorization"]},"status":"superseded_by_ZM-50CYCLE-DELIVERY-20261106"},"mission_50cycle_20261106":{"mission_id":"ZM-50CYCLE-DELIVERY-20261106","supersedes":"ZM-20DAY-COMMERCIAL-MISSION-20261106","cycle_owner":"05","counter":3,"max_runs":50,"runs":[{"slot":"C01","run_id":"ZM50-C05-20261106T170454Z","stage":"baseline","accepted_deliverables":0},{"slot":"C02","run_id":"ZM50-C05-20261106T180501Z","stage":"blocked","accepted_deliverables":0,"primary_gate":"production-isolation-and-restorable-backup","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434","workflow_run_id":42263164434,"production_isolation_proven":false,"recoverable_backups_verified":false,"release_permitted":false,"owner":"03","oversight_owner":"05","next_acceptance":"Independent isolation proof and actual restore/rollback evidence; no deployment until both pass"},{"slot":"C03","run_id":"ZM50-C05-20261106T220123Z-turn11","stage":"blocked","accepted_deliverables":0,"primary_gate":"pr2066-closed-unmerged;pr2053-pr1976-not-mergeable","evidence_url":"https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066","owner":"05","next_acceptance":"Reconcile closure reason and exact main/head differences; resolve conflicts source-only; independent VPS restore/isolation gate before any deployment"}],"owners":{"01":{"deliverable":"scientific manuscript","priority":"P1","gate":"rights/scientific acceptance","acceptance":"independently accepted publication-ready manuscript"},"02":{"deliverable":"finished written product","priority":"P1","gate":"rights, final files, automated delivery","acceptance":"rights-cleared final product package"},"03":{"deliverable":"guest checkout/store and single-product factory","priority":"P0","gate":"legal merchant, server-side payment proof, backup and rollback","acceptance":"independent end-to-end delivery evidence; factory remains HOLD"},"04":{"deliverable":"Moj Coin","priority":"P1","gate":"security, playable build, minors safety, release approval","acceptance":"independently playable accepted build"},"05":{"deliverable":"business command, accounting, agents, MOJ7-MOJ36 technical packages","priority":"P0","gate":"DB identity, MFA, backup restore, deduplicated receipts, no unapproved on-chain activity","acceptance":"verified operations and independently reconciled real revenue"}},"stages":["code","deployment","accepted","order","payment_confirmed","delivered","revenue_settled","cost","profit"],"deadlines":{"P0":"C05","P1":"C20","integration":"C35","e2e":"C45","final":"C50"},"policy":"No public release, payment, message about project 39, Remote Desktop Commander, or factory startup without required authorization. A scheduled run does not equal acceptance.","financial_evidence":"unknown","accepted_outputs":0}}
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-11-05",
+  "kind": "non_sensitive_cross_cycle_result_index",
+  "scope": "coordination metadata only; not production financial records, not factory runtime",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "branch": "ops/zm-cycle-outcome-ledger",
+  "registry_id_rule": "R{cycle_id}-{sequence_4_digits}; separate from historical report numbers",
+  "write_protocol": [
+    "Fetch this exact file from this branch and keep returned blob SHA.",
+    "Read existing receipts and per-cycle sequence; reject duplicate (cycle_id,run_id,deliverable_key) before any write.",
+    "Only for material verified change, reserve next per-cycle sequence and append one redacted receipt in a single JSON update_file call using the observed blob SHA.",
+    "If GitHub rejects the update due to a stale SHA or concurrency, do not claim success; re-fetch, recheck duplicates, recompute sequence, retry at most 3 times.",
+    "After success, re-fetch and ensure exact receipt exists once with the assigned registry_id.",
+    "Never use this index alone as proof of live deployment, accepted output, customer payment, or revenue."
+  ],
+  "report_numbering": "Existing 01-NNNN..05-NNNN numbering remains independent and unverified until a conflict-safe legacy migration. Never infer legacy numbers from this registry.",
+  "security": [
+    "Public-safe metadata only; no names of clients, emails, account or wallet addresses, secrets, financial amounts, private documents, contract contents, or personal information.",
+    "No messages on project 39. No payments, external sending, publishing, deployment, factory startup, or Remote Desktop Commander.",
+    "GitHub is not a runtime dependency of the VPS single-product factory."
+  ],
+  "cycles": {
+    "01": {
+      "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
+      "sequence": 6,
+      "legacy_report_last_verified": null,
+      "primary_output": "validated manuscript",
+      "zm50": {
+        "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+        "counter": 3,
+        "runs": [
+          {
+            "slot": "C01",
+            "run_id": "R01-20261107T081023+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/ZM-50/R01/",
+            "note": "Dimensional reproducibility paragraph added to full private manuscript; no independent scientific acceptance"
+          },
+          {
+            "slot": "C02",
+            "run_id": "R01-20261107T091036+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/ZM-50/R01/",
+            "note": "F7 rounding extrema independently computed; public-safe reproducibility note committed; private DOCX/PDF generated locally but persistent upload failed (container session unavailable)"
+          },
+          {
+            "slot": "C03",
+            "run_id": "R01-20261107T110930+0330-integrity-manifest",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "local conversation attachment only",
+            "note": "Eight existing manuscript artifacts inventoried with independently computed SHA-256 and structure; private JSON manifest generated locally; no persistent private upload or scientific acceptance"
+          }
+        ]
+      },
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE01_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": null,
+        "change_percentage_points": null,
+        "minimum_2pp_met": false,
+        "reason": "Initial WBS baseline; no accepted deliverable"
+      }
+    },
+    "02": {
+      "automation_id": "6adde91161708191b6e89b01870a092b",
+      "sequence": 11,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted publication-ready book",
+      "zm50": {
+        "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+        "counter": 4,
+        "runs": [
+          {
+            "slot": "C01",
+            "run_id": "ZM50-B02-20261107T084319+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected dispatch versus production denominator; DOCX/PDF readback hashes verified; author/legal/scientific gates remain open"
+          },
+          {
+            "slot": "C02",
+            "run_id": "ZM50-B02-20261107T095312+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected mixed inventory scenarios in harvested-mass denominator; 609-page DOCX/PDF private review uploaded, no scientific/legal acceptance"
+          },
+          {
+            "slot": "C03",
+            "run_id": "ZM50-B02-20261107T105056+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Corrected cold-room event sequence and peak physical stock; full 609-page private DOCX/PDF uploaded; no author/legal/scientific acceptance"
+          },
+          {
+            "slot": "C04",
+            "run_id": "ZM50-B02-20261107T154604+0330-turn11",
+            "stage": "private-review",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/",
+            "note": "Added substantive measurement-uncertainty worked exercise to complete C113 private review; 611-page DOCX/PDF and SHA256 receipt uploaded to Library; no publication authorization"
+          }
+        ]
+      },
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE02_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": null,
+        "change_percentage_points": null,
+        "minimum_2pp_met": false,
+        "reason": "First accepted fixed WBS baseline; no product acceptance in this run"
+      }
+    },
+    "03": {
+      "automation_id": "6ae7484cd8a88191ba55377a41096912",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted guest checkout and delivery"
+    },
+    "04": {
+      "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
+      "sequence": 5,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted playable game build",
+      "progress_wbs": {
+        "version": "v1",
+        "path": "ops/ZM50_CYCLE04_WBS_v1.json",
+        "accepted_weight": 0,
+        "progress_percent": 0,
+        "previous_progress_percent": 0,
+        "change_percentage_points": 0,
+        "minimum_2pp_met": false,
+        "reason": "Fixed WBS baseline established; no independently accepted end-to-end deliverable"
+      }
+    },
+    "05": {
+      "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
+      "sequence": 9,
+      "legacy_report_last_verified": 57,
+      "primary_output": "accepted operational business gate",
+      "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
+      "legacy_number_audit": {
+        "source_scope": "all current 67 comments on issue 1725",
+        "numbered_reports": 57,
+        "range_start": 1,
+        "range_end": 57,
+        "duplicates": 0,
+        "missing": 0,
+        "noncanonical_headers": [
+          41,
+          42,
+          43,
+          44
+        ],
+        "scope_note": "This verifies only the numbered public issue source, not unobserved private reports. New numbers must still be reserved with CAS and cross-checked against issue before publication."
+      }
+    }
+  },
+  "receipts": [
+    {
+      "registry_id": "R05-0001",
+      "cycle_id": "05",
+      "run_id": "implementation-20261105-branch-e19d43c0",
+      "deliverable_key": "central-outcome-registry",
+      "stage": "code",
+      "acceptance_result": "GitHub ledger file created on dedicated branch and exact content read back",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/e19d43c0c6c2bfe211837ff5cbd801345f9084c4",
+      "impact": "Collision-aware non-sensitive result index initialized; no product or revenue claim"
+    },
+    {
+      "registry_id": "R05-0002",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1837-local-test-12",
+      "deliverable_key": "receipt-validator-test-execution",
+      "stage": "code",
+      "acceptance_result": "12/12 unit tests passed on exact PR #1837 head using independent Python 3.12.14; importer integration and live acceptance not verified",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1837#issuecomment-6649575610",
+      "impact": "Removed unverified-local-test blocker only; no deployment, sales or product acceptance"
+    },
+    {
+      "registry_id": "R05-0003",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1880-ci-41967804873",
+      "deliverable_key": "guarded-import-action-receipt-integration",
+      "stage": "code",
+      "acceptance_result": "PR #1880 draft source with new receipt pre-import gate; 16 new tests included in successful exact-head Django CI run 41967804873; no live deployment",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41967804873",
+      "impact": "A source/CI blocker in management report integrity was closed; operational acceptance and revenue remain unverified"
+    },
+    {
+      "registry_id": "R05-0004",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1880-ci-41968659233",
+      "deliverable_key": "receipt-header-normalization-and-atomic-django-regression",
+      "stage": "code",
+      "acceptance_result": "Parser and validator accept matching Persian/Latin headers, reject mismatched receipt numbers; 19 validator tests plus 2 Django integration regressions on exact head 8f4dc143; workflow 41968659233 all steps successful",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41968659233",
+      "impact": "Resolved verified false-rejection bug and verified fail-closed DB staging in isolated CI; no live deployment, product acceptance or collected revenue"
+    },
+    {
+      "registry_id": "R05-0005",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-sixdomain-fivecycle-scope-verified",
+      "deliverable_key": "six-domain-task-scope-and-ownership",
+      "stage": "code",
+      "acceptance_result": "All five automation update calls succeeded; re-peek confirmed all five enabled, all task scopes present, all schedule strings unchanged; sixth automation rejected by plan limit 5",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
+      "impact": "Six owner-mandated operational domains now explicitly assigned across five existing hourly automations; no delivery or revenue evidence"
+    },
+    {
+      "registry_id": "R05-0006",
+      "cycle_id": "05",
+      "run_id": "ZM20DAY-20261106T110852Z-C05",
+      "deliverable_key": "20day-mission-gate-baseline",
+      "stage": "code",
+      "acceptance_result": "20-day milestone and gate ownership baseline recorded in shared coordination ledger; no operational gate accepted",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "impact": "Cross-cycle deadline, owner and stage separation recorded; no product acceptance or revenue"
+    },
+    {
+      "registry_id": "R05-0007",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T170454Z",
+      "deliverable_key": "50cycle-mission-baseline",
+      "stage": "code",
+      "acceptance_result": "C01 coordination baseline recorded; no product or revenue acceptance",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "impact": "Replaced obsolete 20-day milestones with C01-C50 owner and gate registry; no revenue"
+    },
+    {
+      "registry_id": "R01-0001",
+      "cycle_id": "01",
+      "run_id": "r01-20261106-211610-commit-d1e53bbd",
+      "deliverable_key": "irrigation-pytest-collection-import",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/d1e53bbd818d75b4bc23ef2f54634614c0333383",
+      "acceptance_result": "Exact CI logs 42242506241 and 42242506224 identify missing module during pytest collection; repository-qualified import patched; post-fix CI not yet confirmed",
+      "impact": "Source-level collection blocker addressed, manuscript acceptance and revenue unverified"
+    },
+    {
+      "registry_id": "R05-0008",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T180501Z",
+      "deliverable_key": "production-release-hold-evidence-linkage-42263164434",
+      "stage": "blocked",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434",
+      "acceptance_result": "Read-only cPanel inventory workflow completed successfully; user-supplied gate findings remain false: isolation and recoverable backups; no P0 closure or deployment",
+      "impact": "Release HOLD linked to exact workflow and delegated to cycle 03; no accepted product or collected revenue"
+    },
+    {
+      "registry_id": "R02-0001",
+      "cycle_id": "02",
+      "run_id": "B01-20261106T235220+0330-turn11",
+      "deliverable_key": "C113-source-integrity-private-review-91ab4d43",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "One unverified source attribution explicitly flagged in C113 DOCX and matching 608-page PDF; SHA readback of both private Library files succeeded; not author approved",
+      "impact": "Removed misleading implied citation verification; no approved book, live SKU or revenue"
+    },
+    {
+      "registry_id": "R01-0002",
+      "cycle_id": "01",
+      "run_id": "github-42264835596-head-d1e53bbd",
+      "deliverable_key": "irrigation-import-fix-postchange-ci-42264835596",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42264835596",
+      "acceptance_result": "CI and Django CI on exact corrected commit d1e53bbd succeeded; earlier CI 42242506241 failed on ModuleNotFoundError paired_scenario_audit during collection",
+      "impact": "Import/collection regression closed at CI level; manuscript scientific acceptance and income not verified"
+    },
+    {
+      "registry_id": "R02-0002",
+      "cycle_id": "02",
+      "run_id": "automation-02-20261107T004419+0330-turn11",
+      "deliverable_key": "C113-regulatory-scope-clarification-private-docx-pdf",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "Private DOCX/PDF uploaded and independently re-fetched; 608 PDF pages, zero blank; SHA256 DOCX b818060022deddc83b0cfaf5440c54dd4caaa09ad16f5cae92b40c7e7fa65307, PDF 8fce1dd7e72de114f1f9c3e097b9b57edf6d8aabab0dd81a3560c3fc4b66cd03; editorial review only",
+      "impact": "Corrected regulatory-scope teaching paragraph in C113; publication and revenue gates remain HOLD"
+    },
+    {
+      "registry_id": "R05-0009",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T220123Z-turn11",
+      "deliverable_key": "pr2066-closed-unmerged-and-conflict-gates",
+      "stage": "blocked",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066",
+      "acceptance_result": "Live GitHub PR metadata: #2066 closed, unmerged, draft at head 97bde3eb; #2053 and #1976 open but mergeable=false. No deployment or runtime/DB/restore proof.",
+      "impact": "CI-passed source #2066 cannot be treated as pending deployable PR; conflict gates on #2053/#1976 remain. No revenue."
+    },
+    {
+      "registry_id": "R04-0001",
+      "cycle_id": "04",
+      "run_id": "ZM50-C02-20261107T022553+0330",
+      "deliverable_key": "mojcoin-tron-network-tx-atomic-claim",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/7aafff3ab32ecbd51ac546bb2b0bff2b8777ad03",
+      "acceptance_result": "MariaDB-compatible unique network/tx model, migration, atomic settlement call and two Django tests committed; no DB integration or concurrency execution",
+      "impact": "Source-level replay defense added; production, acceptance and revenue remain unverified"
+    },
+    {
+      "registry_id": "R04-0002",
+      "cycle_id": "04",
+      "run_id": "ZM50-04-20261107T032036+0330",
+      "deliverable_key": "mojcoin-state-poll-replay-integrity-error",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/5c85d62cf7fe0531c034686aaaaf7c0678f75bee",
+      "acceptance_result": "Source readback verified; GET settlement replay IntegrityError now returns 409; Django/MariaDB concurrency gate not executed",
+      "impact": "Avoids uncaught 500 on concurrent duplicate settlement; no accepted game or revenue"
+    },
+    {
+      "registry_id": "R02-0003",
+      "cycle_id": "02",
+      "run_id": "B02-20261107T044519+0330-automation11",
+      "deliverable_key": "C113-lot-balance-massflow-clarification",
+      "stage": "code",
+      "evidence_url": "/B01-Private-Editorial/B01_C113_lot_balance_corrected_PRIVATE_REVIEW.docx",
+      "acceptance_result": "Full 609-page PDF and DOCX saved privately; downloaded and SHA-256 verified; scientific/legal/author acceptance pending",
+      "impact": "Clarified physical inflow versus status reclassification; no publication or revenue"
+    },
+    {
+      "registry_id": "R02-0004",
+      "cycle_id": "02",
+      "run_id": "B01-20261107T054454+0330-waterbudget",
+      "deliverable_key": "C113-reproducible-water-budget",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "Private C113 DOCX/PDF with worked 9800L water balance uploaded to Library; 608 PDF pages, zero blank; author/science/legal approval pending",
+      "impact": "Replaced non-reproducible example gap with calculated instructional answer; no publication or revenue"
+    },
+    {
+      "registry_id": "R02-0005",
+      "cycle_id": "02",
+      "run_id": "B02-20261107T064711+0330-storage-reconciliation",
+      "deliverable_key": "C113-water-storage-boundary-correction",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "اصلاح واقعی موازنه آب با تغییر موجودی مخزن؛ DOCX/PDF خصوصی ۶۰۸ صفحه؛ بازیابی مستقل و تطبیق SHA256؛ داوری و مجوز نشر باز",
+      "impact": "کاهش ابهام محاسبه تراز آب از اختلاف خام ۱۰۰۰ لیتر به مانده مشروط ۷۰۰ لیتر؛ بدون فروش یا نشر"
+    },
+    {
+      "registry_id": "R04-0003",
+      "cycle_id": "04",
+      "run_id": "mojcoin-20261107T072154+0330-guard-fc361ece",
+      "deliverable_key": "ambiguous-receipt-settlement-guard",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/fc361ece22d104c9cd826929b997fa08093db84d",
+      "acceptance_result": "Source guard and Django regression test committed and read back; Django/MariaDB execution not verified",
+      "impact": "Ambiguous duplicate receipt or tx identifiers are rejected before entitlement capture; no deployment or revenue"
+    },
+    {
+      "registry_id": "R02-0006",
+      "cycle_id": "02",
+      "run_id": "B01-20261107T074824+0330-turn11-meter-boundary",
+      "deliverable_key": "C113-meter-topology-doublecount-609page",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "C113 DOCX/PDF revised to prevent internal-transfer double counting; 609 PDF pages, zero text-empty pages; private Library upload confirmed; author/scientific/legal gates remain open",
+      "impact": "One accounting-method ambiguity corrected in private review manuscript; no accepted book, live SKU, or revenue"
+    },
+    {
+      "registry_id": "R01-0003",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T081023+0330-turn11",
+      "deliverable_key": "mr-c144-dimensional-audit-private-package",
+      "stage": "code",
+      "evidence_url": "https://docs.google.com/document/d/1ixKL_FH1DUzJi406t-GKTIk9gYJ6qpVjcZ_vFeQYuPc/edit",
+      "acceptance_result": "Private Library /ZM-50/R01 holds revised 270-paragraph 5-table DOCX and 25-page PDF; displayed-cell F7 dimensional arithmetic independently recalculated; DOCX SHA256 34d54ed5b97dece84558ebc28ff10cea252d983fde850d844f48cda1fe354619; PDF SHA256 dbb4c14b921bc90674a043a532d90012356142e2738a00855b2ab7888d324872; no source-level discrepancy resolved",
+      "impact": "Full private author-review files persist; reproducibility improved; no journal submission, acceptance, publication or revenue"
+    },
+    {
+      "registry_id": "R02-0007",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T084319+0330-turn11",
+      "deliverable_key": "C113-dispatch-production-denominator-boundary",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Full private 609-page DOCX/PDF uploaded, independently re-fetched, SHA256 matched; dispatch-vs-production water denominator corrected; no author approval",
+      "impact": "One material accounting interpretation correction; no accepted publication, sale or revenue"
+    },
+    {
+      "registry_id": "R01-0004",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T091036+0330-turn11",
+      "deliverable_key": "mr-c144-f7-displayed-cell-rounding-envelope",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/7908a7a78e2179a977790a98fad366b0b4c2d0cc",
+      "acceptance_result": "Independent dimensional and rounding-extrema computation; source-data discrepancy remains unresolved; private artifact persistence failed",
+      "impact": "Improved audit reproducibility; no independently accepted manuscript, submission, publication or revenue"
+    },
+    {
+      "registry_id": "R04-0004",
+      "cycle_id": "04",
+      "run_id": "G04-20261107T092636+0330-turn11",
+      "deliverable_key": "tron-confirmed-block-consistency",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/d3d028fca67ea0362597969e1adf542b2d3a7631",
+      "acceptance_result": "Verifier requires positive solidity receipt block and rejects mismatched transaction block; three regression cases added but not executed against Django/MariaDB",
+      "impact": "Fail-closed on inconsistent TRON confirmation metadata; no production payment or release"
+    },
+    {
+      "registry_id": "R02-0008",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T095312+0330-turn11",
+      "deliverable_key": "C113-harvest-inventory-denominator-consistency",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Private DOCX/PDF uploaded; PDF 609 pages and no text-empty pages; DOCX SHA256 f3bfa372a9cf7422759e689237d8425bc2e89d7a670992b21c24c85c406fafbe; PDF SHA256 ec01c4266d7461e78d678c20c5451fc8158a75760e2159a39ba08793d2ca8881; author and legal HOLD",
+      "impact": "Clarified total-harvest denominator under changing inventory; no accepted book or revenue"
+    },
+    {
+      "registry_id": "R04-0005",
+      "cycle_id": "04",
+      "run_id": "ZM50-G04-20261107T102142+0330-turn11",
+      "deliverable_key": "trx-sun-amount-strict-node-validation",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/0d7cca1b09ca821eb33327e2c7ac0ca18e115d60",
+      "acceptance_result": "Verifier code and six regression cases committed and read back; no executed CI/Django/MariaDB gate",
+      "impact": "Malformed fractional, boolean and nonpositive TRON SUN amounts now rejected in source; release remains HOLD"
+    },
+    {
+      "registry_id": "R02-0009",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T105056+0330-turn11",
+      "deliverable_key": "C113-coldroom-time-ordered-peak-inventory",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "Full DOCX/PDF saved privately; 609 PDF pages, 0 text-empty pages; SHA256 DOCX 31e2ca03aabd4a3754a37b898bc682cd5902efa7804e0fd0da826ba89c901c5e PDF 23444141174d95c24d2fa1f5c21a4dec4cc0250d817cf7c8101804566bc7330c; review only",
+      "impact": "One technical teaching correction, no approved book, deployment, order or revenue"
+    },
+    {
+      "registry_id": "R01-0005",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T110930+0330-integrity-manifest",
+      "deliverable_key": "c144-eight-artifact-sha256-inventory",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "8/8 mounted DOCX/PDF files read and SHA-256 inventoried; local manifest hash ec300eb36c87efdd4891e519a9b022cf09245143a18da24a6c25dbadcb3b85e2; private artifact not uploaded; manuscript not accepted",
+      "impact": "Provenance and file integrity baseline for four existing manuscript versions; no publication, sale, or revenue"
+    },
+    {
+      "registry_id": "R02-0010",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T154604+0330-turn11",
+      "deliverable_key": "C113-measurement-uncertainty-worst-case-bound",
+      "stage": "private-review",
+      "evidence_url": "/Books/Mushroom Books/B01_C113_20261106_Editorial_Repair/B01_C113_measurement_uncertainty_receipt.json",
+      "acceptance_result": "Complete private DOCX/PDF 611 pages, zero text-empty pages; DOCX SHA256 1849aa9c1dfa7ec93510257f1e6cc5189fa722b2bd0c715929e45d715eee5bf6; PDF SHA256 7010e9226df00dfd7876936ca967ea92976f9dc011601bce13f4e5502ad6fb14; author/scientific/rights HOLD",
+      "impact": "New technical exercise on measurement tolerance and 2 kg residual; no approved sale, delivery, or revenue"
+    },
+    {
+      "registry_id": "R02-0011",
+      "cycle_id": "02",
+      "run_id": "ZM50-B02-20261107T204319+0330-WBS-v1",
+      "deliverable_key": "cycle02-fixed-wbs-baseline-v1",
+      "stage": "baseline",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE02_WBS_v1.json",
+      "acceptance_result": "Fixed 100-weight evidence-based WBS v1 recorded; no product accepted and no retroactive progress assigned",
+      "impact": "Progress accounting now defined; no publication, orders, delivery or revenue"
+    },
+    {
+      "registry_id": "R01-0006",
+      "cycle_id": "01",
+      "run_id": "ZM50-R01-20261107T211242-WBS",
+      "deliverable_key": "cycle01-fixed-wbs-baseline-v1",
+      "stage": "baseline",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/ZM50_CYCLE01_WBS_v1.json",
+      "acceptance_result": "Fixed 100-weight WBS created; no deliverables accepted",
+      "impact": "Progress baseline only, no revenue"
+    }
+  ],
+  "report_reservations": [],
+  "legacy_reporting_protocol": [
+    "Applicable only to cycles with a non-null verified historical last number and an audited canonical issue source.",
+    "Do not reserve a historical report number unless a new substantive result with independent evidence is ready to publish.",
+    "First fetch canonical issue comments and this registry; if the maximum valid issue report number exceeds the stored verified counter or conflicts exist, halt numbering and reconcile, not guess.",
+    "Check the run_id is not already reserved. If reserved, resume exactly that number; never reserve twice for the same run_id.",
+    "Atomically increment legacy_report_last_verified and append {cycle_id,run_id,number,state:'reserved'} via GitHub update_file with observed blob SHA; on stale version re-fetch/recheck/retry at most three times.",
+    "Only after successfully reading back the reservation, publish the numbered report to the canonical issue, including run_id; if issue write fails leave reservation pending and repair it later. Never reuse reserved number.",
+    "Upon success, update reservation to state:'published' with the comment link using another SHA-checked update. A published report is not independently accepted revenue or product."
+  ],
+  "scope_assignment_2026_11_05": {
+    "active_scheduled_automations": 5,
+    "domains": 6,
+    "extra_cycle_create_error": "too_many_active_automations: plan limit 5",
+    "owners": {
+      "01": "Scientific papers, research and content",
+      "02": "Books, guides and written products",
+      "03": "Digital tools and products; live sites and subsites services/defects; factory, store and sales operations",
+      "04": "Game development and quality",
+      "05": "Business, sites and commerce command; operational oversight, accounting and cross-cycle result verification"
+    },
+    "source_issue_comment": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
+    "schedules_changed": false,
+    "disabled_automations": 0
+  },
+  "mission_20day_20261106": {
+    "mission_id": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
+    "start_date": "2026-11-06",
+    "deadline": "2026-11-26",
+    "milestones": [
+      {
+        "day": 3,
+        "date": "2026-11-08",
+        "acceptance": "Baseline, evidence-backed ownership and P0/backup/license gates; unresolved gates explicitly HOLD"
+      },
+      {
+        "day": 7,
+        "date": "2026-11-12",
+        "acceptance": "Verified fixes and legally saleable product packages; no publication without approval"
+      },
+      {
+        "day": 14,
+        "date": "2026-11-19",
+        "acceptance": "Exact-version integrated acceptance with independent evidence; reconcile real orders and settlement"
+      },
+      {
+        "day": 20,
+        "date": "2026-11-26",
+        "acceptance": "Only approved accepted outputs released; report independent sales and profit evidence or unknown"
+      }
+    ],
+    "owners": {
+      "01": {
+        "output": "scientific manuscript",
+        "gate": "scientific/rights acceptance"
+      },
+      "02": {
+        "output": "written product",
+        "gate": "rights and finished delivery package"
+      },
+      "03": {
+        "output": "store/guest checkout and one-product factory",
+        "gate": "legal payment acceptance, server-side payment confirmation, backup/rollback; factory HOLD"
+      },
+      "04": {
+        "output": "Moj Coin",
+        "gate": "playability, security, minors' safety and approved release"
+      },
+      "05": {
+        "output": "commerce, accounting, governance and token technical packages",
+        "gate": "P0 security, DB identity, independent acceptance and no unapproved chain deployment"
+      }
+    },
+    "measurement_contract": {
+      "stages": [
+        "code",
+        "deployment",
+        "accepted",
+        "order",
+        "payment_confirmed",
+        "delivered",
+        "revenue_settled",
+        "cost",
+        "profit"
+      ],
+      "default": "unknown_unless_independently_verified",
+      "dedupe": "one deliverable owner and unique evidence; financial truth requires private independent ledger",
+      "restrictions": [
+        "no project39 correspondence",
+        "no Remote Desktop Commander",
+        "no factory startup",
+        "no financial transactions or public releases without specific authorization"
+      ]
+    },
+    "status": "superseded_by_ZM-50CYCLE-DELIVERY-20261106"
+  },
+  "mission_50cycle_20261106": {
+    "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+    "supersedes": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
+    "cycle_owner": "05",
+    "counter": 3,
+    "max_runs": 50,
+    "runs": [
+      {
+        "slot": "C01",
+        "run_id": "ZM50-C05-20261106T170454Z",
+        "stage": "baseline",
+        "accepted_deliverables": 0
+      },
+      {
+        "slot": "C02",
+        "run_id": "ZM50-C05-20261106T180501Z",
+        "stage": "blocked",
+        "accepted_deliverables": 0,
+        "primary_gate": "production-isolation-and-restorable-backup",
+        "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434",
+        "workflow_run_id": 42263164434,
+        "production_isolation_proven": false,
+        "recoverable_backups_verified": false,
+        "release_permitted": false,
+        "owner": "03",
+        "oversight_owner": "05",
+        "next_acceptance": "Independent isolation proof and actual restore/rollback evidence; no deployment until both pass"
+      },
+      {
+        "slot": "C03",
+        "run_id": "ZM50-C05-20261106T220123Z-turn11",
+        "stage": "blocked",
+        "accepted_deliverables": 0,
+        "primary_gate": "pr2066-closed-unmerged;pr2053-pr1976-not-mergeable",
+        "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066",
+        "owner": "05",
+        "next_acceptance": "Reconcile closure reason and exact main/head differences; resolve conflicts source-only; independent VPS restore/isolation gate before any deployment"
+      }
+    ],
+    "owners": {
+      "01": {
+        "deliverable": "scientific manuscript",
+        "priority": "P1",
+        "gate": "rights/scientific acceptance",
+        "acceptance": "independently accepted publication-ready manuscript"
+      },
+      "02": {
+        "deliverable": "finished written product",
+        "priority": "P1",
+        "gate": "rights, final files, automated delivery",
+        "acceptance": "rights-cleared final product package"
+      },
+      "03": {
+        "deliverable": "guest checkout/store and single-product factory",
+        "priority": "P0",
+        "gate": "legal merchant, server-side payment proof, backup and rollback",
+        "acceptance": "independent end-to-end delivery evidence; factory remains HOLD"
+      },
+      "04": {
+        "deliverable": "Moj Coin",
+        "priority": "P1",
+        "gate": "security, playable build, minors safety, release approval",
+        "acceptance": "independently playable accepted build"
+      },
+      "05": {
+        "deliverable": "business command, accounting, agents, MOJ7-MOJ36 technical packages",
+        "priority": "P0",
+        "gate": "DB identity, MFA, backup restore, deduplicated receipts, no unapproved on-chain activity",
+        "acceptance": "verified operations and independently reconciled real revenue"
+      }
+    },
+    "stages": [
+      "code",
+      "deployment",
+      "accepted",
+      "order",
+      "payment_confirmed",
+      "delivered",
+      "revenue_settled",
+      "cost",
+      "profit"
+    ],
+    "deadlines": {
+      "P0": "C05",
+      "P1": "C20",
+      "integration": "C35",
+      "e2e": "C45",
+      "final": "C50"
+    },
+    "policy": "No public release, payment, message about project 39, Remote Desktop Commander, or factory startup without required authorization. A scheduled run does not equal acceptance.",
+    "financial_evidence": "unknown",
+    "accepted_outputs": 0
+  }
+}
