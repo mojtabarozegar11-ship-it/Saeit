@@ -54,6 +54,13 @@ def _decision(row):
     return {"id": row.id, "kind": row.kind, "status": row.status, "approver": row.approver,
             "evidence": row.evidence, "created_at": row.created_at.isoformat()}
 
+def _approval_request(row):
+    return {"id": row.id, "action_type": row.action_type, "target_type": row.target_type,
+            "target_id": row.target_id, "reason": row.reason, "risk": row.risk,
+            "status": row.status, "decision_note": row.decision_note,
+            "requested_by": row.requested_by.get_username(),
+            "created_at": row.created_at.isoformat()}
+
 def _command(row):
     return {"id": row.id, "domain": row.domain, "domain_name": DOMAINS.get(row.domain, row.domain),
             "command": row.command, "status": row.status, "read_only": row.read_only,
@@ -215,6 +222,28 @@ def integrated_ledger_api(request):
         event_action = "resolve" if _text(payload.get("action")) == "resolve" else "verify"
         _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
+    if kind == "approval_request":
+        try:
+            row = ApprovalRequest.objects.select_for_update().get(pk=int(payload.get("id")))
+        except (ApprovalRequest.DoesNotExist, TypeError, ValueError):
+            return JsonResponse({"error": "درخواست تأیید پیدا نشد."}, status=404)
+        action = _text(payload.get("action"))
+        note = _text(payload.get("note"))
+        if action not in {"approved", "rejected", "explanation"}:
+            return JsonResponse({"error": "عملیات باید قبول، رد یا توضیح باشد."}, status=400)
+        if action == "explanation":
+            if not note:
+                return JsonResponse({"error": "توضیح خالی است."}, status=400)
+            row.decision_note = note
+            row.save(update_fields=["decision_note", "updated_at"])
+            _audit("approve", "approval_request", row.id, "توضیح برای درخواست تأیید ثبت شد.", request.user, note)
+            return JsonResponse({"approval_request": _approval_request(row)})
+        row.status = action
+        row.decision_note = note
+        row.save(update_fields=["status", "decision_note", "updated_at"])
+        _audit("approve", "approval_request", row.id, f"درخواست تأیید {action} شد.", request.user, note)
+        return JsonResponse({"approval_request": _approval_request(row)})
+
     if kind == "approval":
         decision = _text(payload.get("status"))
         if _text(payload.get("kind")) not in {"email", "deploy", "cost"} or decision not in {"approved", "rejected"} or not _text(payload.get("approver")):
