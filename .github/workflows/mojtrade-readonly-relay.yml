@@ -5,6 +5,8 @@ on:
   schedule:
     - cron: "7 * * * *"
   push:
+    branches:
+      - main
     paths:
       - scripts/mojtrade_observe_market.py
       - .github/workflows/mojtrade-readonly-relay.yml
@@ -18,7 +20,7 @@ concurrency:
 
 jobs:
   relay:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'push' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
