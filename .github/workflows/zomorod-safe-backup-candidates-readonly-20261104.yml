@@ -175,6 +175,34 @@ jobs:
           print("BACKUP_KEYWORD_GROUPS="+str(sum(1 for r in rows if r[3]=="keyword")),flush=True)
           print("BACKUP_KEYWORD_BYTES="+str(sum(r[0] for r in rows if r[3]=="keyword")),flush=True)
           PY
+      - name: Check live references to backup archives read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          open_refs=[]; symlinks=[]
+          for ent in Path("/proc").glob("[0-9]*"):
+              try:
+                  pid=int(ent.name)
+                  for fd in (ent/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          if str(root) in target: open_refs.append((pid,str(fd),target))
+                      except (OSError,FileNotFoundError): pass
+              except (OSError,ValueError): pass
+          for p in Path("/home/zomorod2").rglob("*"):
+              try:
+                  if p.is_symlink() and str(root) in os.readlink(p): symlinks.append((str(p),os.readlink(p)))
+              except (OSError,FileNotFoundError): pass
+          print("BACKUP_OPEN_REFERENCES="+str(len(open_refs)),flush=True)
+          for pid,fd,target in open_refs[:40]: print("BACKUP_OPEN_REF=pid:"+str(pid)+":fd:"+fd+":target:"+target,flush=True)
+          print("BACKUP_SYMLINK_REFERENCES="+str(len(symlinks)),flush=True)
+          for path,target in symlinks[:40]: print("BACKUP_SYMLINK_REF=path:"+path+":target:"+target,flush=True)
+          PY
       - name: Audit npm cache and active processes read-only
         shell: bash
         run: |
