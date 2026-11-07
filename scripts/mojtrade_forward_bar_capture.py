@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import mojtrade_observe_market as observer
+import mojtrade_market_quote_evidence as quote_evidence
 
 
 SCHEMA = "mojtrade.forward-bar-evidence.v1"
@@ -28,6 +29,10 @@ OBSERVATION_KEYS = {"schema", "symbol", "venue_claim", "bar_open_utc", "bar_clos
                     "first_observed_at_utc", "open", "high", "low", "close", "volume",
                     "spread_bps", "provenance_authenticated", "research_dataset_eligible",
                     "execution", "publication", "real_orders"}
+QUOTE_KEYS = {"schema", "venue_claim", "symbol", "quote_received_at_utc",
+              "book_source_timestamp_utc", "book_sequence", "bid", "ask", "spread_bps",
+              "venue_authenticity_independently_verified", "execution", "publication",
+              "real_orders"}
 VENUES = (
     (observer.SOURCE, observer._fetch_candles),
     (observer.BITSTAMP_SOURCE, observer._fetch_bitstamp_candles),
@@ -69,11 +74,10 @@ def _parse_utc(value):
 
 
 def validate_observation(value):
-    if (not isinstance(value, dict) or set(value) != OBSERVATION_KEYS
+    if (not isinstance(value, dict) or set(value) not in (OBSERVATION_KEYS, OBSERVATION_KEYS | {"quote_receipt"})
             or value["schema"] != SCHEMA or value["symbol"] not in ("BTC/USD", "ETH/USD")
             or type(value["venue_claim"]) is not str
             or value["venue_claim"] not in {label for label, _ in VENUES}
-            or value["spread_bps"] is not None
             or value["provenance_authenticated"] is not False
             or value["research_dataset_eligible"] is not False
             or value["execution"] != "disabled" or value["publication"] != "disabled"
@@ -92,6 +96,39 @@ def validate_observation(value):
             or not value["low"] <= value["open"] <= value["high"]
             or not value["low"] <= value["close"] <= value["high"]):
         raise CaptureReject("observation_ohlcv_invalid")
+    if "quote_receipt" in value:
+        quote = value["quote_receipt"]
+        if (not isinstance(quote, dict) or set(quote) != QUOTE_KEYS
+                or quote["schema"] != quote_evidence.SCHEMA
+                or quote["venue_claim"] != value["venue_claim"]
+                or quote["symbol"] != value["symbol"]
+                or quote["venue_claim"] not in quote_evidence.SUPPORTED
+                or quote["venue_authenticity_independently_verified"] is not False
+                or quote["execution"] != "disabled" or quote["publication"] != "disabled"
+                or type(quote["real_orders"]) is not int or quote["real_orders"] != 0):
+            raise CaptureReject("quote_evidence_schema_or_source_invalid")
+        quote_at = _parse_utc(quote["quote_received_at_utc"])
+        if not observed <= quote_at <= observed + timedelta(seconds=30) or quote_at >= closing + timedelta(hours=1):
+            raise CaptureReject("quote_not_contemporaneous_with_closed_bar_receipt")
+        if quote["venue_claim"] == observer.SOURCE:
+            if (type(quote["book_sequence"]) is not int or quote["book_sequence"] < 0
+                    or quote["book_source_timestamp_utc"] is None):
+                raise CaptureReject("coinbase_book_receipt_metadata_invalid")
+            book_time = _parse_utc(quote["book_source_timestamp_utc"])
+            if not -2 <= (quote_at - book_time).total_seconds() <= 60:
+                raise CaptureReject("coinbase_book_receipt_not_fresh")
+        elif (quote["book_source_timestamp_utc"] is not None
+              or quote["book_sequence"] is not None):
+            raise CaptureReject("kraken_ticker_unexpected_book_metadata")
+        bid, ask, spread = quote["bid"], quote["ask"], quote["spread_bps"]
+        if (any(type(x) not in (float, int) or not math.isfinite(x) for x in (bid, ask, spread))
+                or not 0 < bid <= ask or not 0 <= spread <= 500):
+            raise CaptureReject("quote_bid_ask_invalid")
+        calculated = (ask - bid) / ((ask + bid) / 2) * 10000
+        if abs(spread - calculated) > 1e-8 or value["spread_bps"] != spread:
+            raise CaptureReject("quote_spread_not_observed_or_mismatched")
+    elif value["spread_bps"] is not None:
+        raise CaptureReject("spread_without_same_venue_quote_evidence")
     return value
 
 
@@ -139,7 +176,7 @@ def latest_capture(symbol, rows, venue, *, received_at=None):
     }
 
 
-def capture_public_once(symbol, *, venues=None, clock=None):
+def capture_public_once(symbol, *, venues=None, clock=None, quote_fetcher=None):
     """Reuse the *existing* observer provider parsers; never call an order API."""
     providers = VENUES if venues is None else venues
     failures = []
@@ -148,7 +185,18 @@ def capture_public_once(symbol, *, venues=None, clock=None):
             rows = fetcher(symbol)
             # Always observe the clock only after this source's fetch returns.
             now = clock() if clock is not None else datetime.now(timezone.utc)
-            return latest_capture(symbol, rows, label, received_at=now)
+            bar = latest_capture(symbol, rows, label, received_at=now)
+            if quote_fetcher is not None and label in quote_evidence.SUPPORTED:
+                try:
+                    quote = quote_fetcher(symbol, label)
+                    enriched = {**bar, "spread_bps": quote["spread_bps"],
+                                "quote_receipt": quote}
+                    validate_observation(enriched)
+                    return enriched
+                except (quote_evidence.QuoteReject, CaptureReject, KeyError, TypeError):
+                    # Preserve the genuine OHLCV receipt; never synthesize spread.
+                    pass
+            return bar
         except (observer.MarketDataError, CaptureReject) as exc:
             failures.append(label + ":" + type(exc).__name__)
     raise CaptureReject("no_valid_public_capture:" + ",".join(failures))
@@ -243,7 +291,8 @@ def main(argv=None):
     parser.add_argument("--private-journal", type=Path, required=True)
     args = parser.parse_args(argv)
     # No custom timestamp, broker, order, publication or spread flags exist.
-    result = append_private(capture_public_once(args.symbol), args.private_journal)
+    result = append_private(capture_public_once(
+        args.symbol, quote_fetcher=quote_evidence.fetch_public_quote), args.private_journal)
     print(canonical({"schema": SCHEMA, "symbol": args.symbol,
                      "research_dataset_eligible": False,
                      "real_orders": 0, "publication": "disabled", **result}))
