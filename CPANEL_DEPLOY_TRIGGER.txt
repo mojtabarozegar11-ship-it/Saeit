@@ -13,6 +13,6 @@ Public target: /faremah/
 Static Faremah release: b92b475d352b093668640b48d051b8d12d97584c
 Static target: public_html/faremah/index.html
 
-Current store release: 38669a74900159929264af14583c629773b45669
+Current store release: 7f6047329706502d6a41edbadbc0048b71367235
 Public target: /store/
-Change: link the official Zomorod Melal perfume/beauty and toys/models storefronts from the company store page.
+Change: add leather, family clothing, herbalist, and direct agricultural supply storefront links alongside the existing perfume/beauty and toys/models stores.
