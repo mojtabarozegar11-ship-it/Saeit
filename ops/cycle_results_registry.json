@@ -77,7 +77,7 @@
     },
     "04": {
       "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
-      "sequence": 3,
+      "sequence": 4,
       "legacy_report_last_verified": null,
       "primary_output": "accepted playable game build"
     },
@@ -334,6 +334,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/7908a7a78e2179a977790a98fad366b0b4c2d0cc",
       "acceptance_result": "Independent dimensional and rounding-extrema computation; source-data discrepancy remains unresolved; private artifact persistence failed",
       "impact": "Improved audit reproducibility; no independently accepted manuscript, submission, publication or revenue"
+    },
+    {
+      "registry_id": "R04-0004",
+      "cycle_id": "04",
+      "run_id": "G04-20261107T092636+0330-turn11",
+      "deliverable_key": "tron-confirmed-block-consistency",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/d3d028fca67ea0362597969e1adf542b2d3a7631",
+      "acceptance_result": "Verifier requires positive solidity receipt block and rejects mismatched transaction block; three regression cases added but not executed against Django/MariaDB",
+      "impact": "Fail-closed on inconsistent TRON confirmation metadata; no production payment or release"
     }
   ],
   "report_reservations": [],
