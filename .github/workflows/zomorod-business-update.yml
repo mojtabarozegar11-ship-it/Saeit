@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RELAY_CONFIG"
-          scp -q -F "$d/config" content/zomorod-business/app.php saeit-cpanel:"/home/zomorod2/.private/zomorod-business/.incoming-app-$GITHUB_SHA.php"
+          ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/.private/zomorod-business/.incoming-app-$GITHUB_SHA.php" < content/zomorod-business/app.php
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           sha="$1"
