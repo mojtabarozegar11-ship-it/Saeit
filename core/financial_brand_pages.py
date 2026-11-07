@@ -86,7 +86,7 @@ def financial_brand_page(request, brand, locale, page_type):
     intro = copy["signals_intro"] if page_type == "signals" else copy["store_intro"]
     notice = copy["signals_notice"] if page_type == "signals" else copy["store_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
-    shop_url = "/store/"
+    shop_url = "/store/" if locale == "fa" else "/commerce/"
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
