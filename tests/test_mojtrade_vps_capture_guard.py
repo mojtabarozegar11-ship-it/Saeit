@@ -215,5 +215,31 @@ class VPSCaptureGuardTests(unittest.TestCase):
         self.assertFalse(self.journal.exists())
 
 
+class VPSLegacyInstallerBoundaryTests(unittest.TestCase):
+    """Regression: no writes or installation before enough capacity is proven."""
+
+    def test_workflow_capacity_check_precedes_first_vps_write(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/mojtrade-vps-observer-activate.yml").read_text()
+        self.assertIn("MOJTRADE_PREUPLOAD_CAPACITY_PASS", workflow)
+        self.assertIn("free_kib >= 2113536", workflow)
+        self.assertIn("free_inodes >= 16", workflow)
+        self.assertLess(workflow.index("MOJTRADE_PREUPLOAD_CAPACITY_PASS"),
+                        workflow.index('install -d -m 700 "$HOME/factory-runtime/operations/mojtrade"'))
+        self.assertLess(workflow.index("MOJTRADE_PREUPLOAD_CAPACITY_PASS"),
+                        workflow.index("scp \"${opts[@]}\" scripts/mojtrade_observe_market.py"))
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:", workflow)
+
+    def test_legacy_installer_has_matching_second_capacity_gate(self):
+        root = Path(__file__).resolve().parents[1]
+        installer = (root / "deploy/install_mojtrade_observer_vps.sh").read_text()
+        self.assertIn("free_kib >= 2113536", installer)
+        self.assertIn("free_inodes >= 16", installer)
+        self.assertNotIn("free_mb >= 500", installer)
+        self.assertLess(installer.index("MOJTRADE_INSUFFICIENT_FREE_SPACE_2GIB_PLUS_16MIB"),
+                        installer.index('install -d -m 700 "$operations" "$private"'))
+
+
 if __name__ == "__main__":
     unittest.main()

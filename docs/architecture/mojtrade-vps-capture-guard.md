@@ -63,3 +63,16 @@ mode on an unverified VPS.
 
 No rollout, merge, GitHub Actions deployment, payment, real order, public
 signal, restart or email is included. All tests are offline fixtures.
+
+## Separate legacy private observer — not research capture
+
+`deploy/install_mojtrade_observer_vps.sh` and the manual-only
+`mojtrade-vps-observer-activate.yml` workflow serve a legacy private
+hourly signal payload, **not** the same-venue, quote-backed research journal.
+They now require at least 2 GiB + 16 MiB free and 16 available inodes on
+both relevant VPS paths, with a strictly read-only pre-upload check before
+the workflow creates directories or uploads any source. The installer
+rechecks capacity before its local changes. None of this proves the legacy
+observer is installed or safe to activate. Existing GitHub relay writes and
+local scheduler collisions still require an independent cutover review;
+legacy payloads must never be counted toward the 100-hour research dataset.

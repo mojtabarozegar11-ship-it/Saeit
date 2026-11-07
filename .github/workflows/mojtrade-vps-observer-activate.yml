@@ -34,6 +34,29 @@ jobs:
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
           remote=githubops@178.239.147.150
+          # Capacity and path gates must precede all mkdir, SCP and installer writes.
+          ssh "${opts[@]}" "$remote" 'bash -se' <<'REMOTE_PREFLIGHT'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          test "$(id -un)" = githubops
+          test -d "$base" && test ! -L "$base"
+          test -d "$base/operations" && test ! -L "$base/operations"
+          test -d "$base/private" && test ! -L "$base/private"
+          for path in "$base/operations" "$base/private"; do
+            free_kib="$(df -Pk "$path" | awk 'NR==2 {print $4}')"
+            free_inodes="$(df -Pi "$path" | awk 'NR==2 {print $4}')"
+            [[ "$free_kib" =~ ^[0-9]+$ && "$free_inodes" =~ ^[0-9]+$ ]] || {
+              echo MOJTRADE_PREUPLOAD_STORAGE_METRICS_INVALID; exit 2;
+            }
+            (( free_kib >= 2113536 )) || {
+              echo MOJTRADE_PREUPLOAD_DISK_RESERVE_BLOCKED; exit 2;
+            }
+            (( free_inodes >= 16 )) || {
+              echo MOJTRADE_PREUPLOAD_INODE_RESERVE_BLOCKED; exit 2;
+            }
+          done
+          echo MOJTRADE_PREUPLOAD_CAPACITY_PASS
+          REMOTE_PREFLIGHT
           ssh "${opts[@]}" "$remote" 'test -x "$HOME/factory-runtime/.venv/bin/python" && install -d -m 700 "$HOME/factory-runtime/operations/mojtrade"'
           scp "${opts[@]}" scripts/mojtrade_observe_market.py "$remote:/home/githubops/factory-runtime/operations/mojtrade/observer.py.staged"
           scp "${opts[@]}" deploy/install_mojtrade_observer_vps.sh "$remote:/home/githubops/factory-runtime/operations/mojtrade/install.sh"
