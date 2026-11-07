@@ -29,7 +29,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 5,
+      "sequence": 6,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book"
     },
@@ -258,6 +258,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/fc361ece22d104c9cd826929b997fa08093db84d",
       "acceptance_result": "Source guard and Django regression test committed and read back; Django/MariaDB execution not verified",
       "impact": "Ambiguous duplicate receipt or tx identifiers are rejected before entitlement capture; no deployment or revenue"
+    },
+    {
+      "registry_id": "R02-0006",
+      "cycle_id": "02",
+      "run_id": "B01-20261107T074824+0330-turn11-meter-boundary",
+      "deliverable_key": "C113-meter-topology-doublecount-609page",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "C113 DOCX/PDF revised to prevent internal-transfer double counting; 609 PDF pages, zero text-empty pages; private Library upload confirmed; author/scientific/legal gates remain open",
+      "impact": "One accounting-method ambiguity corrected in private review manuscript; no accepted book, live SKU, or revenue"
     }
   ],
   "report_reservations": [],
