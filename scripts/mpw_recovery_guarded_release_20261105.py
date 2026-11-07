@@ -183,15 +183,22 @@ def build_plan(stage):
         and "MPW_GUEST_RECOVERY_ENABLED = True" not in settings
         and "MPW_GUEST_RECOVERY_EMAIL_APPROVED = True" not in settings
     )
+    active_settings_patch = (
+        settings.count(SETTING_MARKER) == 1
+        and settings.count("MPW_GUEST_RECOVERY_ENABLED = True") == 1
+        and settings.count("MPW_GUEST_RECOVERY_EMAIL_APPROVED = True") == 1
+        and "MPW_GUEST_RECOVERY_ENABLED = False" not in settings
+        and "MPW_GUEST_RECOVERY_EMAIL_APPROVED = False" not in settings
+    )
     has_any_recovery_patch = (
         MODEL_MARKER in models or SETTING_MARKER in settings
         or "from .guest_recovery_models import" in models
         or "MPW_GUEST_RECOVERY_ENABLED" in settings
     )
     if has_any_recovery_patch:
-        # Idempotent continuation is allowed only for the exact reviewed,
-        # disabled patch already present on the live tree.
-        if not (exact_models_patch and exact_settings_patch):
+        # Idempotent continuation is allowed only for the exact reviewed
+        # disabled patch or its exact already-approved active state.
+        if not (exact_models_patch and (exact_settings_patch or active_settings_patch)):
             fail("EXISTING_RECOVERY_PATCH_DRIFT")
         new["models"] = old["models"]
         new["settings"] = old["settings"]
