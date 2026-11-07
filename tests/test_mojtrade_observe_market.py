@@ -120,6 +120,19 @@ class ObserverTests(unittest.TestCase):
                 observer._validated_closes(coinbase_rows, self.now),
             )
 
+    def test_bitstamp_response_normalizes_to_common_ohlc_schema(self):
+        coinbase_rows = sample(self.now)
+        bitstamp_rows = [
+            {"timestamp": str(row[0]), "open": str(row[3]), "high": str(row[2]), "low": str(row[1]), "close": str(row[4]), "volume": str(row[5])}
+            for row in coinbase_rows
+        ]
+        with patch.object(observer, "_fetch_json", return_value={"data": {"ohlc": bitstamp_rows}}):
+            normalized = observer._fetch_bitstamp_candles("BTC-USD")
+            self.assertEqual(
+                observer._validated_closes(normalized, self.now),
+                observer._validated_closes(coinbase_rows, self.now),
+            )
+
     def test_binance_response_normalizes_to_common_ohlc_schema(self):
         coinbase_rows = sample(self.now)
         binance_rows = [
@@ -135,18 +148,19 @@ class ObserverTests(unittest.TestCase):
 
     def test_fallback_tracks_real_provider_and_never_fabricates_on_total_outage(self):
         with patch.object(observer, "_fetch_candles", side_effect=observer.MarketDataError("coinbase_http_403")):
-            with patch.object(observer, "_fetch_binance_candles", return_value=sample(self.now)):
+            with patch.object(observer, "_fetch_bitstamp_candles", return_value=sample(self.now)):
                 result = observer._observed_signal("BTC-USD", self.now)
-                self.assertEqual(result["data_source"], observer.BINANCE_SOURCE)
+                self.assertEqual(result["data_source"], observer.BITSTAMP_SOURCE)
                 self.assertEqual(result["stance"], "watch_buy")
-            with patch.object(observer, "_fetch_binance_candles", side_effect=observer.MarketDataError("binance_http_403")):
-                with patch.object(observer, "_fetch_kraken_candles", side_effect=observer.MarketDataError("kraken_http_403")):
-                    with patch.object(observer, "_fetch_bitfinex_candles", side_effect=observer.MarketDataError("bitfinex_network_timeout")):
-                        with self.assertRaisesRegex(
-                            observer.MarketDataError,
-                            "coinbase_http_403;binance_http_403;kraken_http_403;bitfinex_network_timeout",
-                        ):
-                            observer._observed_signal("BTC-USD", self.now)
+            with patch.object(observer, "_fetch_bitstamp_candles", side_effect=observer.MarketDataError("bitstamp_http_403")):
+                with patch.object(observer, "_fetch_binance_candles", side_effect=observer.MarketDataError("binance_http_451")):
+                    with patch.object(observer, "_fetch_kraken_candles", side_effect=observer.MarketDataError("kraken_http_403")):
+                        with patch.object(observer, "_fetch_bitfinex_candles", side_effect=observer.MarketDataError("bitfinex_network_timeout")):
+                            with self.assertRaisesRegex(
+                                observer.MarketDataError,
+                                "coinbase_http_403;bitstamp_http_403;binance_http_451;kraken_http_403;bitfinex_network_timeout",
+                            ):
+                                observer._observed_signal("BTC-USD", self.now)
 
 
 if __name__ == "__main__":
