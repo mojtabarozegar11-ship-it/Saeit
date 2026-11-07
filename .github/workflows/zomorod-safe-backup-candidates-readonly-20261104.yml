@@ -109,3 +109,4 @@ jobs:
         run: |
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           if test -d "$d"; then rm -rf -- "$d"; fi
+# Continued read-only backup metadata audit; no transfer or deletion.
