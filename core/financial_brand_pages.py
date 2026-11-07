@@ -43,6 +43,9 @@ COPY = {
   "store_title":"فروشگاه محصولات دیجیتال",
   "store_intro":"راهنماها، قالب‌ها و محتوای آموزشی دیجیتال با توضیح روشن دربارهٔ محتوا و شرایط استفاده.",
   "store_notice":"فهرست محصولات و پرداخت این زیردسته هنوز فعال نشده است؛ موجودی، قیمت یا لینک خریدِ ساختگی نمایش داده نمی‌شود.",
+  "game_title":"بازی و تجربهٔ تعاملی",
+  "game_intro":"یک زیرسایت بازی با هویت مستقل برای سرگرمی، یادگیری و تعامل؛ بدون ادعای جایگزینی آموزش یا مشاورهٔ مالی.",
+  "game_notice":"این بخش برای معرفی و توسعهٔ بازی است؛ خرید درون‌بازی یا دارایی مالی بدون فعال‌سازی رسمی نمایش داده نمی‌شود.",
   "cta":"بازگشت به فروشگاه اصلی", "disclaimer":"محتوا آموزشی و اطلاع‌رسانی است و توصیهٔ شخصی سرمایه‌گذاری، پیشنهاد خریدوفروش یا تضمین نتیجه محسوب نمی‌شود.",
   "pill":"تحلیل شفاف · آموزش کاربردی"
  },
@@ -53,6 +56,9 @@ COPY = {
   "store_title":"Digital products shop",
   "store_intro":"Digital guides, templates, and learning materials with clear descriptions and usage terms.",
   "store_notice":"This sub-store's product listing and checkout are not active yet. No fictional stock, prices, or purchase links are shown.",
+  "game_title":"Interactive game experience",
+  "game_intro":"A dedicated game subsite for play, learning, and interaction, without claiming to replace financial education or advice.",
+  "game_notice":"This section introduces the game experience. No in-game purchase or financial asset is shown until officially activated.",
   "cta":"Visit the main shop", "disclaimer":"For education and information only. This is not personalized investment advice or a recommendation to buy or sell, and no outcome is guaranteed.",
   "pill":"Clear analysis · Practical learning"
  },
@@ -63,6 +69,9 @@ COPY = {
   "store_title":"متجر المنتجات الرقمية",
   "store_intro":"أدلة وقوالب ومواد تعليمية رقمية مع وصف واضح للمحتوى وشروط الاستخدام.",
   "store_notice":"قائمة المنتجات والدفع لهذا المتجر الفرعي غير مفعّلين بعد. لن نعرض مخزوناً أو أسعاراً أو روابط شراء وهمية.",
+  "game_title":"تجربة لعبة تفاعلية",
+  "game_intro":"مساحة لعبة مستقلة للترفيه والتعلم والتفاعل، من دون ادعاء أنها بديل عن التعليم أو النصيحة المالية.",
+  "game_notice":"هذا القسم للتعريف بتجربة اللعبة؛ لا تُعرض مشتريات داخل اللعبة أو أصول مالية قبل التفعيل الرسمي.",
   "cta":"زيارة المتجر الرئيسي", "disclaimer":"للتعليم والمعلومات فقط. لا يُعد ذلك نصيحة استثمارية شخصية أو توصية بالشراء أو البيع، ولا نضمن النتائج.",
   "pill":"تحليل واضح · تعلم عملي"
  }
@@ -76,15 +85,18 @@ def financial_brand_page(request, brand, locale, page_type):
         locale = "fa" if "zomorodmelal.ir" in host else "en"
     if locale not in COPY:
         locale = "en"
-    if match is None or page_type not in {"signals", "store"}:
+    if match is None or page_type not in {"signals", "store", "game"}:
         from django.http import Http404
         raise Http404
     slug, fa_name, en_name, ar_name = match
     name = {"fa": fa_name, "en": en_name, "ar": ar_name}[locale]
     copy = COPY[locale]
-    title = copy["signals_title"] if page_type == "signals" else copy["store_title"]
-    intro = copy["signals_intro"] if page_type == "signals" else copy["store_intro"]
-    notice = copy["signals_notice"] if page_type == "signals" else copy["store_notice"]
+    if page_type == "signals":
+        title, intro, notice = copy["signals_title"], copy["signals_intro"], copy["signals_notice"]
+    elif page_type == "store":
+        title, intro, notice = copy["store_title"], copy["store_intro"], copy["store_notice"]
+    else:
+        title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
     return render(request, "core/financial_brand_page.html", {
