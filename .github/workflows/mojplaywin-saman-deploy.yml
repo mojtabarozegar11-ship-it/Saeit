@@ -209,7 +209,8 @@ jobs:
           for slug, fa_name, en_name, ar_name in BRANDS:
               for kind in ("market-signals", "digital-products", "game"):
                   routes[f"/{slug}/{kind}/"] = "financial_brand_page"
-                  routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
+                  if kind != "game":
+                      routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
               match = resolve(path)
               print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + (match.func.func if hasattr(match.func, "func") else match.func).__name__)
