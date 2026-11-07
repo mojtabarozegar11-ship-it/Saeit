@@ -359,13 +359,21 @@ def generate_program(rng, proposals=None):
     return validate_program(program)
 
 
-def invent(payload, *, seed=0, max_trials=32, cost_bps=2.0):
+def invent(payload, *, seed=0, max_trials=32, cost_bps=2.0,
+           existing_signatures=()):
     dataset = validate_dataset(payload)
     if type(seed) is not int or not 0 <= seed < 2**32:
         raise FoundryError("seed_invalid")
     if type(max_trials) is not int or not 1 <= max_trials <= MAX_TRIALS:
         raise FoundryError("trial_budget_invalid")
     _number(cost_bps, "cost_bps", min_value=0, max_value=200)
+    if (not isinstance(existing_signatures, (list, set, tuple, frozenset)) or
+            len(existing_signatures) > MAX_REGISTRY_ROWS * MAX_TRIALS or
+            any(not isinstance(s, str) or len(s) != 64 or
+                any(ch not in "0123456789abcdef" for ch in s)
+                for s in existing_signatures)):
+        raise FoundryError("historical_signatures_invalid")
+    historical = set(existing_signatures)
     rng = random.Random(seed)
     bars = dataset["bars"]
     split = int(len(bars) * .65)
@@ -384,6 +392,10 @@ def invent(payload, *, seed=0, max_trials=32, cost_bps=2.0):
         p = generate_program(rng, proposals)
         sig = structure_signature(p)
         trial = {"trial": trial_number, "structure_signature": sig}
+        if sig in historical:
+            trial["state"] = "REJECTED_PRIOR_RUN_STRUCTURE"
+            trials.append(trial)
+            continue
         if sig in structures:
             trial["state"] = "REJECTED_DUPLICATE_STRUCTURE"
             trials.append(trial)
@@ -440,6 +452,12 @@ def invent(payload, *, seed=0, max_trials=32, cost_bps=2.0):
         "split": {"train_end_exclusive": split, "holdout_start_inclusive": split,
                   "holdout_end_exclusive": len(bars)},
         "training_discovery": {k: v for k, v in discovery.items() if k != "proposals"},
+        "historical_novelty": {
+            "prior_run_structures_seen": len(historical),
+            "prior_run_structures_rejected": sum(
+                t["state"] == "REJECTED_PRIOR_RUN_STRUCTURE" for t in trials),
+            "scope": "same-symbol-and-candle-interval-private-registry",
+        },
         "multiple_testing_gate": {
             "status": "NOT_STATISTICALLY_VALIDATED",
             "primitive_hypotheses_tested": discovery["primitive_hypotheses_tested"],
@@ -572,6 +590,16 @@ def append_private_registry(report, target):
                 if existing["report"]["report_sha256"] == report["report_sha256"]:
                     return {"written": False, "sequence": existing["sequence"],
                             "entry_sha256": existing["entry_sha256"]}
+            prior_signatures = {
+                birth["structure_signature"]
+                for record in records
+                if record["report"]["symbol"] == report["symbol"] and
+                record["report"]["interval_seconds"] == report["interval_seconds"]
+                for birth in record["report"]["birth_certificates"]
+            }
+            if any(birth["structure_signature"] in prior_signatures
+                   for birth in report["birth_certificates"]):
+                raise FoundryError("registry_prior_structure_collision")
             if len(records) >= MAX_REGISTRY_ROWS:
                 raise FoundryError("registry_record_budget_exceeded")
             entry = {"sequence": len(records) + 1,
@@ -593,7 +621,7 @@ def append_private_registry(report, target):
             os.close(fd)
 
 
-def verify_private_registry(target):
+def read_private_registry(target):
     target = Path(target)
     if target.is_symlink() or not target.is_file():
         raise FoundryError("registry_missing_or_symlink")
@@ -613,7 +641,11 @@ def verify_private_registry(target):
         raw = handle.read(MAX_REGISTRY_BYTES + 1)
     if len(raw) > MAX_REGISTRY_BYTES:
         raise FoundryError("registry_capacity_exceeded")
-    rows = _read_and_verify_registry(raw)
+    return _read_and_verify_registry(raw)
+
+
+def verify_private_registry(target):
+    rows = read_private_registry(target)
     return {"records": len(rows), "last_entry_sha256": rows[-1]["entry_sha256"] if rows else None}
 
 
@@ -626,11 +658,31 @@ def main(argv=None):
     parser.add_argument("--cost-bps", type=float, default=2.0)
     parser.add_argument("--registry", type=Path, help="Private JSONL evidence history (default: output directory)")
     args = parser.parse_args(argv)
-    result = invent(_read_private_input(args.input), seed=args.seed,
-                    max_trials=args.trials, cost_bps=args.cost_bps)
     registry = args.registry or args.output.parent / "foundry-registry.jsonl"
     if registry.resolve() == args.output.resolve():
         raise FoundryError("registry_cannot_equal_report")
+    source = _read_private_input(args.input)
+    dataset_hash = digest(validate_dataset(source))
+    rows = read_private_registry(registry) if registry.exists() or registry.is_symlink() else []
+    result = None
+    for row in rows:
+        previous = row["report"]
+        if (previous["dataset_digest"] == dataset_hash and
+                previous["seed"] == args.seed and
+                previous["max_trials"] == args.trials and
+                previous["cost_bps_per_side"] == args.cost_bps):
+            result = previous  # Exact same research run is intentionally idempotent.
+            break
+    if result is None:
+        previous_structures = {
+            birth["structure_signature"]
+            for row in rows
+            if row["report"]["symbol"] == source["symbol"] and
+            row["report"]["interval_seconds"] == source["interval_seconds"]
+            for birth in row["report"]["birth_certificates"]
+        }
+        result = invent(source, seed=args.seed, max_trials=args.trials,
+                        cost_bps=args.cost_bps, existing_signatures=previous_structures)
     receipt = append_private_registry(result, registry)
     write_private(result, args.output)
     print("MOJTRADE_FOUNDRY_RESEARCH_SAVED")
