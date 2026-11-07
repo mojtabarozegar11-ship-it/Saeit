@@ -9,6 +9,7 @@ research hypotheses. Backtest fills are deliberately delayed and simplified.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
@@ -28,6 +29,8 @@ MAX_INPUT_BYTES = 1_000_000
 MIN_BARS = 100
 MAX_BARS = 5000
 MAX_TRIALS = 96
+MAX_REGISTRY_BYTES = 8_000_000
+MAX_REGISTRY_ROWS = 128
 MIN_TRAIN_EVENTS = 2
 MAX_BEHAVIOR_OVERLAP = 0.90
 WINDOWS = (6, 12, 24)
@@ -437,10 +440,23 @@ def invent(payload, *, seed=0, max_trials=32, cost_bps=2.0):
         "split": {"train_end_exclusive": split, "holdout_start_inclusive": split,
                   "holdout_end_exclusive": len(bars)},
         "training_discovery": {k: v for k, v in discovery.items() if k != "proposals"},
+        "multiple_testing_gate": {
+            "status": "NOT_STATISTICALLY_VALIDATED",
+            "primitive_hypotheses_tested": discovery["primitive_hypotheses_tested"],
+            "candidate_trials_attempted": len(trials),
+            "total_search_attempts": discovery["primitive_hypotheses_tested"] + len(trials),
+            "holdout_candidates_inspected": len(births),
+            "multiplicity_adjusted_evidence": False,
+            "eligible_for_broker_or_public_signals": False,
+            "next_evidence": ["independent untouched time-period/asset test",
+                              "purged walk-forward and dependency-aware significance",
+                              "verified execution-cost, slippage and drawdown stress"],
+        },
         "trial_ledger": trials, "birth_certificates": births,
         "limitations": ["not a venue/broker backtest", "no proof of profitability",
                         "coarse OHLC ambiguous fills", "selection bias remains possible",
-                        "holdout results are research only"],
+                        "holdout results are research only",
+                        "many tested hypotheses can produce misleading positive results"],
     }
     result["report_sha256"] = digest(result)
     return result
@@ -482,6 +498,125 @@ def write_private(result, target):
             tmp.unlink()
 
 
+def _validate_report_checksum(report):
+    if (not isinstance(report, dict) or
+            report.get("schema") != SCHEMA or
+            report.get("execution") != "disabled" or
+            report.get("orders") != 0 or
+            report.get("public_signals") != 0 or
+            report.get("mode") != "RESEARCH_ONLY"):
+        raise FoundryError("registry_report_mode_invalid")
+    supplied = report.get("report_sha256")
+    if not isinstance(supplied, str) or supplied != digest(
+            {k: v for k, v in report.items() if k != "report_sha256"}):
+        raise FoundryError("registry_report_digest_invalid")
+
+
+def _read_and_verify_registry(raw):
+    previous = "0" * 64
+    records = []
+    if raw and not raw.endswith(b"\n"):
+        raise FoundryError("registry_partial_record")
+    for line in raw.splitlines():
+        try:
+            record = json.loads(line)
+        except (ValueError, UnicodeError) as exc:
+            raise FoundryError("registry_invalid_json") from exc
+        if (not isinstance(record, dict) or
+                set(record) != {"sequence", "previous_sha256", "report", "entry_sha256"} or
+                record["sequence"] != len(records) + 1 or
+                record["previous_sha256"] != previous):
+            raise FoundryError("registry_chain_invalid")
+        _validate_report_checksum(record["report"])
+        expected = digest({k: v for k, v in record.items() if k != "entry_sha256"})
+        if record["entry_sha256"] != expected:
+            raise FoundryError("registry_entry_digest_invalid")
+        previous = expected
+        records.append(record)
+    return records
+
+
+def append_private_registry(report, target):
+    """Bounded full-report hash-chain, locked across processes, idempotent.
+
+    SHA-256 detects accidental/unauthorized mutation relative to trusted
+    checkpoints; it is NOT a signature against a writer who can rewrite all
+    chain entries. An independent off-host checkpoint is still required.
+    """
+    _validate_report_checksum(report)
+    target = Path(target)
+    parent = target.parent
+    if (parent.is_symlink() or not parent.is_dir() or
+            stat.S_IMODE(parent.stat().st_mode) != 0o700):
+        raise FoundryError("registry_private_dir_required")
+    if target.is_symlink():
+        raise FoundryError("registry_symlink_rejected")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDWR | os.O_CREAT | os.O_APPEND | nofollow
+    fd = os.open(target, flags, 0o600)
+    try:
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode) or
+                stat.S_IMODE(metadata.st_mode) != 0o600 or
+                metadata.st_nlink != 1 or metadata.st_uid != os.geteuid()):
+            raise FoundryError("registry_file_permissions_invalid")
+        with os.fdopen(fd, "r+b", buffering=0) as handle:
+            fd = -1
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            handle.seek(0)
+            raw = handle.read(MAX_REGISTRY_BYTES + 1)
+            if len(raw) > MAX_REGISTRY_BYTES:
+                raise FoundryError("registry_capacity_exceeded")
+            records = _read_and_verify_registry(raw)
+            for existing in records:
+                if existing["report"]["report_sha256"] == report["report_sha256"]:
+                    return {"written": False, "sequence": existing["sequence"],
+                            "entry_sha256": existing["entry_sha256"]}
+            if len(records) >= MAX_REGISTRY_ROWS:
+                raise FoundryError("registry_record_budget_exceeded")
+            entry = {"sequence": len(records) + 1,
+                     "previous_sha256": records[-1]["entry_sha256"] if records else "0" * 64,
+                     "report": report}
+            entry["entry_sha256"] = digest(entry)
+            line = canonical(entry).encode("utf-8") + b"\n"
+            if len(raw) + len(line) > MAX_REGISTRY_BYTES:
+                raise FoundryError("registry_capacity_exceeded")
+            handle.seek(0, os.SEEK_END)
+            written = handle.write(line)
+            if written != len(line):
+                raise FoundryError("registry_partial_write")
+            os.fsync(handle.fileno())
+            return {"written": True, "sequence": entry["sequence"],
+                    "entry_sha256": entry["entry_sha256"]}
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def verify_private_registry(target):
+    target = Path(target)
+    if target.is_symlink() or not target.is_file():
+        raise FoundryError("registry_missing_or_symlink")
+    parent = target.parent
+    if (parent.is_symlink() or stat.S_IMODE(parent.stat().st_mode) != 0o700 or
+            stat.S_IMODE(target.stat().st_mode) != 0o600):
+        raise FoundryError("registry_permissions_invalid")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(target, os.O_RDONLY | nofollow)
+    with os.fdopen(fd, "rb") as handle:
+        metadata = os.fstat(handle.fileno())
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or
+                metadata.st_uid != os.geteuid() or
+                stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise FoundryError("registry_file_permissions_invalid")
+        fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+        raw = handle.read(MAX_REGISTRY_BYTES + 1)
+    if len(raw) > MAX_REGISTRY_BYTES:
+        raise FoundryError("registry_capacity_exceeded")
+    rows = _read_and_verify_registry(raw)
+    return {"records": len(rows), "last_entry_sha256": rows[-1]["entry_sha256"] if rows else None}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Offline research-only MojTrade strategy invention")
     parser.add_argument("--input", required=True, type=Path)
@@ -489,13 +624,19 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--trials", type=int, default=32)
     parser.add_argument("--cost-bps", type=float, default=2.0)
+    parser.add_argument("--registry", type=Path, help="Private JSONL evidence history (default: output directory)")
     args = parser.parse_args(argv)
     result = invent(_read_private_input(args.input), seed=args.seed,
                     max_trials=args.trials, cost_bps=args.cost_bps)
+    registry = args.registry or args.output.parent / "foundry-registry.jsonl"
+    if registry.resolve() == args.output.resolve():
+        raise FoundryError("registry_cannot_equal_report")
+    receipt = append_private_registry(result, registry)
     write_private(result, args.output)
     print("MOJTRADE_FOUNDRY_RESEARCH_SAVED")
     print("MOJTRADE_FOUNDRY_CANDIDATES=" + str(len(result["birth_certificates"])))
     print("MOJTRADE_FOUNDRY_ORDERS=0")
+    print("MOJTRADE_FOUNDRY_REGISTRY_SEQUENCE=" + str(receipt["sequence"]))
     return 0
 
 
