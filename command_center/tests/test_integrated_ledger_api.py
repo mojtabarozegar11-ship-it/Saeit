@@ -1,6 +1,7 @@
 """Regressions for the owner-only, evidence-backed integrated management desk."""
 import json
 from io import StringIO
+from html.parser import HTMLParser
 from datetime import date
 from decimal import Decimal
 
@@ -11,7 +12,33 @@ from django.urls import reverse
 
 from accounting.models import Account, JournalEntry, JournalLine
 from core.models import ApprovalRequest
-from command_center.models import ApprovalDecision, CommandRequest, LedgerAuditEvent, WorkItem
+from command_center.models import ApprovalDecision, CommandRequest, LedgerAuditEvent, WorkItem, CycleIssue
+
+
+class _TabNestingParser(HTMLParser):
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.tabs = []
+        self.nested = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        label = attributes.get("id", "")
+        if tag == "section" and label.startswith("tab-"):
+            self.tabs.append(label)
+            if any(name.startswith("section#tab-") for name in self.stack):
+                self.nested.append(label)
+        if tag not in self.VOID:
+            self.stack.append(tag + ("#" + label if label else ""))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index].split("#", 1)[0] == tag:
+                self.stack = self.stack[:index]
+                return
 
 
 class IntegratedLedgerSafetyTests(TestCase):
@@ -105,6 +132,32 @@ class IntegratedLedgerSafetyTests(TestCase):
 
     def test_not_logged_in_cannot_read_ledger(self):
         self.assertNotEqual(self.client.get(reverse("command_center_integrated_ledger_api")).status_code, 200)
+
+    def test_all_management_tabs_are_siblings(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("command_center_integrated_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        parser = _TabNestingParser()
+        parser.feed(response.content.decode())
+        self.assertEqual(len(parser.tabs), 7)
+        self.assertEqual(parser.nested, [])
+
+    def test_issue_requires_verification_before_final_resolution(self):
+        issue = CycleIssue.objects.create(
+            cycle="C01", project_key="management", title="Provisional issue",
+            owner="management", observed_on=date(2026, 11, 7),
+            next_action="Verify the source", created_by=self.staff,
+        )
+        self.client.force_login(self.staff)
+        payload = {"kind": "issue_update", "id": issue.pk, "action": "resolve", "evidence": "Claimed fix"}
+        self.assertEqual(self.api(payload).status_code, 409)
+        self.assertEqual(self.api({**payload, "action": "verify", "evidence": "Inspection receipt"}).status_code, 200)
+        self.assertEqual(self.api({**payload, "action": "verify", "evidence": "Inspection receipt"}).status_code, 409)
+        self.assertEqual(self.api(payload).status_code, 200)
+        self.assertEqual(self.api(payload).status_code, 409)
+        issue.refresh_from_db()
+        self.assertEqual(issue.status, "resolved")
+        self.assertEqual(issue.resolution_evidence, "Claimed fix")
 
     def test_headless_watchdog_is_read_only_and_never_invents_completion(self):
         WorkItem.objects.create(title="Claimed done without receipt", status="done", created_by=self.staff)
