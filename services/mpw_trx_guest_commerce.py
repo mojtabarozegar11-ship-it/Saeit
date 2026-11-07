@@ -315,8 +315,6 @@ def patch_public(namespace):
     )
     from collections.abc import Mapping
     for key, patterns in list(namespace.items()):
-        if "PATTERN" not in str(key).upper() and key != "urlpatterns":
-            continue
         if isinstance(patterns, Mapping):
             items = list(patterns.items())
             if not any("trx-easy" in str(route) or "start/" in str(route)
