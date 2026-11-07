@@ -8,9 +8,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 from unittest.mock import MagicMock
-from pytest import mark
-
-pytestmark = mark.django_db(transaction=True)
+import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.mpw_recovery_test_settings")
 
@@ -29,6 +27,7 @@ from services import mpw_trx_email_recovery as module
 from services import mpw_trx_guest_commerce as guest_adapter
 
 
+@pytest.mark.django_db(transaction=True)
 class RecoveryIsolationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
