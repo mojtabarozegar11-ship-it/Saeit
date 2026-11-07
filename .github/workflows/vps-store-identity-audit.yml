@@ -176,6 +176,17 @@ jobs:
             stat -c 'APP_SOURCE_BYTES=%s APP_SOURCE_MTIME=%y' "$APP/manage.py"
           fi
           REMOTE
+      - name: Read live root routing rules before performance fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ROOT=/home/zomorod2/public_html
+          echo LIVE_HTACCESS_BEGIN
+          sed -n '1,220p' "$ROOT/.htaccess"
+          echo LIVE_HTACCESS_END
+          REMOTE
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
