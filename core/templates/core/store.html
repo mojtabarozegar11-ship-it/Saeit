@@ -1,21 +1,38 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}فروشگاه شرکت — Zomorodmelal{% endblock %}
-{% block meta_description %}کاتالوگ فروشگاه شرکت کشت و صنعت زمرد ملل؛ محصولات فعال و ثبت‌شده همراه با اطلاعات پایه و مسیر ارتباط برای دریافت جزئیات.{% endblock %}
+{% block meta_description %}فروشگاه‌های تخصصی و کاتالوگ فروشگاه شرکت کشت و صنعت زمرد ملل؛ عطر و زیبایی، اسباب‌بازی و ماکت، و محصولات فعال ثبت‌شده.{% endblock %}
 {% block body_class %}page-store commerce-page{% endblock %}
 {% block content %}
 <div class="commerce-page store-page">
   <section class="store-hero">
-    <span>COMPANY STORE · ACTIVE CATALOG</span>
-    <h1>فروشگاه شرکت</h1>
-    <p>این فروشگاه فقط محصولات فعال و ثبت‌شده شرکت را نمایش می‌دهد. برای جزئیات سفارش و شرایط عرضه با شرکت در تماس باشید.</p>
+    <span>COMPANY STORE · ZOMOROD MELAL</span>
+    <h1>فروشگاه‌های زمرد ملل</h1>
+    <p>از مسیر رسمی فروشگاه زمرد ملل وارد فروشگاه‌های تخصصی شوید یا محصولات فعال و ثبت‌شده شرکت را بررسی کنید.</p>
+  </section>
+  <section class="store-products" aria-labelledby="specialty-stores-title">
+    <header><span>SPECIALTY STORES</span><h2 id="specialty-stores-title">فروشگاه‌های تخصصی</h2></header>
+    <div class="store-product-grid">
+      <article class="store-product-card">
+        <small>BEAUTY · PERFUME · PERSONAL CARE</small>
+        <h3><a href="https://zomorod-perfume-beauty.mojtaba-rozegar11.chatgpt.site/" rel="noopener">فروشگاه عطر و زیبایی</a></h3>
+        <p>عطر، ادکلن، لوازم آرایشی و بهداشتی؛ همراه با راهنمای انتخاب و مسیر استعلام سفارش.</p>
+        <p><a href="https://zomorod-perfume-beauty.mojtaba-rozegar11.chatgpt.site/" rel="noopener">ورود به فروشگاه ←</a></p>
+      </article>
+      <article class="store-product-card">
+        <small>TOYS · MODELS · DIE-CAST CARS</small>
+        <h3><a href="https://zomorod-toys-models.mojtaba-rozegar11.chatgpt.site/" rel="noopener">فروشگاه اسباب‌بازی و ماکت</a></h3>
+        <p>اسباب‌بازی، ماکت و ماشین‌های فلزی برای بازی، هدیه و کلکسیون؛ همراه با مسیر استعلام مدل.</p>
+        <p><a href="https://zomorod-toys-models.mojtaba-rozegar11.chatgpt.site/" rel="noopener">ورود به فروشگاه ←</a></p>
+      </article>
+    </div>
   </section>
   <section class="store-products" aria-labelledby="store-products-title">
-    <header><span>REGISTERED PRODUCTS</span><h2 id="store-products-title">محصولات فعال</h2></header>
+    <header><span>REGISTERED PRODUCTS</span><h2 id="store-products-title">محصولات فعال شرکت</h2></header>
     <div class="store-product-grid">
       {% for product in products %}
       <article class="store-product-card"><small>{{ product.product_type }}</small><h3><a href="/store/product/{{ product.pk }}/">{{ product.title }}</a></h3><strong>{{ product.price }} {{ product.currency }}</strong>{% if product.metadata.factory_recipe == "farm_enterprise_economics" and product.metadata.factory_status == "published_free" %}<p><a href="/factory-releases/farm-enterprise-economics-v1/" rel="noopener">Download free toolkit and view details</a></p>{% endif %}</article>
-      {% empty %}<div class="store-empty" role="status">در حال حاضر محصول فعالی برای نمایش در فروشگاه ثبت نشده است.</div>
+      {% empty %}<div class="store-empty" role="status">در حال حاضر محصول فعالی برای نمایش در کاتالوگ شرکت ثبت نشده است.</div>
       {% endfor %}
     </div>
   </section>
