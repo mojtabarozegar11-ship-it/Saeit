@@ -12,7 +12,7 @@ class CronEvidenceTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.module = runpy.run_path(str(PROBE))
-        cls.summarize = cls.module["summarize_cron"]
+        cls.summarize = staticmethod(cls.module["summarize_cron"])
 
     def test_present_site_schedule_and_all_robot_markers(self):
         site = "*/10 * * * * php /private/worker.php # zm-site-agents-only-v100"
