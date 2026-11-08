@@ -2,7 +2,8 @@
 """Read-only, privacy-safe reconciliation of MojPlayWin paid flags.
 
 Never creates an order, contacts a blockchain node, reads buyer email,
-touches private downloads, or prints IDs, addresses or transaction hashes.
+opens private downloads, or prints IDs, addresses or transaction hashes.
+The existing paid-status checker may inspect private-file metadata only.
 A paid database flag is not proof of a completed customer delivery.
 """
 from __future__ import annotations
@@ -141,11 +142,42 @@ def delivery_records_for_order(order_id):
     return result
 
 
+def walletless_download_readiness(intent_id, customer_id, *, verified):
+    """Check existing server-side buyer entitlement without serving the file.
+
+    The walletless rail intentionally stores finalized proof in the webhook
+    event and credit ledger, not in CommerceReceipt. A missing CommerceReceipt
+    must therefore never be used as the walletless download-readiness verdict.
+
+    The invoked status checker reads the current entitlement and private-asset
+    metadata, but does not open a file, make an HTTP request or mutate an order.
+    Only fixed labels and a Boolean reach this audit's output.
+    """
+    if verified is not True:
+        return {"state": "not_verified", "can_download": None}
+    if type(intent_id) is not int or intent_id <= 0 or type(customer_id) is not int or customer_id <= 0:
+        return {"state": "unavailable", "can_download": None}
+    try:
+        from services.mpw_walletless_commercial_intent import commercial_buyer_status
+        result = commercial_buyer_status(intent_id, customer_id)
+    except Exception:
+        # Never expose identifiers, paths, checkout errors or configuration.
+        return {"state": "unavailable", "can_download": None}
+    if not isinstance(result, dict):
+        return {"state": "unavailable", "can_download": None}
+    if result.get("status") == "paid" and result.get("can_download") is True:
+        return {"state": "ready", "can_download": True}
+    if result.get("status") in ("awaiting", "review") and result.get("can_download") is False:
+        return {"state": "not_ready", "can_download": False}
+    return {"state": "unavailable", "can_download": None}
+
+
 def run():
     paid = PaymentIntent.objects.filter(status="paid").select_related("order")
     total = paid.count()
     rows = []
     provider_counts = Counter()
+    readiness_counts = Counter()
     valid_walletless_credits = 0
     for intent in paid.order_by("pk")[:100]:
         order = intent.order
@@ -163,6 +195,11 @@ def run():
         ).count()
         verified = bool(verified_walletless_credit(order, intent)) if provider == PROVIDER else False
         valid_walletless_credits += int(verified)
+        readiness = (
+            walletless_download_readiness(intent.pk, order.customer_id, verified=verified)
+            if provider == PROVIDER else {"state": "not_walletless", "can_download": None}
+        )
+        readiness_counts[readiness["state"]] += 1
         customer = getattr(order, "customer", None)
         customer_class = (
             "unknown" if customer is None else
@@ -187,6 +224,8 @@ def run():
         "truncated": total > len(rows),
         "provider_counts_examined": dict(sorted(provider_counts.items())),
         "walletless_persisted_credit_verified": valid_walletless_credits,
+        "walletless_download_readiness_counts": dict(sorted(readiness_counts.items())),
+        "walletless_readiness_is_not_customer_download_proof": True,
         "fulfillment_schema_metadata": fulfillment_model_shape(),
         "delivery_model_inventory": delivery_model_inventory(),
         "independent_mainnet_recheck_performed": False,
