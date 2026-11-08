@@ -19,7 +19,7 @@ ORIGIN = "https://zomorodmelal.ir"
 MAX_HTML_BYTES = 2_000_000
 SIGNATURE = "#مجتبی_روزگار"
 DAILY_LINE = re.compile(r"(?m)^\s*•\s*(\d{4}-\d{2}-\d{2}):")
-PROVINCE_HEADER = re.compile(r"(?m)^[^\n•|]+\s+—\s+[^\n|]+\|\s*دامنه دمای ۷ روز")
+PROVINCE_HEADER = re.compile(r"(?m)^(?P<province>[^\n•|]+?)\s+—\s+[^\n|]+\|\s*دامنه دمای ۷ روز")
 VOID_ELEMENTS = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"})
 
 
@@ -92,11 +92,31 @@ def inspect_delivery(weather_html: str, news_html: str, story_html: str, *, repo
     observed_dates = Counter(DAILY_LINE.findall(story_text))
     lines = [line.strip() for line in story_text.splitlines() if line.strip()]
     exact_final_signature = bool(lines) and lines[-1] == SIGNATURE
+    province_dates = {}
+    current_province = None
+    duplicate_province = False
+    orphan_daily_row = False
+    for line in lines:
+        header = PROVINCE_HEADER.match(line)
+        if header:
+            current_province = header.group("province").strip()
+            if current_province in province_dates:
+                duplicate_province = True
+            else:
+                province_dates[current_province] = []
+        daily_row = DAILY_LINE.match(line)
+        if daily_row:
+            if current_province is None:
+                orphan_daily_row = True
+            else:
+                province_dates[current_province].append(daily_row.group(1))
     seven_day_complete = (
         body_found and len(DAILY_LINE.findall(story_text)) == 217
         and all(observed_dates[item] == 31 for item in expected_dates)
         and set(observed_dates) == set(expected_dates)
         and len(PROVINCE_HEADER.findall(story_text)) == 31
+        and len(province_dates) == 31 and not duplicate_province and not orphan_daily_row
+        and all(days == expected_dates for days in province_dates.values())
     )
     weather_disclaimer = "این صفحه فعلاً پیش‌بینی زنده منتشر نمی‌کند" in weather_text
     news_disclaimer = "در این صفحه خبر فوری یا دستاورد تأییدنشده درج نشده است" in news_text
@@ -110,6 +130,7 @@ def inspect_delivery(weather_html: str, news_html: str, story_html: str, *, repo
         "story_daily_rows": sum(observed_dates.values()),
         "story_daily_rows_by_date": dict(sorted(observed_dates.items())),
         "story_province_headers": len(PROVINCE_HEADER.findall(story_text)),
+        "story_unique_provinces": len(province_dates),
         "story_seven_days_31_provinces": seven_day_complete,
         "story_exact_final_signature": exact_final_signature,
         "public_delivery_gate_passed": (
