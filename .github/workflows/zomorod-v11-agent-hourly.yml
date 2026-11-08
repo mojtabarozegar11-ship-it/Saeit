@@ -1,6 +1,6 @@
 name: Zomorod V11 hourly site agent telemetry
 on:
-  # Live PHP agent cycles are initiated by the independent cPanel scheduler;
+  # Continuous PHP agent cycles require a separately verified cPanel scheduler;
   # this GitHub path is for explicitly authorized diagnostics only.
   workflow_dispatch:
 permissions:
