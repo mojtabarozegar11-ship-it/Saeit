@@ -69,6 +69,7 @@ namespace MojTrade.OmegaX
         private DateTime _riskDayUtc;
         private int _consecutiveLosses;
         private bool _halted;
+        private DateTime _lastObservationUtc = DateTime.MinValue;
 
         protected override void OnStart()
         {
@@ -98,11 +99,19 @@ namespace MojTrade.OmegaX
             _sessionStartEquity = Account.Equity;
             _riskDayUtc = Server.TimeInUtc.Date;
             Positions.Closed += OnPositionClosed;
+            if (EnableCoordinatedDemoTrading && CoordinatorConfigured())
+            {
+                Timer.Start(60);
+                ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
+            }
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
 
         protected override void OnBarClosed()
         {
+            if (Account.IsLive)
+                return;
+            ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
             if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
                 !CoordinatorConfigured() || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
                 return;
@@ -177,6 +186,17 @@ namespace MojTrade.OmegaX
                     ModifyPosition(position, breakEven, position.TakeProfit);
                 }
             }
+        }
+
+        protected override void OnTimer()
+        {
+            if (Account.IsLive)
+            {
+                _halted = true;
+                Stop();
+                return;
+            }
+            ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
         }
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
@@ -268,6 +288,52 @@ namespace MojTrade.OmegaX
                    string.IsNullOrEmpty(endpoint.UserInfo) &&
                    !string.IsNullOrWhiteSpace(CoordinatorToken) &&
                    CoordinatorToken.Length >= 32;
+        }
+
+        private void ObserveCoordinatedRisk(double realizedToday)
+        {
+            if (_halted || Account.IsLive || !EnableCoordinatedDemoTrading ||
+                !CoordinatorConfigured())
+                return;
+            var now = Server.TimeInUtc;
+            if (now >= _lastObservationUtc &&
+                (now - _lastObservationUtc).TotalSeconds < 60)
+                return;
+            _lastObservationUtc = now;
+            if (!IsFinitePositive(Account.Equity) || !IsFinite(realizedToday))
+            {
+                _halted = true;
+                Print("BLOCKED: invalid broker risk observation.");
+                return;
+            }
+            var invariant = CultureInfo.InvariantCulture;
+            var body = "mode=demo&account=" + Account.Number.ToString(invariant) +
+                       "&day=" + now.ToString("yyyy-MM-dd", invariant) +
+                       "&request_id=" + Guid.NewGuid().ToString("N") +
+                       "&equity=" + Account.Equity.ToString("R", invariant) +
+                       "&realized_today=" + realizedToday.ToString("R", invariant) +
+                       "&open_positions=" + SharedMojTradePositionCount().ToString(invariant);
+            try
+            {
+                var request = new HttpRequest(new Uri(CoordinatorUrl.TrimEnd('/') + "/v1/observe"))
+                {
+                    Method = HttpMethod.Post,
+                    Body = body,
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                var response = Http.Send(request);
+                if (response.IsSuccessful && response.StatusCode == 200 &&
+                    response.Body == "OBSERVED")
+                    return;
+            }
+            catch (Exception)
+            {
+                // Never print token, raw request or financial account values.
+            }
+            _halted = true;
+            Print("BLOCKED: coordinator risk observation failed; new orders halted.");
         }
 
         private string ReserveCoordinatedSlot(double realizedToday)

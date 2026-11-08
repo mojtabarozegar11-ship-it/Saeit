@@ -184,6 +184,67 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(risk.Denied, "baseline_not_enrolled"):
             self.ledger.reserve(future)
 
+    def test_observe_updates_equity_without_reservations_when_positions_full(self):
+        self.seed()
+        self.ledger.observe(self.admission(1, equity="995", positions=3))
+        with self.ledger._connection() as db:
+            equity = db.execute(
+                "SELECT last_equity FROM day_state WHERE account=? AND day=?",
+                ("123", DAY),
+            ).fetchone()[0]
+            reserved = db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
+        self.assertEqual(equity, "995")
+        self.assertEqual(reserved, 0)
+
+    def test_observe_latches_equity_stop_across_restart(self):
+        self.seed()
+        with self.assertRaisesRegex(risk.Denied, "daily_loss_reached"):
+            self.ledger.observe(self.admission(1, equity="979", positions=3))
+        restarted = risk.Ledger(self.path, enabled=True, clock=lambda: self.now)
+        with self.assertRaisesRegex(risk.Denied, "risk_halted"):
+            restarted.reserve(self.admission(2, equity="1000"))
+
+    def test_observe_latches_realized_stop_without_order_attempt(self):
+        self.seed()
+        with self.assertRaisesRegex(risk.Denied, "daily_loss_reached"):
+            self.ledger.observe(self.admission(1, realized="-21"))
+        with self.assertRaisesRegex(risk.Denied, "risk_halted"):
+            self.ledger.observe(self.admission(2, realized="0"))
+
+    def test_observe_rolls_baseline_without_new_order(self):
+        self.seed()
+        midnight = datetime(2026, 11, 9, tzinfo=timezone.utc).timestamp()
+        self.now = midnight - 30
+        self.ledger.observe(self.admission(1, equity="991", positions=3))
+        self.now = midnight + 10
+        next_day = "2026-11-09"
+        observed = risk.Admission.parse({
+            "mode": "demo", "account": "123", "day": next_day,
+            "request_id": f"{2:032x}", "equity": "991",
+            "realized_today": "0", "open_positions": "3",
+        }, next_day)
+        self.ledger.observe(observed)
+        with self.ledger._connection() as db:
+            state = db.execute(
+                "SELECT baseline FROM day_state WHERE account=? AND day=?",
+                ("123", next_day),
+            ).fetchone()[0]
+        self.assertEqual(state, "991")
+
+    def test_observation_allowed_while_reservations_disabled(self):
+        self.seed()
+        self.ledger.enabled = False
+        self.ledger.observe(self.admission(1))
+        with self.assertRaisesRegex(risk.Denied, "disabled"):
+            self.ledger.reserve(self.admission(2))
+
+    def test_direct_observation_rejects_stale_day(self):
+        self.seed()
+        invalid = risk.Admission("123", "2026-11-07", f"{1:032x}",
+                                 risk.Decimal("1000"), risk.Decimal("0"), 0)
+        with self.assertRaisesRegex(risk.Denied, "stale_day"):
+            self.ledger.observe(invalid)
+
 
 class HttpProtocolTests(unittest.TestCase):
     def setUp(self):
@@ -232,6 +293,20 @@ class HttpProtocolTests(unittest.TestCase):
         status, body = self.post(
             "/v1/commit", {"account": "123", "request_id": f"{2:032x}"})
         self.assertEqual((status, body), (200, "SETTLED"))
+
+    def test_authenticated_observation_http_does_not_reserve(self):
+        data = dict(mode="demo", account="123", day=DAY, request_id=f"{3:032x}",
+                    equity="999", realized_today="0", open_positions="3")
+        self.assertEqual(self.post("/v1/observe", data), (200, "OBSERVED"))
+        with self.server.RequestHandlerClass.ledger._connection() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0], 0)
+
+    def test_observation_http_unauthorized_is_denied(self):
+        data = dict(mode="demo", account="123", day=DAY, request_id=f"{4:032x}",
+                    equity="999", realized_today="0", open_positions="0")
+        with self.assertRaises(HTTPError) as caught:
+            self.post("/v1/observe", data, token="wrong")
+        self.assertEqual(caught.exception.code, 401)
 
 
 if __name__ == "__main__":

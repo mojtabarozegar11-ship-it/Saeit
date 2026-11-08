@@ -144,6 +144,77 @@ class Ledger:
         finally:
             db.close()
 
+    def _refresh_daily(self, db: sqlite3.Connection, admission: Admission, now: float) -> None:
+        """Persist observations and latch daily loss, without consuming a slot.
+
+        Caller must hold an immediate SQLite transaction.
+        """
+        if admission.day != datetime.fromtimestamp(now, timezone.utc).date().isoformat():
+            raise Denied("stale_day")
+        if not admission.equity.is_finite() or admission.equity <= 0:
+            raise Denied("invalid_equity")
+        if not admission.realized_today.is_finite():
+            raise Denied("invalid_number")
+        state = db.execute(
+            "SELECT baseline,halted FROM day_state WHERE account=? AND day=?",
+            (admission.account, admission.day),
+        ).fetchone()
+        if state is None:
+            # Unattended UTC rollover requires a fresh pre-midnight equity snapshot.
+            midnight = datetime.strptime(admission.day, "%Y-%m-%d").replace(
+                tzinfo=timezone.utc).timestamp()
+            yesterday = (datetime.fromtimestamp(midnight, timezone.utc).date()
+                         - timedelta(days=1)).isoformat()
+            old = db.execute(
+                "SELECT last_equity,updated FROM day_state "
+                "WHERE account=? AND day=?",
+                (admission.account, yesterday),
+            ).fetchone()
+            if (old is None or not midnight <= now <= midnight + 120 or
+                    not midnight - 120 <= old[1] < midnight):
+                raise Denied("baseline_not_enrolled")
+            carried = Decimal(old[0])
+            if not carried.is_finite() or carried <= 0:
+                raise Denied("invalid_prior_baseline")
+            db.execute(
+                "INSERT INTO day_state(account,day,baseline,last_equity,updated) "
+                "VALUES (?,?,?,?,?)",
+                (admission.account, admission.day, str(carried),
+                 str(carried), now),
+            )
+            state = (str(carried), 0)
+        baseline, halted = Decimal(state[0]), state[1]
+        if baseline <= 0 or not baseline.is_finite() or halted:
+            raise Denied("risk_halted")
+        if (admission.equity <= baseline * (1 - LIMIT) or
+                admission.realized_today <= -(baseline * LIMIT)):
+            db.execute(
+                "UPDATE day_state SET halted=1,last_equity=?,updated=? "
+                "WHERE account=? AND day=?",
+                (str(admission.equity), now, admission.account, admission.day),
+            )
+            db.commit()  # Latch persists even if a future retry is denied.
+            raise Denied("daily_loss_reached")
+        db.execute(
+            "UPDATE day_state SET last_equity=?,updated=? "
+            "WHERE account=? AND day=?",
+            (str(admission.equity), now, admission.account, admission.day),
+        )
+
+    def observe(self, admission: Admission) -> None:
+        """Observe equity even with no trade signal or a full position book."""
+        now = self.clock()
+        db = self._connection()
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            self._refresh_daily(db, admission, now)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def reserve(self, admission: Admission) -> str:
         if not self.enabled:
             raise Denied("disabled")
@@ -156,52 +227,7 @@ class Ledger:
                 (admission.request_id,),
             ).fetchone():
                 raise Denied("duplicate_request")
-            state = db.execute(
-                "SELECT baseline,halted FROM day_state WHERE account=? AND day=?",
-                (admission.account, admission.day),
-            ).fetchone()
-            if state is None:
-                # Unattended UTC rollover is permitted only with a recent,
-                # persisted pre-midnight account-equity snapshot.
-                midnight = datetime.strptime(admission.day, "%Y-%m-%d").replace(
-                    tzinfo=timezone.utc).timestamp()
-                yesterday = (datetime.fromtimestamp(midnight, timezone.utc).date()
-                             - timedelta(days=1)).isoformat()
-                old = db.execute(
-                    "SELECT last_equity,updated FROM day_state "
-                    "WHERE account=? AND day=?",
-                    (admission.account, yesterday),
-                ).fetchone()
-                if (old is None or not midnight <= now <= midnight + 120 or
-                        not midnight - 120 <= old[1] < midnight):
-                    raise Denied("baseline_not_enrolled")
-                carried = Decimal(old[0])
-                if not carried.is_finite() or carried <= 0:
-                    raise Denied("invalid_prior_baseline")
-                db.execute(
-                    "INSERT INTO day_state(account,day,baseline,last_equity,updated) "
-                    "VALUES (?,?,?,?,?)",
-                    (admission.account, admission.day, str(carried),
-                     str(carried), now),
-                )
-                state = (str(carried), 0)
-            baseline, halted = Decimal(state[0]), state[1]
-            if baseline <= 0 or not baseline.is_finite() or halted:
-                raise Denied("risk_halted")
-            if (admission.equity <= baseline * (1 - LIMIT) or
-                    admission.realized_today <= -(baseline * LIMIT)):
-                db.execute(
-                    "UPDATE day_state SET halted=1,last_equity=?,updated=? "
-                    "WHERE account=? AND day=?",
-                    (str(admission.equity), now, admission.account, admission.day),
-                )
-                db.commit()  # Latch persists even if a future retry is denied.
-                raise Denied("daily_loss_reached")
-            db.execute(
-                "UPDATE day_state SET last_equity=?,updated=? "
-                "WHERE account=? AND day=?",
-                (str(admission.equity), now, admission.account, admission.day),
-            )
+            self._refresh_daily(db, admission, now)
             active = db.execute(
                 "SELECT COUNT(*) FROM reservations WHERE account=? AND day=? "
                 "AND state IN ('reserved','committed') AND expires>?",
@@ -278,11 +304,15 @@ class Handler(BaseHTTPRequestHandler):
             if any(len(values) != 1 for values in parsed.values()):
                 raise Denied("duplicate_field")
             fields = {k: v[0] for k, v in parsed.items()}
-            if self.path == "/v1/reserve":
+            if self.path in ("/v1/reserve", "/v1/observe"):
                 today = datetime.fromtimestamp(self.ledger.clock(), timezone.utc).date().isoformat()
                 request = Admission.parse(fields, today)
-                ticket = self.ledger.reserve(request)
-                self._reply(200, "GRANTED|" + ticket)
+                if self.path == "/v1/observe":
+                    self.ledger.observe(request)
+                    self._reply(200, "OBSERVED")
+                else:
+                    ticket = self.ledger.reserve(request)
+                    self._reply(200, "GRANTED|" + ticket)
             elif self.path in ("/v1/commit", "/v1/cancel"):
                 self.ledger.settle(
                     fields.get("request_id", ""),
