@@ -12,6 +12,9 @@ from core.models import ApprovalRequest, ResearchProject
 @require_GET
 def management_report(request):
     now = timezone.now()
+    done = WorkItem.objects.filter(status="done")
+    with_reference = done.exclude(resolution_reference="").count()
+    without_reference = done.filter(resolution_reference="").count()
     data = {
         "captured_at": now.isoformat(),
         "accounting": {
@@ -22,7 +25,10 @@ def management_report(request):
             "open": WorkItem.objects.filter(status="open").count(),
             "in_progress": WorkItem.objects.filter(status="in_progress").count(),
             "blocked": WorkItem.objects.filter(status="blocked").count(),
-            "done": WorkItem.objects.filter(status="done").count(),
+            "done": with_reference + without_reference,
+            # Presence of a reference is NOT independent outcome verification.
+            "done_with_reference_unverified": with_reference,
+            "done_without_reference": without_reference,
         },
         "communications": {
             "unread_for_me": InternalMessage.objects.filter(recipient=request.user, read_at__isnull=True).count(),
