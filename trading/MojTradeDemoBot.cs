@@ -261,6 +261,11 @@ namespace cAlgo.Robots
                 Stop();
                 return;
             }
+            // Observation mode is strictly read-only, including existing demo
+            // positions. Never adjust broker-side protection without the same
+            // coordinated opt-in required for entry orders.
+            if (_halted || !EnableCoordinatedDemoTrading || !CoordinatorConfigured())
+                return;
             ManageOpenPositions();
         }
 
