@@ -237,11 +237,22 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
     if target.is_symlink() or not target.is_dir():
         raise ValueError("bundle_directory_invalid")
     found = set()
+    expected_directories = {
+        str(parent.as_posix())
+        for name in expected for parent in list(Path(name).parents)[:-1]
+        if str(parent) != "."
+    }
     for path in target.rglob("*"):
         if path.is_symlink():
             raise ValueError("untrusted_bundle_symlink")
+        relative = path.relative_to(target).as_posix()
         if path.is_file():
-            found.add(path.relative_to(target).as_posix())
+            found.add(relative)
+        elif path.is_dir():
+            if relative not in expected_directories:
+                raise ValueError("bundle_unexpected_directory")
+        else:
+            raise ValueError("bundle_unexpected_entry")
     if found != expected:
         raise ValueError("bundle_inventory_mismatch")
     actual_checksums = json.loads((target / "SHA256SUMS.json").read_text("utf-8"))
