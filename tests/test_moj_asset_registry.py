@@ -34,6 +34,9 @@ class AssetRegistryTests(unittest.TestCase):
     def test_mojoner_bitcoin_supply_is_exact(self):
         self.assertEqual(int(self.program["assets"][0]["supply_tokens"]), MOJONER_SUPPLY)
 
+    def test_mojoner_display_name_is_immutable_in_candidate(self):
+        self.rejects("bitcoin_runes_spec_mismatch", lambda p: p["assets"][0].update(name="Imposter"))
+
     def test_mojoner_seven_letter_length_unlock_is_not_availability(self):
         before = mojoner_rune_name_length_gate(944_999)
         after = mojoner_rune_name_length_gate(945_000)
