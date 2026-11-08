@@ -24,6 +24,7 @@ namespace cAlgo.Robots
 
         private DateTime _lastEntryTime = DateTime.MinValue;
         private DateTime _lastObservationUtc = DateTime.MinValue;
+        private DateTime _lastSuccessfulObservationUtc = DateTime.MinValue;
         private DateTime _riskDayUtc;
         private double _dailyStartEquity;
         private bool _halted;
@@ -186,6 +187,8 @@ namespace cAlgo.Robots
                 Print("BLOCKED: daily equity or closed-loss risk stop active.");
                 return;
             }
+            if (!HasFreshRiskObservation())
+                return;
 
             var requiredBars = Math.Max(SlowEma, BreakoutLookback) +
                                Math.Max(AtrPeriod, RsiPeriod) + 5;
@@ -266,6 +269,8 @@ namespace cAlgo.Robots
             // coordinated opt-in required for entry orders.
             if (_halted || !EnableCoordinatedDemoTrading || !CoordinatorConfigured())
                 return;
+            if (!HasFreshRiskObservation())
+                return;
             ManageOpenPositions();
         }
 
@@ -293,6 +298,9 @@ namespace cAlgo.Robots
                 !IsFinitePositive(Symbol.Ask) || !IsFinitePositive(Symbol.Bid) ||
                 Symbol.Ask < Symbol.Bid || !IsFinitePositive(Symbol.VolumeInUnitsMin) ||
                 !IsFinitePositive(MaximumSpreadPips))
+                return;
+
+            if (!HasFreshRiskObservation())
                 return;
 
             var atrPips = _atr.Result.Last(1) / Symbol.PipSize;
@@ -474,6 +482,17 @@ namespace cAlgo.Robots
                    CoordinatorToken.Length >= 32;
         }
 
+        private bool HasFreshRiskObservation()
+        {
+            // A request attempt is not a successful risk observation. Do not
+            // reuse yesterday's observation across the UTC risk-day boundary.
+            var now = Server.TimeInUtc;
+            return _lastSuccessfulObservationUtc != DateTime.MinValue &&
+                   now >= _lastSuccessfulObservationUtc &&
+                   now.Date == _lastSuccessfulObservationUtc.Date &&
+                   (now - _lastSuccessfulObservationUtc).TotalSeconds <= 60;
+        }
+
         private void ObserveCoordinatedRisk(double realizedToday)
         {
             if (_halted || Account.IsLive || !EnableCoordinatedDemoTrading ||
@@ -510,7 +529,10 @@ namespace cAlgo.Robots
                 var response = Http.Send(request);
                 if (response.IsSuccessful && response.StatusCode == 200 &&
                     response.Body == "OBSERVED")
+                {
+                    _lastSuccessfulObservationUtc = now;
                     return;
+                }
             }
             catch (Exception)
             {
