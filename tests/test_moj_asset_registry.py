@@ -170,7 +170,9 @@ class AssetRegistryTests(unittest.TestCase):
             self.assertEqual(receipt["offline_files"], 103)
             self.assertFalse(receipt["on_chain_issuance"])
             self.assertEqual(len(list((target / "f41-shasta").glob("moj*.json"))), 50)
-            self.assertEqual(len(list(target.glob("evm-candidates/moj*/contracts/Moj*FixedSupply.sol"))), 50)\n            for n in range(1, 51):\n                self.assertTrue((target / f"evm-candidates/moj{n}/contracts/Moj{n}FixedSupply.sol").is_file())
+            self.assertEqual(len(list(target.glob("evm-candidates/moj*/contracts/Moj*FixedSupply.sol"))), 50)
+            for n in range(1, 51):
+                self.assertTrue((target / f"evm-candidates/moj{n}/contracts/Moj{n}FixedSupply.sol").is_file())
             self.assertTrue((target / "bitcoin-runes/mojoner-etching-fragment.yaml").is_file())
             self.assertEqual(len(json.loads((target / "SHA256SUMS.json").read_text())), 102)
             self.assertEqual(verify_bundle(self.program, target)["offline_files"], 103)
