@@ -304,9 +304,14 @@ def inspect_error_classes(public, now_epoch=None):
         "django_dependency", "static_middleware_dependency", "environment_library",
         "database_driver", "management_module", "other_unclassified",
     )
+    shape_names = (
+        "exception_message_line", "non_exception_reference",
+        "module_phrase_near_marker", "module_phrase_absent_near_marker",
+    )
     result = {"regular_recent_error_files": 0, "bounded_bytes_scanned": 0,
               "classes": {key: 0 for key in signatures},
               "missing_module_categories": {key: 0 for key in category_names},
+              "missing_module_shapes": {key: 0 for key in shape_names},
               "files_modified": False, "raw_log_emitted": False}
     for path in files:
         try:
@@ -323,14 +328,36 @@ def inspect_error_classes(public, now_epoch=None):
             result["bounded_bytes_scanned"] += len(data)
             for key, needle in signatures.items():
                 result["classes"][key] = min(100, result["classes"][key] + data.count(needle))
-            for found in re.findall(
-                rb"modulenotfounderror\s*:\s*no module named\s+['\"]([^'\"\r\n]{1,128})['\"]",
-                data,
-            ):
-                group = classify_missing_module(found)
-                result["missing_module_categories"][group] = min(
-                    100, result["missing_module_categories"][group] + 1
+            # Never emit log text, module names, or arbitrary substrings.
+            # Distinguish exception messages from code references in tracebacks.
+            for marker in re.finditer(rb"modulenotfounderror", data):
+                suffix = data[marker.end():marker.end() + 256]
+                first_line = suffix.split(b"\n", 1)[0]
+                prefix = data[max(0, marker.start() - 32):marker.start()]
+                source_reference = bool(re.search(rb"\b(?:except|raise)\s+$", prefix))
+                is_exception = bool(re.match(rb"\s*:", first_line)) and not source_reference
+                line_shape = "exception_message_line" if is_exception else "non_exception_reference"
+                result["missing_module_shapes"][line_shape] = min(
+                    100, result["missing_module_shapes"][line_shape] + 1
                 )
+                # Do not borrow the next exception's module from a source-code marker.
+                scoped = suffix.split(b"modulenotfounderror", 1)[0] if is_exception else b""
+                normalized = re.sub(rb"\s+", b" ", scoped)
+                phrase = re.search(
+                    rb"no module named\s+(?:['\"]|&#39;|&#x27;|&quot;)?"
+                    rb"([a-z_][a-z0-9_.]{0,127})",
+                    normalized,
+                )
+                phrase_shape = ("module_phrase_near_marker" if phrase
+                                else "module_phrase_absent_near_marker")
+                result["missing_module_shapes"][phrase_shape] = min(
+                    100, result["missing_module_shapes"][phrase_shape] + 1
+                )
+                if phrase and is_exception:
+                    group = classify_missing_module(phrase.group(1))
+                    result["missing_module_categories"][group] = min(
+                        100, result["missing_module_categories"][group] + 1
+                    )
         except (OSError, ValueError):
             continue
     return result
