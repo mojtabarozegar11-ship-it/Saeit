@@ -212,7 +212,8 @@ def offline_release_readiness(program: dict) -> dict:
         "unverified_rune_commitment": True,
         "initial_holder_addresses_untracked": True,
         "unissued_series_assets": sum(asset["issuance_state"] == "not_issued" for asset in program["assets"][1:]),
-        "unverified_contract_deployments": sum(asset["mainnet_authorized"] is False for asset in program["assets"][1:]),
+        # Offline planning records authorization, not independent deployment evidence.
+        "contract_deployment_evidence_untracked": True,
         "undecided_series_decimals": sum(asset["decimals"] is None for asset in program["assets"][1:]),
         "unapproved_series_supply_proposals": sum(asset["supply_status"] == "revisable_proposal_within_owner_range" for asset in program["assets"][1:]),
         "release_ready": False,
