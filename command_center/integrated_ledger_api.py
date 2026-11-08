@@ -170,7 +170,13 @@ def _system_status(request):
             if item.get("component") in rows:
                 rows[item["component"]].update(state=item.get("state", "unknown"),
                     detail=item.get("detail", "پایش read-only"), observed_at=item.get("observed_at"))
-    rows["accounting"].update(state="connected", detail="اتصال مستقیم به دفتر مالی داخلی")
+    # A configured Django model is not proof of an authenticated, reconciled,
+    # production accounting runtime. Preserve independently observed status;
+    # never present a fabricated healthy/connected accounting state.
+    if rows["accounting"]["state"] == "unknown":
+        rows["accounting"]["detail"] = (
+            "مدل حسابداری تعریف شده؛ اتصال پایگاه دادهٔ تولیدی و تراز واقعی هنوز تأیید مستقل ندارند."
+        )
     return list(rows.values())
 
 
