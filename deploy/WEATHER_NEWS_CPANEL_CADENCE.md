@@ -45,7 +45,7 @@ PR #2194 ships two additional release files:
 **19 exact application files**, including the published-page templates. It does
 not grant deployment authority and the checker **cannot write files**.
 The manifest's `commit` is the immutable application-code snapshot whose
-19 file hashes are enumerated (cycle 11: `1d9621c`); a later documentation-only
+19 file hashes are enumerated (cycle 12: `dea67c8d`); a later documentation-only
 commit may carry that manifest without changing the application snapshot.
 
 Cycle 10 also HTML-script-escapes untrusted JSON-LD values in public newsletter
@@ -56,6 +56,12 @@ Cycle 11 additionally blocks public surfaces from showing unapproved, future,
 unpublished or prohibited newsletter stories, and filters public channel records
 to confirmed published channel entries. A successful GitHub CI does not prove
 these protections are active on the live cPanel instance.
+Cycle 12 adds a model-level `#مجتبی_روزگار` final-signature requirement for a
+`published` NewsletterStory and for published channel distribution. Publishing
+to a channel also requires a presently public, non-future story. Legacy unsigned
+published rows must be individually corrected under editorial approval before
+their next programmatic save or public-channel distribution; the source change
+does not silently rewrite their bodies.
 
 After authenticating legitimately and placing these two verified release-tool
 files in an accessible, nonproduction staging directory, inspect the actual
