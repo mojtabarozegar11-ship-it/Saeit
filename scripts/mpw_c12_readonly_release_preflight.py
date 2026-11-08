@@ -39,8 +39,16 @@ def main():
         import hashlib
         h = hashlib.sha256()
         try:
-            with ZIP.open("rb") as f:
-                while chunk := f.read(1024 * 1024):
+            # Refuse symlink substitution between lstat and open.
+            fd = os.open(ZIP, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(fd, "rb") as archive:
+                opened = os.fstat(archive.fileno())
+                initial = ZIP.lstat()
+                if (not stat.S_ISREG(opened.st_mode)
+                        or opened.st_uid != os.geteuid()
+                        or (opened.st_dev, opened.st_ino) != (initial.st_dev, initial.st_ino)):
+                    raise OSError("release archive identity changed")
+                while chunk := archive.read(1024 * 1024):
                     h.update(chunk)
             zip_meta["expected_sha256_matches"] = h.hexdigest() == EXPECTED
         except OSError:
