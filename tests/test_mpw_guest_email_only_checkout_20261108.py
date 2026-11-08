@@ -81,6 +81,23 @@ class GuestEmailOnlyCheckoutTests(TransactionTestCase):
         self.assertFalse(Order.objects.exists())
 
 
+    def test_guest_creation_accepts_recovery_compatible_purchase_email_alias(self):
+        request = self._request({"purchase_email": "Buyer@Example.com"})
+        request.META["CSRF_COOKIE"] = "a" * 32
+        with patch.object(guest, "_rate_limit", return_value=None):
+            created, cookie = guest._new_user(request)
+        self.assertNotEqual(created.pk, self.buyer.pk)
+        self.assertEqual(created.email, "buyer@example.com")
+        self.assertTrue(created.username.startswith("mpwguest_"))
+        self.assertIsInstance(cookie, str)
+
+    def test_existing_guest_accepts_recovery_compatible_purchase_email_alias(self):
+        request = self._request({"purchase_email": "Buyer@Example.com"})
+        guest._bind_guest_email(request, self.buyer)
+        self.buyer.refresh_from_db()
+        self.assertEqual(self.buyer.email, "buyer@example.com")
+
+
 def test_checkout_template_is_guest_email_only_and_has_no_wallet_js():
     root = Path(__file__).resolve().parents[1]
     markup = (
