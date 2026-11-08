@@ -25,6 +25,7 @@ try:
     spec.loader.exec_module(guard)
 finally:
     sys.path.pop(0)
+REAL_NTP_PROBE = guard._system_clock_synchronized
 
 NOW = datetime(2026, 11, 7, 13, 7, tzinfo=timezone.utc)
 EXCESS = guard.MIN_FREE_BYTES + 4 * 1024 * 1024
@@ -34,6 +35,10 @@ class VPSCaptureGuardTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        # Offline tests use a deterministic NTP fixture, never the host clock.
+        clock_patch = patch.object(guard, "_system_clock_synchronized", return_value=True)
+        clock_patch.start()
+        self.addCleanup(clock_patch.stop)
         self.root = Path(self.tmp.name)
         self.folder = self.root / "private"
         self.folder.mkdir(mode=0o700)
@@ -49,12 +54,40 @@ class VPSCaptureGuardTests(unittest.TestCase):
     def test_read_only_preflight_does_not_create_journal_or_lock(self):
         result = self.check()
         self.assertEqual(result["status"], "LOCAL_READINESS_ONLY_NOT_ACTIVATED")
+        self.assertIs(result["ntp_synchronized_at_preflight"], True)
         self.assertFalse(result["journal_exists"])
         self.assertEqual(result["real_orders"], 0)
         self.assertFalse(result["remote_source_authenticity_verified"])
         self.assertEqual(len(result["observed_source_sha256"]), 4)
         self.assertFalse(self.journal.exists())
         self.assertFalse(Path(str(self.journal) + ".lock").exists())
+
+    def test_unsynchronized_clock_blocks_before_network_or_file_creation(self):
+        with patch.object(guard, "_system_clock_synchronized", return_value=False), \
+             patch.object(guard.capture, "capture_public_once") as network:
+            with self.assertRaisesRegex(guard.GuardReject, "ntp_synchronized"):
+                guard.capture_once(self.journal, "BTC-USD", self.venue,
+                                   source_dir=SOURCE.parent, now=NOW, free_bytes=EXCESS)
+            network.assert_not_called()
+        self.assertFalse(self.journal.exists())
+        self.assertFalse(Path(str(self.journal) + ".lock").exists())
+
+    def test_ntp_probe_accepts_only_positive_kernel_sync_receipt(self):
+        accepted = guard.subprocess.CompletedProcess([], 0, "NTPSynchronized=yes\n", "")
+        rejected = guard.subprocess.CompletedProcess([], 0, "NTPSynchronized=no\n", "")
+        with patch.object(guard.subprocess, "run", return_value=accepted) as probe:
+            self.assertTrue(REAL_NTP_PROBE())
+            probe.assert_called_once_with(
+                ["timedatectl", "show", "--property=NTPSynchronized"],
+                capture_output=True, text=True, timeout=5, check=False)
+        with patch.object(guard.subprocess, "run", return_value=rejected):
+            self.assertFalse(REAL_NTP_PROBE())
+
+    def test_ntp_probe_fails_closed_if_tool_missing_or_unresponsive(self):
+        for failure in (OSError("missing"), guard.subprocess.TimeoutExpired("timedatectl", 5)):
+            with self.subTest(failure=type(failure).__name__), \
+                 patch.object(guard.subprocess, "run", side_effect=failure):
+                self.assertFalse(REAL_NTP_PROBE())
 
     def test_2gib_plus_headroom_is_mandatory(self):
         with self.assertRaisesRegex(guard.GuardReject, "insufficient_disk"):

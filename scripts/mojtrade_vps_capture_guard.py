@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +44,22 @@ PUBLIC_VENUES = {
 
 class GuardReject(ValueError):
     """Private runtime, disk, timing, source or evidence gate failed."""
+
+
+def _system_clock_synchronized():
+    """Read the kernel-backed systemd NTP state; fail closed on uncertainty.
+
+    This never configures NTP, sets time, invokes network requests or writes
+    files. The production CLI provides no way to bypass this OS check.
+    """
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show", "--property=NTPSynchronized"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and result.stdout.strip() == "NTPSynchronized=yes"
 
 
 def _no_symlink_ancestors(path):
@@ -158,6 +175,8 @@ def preflight(journal, symbol, venue, *, source_dir=None, now=None,
     """
     if symbol not in observer.PRODUCTS or venue not in PUBLIC_VENUES:
         raise GuardReject("only_supported_public_symbol_and_quoted_venue")
+    if not _system_clock_synchronized():
+        raise GuardReject("ntp_synchronized_system_clock_required")
     clock = datetime.now(timezone.utc) if now is None else now
     if not isinstance(clock, datetime) or clock.tzinfo is None:
         raise GuardReject("timezone_aware_clock_required")
@@ -189,6 +208,7 @@ def preflight(journal, symbol, venue, *, source_dir=None, now=None,
         "required_free_bytes": MIN_FREE_BYTES,
         "free_inodes": available_inodes,
         "required_free_inodes": MIN_FREE_INODES,
+        "ntp_synchronized_at_preflight": True,
         "existing_private_lock": lock_exists,
         "capture_window_utc_minutes": [FIRST_CAPTURE_MINUTE, LAST_CAPTURE_MINUTE],
         "observed_source_sha256": fingerprints,
