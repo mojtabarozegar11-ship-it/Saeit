@@ -53,6 +53,25 @@ class OfficialRssReaderTests(unittest.TestCase):
             ["Agricultural production index"],
         )
 
+    def test_prohibited_topics_hidden_in_rss_metadata_are_discarded(self):
+        raw = rss([
+            "<item><title>Wheat estimates</title><link>https://www.nass.usda.gov/news/wheat</link>"
+            "<category>Political affairs</category>"
+            "<pubDate>Sun, 08 Nov 2026 10:00:00 GMT</pubDate></item>",
+            "<item xmlns:content='http://purl.org/rss/1.0/modules/content/'>"
+            "<title>Regional food report</title><link>https://www.nass.usda.gov/news/food</link>"
+            "<content:encoded><![CDATA[<p>Israel-related harvest update</p>]]></content:encoded>"
+            "<pubDate>Sun, 08 Nov 2026 10:00:00 GMT</pubDate></item>",
+            "<item><title>Seed data</title><link>https://www.nass.usda.gov/news/seed</link>"
+            "<category domain='https://example.test/politics'>Agriculture</category>"
+            "<pubDate>Sun, 08 Nov 2026 10:00:00 GMT</pubDate></item>",
+            item("https://www.nass.usda.gov/news/safe", title="Regional production report"),
+        ])
+        self.assertEqual(
+            [row.title for row in parse_official_rss(raw, now=NOW)],
+            ["Regional production report"],
+        )
+
     def test_untrusted_hosts_credentials_and_scripts_rejected(self):
         rows = parse_official_rss(rss([
             item("https://www.nass.usda.gov.evil.example/news"),
