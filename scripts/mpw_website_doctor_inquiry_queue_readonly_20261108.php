@@ -19,9 +19,14 @@ function abort_safely(string $reason): void {
     exit(2);
 }
 if (!extension_loaded('openssl') || !is_dir($root) || is_link($root)) abort_safely('PRIVATE_STORE');
-if (function_exists('posix_geteuid') && @fileowner($root) !== posix_geteuid()) abort_safely('OWNER_MISMATCH');
+$rootStat = @stat($root);
+if (!is_array($rootStat) || ($rootStat['mode'] & 0077) !== 0) abort_safely('PRIVATE_DIR_PERMISSIONS');
+if (function_exists('posix_geteuid') && $rootStat['uid'] !== posix_geteuid()) abort_safely('OWNER_MISMATCH');
 $keyFile = $root . '/.inquiry-key';
 if (!is_file($keyFile) || is_link($keyFile)) abort_safely('KEY_MISSING');
+$keyStat = @stat($keyFile);
+if (!is_array($keyStat) || ($keyStat['mode'] & 0077) !== 0 ||
+    (function_exists('posix_geteuid') && $keyStat['uid'] !== posix_geteuid())) abort_safely('KEY_PERMISSIONS');
 $key = @file_get_contents($keyFile);
 if ($key === false || strlen($key) !== 32) abort_safely('KEY_INVALID');
 $files = @scandir($root);
@@ -56,10 +61,21 @@ foreach (array_slice($files, 0, $cap) as $file) {
         continue;
     }
     $values = [];
+    $validEnvelope = true;
     foreach (['iv', 'tag', 'cipher'] as $field) {
-        if (!isset($obj[$field]) || !is_string($obj[$field])) continue 2;
+        if (!isset($obj[$field]) || !is_string($obj[$field])) {
+            $validEnvelope = false;
+            break;
+        }
         $values[$field] = base64_decode($obj[$field], true);
-        if ($values[$field] === false) continue 2;
+        if ($values[$field] === false) {
+            $validEnvelope = false;
+            break;
+        }
+    }
+    if (!$validEnvelope) {
+        $out['invalid_records']++;
+        continue;
     }
     if (strlen($values['iv']) !== 12 || strlen($values['tag']) !== 16) {
         $out['invalid_records']++;
