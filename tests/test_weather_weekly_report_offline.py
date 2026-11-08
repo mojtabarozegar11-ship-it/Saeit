@@ -55,6 +55,23 @@ class WeatherWeeklyReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "consecutive"):
             render([item])
 
+    def test_shifted_seven_day_window_is_rejected(self):
+        item = province()
+        for offset, row in enumerate(item["forecast"]):
+            row["date"] = f"2026-11-{9 + offset:02d}"
+        with self.assertRaisesRegex(ValueError, "report date"):
+            render([item])
+
+    def test_provinces_cannot_mix_different_seven_day_windows(self):
+        first = province()
+        second = province()
+        second["province"] = "مازندران"
+        second["capital"] = "ساری"
+        for offset, row in enumerate(second["forecast"]):
+            row["date"] = f"2026-11-{9 + offset:02d}"
+        with self.assertRaisesRegex(ValueError, "report date"):
+            render([first, second])
+
     def test_duplicate_provinces_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             render([province(), province()])
