@@ -48,6 +48,21 @@ def test_private_only_and_exact_workflow_trigger():
     assert "rm -rf" in TEXT
 
 
+def test_unrelated_issue_comments_do_not_produce_green_offline_rotation_runs():
+    # The matrix must be skipped on unrelated comments; protected job already
+    # has a separate owner-only conditional and remains unchanged.
+    offline = TEXT.split("  offline-safety:\n", 1)[1].split(
+        "\n  protected-owner-operation:\n", 1
+    )[0]
+    assert "if: >-" in offline
+    assert "github.event_name != 'issue_comment'" in offline
+    assert "github.event.issue.number == 1600" in offline
+    assert "github.event.comment.user.login == 'mojtabarozegar11-ship-it'" in offline
+    assert "github.event.comment.author_association == 'OWNER'" in offline
+    assert "github.event.comment.body == 'ZMR-OWNER-ROTATE-INSPECT-V1'" in offline
+    assert "startsWith(github.event.comment.body, 'ZMR-OWNER-ROTATE-V1')" in offline
+
+
 def test_checks_run_before_protected_remote_action():
     assert "needs: offline-safety" in TEXT
     assert "python3 scripts/test_zomorod_owner_password_rotate.py" in TEXT
