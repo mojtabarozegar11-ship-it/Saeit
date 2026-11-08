@@ -9,7 +9,7 @@ ALLOCATION_BPS = {
     "game_rewards": 3000,
     "player_ecosystem_reserve": 2500,
     "liquidity_reserve_unfunded": 1500,
-    "development_treasury_locked": 1500,
+    "development_treasury_not_yet_locked": 1500,
     "community_and_creators": 1000,
     "security_and_contingency": 500,
 }
@@ -48,6 +48,11 @@ def candidate_allocations(program=None):
             "allocations_tokens": {k: str(v) for k, v in allocations.items()},
             "status": "revisable_offline_proposal_not_issued",
             "vesting_schedule": "undecided_requires_owner_approval",
+            # Allocating accounting percentages does NOT lock tokens.
+            # The present ERC-20 candidate mints all units to one holder;
+            # independent vesting and custody are release prerequisites.
+            "treasury_timelock_deployed": False,
+            "treasury_vesting_enforced_onchain": False,
             "market_liquidity_committed": False,
             "player_rewards_transferable": False,
             "no_expected_profit_or_redemption": True,
