@@ -27,7 +27,8 @@ def render_seven_day_report(
         "این داده‌ها مشاهدهٔ قطعی، اجماع چند مدل یا هشدار رسمی نیستند.",
         "احتمال بارش «ناموجود» به معنی احتمال صفر نیست. ",
     ]
-    date.fromisoformat(report_date)
+    first_day = date.fromisoformat(report_date)
+    expected_dates = [first_day + timedelta(days=offset) for offset in range(7)]
     seen_provinces: set[str] = set()
     for item in provinces:
         province = item.get("province")
@@ -43,6 +44,8 @@ def render_seven_day_report(
         dates = [date.fromisoformat(day["date"]) for day in days]
         if any(next_day != today + timedelta(days=1) for today, next_day in zip(dates, dates[1:])):
             raise ValueError(f"Forecast dates must be seven consecutive days for {province}")
+        if dates != expected_dates:
+            raise ValueError(f"Forecast dates must start on report date and cover seven consecutive days for {province}")
         for day in days:
             numeric_fields = ("min_c", "max_c", "rain_mm", "wind_kmh", "rain_probability")
             for key in numeric_fields:
