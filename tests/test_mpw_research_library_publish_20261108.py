@@ -10,7 +10,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("c4publisher", HERE / "mpw_c4_atomic_publish.py")
+SCRIPT = next((p for p in (
+    HERE / "mpw_c4_atomic_publish.py",
+    HERE.parent / "scripts/mpw_research_library_publish_20261108.py",
+) if p.is_file()), None)
+if SCRIPT is None:
+    raise RuntimeError("Standalone publication helper not found")
+spec = importlib.util.spec_from_file_location("c4publisher", SCRIPT)
 publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
 
