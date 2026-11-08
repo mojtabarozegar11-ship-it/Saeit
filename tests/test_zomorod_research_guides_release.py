@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError
 import sys
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "zomorod_research_guides_release.py"
@@ -15,6 +17,10 @@ SPEC = importlib.util.spec_from_file_location("zomorod_release", SCRIPT)
 release = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
 SPEC.loader.exec_module(release)
+
+
+class MockHttpResponse(io.BytesIO):
+    status = 200
 
 
 class GuardedPublicationTests(unittest.TestCase):
@@ -123,6 +129,42 @@ class GuardedPublicationTests(unittest.TestCase):
             release.rollback_release(self.web, self.state, m["release_id"])
         self.assertEqual(created.read_text(), "modified outside release")
         self.assertEqual(self.template.read_bytes(), self.original)
+
+    def test_http_verification_requires_live_bytes_then_allows_safe_rollback(self) -> None:
+        m, h, pages = self.load()
+        release.apply_release(self.web, self.state, m["release_id"], h, h, pages)
+        public_bytes = next(iter(pages.values()))
+        with patch.object(release, "urlopen", return_value=MockHttpResponse(public_bytes)):
+            release.verify_public_release(self.web, self.state, m["release_id"])
+        journal = json.loads((self.state / m["release_id"] / "journal.json").read_text())
+        self.assertEqual(journal["state"], "live_verified")
+        self.assertEqual(journal["verified_urls"],
+                         ["https://zomorodmelal.ir/research/guides/guide-one/"])
+        release.rollback_release(self.web, self.state, m["release_id"])
+        self.assertFalse((self.web / next(iter(pages))).exists())
+        self.assertEqual(self.template.read_bytes(), self.original)
+
+    def test_public_200_with_wrong_content_cannot_mark_release_verified(self) -> None:
+        m, h, pages = self.load()
+        release.apply_release(self.web, self.state, m["release_id"], h, h, pages)
+        with patch.object(release, "urlopen", return_value=MockHttpResponse(b"wrong Django route")):
+            with self.assertRaisesRegex(ValueError, "PUBLIC_CONTENT_HASH_MISMATCH"):
+                release.verify_public_release(self.web, self.state, m["release_id"])
+        journal = json.loads((self.state / m["release_id"] / "journal.json").read_text())
+        self.assertEqual(journal["state"], "installed_unverified")
+        release.rollback_release(self.web, self.state, m["release_id"])
+
+    def test_public_404_blocks_publication_status(self) -> None:
+        m, h, pages = self.load()
+        release.apply_release(self.web, self.state, m["release_id"], h, h, pages)
+        error = HTTPError("https://zomorodmelal.ir/research/guides/guide-one/",
+                          404, "Not Found", {}, None)
+        with patch.object(release, "urlopen", side_effect=error):
+            with self.assertRaises(HTTPError):
+                release.verify_public_release(self.web, self.state, m["release_id"])
+        journal = json.loads((self.state / m["release_id"] / "journal.json").read_text())
+        self.assertEqual(journal["state"], "installed_unverified")
+        release.rollback_release(self.web, self.state, m["release_id"])
 
     def test_wrong_template_sha_fails_before_writes(self) -> None:
         m, h, pages = self.load()
