@@ -85,6 +85,12 @@ class Command(BaseCommand):
                     f"AUTO_UNVERIFIED_STOP task={done.pk} action={done.action_type} requires_review=true"
                 )
                 return
+            if done.output_data.get("progress_class") == "diagnostic_only":
+                self.stdout.write(
+                    f"AUTO_DIAGNOSTIC_BOUNDARY task={done.pk} action={done.action_type} "
+                    "business_outcome_verified=false; await external evidence"
+                )
+                return
             if done.action_type=="income_growth_experiment":
                 self.stdout.write("AUTO_EXTERNAL_BOUNDARY growth experiment prepared; real acquisition requires an authorized external channel.")
                 return
