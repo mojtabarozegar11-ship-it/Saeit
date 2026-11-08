@@ -79,6 +79,37 @@ class GuardedPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "INVALID_TARGET_URL"):
             self.load()
 
+    def test_rejects_duplicate_target_url_instead_of_silently_dropping_an_article(self) -> None:
+        m = json.loads(self.manifest.read_text())
+        clone = dict(m["guides"][0])
+        clone["id"] = "TWO"
+        second = self.source / "content" / "zomorod-research-guides" / "second.md"
+        second.write_text((self.source / "content" / "zomorod-research-guides" / "guide.md").read_text())
+        clone["source_path"] = "content/zomorod-research-guides/second.md"
+        m["guides"].append(clone)
+        self.manifest.write_text(json.dumps(m))
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_TARGET_URL"):
+            self.load()
+
+    def test_rejects_duplicate_guide_identifier(self) -> None:
+        m = json.loads(self.manifest.read_text())
+        clone = dict(m["guides"][0])
+        clone["desired_url"] = "https://zomorodmelal.ir/research/guides/guide-two/"
+        m["guides"].append(clone)
+        self.manifest.write_text(json.dumps(m))
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_GUIDE_ID"):
+            self.load()
+
+    def test_rejects_duplicate_source_file_for_distinct_urls(self) -> None:
+        m = json.loads(self.manifest.read_text())
+        clone = dict(m["guides"][0])
+        clone["id"] = "TWO"
+        clone["desired_url"] = "https://zomorodmelal.ir/research/guides/guide-two/"
+        m["guides"].append(clone)
+        self.manifest.write_text(json.dumps(m))
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_SOURCE_PATH"):
+            self.load()
+
     def test_apply_is_add_only_and_rollback_is_hash_guarded(self) -> None:
         m, h, pages = self.load()
         release.apply_release(self.web, self.state, m["release_id"], h, h, pages)
