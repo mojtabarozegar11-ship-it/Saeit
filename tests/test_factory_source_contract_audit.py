@@ -89,6 +89,24 @@ class FactorySourceContractAuditTests(unittest.TestCase):
                             item["component"] == "core.factory_missing_transitive"
                             for item in result["blockers"]))
 
+    def test_missing_relative_package_import_is_not_skipped(self):
+        root = self.fixture()
+        (root / "core/factory_agent_runtime.py").write_text(
+            "from . import factory_missing_relative\n", encoding="utf-8")
+        result = audit_module.audit(root)
+        self.assertTrue(any(item["code"] == "LOCAL_IMPORT_MISSING" and
+                            item["component"] == "core.factory_missing_relative"
+                            for item in result["blockers"]))
+
+    def test_missing_absolute_package_import_is_not_skipped(self):
+        root = self.fixture()
+        (root / "core/factory_agent_runtime.py").write_text(
+            "from core import factory_missing_absolute\n", encoding="utf-8")
+        result = audit_module.audit(root)
+        self.assertTrue(any(item["code"] == "LOCAL_IMPORT_MISSING" and
+                            item["component"] == "core.factory_missing_absolute"
+                            for item in result["blockers"]))
+
     def test_transitive_missing_model_symbol_stays_blocked(self):
         root = self.fixture()
         (root / "core/factory_agent_runtime.py").write_text(
