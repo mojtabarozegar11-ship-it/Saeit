@@ -83,6 +83,10 @@ def _load_public_file(slug: str, *, require_verified: bool = False) -> tuple[byt
             raise Http404
         if require_verified and state != "live_verified":
             raise Http404
+        if state == "live_verified":
+            verified_urls = journal.get("verified_urls", [])
+            if not isinstance(verified_urls, list) or wanted not in verified_urls:
+                raise Http404
         relative_html = "research/guides/" + slug + "/index.html"
         expected_html_sha = journal.get("created", {}).get(relative_html, "")
         if not isinstance(expected_html_sha, str) or not SHA_RE.fullmatch(expected_html_sha):
