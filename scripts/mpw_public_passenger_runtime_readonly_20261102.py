@@ -304,6 +304,28 @@ def inspect_error_classes(public, now_epoch=None):
         "django_dependency", "static_middleware_dependency", "environment_library",
         "database_driver", "management_module", "other_unclassified",
     )
+    # Named exception types only; all output keys are fixed and aggregate.
+    exception_types = {
+        "django_disallowed_host": b"disallowedhost",
+        "django_suspicious_operation": b"suspiciousoperation",
+        "django_app_registry": b"appregistrynotready",
+        "django_url_reverse": b"noreversematch",
+        "django_template_syntax": b"templatesyntaxerror",
+        "python_attribute": b"attributeerror",
+        "python_type": b"typeerror",
+        "python_value": b"valueerror",
+        "python_key": b"keyerror",
+        "python_runtime": b"runtimeerror",
+        "python_name": b"nameerror",
+        "python_assertion": b"assertionerror",
+        "python_file_not_found": b"filenotfounderror",
+        "python_os": b"oserror",
+        "python_system_exit": b"systemexit",
+        "python_connection_refused": b"connectionrefusederror",
+        "python_timeout": b"timeouterror",
+        "database_programming": b"programmingerror",
+        "database_integrity": b"integrityerror",
+    }
     shape_names = (
         "exception_message_line", "non_exception_reference",
         "module_phrase_near_marker", "module_phrase_absent_near_marker",
@@ -312,6 +334,7 @@ def inspect_error_classes(public, now_epoch=None):
               "classes": {key: 0 for key in signatures},
               "missing_module_categories": {key: 0 for key in category_names},
               "missing_module_shapes": {key: 0 for key in shape_names},
+              "exception_type_signatures": {key: 0 for key in exception_types},
               "files_modified": False, "raw_log_emitted": False}
     for path in files:
         try:
@@ -328,6 +351,15 @@ def inspect_error_classes(public, now_epoch=None):
             result["bounded_bytes_scanned"] += len(data)
             for key, needle in signatures.items():
                 result["classes"][key] = min(100, result["classes"][key] + data.count(needle))
+            for key, token in exception_types.items():
+                pattern = rb"(?<![a-z0-9_])(?:[a-z_][a-z0-9_]*\.){0,6}" + token + rb"\s*:"
+                for match in re.finditer(pattern, data):
+                    prefix = data[max(0, match.start() - 32):match.start()]
+                    if re.search(rb"\b(?:except|raise)\s+$", prefix):
+                        continue
+                    result["exception_type_signatures"][key] = min(
+                        100, result["exception_type_signatures"][key] + 1
+                    )
             # Never emit log text, module names, or arbitrary substrings.
             # Distinguish exception messages from code references in tracebacks.
             for marker in re.finditer(rb"modulenotfounderror", data):
