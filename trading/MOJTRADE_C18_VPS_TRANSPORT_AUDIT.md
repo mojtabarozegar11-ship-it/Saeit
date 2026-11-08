@@ -25,7 +25,11 @@ job while the C# compile and Python regression checks remain separate.
 
 | Marker | What it establishes | What it does not establish |
 | --- | --- | --- |
-| `MOJTRADE_C18_TCP_OR_BANNER_UNREACHABLE` | SSH transport/banners not reachable from that GitHub runner | VPS is down for every other network path |
+| `MOJTRADE_C18_TCP_TIMEOUT` | TCP connection to SSH timed out from this runner | VPS is down for every other network path |
+| `MOJTRADE_C18_TCP_REFUSED` | TCP connection was explicitly refused | Why the VPS/firewall refused it |
+| `MOJTRADE_C18_TCP_ERROR` | Another TCP socket error blocked connection | A specific server-side cause |
+| `MOJTRADE_C18_SSH_BANNER_TIMEOUT` | TCP connected but the SSH banner timed out | Server or network root cause |
+| `MOJTRADE_C18_SSH_BANNER_ERROR` | TCP connected but reading the banner failed | Server or network root cause |
 | `MOJTRADE_C18_UNEXPECTED_SSH_BANNER` | Port response is not the expected SSH v2 banner | Any specific attack or server fault |
 | `MOJTRADE_C18_RSA_HOST_KEY_UNAVAILABLE` | The earlier pinned RSA key could not be retrieved | Why the port/key service behaved differently |
 | `MOJTRADE_C18_HOST_KEY_MISMATCH_STOP` | The observed RSA fingerprint differs from the pinned source value | That the changed host should be trusted |

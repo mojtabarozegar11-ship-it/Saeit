@@ -17,6 +17,8 @@ class TransportProbeContractTests(unittest.TestCase):
 
     def test_read_only_network_not_a_secret_or_login_workflow(self):
         self.assertIn("socket.create_connection", PROBE)
+        self.assertIn("MOJTRADE_C18_TCP_TIMEOUT", PROBE)
+        self.assertIn("MOJTRADE_C18_SSH_BANNER_TIMEOUT", PROBE)
         self.assertIn("ssh-keyscan -T 8 -t rsa", PROBE)
         self.assertIn("MOJTRADE_C18_HOST_KEY_MISMATCH_STOP", PROBE)
         for forbidden in ("secrets.", "ssh -i", "scp ", "rsync", "curl -X POST",

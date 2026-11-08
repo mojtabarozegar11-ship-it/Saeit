@@ -31,11 +31,25 @@ jobs:
 
           host = os.environ["TARGET_HOST"]
           try:
-              with socket.create_connection((host, 22), timeout=6) as connection:
+              connection = socket.create_connection((host, 22), timeout=6)
+          except ConnectionRefusedError:
+              print("MOJTRADE_C18_TCP_REFUSED")
+              raise SystemExit(2)
+          except TimeoutError:
+              print("MOJTRADE_C18_TCP_TIMEOUT")
+              raise SystemExit(2)
+          except OSError:
+              print("MOJTRADE_C18_TCP_ERROR")
+              raise SystemExit(2)
+          try:
+              with connection:
                   connection.settimeout(6)
                   banner = connection.recv(120)
-          except (OSError, TimeoutError):
-              print("MOJTRADE_C18_TCP_OR_BANNER_UNREACHABLE")
+          except TimeoutError:
+              print("MOJTRADE_C18_SSH_BANNER_TIMEOUT")
+              raise SystemExit(3)
+          except OSError:
+              print("MOJTRADE_C18_SSH_BANNER_ERROR")
               raise SystemExit(2)
           if not banner.startswith(b"SSH-2.0-"):
               print("MOJTRADE_C18_UNEXPECTED_SSH_BANNER")
