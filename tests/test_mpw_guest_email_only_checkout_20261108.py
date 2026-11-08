@@ -10,7 +10,7 @@ import django
 django.setup()
 
 from django.contrib.auth import get_user_model
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.test import RequestFactory, TransactionTestCase, override_settings
 
 from core.models import GuestOrderEmail, Order, PaymentIntent
@@ -96,6 +96,30 @@ class GuestEmailOnlyCheckoutTests(TransactionTestCase):
         guest._bind_guest_email(request, self.buyer)
         self.buyer.refresh_from_db()
         self.assertEqual(self.buyer.email, "buyer@example.com")
+
+
+    def test_blank_primary_alias_does_not_override_valid_purchase_email(self):
+        request = self._request({"email": "", "purchase_email": "Buyer@Example.com"})
+        request.META["CSRF_COOKIE"] = "b" * 32
+        with patch.object(guest, "_rate_limit", return_value=None):
+            created, _cookie = guest._new_user(request)
+        self.assertEqual(created.email, "buyer@example.com")
+        guest._bind_guest_email(request, self.buyer)
+        self.buyer.refresh_from_db()
+        self.assertEqual(self.buyer.email, "buyer@example.com")
+
+    def test_conflicting_aliases_cannot_create_or_rebind_guest(self):
+        request = self._request({
+            "email": "first@example.com", "purchase_email": "second@example.com",
+        })
+        request.META["CSRF_COOKIE"] = "c" * 32
+        with self.assertRaises(Http404):
+            guest._new_user(request)
+        self.assertEqual(get_user_model().objects.count(), 1)
+        with self.assertRaises(Http404):
+            guest._bind_guest_email(request, self.buyer)
+        self.buyer.refresh_from_db()
+        self.assertEqual(self.buyer.email, "")
 
 
 def test_checkout_template_is_guest_email_only_and_has_no_wallet_js():
