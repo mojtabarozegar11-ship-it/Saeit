@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 ACCOUNT_RE = re.compile(r"^[0-9]{1,20}$")
 REQUEST_RE = re.compile(r"^[a-f0-9]{32}$")
+POSITION_RE = re.compile(r"^[1-9][0-9]{0,19}$")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 LIMIT = Decimal("0.02")
 CAP = 3
@@ -105,11 +106,22 @@ class Ledger:
                 CREATE TABLE IF NOT EXISTS reservations (
                     request_id TEXT PRIMARY KEY, account TEXT NOT NULL,
                     day TEXT NOT NULL, state TEXT NOT NULL,
-                    expires REAL NOT NULL, created REAL NOT NULL
+                    expires REAL NOT NULL, created REAL NOT NULL,
+                    broker_position_id TEXT
                 );
                 CREATE INDEX IF NOT EXISTS active_reservations
                     ON reservations(account, day, state, expires);
                 """
+            )
+            # Non-destructive migration for existing C14 ledgers. A broker ID
+            # is evidence reported by the cBot, not independently verified.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(reservations)")}
+            if "broker_position_id" not in columns:
+                db.execute("ALTER TABLE reservations ADD COLUMN broker_position_id TEXT")
+            db.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS broker_position_receipt "
+                "ON reservations(account, broker_position_id) "
+                "WHERE broker_position_id IS NOT NULL"
             )
         finally:
             db.close()
@@ -258,14 +270,20 @@ class Ledger:
         finally:
             db.close()
 
-    def settle(self, request_id: str, account: str, *, filled: bool) -> None:
+    def settle(self, request_id: str, account: str, *, filled: bool,
+               position_id: str = "") -> None:
         if not REQUEST_RE.fullmatch(request_id) or not ACCOUNT_RE.fullmatch(account):
             raise Denied("invalid_identity")
+        if filled and not POSITION_RE.fullmatch(position_id):
+            raise Denied("missing_broker_position_id")
+        if not filled and position_id:
+            raise Denied("unexpected_broker_position_id")
         db = self._connection()
         try:
             db.execute("BEGIN IMMEDIATE")
             state = db.execute(
-                "SELECT state,expires FROM reservations WHERE request_id=? AND account=?",
+                "SELECT state,expires,broker_position_id FROM reservations "
+                "WHERE request_id=? AND account=?",
                 (request_id, account),
             ).fetchone()
             if state is None:
@@ -273,16 +291,24 @@ class Ledger:
             target = "committed" if filled else "cancelled"
             if state[0] == target:
                 # The database may have committed while the HTTP ACK was lost.
-                # A byte-identical retry must not fail or extend slot expiry.
+                # A receipt replay must match the same broker position ID.
+                if filled and position_id != state[2]:
+                    raise Denied("settlement_conflict")
                 db.commit()
                 return
             if state[0] != "reserved":
                 raise Denied("settlement_conflict")
             if state[1] <= self.clock():
                 raise Denied("unknown_or_expired_reservation")
+            if filled and db.execute(
+                "SELECT 1 FROM reservations WHERE account=? AND broker_position_id=?",
+                (account, position_id),
+            ).fetchone():
+                raise Denied("broker_position_reuse")
             db.execute(
-                "UPDATE reservations SET state=? WHERE request_id=?",
-                (target, request_id),
+                "UPDATE reservations SET state=?,broker_position_id=? "
+                "WHERE request_id=?",
+                (target, position_id if filled else None, request_id),
             )
             db.commit()
         except Exception:
@@ -290,6 +316,40 @@ class Ledger:
             raise
         finally:
             db.close()
+
+    def receipts(self, account: str, day: str) -> dict[str, object]:
+        """Read-only, operator-only evidence for manual broker reconciliation.
+
+        The broker identity is a cBot assertion. Nothing in this report
+        independently interrogates the broker or authorizes an order.
+        """
+        if not ACCOUNT_RE.fullmatch(account):
+            raise Denied("invalid_identity")
+        valid_day(day)
+        db = self._readonly_connection()
+        try:
+            db.execute("BEGIN")
+            rows = db.execute(
+                "SELECT request_id,state,broker_position_id,created,expires "
+                "FROM reservations WHERE account=? AND day=? "
+                "ORDER BY created DESC, request_id DESC LIMIT 101", (account, day),
+            ).fetchall()
+            db.commit()
+        finally:
+            db.close()
+        return {
+            "account": account,
+            "day": day,
+            "broker_verified": False,
+            "truncated": len(rows) > 100,
+            "receipts": [{
+                "request_id": entry[0],
+                "state": entry[1],
+                "reported_broker_position_id": entry[2],
+                "created_unix_seconds": entry[3],
+                "expires_unix_seconds": entry[4],
+            } for entry in rows[:100]],
+        }
 
     def status(self, account: str, day: str) -> dict[str, object]:
         """Authenticated, non-mutating operator snapshot; not broker readiness.
@@ -350,7 +410,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(200, "SERVICE_UP")
             return
         address = urlsplit(self.path)
-        if address.path != "/v1/status":
+        if address.path not in ("/v1/status", "/v1/receipts"):
             self._reply(404, "NOT_FOUND")
             return
         if not hmac.compare_digest(
@@ -362,7 +422,10 @@ class Handler(BaseHTTPRequestHandler):
             if set(fields) != {"account", "day"} or any(
                     len(values) != 1 for values in fields.values()):
                 raise Denied("invalid_query")
-            snapshot = self.ledger.status(fields["account"][0], fields["day"][0])
+            if address.path == "/v1/status":
+                snapshot = self.ledger.status(fields["account"][0], fields["day"][0])
+            else:
+                snapshot = self.ledger.receipts(fields["account"][0], fields["day"][0])
             self._reply(200, json.dumps(snapshot, sort_keys=True),
                         "application/json; charset=us-ascii")
         except (Denied, ValueError, UnicodeError) as exc:
@@ -398,6 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                     fields.get("request_id", ""),
                     fields.get("account", ""),
                     filled=self.path == "/v1/commit",
+                    position_id=fields.get("broker_position_id", ""),
                 )
                 self._reply(200, "SETTLED")
             else:

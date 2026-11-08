@@ -89,7 +89,7 @@ class LedgerTests(unittest.TestCase):
     def test_commit_retains_short_term_capacity(self):
         self.seed()
         self.ledger.reserve(self.admission(1))
-        self.ledger.settle(f"{1:032x}", "123", filled=True)
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
         self.ledger.reserve(self.admission(2))
         self.ledger.reserve(self.admission(3))
         with self.assertRaisesRegex(risk.Denied, "position_cap"):
@@ -99,14 +99,14 @@ class LedgerTests(unittest.TestCase):
         self.seed()
         request_id = f"{1:032x}"
         self.ledger.reserve(self.admission(1))
-        self.ledger.settle(request_id, "123", filled=True)
+        self.ledger.settle(request_id, "123", filled=True, position_id="801")
         with self.ledger._readonly_connection() as db:
             before = db.execute(
                 "SELECT state, expires, created FROM reservations WHERE request_id=?",
                 (request_id,),
             ).fetchone()
         self.now += risk.TTL_SECONDS + 10
-        self.ledger.settle(request_id, "123", filled=True)
+        self.ledger.settle(request_id, "123", filled=True, position_id="801")
         with self.ledger._readonly_connection() as db:
             after = db.execute(
                 "SELECT state, expires, created FROM reservations WHERE request_id=?",
@@ -127,26 +127,112 @@ class LedgerTests(unittest.TestCase):
         self.seed()
         self.ledger.reserve(self.admission(1))
         self.ledger.reserve(self.admission(2))
-        self.ledger.settle(f"{1:032x}", "123", filled=True)
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
         self.ledger.settle(f"{2:032x}", "123", filled=False)
         with self.assertRaisesRegex(risk.Denied, "settlement_conflict"):
             self.ledger.settle(f"{1:032x}", "123", filled=False)
         with self.assertRaisesRegex(risk.Denied, "settlement_conflict"):
-            self.ledger.settle(f"{2:032x}", "123", filled=True)
+            self.ledger.settle(f"{2:032x}", "123", filled=True, position_id="802")
 
     def test_wrong_account_cannot_replay_settlement(self):
         self.seed()
         self.ledger.reserve(self.admission(1))
-        self.ledger.settle(f"{1:032x}", "123", filled=True)
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
         with self.assertRaisesRegex(risk.Denied, "unknown_or_expired_reservation"):
-            self.ledger.settle(f"{1:032x}", "456", filled=True)
+            self.ledger.settle(f"{1:032x}", "456", filled=True, position_id="801")
 
     def test_expired_unsettled_request_cannot_be_committed_by_retry(self):
         self.seed()
         self.ledger.reserve(self.admission(1))
         self.now += risk.TTL_SECONDS + 1
         with self.assertRaisesRegex(risk.Denied, "unknown_or_expired_reservation"):
-            self.ledger.settle(f"{1:032x}", "123", filled=True)
+            self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
+
+    def test_success_requires_realistic_broker_position_id(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        for position_id in ("", "0", "-1", "1.0", "nan", "x", "1" * 21):
+            with self.subTest(position_id=position_id):
+                with self.assertRaisesRegex(risk.Denied, "missing_broker_position_id"):
+                    self.ledger.settle(f"{1:032x}", "123", filled=True,
+                                       position_id=position_id)
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
+
+    def test_cancellation_rejects_broker_position_id(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        with self.assertRaisesRegex(risk.Denied, "unexpected_broker_position_id"):
+            self.ledger.settle(f"{1:032x}", "123", filled=False, position_id="801")
+        self.ledger.settle(f"{1:032x}", "123", filled=False)
+
+    def test_duplicate_ack_cannot_replace_original_broker_position(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
+        with self.assertRaisesRegex(risk.Denied, "settlement_conflict"):
+            self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="802")
+        rows = self.ledger.receipts("123", DAY)["receipts"]
+        self.assertEqual(rows[0]["reported_broker_position_id"], "801")
+
+    def test_two_requests_cannot_claim_same_broker_position(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.ledger.reserve(self.admission(2))
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
+        with self.assertRaisesRegex(risk.Denied, "broker_position_reuse"):
+            self.ledger.settle(f"{2:032x}", "123", filled=True, position_id="801")
+        self.ledger.settle(f"{2:032x}", "123", filled=True, position_id="802")
+
+    def test_readonly_receipt_report_is_not_broker_verification(self):
+        self.seed()
+        for n in (1, 2, 3):
+            self.ledger.reserve(self.admission(n))
+        self.ledger.settle(f"{1:032x}", "123", filled=True, position_id="801")
+        self.ledger.settle(f"{2:032x}", "123", filled=False)
+        report = self.ledger.receipts("123", DAY)
+        self.assertFalse(report["broker_verified"])
+        self.assertFalse(report["truncated"])
+        self.assertEqual(len(report["receipts"]), 3)
+        by_request = {r["request_id"]: r for r in report["receipts"]}
+        self.assertEqual(by_request[f"{1:032x}"]["state"], "committed")
+        self.assertEqual(by_request[f"{1:032x}"]["reported_broker_position_id"], "801")
+        self.assertIsNone(by_request[f"{2:032x}"]["reported_broker_position_id"])
+        self.assertEqual(by_request[f"{3:032x}"]["state"], "reserved")
+        with self.ledger._readonly_connection() as db:
+            self.assertEqual(db.execute("PRAGMA query_only").fetchone()[0], 1)
+
+    def test_receipt_report_rejects_bad_scope(self):
+        with self.assertRaisesRegex(risk.Denied, "invalid_identity"):
+            self.ledger.receipts("abc", DAY)
+        with self.assertRaisesRegex(risk.Denied, "invalid_day"):
+            self.ledger.receipts("123", "invalid")
+
+    def test_receipt_report_is_bounded_and_explicitly_truncated(self):
+        self.seed()
+        with self.ledger._connection() as db:
+            for n in range(101):
+                db.execute(
+                    "INSERT INTO reservations(request_id,account,day,state,expires,created) "
+                    "VALUES (?,?,?,'cancelled',?,?)",
+                    (f"{n:032x}", "123", DAY, self.now + 10, self.now + n),
+                )
+        report = self.ledger.receipts("123", DAY)
+        self.assertTrue(report["truncated"])
+        self.assertEqual(len(report["receipts"]), 100)
+
+    def test_existing_ledger_is_migrated_without_losing_old_receipts(self):
+        old_path = str(Path(self.dir.name) / "old.sqlite")
+        with risk.sqlite3.connect(old_path) as db:
+            db.execute("CREATE TABLE reservations (request_id TEXT PRIMARY KEY, "
+                       "account TEXT NOT NULL,day TEXT NOT NULL,state TEXT NOT NULL, "
+                       "expires REAL NOT NULL,created REAL NOT NULL)")
+            db.execute("INSERT INTO reservations VALUES (?,?,?,'cancelled',?,?)",
+                       (f"{7:032x}", "123", DAY, self.now + 10, self.now))
+        migrated = risk.Ledger(old_path, enabled=True, clock=lambda: self.now)
+        report = migrated.receipts("123", DAY)
+        self.assertEqual(len(report["receipts"]), 1)
+        self.assertEqual(report["receipts"][0]["request_id"], f"{7:032x}")
+        self.assertIsNone(report["receipts"][0]["reported_broker_position_id"])
 
     def test_expiry_does_not_allow_request_replay(self):
         self.seed()
@@ -405,18 +491,44 @@ class HttpProtocolTests(unittest.TestCase):
         status, body = self.post("/v1/reserve", data)
         self.assertEqual((status, body), (200, "GRANTED|" + f"{2:032x}"))
         status, body = self.post(
-            "/v1/commit", {"account": "123", "request_id": f"{2:032x}"})
+            "/v1/commit", {"account": "123", "request_id": f"{2:032x}",
+                            "broker_position_id": "802"})
         self.assertEqual((status, body), (200, "SETTLED"))
 
     def test_lost_ack_retry_returns_settled_over_http(self):
         data = dict(mode="demo", account="123", day=DAY, request_id=f"{5:032x}",
                     equity="1000", realized_today="0", open_positions="0")
         self.post("/v1/reserve", data)
-        body = {"account": "123", "request_id": f"{5:032x}"}
+        body = {"account": "123", "request_id": f"{5:032x}",
+                "broker_position_id": "805"}
         self.assertEqual(self.post("/v1/commit", body), (200, "SETTLED"))
         self.assertEqual(self.post("/v1/commit", body), (200, "SETTLED"))
         with self.assertRaises(HTTPError) as caught:
-            self.post("/v1/cancel", body)
+            self.post("/v1/cancel", {"account": "123", "request_id": f"{5:032x}"})
+        self.assertEqual(caught.exception.code, 409)
+
+    def test_http_receipt_report_requires_authentication_and_exposes_unverified_status(self):
+        data = dict(mode="demo", account="123", day=DAY, request_id=f"{6:032x}",
+                    equity="1000", realized_today="0", open_positions="0")
+        self.post("/v1/reserve", data)
+        self.post("/v1/commit", {"account": "123", "request_id": f"{6:032x}",
+                                 "broker_position_id": "806"})
+        endpoint = self.base + "/v1/receipts?account=123&day=" + DAY
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(endpoint, timeout=2)
+        self.assertEqual(caught.exception.code, 401)
+        req = Request(endpoint, headers={"Authorization": "Bearer " + "a" * 40})
+        with urlopen(req, timeout=2) as response:
+            report = json.loads(response.read().decode("ascii"))
+        self.assertFalse(report["broker_verified"])
+        self.assertEqual(report["receipts"][0]["reported_broker_position_id"], "806")
+
+    def test_http_commit_without_broker_reference_fails_closed(self):
+        data = dict(mode="demo", account="123", day=DAY, request_id=f"{7:032x}",
+                    equity="1000", realized_today="0", open_positions="0")
+        self.post("/v1/reserve", data)
+        with self.assertRaises(HTTPError) as caught:
+            self.post("/v1/commit", {"account": "123", "request_id": f"{7:032x}"})
         self.assertEqual(caught.exception.code, 409)
 
     def test_authenticated_observation_http_does_not_reserve(self):

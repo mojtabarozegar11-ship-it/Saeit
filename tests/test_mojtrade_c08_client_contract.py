@@ -35,7 +35,7 @@ class C08ClientContractTests(unittest.TestCase):
 
     def test_order_result_always_settled_before_success_path(self):
         for bot in (SCALP, OMEGA):
-            self.assertIn("SettleCoordinatedSlot(reservationId, result.IsSuccessful)", bot)
+            self.assertIn("SettleCoordinatedSlot(reservationId, result.IsSuccessful, brokerPositionId)", bot)
             self.assertIn("Adapter halted.", bot)
 
     def test_settlement_retries_same_receipt_but_never_unconfirmed_success(self):
@@ -44,9 +44,16 @@ class C08ClientContractTests(unittest.TestCase):
             method = method.split("\n        private ", 1)[0]
             self.assertIn("attempt < 2", method)
             self.assertIn('"&request_id=" + requestId', method)
+            self.assertIn('"&broker_position_id=" + brokerPositionId', method)
             self.assertIn('response.Body == "SETTLED"', method)
             self.assertIn("response.StatusCode < 500", method)
             self.assertIn("return false; // Never treat unconfirmed", method)
+
+    def test_successful_order_reports_broker_position_id(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("result.Position.Id.ToString(CultureInfo.InvariantCulture)", bot)
+            self.assertIn("SettleCoordinatedSlot(reservationId, result.IsSuccessful, brokerPositionId)", bot)
+            self.assertIn('filled ? "&broker_position_id=" + brokerPositionId : ""', bot)
 
     def test_both_send_broker_observed_equity_and_position_count(self):
         for bot in (SCALP, OMEGA):
