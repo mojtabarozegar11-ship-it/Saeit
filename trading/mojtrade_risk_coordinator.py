@@ -177,7 +177,7 @@ class Ledger:
         if not admission.realized_today.is_finite():
             raise Denied("invalid_number")
         state = db.execute(
-            "SELECT baseline,halted FROM day_state WHERE account=? AND day=?",
+            "SELECT baseline,halted,updated FROM day_state WHERE account=? AND day=?",
             (admission.account, admission.day),
         ).fetchone()
         if state is None:
@@ -203,8 +203,12 @@ class Ledger:
                 (admission.account, admission.day, str(carried),
                  str(carried), now),
             )
-            state = (str(carried), 0)
-        baseline, halted = Decimal(state[0]), state[1]
+            state = (str(carried), 0, now)
+        baseline, halted, updated = Decimal(state[0]), state[1], state[2]
+        # A server clock moving backwards must not replace a newer observation
+        # or admit another DEMO reservation using an earlier risk timestamp.
+        if now < updated:
+            raise Denied("clock_rollback")
         if baseline <= 0 or not baseline.is_finite() or halted:
             raise Denied("risk_halted")
         if (admission.equity <= baseline * (1 - LIMIT) or
@@ -376,7 +380,8 @@ class Ledger:
             ).fetchone()[0]
         finally:
             db.close()
-        age = max(0, int(now - row[3]))
+        elapsed = now - row[3]
+        age = int(elapsed)
         today = datetime.fromtimestamp(now, timezone.utc).date().isoformat()
         return {
             "account": account,
@@ -385,7 +390,7 @@ class Ledger:
             "last_equity": row[1],
             "halted": bool(row[2]),
             "last_risk_update_age_seconds": age,
-            "telemetry_fresh": day == today and age <= 120,
+            "telemetry_fresh": day == today and 0 <= elapsed <= 120,
             "active_reservations": active,
             "demo_reservations_enabled": self.enabled,
         }
