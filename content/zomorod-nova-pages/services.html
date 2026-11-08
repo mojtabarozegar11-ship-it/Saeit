@@ -130,7 +130,7 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
  <noscript><p class="zm-margin-note">برای محاسبهٔ خودکار، جاوااسکریپت مرورگر را فعال کنید. ثبت درخواست تخصصی بدون این ابزار هم امکان‌پذیر است.</p></noscript>
  <p id="zm-margin-error" class="zm-margin-error" role="alert"></p>
  <output id="zm-margin-output" class="zm-margin-output" aria-live="polite" hidden></output>
- <p class="zm-margin-note">پس از محاسبه می‌توانید گزارش شامل ورودی‌ها، نتایج، سناریوهای ریسک و محدودیت‌ها را به‌صورت CSV دریافت و در اکسل باز کنید. داده‌ها در مرورگر شما پردازش می‌شوند و به سرور ارسال نمی‌شوند.</p>
+ <p class="zm-margin-note">پس از محاسبه می‌توانید گزارش شامل ورودی‌ها، نتایج، قیمت و عملکرد سربه‌سر، سناریوهای ریسک و محدودیت‌ها را به‌صورت CSV دریافت و در اکسل باز کنید. با تغییر هر ورودی، نتیجه و گزارش قبلی پاک می‌شوند تا دادهٔ قدیمی اشتباه تحویل نشود. داده‌ها در مرورگر شما پردازش می‌شوند و به سرور ارسال نمی‌شوند.</p>
  <p class="zm-margin-note">روش محاسبه: درآمد = سطح × عملکرد × قیمت؛ حاشیهٔ ناخالص = درآمد − هزینهٔ متغیر؛ ماندهٔ برآوردی = درآمد − هزینهٔ متغیر − هزینهٔ ثابت. هزینهٔ سرمایه، مالیات، تأمین مالی، ریسک عملکرد و تغییرات بازار لحاظ نشده‌اند. این اعداد تضمین سود یا پیشنهاد سرمایه‌گذاری نیستند.</p>
  <p><a class="zm-margin-cta" href="/ask-master/index.php?service=1">درخواست تحلیل اقتصادی تخصصی مزرعه</a></p>
 </section>
@@ -160,6 +160,7 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
     return {revenue:revenue,variableTotal:variableTotal,fixedTotal:fixedTotal,
       gross:revenue-variableTotal,remaining:revenue-variableTotal-fixedTotal,
       breakEven:(variable+fixed)/price,
+      breakEvenPrice:yieldKg>0?(variable+fixed)/yieldKg:null,
       priceDrop:revenue*0.9-variableTotal-fixedTotal,
       costRise:revenue-variableTotal*1.1-fixedTotal};
   }
@@ -180,6 +181,7 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
       ['هزینه ثابت کل',o.fixedTotal,'تومان'],
       ['مانده برآوردی',o.remaining,'تومان'],
       ['عملکرد سربه سر',o.breakEven,'کیلوگرم در هکتار'],
+      ['قیمت سربه سر',o.breakEvenPrice===null?'غیرقابل محاسبه؛ عملکرد صفر':o.breakEvenPrice,'تومان در کیلوگرم'],
       ['مانده با کاهش ۱۰ درصد قیمت',o.priceDrop,'تومان'],
       ['مانده با افزایش ۱۰ درصد هزینه متغیر',o.costRise,'تومان'],
       ['محدودیت','مالیات، سرمایه، تامین مالی، استهلاک تفصیلی، تورم و ریسک بازار لحاظ نشده است',''],
@@ -198,16 +200,24 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
     document.body.appendChild(anchor);anchor.click();anchor.remove();
     setTimeout(function(){URL.revokeObjectURL(url);},1000);
   });
+  function resetPriorResult(){
+    lastCalculation=null;download.disabled=true;result.hidden=true;
+    result.textContent='';error.textContent='';
+  }
+  Array.prototype.forEach.call(root.querySelectorAll('input'),function(input){
+    input.addEventListener('input',resetPriorResult);
+    input.addEventListener('change',resetPriorResult);
+  });
   document.getElementById('zm-margin-run').addEventListener('click',function(){
-    result.hidden=true;error.textContent='';lastCalculation=null;download.disabled=true;
+    resetPriorResult();
     var field=function(name){return numberFromUser(root.querySelector('[name="'+name+'"]').value);};
     var a=field('area'),y=field('yield'),p=field('price'),v=field('variable'),f=field('fixed');
     if(![a,y,p,v,f].every(Number.isFinite)||a<=0||a>10000000||y<0||y>100000000||p<=0||p>1000000000000||v<0||f<0||v>1000000000000000||f>1000000000000000){
       error.textContent='لطفاً پنج مقدار معتبر و غیرمنفی وارد کنید؛ سطح و قیمت باید بزرگ‌تر از صفر باشند.';return;
     }
     var outcome=calculate(a,y,p,v,f);
-    if(!Object.keys(outcome).every(function(k){return Number.isFinite(outcome[k]);})){
-      error.textContent='اندازهٔ اعداد برای محاسبه بیش‌ازحد بزرگ است.';return;
+    if(!Object.keys(outcome).every(function(k){return outcome[k]===null||(Number.isFinite(outcome[k])&&Math.abs(outcome[k])<=Number.MAX_SAFE_INTEGER);})){
+      error.textContent='مقادیر به اندازه‌ای بزرگ‌اند که محاسبهٔ مالی قابل اتکا نیست؛ مقدارها را در مقیاس کوچک‌تری وارد کنید.';return;
     }
     result.textContent='درآمد فروش: '+fm(outcome.revenue)+' تومان\n'+
       'هزینهٔ متغیر کل: '+fm(outcome.variableTotal)+' تومان\n'+
@@ -215,6 +225,7 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
       'هزینهٔ ثابت کل: '+fm(outcome.fixedTotal)+' تومان\n'+
       'ماندهٔ برآوردی پیش از مالیات و تأمین مالی: '+fm(outcome.remaining)+' تومان\n'+
       'عملکرد سربه‌سر برآوردی: '+fd(outcome.breakEven)+' کیلوگرم در هکتار\n'+
+      'قیمت سربه‌سر برآوردی: '+(outcome.breakEvenPrice===null?'نامشخص (عملکرد صفر)':fd(outcome.breakEvenPrice)+' تومان در کیلوگرم')+'\n'+
       'مانده در صورت کاهش ۱۰٪ قیمت فروش: '+fm(outcome.priceDrop)+' تومان\n'+
       'مانده در صورت افزایش ۱۰٪ هزینهٔ متغیر: '+fm(outcome.costRise)+' تومان';
     lastCalculation={
