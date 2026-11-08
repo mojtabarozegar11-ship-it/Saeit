@@ -212,6 +212,8 @@ def offline_release_readiness(program: dict) -> dict:
         "unverified_rune_commitment": True,
         "unselected_initial_holder_addresses": SERIES_SIZE,
         "unverified_contract_deployments": SERIES_SIZE,
+        "undecided_series_decimals": sum(asset["decimals"] is None for asset in program["assets"][1:]),
+        "unapproved_series_supply_proposals": sum(asset["supply_status"] == "revisable_proposal_within_owner_range" for asset in program["assets"][1:]),
         "release_ready": False,
         "on_chain_issuance_verified": False,
         "verified_revenue": False,
