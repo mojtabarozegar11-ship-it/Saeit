@@ -12,12 +12,13 @@ import argparse
 import json
 import os
 import uuid
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, getcontext
 from pathlib import Path
 
 MAX_BYTES = 200_000
 MONEY = Decimal("0.01")
 ZERO = Decimal("0")
+getcontext().prec = 80
 ALLOWED_CURRENCIES = {"IRR", "TOMAN", "USD", "EUR", "AED", "CAD"}
 
 
@@ -28,6 +29,8 @@ class InputError(Exception):
 def amount(value, name, positive=False):
     if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
         raise InputError(f"{name}: invalid decimal")
+    if len(str(value)) > 32:
+        raise InputError(f"{name}: decimal exceeds safe input bound")
     try:
         number = Decimal(str(value))
     except InvalidOperation as err:
@@ -58,7 +61,7 @@ def calculate(data):
     if not isinstance(data, dict):
         raise InputError("expected JSON object")
     currency = data.get("currency")
-    if currency not in ALLOWED_CURRENCIES:
+    if not isinstance(currency, str) or currency not in ALLOWED_CURRENCIES:
         raise InputError("currency not supported")
     area = amount(data.get("area_hectares"), "area_hectares", positive=True)
     harvested = amount(data.get("harvested_kg"), "harvested_kg")
@@ -69,6 +72,8 @@ def calculate(data):
     fixed = costs(data.get("fixed_costs"), "fixed_costs")
     input_costs = costs(data.get("production_variable_costs"), "production_variable_costs")
     unit_costs = costs(data.get("per_sold_kg_costs"), "per_sold_kg_costs")
+    if not fixed and not input_costs and not unit_costs:
+        raise InputError("at least one cost category is required")
     full_costs = data.get("all_material_costs_documented")
     if not isinstance(full_costs, bool):
         raise InputError("all_material_costs_documented must be true or false")
