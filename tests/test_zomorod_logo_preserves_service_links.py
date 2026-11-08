@@ -36,5 +36,16 @@ class LogoOnlyRegression(unittest.TestCase):
                 self.assertEqual(html.count("?service=1&amp;topic=" + topic), 1)
 
 
+    def test_service_page_has_one_semantic_shell(self):
+        html = SERVICES.read_text(encoding="utf-8")
+        self.assertEqual(html.count("<header"), 1)
+        self.assertEqual(html.count("<footer"), 1)
+        self.assertEqual(html.count("<h1"), 1)
+        self.assertIn('class="zm-v7-header"', html)
+        self.assertIn('class="zm-v7-footer"', html)
+        self.assertNotIn('class="zm-site-header"', html)
+        self.assertNotIn('class="zm-footer"', html)
+
+
 if __name__ == "__main__":
     unittest.main()
