@@ -1,5 +1,6 @@
 """Offline CLI coverage checks; all fixtures are synthetic."""
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 import importlib.util
@@ -34,7 +35,8 @@ class CaptureGateTests(unittest.TestCase):
                          "source": "ctrader-cli", "captures": captures}
 
     def result(self, manifest=None):
-        return gate.check_capture(self.manifest if manifest is None else manifest, self.root)
+        return gate.check_capture(self.manifest if manifest is None else manifest, self.root,
+                                  now_utc=datetime(2026, 11, 9, 0, 2, tzinfo=timezone.utc))
 
     def test_complete_synthetic_manifest_is_never_authenticated(self):
         result = self.result()
@@ -63,6 +65,42 @@ class CaptureGateTests(unittest.TestCase):
     def test_early_capture_fails(self):
         self.manifest["captures"]["positions"]["captured_utc"] = "2026-11-08T23:59:59Z"
         self.assertIn("capture_before_utc_day_end:positions", self.result()["issues"])
+
+    def test_future_dated_capture_fails_closed(self):
+        self.manifest["captures"]["deals"]["captured_utc"] = "2026-11-09T00:03:01Z"
+        result = self.result()
+        self.assertIn("capture_in_future:deals", result["issues"])
+        self.assertFalse(result["coverage_plausible"])
+        self.assertFalse(result["commercial_readiness"])
+
+    def test_maximum_clock_skew_is_bounded(self):
+        self.manifest["captures"]["deals"]["captured_utc"] = "2026-11-09T00:03:00Z"
+        self.assertTrue(self.result()["coverage_plausible"])
+
+    def test_max_reference_clock_does_not_overflow(self):
+        # A valid day before the maximum representable date can be checked
+        # even when the inspection clock is at datetime.max.
+        self.manifest["day"] = "9999-12-30"
+        for name, record in self.manifest["captures"].items():
+            record["captured_utc"] = "9999-12-31T00:00:01Z"
+            if name != "positions":
+                record["from_utc_day"] = "9999-12-30"
+                record["to_utc_day"] = "9999-12-30"
+        result = gate.check_capture(
+            self.manifest, self.root,
+            now_utc=datetime.max.replace(tzinfo=timezone.utc))
+        self.assertTrue(result["coverage_plausible"])
+        self.assertFalse(result["commercial_readiness"])
+
+    def test_invalid_reference_clock_is_rejected(self):
+        with self.assertRaisesRegex(gate.CaptureError, "invalid_reference_clock"):
+            gate.check_capture(self.manifest, self.root,
+                               now_utc=datetime(2026, 11, 9))
+
+    def test_maximum_calendar_day_is_rejected_without_overflow(self):
+        self.manifest["day"] = "9999-12-31"
+        with self.assertRaisesRegex(gate.CaptureError, "invalid_day"):
+            self.result()
 
     def test_hash_mismatch_fails(self):
         (self.root / "deals.json").write_text("tampered", encoding="utf-8")
