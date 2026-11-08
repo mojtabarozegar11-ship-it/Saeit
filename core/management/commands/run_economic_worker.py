@@ -1,9 +1,9 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
-from core.economic_tool_pack import build_economic_gateway
+from core.economic_tool_pack import build_economic_master_gateway as build_economic_gateway
 from core.models import AgentTask
-from core.worker_runner import WorkerRunner
+from core.economic_execution import EconomicWorkerRunner as WorkerRunner
 
 
 class Command(BaseCommand):
@@ -29,6 +29,7 @@ class Command(BaseCommand):
         limit = self.MAX_DRAIN_TASKS if options["drain"] else requested_limit
         executed = 0
         attempted_ids = []
+        failed_ids = []
         gateway = build_economic_gateway()
         supported = frozenset(
             code for code, spec in gateway.describe().items()
@@ -44,8 +45,11 @@ class Command(BaseCommand):
                     agent__code="economic-master-agent",
                     agent__active=True,
                     status="queued",
+                    attempt_count__lt=F("max_attempts"),
                     capability_code__in=supported,
                     action_type=F("capability_code"),
+                    agent__capabilities__code=F("capability_code"),
+                    agent__capabilities__active=True,
                 )
                 .exclude(pk__in=attempted_ids)
             )
@@ -67,7 +71,22 @@ class Command(BaseCommand):
                             f"capability={unknown.capability_code} requires_review=true"
                         )
                     else:
-                        self.stdout.write("IDLE: no queued economic task.")
+                        unresolved = AgentTask.objects.filter(
+                            agent__code="economic-master-agent",
+                            agent__active=True, status="queued",
+                        ).first()
+                        if unresolved:
+                            condition = (
+                                "BLOCKED_RETRY_EXHAUSTED"
+                                if unresolved.attempt_count >= unresolved.max_attempts
+                                else "BLOCKED_CAPABILITY_OR_POLICY"
+                            )
+                            self.stdout.write(
+                                f"{condition}: task={unresolved.pk} "
+                                "requires_review=true"
+                            )
+                        else:
+                            self.stdout.write("IDLE: no queued economic task.")
                 break
             attempted_ids.append(task.pk)
             if runner is None:
@@ -76,14 +95,47 @@ class Command(BaseCommand):
             try:
                 completed = runner.run(task.pk)
             except Exception as exc:
-                raise CommandError(f"Task {task.pk} execution failed: {exc}") from exc
+                # A bad task must not starve the rest of an explicitly bounded
+                # drain. The runner has already recorded failure/retry state;
+                # attempted_ids prevents retrying it in this invocation.
+                failed_ids.append(task.pk)
+                self.stdout.write(
+                    f"EXECUTION_FAILED task={task.pk} requires_review=true "
+                    f"error_type={type(exc).__name__}"
+                )
+                if options["task_id"] is not None:
+                    raise CommandError(
+                        f"Task {task.pk} execution failed ({type(exc).__name__}); "
+                        "inspect the private task audit"
+                    ) from exc
+                continue
             if completed.status != "completed":
                 raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
             executed += 1
-            verified_effect = bool((completed.output_data or {}).get('verified_effect', False))
+            output = completed.output_data if isinstance(completed.output_data, dict) else {}
+            verified_effect = output.get("verified_effect") is True
             self.stdout.write(self.style.SUCCESS(
                 f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
             ))
+            if not verified_effect:
+                self.stdout.write(
+                    f"DRAIN_PAUSED_UNVERIFIED task={completed.pk} requires_review=true"
+                )
+                break
+            if task.action_type == "income_growth_experiment":
+                self.stdout.write(
+                    "DRAIN_EXTERNAL_BOUNDARY growth experiment prepared; "
+                    "customer acquisition requires an authorized channel."
+                )
+                break
         if options["drain"]:
-            self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
+            self.stdout.write(
+                f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS} "
+                f"failed={len(failed_ids)} attempted={len(attempted_ids)}"
+            )
+        if failed_ids:
+            raise CommandError(
+                f"Economic worker finished remaining eligible work but {len(failed_ids)} "
+                f"task(s) failed: {failed_ids[:20]}"
+            )

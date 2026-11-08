@@ -21,15 +21,17 @@ if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --qui
   echo MASTER_CRON_DAEMON_INACTIVE
   exit 1
 fi
-for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
+for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/tool_gateway.py core/task_runtime.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
-# A SQLite rollback snapshot needs at least the size of the live database on
-# the backup filesystem. Refuse activation BEFORE changing cron if insufficient.
-# No database rows are read, and this gate creates no files.
+# Capacity must be checked before creating the activation directory, lock,
+# SQLite snapshot or cron backup. Preserve the stronger already-merged main
+# safety reserve when this isolated economic runner is later integrated.
+cd "$app"
 master_capacity_preflight() {
   SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings \
-    "$py" - "$ops" <<'PY'
+    MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0 \
+    "$py" -B - "$ops" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -58,9 +60,6 @@ if available < required:
 print("MASTER_CAPACITY_PREFLIGHT_OK", flush=True)
 PY
 }
-# Resolve config.settings relative to the live Django app before importing it.
-# This read-only directory change precedes every backup or cron mutation.
-cd "$app"
 master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
@@ -68,22 +67,42 @@ flock -w 20 8
 export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$app"
+# Keep the native factory gateway, worker, and task lifecycle byte-identical.
+# The economic agent now ships its own executor and never overwrites them.
+shared_modules=(core/tool_gateway.py core/worker_runner.py core/task_runtime.py)
+shared_before="$(sha256sum "${shared_modules[@]}")"
+"$py" - <<'PY'
+import inspect
+import django
+django.setup()
+from core.task_runtime import TaskRuntime
+from core.worker_runner import WorkerRunner
+from core.tool_gateway import ToolGateway
+required = {
+    TaskRuntime.claim: ("task_id",),
+    TaskRuntime.heartbeat: ("task_id", "execution_id"),
+    TaskRuntime.complete: ("task_id", "output_data", "cost", "execution_id"),
+    TaskRuntime.fail: ("task_id", "error", "execution_id"),
+}
+for func, parameters in required.items():
+    actual = inspect.signature(func).parameters
+    assert all(parameter in actual for parameter in parameters), "MASTER_SHARED_RUNTIME_ABI_UNSUPPORTED"
+assert callable(WorkerRunner.run) and callable(ToolGateway.invoke)
+print("MASTER_FACTORY_SHARED_ABI_PRESERVED_PREFLIGHT")
+PY
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 modules=(
   core/autonomous_brain.py
   core/economic_tool_pack.py
+  core/economic_execution.py
   core/isolated_upgrade_proof.py
   core/economic_master_agent.py
   core/self_funding_policy.py
-  core/task_runtime.py
   core/management/commands/seed_online_income_agents.py
   core/management/commands/run_economic_worker.py
   core/management/commands/economic_worker.py
-  core/worker_runner.py
   core/management/commands/autonomous_master_loop.py
   core/management/commands/online_income_cycle.py
-  core/recovery_scheduler.py
-  core/management/commands/recover_stale_tasks.py
 )
 source_backup="$ops/backups/master-source-before-$stamp"
 install -d -m 700 "$source_backup"
@@ -99,30 +118,51 @@ for module in "${modules[@]}"; do
   fi
 done
 rollback_sources() {
+  if [ "${sources_mutated:-0}" -ne 1 ]; then
+    echo MASTER_SOURCE_ROLLBACK_NOT_NEEDED
+    return 0
+  fi
+  local failed=0
   for module in "${modules[@]}"; do
     backup="$source_backup/$module"
     target="$app/$module"
     if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
-      install -D -m 600 "$backup" "$target.rollback.tmp"
-      mv -f "$target.rollback.tmp" "$target"
+      if install -D -m 600 "$backup" "$target.rollback.tmp"; then
+        mv -f "$target.rollback.tmp" "$target" || failed=1
+      else
+        failed=1
+      fi
     elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
-      rm -f "$target"
+      rm -f "$target" || failed=1
     fi
   done
+  if [ "$failed" -eq 1 ]; then
+    echo MASTER_SOURCE_ROLLBACK_INCOMPLETE
+    return 1
+  fi
   echo MASTER_SOURCE_ROLLBACK_COMPLETED
 }
 restore_all() {
-  result=$?
+  local result=$?
+  local rollback_failed=0
   trap - EXIT
-  if [ "$result" -ne 0 ]; then rollback_sources; fi
+  if [ "$result" -ne 0 ]; then rollback_sources || rollback_failed=1; fi
   if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] && [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
-    rm -f "$ops/backups/master-before-$stamp.sqlite3"
-    echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
+    if rm -f "$ops/backups/master-before-$stamp.sqlite3"; then
+      echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
+    else
+      rollback_failed=1
+    fi
   fi
   if [ "${cron_paused:-0}" -eq 1 ]; then
-    crontab "$old"
-    echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    if crontab "$old"; then
+      echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    else
+      rollback_failed=1
+      echo MASTER_CRON_RESTORE_FAILED
+    fi
   fi
+  if [ "$rollback_failed" -ne 0 ]; then echo MASTER_ROLLBACK_INCOMPLETE; fi
   return "$result"
 }
 old="$ops/backups/cron-before-master-$stamp.txt"
@@ -192,20 +232,26 @@ print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
 backup_verified=1
+sources_mutated=1
 for module in "${modules[@]}"; do
   target="$app/$module"
   install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
   mv -f "$target.deploy.tmp" "$target"
 done
 "$py" -m py_compile \
-  core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py \
-  core/self_funding_policy.py core/task_runtime.py \
+  core/autonomous_brain.py core/economic_tool_pack.py core/economic_execution.py \
+  core/isolated_upgrade_proof.py core/economic_master_agent.py \
+  core/self_funding_policy.py \
   core/management/commands/seed_online_income_agents.py \
-  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py
 "$py" -m py_compile \
   core/management/commands/autonomous_master_loop.py \
   core/management/commands/online_income_cycle.py
 "$py" manage.py check
+test "$(sha256sum "${shared_modules[@]}")" = "$shared_before" || {
+  echo MASTER_FACTORY_SHARED_MODULES_CHANGED
+  exit 1
+}
 "$py" manage.py seed_online_income_agents
 "$py" - <<'PY'
 import django
@@ -290,12 +336,12 @@ chmod 600 "$tmp"
 crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
-trap - EXIT
-if "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
-  echo MASTER_INITIAL_CYCLE_COMPLETED
-else
-  echo MASTER_INITIAL_CYCLE_DEFERRED_TO_SCHEDULE
+if ! "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
+  echo MASTER_INITIAL_CYCLE_FAILED_ROLLING_BACK
+  exit 1
 fi
+trap - EXIT
+echo MASTER_INITIAL_CYCLE_COMPLETED
 echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
 echo MASTER_SERIAL_STEPS_UP_TO_20_VERIFIED
 echo MASTER_FACTORY_LOOP_UNMODIFIED
