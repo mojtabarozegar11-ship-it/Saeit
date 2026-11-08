@@ -1,0 +1,200 @@
+name: Zomorod site-only agents master and local producer factual audit
+on:
+  pull_request:
+    paths: [".github/workflows/zomorod-internal-agent-factory-readonly-20261019.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-local-agent-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read private Zomorod local site production evidence only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          export PYTHONPYCACHEPREFIX="/tmp/zm-site-audit-python-cache"
+          cd /home/zomorod2/Saeit
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          "$py" - <<'PY'
+          import os,sqlite3,datetime,json,pathlib,collections
+          from urllib.parse import quote
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              info=settings.DATABASES["default"]
+              path=pathlib.Path(str(info.get("NAME",""))).resolve()
+              print("SITE_DJANGO_DB_ENGINE="+str(info.get("ENGINE","")).rsplit(".",1)[-1])
+              print("SITE_DJANGO_DB_EXISTS="+str(path.exists() and path.is_file()))
+              print("SITE_DJANGO_ENV_PRESENT="+str((pathlib.Path.cwd()/".env").is_file()))
+              if info.get("ENGINE","").endswith("sqlite3") and path.exists() and not path.is_symlink():
+                  uri="file:"+quote(str(path))+"?mode=ro"
+                  conn=sqlite3.connect(uri,uri=True,timeout=4)
+                  conn.execute("PRAGMA query_only=ON")
+                  names={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  print("SITE_DJANGO_DB_TABLES="+str(len(names)))
+                  for name in ["django_migrations","core_agent","core_agenttask","core_knowledgeagentplan","core_knowledgeagentrun","core_knowledgebook","core_companyactivityagentplan","core_companyactivityreport","core_newsletterstory"]:
+                      if name not in names:
+                          print("SITE_DJANGO_TABLE_MISSING="+name)
+                          continue
+                      number=conn.execute('SELECT COUNT(*) FROM "'+name+'"').fetchone()[0]
+                      columns={x[1] for x in conn.execute('PRAGMA table_info("'+name+'")')}
+                      print("SITE_DJANGO_TABLE_COUNT="+name+" count="+str(number))
+                      if name in {"core_agent","core_agenttask","core_knowledgeagentrun","core_knowledgebook","core_companyactivityreport"}:
+                          if "status" in columns:
+                              print("SITE_DJANGO_STATUS="+name+" "+json.dumps(dict(conn.execute('SELECT status,COUNT(*) FROM "'+name+'" GROUP BY status').fetchall()),ensure_ascii=False))
+                          if "active" in columns:
+                              print("SITE_DJANGO_ENABLED="+name+" "+json.dumps(dict((str(x[0]),x[1]) for x in conn.execute('SELECT active,COUNT(*) FROM "'+name+'" GROUP BY active').fetchall())))
+                          for timestamp in ("finished_at","last_run_at","updated_at","created_at"):
+                              if timestamp in columns:
+                                  latest=conn.execute('SELECT MAX("'+timestamp+'") FROM "'+name+'"').fetchone()[0]
+                                  print("SITE_DJANGO_NEWEST="+name+"."+timestamp+" "+str(latest)[:48])
+                                  break
+                  candidate=[n for n in names if any(k in n.lower() for k in ("factory","product","production","warehouse","publish","agent","worker","queue"))]
+                  print("SITE_DJANGO_FACTORY_LIKE_TABLES="+json.dumps(sorted(candidate)[:36]))
+                  conn.close()
+              else:print("SITE_DJANGO_DB_READONLY_CHECK=not_supported")
+          except Exception as e:
+              print("SITE_DJANGO_DB_AUDIT_ERROR_CLASS="+type(e).__name__)
+          private=pathlib.Path("/home/zomorod2/.private/zomorod-business")
+          script=private/"site_agents.php"
+          db=private/"site_agents.sqlite3"
+          print("SITE_PRIVATE_PHP_AGENT_RUNNER_PRESENT="+str(script.is_file() and not script.is_symlink()))
+          print("SITE_PRIVATE_PHP_AGENT_DB_PRESENT="+str(db.is_file() and not db.is_symlink()))
+          if db.is_file() and not db.is_symlink():
+              try:
+                  con=sqlite3.connect("file:"+quote(str(db))+"?mode=ro",uri=True,timeout=4)
+                  con.execute("PRAGMA query_only=ON")
+                  tables={x[0] for x in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  print("SITE_PRIVATE_DB_TABLES="+json.dumps(sorted(tables)[:24]))
+                  for special in ("runs","agents"):
+                      if special in tables:
+                          fields=[x[1] for x in con.execute('PRAGMA table_info("'+special+'")')]
+                          print("SITE_PRIVATE_DB_COLUMNS="+special+" "+json.dumps(fields))
+                  if "runs" in tables:
+                      fields={x[1] for x in con.execute('PRAGMA table_info("runs")')}
+                      if {"agent_code","status"}.issubset(fields):
+                          summary=[dict(code=str(code),status=str(status),count=int(n)) for code,status,n in con.execute("SELECT agent_code,status,COUNT(*) FROM runs GROUP BY agent_code,status ORDER BY agent_code,status")]
+                          print("SITE_PRIVATE_PER_AGENT_OUTCOMES="+json.dumps(summary))
+                      if "occurred_at" in fields:
+                          print("SITE_PRIVATE_LATEST_RUN_AT="+str(con.execute("SELECT MAX(occurred_at) FROM runs").fetchone()[0])[:48])
+                          recents=[dict(code=str(code),status=str(status),http=str(http),at=str(at)[:48]) for code,status,http,at in con.execute("SELECT x.agent_code,x.status,x.http_code,x.occurred_at FROM runs x JOIN (SELECT agent_code, MAX(id) latest FROM runs GROUP BY agent_code) t ON x.agent_code=t.agent_code AND x.id=t.latest ORDER BY x.agent_code")]
+                          print("SITE_PRIVATE_LATEST_PER_AGENT="+json.dumps(recents))
+                      for field in ("created_at","ran_at","checked_at","timestamp","created","at","observed_at"):
+                          if field in fields:
+                              print("SITE_PRIVATE_LAST_RUN_TIMESTAMP="+field+" "+str(con.execute('SELECT MAX("'+field+'") FROM runs').fetchone()[0])[:60])
+                              break
+                  for t in sorted(tables):
+                      if t.startswith("sqlite_") or t not in ("agents","runs","publications","production","products","events","config","tasks"):continue
+                      cols={x[1] for x in con.execute('PRAGMA table_info("'+t+'")')}
+                      n=con.execute('SELECT COUNT(*) FROM "'+t+'"').fetchone()[0]
+                      print("SITE_PRIVATE_TABLE_COUNT="+t+" count="+str(n))
+                      if "status" in cols:
+                          grp=con.execute('SELECT status,COUNT(*) FROM "'+t+'" GROUP BY status').fetchall()
+                          print("SITE_PRIVATE_STATUS="+t+" "+json.dumps(dict((str(k),n) for k,n in grp[:18])))
+                      if t=="runs":
+                          eligible=[x for x in ("code","agent_code","status","http","http_code","created_at","started_at","finished_at","ran_at") if x in cols]
+                          if eligible:
+                              order="id" if "id" in cols else "rowid"
+                              fields=",".join('"'+x+'"' for x in eligible)
+                              events=con.execute("SELECT "+fields+" FROM runs ORDER BY "+order+" DESC LIMIT 10").fetchall()
+                              print("SITE_PRIVATE_RECENT_RUNS="+json.dumps([dict(zip(eligible,[str(v)[:72] for v in row])) for row in events],ensure_ascii=False))
+                  con.close()
+              except Exception as e:
+                  print("SITE_PRIVATE_DB_AUDIT_ERROR_CLASS="+type(e).__name__)
+          for relative in ("scripts/factory_product_maker.py","scripts/factory_vps_product_cycle.py","core/management/commands/autonomous_master_loop.py","core/management/commands/knowledge_agent_generate.py"):
+              f=pathlib.Path.cwd()/relative
+              print("SITE_LOCAL_FILE_PRESENT="+relative+" "+str(f.is_file()))
+          PY
+          if command -v crontab >/dev/null 2>&1; then
+            cron="$(crontab -l 2>/dev/null || true)"
+            active="$(printf '%s\n' "$cron" | grep -Ev '^[[:space:]]*(#|$)' || true)"
+            for term in knowledge_agent company_activity site_agents autonomous_master factory product; do
+              if printf '%s\n' "$active" | grep -q "$term"; then
+                echo "SITE_CRON_ACTUAL=$term configured=yes"
+              else
+                echo "SITE_CRON_ACTUAL=$term configured=no"
+              fi
+            done
+            cron="$(crontab -l 2>/dev/null || true)"
+            for term in "knowledge_agent" "company_activity" "site_agents" "autonomous_master" "factory" "product"; do
+              if printf '%s\n' "$cron" | grep -q "$term"; then
+                echo "SITE_CRON_MARKER=$term enabled=yes"
+              else
+                echo "SITE_CRON_MARKER=$term enabled=no"
+              fi
+            done
+          else
+            echo "SITE_CRONTAB_PRESENT=no"
+          fi
+          REMOTE
+      - name: Read public site-only admin and agent health without authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in / /agents/ /api/health/ /api/bridge/health/ /admin/login/ /staff/ /command-center/ /company/; do
+            status="$(curl -sS --max-time 14 --retry 0 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$p" || true)"
+            echo "SITE_ROUTE=$p HTTP=$status"
+          done
+      - name: Cleanup SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
