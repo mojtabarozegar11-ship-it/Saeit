@@ -55,6 +55,9 @@ try {
   $email=(string)($lead['email']??'');
   if (!in_array($slug,$allow,true)||!filter_var($email,FILTER_VALIDATE_EMAIL)){$stats['invalid_private_record']++;continue;}
   $reference=substr($file,9,18);
+  // No automatic owner email. Explicit single-reference approval is required per dispatch.
+  $approved=(string)(getenv('MPW_OWNER_DISPATCH_APPROVED_REFERENCE') ?: '');
+  if (!hash_equals($reference,$approved)) continue;
   $subject='MojPlayWin owner inquiry '.$slug.' '.$reference;
   $body="MojPlayWin first-party inquiry | Owner notification\n".
         "Reference: ".$reference."\nService: ".$slug."\n".
