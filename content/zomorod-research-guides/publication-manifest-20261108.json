@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "release_id": "ZM-RESEARCH-GUIDES-20261108-R3",
+  "release_id": "ZM-RESEARCH-GUIDES-20261108-R4",
   "site": "https://zomorodmelal.ir",
   "production_status": "NOT_DEPLOYED",
   "deployment_policy": {
@@ -8,7 +8,9 @@
     "cpanel_only": true,
     "no_auto_merge": true,
     "require_authenticated_release": true,
-    "require_pre_post_http_check": true
+    "require_pre_post_http_check": true,
+    "require_exact_source_hash_after_editorial_approval": true,
+    "require_re_review_after_source_revision": true
   },
   "guides": [
     {
