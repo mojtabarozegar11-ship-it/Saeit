@@ -190,6 +190,28 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertNotIn("ORDER", json.dumps(result))
             self.assertNotIn("private hostname", json.dumps(result))
 
+    def test_runtime_error_cause_buckets_only_emit_fixed_labels(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/SECRET RuntimeError: WSGI startup private-key\n"
+                "RuntimeError: resource temporarily unavailable\n"
+                "except RuntimeError:\n"
+                "RuntimeError: WSGI startup private-key\n"
+            )
+            result = inspect_error_classes(root)
+            buckets = result["runtime_error_cause_buckets"]
+            self.assertEqual(buckets["passenger_wsgi_startup"], 2)
+            self.assertEqual(buckets["resource_exhaustion"], 1)
+            self.assertEqual(sum(buckets.values()), 3)
+            self.assertEqual(result["runtime_error_message_distinct_capped"], 2)
+            self.assertEqual(result["runtime_error_leading_words"]["wsgi"], 2)
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+            self.assertNotIn("private-key", json.dumps(result))
+
     def test_missing_module_name_is_binned_without_exposing_raw_name(self):
         from scripts.mpw_public_passenger_runtime_readonly_20261102 import classify_missing_module
         self.assertEqual(classify_missing_module(b"config"), "project_config")
