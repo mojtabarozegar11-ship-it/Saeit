@@ -26,7 +26,8 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
    `core/news_feed_reader.py`, `core/management/commands/news_agent_cycle.py`,
    and, only if absent, `core/management/commands/weather_agent_cycle.py`.
    Store timestamped copies of any destination files before replacement.
-3. Run `manage.py check`, validate an actual official-feed fetch, inspect
+3. Run `manage.py check`, validate actual USDA NASS and FAO official-feed fetches,
+   tolerate an isolated feed failure but report it explicitly, then inspect
    `news_agent_cycle` output and its **draft-only** records. Never bypass a
    source or agent validation failure.
 4. In cPanel Cron Jobs, configure in server timezone (`+03:30` on 2026-11-08)
