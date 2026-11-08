@@ -34,6 +34,9 @@ def candidate_allocations(program=None):
     _valid_allocation_weights()
     result = {}
     for asset in program["assets"]:
+        # A duplicated identifier must never silently overwrite a proposed allocation.
+        if asset["id"] in result:
+            raise ValueError("duplicate_asset_allocation_id")
         supply = int(asset["supply_tokens"])
         allocations = {name: supply * bps // 10000
                        for name, bps in ALLOCATION_BPS.items()}
