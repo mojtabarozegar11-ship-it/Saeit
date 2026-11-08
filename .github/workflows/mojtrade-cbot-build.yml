@@ -46,6 +46,17 @@ jobs:
       - name: Compile both cBots and verify fresh .algo files
         run: bash scripts/mojtrade_build_cbots.sh
 
+      - name: Keep verified cBot packages for broker-side validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojtrade-cbots-${{ github.sha }}
+          path: |
+            trading/build/**/MojTradeDemoBot.algo
+            trading/build/**/MojTradeOmegaXDemoBot.algo
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Record non-secret compiler version
         if: always()
         run: dotnet --version
