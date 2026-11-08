@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 PUBLIC = Path("/home/zomorod2/mojplaywin.com")
@@ -235,6 +236,213 @@ def inspect_public_store_fallback(public, conf):
 
 
 
+def inspect_passenger_wiring(conf, wsgi_text):
+    """Boolean-only public virtual-host wiring evidence; no directive values leak."""
+    python = re.findall(r"(?im)^\s*PassengerPython\s+([^\r\n#]+)", conf)
+    startup = re.findall(r"(?im)^\s*PassengerStartupFile\s+([^\r\n#]+)", conf)
+    return {
+        "passenger_python_directives": min(8, len(python)),
+        "passenger_python_311": any("/3.11/" in p for p in python),
+        "passenger_python_stage_venv": any("/virtualenv/Saeit-staging/" in p for p in python),
+        "passenger_python_other_venv": any(
+            "/virtualenv/" in p and "/virtualenv/Saeit-staging/" not in p for p in python
+        ),
+        "passenger_startup_file_directives": min(8, len(startup)),
+        "wsgi_mentions_staging_source": str(APP) in wsgi_text,
+        "wsgi_has_django_entrypoint": (
+            "from config.wsgi import application" in wsgi_text
+            or "get_wsgi_application()" in wsgi_text
+        ),
+        "htaccess_rewrite_rule_count_capped": min(
+            32, sum(bool(re.match(r"^\s*RewriteRule\b", s, re.I)) for s in conf.splitlines())
+        ),
+    }
+
+
+def classify_missing_module(module):
+    """Fixed-label bucketing only; never return untrusted module text."""
+    module = module.lower()
+    if module == b"config" or module.startswith(b"config."):
+        return "project_config"
+    if module == b"core.commerce_funnel" or module.startswith(b"core.commerce_funnel."):
+        return "optional_commerce_telemetry"
+    if module == b"core" or module.startswith(b"core."):
+        return "project_core"
+    if module == b"django" or module.startswith(b"django."):
+        return "django_dependency"
+    if module == b"whitenoise" or module.startswith(b"whitenoise."):
+        return "static_middleware_dependency"
+    if module == b"environ" or module.startswith(b"environ."):
+        return "environment_library"
+    if module in (b"mysqlclient", b"mysqldb", b"pymysql"):
+        return "database_driver"
+    if module == b"command_center" or module.startswith(b"command_center."):
+        return "management_module"
+    return "other_unclassified"
+
+
+def inspect_error_classes(public, now_epoch=None):
+    """Scan bounded recent, allowlisted *error* files; emit only fixed classes."""
+    now_epoch = time.time() if now_epoch is None else now_epoch
+    files = (
+        public / "error_log", public / "stderr.log",
+        public / "tmp/passenger.stderr.log", public / "logs/error.log",
+    )
+    signatures = {
+        "module_missing": b"modulenotfounderror",
+        "import_error": b"importerror",
+        "django_improper_settings": b"improperlyconfigured",
+        "database_operational_error": b"operationalerror",
+        "file_permission_error": b"permissionerror",
+        "template_missing": b"templatedoesnotexist",
+        "static_manifest_error": b"missing staticfiles manifest entry",
+        "passenger_boot_error": b"cannot load application",
+        "python_traceback": b"traceback (most recent call last)",
+    }
+    category_names = (
+        "project_config", "optional_commerce_telemetry", "project_core",
+        "django_dependency", "static_middleware_dependency", "environment_library",
+        "database_driver", "management_module", "other_unclassified",
+    )
+    # Named exception types only; all output keys are fixed and aggregate.
+    exception_types = {
+        "django_disallowed_host": b"disallowedhost",
+        "django_suspicious_operation": b"suspiciousoperation",
+        "django_app_registry": b"appregistrynotready",
+        "django_url_reverse": b"noreversematch",
+        "django_template_syntax": b"templatesyntaxerror",
+        "python_attribute": b"attributeerror",
+        "python_type": b"typeerror",
+        "python_value": b"valueerror",
+        "python_key": b"keyerror",
+        "python_runtime": b"runtimeerror",
+        "python_name": b"nameerror",
+        "python_assertion": b"assertionerror",
+        "python_file_not_found": b"filenotfounderror",
+        "python_os": b"oserror",
+        "python_system_exit": b"systemexit",
+        "python_connection_refused": b"connectionrefusederror",
+        "python_timeout": b"timeouterror",
+        "database_programming": b"programmingerror",
+        "database_integrity": b"integrityerror",
+    }
+    runtime_cause_phrases = {
+        "django_initialization": (b"populate()", b"app registry", b"apps aren't loaded"),
+        "passenger_wsgi_startup": (b"passenger", b"wsgi", b"app root", b"startup", b"spawn"),
+        "python_import_environment": (b"sys.path", b"virtualenv", b"interpreter", b"import", b"module"),
+        "resource_exhaustion": (b"resource temporarily unavailable", b"out of memory",
+                                b"too many open files", b"cannot allocate memory",
+                                b"can't start new thread", b"process limit"),
+        "database_runtime": (b"database", b"sqlite", b"mysql", b"mariadb"),
+        "settings_environment": (b"settings", b"environment", b"secret_key", b"configuration"),
+        "filesystem_runtime": (b"permission", b"directory", b"file not found"),
+        "async_or_thread": (b"event loop", b"thread", b"async"),
+        "store_business_guard": (b"store", b"checkout", b"commerce", b"payment"),
+    }
+    runtime_leading_words = (
+        b"cannot", b"unable", b"failed", b"missing", b"invalid", b"no", b"the",
+        b"application", b"wsgi", b"passenger", b"django", b"settings",
+        b"public", b"staging", b"expected", b"wrong", b"store", b"source",
+    )
+    shape_names = (
+        "exception_message_line", "non_exception_reference",
+        "module_phrase_near_marker", "module_phrase_absent_near_marker",
+    )
+    result = {"regular_recent_error_files": 0, "bounded_bytes_scanned": 0,
+              "classes": {key: 0 for key in signatures},
+              "missing_module_categories": {key: 0 for key in category_names},
+              "missing_module_shapes": {key: 0 for key in shape_names},
+              "exception_type_signatures": {key: 0 for key in exception_types},
+              "runtime_error_cause_buckets": {key: 0 for key in (
+                  *runtime_cause_phrases.keys(), "other_unclassified")},
+              "runtime_error_leading_words": {key.decode("ascii"): 0 for key in runtime_leading_words},
+              "runtime_error_message_distinct_capped": 0,
+              "files_modified": False, "raw_log_emitted": False}
+    runtime_message_digests = set()
+    for path in files:
+        try:
+            if (path.is_symlink() or path.parent.is_symlink() or
+                    not path.is_file() or path.stat().st_uid != os.geteuid()):
+                continue
+            info = path.stat()
+            if not 0 <= now_epoch - info.st_mtime <= 3 * 86400:
+                continue
+            with path.open("rb") as handle:
+                handle.seek(max(0, info.st_size - 262144))
+                data = handle.read(262144).lower()
+            result["regular_recent_error_files"] += 1
+            result["bounded_bytes_scanned"] += len(data)
+            for key, needle in signatures.items():
+                result["classes"][key] = min(100, result["classes"][key] + data.count(needle))
+            for key, token in exception_types.items():
+                pattern = rb"(?<![a-z0-9_])(?:[a-z_][a-z0-9_]*\.){0,6}" + token + rb"\s*:"
+                for match in re.finditer(pattern, data):
+                    prefix = data[max(0, match.start() - 32):match.start()]
+                    if re.search(rb"\b(?:except|raise)\s+$", prefix):
+                        continue
+                    result["exception_type_signatures"][key] = min(
+                        100, result["exception_type_signatures"][key] + 1
+                    )
+            # Bounded single-line RuntimeError messages. Emit only fixed-label
+            # categories, whitelisted leading words and a distinct count.
+            for marker in re.finditer(rb"\bruntimeerror\s*:", data):
+                prefix = data[max(0, marker.start() - 32):marker.start()]
+                if re.search(rb"\b(?:except|raise)\s+$", prefix):
+                    continue
+                message = data[marker.end():marker.end() + 256].split(b"\n", 1)[0].strip()
+                if not message:
+                    continue
+                runtime_message_digests.add(hashlib.sha256(message).digest())
+                category = "other_unclassified"
+                for label, phrases in runtime_cause_phrases.items():
+                    if any(phrase in message for phrase in phrases):
+                        category = label
+                        break
+                result["runtime_error_cause_buckets"][category] = min(
+                    100, result["runtime_error_cause_buckets"][category] + 1
+                )
+                first = re.match(rb"([a-z]{2,24})\b", message)
+                if first and first.group(1) in runtime_leading_words:
+                    fixed_word = first.group(1).decode("ascii")
+                    result["runtime_error_leading_words"][fixed_word] = min(
+                        100, result["runtime_error_leading_words"][fixed_word] + 1
+                    )
+            # Never emit log text, module names, or arbitrary substrings.
+            # Distinguish exception messages from code references in tracebacks.
+            for marker in re.finditer(rb"modulenotfounderror", data):
+                suffix = data[marker.end():marker.end() + 256]
+                first_line = suffix.split(b"\n", 1)[0]
+                prefix = data[max(0, marker.start() - 32):marker.start()]
+                source_reference = bool(re.search(rb"\b(?:except|raise)\s+$", prefix))
+                is_exception = bool(re.match(rb"\s*:", first_line)) and not source_reference
+                line_shape = "exception_message_line" if is_exception else "non_exception_reference"
+                result["missing_module_shapes"][line_shape] = min(
+                    100, result["missing_module_shapes"][line_shape] + 1
+                )
+                # Do not borrow the next exception's module from a source-code marker.
+                scoped = suffix.split(b"modulenotfounderror", 1)[0] if is_exception else b""
+                normalized = re.sub(rb"\s+", b" ", scoped)
+                phrase = re.search(
+                    rb"no module named\s+(?:['\"]|&#39;|&#x27;|&quot;)?"
+                    rb"([a-z_][a-z0-9_.]{0,127})",
+                    normalized,
+                )
+                phrase_shape = ("module_phrase_near_marker" if phrase
+                                else "module_phrase_absent_near_marker")
+                result["missing_module_shapes"][phrase_shape] = min(
+                    100, result["missing_module_shapes"][phrase_shape] + 1
+                )
+                if phrase and is_exception:
+                    group = classify_missing_module(phrase.group(1))
+                    result["missing_module_categories"][group] = min(
+                        100, result["missing_module_categories"][group] + 1
+                    )
+        except (OSError, ValueError):
+            continue
+    result["runtime_error_message_distinct_capped"] = min(32, len(runtime_message_digests))
+    return result
+
+
 def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_payload=None):
     if public == PUBLIC and app == APP and pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise RuntimeError("WRONG_CPANEL_ACCOUNT")
@@ -258,6 +466,8 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_p
     if workers is None:
         workers = _owned_workers()
     return {"classification": "MPW_PUBLIC_PASSENGER_READ_ONLY_RUNTIME_CONTRACT",
+            "passenger_wiring_readonly": inspect_passenger_wiring(conf, wsgi_text),
+            "server_error_classes_readonly": inspect_error_classes(public),
             "public_app_root_directive_count": len(roots),
             "htaccess_public_root": len(roots) == 1 and _as_target_root(roots[0]) == "public",
             "htaccess_staging_root": len(roots) == 1 and _as_target_root(roots[0]) == "staging",

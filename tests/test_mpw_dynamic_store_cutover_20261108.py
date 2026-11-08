@@ -4,9 +4,11 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
+    verify_dynamic_public,
 )
 
 
@@ -78,6 +80,52 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         self.assertIn("github.event.comment.body == 'MPW-STORE-DYNAMIC-CUTOVER-20261108'", workflow)
         self.assertIn("timeout 150s ssh -T", workflow)
         self.assertNotIn("StrictHostKeyChecking no", workflow)
+
+    def test_public_probe_reports_only_redacted_static_category(self):
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response", return_value=(MARKER + b"x" * 2400)):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.time.sleep", return_value=None):
+                with contextlib.redirect_stdout(sink):
+                    self.assertFalse(verify_dynamic_public("42425162108"))
+        out = sink.getvalue()
+        self.assertIn('"still_owned_static_fallback": 18', out)
+        self.assertIn('"attempts": 18', out)
+        self.assertIn('"dynamic_confirmed": false', out)
+        self.assertNotIn("buyer", out)
+
+    def test_public_probe_stops_at_deadline_without_extra_requests(self):
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response", return_value=(MARKER + b"x" * 2400)) as probe:
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.time.monotonic", side_effect=[100, 100, 156]):
+                with patch("scripts.mpw_dynamic_store_cutover_20261108.time.sleep", return_value=None):
+                    with contextlib.redirect_stdout(sink):
+                        self.assertFalse(verify_dynamic_public("42425162108"))
+        self.assertEqual(probe.call_count, 1)
+        self.assertIn('"attempts": 1', sink.getvalue())
+        self.assertIn('"still_owned_static_fallback": 1', sink.getvalue())
+
+    def test_public_probe_recovers_after_previous_six_static_responses(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import PRODUCT_ROUTES
+        html = b"mpw-shop-kicker mpw-store-catalog-20261026 " + b" ".join(PRODUCT_ROUTES)
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
+                   side_effect=[MARKER + b"x" * 2400] * 7 + [html]) as probe:
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.time.sleep", return_value=None):
+                with contextlib.redirect_stdout(sink):
+                    self.assertTrue(verify_dynamic_public("42425162108"))
+        self.assertEqual(probe.call_count, 8)
+        self.assertIn('"attempts": 8', sink.getvalue())
+        self.assertIn('"still_owned_static_fallback": 7', sink.getvalue())
+
+    def test_public_probe_reports_verified_django_without_raw_html(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import PRODUCT_ROUTES
+        html = b"mpw-shop-kicker mpw-store-catalog-20261026 " + b" ".join(PRODUCT_ROUTES)
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response", return_value=html):
+            with contextlib.redirect_stdout(sink):
+                self.assertTrue(verify_dynamic_public("42425162108"))
+        self.assertIn('"dynamic_confirmed": true', sink.getvalue())
+        self.assertNotIn("mpw-shop-kicker", sink.getvalue())
 
 
 if __name__ == "__main__":

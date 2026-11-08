@@ -7,6 +7,7 @@ present Passenger restart marker. Never changes invoices, payments or mail.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pwd
 import re
@@ -127,18 +128,41 @@ def public_response(run_id: str) -> bytes:
 
 
 def verify_dynamic_public(run_id: str) -> bool:
+    # Allow Passenger time to switch while bounding public requests and the
+    # total observation window. A fixed six probes only waited ~15 seconds.
     end = time.monotonic() + 55
-    for attempt in range(6):
+    observations = {}
+    attempts = 0
+    while attempts < 18 and (attempts == 0 or time.monotonic() < end - 4):
+        attempt = attempts
+        attempts += 1
         try:
             data = public_response(run_id + "-" + str(attempt))
             if (MARKER not in data and b"mpw-shop-kicker" in data and
                     b"mpw-store-catalog-20261026" in data and
                     all(route in data for route in PRODUCT_ROUTES)):
+                print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
+                    "dynamic_confirmed": True,
+                    "observations": observations,
+                    "attempts": attempts,
+                }, sort_keys=True))
                 return True
+            category = "still_owned_static_fallback" if MARKER in data else "unexpected_non_django_html"
+        except urllib.error.HTTPError as err:
+            category = "http_" + str(err.code) if err.code in (403, 404, 429, 500, 502, 503, 504) else "http_other"
+        except TimeoutError:
+            category = "network_timeout"
         except (OSError, RuntimeError, urllib.error.URLError):
-            pass
-        if attempt < 5 and time.monotonic() < end - 4:
-            time.sleep(3)
+            category = "network_or_response_validation_error"
+        observations[category] = observations.get(category, 0) + 1
+        remaining = end - time.monotonic() - 4
+        if attempts < 18 and remaining > 0:
+            time.sleep(min(3, remaining))
+    print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
+        "dynamic_confirmed": False,
+        "observations": observations,
+        "attempts": attempts,
+    }, sort_keys=True))
     return False
 
 
