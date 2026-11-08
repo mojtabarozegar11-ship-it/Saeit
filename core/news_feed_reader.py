@@ -120,8 +120,14 @@ def parse_official_rss(payload: bytes, *, feed: OfficialFeed = OFFICIAL_FEEDS[0]
             "{http://purl.org/dc/elements/1.1/}date") or "").strip()
         if not title or not link or not raw_date or link in seen:
             continue
-        # Discard prohibited headlines at the earliest ingestion boundary.
-        if blocked_news_reason(title, link, feed.publisher, item.findtext("description") or ""):
+        # Inspect all source-supplied metadata, not just the headline and
+        # summary: categories, full-text extensions, GUIDs and attributes can
+        # reveal prohibited topics hidden behind a neutral headline.
+        editorial_fields = [feed.publisher]
+        for field in item.iter():
+            editorial_fields.extend((field.text or "", field.tail or ""))
+            editorial_fields.extend(field.attrib.values())
+        if blocked_news_reason(*editorial_fields):
             continue
         try:
             try:
