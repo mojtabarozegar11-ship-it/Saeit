@@ -24,6 +24,7 @@ PROJECTS = {
 }
 CYCLES = {f"C{i:02d}" for i in range(1, 51)}
 MINIMUM_RECORDED_ACTIONS_PER_CYCLE = 20
+COMMAND_RECORDED_ACTIONS_PER_CYCLE = 50
 DOMAINS = {"command": "فرمان و چرخه‌ها", "virtual": "سایت‌ها و کسب‌وکار مجازی", "physical": "شرکت و کسب‌وکار فیزیکی"}
 
 def _text(value):
@@ -105,14 +106,15 @@ def cycle_health():
     total_shortfall = 0
     cycles_at_minimum = 0
     for key, name in PROJECTS.items():
+        minimum_for_project = COMMAND_RECORDED_ACTIONS_PER_CYCLE if key == "management" else MINIMUM_RECORDED_ACTIONS_PER_CYCLE
         recorded = by_project[key]
         remaining = sorted(CYCLES - recorded.keys())
-        below_target = sorted(c for c in CYCLES if recorded.get(c, 0) < MINIMUM_RECORDED_ACTIONS_PER_CYCLE)
-        shortfall = sum(MINIMUM_RECORDED_ACTIONS_PER_CYCLE - min(recorded.get(c, 0), MINIMUM_RECORDED_ACTIONS_PER_CYCLE) for c in CYCLES)
+        below_target = sorted(c for c in CYCLES if recorded.get(c, 0) < minimum_for_project)
+        shortfall = sum(minimum_for_project - min(recorded.get(c, 0), minimum_for_project) for c in CYCLES)
         at_minimum = len(CYCLES) - len(below_target)
         total_shortfall += shortfall
         cycles_at_minimum += at_minimum
-        coverage.append({"project": key, "name": name, "cycles_with_reports": len(recorded),
+        coverage.append({"project": key, "name": name, "minimum_reports_per_cycle": minimum_for_project, "cycles_with_reports": len(recorded),
                          "next_unreported": remaining[0] if remaining else None,
                          "missing_cycles": len(remaining),
                          "cycles_at_minimum_report_count": at_minimum,
@@ -131,7 +133,7 @@ def cycle_health():
                 Q(resolution_reference="") | Q(resolution_reference__isnull=True)).count(),
             "pending_owner_approval": ApprovalRequest.objects.filter(status="pending").count(),
             "verified_completions": None,
-            "note": "رسیدن به ۲۰ گزارش در یک چرخه شرط شمارشی است، نه اثبات ۲۰ اقدام واقعی؛ تکمیل واقعی بدون شاهد مستقل احراز نمی‌شود."}
+            "note": "حداقل شمارشی مرکز فرماندهی ۵۰ و دیگر پروژه‌ها ۲۰ گزارش در چرخه است؛ هیچ تعداد گزارشی به‌تنهایی اثبات اقدام واقعی نیست."}
 
 def _auto_execute_command(request, domain, command_text):
     # Arbitrary natural language is NEVER an executable instruction. Only exact,
