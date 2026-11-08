@@ -125,12 +125,7 @@ def _system_status(request):
 @transaction.atomic
 def integrated_ledger_api(request):
     if request.method == "GET":
-        for row in CommandRequest.objects.filter(status="pending", read_only=True).order_by("created_at")[:20]:
-            status, _, result = _auto_execute_command(request, row.domain, row.command)
-            if status == "executed":
-                row.status, row.result, row.executed_at = status, result, timezone.now()
-                row.save(update_fields=["status", "result", "executed_at"])
-                _audit("approve", "command", row.id, "فرمان read-only از صف خودکار اجرا شد.", request.user, result)
+        # A GET is always read-only. Queue execution belongs to the background worker.
         return JsonResponse({"captured_at": timezone.now().isoformat(),
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
@@ -223,6 +218,8 @@ def integrated_ledger_api(request):
         _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
     if kind == "approval_request":
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "owner_only"}, status=403)
         try:
             row = ApprovalRequest.objects.select_for_update().get(pk=int(payload.get("id")))
         except (ApprovalRequest.DoesNotExist, TypeError, ValueError):
@@ -245,6 +242,8 @@ def integrated_ledger_api(request):
         return JsonResponse({"approval_request": _approval_request(row)})
 
     if kind == "approval":
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "owner_only"}, status=403)
         decision = _text(payload.get("status"))
         if _text(payload.get("kind")) not in {"email", "deploy", "cost"} or decision not in {"approved", "rejected"} or not _text(payload.get("approver")):
             return JsonResponse({"error": "نوع تصمیم، وضعیت و نام تأییدکننده الزامی است."}, status=400)
