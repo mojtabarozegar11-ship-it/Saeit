@@ -7,10 +7,12 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import never_cache
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, F, Count
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent, CommandRequest
 from accounting.models import JournalEntry, Account
+from core.approval import ApprovalService
 from core.models import ApprovalRequest, ResearchProject
 from .zomorod_status import read_zomorod_health
 
@@ -21,6 +23,7 @@ PROJECTS = {
     "profile": "وب‌سایت و معرفی مجتبی روزگار",
 }
 CYCLES = {f"C{i:02d}" for i in range(1, 51)}
+MINIMUM_RECORDED_ACTIONS_PER_CYCLE = 20
 DOMAINS = {"command": "فرمان و چرخه‌ها", "virtual": "سایت‌ها و کسب‌وکار مجازی", "physical": "شرکت و کسب‌وکار فیزیکی"}
 
 def _text(value):
@@ -75,24 +78,75 @@ def _finance_snapshot():
     )
     return [{"name": row.name, "kind": row.kind, "debit": str(row.debit_total or 0), "credit": str(row.credit_total or 0)} for row in rows]
 
+def _finance_integrity():
+    """One grouped query; do not load all financial documents on every UI poll."""
+    invalid = (JournalEntry.objects.filter(status=JournalEntry.Status.POSTED)
+               .annotate(total_debit=Sum("lines__debit"), total_credit=Sum("lines__credit"))
+               .filter(Q(total_debit__isnull=True) | Q(total_debit__lte=0) |
+                       ~Q(total_debit=F("total_credit"))).exists())
+    return {"balanced_posted_entries": not invalid, "source": "Django double-entry ledger (posted only)"}
+
 def _no_output_rows():
     return [{"id": row.id, "title": row.title, "status": row.status, "priority": row.priority,
              "due_at": row.due_at.isoformat() if row.due_at else None, "reason": "مرجع نتیجه یا رفع کامل ثبت نشده است."}
             for row in WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).filter(
                 Q(resolution_reference="") | Q(resolution_reference__isnull=True))[:100]]
 
+def cycle_health():
+    """Read-only, per-project C01–C50 ledger gaps; reports are not proof."""
+    rows = CycleReport.objects.values("project_key", "cycle").annotate(actions=Count("pk"))
+    by_project = {project: {} for project in PROJECTS}
+    total_actions = 0
+    for row in rows:
+        if row["project_key"] in by_project and row["cycle"] in CYCLES:
+            by_project[row["project_key"]][row["cycle"]] = row["actions"]
+        total_actions += row["actions"]
+    coverage = []
+    total_shortfall = 0
+    cycles_at_minimum = 0
+    for key, name in PROJECTS.items():
+        recorded = by_project[key]
+        remaining = sorted(CYCLES - recorded.keys())
+        below_target = sorted(c for c in CYCLES if recorded.get(c, 0) < MINIMUM_RECORDED_ACTIONS_PER_CYCLE)
+        shortfall = sum(MINIMUM_RECORDED_ACTIONS_PER_CYCLE - min(recorded.get(c, 0), MINIMUM_RECORDED_ACTIONS_PER_CYCLE) for c in CYCLES)
+        at_minimum = len(CYCLES) - len(below_target)
+        total_shortfall += shortfall
+        cycles_at_minimum += at_minimum
+        coverage.append({"project": key, "name": name, "cycles_with_reports": len(recorded),
+                         "next_unreported": remaining[0] if remaining else None,
+                         "missing_cycles": len(remaining),
+                         "cycles_at_minimum_report_count": at_minimum,
+                         "cycles_below_minimum_report_count": len(below_target),
+                         "next_below_minimum": below_target[0] if below_target else None,
+                         "reports_needed_for_minimum": shortfall})
+    now = timezone.now()
+    return {"coverage": coverage, "recorded_actions": total_actions,
+            "minimum_reports_per_cycle": MINIMUM_RECORDED_ACTIONS_PER_CYCLE,
+            "cycles_at_minimum_report_count": cycles_at_minimum,
+            "reports_needed_for_minimum": total_shortfall,
+            "overdue_open_work": WorkItem.objects.filter(status__in=("open", "in_progress", "blocked"), due_at__lt=now).count(),
+            "no_result_reference": WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).filter(
+                Q(resolution_reference="") | Q(resolution_reference__isnull=True)).count(),
+            "done_without_evidence": WorkItem.objects.filter(status="done").filter(
+                Q(resolution_reference="") | Q(resolution_reference__isnull=True)).count(),
+            "pending_owner_approval": ApprovalRequest.objects.filter(status="pending").count(),
+            "verified_completions": None,
+            "note": "رسیدن به ۲۰ گزارش در یک چرخه شرط شمارشی است، نه اثبات ۲۰ اقدام واقعی؛ تکمیل واقعی بدون شاهد مستقل احراز نمی‌شود."}
+
 def _auto_execute_command(request, domain, command_text):
-    text = command_text.lower()
-    sensitive = ("ارسال", "ایمیل", "استقرار", "انتشار", "هزینه", "خرید", "پرداخت", "حذف", "تغییر رمز", "برداشت")
-    readonly = ("وضعیت", "گزارش", "پایش", "ممیزی", "بررسی", "تعداد", "سلامت")
-    if any(term in text for term in sensitive):
-        return "pending", False, "این فرمان حساس است و برای اجرا به تأیید موردی نیاز دارد."
-    if any(term in text for term in readonly):
+    # Arbitrary natural language is NEVER an executable instruction. Only exact,
+    # bounded local queries may be labeled executed. In particular, a sentence
+    # containing the word "audit" must not silently become a successful job.
+    command = command_text.strip().lower()
+    if command in ("monitor:systems", "پایش وضعیت سامانه"):
         systems = _system_status(request)
         connected = sum(1 for item in systems if item["state"] in ("connected", "healthy"))
+        return "executed", True, f"وضعیت اتصال‌ها خوانده شد؛ {connected} مورد دارای شاهد داخلی است؛ سایر اتصال‌ها نامشخص باقی می‌مانند."
+    if command in ("monitor:work", "پایش کارهای بدون خروجی"):
         open_work = WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).count()
-        return "executed", True, f"پایش read-only خودکار انجام شد؛ {connected} اتصال دارای شاهد و {open_work} کار باز/درحال اجرا/متوقف ثبت شده است."
-    return "pending", True, "فرمان در صف تحلیل قرار گرفت؛ الگوی اجرایی امن برای آن شناسایی نشد."
+        unproven = len(_no_output_rows())
+        return "executed", True, f"صف داخلی خوانده شد؛ {open_work} کار ناتمام، و حداقل {unproven} کار فاقد مرجع نتیجه در نمونهٔ ۱۰۰تایی وجود دارد."
+    return "pending", False, "فرمان فقط ثبت شد؛ هیچ اجرای خودکار یا تأیید ضمنی برای متن آزاد وجود ندارد."
 
 def _system_status(request):
     names = {
@@ -122,28 +176,41 @@ def _system_status(request):
 
 @staff_member_required
 @require_http_methods(["GET", "POST"])
+@never_cache
 @transaction.atomic
 def integrated_ledger_api(request):
     if request.method == "GET":
-        for row in CommandRequest.objects.filter(status="pending", read_only=True).order_by("created_at")[:20]:
-            status, _, result = _auto_execute_command(request, row.domain, row.command)
-            if status == "executed":
-                row.status, row.result, row.executed_at = status, result, timezone.now()
-                row.save(update_fields=["status", "result", "executed_at"])
-                _audit("approve", "command", row.id, "فرمان read-only از صف خودکار اجرا شد.", request.user, result)
+        # GET must not acknowledge, execute, or mutate queued work.
+        if request.GET.get("view") == "approvals":
+            pending = ApprovalRequest.objects.filter(status="pending", requested_by=request.user)
+            pending_count = pending.count()
+            response = JsonResponse({
+                "pending_count": pending_count,
+                "pending_approvals": [_approval_request(x) for x in pending.select_related("requested_by").order_by("created_at")[:100]],
+                "truncated": pending_count > 100,
+            })
+            response["Cache-Control"] = "private, no-store"
+            return response
+        systems = _system_status(request)
+        integrity = _finance_integrity()
         return JsonResponse({"captured_at": timezone.now().isoformat(),
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
             "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
             "audit": [_audit_row(x) for x in LedgerAuditEvent.objects.select_related("actor")[:100]],
             "commands": [_command(x) for x in CommandRequest.objects.select_related("requested_by")[:100]],
-            "systems": _system_status(request),
+            "pending_approvals": [_approval_request(x) for x in ApprovalRequest.objects.filter(
+                status="pending", requested_by=request.user).select_related("requested_by").order_by("created_at")[:100]],
+            "systems": systems,
             "finance": _finance_snapshot(),
+            "finance_integrity": integrity,
             "no_output": _no_output_rows(),
+            "cycle_health": cycle_health(),
             "release_readiness": {"open_issues": CycleIssue.objects.filter(status="open").count(),
                                   "blocked_work": WorkItem.objects.filter(status="blocked").count(),
                                   "pending_approvals": ApprovalRequest.objects.filter(status="pending").count(),
-                                  "unknown_connections": sum(1 for item in _system_status(request) if item["state"] == "unknown")},
+                                  "unknown_connections": sum(1 for item in systems if item["state"] == "unknown"),
+                                  "ledger_balanced": integrity["balanced_posted_entries"]},
             "live_summary": {
                 "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
                                "draft": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count()},
@@ -159,8 +226,10 @@ def integrated_ledger_api(request):
             }})
     try:
         payload = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({"error": "بدنهٔ درخواست معتبر نیست."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "فرمت درخواست باید شیء JSON باشد."}, status=400)
     kind = _text(payload.get("kind"))
     if kind == "command":
         domain, command_text = _text(payload.get("domain")) or "command", _text(payload.get("command"))
@@ -212,15 +281,26 @@ def integrated_ledger_api(request):
         _audit("create", "issue", row.id, f"مانع {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, source)
         return JsonResponse({"issue": _issue(row)}, status=201)
     if kind == "issue_update":
-        try: row = CycleIssue.objects.get(pk=int(payload.get("id")))
+        try: row = CycleIssue.objects.select_for_update().get(pk=int(payload.get("id")))
         except (CycleIssue.DoesNotExist, TypeError, ValueError): return JsonResponse({"error": "مانع پیدا نشد."}, status=404)
+        action = _text(payload.get("action"))
+        if action not in {"verify", "resolve"}:
+            return JsonResponse({"error": "عملیات نامعتبر است."}, status=400)
+        if row.status != "open":
+            return JsonResponse({"error": "مانع قبلاً بسته شده است."}, status=409)
         evidence = _text(payload.get("evidence"))
         if not evidence: return JsonResponse({"error": "مدرک الزامی است."}, status=400)
-        if _text(payload.get("action")) == "resolve": row.status, row.resolution_evidence, row.resolved_at = "resolved", evidence, timezone.now()
-        else: row.certainty, row.source = "verified", evidence
-        row.save(update_fields=["status", "resolution_evidence", "resolved_at", "certainty", "source"])
-        event_action = "resolve" if _text(payload.get("action")) == "resolve" else "verify"
-        _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
+        if action == "resolve":
+            if row.certainty != "verified" or not row.source:
+                return JsonResponse({"error": "رفع مانع تنها پس از ثبت شاهد تأیید مجاز است."}, status=409)
+            row.status, row.resolution_evidence, row.resolved_at = "resolved", evidence, timezone.now()
+            row.save(update_fields=["status", "resolution_evidence", "resolved_at"])
+        else:
+            if row.certainty == "verified" and row.source == evidence:
+                return JsonResponse({"error": "شاهد تکراری است."}, status=409)
+            row.certainty, row.source = "verified", evidence
+            row.save(update_fields=["certainty", "source"])
+        _audit(action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
     if kind == "approval_request":
         try:
@@ -231,6 +311,12 @@ def integrated_ledger_api(request):
         note = _text(payload.get("note"))
         if action not in {"approved", "rejected", "explanation"}:
             return JsonResponse({"error": "عملیات باید قبول، رد یا توضیح باشد."}, status=400)
+        if row.status != "pending":
+            return JsonResponse({"error": "درخواست قبلاً تعیین تکلیف شده است."}, status=409)
+        if row.requested_by_id != request.user.pk:
+            return JsonResponse({"error": "فقط مالک تعیین‌شدهٔ درخواست اجازهٔ تصمیم دارد."}, status=403)
+        if action in {"approved", "rejected"} and not request.user.is_superuser:
+            return JsonResponse({"error": "تصمیم حساس فقط با حساب مالک ارشد مجاز است."}, status=403)
         if action == "explanation":
             if not note:
                 return JsonResponse({"error": "توضیح خالی است."}, status=400)
@@ -238,17 +324,24 @@ def integrated_ledger_api(request):
             row.save(update_fields=["decision_note", "updated_at"])
             _audit("approve", "approval_request", row.id, "توضیح برای درخواست تأیید ثبت شد.", request.user, note)
             return JsonResponse({"approval_request": _approval_request(row)})
-        row.status = action
-        row.decision_note = note
-        row.save(update_fields=["status", "decision_note", "updated_at"])
+        try:
+            # Use the canonical owner-only lifecycle; it validates the target
+            # and updates any dependent task/intent atomically and auditably.
+            row = ApprovalService().decide(row.pk, approved=action == "approved",
+                                          actor_id=request.user.pk, note=note, actor_type="owner")
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=409)
         _audit("approve", "approval_request", row.id, f"درخواست تأیید {action} شد.", request.user, note)
         return JsonResponse({"approval_request": _approval_request(row)})
 
     if kind == "approval":
         decision = _text(payload.get("status"))
-        if _text(payload.get("kind")) not in {"email", "deploy", "cost"} or decision not in {"approved", "rejected"} or not _text(payload.get("approver")):
+        decision_kind = _text(payload.get("approval_kind"))
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "ثبت تصمیم حساس فقط با حساب مالک مجاز است."}, status=403)
+        if decision_kind not in {"email", "deploy", "cost"} or decision not in {"approved", "rejected"}:
             return JsonResponse({"error": "نوع تصمیم، وضعیت و نام تأییدکننده الزامی است."}, status=400)
-        row = ApprovalDecision.objects.create(kind=_text(payload.get("kind")), status=decision, approver=_text(payload.get("approver")), evidence=_text(payload.get("evidence")), created_by=request.user)
+        row = ApprovalDecision.objects.create(kind=decision_kind, status=decision, approver=request.user.get_username(), evidence=_text(payload.get("evidence")), created_by=request.user)
         _audit("approve", "approval", row.id, f"تصمیم {row.kind} با وضعیت {row.status} ثبت شد.", request.user, row.evidence)
         return JsonResponse({"decision": _decision(row)}, status=201)
     return JsonResponse({"error": "نوع عملیات شناخته نشد."}, status=400)
