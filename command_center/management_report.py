@@ -39,5 +39,6 @@ def management_report(request):
         },
     }
     response = JsonResponse(data)
-    response["Cache-Control"] = "no-store"
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["X-Robots-Tag"] = "noindex, nofollow"
     return response
