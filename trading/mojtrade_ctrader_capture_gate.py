@@ -114,7 +114,9 @@ def check_capture(manifest: dict, base_dir: Path, *, now_utc: datetime | None = 
         count = _count(record["count"])
         if captured < day_end:
             issues.append(f"capture_before_utc_day_end:{name}")
-        if captured > now_utc + MAX_CLOCK_SKEW:
+        # Subtract timestamps rather than adding to now: datetime.max + skew
+        # can overflow, which must never turn an unsafe manifest into a crash.
+        if captured > now_utc and captured - now_utc > MAX_CLOCK_SKEW:
             issues.append(f"capture_in_future:{name}")
         if name in ("orders_history", "deals"):
             if record["from_utc_day"] != day or record["to_utc_day"] != day:
