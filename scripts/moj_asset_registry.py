@@ -164,9 +164,12 @@ def ord_etching_fragment(program: dict) -> str:
         f"  rune: {bitcoin['symbol_candidate']}\n"
         "  divisibility: 0\n"
         f"  premine: {bitcoin['supply_tokens']}\n"
-        "# Protocol etching carries premine, not an extra supply field.\n"
-        "# No mint terms: total planned issuance equals premine.\n"
-        "# A separate name commitment and confirmation procedure is required.\n"
+        f"  supply: {bitcoin['supply_tokens']}\n"
+        "# ord wallet batch YAML requires both supply and premine; they match\n"
+        "# when no mint terms are provided. The on-chain Etching structure\n"
+        "# itself does not encode a separate supply field.\n"
+        "# This fragment is NOT a complete executable ord batch file.\n"
+        "# Select symbol, network, wallet, fee, and name commitment after approval.\n"
     )
 
 
