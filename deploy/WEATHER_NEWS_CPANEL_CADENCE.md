@@ -44,6 +44,9 @@ PR #2194 ships two additional release files:
 `deploy/newsroom_release_preflight.py`. The manifest pins the Git blob SHAs of
 **19 exact application files**, including the published-page templates. It does
 not grant deployment authority and the checker **cannot write files**.
+The manifest's `commit` is the immutable application-code snapshot whose
+19 file hashes are enumerated (cycle 9: `47afb81d`); a later documentation-only
+commit may carry that manifest without changing the application snapshot.
 
 After authenticating legitimately and placing these two verified release-tool
 files in an accessible, nonproduction staging directory, inspect the actual
