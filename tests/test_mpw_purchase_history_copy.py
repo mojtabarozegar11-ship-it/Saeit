@@ -101,14 +101,14 @@ class PurchaseHistoryPageTests(unittest.TestCase):
             self.assertEqual(owner, 7)
             result = statuses[pk]
             if isinstance(result, Exception):
-                raise result
+                raise PaymentHold(str(result))
             return result
 
         def decode(intent):
             decoded.append(intent.pk)
             result = expiries[intent.pk]
             if isinstance(result, Exception):
-                raise result
+                raise PaymentHold(str(result))
             return SimpleNamespace(expires_at=result)
 
         intent_module.commercial_buyer_status = buyer_status
