@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 PUBLIC = Path("/home/zomorod2/mojplaywin.com")
@@ -235,6 +236,70 @@ def inspect_public_store_fallback(public, conf):
 
 
 
+def inspect_passenger_wiring(conf, wsgi_text):
+    """Boolean-only public virtual-host wiring evidence; no directive values leak."""
+    python = re.findall(r"(?im)^\s*PassengerPython\s+([^\r\n#]+)", conf)
+    startup = re.findall(r"(?im)^\s*PassengerStartupFile\s+([^\r\n#]+)", conf)
+    return {
+        "passenger_python_directives": min(8, len(python)),
+        "passenger_python_311": any("/3.11/" in p for p in python),
+        "passenger_python_stage_venv": any("/virtualenv/Saeit-staging/" in p for p in python),
+        "passenger_python_other_venv": any(
+            "/virtualenv/" in p and "/virtualenv/Saeit-staging/" not in p for p in python
+        ),
+        "passenger_startup_file_directives": min(8, len(startup)),
+        "wsgi_mentions_staging_source": str(APP) in wsgi_text,
+        "wsgi_has_django_entrypoint": (
+            "from config.wsgi import application" in wsgi_text
+            or "get_wsgi_application()" in wsgi_text
+        ),
+        "htaccess_rewrite_rule_count_capped": min(
+            32, sum(bool(re.match(r"^\s*RewriteRule\b", s, re.I)) for s in conf.splitlines())
+        ),
+    }
+
+
+def inspect_error_classes(public, now_epoch=None):
+    """Scan bounded recent, allowlisted *error* files; emit only fixed classes."""
+    now_epoch = time.time() if now_epoch is None else now_epoch
+    files = (
+        public / "error_log", public / "stderr.log",
+        public / "tmp/passenger.stderr.log", public / "logs/error.log",
+    )
+    signatures = {
+        "module_missing": b"modulenotfounderror",
+        "import_error": b"importerror",
+        "django_improper_settings": b"improperlyconfigured",
+        "database_operational_error": b"operationalerror",
+        "file_permission_error": b"permissionerror",
+        "template_missing": b"templatedoesnotexist",
+        "static_manifest_error": b"missing staticfiles manifest entry",
+        "passenger_boot_error": b"cannot load application",
+        "python_traceback": b"traceback (most recent call last)",
+    }
+    result = {"regular_recent_error_files": 0, "bounded_bytes_scanned": 0,
+              "classes": {key: 0 for key in signatures}, "files_modified": False,
+              "raw_log_emitted": False}
+    for path in files:
+        try:
+            if (path.is_symlink() or path.parent.is_symlink() or
+                    not path.is_file() or path.stat().st_uid != os.geteuid()):
+                continue
+            info = path.stat()
+            if not 0 <= now_epoch - info.st_mtime <= 3 * 86400:
+                continue
+            with path.open("rb") as handle:
+                handle.seek(max(0, info.st_size - 262144))
+                data = handle.read(262144).lower()
+            result["regular_recent_error_files"] += 1
+            result["bounded_bytes_scanned"] += len(data)
+            for key, needle in signatures.items():
+                result["classes"][key] = min(100, result["classes"][key] + data.count(needle))
+        except (OSError, ValueError):
+            continue
+    return result
+
+
 def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_payload=None):
     if public == PUBLIC and app == APP and pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise RuntimeError("WRONG_CPANEL_ACCOUNT")
@@ -258,6 +323,8 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_p
     if workers is None:
         workers = _owned_workers()
     return {"classification": "MPW_PUBLIC_PASSENGER_READ_ONLY_RUNTIME_CONTRACT",
+            "passenger_wiring_readonly": inspect_passenger_wiring(conf, wsgi_text),
+            "server_error_classes_readonly": inspect_error_classes(public),
             "public_app_root_directive_count": len(roots),
             "htaccess_public_root": len(roots) == 1 and _as_target_root(roots[0]) == "public",
             "htaccess_staging_root": len(roots) == 1 and _as_target_root(roots[0]) == "staging",
