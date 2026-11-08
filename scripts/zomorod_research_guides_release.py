@@ -204,11 +204,12 @@ def load_release(source_root: Path, web_root: Path, manifest_path: Path) -> tupl
         if str(rel) in seen_sources:
             raise ValueError("DUPLICATE_SOURCE_PATH " + str(rel))
         seen_sources.add(str(rel))
-        source = secure_file(source_root / rel, source_root).read_text(encoding="utf-8")
+        source_bytes = secure_file(source_root / rel, source_root).read_bytes()
+        source = source_bytes.decode("utf-8")
         if guide.get("status") == "APPROVED_FOR_SITE":
-            # Approval binds to exact editorial bytes, not just a mutable status.
+            # Approval is for exact file bytes, including original line endings.
             approved_sha = guide.get("approved_source_sha256")
-            if not isinstance(approved_sha, str) or approved_sha != digest(source.encode("utf-8")):
+            if not isinstance(approved_sha, str) or approved_sha != digest(source_bytes):
                 raise ValueError("EDITORIAL_APPROVAL_SOURCE_HASH_MISMATCH " + identifier)
         title, body = markdown_body(source)
         target = f"research/guides/{m.group(1)}/index.html"
