@@ -1,6 +1,7 @@
 import pytest
 
 from core import weather_agent
+from core.editorial_signature import has_final_signature
 from core.models import Agent, NewsletterStory
 
 
@@ -33,7 +34,9 @@ def test_weather_assigns_report_to_content_director(monkeypatch):
 
     result = weather_agent.run_daily_cycle()
 
-    assert NewsletterStory.objects.get(pk=result["weather_story_id"]).agent_id == director.id
+    story = NewsletterStory.objects.get(pk=result["weather_story_id"])
+    assert story.agent_id == director.id
+    assert has_final_signature(story.body)
 
 
 def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
