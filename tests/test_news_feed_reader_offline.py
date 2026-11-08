@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from core.news_feed_reader import (
-    MAX_FEED_BYTES, OFFICIAL_FEEDS, fetch_official_news, parse_official_rss,
+    MAX_FEED_BYTES, OFFICIAL_FEEDS, editorial_identity,
+    fetch_official_news, parse_official_rss,
 )
 
 
@@ -60,6 +61,37 @@ class OfficialRssReaderTests(unittest.TestCase):
         rows = parse_official_rss(raw, feed=fao, now=NOW)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].publisher, fao.publisher)
+
+    def test_fao_observed_rss_date_with_z_timezone_accepted(self):
+        fao = OFFICIAL_FEEDS[1]
+        raw = rss([item(
+            "https://www.fao.org/newsroom/detail/fao-food-price-index-edges-down-in-october-amid-subdued-demand/en",
+            date="Fri, 06 Nov 2026 12:00:00 Z",
+            title="FAO Food Price Index edges down in October amid subdued demand",
+        )])
+        rows = parse_official_rss(raw, feed=fao, now=NOW)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].published_at.isoformat(), "2026-11-06T12:00:00+00:00")
+
+    def test_editorial_ids_are_source_specific_and_stable(self):
+        usda = parse_official_rss(rss([item("https://www.nass.usda.gov/new")]), now=NOW)[0]
+        fao = parse_official_rss(
+            rss([item("https://www.fao.org/newsroom/detail/new/en")]),
+            feed=OFFICIAL_FEEDS[1], now=NOW,
+        )[0]
+        usda_id, usda_slug = editorial_identity(usda)
+        fao_id, fao_slug = editorial_identity(fao)
+        self.assertTrue(usda_id.startswith("official-usda-news:"))
+        self.assertTrue(usda_slug.startswith("usda-news-"))
+        self.assertTrue(fao_id.startswith("official-fao-news:"))
+        self.assertTrue(fao_slug.startswith("fao-news-"))
+        self.assertEqual(editorial_identity(usda), (usda_id, usda_slug))
+
+    def test_unknown_feed_cannot_gain_editorial_identity(self):
+        from dataclasses import replace
+        usda = parse_official_rss(rss([item("https://www.nass.usda.gov/new")]), now=NOW)[0]
+        with self.assertRaises(ValueError):
+            editorial_identity(replace(usda, feed_url="https://untrusted.example/rss"))
 
     def test_one_feed_failure_retains_other_source(self):
         class Response:
