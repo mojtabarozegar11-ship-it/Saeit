@@ -144,6 +144,8 @@ def main():
         private_root.mkdir(mode=0o700, exist_ok=True)
         if not private_root.is_dir() or private_root.is_symlink():
             raise InputError("private root unavailable")
+        if hasattr(os, "geteuid") and private_root.stat().st_uid != os.geteuid():
+            raise InputError("private root is not owned by current process")
         os.chmod(private_root, 0o700)
         dest = private_root / ("farm-" + uuid.uuid4().hex + ".json")
         fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
