@@ -166,6 +166,13 @@ namespace MojTrade.OmegaX
             if (Account.IsLive)
                 return;
 
+            // No broker mutation while observing. Trailing protection is an
+            // account write, so it must obey both demo opt-ins and the
+            // coordinator failure latch, just like order creation.
+            if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
+                !CoordinatorConfigured())
+                return;
+
             foreach (var position in Positions.FindAll(Label, SymbolName))
             {
                 var trigger = position.StopLoss.HasValue
