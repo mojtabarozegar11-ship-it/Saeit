@@ -156,7 +156,8 @@ def run_daily_cycle():
             'slug':f'weather-research-{day.isoformat()}-{idx}','summary':item.get('summary','')[:3000],
             'body':ensure_signed(item.get('body','')),'author_name':'مجتبی روزگار','event_date':day,
             'seo_keywords':item.get('keywords',[]) if isinstance(item.get('keywords',[]),list) else [],
-            'status':'published','published_at':timezone.now(),
+            # Generated research requires source and editorial review before publication.
+            'status':'draft','published_at':None,
         })
         content_created += int(was_created)
     return {'date':str(day),'provinces':len(data),'weather_story_id':story.id,'weather_created':created,'research_contents_created':content_created}
