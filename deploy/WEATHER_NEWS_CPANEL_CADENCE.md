@@ -24,8 +24,12 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
    Do not alter an unrelated path or any of the 141 existing worktree changes.
 2. Compare individual hashes/content before installing only these source files:
    `core/news_feed_reader.py`, `core/management/commands/news_agent_cycle.py`,
-   and, only if absent, `core/management/commands/weather_agent_cycle.py`.
-   Store timestamped copies of any destination files before replacement.
+   `core/weather_weekly_report.py`, the minimal `build_public_report()`
+   integration in `core/weather_agent.py`, and, only if absent,
+   `core/management/commands/weather_agent_cycle.py`. The installed
+   `weather_agent.py` was already modified on 2026-11-07: review its diff
+   manually and merge only the compatible function change. Store timestamped
+   copies of any destination files before replacement.
 3. Run `manage.py check`, validate actual USDA NASS and FAO official-feed fetches,
    tolerate an isolated feed failure but report it explicitly, then inspect
    `news_agent_cycle` output and its **draft-only** records. Never bypass a
@@ -47,7 +51,11 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
 
 5. Verify **actual** next execution timestamps, successful logs, no duplicate
    news fingerprint, weather report freshness and public newsletter render.
-6. The `/weather/` and `/news/` paths are separate static pages and require a
+6. The first published story showed just the first daily slice for each of
+   31 provinces despite 7-day retrieval. The new weekly report builder renders
+   all seven dates; compare public content after the guarded deploy, without
+   claiming the prior story was a full 7-day decision report.
+7. The `/weather/` and `/news/` paths are separate static pages and require a
    separately reviewed UI wiring/deployment. A Django publication alone does
    not establish those static pages have updated.
 
