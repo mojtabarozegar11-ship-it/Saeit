@@ -125,7 +125,8 @@ def validate_program(program: dict) -> None:
             or len(set(symbols)) != len(assets)):
         raise ValueError("asset_identifier_collision")
     bitcoin = assets[0]
-    if (bitcoin.get("id") != "mojoner" or bitcoin.get("network") != "bitcoin"
+    if (bitcoin.get("id") != "mojoner" or bitcoin.get("name") != "Mojoner"
+            or bitcoin.get("network") != "bitcoin"
             or bitcoin.get("protocol_candidate") != "runes"
             or bitcoin.get("symbol_candidate") != "MOJONER"
             or bitcoin.get("supply_status") != "owner_specified"
