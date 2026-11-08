@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Add-only cPanel publisher for Zomorod Melal's reviewed research guides.
 
-No network, third-party modules, template edits, or existing-file replacement.
+No network during plan/apply, no third-party modules, template edits, or
+existing-file replacement. `verify` uses read-only HTTPS to ensure the live
+route serves exact staged bytes, including on Django/Passenger deployments.
 Run `plan` first; `apply` requires the exact manifest release ID and live
 template SHA-256 printed by plan. A journal permits hash-guarded rollback.
 """
@@ -15,6 +17,7 @@ import json
 import os
 import re
 import sys
+from urllib.request import Request, urlopen
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -262,10 +265,48 @@ def apply_release(web_root: Path, state_root: Path, release: str, expected: str,
                       "release_id": release}, ensure_ascii=False))
 
 
+def verify_public_release(web_root: Path, state_root: Path, release: str) -> None:
+    """Verify deployed bytes through the public HTTPS route, not filesystem alone.
+
+    A Passenger/Django route can respond 404 or serve a dynamic page even when
+    public_html contains a matching index.html; neither counts as publication.
+    """
+    journal_path = state_root / release / "journal.json"
+    journal = read_json(journal_path)
+    if journal.get("release_id") != release or journal.get("state") != "installed_unverified":
+        raise ValueError("RELEASE_NOT_INSTALLED_UNVERIFIED")
+    template = secure_file(web_root / "research" / "index.html", web_root)
+    if digest(template.read_bytes()) != journal.get("template_sha256"):
+        raise ValueError("LIVE_TEMPLATE_CHANGED_AFTER_INSTALL")
+    urls: list[str] = []
+    for rel, expected_hash in journal.get("created", {}).items():
+        match = re.fullmatch(r"research/guides/([a-z0-9-]+)/index\.html", rel)
+        if not match or not re.fullmatch(r"[a-f0-9]{64}", expected_hash):
+            raise ValueError("INVALID_VERIFICATION_JOURNAL")
+        target = secure_file(web_root / rel, web_root)
+        if digest(target.read_bytes()) != expected_hash:
+            raise ValueError("INSTALLED_FILE_CHANGED " + rel)
+        url = "https://zomorodmelal.ir/research/guides/" + match.group(1) + "/"
+        request = Request(url, headers={"Cache-Control": "no-cache", "Accept-Encoding": "identity"})
+        with urlopen(request, timeout=15) as response:
+            if response.status != 200:
+                raise ValueError("PUBLIC_HTTP_NOT_200 " + url)
+            payload = response.read(2_000_001)
+        if digest(payload) != expected_hash:
+            raise ValueError("PUBLIC_CONTENT_HASH_MISMATCH " + url)
+        urls.append(url)
+    if not urls:
+        raise ValueError("NO_PUBLIC_PAGES_IN_JOURNAL")
+    journal["state"] = "live_verified"
+    journal["verified_urls"] = urls
+    journal_path.write_text(json.dumps(journal, indent=2), encoding="utf-8")
+    print(json.dumps({"status": "LIVE_VERIFIED", "urls": urls}, ensure_ascii=False))
+
+
 def rollback_release(web_root: Path, state_root: Path, release: str) -> None:
     journal_path = state_root / release / "journal.json"
     journal = read_json(journal_path)
-    if journal.get("release_id") != release or journal.get("state") not in ("in_progress", "installed_unverified"):
+    if journal.get("release_id") != release or journal.get("state") not in ("in_progress", "installed_unverified", "live_verified"):
         raise ValueError("INVALID_ROLLBACK_JOURNAL")
     blockers = []
     for rel, expected in journal.get("created", {}).items():
@@ -284,7 +325,7 @@ def rollback_release(web_root: Path, state_root: Path, release: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("plan", "apply", "rollback"))
+    parser.add_argument("mode", choices=("plan", "apply", "verify", "rollback"))
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--web-root", type=Path, required=True)
     parser.add_argument("--manifest", default="content/zomorod-research-guides/publication-manifest-20261108.json")
@@ -299,6 +340,11 @@ def main() -> int:
         if not args.confirm_release_id:
             raise ValueError("EXPLICIT_RELEASE_ID_REQUIRED")
         rollback_release(web_root, state_root, args.confirm_release_id)
+        return 0
+    if args.mode == "verify":
+        if not args.confirm_release_id:
+            raise ValueError("EXPLICIT_RELEASE_ID_REQUIRED")
+        verify_public_release(web_root, state_root, args.confirm_release_id)
         return 0
     manifest, template_sha, rendered = load_release(source_root, web_root, source_root / args.manifest)
     preflight(web_root, rendered)
