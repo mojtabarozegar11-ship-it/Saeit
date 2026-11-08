@@ -1,10 +1,12 @@
 """Offline checks for the mandatory no-politics/no-Israel news rule."""
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from core.editorial_policy import (
-    blocked_news_reason, blocked_story_reason, visible_news_stories, visible_story_links,
+    blocked_news_reason, blocked_story_reason, public_story_allowed,
+    visible_news_stories, visible_story_links,
 )
 
 
@@ -72,14 +74,37 @@ class EditorialPolicyTests(unittest.TestCase):
             def __getitem__(self, key):
                 return self.items[key]
 
-        def story(title):
-            return SimpleNamespace(title=title, body="کشاورزی", summary="", source=None, seo_keywords=[])
+        now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+
+        def story(title, *, status="published", published_at=now):
+            return SimpleNamespace(title=title, body="کشاورزی", summary="", source=None,
+                                   seo_keywords=[], status=status, published_at=published_at)
 
         safe = story("Crop report")
         blocked = story("Israel crop report")
-        self.assertEqual(visible_news_stories(FakeQuerySet([blocked, safe]), limit=2), [safe])
+        self.assertEqual(visible_news_stories(FakeQuerySet([blocked, safe]), limit=2, as_of=now), [safe])
         links = [SimpleNamespace(newsletter_story=blocked), SimpleNamespace(newsletter_story=safe)]
-        self.assertEqual(visible_story_links(links), [links[1]])
+        self.assertEqual(visible_story_links(links, as_of=now), [links[1]])
+
+    def test_public_story_gate_excludes_drafts_future_and_missing_dates(self):
+        now = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
+
+        def story(status, published_at, title="برداشت محصول"):
+            return SimpleNamespace(status=status, published_at=published_at,
+                                   title=title, summary="", body="متن", source=None)
+
+        safe = story("published", now - timedelta(hours=1))
+        future = story("published", now + timedelta(hours=1))
+        draft = story("draft", now - timedelta(hours=1))
+        missing = story("published", None)
+        prohibited = story("published", now, title="Government election update")
+        naive = story("published", datetime(2026, 11, 8, 11))
+        self.assertTrue(public_story_allowed(safe, as_of=now))
+        for blocked in (future, draft, missing, prohibited, naive):
+            with self.subTest(blocked=blocked):
+                self.assertFalse(public_story_allowed(blocked, as_of=now))
+        links = [SimpleNamespace(newsletter_story=x) for x in (future, draft, safe, prohibited)]
+        self.assertEqual(visible_story_links(links, as_of=now), [links[2]])
 
 
 if __name__ == "__main__":
