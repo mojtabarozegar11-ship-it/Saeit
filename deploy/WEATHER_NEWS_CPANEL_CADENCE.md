@@ -37,6 +37,38 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
 
 ## Controlled release steps after reauthentication
 
+### Mandatory read-only file-conflict preflight (cycle 8)
+
+PR #2194 ships two additional release files:
+`deploy/newsroom_release_manifest_20261108.json` and
+`deploy/newsroom_release_preflight.py`. The manifest pins the Git blob SHAs of
+**19 exact application files**, including the published-page templates. It does
+not grant deployment authority and the checker **cannot write files**.
+
+After authenticating legitimately and placing these two verified release-tool
+files in an accessible, nonproduction staging directory, inspect the actual
+Passenger app path (confirm it independently first):
+
+```bash
+python3 deploy/newsroom_release_preflight.py \
+  --target-root /home/zomorod2/Saeit --strict
+```
+
+- `already_current` means the target bytes match this PR's pinned Git blob.
+- `new_file_missing` means the PR adds a file not present on the target.
+- `different_manual_merge_required` means the target has local contents that
+  must be backed up, reviewed, and reconciled individually before any write.
+- `modified_file_missing`, `unsafe_symlink`, `unsafe_not_regular_file`, and
+  `unreadable` are release blockers, not implicit permission to replace.
+- This scan does **not** prove whether cPanel/LiteSpeed serves `/weather/` or
+  `/news/` from another public document root. Inspect those routes separately.
+- Never use the broad eight-template deployment workflow as a substitute for
+  this reconciliation, and never expand the read-only VPS-to-cPanel bridge.
+
+The `--strict` return code is nonzero when reconciliation is required. Do not
+claim a safe release merely because the command exits zero: it never installs
+anything and missing new files still require a reviewed installation step.
+
 1. Reconfirm the live source, database route, valid account and existing cron.
    Do not alter an unrelated path or any of the 141 existing worktree changes.
 2. Compare individual hashes/content before installing only these source files:
