@@ -40,14 +40,27 @@ def _core_imports(tree, current_module):
     imports = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if node.level and node.module:
+            if node.level:
                 parts = current_module.split(".")[:-node.level]
-                resolved = ".".join(parts + [node.module])
-                if resolved.startswith("core."):
-                    imports.add(resolved)
+                if node.module:
+                    resolved = ".".join(parts + [node.module])
+                    if resolved.startswith("core."):
+                        imports.add(resolved)
+                else:
+                    # `from . import factory_tool_pack` has no node.module.
+                    # Without this branch an absent dependency is silently skipped.
+                    imports.update(
+                        ".".join(parts + [alias.name])
+                        for alias in node.names
+                        if alias.name != "*" and ".".join(parts).startswith("core")
+                    )
             elif node.level == 0 and node.module:
                 if node.module.startswith("core."):
                     imports.add(node.module)
+                elif node.module == "core":
+                    # `from core import factory_tool_pack` is also a local import.
+                    imports.update("core." + alias.name for alias in node.names
+                                   if alias.name != "*")
         elif isinstance(node, ast.Import):
             for name in node.names:
                 if name.name.startswith("core."):
