@@ -112,7 +112,8 @@ def run_daily_cycle():
     data = province_forecast(7)
     if len(data) != len(PROVINCES) or any(len(item.get('forecast', [])) != 7 for item in data):
         raise RuntimeError('Incomplete seven-day weather forecast; publication withheld')
-    report = build_public_report(data)
+    # The publication model rejects unsigned reports, even when a renderer is mocked.
+    report = ensure_signed(build_public_report(data))
     day = timezone.localdate()
     # Weather publication belongs to an explicitly designated content agent.
     # Never attribute it to an arbitrary active agent (e.g. factory or trading).
