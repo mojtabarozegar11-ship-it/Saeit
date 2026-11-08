@@ -169,10 +169,14 @@ namespace MojTrade.OmegaX
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
-            // Recheck at the order boundary; never trust a prior signal gate.
-            if (!EnableDemoTrading || Account.IsLive ||
+            // Recheck the hard stop at the order boundary, not only in the signal handler.
+            // If any previously opened labelled trade has no broker-side stop, do not
+            // increase exposure until an operator resolves that unsafe position.
+            if (!EnableDemoTrading || Account.IsLive || DailyLossReached() ||
+                _consecutiveLosses >= ConsecutiveLossStop ||
                 Positions.FindAll(Label, SymbolName).Length >= MaxPositions ||
-                Positions.FindAll(Label).Length >= MaxTotalDemoPositions)
+                Positions.FindAll(Label).Length >= MaxTotalDemoPositions ||
+                Positions.FindAll(Label).Any(p => !p.StopLoss.HasValue))
                 return;
 
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
