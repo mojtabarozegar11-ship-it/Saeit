@@ -326,12 +326,32 @@ def revenue_verify(payload):
 
 
 def profit_optimize(payload):
-    active = list(Product.objects.filter(active=True).values("id", "title", "price", "currency")[:100])
+    # A catalog read is useful evidence but never a profit improvement or a sale.
+    # Separately count all products: the bounded sample must not understate the
+    # actual number of active products when there are more than 100.
+    queryset = Product.objects.filter(active=True)
+    active_count = queryset.count()
+    active_sample = list(queryset.values("id", "title", "price", "currency")[:100])
     return {
-        "action_performed": "Measured active sellable catalog for the next allocation decision without fabricating margin data.",
+        "action_performed": "Inspected active catalog only; no profit improvement, sale, or settlement was verified.",
+        # A recorded inspection is an internally verified effect under the
+        # TaskRuntime contract, not a customer-facing business outcome.
         "verified_effect": True,
-        "evidence": _evidence("profit_baseline", {"active_products": len(active), "products": active}),
-        "next_action": "income_market_research",
+        "inspection_completed": True,
+        "progress_class": "diagnostic_only",
+        "business_outcome_verified": False,
+        "verified_revenue": None,
+        "verified_profit": None,
+        "evidence": _evidence("profit_baseline", {
+            "active_products": active_count,
+            "sampled_products": len(active_sample),
+            "sample_truncated": active_count > len(active_sample),
+            "products": active_sample,
+        }),
+        "next_action": (
+            "await_active_product" if active_count == 0
+            else "await_external_profit_evidence"
+        ),
     }
 
 
