@@ -268,11 +268,21 @@ class Ledger:
                 "SELECT state,expires FROM reservations WHERE request_id=? AND account=?",
                 (request_id, account),
             ).fetchone()
-            if state is None or state[0] != "reserved" or state[1] <= self.clock():
+            if state is None:
+                raise Denied("unknown_or_expired_reservation")
+            target = "committed" if filled else "cancelled"
+            if state[0] == target:
+                # The database may have committed while the HTTP ACK was lost.
+                # A byte-identical retry must not fail or extend slot expiry.
+                db.commit()
+                return
+            if state[0] != "reserved":
+                raise Denied("settlement_conflict")
+            if state[1] <= self.clock():
                 raise Denied("unknown_or_expired_reservation")
             db.execute(
                 "UPDATE reservations SET state=? WHERE request_id=?",
-                ("committed" if filled else "cancelled", request_id),
+                (target, request_id),
             )
             db.commit()
         except Exception:

@@ -38,6 +38,16 @@ class C08ClientContractTests(unittest.TestCase):
             self.assertIn("SettleCoordinatedSlot(reservationId, result.IsSuccessful)", bot)
             self.assertIn("Adapter halted.", bot)
 
+    def test_settlement_retries_same_receipt_but_never_unconfirmed_success(self):
+        for bot in (SCALP, OMEGA):
+            method = bot.split("private bool SettleCoordinatedSlot(", 1)[1]
+            method = method.split("\n        private ", 1)[0]
+            self.assertIn("attempt < 2", method)
+            self.assertIn('"&request_id=" + requestId', method)
+            self.assertIn('response.Body == "SETTLED"', method)
+            self.assertIn("response.StatusCode < 500", method)
+            self.assertIn("return false; // Never treat unconfirmed", method)
+
     def test_both_send_broker_observed_equity_and_position_count(self):
         for bot in (SCALP, OMEGA):
             self.assertIn("Account.Number.ToString(invariant)", bot)

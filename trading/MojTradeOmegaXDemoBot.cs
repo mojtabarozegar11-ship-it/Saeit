@@ -378,26 +378,36 @@ namespace MojTrade.OmegaX
 
         private bool SettleCoordinatedSlot(string requestId, bool filled)
         {
-            try
+            // Retry only ambiguous transport/server failures with the SAME
+            // request ID and outcome. The coordinator is settlement-idempotent;
+            // a conflicting or unauthorized response still halts this adapter.
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                var request = new HttpRequest(new Uri(
-                    CoordinatorUrl.TrimEnd('/') + (filled ? "/v1/commit" : "/v1/cancel")))
+                try
                 {
-                    Method = HttpMethod.Post,
-                    Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
-                           "&request_id=" + requestId,
-                    Timeout = TimeSpan.FromSeconds(3)
-                };
-                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
-                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
-                var response = Http.Send(request);
-                return response.IsSuccessful && response.StatusCode == 200 &&
-                       response.Body == "SETTLED";
+                    var request = new HttpRequest(new Uri(
+                        CoordinatorUrl.TrimEnd('/') + (filled ? "/v1/commit" : "/v1/cancel")))
+                    {
+                        Method = HttpMethod.Post,
+                        Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
+                               "&request_id=" + requestId,
+                        Timeout = TimeSpan.FromSeconds(3)
+                    };
+                    request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                    request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                    var response = Http.Send(request);
+                    if (response.IsSuccessful && response.StatusCode == 200 &&
+                        response.Body == "SETTLED")
+                        return true;
+                    if (response.StatusCode < 500)
+                        return false;
+                }
+                catch (Exception)
+                {
+                    // The first request may already have been committed.
+                }
             }
-            catch (Exception)
-            {
-                return false;
-            }
+            return false; // Never treat unconfirmed broker settlement as safe.
         }
 
         private int SharedMojTradePositionCount()
