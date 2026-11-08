@@ -7,6 +7,7 @@ present Passenger restart marker. Never changes invoices, payments or mail.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pwd
 import re
@@ -128,17 +129,34 @@ def public_response(run_id: str) -> bytes:
 
 def verify_dynamic_public(run_id: str) -> bool:
     end = time.monotonic() + 55
+    observations = {}
     for attempt in range(6):
         try:
             data = public_response(run_id + "-" + str(attempt))
             if (MARKER not in data and b"mpw-shop-kicker" in data and
                     b"mpw-store-catalog-20261026" in data and
                     all(route in data for route in PRODUCT_ROUTES)):
+                print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
+                    "dynamic_confirmed": True,
+                    "observations": observations,
+                    "attempts": attempt + 1,
+                }, sort_keys=True))
                 return True
+            category = "still_owned_static_fallback" if MARKER in data else "unexpected_non_django_html"
+        except urllib.error.HTTPError as err:
+            category = "http_" + str(err.code) if err.code in (403, 404, 429, 500, 502, 503, 504) else "http_other"
+        except TimeoutError:
+            category = "network_timeout"
         except (OSError, RuntimeError, urllib.error.URLError):
-            pass
+            category = "network_or_response_validation_error"
+        observations[category] = observations.get(category, 0) + 1
         if attempt < 5 and time.monotonic() < end - 4:
             time.sleep(3)
+    print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
+        "dynamic_confirmed": False,
+        "observations": observations,
+        "attempts": 6,
+    }, sort_keys=True))
     return False
 
 
