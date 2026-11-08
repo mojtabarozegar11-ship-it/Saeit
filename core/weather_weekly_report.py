@@ -1,6 +1,8 @@
 """Seven-day weather editorial report, independent from Django and paid models."""
 
 from datetime import date
+from datetime import timedelta
+from math import isfinite
 from typing import Callable
 
 
@@ -23,17 +25,35 @@ def render_seven_day_report(
         "این داده‌ها مشاهدهٔ قطعی، اجماع چند مدل یا هشدار رسمی نیستند.",
         "احتمال بارش «ناموجود» به معنی احتمال صفر نیست. ",
     ]
+    date.fromisoformat(report_date)
+    seen_provinces: set[str] = set()
     for item in provinces:
         province = item.get("province")
         capital = item.get("capital")
         days = item.get("forecast") or []
         if not province or not capital or len(days) != 7:
             raise ValueError(f"Incomplete weather record for {province or 'unknown'}")
+        if province in seen_provinces:
+            raise ValueError(f"Duplicate weather record for {province}")
+        seen_provinces.add(province)
         if any(day.get("min_c") is None or day.get("max_c") is None or not day.get("date") for day in days):
             raise ValueError(f"Missing essential weather values for {province}")
         dates = [date.fromisoformat(day["date"]) for day in days]
-        if len(set(dates)) != 7 or dates != sorted(dates):
-            raise ValueError(f"Repeated or unordered dates for {province}")
+        if any(next_day != today + timedelta(days=1) for today, next_day in zip(dates, dates[1:])):
+            raise ValueError(f"Forecast dates must be seven consecutive days for {province}")
+        for day in days:
+            numeric_fields = ("min_c", "max_c", "rain_mm", "wind_kmh", "rain_probability")
+            for key in numeric_fields:
+                value = day.get(key)
+                if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value)):
+                    raise ValueError(f"Invalid {key} for {province}")
+            if day["min_c"] > day["max_c"]:
+                raise ValueError(f"Reversed temperature limits for {province}")
+            if any(day.get(key) is not None and day[key] < 0 for key in ("rain_mm", "wind_kmh")):
+                raise ValueError(f"Negative rain or wind for {province}")
+            probability = day.get("rain_probability")
+            if probability is not None and not 0 <= probability <= 100:
+                raise ValueError(f"Out-of-range rain probability for {province}")
         low = min(day["min_c"] for day in days)
         high = max(day["max_c"] for day in days)
         rain_known = all(day.get("rain_mm") is not None for day in days)
