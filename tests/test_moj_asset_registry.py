@@ -10,8 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from moj_asset_registry import (  # noqa: E402
     MAX_SERIES_SUPPLY, MIN_SERIES_SUPPLY, MOJONER_SUPPLY,
-    export_bundle, f41_shasta_candidate_specs, generate_program,
-    series_supply, validate_program,
+    evm_candidate_sources, export_bundle, f41_shasta_candidate_specs,
+    generate_program, ord_etching_fragment, series_supply,
+    validate_program, verify_bundle,
 )
 
 
@@ -34,7 +35,8 @@ class AssetRegistryTests(unittest.TestCase):
 
     def test_bitcoin_runes_etching_has_no_unintended_open_mint(self):
         self.assertEqual(self.program["assets"][0]["runes_etching_proposal"], {
-            "premine": str(MOJONER_SUPPLY), "mint_amount": "0", "mint_cap": "0"})
+            "premine": str(MOJONER_SUPPLY), "supply": str(MOJONER_SUPPLY),
+            "terms": None})
 
     def test_minimum_and_maximum_series_supply_inclusive(self):
         self.assertEqual(series_supply(1), MIN_SERIES_SUPPLY)
@@ -67,6 +69,16 @@ class AssetRegistryTests(unittest.TestCase):
 
     def test_bitcoin_premine_mismatch_is_rejected(self):
         self.rejects("runes_supply_formula_mismatch", lambda p: p["assets"][0]["runes_etching_proposal"].update(premine="24567855"))
+
+    def test_open_mint_terms_are_forbidden(self):
+        self.rejects("runes_supply_formula_mismatch", lambda p: p["assets"][0]["runes_etching_proposal"].update(terms={"amount": "1", "cap": 1}))
+
+    def test_ord_fragment_omits_open_mint_terms(self):
+        fragment = ord_etching_fragment(self.program)
+        self.assertIn("  premine: 24567856\n", fragment)
+        self.assertIn("  supply: 24567856\n", fragment)
+        self.assertNotIn("  terms:", fragment)
+        self.assertNotIn("wallet broadcast", fragment)
 
     def test_fractional_bitcoin_units_are_rejected(self):
         self.rejects("bitcoin_runes_spec_mismatch", lambda p: p["assets"][0].update(divisibility_proposal=8))
@@ -113,17 +125,52 @@ class AssetRegistryTests(unittest.TestCase):
                 self.assertEqual(parsed["symbol"], asset_id.upper())
                 self.assertEqual(units, int(parsed["supply_tokens"]) * 10**18)
 
-    def test_bundle_export_writes_51_offline_documents_and_checksums(self):
+    def test_fifty_evm_sources_are_fixed_supply_and_distinct(self):
+        sources = evm_candidate_sources(self.program)
+        self.assertEqual(len(sources), 50)
+        for asset in self.program["assets"][1:]:
+            code = sources[asset["id"]]
+            units = int(asset["supply_tokens"]) * 10**18
+            self.assertIn(f'_mint(initialHolder, {units});', code)
+            self.assertIn(f'ERC20("{asset["name"]}", "{asset["symbol_candidate"]}")', code)
+            self.assertIn("zero_initial_holder", code)
+            self.assertNotIn("function mint", code)
+            self.assertNotIn("tx.origin", code)
+
+    def test_mojoner_is_never_generated_as_erc20(self):
+        self.assertNotIn("mojoner", evm_candidate_sources(self.program))
+
+    def test_bundle_export_writes_102_offline_documents_and_checksums(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "new"
             receipt = export_bundle(self.program, target)
             self.assertEqual(receipt["assets"], 51)
-            self.assertEqual(receipt["offline_files"], 52)
+            self.assertEqual(receipt["offline_files"], 103)
             self.assertFalse(receipt["on_chain_issuance"])
             self.assertEqual(len(list((target / "f41-shasta").glob("moj*.json"))), 50)
-            self.assertEqual(len(json.loads((target / "SHA256SUMS.json").read_text())), 51)
+            self.assertEqual(len(list(target.glob("evm-candidates/moj*/contracts/MojFixedSupply.sol"))), 50)
+            self.assertTrue((target / "bitcoin-runes/mojoner-etching-fragment.yaml").is_file())
+            self.assertEqual(len(json.loads((target / "SHA256SUMS.json").read_text())), 102)
+            self.assertEqual(verify_bundle(self.program, target)["offline_files"], 103)
             with self.assertRaisesRegex(ValueError, "output_must_be_new_directory"):
                 export_bundle(self.program, target)
+
+    def test_bundle_verifier_rejects_tampered_evm_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "new"
+            export_bundle(self.program, target)
+            source = target / "evm-candidates/moj1/contracts/MojFixedSupply.sol"
+            source.write_text(source.read_text() + "// changed\n")
+            with self.assertRaisesRegex(ValueError, "bundle_content_mismatch"):
+                verify_bundle(self.program, target)
+
+    def test_bundle_verifier_rejects_extra_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "new"
+            export_bundle(self.program, target)
+            (target / "unexpected.txt").write_text("extra")
+            with self.assertRaisesRegex(ValueError, "bundle_inventory_mismatch"):
+                verify_bundle(self.program, target)
 
 
 if __name__ == "__main__":
