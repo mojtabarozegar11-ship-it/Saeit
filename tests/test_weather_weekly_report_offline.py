@@ -48,6 +48,32 @@ class WeatherWeeklyReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             render([item])
 
+    def test_skipped_calendar_day_is_rejected(self):
+        item = province()
+        item["forecast"][4]["date"] = "2026-11-17"
+        with self.assertRaisesRegex(ValueError, "consecutive"):
+            render([item])
+
+    def test_duplicate_provinces_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            render([province(), province()])
+
+    def test_impossible_temperatures_and_negative_rain_rejected(self):
+        for change in ({"min_c": 30, "max_c": 12}, {"rain_mm": -1}):
+            with self.subTest(change=change):
+                item = province()
+                item["forecast"][0].update(change)
+                with self.assertRaises(ValueError):
+                    render([item])
+
+    def test_invalid_probability_and_nan_rejected(self):
+        for change in ({"rain_probability": 101}, {"wind_kmh": float("nan")}):
+            with self.subTest(change=change):
+                item = province()
+                item["forecast"][0].update(change)
+                with self.assertRaises(ValueError):
+                    render([item])
+
 
 if __name__ == "__main__":
     unittest.main()
