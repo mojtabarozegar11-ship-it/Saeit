@@ -8,14 +8,15 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from moj_asset_registry import generate_program, validate_program, MOJONER_SUPPLY
+from moj_token_allocation_proposals import candidate_allocations
 
 ALLOCATION_BPS = {
     "game_rewards": 3000,
     "player_ecosystem_reserve": 2500,
-    "unfunded_liquidity_reserve": 1500,
-    "development_treasury": 1500,
-    "community_creators": 1000,
-    "security_contingency": 500,
+    "liquidity_reserve_unfunded": 1500,
+    "development_treasury_not_yet_locked": 1500,
+    "community_and_creators": 1000,
+    "security_and_contingency": 500,
 }
 ALLOCATION_KEYS = frozenset(ALLOCATION_BPS)
 BASIS_POINTS = 10_000
@@ -36,7 +37,7 @@ def allocation_for_supply(supply):
     result = {name: supply * bps // BASIS_POINTS
               for name, bps in ALLOCATION_BPS.items()}
     # Assign rounding dust deterministically to a reserve, not rewards.
-    result["security_contingency"] += supply - sum(result.values())
+    result["security_and_contingency"] += supply - sum(result.values())
     if sum(result.values()) != supply or any(x < 0 or x > supply for x in result.values()):
         raise ValueError("allocation_sum_mismatch")
     return result
@@ -45,14 +46,23 @@ def allocation_for_supply(supply):
 def audit():
     program = generate_program()
     validate_program(program)
+    # Recompute the proposal independently, then reconcile all 51 records
+    # against the canonical plan so two reports never contradict one another.
+    planned = candidate_allocations(program)
     assets = {}
     for item in program["assets"]:
         supply = int(item["supply_tokens"])
+        allocation = {k: str(v) for k, v in allocation_for_supply(supply).items()}
+        if allocation != planned[item["id"]]["allocations_tokens"]:
+            raise ValueError("allocation_proposal_mismatch")
         assets[item["id"]] = {
             "supply": str(supply),
-            "allocation": {k: str(v) for k, v in allocation_for_supply(supply).items()},
+            "allocation": allocation,
             "issued": False,
             "liquidity_funded": False,
+            "treasury_timelock_deployed": False,
+            "treasury_vesting_enforced_onchain": False,
+            "player_rewards_transferable": False,
         }
     if int(assets["mojoner"]["supply"]) != MOJONER_SUPPLY:
         raise ValueError("mojoner_supply_mismatch")
