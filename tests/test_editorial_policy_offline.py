@@ -14,6 +14,10 @@ class EditorialPolicyTests(unittest.TestCase):
             "اسرائیل", "اسراییل", "إسرائيل", "Israel", "Israeli",
             "TEL AVIV", "Jerusalem", "صهیونیست", "ישראל", "تل‌آویو",
             "https://example.org/news/Isra%65l/farming",
+            "Gaza agriculture update", "West Bank farm report", "Knesset vote",
+            "Netanyahu statement", "Mossad report", "Haifa weather",
+            "IDF briefing", "غزه", "کرانه باختری", "نتانیاهو",
+            "القدس", "حیفا", "الكنيست", "עזה", "נתניהו",
         ):
             with self.subTest(text=text):
                 self.assertEqual(blocked_news_reason(text), "israel_related")
@@ -23,6 +27,9 @@ class EditorialPolicyTests(unittest.TestCase):
             "انتخابات مجلس", "گزارش وزیر کشاورزی", "اخبار سیاسی",
             "government election", "Agricultural sanctions debated in parliament",
             "Diplomatic statement", "War in region", "رئیس‌جمهور",
+            "Lawmakers vote", "foreign policy debate", "White House statement",
+            "National security meeting", "خبر استاندار", "فرماندار اعلام کرد",
+            "الحكومة", "الرئيس", "الجيش",
         ):
             with self.subTest(text=text):
                 self.assertEqual(blocked_news_reason(text), "political_news")
