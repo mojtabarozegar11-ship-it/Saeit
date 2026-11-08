@@ -18,6 +18,9 @@ from moj_asset_registry import (  # noqa: E402
 
 
 class AssetRegistryTests(unittest.TestCase):
+    def test_program_purpose_cannot_claim_onchain_issuance(self):
+        self.rejects("invalid_program_purpose", lambda p: p.update(purpose="mainnet_issuance"))
+
     def setUp(self):
         self.program = generate_program()
 
