@@ -20,6 +20,30 @@ SERIES_SIZE = 50
 F41_SCHEMA = "saeit.factory.f41-token-spec.v1"
 
 
+def mojoner_rune_name_length_gate(verified_block_height: int) -> dict:
+    """Conservative length-unlock check; it cannot validate name ownership.
+
+    Per Bitcoin Runes, 13-character names were initially unlocked at 840000.
+    Each 17500-block era fully unlocks the next shorter length. A 7-letter
+    name is therefore fully eligible after block 945000. This does *not*
+    check if MOJONER has already been etched or whether a six-confirmation
+    name commitment and owner approvals exist.
+    Source: https://docs.ordinals.com/runes/specification.html
+    """
+    if type(verified_block_height) is not int or verified_block_height < 0:
+        raise ValueError("verified_bitcoin_height_required")
+    full_unlock_height = 840_000 + (13 - len("MOJONER")) * 17_500
+    return {
+        "name": "MOJONER",
+        "checked_block_height": verified_block_height,
+        "full_length_unlock_height": full_unlock_height,
+        "length_eligible": verified_block_height >= full_unlock_height,
+        "name_availability_verified": False,
+        "commitment_confirmations_verified": False,
+        "mainnet_authorized": False,
+    }
+
+
 def series_supply(number: int) -> int:
     """An explicit, revisable proposal across the owner's stated range.
 
