@@ -95,6 +95,59 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(risk.Denied, "position_cap"):
             self.ledger.reserve(self.admission(4))
 
+    def test_commit_ack_replay_is_idempotent_and_does_not_extend_expiry(self):
+        self.seed()
+        request_id = f"{1:032x}"
+        self.ledger.reserve(self.admission(1))
+        self.ledger.settle(request_id, "123", filled=True)
+        with self.ledger._readonly_connection() as db:
+            before = db.execute(
+                "SELECT state, expires, created FROM reservations WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        self.now += risk.TTL_SECONDS + 10
+        self.ledger.settle(request_id, "123", filled=True)
+        with self.ledger._readonly_connection() as db:
+            after = db.execute(
+                "SELECT state, expires, created FROM reservations WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+        self.assertEqual(before, after)
+        self.assertEqual(before[0], "committed")
+        self.assertEqual(self.ledger.status("123", DAY)["active_reservations"], 0)
+
+    def test_cancel_ack_replay_is_idempotent(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.ledger.settle(f"{1:032x}", "123", filled=False)
+        self.ledger.settle(f"{1:032x}", "123", filled=False)
+        self.assertEqual(self.ledger.status("123", DAY)["active_reservations"], 0)
+
+    def test_opposite_settlement_is_never_accepted(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.ledger.reserve(self.admission(2))
+        self.ledger.settle(f"{1:032x}", "123", filled=True)
+        self.ledger.settle(f"{2:032x}", "123", filled=False)
+        with self.assertRaisesRegex(risk.Denied, "settlement_conflict"):
+            self.ledger.settle(f"{1:032x}", "123", filled=False)
+        with self.assertRaisesRegex(risk.Denied, "settlement_conflict"):
+            self.ledger.settle(f"{2:032x}", "123", filled=True)
+
+    def test_wrong_account_cannot_replay_settlement(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.ledger.settle(f"{1:032x}", "123", filled=True)
+        with self.assertRaisesRegex(risk.Denied, "unknown_or_expired_reservation"):
+            self.ledger.settle(f"{1:032x}", "456", filled=True)
+
+    def test_expired_unsettled_request_cannot_be_committed_by_retry(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.now += risk.TTL_SECONDS + 1
+        with self.assertRaisesRegex(risk.Denied, "unknown_or_expired_reservation"):
+            self.ledger.settle(f"{1:032x}", "123", filled=True)
+
     def test_expiry_does_not_allow_request_replay(self):
         self.seed()
         self.ledger.reserve(self.admission(1))
@@ -354,6 +407,17 @@ class HttpProtocolTests(unittest.TestCase):
         status, body = self.post(
             "/v1/commit", {"account": "123", "request_id": f"{2:032x}"})
         self.assertEqual((status, body), (200, "SETTLED"))
+
+    def test_lost_ack_retry_returns_settled_over_http(self):
+        data = dict(mode="demo", account="123", day=DAY, request_id=f"{5:032x}",
+                    equity="1000", realized_today="0", open_positions="0")
+        self.post("/v1/reserve", data)
+        body = {"account": "123", "request_id": f"{5:032x}"}
+        self.assertEqual(self.post("/v1/commit", body), (200, "SETTLED"))
+        self.assertEqual(self.post("/v1/commit", body), (200, "SETTLED"))
+        with self.assertRaises(HTTPError) as caught:
+            self.post("/v1/cancel", body)
+        self.assertEqual(caught.exception.code, 409)
 
     def test_authenticated_observation_http_does_not_reserve(self):
         data = dict(mode="demo", account="123", day=DAY, request_id=f"{3:032x}",
