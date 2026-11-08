@@ -259,6 +259,28 @@ def inspect_passenger_wiring(conf, wsgi_text):
     }
 
 
+def classify_missing_module(module):
+    """Fixed-label bucketing only; never return untrusted module text."""
+    module = module.lower()
+    if module == b"config" or module.startswith(b"config."):
+        return "project_config"
+    if module == b"core.commerce_funnel" or module.startswith(b"core.commerce_funnel."):
+        return "optional_commerce_telemetry"
+    if module == b"core" or module.startswith(b"core."):
+        return "project_core"
+    if module == b"django" or module.startswith(b"django."):
+        return "django_dependency"
+    if module == b"whitenoise" or module.startswith(b"whitenoise."):
+        return "static_middleware_dependency"
+    if module == b"environ" or module.startswith(b"environ."):
+        return "environment_library"
+    if module in (b"mysqlclient", b"mysqldb", b"pymysql"):
+        return "database_driver"
+    if module == b"command_center" or module.startswith(b"command_center."):
+        return "management_module"
+    return "other_unclassified"
+
+
 def inspect_error_classes(public, now_epoch=None):
     """Scan bounded recent, allowlisted *error* files; emit only fixed classes."""
     now_epoch = time.time() if now_epoch is None else now_epoch
@@ -277,9 +299,15 @@ def inspect_error_classes(public, now_epoch=None):
         "passenger_boot_error": b"cannot load application",
         "python_traceback": b"traceback (most recent call last)",
     }
+    category_names = (
+        "project_config", "optional_commerce_telemetry", "project_core",
+        "django_dependency", "static_middleware_dependency", "environment_library",
+        "database_driver", "management_module", "other_unclassified",
+    )
     result = {"regular_recent_error_files": 0, "bounded_bytes_scanned": 0,
-              "classes": {key: 0 for key in signatures}, "files_modified": False,
-              "raw_log_emitted": False}
+              "classes": {key: 0 for key in signatures},
+              "missing_module_categories": {key: 0 for key in category_names},
+              "files_modified": False, "raw_log_emitted": False}
     for path in files:
         try:
             if (path.is_symlink() or path.parent.is_symlink() or
@@ -295,6 +323,14 @@ def inspect_error_classes(public, now_epoch=None):
             result["bounded_bytes_scanned"] += len(data)
             for key, needle in signatures.items():
                 result["classes"][key] = min(100, result["classes"][key] + data.count(needle))
+            for found in re.findall(
+                rb"modulenotfounderror\s*:\s*no module named\s+['\"]([^'\"\r\n]{1,128})['\"]",
+                data,
+            ):
+                group = classify_missing_module(found)
+                result["missing_module_categories"][group] = min(
+                    100, result["missing_module_categories"][group] + 1
+                )
         except (OSError, ValueError):
             continue
     return result
