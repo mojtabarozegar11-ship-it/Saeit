@@ -17,6 +17,7 @@ ENTRYPOINTS = (
     Path("core/factory_worker_compat.py"),
 )
 MODEL = Path("core/models.py")
+MAX_SOURCE_MODULES = 200
 REQUIRED_TASK_FIELDS = (
     "factory_run", "product", "environment", "next_retry_at",
 )
@@ -34,13 +35,16 @@ def _parse(path, blockers, code):
         return None
 
 
-def _core_imports(tree):
-    """Return only the project's local Python module import dependencies."""
+def _core_imports(tree, current_module):
+    """Return local imports, correctly resolving relative Python packages."""
     imports = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if node.level == 1 and node.module:
-                imports.add("core." + node.module)
+            if node.level and node.module:
+                parts = current_module.split(".")[:-node.level]
+                resolved = ".".join(parts + [node.module])
+                if resolved.startswith("core."):
+                    imports.add(resolved)
             elif node.level == 0 and node.module:
                 if node.module.startswith("core."):
                     imports.add(node.module)
@@ -49,6 +53,33 @@ def _core_imports(tree):
                 if name.name.startswith("core."):
                     imports.add(name.name)
     return imports
+
+
+def _model_imported_symbols(tree, current_module):
+    symbols = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        if node.level:
+            parts = current_module.split(".")[:-node.level]
+            module = ".".join(parts + [node.module])
+        else:
+            module = node.module
+        if module == "core.models":
+            symbols.update(alias.name for alias in node.names if alias.name != "*")
+    return symbols
+
+
+def _declared_module_symbols(tree):
+    symbols = set()
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            symbols.add(node.name)
+        elif isinstance(node, ast.Assign):
+            symbols.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            symbols.add(node.target.id)
+    return symbols
 
 
 def _module_present(root, module):
@@ -73,23 +104,58 @@ def _declared_fields(tree, class_name):
 
 
 def audit(root):
-    """Perform only static, explicit-file reads and return deterministic JSON."""
+    """Perform bounded, read-only source-import traversal; never load Python modules."""
     root = Path(root)
     blockers = []
     trees = {}
     modules_checked = set()
-    for relative in ENTRYPOINTS:
-        tree = _parse(root / relative, blockers, relative.as_posix())
-        if tree is not None:
-            trees[relative.as_posix()] = tree
-            modules_checked.update(_core_imports(tree))
-
-    for module in sorted(modules_checked):
-        if not _module_present(root, module):
+    model_imports = set()
+    pending = [
+        ("core.management.commands.factory_product_step", ENTRYPOINTS[0]),
+        ("core.factory_worker_compat", ENTRYPOINTS[1]),
+    ]
+    visited = set()
+    checked_entrypoints = 0
+    while pending:
+        module, relative = pending.pop(0)
+        if module in visited:
+            continue
+        if len(visited) >= MAX_SOURCE_MODULES:
+            blockers.append({"code": "SOURCE_GRAPH_LIMIT", "component": module})
+            break
+        visited.add(module)
+        if module not in {"core.management.commands.factory_product_step",
+                          "core.factory_worker_compat"} and not _module_present(root, module):
             blockers.append({"code": "LOCAL_IMPORT_MISSING", "component": module})
+            continue
+        if not (root / relative).is_file() and (root / relative / "__init__.py").is_file():
+            relative = relative / "__init__.py"
+        tree = _parse(root / relative, blockers, relative.as_posix())
+        if tree is None:
+            continue
+        if module in {"core.management.commands.factory_product_step",
+                      "core.factory_worker_compat"}:
+            checked_entrypoints += 1
+        trees[module] = tree
+        imports = _core_imports(tree, module)
+        modules_checked.update(imports)
+        model_imports.update(_model_imported_symbols(tree, module))
+        for dependency in sorted(imports):
+            if dependency not in visited:
+                local = Path(*dependency.split("."))
+                candidate = local.with_suffix(".py")
+                if not (root / candidate).is_file():
+                    candidate = local
+                pending.append((dependency, candidate))
 
-    model_tree = _parse(root / MODEL, blockers, MODEL.as_posix())
+    model_tree = trees.get("core.models")
+    if model_tree is None:
+        model_tree = _parse(root / MODEL, blockers, MODEL.as_posix())
     if model_tree is not None:
+        declared = _declared_module_symbols(model_tree)
+        for symbol in sorted(model_imports - declared):
+            blockers.append({"code": "MODEL_SYMBOL_MISSING",
+                             "component": "core.models." + symbol})
         fields = _declared_fields(model_tree, "AgentTask")
         if fields is None:
             blockers.append({"code": "MODEL_CLASS_MISSING", "component": "AgentTask"})
@@ -111,8 +177,9 @@ def audit(root):
         "live_vps_verified": False,
         "production_ready": False,
         "status": "blocked" if blockers else "source_contract_present",
-        "checked_entrypoints": len(trees),
+        "checked_entrypoints": checked_entrypoints,
         "checked_local_imports": len(modules_checked),
+        "checked_source_modules": len(trees),
         "blockers": blockers,
     }
 
