@@ -18,6 +18,11 @@ from moj_asset_registry import (  # noqa: E402
 
 
 class AssetRegistryTests(unittest.TestCase):
+    def test_unknown_claim_fields_are_rejected_in_program_and_assets(self):
+        self.rejects("unexpected_program_fields", lambda p: p.update(exchange_listing_verified=True))
+        self.rejects("unexpected_asset_fields", lambda p: p["assets"][0].update(onchain_tx_id="fake"))
+        self.rejects("unexpected_asset_fields", lambda p: p["assets"][1].update(liquidity_funded=True))
+
     def test_program_purpose_cannot_claim_onchain_issuance(self):
         self.rejects("invalid_program_purpose", lambda p: p.update(purpose="mainnet_issuance"))
 
