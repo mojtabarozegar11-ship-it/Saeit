@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """Redacted, read-only Django render readiness for the existing MojPlayWin store."""
-import hashlib
 import json
 import os
 import pwd
 import sys
-import types
 from pathlib import Path
 
 APP = Path("/home/zomorod2/Saeit-staging")
 TARGET = APP / "core/mojplaywin_views.py"
-REQUIRED_HASH_PREFIX = "337bd51a2390578d"
-REQUIRED_BYTES = 15919
+REQUIRED_BYTES = 16371
+GUARDED_STORE_ANCHOR = b"def store(request):\n # Analytics must never make the public storefront unavailable."
 STATIC_KEYS = {
     "css": "site/mojplaywin.css",
     "header_image": "site/mojplaywin-header-emblem.jpg",
 }
+
+
+def known_guarded_store_source(raw):
+    """Require the bounded post-repair view without importing optional analytics."""
+    if len(raw) != REQUIRED_BYTES or raw.count(GUARDED_STORE_ANCHOR) != 1:
+        return False
+    tail = raw[raw.index(GUARDED_STORE_ANCHOR):][:900]
+    return (b"try:\n  from .commerce_funnel import record_funnel_event" in tail and
+            b"except Exception as exc:" in tail and
+            raw.count(b"def store(request):") == 1)
 
 
 def manifest_target_collected(root, mapping, key):
@@ -134,7 +142,7 @@ def main():
         if APP.is_symlink() or not APP.is_dir() or TARGET.is_symlink() or not TARGET.is_file():
             raise RuntimeError("Invalid app root")
         raw = TARGET.read_bytes()
-        if len(raw) != REQUIRED_BYTES or not hashlib.sha256(raw).hexdigest().startswith(REQUIRED_HASH_PREFIX):
+        if not known_guarded_store_source(raw):
             raise RuntimeError("Unexpected source version")
         if (APP / "core/commerce_funnel.py").exists():
             raise RuntimeError("Optional metrics now installed")
@@ -160,29 +168,55 @@ def main():
         from django.contrib.auth.models import AnonymousUser
         req = RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com")
         req.user = AnonymousUser()
-        phase = "render_view_with_memory_only_metrics_stub"
-        from unittest.mock import patch
-        stub = types.ModuleType("core.commerce_funnel")
-        stub.record_funnel_event = lambda *args, **kwargs: None
-        with patch.dict(sys.modules, {"core.commerce_funnel": stub}):
-            response = store(req)
+        phase = "render_real_view_without_metrics_stub"
+        response = store(req)
         data = response.content
         if response.status_code != 200 or len(data) < 2000:
             raise RuntimeError("Store page render invalid")
         for route in (b"/store/product/72/checkout/", b"/store/product/225/checkout/", b"/store/product/879/"):
             if route not in data:
                 raise RuntimeError("Product CTA missing")
+        phase = "resolve_django_store_path"
+        from django.urls import resolve
+        match = resolve("/store/")
+        phase = "get_store_through_full_django_middleware"
+        from django.test import Client
+        import logging
+        previous_logging_disable = logging.root.manager.disable
+        logging.disable(logging.CRITICAL)
+        try:
+            routed_response = Client(raise_request_exception=False).get(
+                "/store/", secure=True, HTTP_HOST="mojplaywin.com", HTTP_ACCEPT="text/html"
+            )
+        finally:
+            logging.disable(previous_logging_disable)
+        routed_body = routed_response.content
+        product_routes = (b"/store/product/72/checkout/",
+                          b"/store/product/225/checkout/",
+                          b"/store/product/879/")
+        route_check = {
+            "name_is_store": match.url_name == "store",
+            "http_status": routed_response.status_code,
+            "django_store_marker": b"mpw-shop-kicker" in routed_body,
+            "owned_static_fallback_marker": b"MPW_STATIC_STORE_FALLBACK_V1" in routed_body,
+            "product_cta_count": sum(route in routed_body for route in product_routes),
+        }
+        is_ready = (route_check["name_is_store"] and route_check["http_status"] == 200
+                    and route_check["django_store_marker"]
+                    and not route_check["owned_static_fallback_marker"]
+                    and route_check["product_cta_count"] == 3)
         print(json.dumps({
             "classification": "MPW_DYNAMIC_STORE_READONLY",
-            "status": "passed",
+            "status": "passed" if is_ready else "blocked",
             "phase": "complete",
             "product_cta_count": 3,
+            "routed_django_get": route_check,
             "static_manifest": manifest,
             "payments_created": False,
             "mail_sent": False,
             "source_mutated": False,
         }, sort_keys=True))
-        return 0
+        return 0 if is_ready else 2
     except BaseException as exc:
         print(json.dumps(safe_error(phase, exc, manifest), sort_keys=True))
         return 2
