@@ -66,6 +66,15 @@ class JournalEntry(models.Model):
     def __str__(self):
         return f"{self.reference} — {self.memo}"
 
+    def save(self, *args, **kwargs):
+        # A posted journal is permanent: reverse it with a new journal instead
+        # of silently editing its header, status, date, or author.
+        if self.pk is not None and type(self).objects.filter(
+            pk=self.pk, status=self.Status.POSTED
+        ).exists():
+            raise ValidationError("سند قطعی قابل ویرایش یا بازگشت به پیش‌نویس نیست؛ سند معکوس جدید ثبت کنید.")
+        return super().save(*args, **kwargs)
+
     def validate_balanced(self):
         totals = self.lines.aggregate(debit=models.Sum("debit"), credit=models.Sum("credit"))
         debit = totals["debit"] or Decimal("0")
