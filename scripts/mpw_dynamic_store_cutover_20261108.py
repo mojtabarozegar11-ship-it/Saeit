@@ -44,6 +44,9 @@ BUYER_ROUTE_PROBES = (
     ("/store/product/72/checkout/", b"The Science and Practice of Chess Improvement", b"Create my TRX payment invoice"),
     ("/store/product/225/checkout/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
     ("/store/product/879/checkout/", b"Atelier Interior", b"Create my TRX payment invoice"),
+    ("/commerce/book/72/", b"The Science and Practice of Chess Improvement", b"Create my TRX payment invoice"),
+    ("/commerce/book/225/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
+    ("/commerce/book/879/", b"Atelier Interior", b"Create my TRX payment invoice"),
 )
 
 
@@ -136,7 +139,7 @@ def public_response(run_id: str) -> bytes:
 
 
 def verify_public_buyer_routes(run_id: str) -> bool:
-    """Check six buyer-facing GET pages without creating orders or touching PII."""
+    """Check all nine buyer-facing GET pages without orders or PII."""
     checked = 0
     for route, title, action in BUYER_ROUTE_PROBES:
         url = "https://mojplaywin.com" + route + "?mpw_cutover_probe=" + run_id
@@ -160,7 +163,7 @@ def verify_public_buyer_routes(run_id: str) -> bool:
             category = "network_or_read_error"
         print("MPW_BUYER_ROUTE_PROBE=" + json.dumps({
             "checked": checked, "passed": False,
-            "route_group": "checkout" if "/checkout/" in route else "detail",
+            "route_group": "checkout" if ("/checkout/" in route or route.startswith("/commerce/book/")) else "detail",
             "category": category,
         }, sort_keys=True))
         return False
