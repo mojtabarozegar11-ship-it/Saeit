@@ -59,8 +59,24 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # Bound transient VPS connection drops; reject a changed identity immediately.
+          for attempt in 1 2 3 4; do
+            if timeout 12s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/vps.candidate" 2>/dev/null && test -s "$d/vps.candidate"; then
+              actual_pin="$(ssh-keygen -lf "$d/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if test "$actual_pin" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+                echo "MPW_AUDIT_VPS_PIN=mismatch_fail_closed" >&2
+                exit 1
+              fi
+              mv "$d/vps.candidate" "$d/vps.known"
+              echo "MPW_AUDIT_VPS_PIN=verified_attempt_$attempt"
+              break
+            fi
+            if test "$attempt" = 4; then
+              echo "MPW_AUDIT_VPS_RELAY=unreachable_after_4_attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -85,9 +101,24 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          mv "$d/host.candidate" "$d/host.known"
+          # Keep the hosting host-key pin independent of the VPS relay.
+          for attempt in 1 2 3 4; do
+            if timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              actual_pin="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if test "$actual_pin" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+                echo "MPW_AUDIT_CPANEL_PIN=mismatch_fail_closed" >&2
+                exit 1
+              fi
+              mv "$d/host.candidate" "$d/host.known"
+              echo "MPW_AUDIT_CPANEL_PIN=verified_attempt_$attempt"
+              break
+            fi
+            if test "$attempt" = 4; then
+              echo "MPW_AUDIT_CPANEL_RELAY=unreachable_after_4_attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
       - name: Run read-only live sales and checkout audit
         env:
           PYTHONDONTWRITEBYTECODE: "1"
