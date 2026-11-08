@@ -80,6 +80,22 @@ python3 deploy/newsroom_release_preflight.py \
   `unreadable` are release blockers, not implicit permission to replace.
 - This scan does **not** prove whether cPanel/LiteSpeed serves `/weather/` or
   `/news/` from another public document root. Inspect those routes separately.
+- Cycle 18 adds a separate **read-only** script for this exact distinction:
+  `deploy/newsroom_static_routes_audit.py`. After legitimate cPanel access,
+  independently confirm the document root for `zomorodmelal.ir` from Passenger/
+  web-server settings, then run the staged script against **that exact root**:
+
+  ```bash
+  python3 deploy/newsroom_static_routes_audit.py --public-root /home/zomorod2/public_html
+  ```
+
+  This example path is only a prior observed candidate, **not a fresh route
+  verification**. The audit prints SHA-256 and whether `news/index.html` and
+  `weather/index.html` reference the previously injected editorial loader. It
+  does not mutate content, does not follow a route symlink, and does **not**
+  prove the live server sends traffic to the inspected files. Compare with
+  active rewrite/Passenger rules and independent HTTP evidence before any
+  changes. Do not broaden the read-only GitHub→VPS→cPanel command bridge.
 - Never use the broad eight-template deployment workflow as a substitute for
   this reconciliation, and never expand the read-only VPS-to-cPanel bridge.
 
