@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "release_id": "ZM-RESEARCH-GUIDES-20261108-R2",
+  "release_id": "ZM-RESEARCH-GUIDES-20261108-R3",
   "site": "https://zomorodmelal.ir",
   "production_status": "NOT_DEPLOYED",
   "deployment_policy": {
@@ -49,6 +49,19 @@
         "https://www.fao.org/4/i2096e/i2096e.pdf",
         "https://www.fao.org/fileadmin/user_upload/rne/docs/LWD-Main-Report-2nd-Edition.pdf",
         "https://www.fao.org/in-action/remote-sensing-for-water-productivity/wapor-data/"
+      ],
+      "live_verified": false
+    },
+    {
+      "id": "ZM-RG-YEAR-AUDIT-04",
+      "title_fa": "وقتی چکیده با روش و نتایج یک پژوهش هم‌سال نیست: راهنمای ممیزی شواهد آبیاری",
+      "source_path": "content/zomorod-research-guides/irrigation-study-year-conflict-audit-20261108.md",
+      "desired_url": "https://zomorodmelal.ir/research/guides/irrigation-study-year-conflict-audit/",
+      "status": "EDITORIAL_REVIEW_REQUIRED",
+      "kind": "educational_guide_not_empirical_article",
+      "primary_sources": [
+        "https://doi.org/10.3390/agronomy14010066",
+        "https://repositorio.ulisboa.pt/entities/publication/874f83da-cbc2-4742-99f6-b7ce1543a000"
       ],
       "live_verified": false
     }
