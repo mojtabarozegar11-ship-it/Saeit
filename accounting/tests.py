@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory
 from .models import Account, JournalEntry, JournalLine
-from .admin import JournalEntryAdmin
+from .admin import JournalEntryAdmin, AccountAdmin
 from .services import ledger_summary
 
 
@@ -53,6 +53,24 @@ class AccountingDashboardTests(TestCase):
     def test_unbalanced_posted_entry_is_reported_not_crashed(self):
         JournalEntry.objects.create(reference="JV-BAD", occurred_on=date(2026, 11, 4), memo="نامتوازن", status=JournalEntry.Status.POSTED)
         self.assertFalse(ledger_summary()["integrity"]["balanced_posted_entries"])
+
+    def test_posted_account_identity_is_readonly_in_admin(self):
+        request = RequestFactory().get("/admin/accounting/account/")
+        request.user = self.user
+        model_admin = AccountAdmin(Account, admin.site)
+        for account in (self.cash, self.revenue):
+            form = model_admin.get_form(request, account)
+            self.assertNotIn("code", form.base_fields)
+            self.assertNotIn("kind", form.base_fields)
+            self.assertIn("name", form.base_fields)
+
+    def test_unused_account_identity_remains_editable_in_admin(self):
+        unused = Account.objects.create(code="1200", name="Unused", kind=Account.Kind.ASSET)
+        request = RequestFactory().get("/admin/accounting/account/")
+        request.user = self.user
+        form = AccountAdmin(Account, admin.site).get_form(request, unused)
+        self.assertIn("code", form.base_fields)
+        self.assertIn("kind", form.base_fields)
 
     def test_posted_entry_cannot_be_changed_or_deleted_from_admin(self):
         entry = JournalEntry.objects.get(reference="JV-1")
