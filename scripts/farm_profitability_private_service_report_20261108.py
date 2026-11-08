@@ -75,8 +75,8 @@ def calculate(data):
     fixed = costs(data.get("fixed_costs"), "fixed_costs")
     input_costs = costs(data.get("production_variable_costs"), "production_variable_costs")
     unit_costs = costs(data.get("per_sold_kg_costs"), "per_sold_kg_costs")
-    if not fixed and not input_costs and not unit_costs:
-        raise InputError("at least one cost category is required")
+    if sum(fixed.values(), ZERO) + sum(input_costs.values(), ZERO) + sum(unit_costs.values(), ZERO) <= ZERO:
+        raise InputError("at least one positive documented cost amount is required")
     full_costs = data.get("all_material_costs_documented")
     if not isinstance(full_costs, bool):
         raise InputError("all_material_costs_documented must be true or false")
