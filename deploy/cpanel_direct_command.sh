@@ -12,6 +12,9 @@ esac
 : "${VPS_KEY:?VPS_KEY is required}"
 : "${HOST_KEY:?HOST_KEY is required}"
 
+stage="prepare_key_material"
+trap 'rc=$?; printf "CPANEL_DIRECT_FAILURE_STAGE=%s EXIT=%s\n" "$stage" "$rc" >&2' ERR
+
 work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
 cleanup() { rm -rf -- "$work"; }
@@ -26,10 +29,12 @@ normalize_key() {
 normalize_key "$VPS_KEY" "$work/vps.key"
 normalize_key "$HOST_KEY" "$work/host.key"
 
+stage="verify_vps_host_key"
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
-ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
+stage="verify_cpanel_host_key_via_vps"
+ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
 cat > "$work/config" <<EOF
@@ -39,7 +44,7 @@ Host saeit-vps
   IdentityFile $work/vps.key
   UserKnownHostsFile $work/vps.known
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -58,6 +63,7 @@ Host *
 EOF
 chmod 600 "$work/config"
 
+stage="execute_selected_readonly_operation"
 case "$operation" in
   relay_preflight)
     timeout 45s ssh -T -F "$work/config" saeit-vps 'printf "VPS_RELAY=READY\n"'
