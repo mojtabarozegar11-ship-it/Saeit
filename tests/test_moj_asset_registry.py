@@ -12,6 +12,7 @@ from moj_asset_registry import (  # noqa: E402
     MAX_SERIES_SUPPLY, MIN_SERIES_SUPPLY, MOJONER_SUPPLY,
     evm_candidate_sources, export_bundle, f41_shasta_candidate_specs,
     generate_program, ord_etching_fragment, series_supply,
+    mojoner_rune_name_length_gate,
     validate_program, verify_bundle,
 )
 
@@ -32,6 +33,22 @@ class AssetRegistryTests(unittest.TestCase):
 
     def test_mojoner_bitcoin_supply_is_exact(self):
         self.assertEqual(int(self.program["assets"][0]["supply_tokens"]), MOJONER_SUPPLY)
+
+    def test_mojoner_seven_letter_length_unlock_is_not_availability(self):
+        before = mojoner_rune_name_length_gate(944_999)
+        after = mojoner_rune_name_length_gate(945_000)
+        self.assertEqual(after["full_length_unlock_height"], 945_000)
+        self.assertFalse(before["length_eligible"])
+        self.assertTrue(after["length_eligible"])
+        self.assertFalse(after["name_availability_verified"])
+        self.assertFalse(after["commitment_confirmations_verified"])
+        self.assertFalse(after["mainnet_authorized"])
+
+    def test_mojoner_length_gate_rejects_unverified_height_types(self):
+        for bad in (True, 945_000.0, "945000", -1, None):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError, "verified_bitcoin_height_required"):
+                    mojoner_rune_name_length_gate(bad)
 
     def test_bitcoin_runes_etching_has_no_unintended_open_mint(self):
         self.assertEqual(self.program["assets"][0]["runes_etching_proposal"], {
