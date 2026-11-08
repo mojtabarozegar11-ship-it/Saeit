@@ -2,7 +2,7 @@
   "version": 1,
   "repository": "mojtabarozegar11-ship-it/Saeit",
   "pr": 2194,
-  "commit": "fee9b301e681014bfb2a03914401b2b13fc98920",
+  "commit": "1d9621c50cd836db5f36a5e81570ef2916b2a51e",
   "site": "zomorodmelal.ir",
   "mode": "READ_ONLY_PREFLIGHT",
   "files": [
@@ -19,12 +19,12 @@
     {
       "path": "core/blog_views.py",
       "change": "modified",
-      "git_blob_sha": "5013620b63eafe013e63cf9b3a8144f098a316de"
+      "git_blob_sha": "f9d17f8809b1cfb152b654dc6f97f38142539738"
     },
     {
       "path": "core/company_content_views.py",
       "change": "modified",
-      "git_blob_sha": "5c4003d9d5f14c210252f2ca369c15cc2fef47a3"
+      "git_blob_sha": "ea8c4b07f373b2e10c6bb977c7c968016d2fecb5"
     },
     {
       "path": "core/editorial_audit.py",
@@ -34,7 +34,7 @@
     {
       "path": "core/editorial_policy.py",
       "change": "added",
-      "git_blob_sha": "dfd8258db728c6ce39c082979bd553bf150452b5"
+      "git_blob_sha": "6b5f06790c4a71f72df7844a5374f11a37e46861"
     },
     {
       "path": "core/editorial_signature.py",
@@ -69,7 +69,7 @@
     {
       "path": "core/newsletter_views.py",
       "change": "modified",
-      "git_blob_sha": "c47bb26ed8b4ef8537e4d295d7c5bf936ebca0f0"
+      "git_blob_sha": "894b371344a9f9dfa911139dbd031db5a2b995ee"
     },
     {
       "path": "core/seo_views.py",
