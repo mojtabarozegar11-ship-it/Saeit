@@ -94,7 +94,8 @@ namespace MojTrade.OmegaX
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
-            if (CurrentSpreadPips() > MaxSpreadPips)
+            var spreadPips = CurrentSpreadPips();
+            if (!IsFinitePositive(spreadPips) || spreadPips > MaxSpreadPips)
                 return;
 
             var positions = Positions.FindAll(Label, SymbolName);
@@ -103,7 +104,7 @@ namespace MojTrade.OmegaX
 
             var index = Bars.Count - 1;
             var atrPrice = _atr.Result[index];
-            if (atrPrice <= 0)
+            if (!IsFinitePositive(atrPrice))
                 return;
 
             var buyVotes = 0;
@@ -126,6 +127,10 @@ namespace MojTrade.OmegaX
                 buyVotes++;
             if (close < rangeLow && fast < slow)
                 sellVotes++;
+
+            if (!IsFinite(fast) || !IsFinite(slow) || !IsFinite(previousFast) ||
+                !IsFinite(previousSlow) || !IsFinite(rsi))
+                return;
 
             if (buyVotes >= 2 && sellVotes == 0)
                 SubmitDemoOrder(TradeType.Buy, atrPrice);
@@ -167,7 +172,8 @@ namespace MojTrade.OmegaX
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
-            if (volume < Symbol.VolumeInUnitsMin)
+            if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips) ||
+                !IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
                 return;
 
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
@@ -176,6 +182,16 @@ namespace MojTrade.OmegaX
             else
                 Print("OMEGA X DEMO order: {0} volume={1} SL={2} TP={3}",
                       tradeType, volume, stopPips, takePips);
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return IsFinite(value) && value > 0;
         }
 
         private double CurrentSpreadPips()
@@ -194,6 +210,9 @@ namespace MojTrade.OmegaX
                 _sessionStartEquity = Account.Equity;
                 _consecutiveLosses = 0;
             }
+            // Fail closed if the broker/account feed is non-finite or the equity baseline is unusable.
+            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(_sessionStartEquity))
+                return true;
             return Account.Equity <= _sessionStartEquity * (1.0 - DailyLossStopPercent / 100.0);
         }
 
