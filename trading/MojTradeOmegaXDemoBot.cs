@@ -169,8 +169,12 @@ namespace MojTrade.OmegaX
         {
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             var takePips = stopPips * RewardRisk;
+            if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips))
+                return;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
+            if (!IsFinitePositive(volume))
+                return;
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
             if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips) ||
                 !IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
