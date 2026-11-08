@@ -12,14 +12,13 @@ import argparse
 import json
 import os
 import uuid
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, getcontext
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 from pathlib import Path
 
 MAX_BYTES = 200_000
 MAX_FINANCIAL_INPUT = Decimal("1e18")
 MONEY = Decimal("0.01")
 ZERO = Decimal("0")
-getcontext().prec = 80
 ALLOWED_CURRENCIES = {"IRR", "TOMAN", "USD", "EUR", "AED", "CAD"}
 
 
@@ -61,6 +60,13 @@ def rounded(value):
 
 
 def calculate(data):
+    """Use high precision without altering other modules' Decimal context."""
+    with localcontext() as context:
+        context.prec = 80
+        return _calculate(data)
+
+
+def _calculate(data):
     if not isinstance(data, dict):
         raise InputError("expected JSON object")
     currency = data.get("currency")
