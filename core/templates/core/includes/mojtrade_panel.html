@@ -1,0 +1,22 @@
+{% load static %}
+<section class="mojtrade-panel" data-mojtrade-feed="https://mojplaywin.com/api/mojtrade/v1/public/" lang="{% if locale == 'fa' %}fa{% else %}en{% endif %}" aria-live="polite">
+  <div class="mojtrade-heading">
+    <div><small>MOJTRADE AI / READ-ONLY</small><h2>{% if locale == 'fa' %}مرکز مشترک تحلیل بازار{% else %}Connected market intelligence{% endif %}</h2></div>
+    <span class="mojtrade-state" data-mojtrade-status>{% if locale == 'fa' %}در انتظار اتصال دادهٔ معتبر{% else %}Awaiting verified data{% endif %}</span>
+  </div>
+  <p>{% if locale == 'fa' %}این پنل دادهٔ مشترک سه سایت را نمایش می‌دهد. معاملهٔ واقعی و انتشار سیگنال تا تأیید مستقل غیرفعال است.{% else %}This panel reads the same verified feed as Zahra and Zomorod Melal. Live trading and signal publication are disabled until separately authorized.{% endif %}</p>
+  <ul class="mojtrade-signal-list" data-mojtrade-signals></ul>
+  <p class="mojtrade-footnote" data-mojtrade-updated>{% if locale == 'fa' %}دادهٔ معاملاتی تأییدشده‌ای منتشر نشده است.{% else %}No verified market signal has been published.{% endif %}</p>
+</section>
+<style>
+.mojtrade-panel{max-width:1180px;margin:28px auto;padding:24px;border:1px solid #8ba7a0;border-radius:14px;color:#172a27;background:#f6f9f5;font:400 15px/1.6 system-ui,sans-serif;direction:ltr}
+.mojtrade-panel[lang="fa"]{direction:rtl}
+.mojtrade-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.mojtrade-heading small{letter-spacing:.12em;color:#386355;font-size:11px}
+.mojtrade-heading h2{margin:7px 0 10px;color:#172a27;font-size:clamp(20px,2.4vw,28px)}
+.mojtrade-state{padding:7px 12px;border:1px solid #ad8f54;border-radius:40px;color:#685123;font-size:12px}
+.mojtrade-signal-list{list-style:none;padding:0;margin:12px 0;display:grid;gap:8px}
+.mojtrade-signal-list li{background:#fff;border:1px solid #dde5e2;border-radius:7px;padding:10px 12px;color:#173c31}
+.mojtrade-footnote{font-size:12px;color:#586b65}
+</style>
+<script src="{% static 'site/mojtrade-panel.js' %}" defer></script>
