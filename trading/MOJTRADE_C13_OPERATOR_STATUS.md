@@ -27,8 +27,9 @@ Response fields:
 
 Neither `telemetry_fresh` nor `demo_reservations_enabled` asserts that an actual
 broker/cTrader session, TLS connection, sufficient free margin, or profitable
-strategy is ready. The status call neither seeds an account nor changes a
-reservation, baseline, halt latch or equity observation.
+strategy is ready. The status call opens SQLite in `mode=ro` with
+`query_only=ON`. It neither creates a missing database nor seeds an account
+or changes a reservation, baseline, halt latch or equity observation.
 
 ## Go / no-go
 

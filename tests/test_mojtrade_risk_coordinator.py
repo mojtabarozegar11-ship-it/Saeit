@@ -290,6 +290,22 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(risk.Denied, "invalid_day"):
             self.ledger.status("123", "2026-99-99")
 
+    def test_status_sqlite_connection_is_truly_read_only(self):
+        self.seed()
+        with self.ledger._readonly_connection() as db:
+            self.assertEqual(db.execute("PRAGMA query_only").fetchone()[0], 1)
+            with self.assertRaises(risk.sqlite3.OperationalError):
+                db.execute("UPDATE day_state SET halted=1 WHERE account='123'")
+        self.assertFalse(self.ledger.status("123", DAY)["halted"])
+
+    def test_status_does_not_recreate_missing_database(self):
+        fresh_path = Path(self.dir.name) / "lost.sqlite"
+        separate = risk.Ledger(str(fresh_path), enabled=False, clock=lambda: self.now)
+        fresh_path.unlink()
+        with self.assertRaises(risk.sqlite3.OperationalError):
+            separate.status("123", DAY)
+        self.assertFalse(fresh_path.exists())
+
 
 class HttpProtocolTests(unittest.TestCase):
     def setUp(self):

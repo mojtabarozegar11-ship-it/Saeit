@@ -17,7 +17,7 @@ import os
 import re
 import sqlite3
 import time
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 
 ACCOUNT_RE = re.compile(r"^[0-9]{1,20}$")
@@ -119,6 +119,14 @@ class Ledger:
         db.execute("PRAGMA busy_timeout=10000")
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA synchronous=FULL")
+        return db
+
+    def _readonly_connection(self):
+        # SQLite mode=ro prevents a status query from creating a missing ledger
+        # or changing the database header; query_only blocks later writes too.
+        uri = "file:" + quote(self.db_path, safe="/") + "?mode=ro"
+        db = sqlite3.connect(uri, uri=True, timeout=10, isolation_level=None)
+        db.execute("PRAGMA query_only=ON")
         return db
 
     def seed_day(self, account: str, day: str, equity: str) -> None:
@@ -283,7 +291,7 @@ class Ledger:
             raise Denied("invalid_identity")
         valid_day(day)
         now = self.clock()
-        db = self._connection()
+        db = self._readonly_connection()
         try:
             row = db.execute(
                 "SELECT baseline,last_equity,halted,updated FROM day_state "
