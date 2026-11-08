@@ -40,6 +40,9 @@ namespace MojTrade.OmegaX
         [Parameter("Max Positions", DefaultValue = 3, MinValue = 1, MaxValue = 3)]
         public int MaxPositions { get; set; }
 
+        [Parameter("Max Total Demo Positions", DefaultValue = 3, MinValue = 1, MaxValue = 10)]
+        public int MaxTotalDemoPositions { get; set; }
+
         [Parameter("Daily Loss Stop %", DefaultValue = 2.0, MinValue = 0.1)]
         public double DailyLossStopPercent { get; set; }
 
@@ -98,7 +101,9 @@ namespace MojTrade.OmegaX
                 return;
 
             var positions = Positions.FindAll(Label, SymbolName);
-            if (positions.Length >= MaxPositions)
+            // Existing demo positions under this shared label across ALL symbols
+            // consume the same portfolio-level position budget.
+            if (positions.Length >= MaxPositions || Positions.FindAll(Label).Length >= MaxTotalDemoPositions)
                 return;
 
             var index = Bars.Count - 1;
@@ -164,6 +169,12 @@ namespace MojTrade.OmegaX
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
+            // Recheck at the order boundary; never trust a prior signal gate.
+            if (!EnableDemoTrading || Account.IsLive ||
+                Positions.FindAll(Label, SymbolName).Length >= MaxPositions ||
+                Positions.FindAll(Label).Length >= MaxTotalDemoPositions)
+                return;
+
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             var takePips = stopPips * RewardRisk;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
