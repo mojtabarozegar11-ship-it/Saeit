@@ -3,9 +3,10 @@
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
+from urllib.request import Request
 
 from core.news_feed_reader import (
-    MAX_FEED_BYTES, OFFICIAL_FEEDS, editorial_identity,
+    MAX_FEED_BYTES, OFFICIAL_FEEDS, _OfficialRedirectsOnly, editorial_identity,
     fetch_official_news, parse_official_rss,
 )
 
@@ -106,12 +107,13 @@ class OfficialRssReaderTests(unittest.TestCase):
             def read(self, _):
                 return rss([item("https://www.nass.usda.gov/new")])
 
-        def fake_urlopen(request, timeout):
-            if "fao.org" in request.full_url:
-                raise TimeoutError("feed temporarily unavailable")
-            return Response()
+        class Opener:
+            def open(self, request, timeout):
+                if "fao.org" in request.full_url:
+                    raise TimeoutError("feed temporarily unavailable")
+                return Response()
 
-        with patch("core.news_feed_reader.urlopen", side_effect=fake_urlopen), patch(
+        with patch("core.news_feed_reader.build_opener", return_value=Opener()), patch(
             "core.news_feed_reader.datetime"
         ) as clock:
             clock.now.return_value = NOW
@@ -119,6 +121,26 @@ class OfficialRssReaderTests(unittest.TestCase):
         self.assertEqual(report.feeds_ok, 1)
         self.assertEqual(len(report.items), 1)
         self.assertEqual(len(report.feed_errors), 1)
+
+    def test_rss_redirects_reject_other_hosts_and_http(self):
+        handler = _OfficialRedirectsOnly(OFFICIAL_FEEDS[1].allowed_hosts)
+        request = Request(OFFICIAL_FEEDS[1].url)
+        for redirect in (
+            "https://evil.example/latest",
+            "http://www.fao.org/latest",
+            "https://www.fao.org.evil.example/latest",
+            "https://admin@www.fao.org/latest",
+        ):
+            with self.subTest(redirect=redirect), self.assertRaises(ValueError):
+                handler.redirect_request(request, None, 302, "Found", {}, redirect)
+
+    def test_rss_redirect_allows_approved_https_host(self):
+        handler = _OfficialRedirectsOnly(OFFICIAL_FEEDS[1].allowed_hosts)
+        request = Request(OFFICIAL_FEEDS[1].url)
+        new_request = handler.redirect_request(
+            request, None, 302, "Found", {}, "https://www.fao.org/feeds/fao-newsroom-rss"
+        )
+        self.assertEqual(new_request.full_url, "https://www.fao.org/feeds/fao-newsroom-rss")
 
 
 if __name__ == "__main__":
