@@ -112,5 +112,28 @@ class SafeDiagnosticTests(unittest.TestCase):
             self.assertFalse(manifest_target_collected(static, {key: "site/mojplaywin.link.css"}, key))
 
 
+    def test_guarded_store_source_requires_post_repair_code(self):
+        from scripts.mpw_store_dynamic_readonly_diag_20261107 import (
+            REQUIRED_BYTES, GUARDED_STORE_ANCHOR, known_guarded_store_source,
+        )
+        fixture = (GUARDED_STORE_ANCHOR + b"\n try:\n  from .commerce_funnel import record_funnel_event\n"
+                   b" except Exception as exc:\n  pass\n")
+        self.assertLess(len(fixture), REQUIRED_BYTES)
+        fixture += b"#" * (REQUIRED_BYTES - len(fixture))
+        self.assertTrue(known_guarded_store_source(fixture))
+        self.assertFalse(known_guarded_store_source(fixture.replace(b"except Exception as exc:", b"except ValueError as exc:")))
+        self.assertFalse(known_guarded_store_source(fixture + b"changed"))
+        self.assertFalse(known_guarded_store_source(fixture.replace(GUARDED_STORE_ANCHOR, b"def store(request):\n from .commerce_funnel import record_funnel_event")))
+
+    def test_diagnostic_never_stubs_analytics_and_checks_real_route(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "scripts/mpw_store_dynamic_readonly_diag_20261107.py").read_text()
+        self.assertNotIn("patch.dict", source)
+        self.assertNotIn("types.ModuleType", source)
+        self.assertIn("resolve(\"/store/\")", source)
+        self.assertIn("Client(raise_request_exception=False)", source)
+        self.assertIn('"routed_django_get": route_check', source)
+
+
 if __name__ == "__main__":
     unittest.main()
