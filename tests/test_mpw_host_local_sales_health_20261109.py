@@ -44,12 +44,14 @@ class LocalHealthContract(unittest.TestCase):
     def test_minimal_fake_probes_produce_aggregate(self):
         with tempfile.TemporaryDirectory() as dirname:
             root = Path(dirname)
+            pins = {}
             for name, filename, marker, _ in health.PROBES:
                 (root / filename).write_text(
                     "import json\nprint('" + marker + "='+json.dumps(" +
                     repr({"result": "completed", "heartbeat_fresh": True, "paid_intent_count": 0}) + "))\n",
                     encoding="utf-8")
-            report = health.build_report(source_dir=root)
+                pins[filename] = health.git_blob_id((root / filename).read_bytes())
+            report = health.build_report(source_dir=root, pins=pins)
             self.assertTrue(report["monitor_completed"])
             self.assertFalse(report["operational_evidence_fresh"])
             self.assertFalse(report["commercial_sale_or_customer_delivery_inferred"])
@@ -57,14 +59,35 @@ class LocalHealthContract(unittest.TestCase):
     def test_current_heartbeat_required_for_operational_freshness(self):
         with tempfile.TemporaryDirectory() as dirname:
             root = Path(dirname)
+            pins = {}
             for name, filename, marker, _ in health.PROBES:
                 (root / filename).write_text(
                     "import json\nprint('" + marker + "='+json.dumps(" +
                     repr({"cron_readable": True, "entry_once_per_minute": True,
                           "heartbeat_fresh": True}) + "))\n",
                     encoding="utf-8")
-            report = health.build_report(source_dir=root)
+                pins[filename] = health.git_blob_id((root / filename).read_bytes())
+            report = health.build_report(source_dir=root, pins=pins)
             self.assertTrue(report["operational_evidence_fresh"])
+
+    def test_changed_source_fails_closed(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            file = root / "probe.py"
+            file.write_text("print('MARKER={}')", encoding="utf-8")
+            previous_pin = health.git_blob_id(file.read_bytes())
+            file.write_text("print('MARKER={\"altered\":true}')", encoding="utf-8")
+            result = health.run_probe("cron", "probe.py", "MARKER", 1,
+                                      source_dir=root, pins={"probe.py": previous_pin})
+            self.assertEqual(result["status"], "source_revision_mismatch")
+
+    def test_missing_pin_fails_closed(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            (root / "probe.py").write_text("print('MARKER={}')", encoding="utf-8")
+            result = health.run_probe("cron", "probe.py", "MARKER", 1,
+                                      source_dir=root, pins={})
+            self.assertEqual(result["status"], "source_pin_missing")
 
     def test_atomic_report_private_mode(self):
         with tempfile.TemporaryDirectory() as dirname:
