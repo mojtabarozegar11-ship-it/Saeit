@@ -61,11 +61,13 @@
       "id": "AE-CASE-06",
       "citation": "Elia et al. 2022",
       "doi": "https://doi.org/10.17660/ActaHortic.2022.1335.81",
-      "observation_unit": "commercial tomato farm and paired management plot",
-      "source_supported_qualitative_boundary": "publisher-reported commercial-farm contrasts",
-      "do_not_infer": "independent pooled farm trials; causal adoption beyond evaluated farms",
-      "unresolved_verification": "full underlying records and independent validation not inspected",
-      "verification_status": "source-limited; contextual outcomes only"
+      "observation_unit": "six commercial processing-tomato farms (2018, Foggia province, Italy), each split into DSS and usual grower-management main plots; farm is paired comparison unit",
+      "source_supported_qualitative_boundary": "ISHS abstract reports DSS-vs-grower-management seasonal irrigation volume 24% lower and nitrogen 7% lower, without statistically significant detected difference in marketable yield; no quantitative non-inferiority is established",
+      "do_not_infer": "twelve independent farms, randomised assignment, independent event-level adoption, equivalence of yield, transportable causal water-saving rate, or post-2018 voluntary uptake",
+      "unresolved_verification": "Full plot-assignment methods, confidence intervals/equivalence margin, original meter and nitrogen records, event-level advice receipt and action logs were not independently checked",
+      "verification_status": "source-limited; contextual outcomes only",
+      "primary_source_locator": "https://www.actahort.org/books/1335/1335_81.htm",
+      "review_scope": "SOURCE_ABSTRACT_ONLY; independent author full-text adjudication still required"
     },
     {
       "id": "AE-CASE-07",
