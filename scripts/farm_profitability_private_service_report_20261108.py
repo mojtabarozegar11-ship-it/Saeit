@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import uuid
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
@@ -129,7 +131,24 @@ def main():
         result = calculate(data)
     except (InputError, OSError, UnicodeError, json.JSONDecodeError) as err:
         parser.exit(2, f"FARM_PRIVATE_REPORT_BLOCKED: {type(err).__name__}\n")
-    print("FARM_PRIVATE_REPORT=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+    # Financial values must never land in CI logs, public stdout, or an open webroot.
+    private_root = Path("/home/zomorod2/.private_zomorod_farm_reports")
+    if private_root.is_symlink() or not private_root.parent.is_dir():
+        parser.exit(2, "FARM_PRIVATE_REPORT_BLOCKED: PRIVATE_ROOT\n")
+    try:
+        private_root.mkdir(mode=0o700, exist_ok=True)
+        if not private_root.is_dir() or private_root.is_symlink():
+            raise InputError("private root unavailable")
+        os.chmod(private_root, 0o700)
+        dest = private_root / ("farm-" + uuid.uuid4().hex + ".json")
+        fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(result, stream, ensure_ascii=False, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except (InputError, OSError):
+        parser.exit(2, "FARM_PRIVATE_REPORT_BLOCKED: PRIVATE_OUTPUT\n")
+    print("FARM_PRIVATE_REPORT_SAVED=YES;OUTBOUND_EMAIL=NO;PAYMENT=NO")
 
 
 if __name__ == "__main__":
