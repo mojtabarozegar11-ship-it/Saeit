@@ -2,7 +2,7 @@
   "version": 1,
   "repository": "mojtabarozegar11-ship-it/Saeit",
   "pr": 2194,
-  "commit": "1d9621c50cd836db5f36a5e81570ef2916b2a51e",
+  "commit": "dea67c8d8c57df3520bb45312711dc667ea82c84",
   "site": "zomorodmelal.ir",
   "mode": "READ_ONLY_PREFLIGHT",
   "files": [
@@ -64,7 +64,7 @@
     {
       "path": "core/newsletter_models.py",
       "change": "modified",
-      "git_blob_sha": "338c22e50205b41b4692514940fd386cf7dd1218"
+      "git_blob_sha": "278037286f312aa3791eb60a6bd427a1493b182a"
     },
     {
       "path": "core/newsletter_views.py",
