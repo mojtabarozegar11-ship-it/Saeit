@@ -24,8 +24,7 @@ class Command(BaseCommand):
             raise CommandError("Factory input planning and external agent results are disabled")
         task_id = opts.get("task_id")
         if not task_id:
-            self.stdout.write("FACTORY_WAIT explicit_task_id_required")
-            return
+            raise CommandError("FACTORY_WAIT explicit_task_id_required")
         task = AgentTask.objects.filter(pk=task_id, status="queued").first()
         if not task:
             raise CommandError("The requested factory task is not queued")
@@ -45,7 +44,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"FACTORY_WAIT task={task.pk} status={task.status} reason={str(exc)[:250]}"
             )
-            return
+            raise CommandError("FACTORY_TASK_NOT_COMPLETED") from exc
         self.stdout.write(self.style.SUCCESS(
             f"FACTORY_DONE task={result.pk} action={result.action_type} verified=True"
         ))
