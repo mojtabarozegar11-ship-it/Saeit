@@ -173,6 +173,21 @@ class GuardedPublicationTests(unittest.TestCase):
         self.assertFalse((self.web / next(iter(pages))).exists())
         self.assertFalse(self.state.exists())
 
+    def test_approved_guide_requires_exact_editorial_source_hash(self) -> None:
+        m = json.loads(self.manifest.read_text(encoding="utf-8"))
+        m["guides"][0]["status"] = "APPROVED_FOR_SITE"
+        self.manifest.write_text(json.dumps(m), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "EDITORIAL_APPROVAL_SOURCE_HASH_MISMATCH"):
+            self.load()
+        source = self.source / "content" / "zomorod-research-guides" / "guide.md"
+        m["guides"][0]["approved_source_sha256"] = release.digest(source.read_bytes())
+        self.manifest.write_text(json.dumps(m), encoding="utf-8")
+        _, _, rendered = self.load()
+        self.assertEqual(len(rendered), 1)
+        source.write_text(source.read_text(encoding="utf-8") + "\\nPost-approval change.", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "EDITORIAL_APPROVAL_SOURCE_HASH_MISMATCH"):
+            self.load()
+
     def test_editorial_review_blocks_live_apply(self) -> None:
         _, template_hash, _ = self.load()
         args = [str(SCRIPT), "apply", "--source-root", str(self.source),
