@@ -170,7 +170,7 @@ class ConsolidateLegacyAgentsTests(TestCase):
         NewsletterStory.objects.create(
             agent=self.legacy, story_type="world", title="Recently published",
             slug="agent-retirement-recent-publication", summary="Existing newsletter",
-            body="Previously published content", fingerprint="audit-recent-publication",
+            body="Previously published content\n\n#مجتبی_روزگار", fingerprint="audit-recent-publication",
             status="published", published_at=timezone.now(),
         )
         result = self.run_command("--apply")
@@ -184,7 +184,7 @@ class ConsolidateLegacyAgentsTests(TestCase):
         story = NewsletterStory.objects.create(
             agent=self.legacy, story_type="world", title="Older newsletter",
             slug="agent-retirement-distribution", summary="Pending distribution",
-            body="Story ready to distribute", fingerprint="audit-distribution",
+            body="Story ready to distribute\n\n#مجتبی_روزگار", fingerprint="audit-distribution",
             status="published", published_at=timezone.now() - timedelta(days=60),
         )
         NewsletterPublication.objects.create(story=story, channel="site", status="queued")
