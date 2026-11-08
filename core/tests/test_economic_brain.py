@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.autonomous_brain import AutonomousBrain
-from core.models import Agent, AgentTask
+from core.models import Agent, AgentCapability, AgentTask
 
 
 def test_market_research_and_scoring_are_verified_before_offer_design():
@@ -110,6 +110,10 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
 
     def test_held_profit_baseline_does_not_block_safe_dry_run_planning(self):
+        capability = AgentCapability.objects.create(
+            code="master_self_improvement", name="Private review", active=True,
+        )
+        self.agent.capabilities.add(capability)
         held = AgentTask.objects.create(
             agent=self.agent, action_type="income_profit_optimize",
             capability_code="income_profit_optimize", status="queued",
@@ -124,8 +128,6 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(held.attempt_count, 0)
 
     def test_held_profit_baseline_allows_one_new_useful_task(self):
-        from core.models import AgentCapability
-
         held = AgentTask.objects.create(
             agent=self.agent, action_type="income_profit_optimize",
             capability_code="income_profit_optimize", status="queued",
