@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
+from core.economic_tool_pack import actionable_economic_tasks
 from core.models import Agent, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
 
@@ -22,7 +23,9 @@ class Command(BaseCommand):
             self.stderr.write("Missing active economic-master-agent.")
             return
 
-        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
+        queued = actionable_economic_tasks(
+            AgentTask.objects.filter(agent=agent, status="queued")
+        ).order_by("created_at").first()
         if queued:
             self.stdout.write(
                 f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
@@ -59,9 +62,9 @@ class Command(BaseCommand):
             if agent is None:
                 self.stderr.write("Economic master agent was deactivated during planning.")
                 return
-            if AgentTask.objects.filter(
+            if actionable_economic_tasks(AgentTask.objects.filter(
                 agent=agent, status__in=("queued", "running", "blocked")
-            ).exists():
+            )).exists():
                 self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")
                 return
 

@@ -11,6 +11,7 @@ from pathlib import Path
 import tempfile
 
 from django.utils import timezone
+from django.db.models import F
 from .factory_native_review_gateway import inspect_family
 from .factory_f41_gateway import build_verified_order
 
@@ -22,6 +23,19 @@ from .tool_gateway import ToolGateway, ToolSpec
 # Keep legacy queued tasks intact for review, but never auto-dispatch them on
 # each scheduler tick merely to generate another identical baseline.
 DIAGNOSTIC_ONLY_ACTIONS = frozenset({"income_profit_optimize"})
+
+
+def actionable_economic_tasks(queryset):
+    """Quarantine only exact legacy queued diagnostic tasks during planning.
+
+    Keep malformed/mismatched tasks and running or blocked tasks visible so
+    they cannot be silently bypassed as if the master were idle.
+    """
+    return queryset.exclude(
+        status="queued",
+        action_type__in=DIAGNOSTIC_ONLY_ACTIONS,
+        capability_code=F("action_type"),
+    )
 
 
 def _evidence(kind, value):
