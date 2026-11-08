@@ -18,6 +18,23 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
 - No weather/news cron line was observed. A cPanel session expired before cron
   activation; no cron activation was claimed or attempted afterward.
 
+## Pinned VPS-to-cPanel relay audit (cycle 3)
+
+- The existing `.github/workflows/cpanel-direct-command-bridge.yml` and
+  `deploy/cpanel_direct_command.sh` are explicitly **read-only**. Their sole
+  operations are relay preflight, cPanel/Passenger inventory, Django checks and
+  migration listing. They cannot install code, change cron, or activate agents.
+  Preserve this allowlist; do not weaken it to bypass cPanel sign-in.
+- The direct-bridge `django_check` path currently names Python **3.11**, while
+  the interpreter directly verified in the production cPanel terminal for this
+  weather/news work was **3.10**. Discover which virtual environment is active
+  for the exact running Passenger app before choosing a Python or cron path.
+  A successful check in another interpreter is not proof of live parity.
+- PR #2194 includes additional offline checks for seven consecutive dates,
+  duplicate provinces, impossible values, stable FAO/USDA identity, and
+  HTTPS redirects restricted to the source publisher. Code/tests remain
+  source-side until an explicitly scoped, backed-up cPanel install.
+
 ## Controlled release steps after reauthentication
 
 1. Reconfirm the live source, database route, valid account and existing cron.
