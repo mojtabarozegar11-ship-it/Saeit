@@ -76,7 +76,8 @@ class AssetRegistryTests(unittest.TestCase):
     def test_ord_fragment_omits_open_mint_terms(self):
         fragment = ord_etching_fragment(self.program)
         self.assertIn("  premine: 24567856\n", fragment)
-        self.assertIn("  supply: 24567856\n", fragment)
+        self.assertNotIn("  supply:", fragment)
+        self.assertIn("separate name commitment", fragment)
         self.assertNotIn("  terms:", fragment)
         self.assertNotIn("wallet broadcast", fragment)
 
