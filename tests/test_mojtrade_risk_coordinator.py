@@ -411,6 +411,35 @@ class LedgerTests(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(updated_before, updated_after)
 
+    def test_server_clock_rollback_cannot_report_future_telemetry_as_fresh(self):
+        self.seed()
+        self.ledger.observe(self.admission(1, equity="995"))
+        self.now -= 15
+        status = self.ledger.status("123", DAY)
+        self.assertEqual(status["last_risk_update_age_seconds"], -15)
+        self.assertFalse(status["telemetry_fresh"])
+        self.now = TICK - 0.25
+        subsecond_status = self.ledger.status("123", DAY)
+        self.assertEqual(subsecond_status["last_risk_update_age_seconds"], 0)
+        self.assertFalse(subsecond_status["telemetry_fresh"])
+
+    def test_server_clock_rollback_blocks_observations_and_reservations(self):
+        self.seed()
+        self.ledger.observe(self.admission(1, equity="995"))
+        self.now -= 15
+        with self.assertRaisesRegex(risk.Denied, "clock_rollback"):
+            self.ledger.observe(self.admission(2, equity="1000"))
+        with self.assertRaisesRegex(risk.Denied, "clock_rollback"):
+            self.ledger.reserve(self.admission(3, equity="1000"))
+        with self.ledger._readonly_connection() as db:
+            row = db.execute(
+                "SELECT last_equity FROM day_state WHERE account=? AND day=?",
+                ("123", DAY),
+            ).fetchone()
+            self.assertEqual(row[0], "995")
+            count = db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0]
+            self.assertEqual(count, 0)
+
     def test_status_reports_latched_stop_and_expiring_reservations(self):
         self.seed()
         self.ledger.reserve(self.admission(1))
