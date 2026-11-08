@@ -138,10 +138,20 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertEqual(result["regular_recent_error_files"], 1)
             self.assertEqual(result["classes"]["module_missing"], 1)
             self.assertEqual(result["classes"]["python_traceback"], 1)
+            self.assertEqual(result["missing_module_categories"]["other_unclassified"], 1)
             self.assertFalse(result["files_modified"])
             self.assertFalse(result["raw_log_emitted"])
             self.assertNotIn("buyer@", json.dumps(result))
             self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_missing_module_name_is_binned_without_exposing_raw_name(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import classify_missing_module
+        self.assertEqual(classify_missing_module(b"config"), "project_config")
+        self.assertEqual(classify_missing_module(b"core.commerce_funnel"), "optional_commerce_telemetry")
+        self.assertEqual(classify_missing_module(b"django.conf"), "django_dependency")
+        self.assertEqual(classify_missing_module(b"MySQLdb"), "database_driver")
+        self.assertEqual(classify_missing_module(b"buyer_private_secret"), "other_unclassified")
+
 
     def test_wiring_flags_are_redacted(self):
         from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_passenger_wiring
