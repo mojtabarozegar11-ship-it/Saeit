@@ -1,0 +1,28 @@
+name: MPW purchase history buyer-state contract
+
+on:
+  pull_request:
+    branches: [integration/mpw-recovery-main-20261107]
+    paths:
+      - .github/workflows/mpw-purchase-history-state-c19.yml
+      - services/mpw_purchase_history_copy.py
+      - services/mpw_trx_public_pages.py
+      - tests/test_mpw_purchase_history_copy.py
+
+permissions:
+  contents: read
+
+jobs:
+  safe-buyer-history:
+    if: github.event_name == 'pull_request' && github.base_ref == 'integration/mpw-recovery-main-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify source syntax and safe buyer-facing states
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile services/mpw_purchase_history_copy.py services/mpw_trx_public_pages.py tests/test_mpw_purchase_history_copy.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_mpw_purchase_history_copy.py' -v
+          echo MPW_PURCHASE_HISTORY_CONTRACT=PASS
