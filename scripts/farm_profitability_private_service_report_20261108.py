@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""Private farm profitability / break-even service calculation.
+
+No external network, database writes, email, payments, or live farm data.
+Input is a private customer-authorized JSON; stdout contains financial summary
+only. Figures are derived strictly from supplied data, not typical market values.
+Not a tax/audit opinion or a substitute for full economic-cost accounting.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
+
+MAX_BYTES = 200_000
+MONEY = Decimal("0.01")
+ZERO = Decimal("0")
+ALLOWED_CURRENCIES = {"IRR", "TOMAN", "USD", "EUR", "AED", "CAD"}
+
+
+class InputError(Exception):
+    pass
+
+
+def amount(value, name, positive=False):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
+        raise InputError(f"{name}: invalid decimal")
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation as err:
+        raise InputError(f"{name}: invalid decimal") from err
+    if not number.is_finite() or number < ZERO or (positive and number <= ZERO):
+        raise InputError(f"{name}: must be {'positive' if positive else 'nonnegative'}")
+    return number
+
+
+def costs(obj, name):
+    if not isinstance(obj, dict):
+        raise InputError(f"{name}: expected object")
+    if len(obj) > 40:
+        raise InputError(f"{name}: too many categories")
+    result = {}
+    for label, raw in obj.items():
+        if not isinstance(label, str) or not (1 <= len(label) <= 64):
+            raise InputError(f"{name}: invalid category")
+        result[label] = amount(raw, f"{name}.{label}")
+    return result
+
+
+def rounded(value):
+    return str(value.quantize(MONEY, rounding=ROUND_HALF_UP))
+
+
+def calculate(data):
+    if not isinstance(data, dict):
+        raise InputError("expected JSON object")
+    currency = data.get("currency")
+    if currency not in ALLOWED_CURRENCIES:
+        raise InputError("currency not supported")
+    area = amount(data.get("area_hectares"), "area_hectares", positive=True)
+    harvested = amount(data.get("harvested_kg"), "harvested_kg")
+    sold = amount(data.get("sold_kg"), "sold_kg", positive=True)
+    if sold > harvested:
+        raise InputError("sold_kg exceeds harvested_kg")
+    price = amount(data.get("price_per_kg"), "price_per_kg", positive=True)
+    fixed = costs(data.get("fixed_costs"), "fixed_costs")
+    input_costs = costs(data.get("production_variable_costs"), "production_variable_costs")
+    unit_costs = costs(data.get("per_sold_kg_costs"), "per_sold_kg_costs")
+    full_costs = data.get("all_material_costs_documented")
+    if not isinstance(full_costs, bool):
+        raise InputError("all_material_costs_documented must be true or false")
+
+    fixed_total = sum(fixed.values(), ZERO)
+    production_total = sum(input_costs.values(), ZERO)
+    per_sold_kg_total = sum(unit_costs.values(), ZERO)
+    revenue = sold * price
+    variable_cost = production_total + sold * per_sold_kg_total
+    operating_contribution = revenue - fixed_total - variable_cost
+    contribution_per_kg = price - per_sold_kg_total
+    break_even_kg = None if contribution_per_kg <= ZERO else (
+        fixed_total + production_total
+    ) / contribution_per_kg
+    return {
+        "classification": "PRIVATE_CUSTOMER_SUPPLIED_FARM_ECONOMICS",
+        "currency": currency,
+        "cost_scope": "selected_documented_costs",
+        "all_material_costs_documented_by_client": full_costs,
+        "results_are_independent_audit": False,
+        "economic_net_profit_computed": False,
+        "area_hectares": rounded(area),
+        "harvested_kg": rounded(harvested),
+        "sold_kg": rounded(sold),
+        "revenue": rounded(revenue),
+        "fixed_cost_total": rounded(fixed_total),
+        "production_variable_cost_total": rounded(production_total),
+        "selling_variable_cost_total": rounded(sold * per_sold_kg_total),
+        "selected_cost_total": rounded(fixed_total + variable_cost),
+        "operating_contribution": rounded(operating_contribution),
+        "contribution_per_sold_kg": rounded(contribution_per_kg),
+        "break_even_sold_kg": (
+            None if break_even_kg is None else rounded(break_even_kg)
+        ),
+        "break_even_possible_at_supplied_price": break_even_kg is not None,
+        "margin_of_safety_percent": (
+            None if break_even_kg is None else
+            rounded((sold - break_even_kg) / sold * Decimal("100"))
+        ),
+        "method": (
+            "break_even_kg=(fixed_costs+production_variable_costs)"
+            "/(sale_price_per_kg-per_sold_kg_costs)"
+        ),
+        "decision_gate": (
+            "CLIENT_QC_AND_PAYMENT_EVIDENCE_REQUIRED"
+            if full_costs else "COST_DATA_INCOMPLETE_NO_COMMERCIAL_ACCEPTANCE"
+        ),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("private_json", type=Path)
+    args = parser.parse_args()
+    path = args.private_json
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_BYTES:
+            raise InputError("private input is missing, unsafe, or exceeds size limit")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        result = calculate(data)
+    except (InputError, OSError, UnicodeError, json.JSONDecodeError) as err:
+        parser.exit(2, f"FARM_PRIVATE_REPORT_BLOCKED: {type(err).__name__}\n")
+    print("FARM_PRIVATE_REPORT=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
