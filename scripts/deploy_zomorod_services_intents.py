@@ -26,7 +26,9 @@ LINKS = (
     ("درخواست تحلیل اقتصادی تخصصی مزرعه", "economics"),
 )
 ANCHOR = re.compile(rb"<a\b[^>]*>[^<]*</a>", re.DOTALL)
-HREF = re.compile(rb'\bhref="([^"]+)"')
+# Only a real, whitespace-delimited HTML href counts. A word boundary also
+# matches data-href / xlink:href and could silently validate a wrong target.
+HREF = re.compile(rb'(?<=\s)href="([^"]+)"')
 
 
 def sha256(data: bytes) -> str:
@@ -45,17 +47,20 @@ def find_links(source: bytes) -> dict[str, tuple[bytes, bytes]]:
     if not 0 < len(source) <= MAX_HTML_BYTES:
         raise ValueError("Missing or oversized HTML")
     found: dict[str, tuple[bytes, bytes]] = {}
+    labels = {label.encode("utf-8"): label for label, _topic in LINKS}
     for match in ANCHOR.finditer(source):
         raw = match.group(0)
-        href = HREF.search(raw)
-        if href is None:
-            continue
         visible = raw[raw.find(b">") + 1: -len(b"</a>")].strip()
-        for label, _topic in LINKS:
-            if visible == label.encode("utf-8"):
-                if label in found:
-                    raise ValueError("Duplicate specialist link: " + label)
-                found[label] = (raw, href.group(1))
+        label = labels.get(visible)
+        if label is None:
+            continue
+        if label in found:
+            raise ValueError("Duplicate specialist link: " + label)
+        attributes = raw[:raw.index(b">")]
+        hrefs = HREF.findall(attributes)
+        if len(hrefs) != 1:
+            raise ValueError("Specialist link requires exactly one real href: " + label)
+        found[label] = (raw, hrefs[0])
     if len(found) != len(LINKS):
         raise ValueError("Missing or altered specialist links")
     return found
