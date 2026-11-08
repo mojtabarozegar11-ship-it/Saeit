@@ -68,7 +68,7 @@ def _run_master_loop_with_result(progress_class, *, max_steps=20):
     module = ast.Module(body=commands, type_ignores=[])
     runs = []
     messages = []
-    task = SimpleNamespace(pk=42, action_type="income_profit_optimize")
+    task = SimpleNamespace(pk=42, action_type="income_market_research")
     task.output_data = {"verified_effect": True, "progress_class": progress_class}
     task.refresh_from_db = lambda: None
     class _Runner:
@@ -81,9 +81,10 @@ def _run_master_loop_with_result(progress_class, *, max_steps=20):
 
     namespace = {
         "BaseCommand": object,
+        "DIAGNOSTIC_ONLY_ACTIONS": frozenset({"income_profit_optimize"}),
         "AutonomousBrain": lambda: object(),
         "build_economic_gateway": lambda: SimpleNamespace(
-            describe=lambda: {"income_profit_optimize": {"enabled": True}}),
+            describe=lambda: {"income_market_research": {"enabled": True}}),
         "WorkerRunner": _Runner,
         "call_command": lambda *args: (_ for _ in ()).throw(
             AssertionError("An existing task must not trigger planning")),
@@ -106,7 +107,7 @@ def _run_worker_drain_with_result(progress_class):
     module = ast.Module(body=commands, type_ignores=[])
     runs = []
     messages = []
-    task = SimpleNamespace(pk=42, action_type="income_profit_optimize")
+    task = SimpleNamespace(pk=42, action_type="income_market_research")
     completed = SimpleNamespace(pk=42, status="completed", output_data={
         "verified_effect": True, "progress_class": progress_class,
     })
@@ -132,11 +133,12 @@ def _run_worker_drain_with_result(progress_class):
     namespace = {
         "BaseCommand": object,
         "CommandError": ValueError,
+        "DIAGNOSTIC_ONLY_ACTIONS": frozenset({"income_profit_optimize"}),
         "F": lambda name: name,
         "AgentTask": SimpleNamespace(objects=SimpleNamespace(
             filter=lambda **kwargs: _Queue())),
         "build_economic_gateway": lambda: SimpleNamespace(
-            describe=lambda: {"income_profit_optimize": {"enabled": True}}),
+            describe=lambda: {"income_market_research": {"enabled": True}}),
         "WorkerRunner": _Runner,
     }
     exec(compile(module, str(ECONOMIC_WORKER), "exec"), namespace)

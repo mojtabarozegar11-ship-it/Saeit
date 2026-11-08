@@ -3,7 +3,7 @@ from django.core.management import call_command
 from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
-from core.economic_tool_pack import build_economic_gateway
+from core.economic_tool_pack import DIAGNOSTIC_ONLY_ACTIONS, build_economic_gateway
 from core.worker_runner import WorkerRunner
 
 class Command(BaseCommand):
@@ -19,6 +19,7 @@ class Command(BaseCommand):
             code for code, spec in gateway.describe().items()
             if spec.get("enabled", False)
             and (code.startswith("income_") or code == "master_self_improvement")
+            and code not in DIAGNOSTIC_ONLY_ACTIONS
         )
         if not supported:
             self.stdout.write("AUTO_BLOCKED_NO_REGISTERED_TOOLS")
@@ -34,6 +35,17 @@ class Command(BaseCommand):
                 call_command("online_income_cycle")
                 active=self._next_eligible_task(supported)
             if not active:
+                held = AgentTask.objects.filter(
+                    agent__code="economic-master-agent", agent__active=True,
+                    status="queued", action_type__in=DIAGNOSTIC_ONLY_ACTIONS,
+                    capability_code=F("action_type"),
+                ).order_by("created_at", "pk").first()
+                if held:
+                    self.stdout.write(
+                        f"AUTO_DIAGNOSTIC_BACKLOG_HELD task={held.pk} "
+                        "requires_external_evidence=true; no retry or task mutation"
+                    )
+                    return
                 unsupported = AgentTask.objects.filter(
                     agent__code="economic-master-agent", agent__active=True, status="queued",
                 ).exclude(

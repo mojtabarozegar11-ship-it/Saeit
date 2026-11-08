@@ -186,6 +186,21 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(task.attempt_count, 0)
         self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
 
+    def test_master_loop_holds_legacy_profit_backlog_without_execution_or_retry(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="queued",
+        )
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            for _ in range(2):
+                output = StringIO()
+                call_command("autonomous_master_loop", "--max-steps", "20", stdout=output)
+                self.assertIn(f"AUTO_DIAGNOSTIC_BACKLOG_HELD task={task.pk}", output.getvalue())
+            worker.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertEqual(task.attempt_count, 0)
+
     def test_master_loop_skips_mismatched_action_snapshot(self):
         task = AgentTask.objects.create(
             agent=self.agent, action_type="income_profit_optimize",

@@ -18,6 +18,11 @@ from .models import AgentTask, Product
 from .production_gate import ProductionGate
 from .tool_gateway import ToolGateway, ToolSpec
 
+# Catalog-only profit inspections cannot establish sales, margin or settlement.
+# Keep legacy queued tasks intact for review, but never auto-dispatch them on
+# each scheduler tick merely to generate another identical baseline.
+DIAGNOSTIC_ONLY_ACTIONS = frozenset({"income_profit_optimize"})
+
 
 def _evidence(kind, value):
     return {"kind": kind, "value": str(value), "verified_at": timezone.now().isoformat()}
