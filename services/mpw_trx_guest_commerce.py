@@ -197,10 +197,11 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
-        from django.conf import settings
-        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
-            from services.mpw_trx_email_recovery import bound_checkout
-            return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+        # Purchase email is a mandatory order-ownership claim regardless of
+        # whether outbound recovery mail is approved. Never create an
+        # anonymous, non-recoverable payable invoice while mail is disabled.
+        from services.mpw_trx_email_recovery import bound_checkout
+        return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)

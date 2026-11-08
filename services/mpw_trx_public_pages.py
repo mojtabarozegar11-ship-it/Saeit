@@ -50,7 +50,7 @@ def public_shop(request):
             if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: continue
         except (OSError,ValueError): continue
         cards.append(f'<article><h2>{escape(p.title)}</h2><p>${escape(str(p.price))} USD · Pay the quoted equivalent in TRX</p><a class="button" href="/commerce/book/{p.pk}/">Buy with TRX</a></article>')
-    return _page('Buy digital products with TRX','<p>Choose a product, sign in, and create your payment invoice. No sender address registration or wallet connection is needed. Pay the exact TRX amount on the TRON network; your download unlocks after confirmation.</p>'+''.join(cards))
+    return _page('Buy digital products with TRX','<p>Choose a product and enter your purchase email to request an invoice. No account signup, wallet connection or wallet signature is needed. Pay the exact TRX amount on TRON mainnet; your private download becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
 
 
 @login_required
