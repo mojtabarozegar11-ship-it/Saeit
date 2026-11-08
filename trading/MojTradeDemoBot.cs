@@ -162,7 +162,7 @@ namespace cAlgo.Robots
             else
             {
                 Timer.Start(60);
-                ObserveCoordinatedRisk(DailyNetProfit());
+                ObserveCoordinatedRisk(TodayAccountRealizedProfit());
             }
 
             Print("MojTrade QuantumScalp v2 started on DEMO: {0} {1}", SymbolName, TimeFrame);
@@ -180,7 +180,7 @@ namespace cAlgo.Robots
             }
             if (!EnableCoordinatedDemoTrading || !CoordinatorConfigured())
                 return;
-            ObserveCoordinatedRisk(DailyNetProfit());
+            ObserveCoordinatedRisk(TodayAccountRealizedProfit());
             if (_halted || RiskStopActive())
             {
                 Print("BLOCKED: daily equity or closed-loss risk stop active.");
@@ -272,7 +272,7 @@ namespace cAlgo.Robots
                 Stop();
                 return;
             }
-            ObserveCoordinatedRisk(DailyNetProfit());
+            ObserveCoordinatedRisk(TodayAccountRealizedProfit());
         }
 
         private void TryOpen(TradeType tradeType, string strategy)
@@ -314,7 +314,7 @@ namespace cAlgo.Robots
                 return;
             }
 
-            var reservationId = ReserveCoordinatedSlot(DailyNetProfit());
+            var reservationId = ReserveCoordinatedSlot(TodayAccountRealizedProfit());
             if (reservationId == null)
                 return;
 
@@ -376,7 +376,7 @@ namespace cAlgo.Robots
                 !IsFinitePositive(MaxDailyLossPercent) || MaxDailyLossPercent > 10)
                 return true;
 
-            var closedToday = DailyNetProfit();
+            var closedToday = TodayAccountRealizedProfit();
             if (!IsFinite(closedToday))
                 return true;
 
@@ -587,21 +587,20 @@ namespace cAlgo.Robots
             return count;
         }
 
-        private double DailyNetProfit()
+        private double TodayAccountRealizedProfit()
         {
+            // The coordinator's daily loss limit is ACCOUNT-wide. A symbol- or
+            // label-filtered result misses losses from manual and other trades.
             var total = 0.0;
-            foreach (var label in StrategyLabels())
+            foreach (var trade in History)
             {
-                var trades = History.FindAll(label, SymbolName);
-                foreach (var trade in trades)
-                    if (trade.ClosingTime.Date == Server.TimeInUtc.Date)
-                    {
-                        if (!IsFinite(trade.NetProfit))
-                            return double.NaN;
-                        total += trade.NetProfit;
-                    }
+                if (trade.ClosingTime.Date != Server.TimeInUtc.Date)
+                    continue;
+                if (!IsFinite(trade.NetProfit))
+                    return double.NaN;
+                total += trade.NetProfit;
             }
-            return total;
+            return IsFinite(total) ? total : double.NaN;
         }
 
         private int RecentConsecutiveLosses()

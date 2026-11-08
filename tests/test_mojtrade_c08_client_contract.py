@@ -86,6 +86,22 @@ class C08ClientContractTests(unittest.TestCase):
                             before_bar.index("SharedMojTradePositionCount()"))
             self.assertIn("&open_positions=", bot)
 
+    def test_both_observe_account_wide_realized_profit(self):
+        # Losses from manual trades or other symbols must count toward the
+        # daily loss gate. Static tests cannot replace broker reconciliation.
+        for bot in (SCALP, OMEGA):
+            method = bot.split("private double TodayAccountRealizedProfit()", 1)[1]
+            method = method.split("\n        private ", 1)[0]
+            self.assertIn("foreach (var trade in History)", method)
+            self.assertIn("trade.ClosingTime.Date != Server.TimeInUtc.Date", method)
+            self.assertIn("total += trade.NetProfit;", method)
+            self.assertIn("return IsFinite(total) ? total : double.NaN;", method)
+            self.assertNotIn("History.FindAll(", method)
+            self.assertNotIn("trade.Label", method)
+            self.assertNotIn("trade.SymbolName", method)
+            self.assertIn("ReserveCoordinatedSlot(TodayAccountRealizedProfit())", bot)
+            self.assertIn("ObserveCoordinatedRisk(TodayAccountRealizedProfit())", bot)
+
 
 if __name__ == "__main__":
     unittest.main()
