@@ -7,10 +7,7 @@
 <link rel="stylesheet" href="/assets/zm-nova-detail-v1.css">
 <link rel="preload" href="/static/site/heroes/services.webp" as="image" fetchpriority="high">
 <link rel="stylesheet" href="/static/site/zomorod-v7/inner-v7.css?v=20261018" data-zm-v7="theme"><!-- zm-v10-restored-content-and-unified-internal-pages-20261018 --><link rel="stylesheet" href="/static/site/zomorod-v10/inner-v10.css?v=20261018" data-zm-v10="shared-theme"></head><body class="zm-unified-v7"><!-- zm-unified-v7-20261018 --><a href="#main" class="zm-v7-skip">رفتن به محتوای اصلی</a><header class="zm-v7-header" role="banner"><div class="zm-v7-top"><a class="zm-v7-identity" href="/"><span class="zm-v7-logo-frame"><img class="zm-v7-logo" src="/static/site/company/company-logo-transparent.png" alt="نشان شرکت کشت و صنعت زمرد ملل" width="60" height="60" loading="eager"></span><span class="zm-v7-brand"><strong>شرکت کشت و صنعت زمرد ملل</strong><small>پژوهش‌های علمی، ژنتیک و فناوری کشاورزی</small></span></a><nav class="zm-v7-chain" aria-label="ناوبری اصلی زمرد ملل"><a href="/" style="--v7delay:0ms"><span aria-hidden="true">⌂</span>خانه</a><a href="/company/" style="--v7delay:140ms"><span aria-hidden="true">◈</span>شرکت</a><a href="/about/" style="--v7delay:280ms"><span aria-hidden="true">✦</span>درباره ما</a><a href="/services/" style="--v7delay:420ms"><span aria-hidden="true">✧</span>خدمات</a><a href="/agriculture/" style="--v7delay:560ms"><span aria-hidden="true">♧</span>کشاورزی</a><a href="/agriculture/genetics/" style="--v7delay:700ms"><span aria-hidden="true">❀</span>ژنتیک</a><a href="/industry/" style="--v7delay:840ms"><span aria-hidden="true">⚙</span>صنعت</a><a href="/research/" style="--v7delay:980ms"><span aria-hidden="true">⌬</span>پژوهش</a><a href="/knowledge/" style="--v7delay:1120ms"><span aria-hidden="true">◆</span>دانشنامه</a><a href="/business/" style="--v7delay:1260ms"><span aria-hidden="true">▣</span>حسابداری و مدیریت</a></nav></div></header><a class="zm-skip" href="#main">رفتن به محتوای اصلی</a>
-<header class="zm-site-header"><div class="zm-container zm-nav">
-<a href="/" class="zm-mark"><img src="/static/site/company/company-logo-transparent.png" width="54" height="54" alt="نشان رسمی زمرد ملل">زمرد ملل</a>
-<nav class="zm-menu" aria-label="منوی شرکت"><a href="/">خانه</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/research/">پژوهش</a>
-<details><summary>تمام حوزه‌ها ☰</summary><div><a href="/">خانه</a><a href="/company/">شرکت</a><a href="/about/">درباره ما</a><a href="/services/">خدمات</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agriculture/genetics/">ژنتیک</a><a href="/economy/">اقتصاد</a><a href="/market/">بازار</a><a href="/contact/">ارتباط</a></div></details></nav></div></header>
+
 <main id="main">
 <aside id="zm-services-action-hub-20261106" role="region" aria-label="امکانات واقعی خدمات زمرد ملل" style="box-sizing:border-box;max-width:1150px;margin:20px auto;padding:20px;background:#173d2f;color:#fff0ce;border:2px solid #c0a979;border-radius:17px;font-family:inherit;line-height:1.9">
  <h2 style="color:#f6d89a;margin:0 0 6px;font-size:clamp(21px,2.5vw,28px)">از معرفی خدمات تا اقدام مشخص</h2>
@@ -111,6 +108,7 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
   .zm-margin-panel input{width:100%;min-height:44px;box-sizing:border-box;border-radius:9px;border:1px solid #729382;padding:10px;font:inherit;color:#173528;background:#fff;direction:ltr;text-align:right}
   .zm-margin-panel input:focus-visible,.zm-margin-panel button:focus-visible,.zm-margin-panel a:focus-visible{outline:3px solid #a76b00;outline-offset:2px}
   .zm-margin-panel button,.zm-margin-panel .zm-margin-cta{display:inline-block;background:#185740;color:#fff;padding:11px 20px;margin:16px 0 4px;border:0;border-radius:9px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}
+  .zm-margin-panel button:disabled{cursor:not-allowed;opacity:.6}
   .zm-margin-panel .zm-margin-cta{background:#a76b00}
   .zm-margin-output{white-space:pre-line;background:#e9f4e6;border-inline-start:5px solid #29704b;border-radius:8px;margin:14px 0;padding:16px;font-weight:600}
   .zm-margin-error{color:#912323;font-weight:700;min-height:1em}
@@ -127,10 +125,12 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
    <div><label for="zm-margin-fixed">هزینهٔ ثابت برآوردی (تومان در هکتار)</label><input id="zm-margin-fixed" name="fixed" inputmode="decimal" autocomplete="off" maxlength="20" placeholder="اجاره و استهلاک؛ اگر ندارد صفر" required></div>
   </div>
   <button id="zm-margin-run" type="button">محاسبهٔ نتیجهٔ اقتصادی</button>
+  <button id="zm-margin-download" type="button" disabled>دریافت گزارش CSV برای اکسل</button>
  </div>
  <noscript><p class="zm-margin-note">برای محاسبهٔ خودکار، جاوااسکریپت مرورگر را فعال کنید. ثبت درخواست تخصصی بدون این ابزار هم امکان‌پذیر است.</p></noscript>
  <p id="zm-margin-error" class="zm-margin-error" role="alert"></p>
  <output id="zm-margin-output" class="zm-margin-output" aria-live="polite" hidden></output>
+ <p class="zm-margin-note">پس از محاسبه می‌توانید گزارش شامل ورودی‌ها، نتایج، قیمت و عملکرد سربه‌سر، سناریوهای ریسک و محدودیت‌ها را به‌صورت CSV دریافت و در اکسل باز کنید. با تغییر هر ورودی، نتیجه و گزارش قبلی پاک می‌شوند تا دادهٔ قدیمی اشتباه تحویل نشود. داده‌ها در مرورگر شما پردازش می‌شوند و به سرور ارسال نمی‌شوند.</p>
  <p class="zm-margin-note">روش محاسبه: درآمد = سطح × عملکرد × قیمت؛ حاشیهٔ ناخالص = درآمد − هزینهٔ متغیر؛ ماندهٔ برآوردی = درآمد − هزینهٔ متغیر − هزینهٔ ثابت. هزینهٔ سرمایه، مالیات، تأمین مالی، ریسک عملکرد و تغییرات بازار لحاظ نشده‌اند. این اعداد تضمین سود یا پیشنهاد سرمایه‌گذاری نیستند.</p>
  <p><a class="zm-margin-cta" href="/ask-master/index.php?service=1">درخواست تحلیل اقتصادی تخصصی مزرعه</a></p>
 </section>
@@ -141,6 +141,8 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
   if(!root){return;}
   var result=document.getElementById('zm-margin-output');
   var error=document.getElementById('zm-margin-error');
+  var download=document.getElementById('zm-margin-download');
+  var lastCalculation=null;
   var digits='۰۱۲۳۴۵۶۷۸۹',arabic='٠١٢٣٤٥٦٧٨٩';
   function numberFromUser(value){
     var s=String(value).trim().replace(/[۰-۹]/g,function(d){return String(digits.indexOf(d));})
@@ -158,19 +160,64 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
     return {revenue:revenue,variableTotal:variableTotal,fixedTotal:fixedTotal,
       gross:revenue-variableTotal,remaining:revenue-variableTotal-fixedTotal,
       breakEven:(variable+fixed)/price,
+      breakEvenPrice:yieldKg>0?(variable+fixed)/yieldKg:null,
       priceDrop:revenue*0.9-variableTotal-fixedTotal,
       costRise:revenue-variableTotal*1.1-fixedTotal};
   }
+  function csvReport(record){
+    var x=record.inputs,o=record.outcome;
+    var rows=[
+      ['گزارش اقتصادی اولیه مزرعه زمرد ملل','',''],
+      ['زمان محاسبه',record.createdAt,''],
+      ['شاخص','مقدار','واحد'],
+      ['سطح زیر کشت',x.area,'هکتار'],
+      ['عملکرد',x.yieldKg,'کیلوگرم در هکتار'],
+      ['قیمت فروش',x.price,'تومان در کیلوگرم'],
+      ['هزینه متغیر',x.variable,'تومان در هکتار'],
+      ['هزینه ثابت',x.fixed,'تومان در هکتار'],
+      ['درآمد فروش',o.revenue,'تومان'],
+      ['هزینه متغیر کل',o.variableTotal,'تومان'],
+      ['حاشیه ناخالص',o.gross,'تومان'],
+      ['هزینه ثابت کل',o.fixedTotal,'تومان'],
+      ['مانده برآوردی',o.remaining,'تومان'],
+      ['عملکرد سربه سر',o.breakEven,'کیلوگرم در هکتار'],
+      ['قیمت سربه سر',o.breakEvenPrice===null?'غیرقابل محاسبه؛ عملکرد صفر':o.breakEvenPrice,'تومان در کیلوگرم'],
+      ['مانده با کاهش ۱۰ درصد قیمت',o.priceDrop,'تومان'],
+      ['مانده با افزایش ۱۰ درصد هزینه متغیر',o.costRise,'تومان'],
+      ['محدودیت','مالیات، سرمایه، تامین مالی، استهلاک تفصیلی، تورم و ریسک بازار لحاظ نشده است',''],
+      ['توجه','گزارش آموزشی است و تضمین سود یا پذیرش پروژه نیست','']
+    ];
+    return '\uFEFF'+rows.map(function(row){
+      return row.map(function(cell){return '"'+String(cell).replace(/"/g,'""')+'"';}).join(',');
+    }).join('\r\n')+'\r\n';
+  }
+  download.addEventListener('click',function(){
+    if(!lastCalculation){return;}
+    var blob=new Blob([csvReport(lastCalculation)],{type:'text/csv;charset=utf-8'});
+    var url=URL.createObjectURL(blob);
+    var anchor=document.createElement('a');
+    anchor.href=url;anchor.download='zomorod-farm-margin-report.csv';
+    document.body.appendChild(anchor);anchor.click();anchor.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  });
+  function resetPriorResult(){
+    lastCalculation=null;download.disabled=true;result.hidden=true;
+    result.textContent='';error.textContent='';
+  }
+  Array.prototype.forEach.call(root.querySelectorAll('input'),function(input){
+    input.addEventListener('input',resetPriorResult);
+    input.addEventListener('change',resetPriorResult);
+  });
   document.getElementById('zm-margin-run').addEventListener('click',function(){
-    result.hidden=true;error.textContent='';
+    resetPriorResult();
     var field=function(name){return numberFromUser(root.querySelector('[name="'+name+'"]').value);};
     var a=field('area'),y=field('yield'),p=field('price'),v=field('variable'),f=field('fixed');
     if(![a,y,p,v,f].every(Number.isFinite)||a<=0||a>10000000||y<0||y>100000000||p<=0||p>1000000000000||v<0||f<0||v>1000000000000000||f>1000000000000000){
       error.textContent='لطفاً پنج مقدار معتبر و غیرمنفی وارد کنید؛ سطح و قیمت باید بزرگ‌تر از صفر باشند.';return;
     }
     var outcome=calculate(a,y,p,v,f);
-    if(!Object.keys(outcome).every(function(k){return Number.isFinite(outcome[k]);})){
-      error.textContent='اندازهٔ اعداد برای محاسبه بیش‌ازحد بزرگ است.';return;
+    if(!Object.keys(outcome).every(function(k){return outcome[k]===null||(Number.isFinite(outcome[k])&&Math.abs(outcome[k])<=Number.MAX_SAFE_INTEGER);})){
+      error.textContent='مقادیر به اندازه‌ای بزرگ‌اند که محاسبهٔ مالی قابل اتکا نیست؛ مقدارها را در مقیاس کوچک‌تری وارد کنید.';return;
     }
     result.textContent='درآمد فروش: '+fm(outcome.revenue)+' تومان\n'+
       'هزینهٔ متغیر کل: '+fm(outcome.variableTotal)+' تومان\n'+
@@ -178,11 +225,17 @@ Bill Branson / U.S. National Cancer Institute (Public Domain).</figcaption></fig
       'هزینهٔ ثابت کل: '+fm(outcome.fixedTotal)+' تومان\n'+
       'ماندهٔ برآوردی پیش از مالیات و تأمین مالی: '+fm(outcome.remaining)+' تومان\n'+
       'عملکرد سربه‌سر برآوردی: '+fd(outcome.breakEven)+' کیلوگرم در هکتار\n'+
+      'قیمت سربه‌سر برآوردی: '+(outcome.breakEvenPrice===null?'نامشخص (عملکرد صفر)':fd(outcome.breakEvenPrice)+' تومان در کیلوگرم')+'\n'+
       'مانده در صورت کاهش ۱۰٪ قیمت فروش: '+fm(outcome.priceDrop)+' تومان\n'+
       'مانده در صورت افزایش ۱۰٪ هزینهٔ متغیر: '+fm(outcome.costRise)+' تومان';
+    lastCalculation={
+      inputs:{area:a,yieldKg:y,price:p,variable:v,fixed:f},
+      outcome:outcome,createdAt:new Date().toISOString()
+    };
+    download.disabled=false;
     result.hidden=false;
   });
 })();
 </script>
-</main><footer class="zm-footer"><div class="zm-container"><div class="zm-footer-main"><div><strong>زمرد ملل</strong><p>پژوهش، تولید، اقتصاد و فناوری برای تصمیم مسئولانه.</p><a href="/" style="color:#ead19c">بازگشت به خانه ←</a></div><div class="zm-footer-links"><a href="/">خانه</a><a href="/company/">شرکت</a><a href="/about/">درباره ما</a><a href="/services/">خدمات</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agriculture/genetics/">ژنتیک</a><a href="/economy/">اقتصاد</a><a href="/market/">بازار</a><a href="/contact/">ارتباط</a></div></div><div class="zm-footer-bottom">© زمرد ملل · تمام مطالب آموزشی نیازمند ارزیابی شرایط محل و مقررات مرتبط‌اند.</div></div></footer>
+</main>
 <footer class="zm-v7-footer" role="contentinfo"><div class="zm-v7-footer-grid"><div><div class="zm-v7-footer-brand"><img src="/static/site/company/company-logo-transparent.png" width="52" height="52" loading="lazy" alt="لوگوی زمرد ملل"><h2>زمرد ملل</h2></div><p>از پژوهش و مدیریت علمی تا کشاورزی، صنعت، ژنتیک، اقتصاد تولید و آموزش کاربردی.</p></div><div><h3>دسترسی سریع</h3><div class="zm-v7-footer-links"><a href="/">خانه</a><a href="/company/">شرکت</a><a href="/about/">درباره ما</a><a href="/services/">خدمات</a><a href="/agriculture/">کشاورزی</a><a href="/agriculture/genetics/">ژنتیک</a><a href="/industry/">صنعت</a><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/business/">حسابداری و مدیریت</a></div></div><div><h3>ارتباط و خدمات شرکت</h3><p>برای معرفی توانمندی‌ها، برنامه‌های پژوهشی و همکاری از بخش شرکت و خدمات استفاده کنید. اطلاعات مالی شرکت فقط برای کاربران مجاز قابل دسترسی است.</p><div class="zm-v7-footer-links"><a href="/company/">معرفی شرکت</a><a href="/services/">خدمات</a></div></div></div><p class="zm-v7-footer-copyright">تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</p></footer></body></html>
