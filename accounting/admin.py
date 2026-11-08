@@ -50,6 +50,23 @@ class JournalEntryAdmin(admin.ModelAdmin):
     search_fields = ("reference", "memo")
     inlines = (JournalLineInline,)
 
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and not (
+            obj and obj.status == JournalEntry.Status.POSTED
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and not (
+            obj and obj.status == JournalEntry.Status.POSTED
+        )
+
+    def save_model(self, request, obj, form, change):
+        if change and JournalEntry.objects.filter(
+            pk=obj.pk, status=JournalEntry.Status.POSTED
+        ).exists():
+            raise ValidationError("سند قطعی فقط از طریق فرآیند اصلاح سند و ثبت برگشت اصلاح می‌شود.")
+        super().save_model(request, obj, form, change)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         if form.instance.status == JournalEntry.Status.POSTED:
