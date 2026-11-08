@@ -9,6 +9,7 @@ on:
       - "tests/test_moj_asset_registry.py"
       - "tests/test_moj_token_allocation_proposals.py"
       - "tests/test_moj_allocation_weight_guards.py"
+      - "scripts/verify_moj_evm_compile.cjs"
       - ".github/workflows/moj-assets-offline-gate.yml"
 
 permissions:
@@ -50,3 +51,24 @@ jobs:
           assert all(asset["issuance_state"] == "not_issued" for asset in program["assets"])
           print("51 offline candidates; none issued; no network calls.")
           PY
+
+  evm-candidate-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout candidate only
+        uses: actions/checkout@v4
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Generate immutable offline candidate input
+        run: python scripts/moj_asset_registry.py --out "$RUNNER_TEMP/moj-assets-compile-bundle" --no-f41
+      - name: Install pinned public compiler dependencies, without running install scripts
+        run: npm install --prefix "$RUNNER_TEMP/moj-solc-deps" --no-save --ignore-scripts --no-audit --no-fund solc@0.8.20 @openzeppelin/contracts@5.0.2
+      - name: Compile every Moj1–Moj50 contract, no RPC or deployment
+        run: NODE_PATH="$RUNNER_TEMP/moj-solc-deps/node_modules" node scripts/verify_moj_evm_compile.cjs "$RUNNER_TEMP/moj-assets-compile-bundle"
