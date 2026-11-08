@@ -88,11 +88,9 @@ def purchases(request):
     cards=[]
     for pi in PaymentIntent.objects.select_related('order').filter(provider=PROVIDER,order__customer_id=request.user.pk).order_by('-pk')[:100]:
         state=commercial_buyer_status(pi.pk,request.user.pk)
-        if state.get('can_download'):
-            detail=f'<a class="button" href="/commerce/trx-easy/download/{pi.pk}/">Download purchase</a>'
-        elif pi.status=='awaiting_chain' and _decode(pi).expires_at>timezone.now():
-            detail=f'<a href="/commerce/trx-easy/invoice/{pi.pk}/">View payment invoice</a>'
-        else:
-            detail='Awaiting payment verification or invoice expired. If you have paid, do not pay again; contact support with this order number.'
+        from services.mpw_purchase_history_copy import buyer_invoice_action
+        detail = buyer_invoice_action(
+            pi.pk, pi.status, state, _decode(pi).expires_at, timezone.now()
+        )
         cards.append(f'<article><h2>Order #{pi.order_id}</h2><p>${escape(str(pi.amount))} USD</p><p>{detail}</p></article>')
     return _page('My TRX purchases',''.join(cards) or '<p>No TRX purchases yet. <a href="/commerce/trx-easy/">Browse products</a>.</p>')
