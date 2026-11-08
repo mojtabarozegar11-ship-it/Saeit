@@ -1,9 +1,8 @@
-import json
 from django.http import Http404
 from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
-from .editorial_signature import has_final_signature
+from .editorial_signature import has_final_signature, safe_news_jsonld
 from .editorial_policy import blocked_news_reason, blocked_story_reason, visible_news_stories
 
 
@@ -58,7 +57,7 @@ def newsletter_detail(request, slug):
         .exclude(pk=story.pk).filter(story_type=story.story_type), limit=6
     )
     publications = story.publications.order_by("channel")
-    article_jsonld = json.dumps({
+    article_jsonld = safe_news_jsonld({
         "@context": "https://schema.org",
         "@type": "NewsArticle",
         "headline": story.title,
@@ -69,7 +68,7 @@ def newsletter_detail(request, slug):
         "publisher": {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/"},
         "image": [request.build_absolute_uri(story.image.url)] if story.image else [],
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
-    }, ensure_ascii=False)
+    })
     return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld, "signature_in_body": has_final_signature(story.body)})
 
 
