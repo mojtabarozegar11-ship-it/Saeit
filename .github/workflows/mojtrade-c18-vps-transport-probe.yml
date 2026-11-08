@@ -1,0 +1,61 @@
+name: MojTrade C18 one-shot VPS transport proof (no credentials)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mojtrade-c18-vps-transport-probe.yml'
+      - 'tests/test_mojtrade_c18_probe_contract.py'
+
+permissions:
+  contents: read
+
+jobs:
+  transport-only:
+    name: Verify TCP and pinned SSH host key; never log in
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.head_ref == 'fix/mojtrade-c18-vps-transport-probe-20261108' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      TARGET_HOST: '178.239.147.150'
+      EXPECTED_RSA_FINGERPRINT: 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+    steps:
+      - name: Confirm SSH banner without authentication
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import socket
+
+          host = os.environ["TARGET_HOST"]
+          try:
+              with socket.create_connection((host, 22), timeout=6) as connection:
+                  connection.settimeout(6)
+                  banner = connection.recv(120)
+          except (OSError, TimeoutError):
+              print("MOJTRADE_C18_TCP_OR_BANNER_UNREACHABLE")
+              raise SystemExit(2)
+          if not banner.startswith(b"SSH-2.0-"):
+              print("MOJTRADE_C18_UNEXPECTED_SSH_BANNER")
+              raise SystemExit(3)
+          print("MOJTRADE_C18_SSH_BANNER_REACHABLE")
+          PY
+
+      - name: Verify the previously pinned RSA host identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          keyfile="$RUNNER_TEMP/mojtrade-c18-rsa-known-host"
+          if ! ssh-keyscan -T 8 -t rsa "$TARGET_HOST" > "$keyfile" 2>/dev/null; then
+            echo 'MOJTRADE_C18_RSA_HOST_KEY_UNAVAILABLE'
+            exit 4
+          fi
+          observed="$(ssh-keygen -lf "$keyfile" -E sha256 | awk '{print $2}' | sort -u)"
+          if [ "$observed" != "$EXPECTED_RSA_FINGERPRINT" ]; then
+            echo 'MOJTRADE_C18_HOST_KEY_MISMATCH_STOP'
+            exit 5
+          fi
+          echo 'MOJTRADE_C18_PINNED_RSA_HOST_KEY_MATCH'
