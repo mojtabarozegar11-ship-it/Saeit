@@ -178,7 +178,17 @@ def load_release(source_root: Path, web_root: Path, manifest_path: Path) -> tupl
     if not isinstance(guides, list) or not 1 <= len(guides) <= 20:
         raise ValueError("INVALID_GUIDE_COUNT")
     rendered: dict[str, bytes] = {}
+    seen_ids: set[str] = set()
+    seen_sources: set[str] = set()
     for guide in guides:
+        if not isinstance(guide, dict):
+            raise ValueError("INVALID_GUIDE_ENTRY")
+        identifier = guide.get("id")
+        if not isinstance(identifier, str) or not re.fullmatch(r"[A-Z0-9-]{3,100}", identifier):
+            raise ValueError("INVALID_GUIDE_ID")
+        if identifier in seen_ids:
+            raise ValueError("DUPLICATE_GUIDE_ID " + identifier)
+        seen_ids.add(identifier)
         url = guide.get("desired_url", "")
         m = re.fullmatch(r"https://zomorodmelal\.ir/research/guides/([a-z0-9-]+)/", url)
         if not m or not SAFE_SLUG.fullmatch(m.group(1)):
@@ -188,9 +198,14 @@ def load_release(source_root: Path, web_root: Path, manifest_path: Path) -> tupl
         rel = Path(str(guide.get("source_path", "")))
         if rel.is_absolute() or ".." in rel.parts or rel.suffix != ".md":
             raise ValueError("INVALID_SOURCE_PATH")
+        if str(rel) in seen_sources:
+            raise ValueError("DUPLICATE_SOURCE_PATH " + str(rel))
+        seen_sources.add(str(rel))
         source = secure_file(source_root / rel, source_root).read_text(encoding="utf-8")
         title, body = markdown_body(source)
         target = f"research/guides/{m.group(1)}/index.html"
+        if target in rendered:
+            raise ValueError("DUPLICATE_TARGET_URL " + str(url))
         rendered[target] = template_page(template, title, body, url)
     return manifest, digest(template_bytes), rendered
 
