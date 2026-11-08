@@ -24,6 +24,26 @@ class Account(models.Model):
     def __str__(self):
         return f"{self.code} — {self.name}"
 
+    def _validate_posted_identity(self):
+        """A posted journal must retain its original account code and kind."""
+        if self.pk is None:
+            return
+        old = type(self).objects.filter(pk=self.pk).values("code", "kind").first()
+        if old is None or (self.code == old["code"] and self.kind == old["kind"]):
+            return
+        if self.journal_lines.filter(entry__status=JournalEntry.Status.POSTED).exists():
+            raise ValidationError("کد و ماهیت حساب دارای سند قطعی نباید تغییر کند؛ حساب اصلاحی جداگانه بسازید.")
+
+    def clean(self):
+        super().clean()
+        self._validate_posted_identity()
+
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if fields is None or {"code", "kind"}.intersection(fields):
+            self._validate_posted_identity()
+        return super().save(*args, **kwargs)
+
 
 class JournalEntry(models.Model):
     class Status(models.TextChoices):
