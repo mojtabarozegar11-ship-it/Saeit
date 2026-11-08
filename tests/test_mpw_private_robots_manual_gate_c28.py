@@ -16,7 +16,7 @@ class MojPlayWinPrivateRobotsManualGate(unittest.TestCase):
 
     def test_no_automatic_live_install_or_execution(self):
         events = self.source.split("\npermissions:", 1)[0]
-        self.assertIn("\non:\n  workflow_dispatch:\n", events)
+        self.assertEqual(events.splitlines()[-2:], ["on:", "  workflow_dispatch:"])
         for forbidden in ("\n  push:", "\n  schedule:", "\n  pull_request:",
                           "\n  issue_comment:", "\n  workflow_run:"):
             self.assertNotIn(forbidden, events)
