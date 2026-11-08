@@ -34,8 +34,9 @@ EXACT_FILES = frozenset({
     "learning/research-project-guide/index.html",
     "learning/twenty-research-projects/index.html",
     "learning/twenty-research-projects/workbook.pdf",
+    "learning/twenty-research-projects/worksheets/index.html",
     "release.json",
-})
+} | {f"learning/twenty-research-projects/worksheets/{i:02d}/index.html" for i in range(1, 21)})
 
 
 def digest(data: bytes) -> str:
@@ -180,7 +181,7 @@ def install(package: Path, run: str) -> None:
             raise RuntimeError("CONCURRENT_TARGET_COLLISION")
         os.replace(stage, TARGET)
         verify_directory(TARGET, verified)
-        print("RESEARCH_BOOKS_ATOMIC_RELEASE_PASS", json.dumps({"target": str(TARGET), "run": run, "count": 6}, sort_keys=True))
+        print("RESEARCH_BOOKS_ATOMIC_RELEASE_PASS", json.dumps({"target": str(TARGET), "run": run, "count": len(EXACT_FILES) - 1}, sort_keys=True))
 
 
 def rollback(run: str) -> None:
