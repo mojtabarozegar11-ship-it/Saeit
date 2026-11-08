@@ -70,13 +70,19 @@ class ServiceIntentsReleaseTests(unittest.TestCase):
     def test_data_href_does_not_hide_real_generic_destination(self):
         original = self.legacy()
         target = deploy.find_links(original)["استعلام مدیریت منابع ←"][0]
-        decoy = b'data-href="/ask-master/index.php?service=1&amp;topic=water" '
+        # Both values initially contain the generic URL: a naive replacement
+        # could modify data-href and leave the actual href unchanged.
+        decoy = b'data-href="/ask-master/index.php?service=1" '
         with_decoy = target.replace(b'<a ', b'<a ' + decoy, 1)
         original = original.replace(target, with_decoy, 1)
         state, updated = deploy.prepare(original, self.approved)
         self.assertEqual(state, "ready")
-        self.assertIn(decoy, updated)
-        self.assertIn(b'href="/ask-master/index.php?service=1&amp;topic=water"', updated)
+        updated_target = deploy.find_links(updated)["استعلام مدیریت منابع ←"][0]
+        self.assertIn(decoy, updated_target)
+        self.assertEqual(deploy.find_links(updated)["استعلام مدیریت منابع ←"][1],
+                         deploy.expected_href("water"))
+        self.assertEqual(updated_target.replace(deploy.expected_href("water"),
+                                                deploy.GENERIC_URL, 1), with_decoy)
 
     def test_duplicate_href_attribute_is_rejected(self):
         original = self.legacy()
