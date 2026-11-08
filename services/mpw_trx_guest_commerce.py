@@ -95,16 +95,11 @@ def _new_user(request):
     # The guest principal is the durable owner of the order.  Persist the
     # address submitted by the checkout form before invoice binding; otherwise
     # record_invoice() correctly refuses to create an unowned delivery record.
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not submitted_email:
-        raise Http404("Email address required")
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    from services.mpw_trx_email_recovery import _posted_email
+    try:
+        submitted_email = _posted_email(request)
+    except ValueError as exc:
+        raise Http404("Valid email address required") from exc
 
     _rate_limit(request)
     Model = get_user_model()
@@ -147,14 +142,11 @@ def _new_user(request):
 
 def _bind_guest_email(request, user):
     """Bind a submitted address only to this existing guest principal."""
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    from services.mpw_trx_email_recovery import _posted_email
+    try:
+        submitted_email = _posted_email(request)
+    except ValueError as exc:
+        raise Http404("Valid email address required") from exc
     existing_email = str(getattr(user, "email", "") or "").strip().lower()
     if existing_email and existing_email != submitted_email:
         raise Http404("Guest email identity mismatch")
