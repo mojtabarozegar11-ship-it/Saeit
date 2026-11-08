@@ -102,3 +102,21 @@ class JournalLine(models.Model):
     def clean(self):
         if (self.debit > 0) == (self.credit > 0):
             raise ValidationError("هر ردیف فقط باید بدهکار یا بستانکار باشد.")
+
+    def _deny_edit_of_posted_line(self):
+        if self.pk is None:
+            return
+        previous = type(self).objects.filter(pk=self.pk).values("entry_id").first()
+        if previous and (
+            JournalEntry.objects.filter(pk=previous["entry_id"], status=JournalEntry.Status.POSTED).exists()
+            or JournalEntry.objects.filter(pk=self.entry_id, status=JournalEntry.Status.POSTED).exists()
+        ):
+            raise ValidationError("تغییر یا انتقال ردیف سند قطعی مجاز نیست؛ سند اصلاحی مستقل صادر کنید.")
+
+    def save(self, *args, **kwargs):
+        self._deny_edit_of_posted_line()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        self._deny_edit_of_posted_line()
+        return super().delete(*args, **kwargs)
