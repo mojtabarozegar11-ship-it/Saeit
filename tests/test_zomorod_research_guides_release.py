@@ -173,6 +173,20 @@ class GuardedPublicationTests(unittest.TestCase):
         self.assertFalse((self.web / next(iter(pages))).exists())
         self.assertFalse(self.state.exists())
 
+    def test_approval_hash_is_exact_for_crlf_source_bytes(self) -> None:
+        m = json.loads(self.manifest.read_text(encoding="utf-8"))
+        src = self.source / "content" / "zomorod-research-guides" / "guide.md"
+        original = src.read_text(encoding="utf-8")
+        src.write_bytes(original.replace("\\n", "\\r\\n").encode("utf-8"))
+        m["guides"][0]["status"] = "APPROVED_FOR_SITE"
+        m["guides"][0]["approved_source_sha256"] = release.digest(src.read_bytes())
+        self.manifest.write_text(json.dumps(m), encoding="utf-8")
+        _, _, result = self.load()
+        self.assertEqual(len(result), 1)
+        src.write_bytes(original.encode("utf-8"))
+        with self.assertRaisesRegex(ValueError, "EDITORIAL_APPROVAL_SOURCE_HASH_MISMATCH"):
+            self.load()
+
     def test_approved_guide_requires_exact_editorial_source_hash(self) -> None:
         m = json.loads(self.manifest.read_text(encoding="utf-8"))
         m["guides"][0]["status"] = "APPROVED_FOR_SITE"
