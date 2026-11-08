@@ -20,10 +20,48 @@ REQUEST_RE = re.compile(r"^[0-9a-f]{32}$")
 LABELS = ("MojTrade-OMEGA-X-DEMO", "MojTrade-Demo-QuantumScalp-v2-")
 FIELDS = frozenset({"account", "position_id", "label", "state",
                     "opened_utc", "stop_loss", "take_profit"})
+RECEIPT_FIELDS = frozenset({"request_id", "state", "reported_broker_position_id",
+                           "created_unix_seconds", "expires_unix_seconds"})
+TIME_TOLERANCE_SECONDS = Decimal("5")
 
 
 class EvidenceError(ValueError):
     """Invalid or ambiguous evidence; never silently skip affected records."""
+
+
+def unique_json_object(pairs: list[tuple[str, object]]) -> dict:
+    """Reject ambiguous JSON keys at every nesting level, including receipts."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise EvidenceError("duplicate_json_key")
+        result[key] = value
+    return result
+
+
+def reject_nonfinite_json_constant(value: str):
+    raise EvidenceError("nonfinite_json_number")
+
+
+def _receipt_times(row: dict, day: str) -> tuple[Decimal, Decimal]:
+    """A C15 receipt must retain its original reservation time window."""
+    created = row["created_unix_seconds"]
+    expires = row["expires_unix_seconds"]
+    if (isinstance(created, bool) or isinstance(expires, bool) or
+            not isinstance(created, (int, float)) or
+            not isinstance(expires, (int, float))):
+        raise EvidenceError("invalid_receipt_timestamps")
+    start, end = Decimal(str(created)), Decimal(str(expires))
+    if (not start.is_finite() or not end.is_finite() or
+            start <= 0 or not Decimal("89.99") <= end - start <= Decimal("90.01")):
+        raise EvidenceError("invalid_receipt_timestamps")
+    try:
+        created_day = datetime.fromtimestamp(float(start), timezone.utc).date().isoformat()
+    except (OverflowError, ValueError, OSError):
+        raise EvidenceError("invalid_receipt_timestamps") from None
+    if created_day != day:
+        raise EvidenceError("receipt_day_mismatch")
+    return start, end
 
 
 def _positive_number(raw: str) -> bool:
@@ -50,7 +88,8 @@ def parse_broker_csv(stream, *, account: str, day: str) -> dict[str, dict[str, s
     if not ACCOUNT_RE.fullmatch(account) or not _valid_day(day):
         raise EvidenceError("invalid_scope")
     reader = csv.DictReader(stream, strict=True)
-    if not reader.fieldnames or set(reader.fieldnames) != FIELDS:
+    if (not reader.fieldnames or len(reader.fieldnames) != len(FIELDS) or
+            set(reader.fieldnames) != FIELDS):
         raise EvidenceError("invalid_broker_columns")
     positions: dict[str, dict[str, str]] = {}
     for line, record in enumerate(reader, start=2):
@@ -97,8 +136,9 @@ def reconcile(receipt_report: dict, broker_positions: dict[str, dict[str, str]],
     claimed_positions: set[str] = set()
     matched = 0
     for row in receipt_report["receipts"]:
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or set(row) != RECEIPT_FIELDS:
             raise EvidenceError("invalid_receipt_row")
+        created_at, expires_at = _receipt_times(row, day)
         request_id = row.get("request_id", "")
         state = row.get("state")
         position_id = row.get("reported_broker_position_id")
@@ -125,6 +165,12 @@ def reconcile(receipt_report: dict, broker_positions: dict[str, dict[str, str]],
             continue
         if not _is_mojtrade(broker["label"]):
             issues.append(f"unexpected_strategy_label:{position_id}")
+            continue
+        broker_opened = Decimal(str(datetime.fromisoformat(
+            broker["opened_utc"].replace("Z", "+00:00")).timestamp()))
+        if not (created_at - TIME_TOLERANCE_SECONDS <= broker_opened <=
+                expires_at + TIME_TOLERANCE_SECONDS):
+            issues.append(f"broker_opened_outside_reservation:{position_id}")
             continue
         if not _positive_number(broker["stop_loss"]) or not _positive_number(broker["take_profit"]):
             issues.append(f"protection_not_evidenced:{position_id}")
@@ -156,7 +202,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         with args.receipts.open("r", encoding="utf-8") as source:
-            report = json.load(source)
+            report = json.load(source, object_pairs_hook=unique_json_object,
+                               parse_constant=reject_nonfinite_json_constant)
         with args.broker_csv.open("r", encoding="utf-8-sig", newline="") as source:
             broker = parse_broker_csv(source, account=args.account, day=args.day)
         result = reconcile(report, broker, account=args.account, day=args.day)
