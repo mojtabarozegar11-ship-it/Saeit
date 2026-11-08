@@ -59,6 +59,33 @@ class C08ClientContractTests(unittest.TestCase):
             self.assertIn('response.Body != "GRANTED|" + requestId', bot)
             self.assertIn("return null;", bot)
 
+    def test_both_use_periodic_timer_for_equity_observation(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("Timer.Start(60);", bot)
+            self.assertIn("protected override void OnTimer()", bot)
+            self.assertIn("ObserveCoordinatedRisk(", bot)
+
+    def test_observation_is_authenticated_and_has_short_timeout(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn('CoordinatorUrl.TrimEnd(\'/\') + "/v1/observe"', bot)
+            self.assertIn('response.Body == "OBSERVED"', bot)
+            self.assertGreaterEqual(bot.count('request.Headers.Add("Authorization", "Bearer " + CoordinatorToken)'), 3)
+            self.assertGreaterEqual(bot.count("Timeout = TimeSpan.FromSeconds(3)"), 3)
+
+    def test_observation_failure_latches_new_order_stop(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("_lastObservationUtc", bot)
+            self.assertIn("(now - _lastObservationUtc).TotalSeconds < 60", bot)
+            self.assertIn("_halted = true;", bot)
+            self.assertIn("coordinator risk observation failed; new orders halted.", bot)
+
+    def test_observation_not_bound_to_signal_or_empty_book(self):
+        for bot in (SCALP, OMEGA):
+            before_bar = bot.split("protected override void OnBarClosed()", 1)[1]
+            self.assertLess(before_bar.index("ObserveCoordinatedRisk("),
+                            before_bar.index("SharedMojTradePositionCount()"))
+            self.assertIn("&open_positions=", bot)
+
 
 if __name__ == "__main__":
     unittest.main()
