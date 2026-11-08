@@ -46,6 +46,27 @@ def _dependencies(tree):
     return None
 
 
+def _data_operations(tree):
+    """Identify data-bearing operations in Migration.operations, without running them."""
+    operations = set()
+    for cls in tree.body:
+        if not isinstance(cls, ast.ClassDef) or cls.name != "Migration":
+            continue
+        for stmt in cls.body:
+            if not isinstance(stmt, ast.Assign) or not any(
+                isinstance(target, ast.Name) and target.id == "operations"
+                for target in stmt.targets
+            ):
+                continue
+            for node in ast.walk(stmt.value):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in {"RunPython", "RunSQL"}
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "migrations"):
+                    operations.add(node.func.attr)
+    return sorted(operations)
+
+
 def _inventory(root, side):
     folder = Path(root) / "core" / "migrations"
     blockers = []
@@ -81,7 +102,8 @@ def _inventory(root, side):
             blockers.append({"code": "MIGRATION_DEPS_UNVERIFIED", "side": side,
                              "component": name})
             continue
-        files[name] = {"sha256": hashlib.sha256(raw).hexdigest(), "deps": deps}
+        files[name] = {"sha256": hashlib.sha256(raw).hexdigest(), "deps": deps,
+                       "data_operations": _data_operations(tree)}
     for name, data in files.items():
         for dependency in data["deps"]:
             if dependency not in files and dependency not in {"__first__", "__latest__"}:
@@ -105,6 +127,10 @@ def audit(current_root, reference_root):
         {"number": name[:4], "current": name,
          "reference": sorted(reference_by_number[name[:4]])}
         for name in current_only if reference_by_number.get(name[:4])
+    ]
+    unshared_data_operations = [
+        {"migration": name, "operations": reference[name]["data_operations"]}
+        for name in reference_only if reference[name]["data_operations"]
     ]
     blockers = current_errors + reference_errors
     if not current:
@@ -134,6 +160,7 @@ def audit(current_root, reference_root):
         "changed_shared_files": changed,
         "current_only": current_only,
         "reference_only": reference_only,
+        "reference_unshared_data_operations": unshared_data_operations,
         "same_number_different_files": number_collisions,
         "blockers": blockers,
     }
