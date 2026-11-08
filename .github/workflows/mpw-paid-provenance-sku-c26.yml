@@ -1,0 +1,29 @@
+name: MPW read-only paid SKU evidence classification
+
+on:
+  pull_request:
+    branches: [integration/mpw-recovery-main-20261107]
+    paths:
+      - .github/workflows/mpw-paid-provenance-sku-c26.yml
+      - scripts/mpw_paid_provenance_readonly_20261105.py
+      - tests/test_mpw_paid_provenance_sku_scope_20261109.py
+
+permissions:
+  contents: read
+
+jobs:
+  sku-scope-offline:
+    if: github.event_name == 'pull_request' && github.base_ref == 'integration/mpw-recovery-main-20261107'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source without writable credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify standalone classification without production data
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_paid_provenance_readonly_20261105.py tests/test_mpw_paid_provenance_sku_scope_20261109.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_paid_provenance_sku_scope_20261109.py' -v
+          echo MPW_PAID_SKU_SCOPE_CONTRACT=PASS
