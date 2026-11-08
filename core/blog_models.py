@@ -66,6 +66,8 @@ class BlogPublication(models.Model):
     def save(self, *args, **kwargs):
         if self.status != "blocked" and blocked_story_reason(self.story):
             raise ValidationError("Blog distribution forbidden by owner editorial policy")
+        if self.status == "published" and self.story.status != "published":
+            raise ValidationError("Cannot distribute an unreviewed or unpublished story")
         return super().save(*args, **kwargs)
 
 

@@ -78,8 +78,9 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
         slug = f"{base}-{n}"; n += 1
 
     # Research-based rule: weak/incomplete stories never enter automatic scheduling.
-    # Worldwide news always stays in editorial review, even after quality scoring.
-    can_schedule = bool(story_type != "world" and publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
+    # Absolute exclusion demands semantic editorial review; a keyword filter alone
+    # cannot certify that any class of news is entirely nonpolitical.
+    can_schedule = False
     story = NewsletterStory.objects.create(
         agent=agent, source=source, story_type=story_type, title=title.strip(),
         slug=slug, summary=summary.strip(), body=ensure_signed(body), event_date=event_date,
@@ -95,7 +96,7 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     if story.status == "draft":
         from .blog_distribution import queue_story_distribution
         queue_story_distribution(story)
-    return story, "created" if can_schedule or not publish_at else "quality_hold"
+    return story, "created" if not publish_at else "editorial_review_required"
 
 
 @transaction.atomic
@@ -198,7 +199,9 @@ def daily_quota_snapshot(day=None):
     for key, limit in (("company", company_limit), ("world", schedule.world_news_daily), ("report", schedule.reports_daily)):
         counts[key] = {"target": limit, "published": NewsletterStory.objects.filter(story_type=key, status="published", published_at__date=day).count()}
         counts[key]["remaining"] = max(0, limit - counts[key]["published"])
-    return {"date": day.isoformat(), "configured": True, "approval_required": schedule.publication_requires_approval, "quality_threshold": MIN_AUTO_PUBLISH_SCORE, "counts": counts}
+    return {"date": day.isoformat(), "configured": True, "approval_required": True,
+            "owner_policy_requires_editorial_review": True,
+            "quality_threshold": MIN_AUTO_PUBLISH_SCORE, "counts": counts}
 
 
 def register_source(*, publisher, title, url, kind="world", content_hash=""):

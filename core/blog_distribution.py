@@ -18,6 +18,8 @@ def queue_story_distribution(story):
 def publication_readiness(story):
     if blocked_story_reason(story):
         return {"ready": False, "reason": "owner_editorial_policy"}
+    if story.status != "published":
+        return {"ready": False, "reason": "story_not_published"}
     plan = getattr(story, "distribution_plan", None)
     if not plan:
         return {"ready": False, "reason": "distribution_plan_missing"}
