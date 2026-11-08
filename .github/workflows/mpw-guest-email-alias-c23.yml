@@ -32,8 +32,8 @@ jobs:
           cache: pip
       - name: Install existing project requirements
         run: python -m pip install -r requirements.txt
-      - name: Verify guest-email source and exact regression tests
+      - name: Verify guest-email source and exact regression tests with isolated settings
         run: |
           set -euo pipefail
           python -m py_compile services/mpw_trx_guest_commerce.py tests/test_mpw_guest_email_only_checkout_20261108.py
-          pytest -q tests/test_mpw_guest_email_only_checkout_20261108.py
+          pytest -q --ds=tests.mpw_recovery_test_settings tests/test_mpw_guest_email_only_checkout_20261108.py
