@@ -98,7 +98,11 @@ def generate_program() -> dict:
 
 
 def _whole_number(value: object) -> int:
-    if not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]*", value):
+    # The maximum owner-authorized candidate supply is 14 decimal digits.
+    # Bound the input before regex/int conversion to reject oversized JSON
+    # without expensive parsing or interpreter-specific integer limits.
+    if (not isinstance(value, str) or len(value) > 14
+            or not re.fullmatch(r"[1-9][0-9]*", value)):
         raise ValueError("supply_must_be_positive_integer_string")
     return int(value)
 
@@ -303,6 +307,11 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
         raise ValueError("bundle_inventory_mismatch")
     actual_checksums = json.loads((target / "SHA256SUMS.json").read_text("utf-8"))
     checksums = {path: hashlib.sha256(data).hexdigest() for path, data in documents.items()}
+    # A valid checksum mapping with duplicate JSON keys or reformatted bytes
+    # is not the deterministic, signed-off manifest that export_bundle wrote.
+    canonical_manifest = (json.dumps(checksums, indent=2, sort_keys=True) + "\n").encode()
+    if (target / "SHA256SUMS.json").read_bytes() != canonical_manifest:
+        raise ValueError("bundle_manifest_bytes_mismatch")
     if actual_checksums != checksums:
         raise ValueError("bundle_sha256_mismatch")
     for path, data in documents.items():
