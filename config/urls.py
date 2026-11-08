@@ -20,6 +20,7 @@ from core.academy_views import (
 )
 from core.services_views import services
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
+from core.research_guide_views import research_guide
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
@@ -43,6 +44,7 @@ urlpatterns = [
     path("marketing/", lambda request: platform_page(request, "marketing"), name="marketing"),
     path("chain-stores/", lambda request: platform_page(request, "chain-stores"), name="chain_stores"),
     path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
+    path("research/guides/<slug:slug>/", research_guide, name="research_guide"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
     path("knowledge/article/<slug:slug>/", knowledge_article_detail, name="knowledge_article_detail"),

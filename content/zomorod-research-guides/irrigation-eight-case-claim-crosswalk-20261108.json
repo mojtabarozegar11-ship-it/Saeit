@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "dataset_id": "ZM-IRR-EIGHT-CASE-CLAIM-CROSSWALK-20261108",
+  "title": "Source-to-claim boundary crosswalk for eight purposively selected published irrigation advisory cases",
+  "maintainer": "Zomorod Melal research editorial workflow",
+  "status": "AUTHOR_EDITORIAL_REVIEW_NOT_VALIDATED",
+  "provenance": "Compiled from the working manuscript 01_Wiley_Manuscript_AUTHOR_REVIEW_NOT_SUBMITTED, source references and editorial notes. Not a systematic literature search or independent reanalysis.",
+  "limitations": "No proprietary company data, field measurements, reconstruction of unresolved denominators, validated adoption rate or pooled effect. Exact original source versions and permissions must be adjudicated by the author before journal submission.",
+  "items": [
+    {
+      "id": "AE-CASE-01",
+      "citation": "Amini et al. 2025",
+      "doi": "https://doi.org/10.1038/s41598-025-26567-z",
+      "observation_unit": "farm/within-farm section and reporting table",
+      "source_supported_qualitative_boundary": "published irrigation-input and water-productivity contrasts",
+      "do_not_infer": "population adoption rate; guaranteed water saving; resolved F7 source effect",
+      "unresolved_verification": "F7 water productivity and reported percentages disagree",
+      "verification_status": "source-limited; author adjudication needed"
+    },
+    {
+      "id": "AE-CASE-02",
+      "citation": "Cvejić et al. 2020",
+      "doi": "https://doi.org/10.3390/agronomy10091238",
+      "observation_unit": "farm; survey respondent; model scenario",
+      "source_supported_qualitative_boundary": "published enrolment areas, questionnaire percentages as reported, modelled scenarios",
+      "do_not_infer": "independent daily adherence or realized 25 percent savings",
+      "unresolved_verification": "dated farmer rosters and item-specific survey denominators unavailable",
+      "verification_status": "source-limited; denominators unresolved"
+    },
+    {
+      "id": "AE-CASE-03",
+      "citation": "Jamal et al. 2023",
+      "doi": "https://doi.org/10.1029/2023WR035810",
+      "observation_unit": "field-observation site versus virtual workshop decision",
+      "source_supported_qualitative_boundary": "model validation and participant choices in their separate evidence units",
+      "do_not_infer": "actual on-farm implementation or attributed field savings from virtual decisions",
+      "unresolved_verification": "no linked prospective advice-to-action field event ledger inspected",
+      "verification_status": "source-limited; human-machine interaction not farmer adherence"
+    },
+    {
+      "id": "AE-CASE-04",
+      "citation": "Abi Saab et al. 2019",
+      "doi": "https://doi.org/10.3390/w11020252",
+      "observation_unit": "randomised research-station plot; crop-season",
+      "source_supported_qualitative_boundary": "gross applied irrigation contrast and within-site crop measurements",
+      "do_not_infer": "nine independent commercial farms or basin-scale conservation",
+      "unresolved_verification": "regional depletion and externally replicated adoption not measured here",
+      "verification_status": "published experimental case; narrow field-inference boundary"
+    },
+    {
+      "id": "AE-CASE-05",
+      "citation": "Car et al. 2012",
+      "doi": "https://doi.org/10.1016/j.compag.2012.03.003",
+      "observation_unit": "SMS service-day; individual respondent; self-report",
+      "source_supported_qualitative_boundary": "submitted inputs and self-reported SMS utility with source-labeled denominators",
+      "do_not_infer": "verified advice-specific water saving or reconstructed universal adherence",
+      "unresolved_verification": "contradictory respondent group totals in Table 5",
+      "verification_status": "source-limited; no independent publisher correction authenticated"
+    },
+    {
+      "id": "AE-CASE-06",
+      "citation": "Elia et al. 2022",
+      "doi": "https://doi.org/10.17660/ActaHortic.2022.1335.81",
+      "observation_unit": "six commercial processing-tomato farms (2018, Foggia province, Italy), each split into DSS and usual grower-management main plots; farm is paired comparison unit",
+      "source_supported_qualitative_boundary": "ISHS abstract reports DSS-vs-grower-management seasonal irrigation volume 24% lower and nitrogen 7% lower, without statistically significant detected difference in marketable yield; no quantitative non-inferiority is established",
+      "do_not_infer": "twelve independent farms, randomised assignment, independent event-level adoption, equivalence of yield, transportable causal water-saving rate, or post-2018 voluntary uptake",
+      "unresolved_verification": "Full plot-assignment methods, confidence intervals/equivalence margin, original meter and nitrogen records, event-level advice receipt and action logs were not independently checked",
+      "verification_status": "source-limited; contextual outcomes only",
+      "primary_source_locator": "https://www.actahort.org/books/1335/1335_81.htm",
+      "review_scope": "SOURCE_ABSTRACT_ONLY; independent author full-text adjudication still required"
+    },
+    {
+      "id": "AE-CASE-07",
+      "citation": "Baroni et al. 2019",
+      "doi": "https://doi.org/10.1002/ird.2337",
+      "observation_unit": "six scheduling methods versus interviewed users",
+      "source_supported_qualitative_boundary": "seasonal scheduling-method comparison and qualitative user feedback",
+      "do_not_infer": "five-of-six farmer adoption or measured event-level fidelity",
+      "unresolved_verification": "supplementary Data S1 and interview-specific denominator not verified",
+      "verification_status": "publisher-abstract scope; distinct method and respondent units"
+    },
+    {
+      "id": "AE-CASE-08",
+      "citation": "Darouich et al. 2024",
+      "doi": "https://doi.org/10.3390/agronomy14010066",
+      "observation_unit": "centre-pivot maize plot and modelled alternative; crop-season",
+      "source_supported_qualitative_boundary": "farmer schedule comparisons with optimised scenarios",
+      "do_not_infer": "unqualified year-two effect; independently observed causal adoption",
+      "unresolved_verification": "2020 versus 2022 second-season source labels",
+      "verification_status": "publisher year-conflict unresolved"
+    }
+  ]
+}

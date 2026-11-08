@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "release_id": "ZM-RESEARCH-GUIDES-20261108-R4",
+  "site": "https://zomorodmelal.ir",
+  "production_status": "NOT_DEPLOYED",
+  "deployment_policy": {
+    "preserve_existing_template": true,
+    "cpanel_only": true,
+    "no_auto_merge": true,
+    "require_authenticated_release": true,
+    "require_pre_post_http_check": true,
+    "require_exact_source_hash_after_editorial_approval": true,
+    "require_re_review_after_source_revision": true
+  },
+  "guides": [
+    {
+      "id": "ZM-RG-IRR-EVIDENCE-01",
+      "title_fa": "از دادهٔ آبیاری تا مقالهٔ قابل‌داوری: راهنمای ثبت شواهد و گزارش‌نویسی",
+      "source_path": "content/zomorod-research-guides/irrigation-evidence-reporting-20261108.md",
+      "desired_url": "https://zomorodmelal.ir/research/guides/irrigation-evidence-reporting/",
+      "status": "EDITORIAL_REVIEW_REQUIRED",
+      "kind": "educational_guide_not_empirical_article",
+      "primary_sources": [
+        "https://www.fao.org/4/x0490e/x0490e00.htm",
+        "https://www.fao.org/4/X0490E/x0490e0e.htm"
+      ],
+      "live_verified": false
+    },
+    {
+      "id": "ZM-RG-IRR-DSS-02",
+      "title_fa": "چرا یک توصیهٔ آبیاری هنوز صرفه‌جویی واقعی نیست؟ پنج سطح شواهد",
+      "source_path": "content/zomorod-research-guides/irrigation-dss-evidence-levels-20261108.md",
+      "desired_url": "https://zomorodmelal.ir/research/guides/irrigation-dss-evidence-levels/",
+      "status": "EDITORIAL_REVIEW_REQUIRED",
+      "kind": "educational_guide_not_empirical_article",
+      "primary_sources": [
+        "https://doi.org/10.1029/2023WR035810",
+        "https://doi.org/10.17632/vtpkrtd2kj.1",
+        "https://doi.org/10.17632/vnwp2zywr8.1"
+      ],
+      "live_verified": false
+    },
+    {
+      "id": "ZM-RG-WP-ECON-03",
+      "title_fa": "یک کیلوگرم محصول به ازای چند مترمکعب آب؟ راهنمای بهره‌وری آب و ارزش اقتصادی",
+      "source_path": "content/zomorod-research-guides/water-productivity-denominator-economics-20261108.md",
+      "desired_url": "https://zomorodmelal.ir/research/guides/water-productivity-economics/",
+      "status": "EDITORIAL_REVIEW_REQUIRED",
+      "kind": "educational_guide_not_empirical_article",
+      "primary_sources": [
+        "https://www.fao.org/4/i2096e/i2096e.pdf",
+        "https://www.fao.org/fileadmin/user_upload/rne/docs/LWD-Main-Report-2nd-Edition.pdf",
+        "https://www.fao.org/in-action/remote-sensing-for-water-productivity/wapor-data/"
+      ],
+      "live_verified": false
+    },
+    {
+      "id": "ZM-RG-YEAR-AUDIT-04",
+      "title_fa": "وقتی چکیده با روش و نتایج یک پژوهش هم‌سال نیست: راهنمای ممیزی شواهد آبیاری",
+      "source_path": "content/zomorod-research-guides/irrigation-study-year-conflict-audit-20261108.md",
+      "desired_url": "https://zomorodmelal.ir/research/guides/irrigation-study-year-conflict-audit/",
+      "status": "EDITORIAL_REVIEW_REQUIRED",
+      "kind": "educational_guide_not_empirical_article",
+      "primary_sources": [
+        "https://doi.org/10.3390/agronomy14010066",
+        "https://repositorio.ulisboa.pt/entities/publication/874f83da-cbc2-4742-99f6-b7ce1543a000"
+      ],
+      "live_verified": false
+    }
+  ]
+}
