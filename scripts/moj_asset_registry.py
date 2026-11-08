@@ -209,7 +209,8 @@ def offline_release_readiness(program: dict) -> dict:
         "blocked_gates": sorted(name for name, approved in program["gates"].items() if approved is False),
         "unselected_series_networks": sum(asset["network"] == "undecided_non_bitcoin" for asset in program["assets"][1:]),
         "unverified_rune_name": program["assets"][0]["name_availability_verified"] is False,
-        "unverified_rune_commitment": True,
+        "rune_commitment_evidence_untracked": True,
+        "bitcoin_asset_not_issued": program["assets"][0]["issuance_state"] == "not_issued",
         "initial_holder_addresses_untracked": True,
         "unissued_series_assets": sum(asset["issuance_state"] == "not_issued" for asset in program["assets"][1:]),
         # Offline planning records authorization, not independent deployment evidence.
