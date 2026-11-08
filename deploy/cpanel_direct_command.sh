@@ -30,8 +30,18 @@ normalize_key "$VPS_KEY" "$work/vps.key"
 normalize_key "$HOST_KEY" "$work/host.key"
 
 stage="verify_vps_host_key"
-ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
-test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+# Retry bounded transient SSH MaxStartups or egress resets; never trust an unpinned key.
+for attempt in 1 2 3; do
+  if ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null &&
+     test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+    break
+  fi
+  if test "$attempt" -eq 3; then
+    echo "VPS_HOST_KEY_UNREACHABLE_OR_MISMATCHED" >&2
+    exit 1
+  fi
+  sleep "$((attempt*3))"
+done
 
 stage="verify_cpanel_host_key_via_vps"
 ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null
