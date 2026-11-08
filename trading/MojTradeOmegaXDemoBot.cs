@@ -70,6 +70,7 @@ namespace MojTrade.OmegaX
         private int _consecutiveLosses;
         private bool _halted;
         private DateTime _lastObservationUtc = DateTime.MinValue;
+        private DateTime _lastSuccessfulObservationUtc = DateTime.MinValue;
 
         protected override void OnStart()
         {
@@ -114,6 +115,8 @@ namespace MojTrade.OmegaX
             ObserveCoordinatedRisk(TodayAccountRealizedProfit());
             if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
                 !CoordinatorConfigured() || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
+                return;
+            if (!HasFreshRiskObservation())
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
@@ -172,6 +175,8 @@ namespace MojTrade.OmegaX
             if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
                 !CoordinatorConfigured())
                 return;
+            if (!HasFreshRiskObservation())
+                return;
 
             foreach (var position in Positions.FindAll(Label, SymbolName))
             {
@@ -222,6 +227,9 @@ namespace MojTrade.OmegaX
                 !IsFinitePositive(Symbol.VolumeInUnitsMin) ||
                 !IsFinitePositive(MaxSpreadPips) ||
                 !IsFinitePositive(CurrentSpreadPips()) || CurrentSpreadPips() > MaxSpreadPips)
+                return;
+
+            if (!HasFreshRiskObservation())
                 return;
 
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
@@ -299,6 +307,15 @@ namespace MojTrade.OmegaX
                    CoordinatorToken.Length >= 32;
         }
 
+        private bool HasFreshRiskObservation()
+        {
+            var now = Server.TimeInUtc;
+            return _lastSuccessfulObservationUtc != DateTime.MinValue &&
+                   now >= _lastSuccessfulObservationUtc &&
+                   now.Date == _lastSuccessfulObservationUtc.Date &&
+                   (now - _lastSuccessfulObservationUtc).TotalSeconds <= 60;
+        }
+
         private void ObserveCoordinatedRisk(double realizedToday)
         {
             if (_halted || Account.IsLive || !EnableCoordinatedDemoTrading ||
@@ -335,7 +352,10 @@ namespace MojTrade.OmegaX
                 var response = Http.Send(request);
                 if (response.IsSuccessful && response.StatusCode == 200 &&
                     response.Body == "OBSERVED")
+                {
+                    _lastSuccessfulObservationUtc = now;
                     return;
+                }
             }
             catch (Exception)
             {
