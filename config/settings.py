@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    # Register schema without enabling payment or recovery endpoints.
+    "mpw_commerce.apps.MpwCommerceConfig",
     "farnaz.apps.FarnazConfig",
     "command_center",
     # Accounting ledger is part of the production management desk.
