@@ -43,6 +43,9 @@ try {
  $allow=['general','website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care'];
  foreach ($all as $file) {
   if (!preg_match('/^[0-9]{8}-[A-F0-9]{18}\.json$/',$file))continue;
+  // A scoped approval only inspects its exact private reference, not unrelated customer records.
+  $approvedRef=(string)(getenv('MPW_OWNER_DISPATCH_APPROVED_REFERENCE') ?: '');
+  if (!preg_match('/^[A-F0-9]{18}$/D',$approvedRef) || !hash_equals(substr($file,9,18),$approvedRef)) continue;
   if ($stats['scanned']>=25)break;
   $stats['scanned']++;
   $path=$root.'/'.$file;
