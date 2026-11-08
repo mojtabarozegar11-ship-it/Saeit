@@ -15,11 +15,23 @@ ALLOCATION_BPS = {
 }
 
 
+EXPECTED_ALLOCATION_CATEGORIES = frozenset(ALLOCATION_BPS)
+
+
+def _valid_allocation_weights():
+    if set(ALLOCATION_BPS) != EXPECTED_ALLOCATION_CATEGORIES:
+        raise ValueError("allocation_categories_invalid")
+    if any(type(bps) is not int or not 0 <= bps <= 10_000
+           for bps in ALLOCATION_BPS.values()):
+        raise ValueError("allocation_weight_invalid")
+    if sum(ALLOCATION_BPS.values()) != 10_000:
+        raise ValueError("allocation_basis_points_must_sum_to_10000")
+
+
 def candidate_allocations(program=None):
     program = generate_program() if program is None else program
     validate_program(program)
-    if sum(ALLOCATION_BPS.values()) != 10000:
-        raise ValueError("allocation_basis_points_must_sum_to_10000")
+    _valid_allocation_weights()
     result = {}
     for asset in program["assets"]:
         supply = int(asset["supply_tokens"])
