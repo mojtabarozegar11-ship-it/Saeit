@@ -1,0 +1,26 @@
+[Unit]
+Description=MojTrade DEMO-only centralized risk admission (disabled by default)
+Documentation=https://github.com/mojtabarozegar11-ship-it/Saeit
+After=network.target
+
+[Service]
+Type=simple
+User=mojtrade-risk
+Group=mojtrade-risk
+WorkingDirectory=/opt/mojtrade
+EnvironmentFile=/etc/mojtrade-risk/risk.env
+ExecStart=/usr/bin/python3 /opt/mojtrade/trading/mojtrade_risk_coordinator.py --db /var/lib/mojtrade-risk/state.sqlite
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/mojtrade-risk
+
+[Install]
+WantedBy=multi-user.target
