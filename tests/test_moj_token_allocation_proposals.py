@@ -17,6 +17,12 @@ class CandidateAllocationTests(unittest.TestCase):
                                  int(row["total_supply_tokens"]))
                 self.assertFalse(row["market_liquidity_committed"])
                 self.assertFalse(row["player_rewards_transferable"])
+                self.assertFalse(row["treasury_timelock_deployed"])
+                self.assertFalse(row["treasury_vesting_enforced_onchain"])
+                self.assertIn("development_treasury_not_yet_locked",
+                              row["allocations_tokens"])
+                self.assertNotIn("development_treasury_locked",
+                                 row["allocations_tokens"])
 
     def test_mojoner_exact_total_and_whole_units(self):
         row = candidate_allocations()["mojoner"]
