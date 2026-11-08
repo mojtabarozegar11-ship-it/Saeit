@@ -177,7 +177,7 @@ class GuardedPublicationTests(unittest.TestCase):
         m = json.loads(self.manifest.read_text(encoding="utf-8"))
         src = self.source / "content" / "zomorod-research-guides" / "guide.md"
         original = src.read_text(encoding="utf-8")
-        src.write_bytes(original.replace("\\n", "\\r\\n").encode("utf-8"))
+        src.write_bytes(original.replace("\n", "\r\n").encode("utf-8"))
         m["guides"][0]["status"] = "APPROVED_FOR_SITE"
         m["guides"][0]["approved_source_sha256"] = release.digest(src.read_bytes())
         self.manifest.write_text(json.dumps(m), encoding="utf-8")
