@@ -142,5 +142,37 @@ anything and missing new files still require a reviewed installation step.
    separately reviewed UI wiring/deployment. A Django publication alone does
    not establish those static pages have updated.
 
+## Live public-HTML negative delivery gate (cycle 19)
+
+On 2026-11-09 (Asia/Tehran), a fresh **public-browser inspection** observed:
+
+- `/weather/` still says it does not publish a live forecast, although it has
+  the independent user-input irrigation-risk calculator.
+- `/news/` still shows company/information navigation, not a working external
+  news reader.
+- The November 8 public newsletter weather bulletin renders **31 day-one
+  province records**, not **217 daily records** (31 provinces × seven days).
+  Its visible original-report body did not end with `#مجتبی_روزگار`.
+
+`deploy/newsroom_public_delivery_audit.py` is a new **read-only, fail-closed
+negative gate** for these visible defects. Run it from a trusted host that
+can reach the public site with a valid HTTPS certificate; it only fetches
+three fixed `zomorodmelal.ir` paths, refuses redirects, caps response sizes,
+and cannot publish or modify anything:
+
+```bash
+python3 deploy/newsroom_public_delivery_audit.py --story-date 2026-11-08
+```
+
+Exit `0`: none of the explicit negative markers were observed and the
+published story has all 217 date lines, 31 province headers and the exact
+final signature **inside** the original report. Exit `1`: known publication
+defect remains. Exit `2`: HTTP/HTML evidence could not be obtained. A clean
+exit does **not** prove that client-side JavaScript, data freshness, backend
+agents, approved-news semantics or cron operate correctly: complete separate
+browser/Passenger/release checks before declaring the service operational.
+This script is not part of the live application release manifest and cannot
+be used to bypass cPanel authentication or the host-key safety gate.
+
 Never pay for a source, emit email, publish RSS news automatically, or enable
 unreviewed promotional or financial material. Drafts need factual human review.
