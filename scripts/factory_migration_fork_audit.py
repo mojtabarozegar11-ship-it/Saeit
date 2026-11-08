@@ -10,6 +10,8 @@ import ast
 import hashlib
 import json
 import re
+import sqlite3
+import stat
 from pathlib import Path
 
 
@@ -17,6 +19,94 @@ SCHEMA = "saeit.factory.migration-fork-audit.v1"
 MAX_MIGRATIONS = 400
 MAX_MIGRATION_BYTES = 1_000_000
 MIGRATION_NAME = re.compile(r"^[0-9]{4}_[a-zA-Z0-9_]+\.py$")
+MIGRATION_STEM = re.compile(r"^[0-9]{4}_[a-zA-Z0-9_]+$")
+MAX_LEDGER_ROWS = 400
+MAX_SNAPSHOT_BYTES = 5 * 1024**3
+REQUIRED_TASK_FIELDS = ("factory_run_id", "product_id", "environment",
+                        "next_retry_at")
+
+
+def _inspect_sqlite_snapshot(path, current_only, reference_only, shared):
+    """Inspect an explicitly supplied *offline copy*, never a running DB.
+
+    immutable=1 and query_only are both intentional: no WAL/SHM creation or
+    database writes. Refuse SQLite sidecars because ignoring WAL would produce
+    potentially stale evidence. This cannot attest a live VPS or safe cutover.
+    """
+    snapshot = Path(path)
+    def blocked(code):
+        return {"state": "unavailable", "code": code,
+                "live_vps_verified": False, "production_ready": False}
+
+    if not snapshot.is_absolute():
+        return blocked("SNAPSHOT_ABSOLUTE_PATH_REQUIRED")
+    try:
+        details = snapshot.lstat()
+        if (not stat.S_ISREG(details.st_mode) or details.st_size < 100
+                or details.st_size > MAX_SNAPSHOT_BYTES):
+            return blocked("SNAPSHOT_FILE_UNSAFE")
+        if any(Path(str(snapshot) + suffix).exists()
+               for suffix in ("-wal", "-shm", "-journal")):
+            return blocked("SNAPSHOT_JOURNAL_SIDECAR_PRESENT")
+        with snapshot.open("rb") as stream:
+            if stream.read(16) != b"SQLite format 3\x00":
+                return blocked("SNAPSHOT_NOT_SQLITE")
+        connection = sqlite3.connect(
+            snapshot.as_uri() + "?mode=ro&immutable=1", uri=True, timeout=3)
+        try:
+            connection.execute("PRAGMA query_only=ON")
+            connection.execute("PRAGMA trusted_schema=OFF")
+            columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(django_migrations)")}
+            if not {"app", "name"}.issubset(columns):
+                return blocked("SNAPSHOT_MIGRATION_TABLE_UNAVAILABLE")
+            names = [row[0] for row in connection.execute(
+                "SELECT name FROM django_migrations WHERE app='core' "
+                "ORDER BY name LIMIT ?", (MAX_LEDGER_ROWS + 1,))]
+            if (len(names) > MAX_LEDGER_ROWS or any(
+                    not isinstance(name, str) or not MIGRATION_STEM.fullmatch(name)
+                    for name in names)):
+                return blocked("SNAPSHOT_MIGRATION_LEDGER_INVALID")
+            task_columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(core_agenttask)")}
+            product_columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(core_product)")}
+            run_columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(core_factoryrun)")}
+        finally:
+            connection.close()
+    except (OSError, ValueError, sqlite3.Error):
+        return blocked("SNAPSHOT_READ_FAILED")
+
+    applied = set(names)
+    current_hits = sorted(applied & set(current_only))
+    reference_hits = sorted(applied & set(reference_only))
+    if current_hits and reference_hits:
+        branch = "mixed_fork"
+    elif current_hits:
+        branch = "current_branch_only"
+    elif reference_hits:
+        branch = "reference_branch_only"
+    else:
+        branch = "no_distinguishing_migrations"
+    return {
+        "state": "read_only_snapshot_observed",
+        "mode": "explicit_consistent_copy_required",
+        "live_vps_verified": False,
+        "production_ready": False,
+        "applied_core_count": len(names),
+        "branch_evidence": branch,
+        "applied_shared_count": len(applied & set(shared)),
+        "applied_current_only": current_hits,
+        "applied_reference_only": reference_hits,
+        "unknown_applied": sorted(applied - set(current_only)
+                                  - set(reference_only) - set(shared)),
+        "agenttask_table_present": bool(task_columns),
+        "agenttask_missing_worker_fields": sorted(
+            set(REQUIRED_TASK_FIELDS) - task_columns),
+        "product_table_present": bool(product_columns),
+        "factoryrun_table_present": bool(run_columns),
+    }
 
 
 def _dependencies(tree):
@@ -112,7 +202,7 @@ def _inventory(root, side):
     return files, blockers
 
 
-def audit(current_root, reference_root):
+def audit(current_root, reference_root, sqlite_snapshot=None):
     current, current_errors = _inventory(current_root, "current")
     reference, reference_errors = _inventory(reference_root, "reference")
     shared = sorted(set(current) & set(reference))
@@ -147,7 +237,7 @@ def audit(current_root, reference_root):
                          "component": "core"})
     blockers.sort(key=lambda x: (x["code"], x.get("side", ""),
                                  x.get("component", "")))
-    return {
+    report = {
         "schema": SCHEMA,
         "mode": "offline_source_read_only",
         "live_vps_verified": False,
@@ -164,14 +254,29 @@ def audit(current_root, reference_root):
         "same_number_different_files": number_collisions,
         "blockers": blockers,
     }
+    if sqlite_snapshot is not None:
+        snapshot = _inspect_sqlite_snapshot(
+            sqlite_snapshot, current_only, reference_only, shared)
+        report["sqlite_snapshot"] = snapshot
+        # A path supplied by the caller is not an attested VPS snapshot, and
+        # even a valid copy cannot prove that the running factory uses it.
+        report["blockers"].append({"code": "SNAPSHOT_NOT_LIVE_VERIFICATION"})
+        if snapshot["state"] == "unavailable":
+            report["blockers"].append({"code": snapshot["code"]})
+        report["blockers"].sort(key=lambda x: (
+            x["code"], x.get("side", ""), x.get("component", "")))
+        report["status"] = "blocked"
+    return report
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--current-root", type=Path, required=True)
     parser.add_argument("--reference-root", type=Path, required=True)
+    parser.add_argument("--sqlite-snapshot", type=Path,
+                        help="Explicit offline consistent SQLite copy, never the live DB")
     args = parser.parse_args(argv)
-    result = audit(args.current_root, args.reference_root)
+    result = audit(args.current_root, args.reference_root, args.sqlite_snapshot)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 2 if result["blockers"] else 0
 
