@@ -2,8 +2,11 @@
 
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
-from core.news_feed_reader import MAX_FEED_BYTES, parse_official_rss
+from core.news_feed_reader import (
+    MAX_FEED_BYTES, OFFICIAL_FEEDS, fetch_official_news, parse_official_rss,
+)
 
 
 NOW = datetime(2026, 11, 8, 12, tzinfo=timezone.utc)
@@ -50,6 +53,40 @@ class OfficialRssReaderTests(unittest.TestCase):
     def test_bad_bounds_rejected(self):
         with self.assertRaises(ValueError):
             parse_official_rss(rss([]), now=NOW, max_items=0)
+
+    def test_fao_newsroom_domain_and_iso_date_accepted(self):
+        fao = OFFICIAL_FEEDS[1]
+        raw = b"<rss><channel><item><title>Food security</title><link>https://www.fao.org/newsroom/detail/example/en</link><dc:date xmlns:dc='http://purl.org/dc/elements/1.1/'>2026-11-08T10:00:00Z</dc:date></item></channel></rss>"
+        rows = parse_official_rss(raw, feed=fao, now=NOW)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].publisher, fao.publisher)
+
+    def test_one_feed_failure_retains_other_source(self):
+        class Response:
+            url = OFFICIAL_FEEDS[0].url
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return None
+
+            def read(self, _):
+                return rss([item("https://www.nass.usda.gov/new")])
+
+        def fake_urlopen(request, timeout):
+            if "fao.org" in request.full_url:
+                raise TimeoutError("feed temporarily unavailable")
+            return Response()
+
+        with patch("core.news_feed_reader.urlopen", side_effect=fake_urlopen), patch(
+            "core.news_feed_reader.datetime"
+        ) as clock:
+            clock.now.return_value = NOW
+            report = fetch_official_news()
+        self.assertEqual(report.feeds_ok, 1)
+        self.assertEqual(len(report.items), 1)
+        self.assertEqual(len(report.feed_errors), 1)
 
 
 if __name__ == "__main__":
