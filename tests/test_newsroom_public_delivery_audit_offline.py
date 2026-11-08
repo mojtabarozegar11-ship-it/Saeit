@@ -60,6 +60,25 @@ class PublicDeliveryAuditTests(unittest.TestCase):
         self.assertTrue(result["story_seven_days_31_provinces"])
         self.assertTrue(result["story_exact_final_signature"])
 
+    def test_duplicate_province_is_not_full_coverage(self):
+        story = _story().replace("استان 30 — مرکز 30", "استان 0 — مرکز 30")
+        result = inspect_delivery("healthy", "healthy", story, report_date="2026-11-08")
+        self.assertEqual(result["story_daily_rows"], 217)
+        self.assertEqual(result["story_unique_provinces"], 30)
+        self.assertFalse(result["story_seven_days_31_provinces"])
+
+    def test_seven_day_counts_are_not_enough_if_days_assigned_wrong(self):
+        story = _story()
+        before = '<p>• 2026-11-09: دما 1 تا 4°C؛ بارش 0 میلی‌متر</p>'
+        after = '<p>• 2026-11-10: دما 1 تا 4°C؛ بارش 0 میلی‌متر</p>'
+        story = story.replace(before, after, 1)
+        position = story.index("استان 1 — مرکز 1")
+        story = story[:position] + story[position:].replace(after, before, 1)
+        result = inspect_delivery("healthy", "healthy", story, report_date="2026-11-08")
+        self.assertEqual(result["story_daily_rows"], 217)
+        self.assertEqual(set(result["story_daily_rows_by_date"].values()), {31})
+        self.assertFalse(result["story_seven_days_31_provinces"])
+
     def test_fewer_provinces_or_missing_story_section_fail(self):
         result = inspect_delivery("healthy", "healthy", _story(provinces=30), report_date="2026-11-08")
         self.assertFalse(result["story_seven_days_31_provinces"])
