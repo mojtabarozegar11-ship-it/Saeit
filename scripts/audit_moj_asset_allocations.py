@@ -43,8 +43,10 @@ def audit():
             "issued": False,
             "liquidity_funded": False,
         }
-    assert int(assets["mojoner"]["supply"]) == MOJONER_SUPPLY
-    assert len(assets) == 51
+    if int(assets["mojoner"]["supply"]) != MOJONER_SUPPLY:
+        raise ValueError("mojoner_supply_mismatch")
+    if len(assets) != 51:
+        raise ValueError("asset_count_mismatch")
     return {"schema": "moj.asset-allocation-audit.v1",
             "allocation_status": "revisable_unapproved_proposal",
             "chain_transactions": 0, "verified_revenue": "0",
