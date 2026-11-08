@@ -305,13 +305,15 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
             raise ValueError("bundle_unexpected_entry")
     if found != expected:
         raise ValueError("bundle_inventory_mismatch")
-    actual_checksums = json.loads((target / "SHA256SUMS.json").read_text("utf-8"))
     checksums = {path: hashlib.sha256(data).hexdigest() for path, data in documents.items()}
     # A valid checksum mapping with duplicate JSON keys or reformatted bytes
     # is not the deterministic, signed-off manifest that export_bundle wrote.
     canonical_manifest = (json.dumps(checksums, indent=2, sort_keys=True) + "\n").encode()
     if (target / "SHA256SUMS.json").read_bytes() != canonical_manifest:
         raise ValueError("bundle_manifest_bytes_mismatch")
+    # Only parse trusted, canonical bytes; malformed or duplicate-key JSON
+    # cannot reach the parser or trigger an uncontrolled decode exception.
+    actual_checksums = json.loads(canonical_manifest)
     if actual_checksums != checksums:
         raise ValueError("bundle_sha256_mismatch")
     for path, data in documents.items():
