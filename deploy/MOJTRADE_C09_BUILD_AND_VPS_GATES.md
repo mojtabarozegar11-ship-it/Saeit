@@ -7,7 +7,9 @@ contain a compiled `.algo` and has not been deployed to a VPS.
 
 1. A supported machine must have the .NET 8 SDK and NuGet access to the
    official `cTrader.Automate` package. Each cBot is a **separate** class
-   library targeting `net8.0`, pinned to package version `1.0.21`.
+   library targeting `net6.0`, pinned to package version `1.0.21`.
+   This corrects the original C09 manifest: real C11 CI run 42458681008
+   proved the cTrader packaging target rejected `net8.0` with CT0004.
 2. Run `bash scripts/mojtrade_build_cbots.sh`. It terminates nonzero if
    `dotnet` is missing or older than version 8. This is **not a success
    indicator** until each project compiles and the resulting `.algo` exists.
