@@ -67,6 +67,33 @@ class ServiceIntentsReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Duplicate specialist"):
             deploy.prepare(self.legacy(), self.approved + target)
 
+    def test_data_href_does_not_hide_real_generic_destination(self):
+        original = self.legacy()
+        target = deploy.find_links(original)["استعلام مدیریت منابع ←"][0]
+        decoy = b'data-href="/ask-master/index.php?service=1&amp;topic=water" '
+        with_decoy = target.replace(b'<a ', b'<a ' + decoy, 1)
+        original = original.replace(target, with_decoy, 1)
+        state, updated = deploy.prepare(original, self.approved)
+        self.assertEqual(state, "ready")
+        self.assertIn(decoy, updated)
+        self.assertIn(b'href="/ask-master/index.php?service=1&amp;topic=water"', updated)
+
+    def test_duplicate_href_attribute_is_rejected(self):
+        original = self.legacy()
+        target = deploy.find_links(original)["استعلام مدیریت منابع ←"][0]
+        duplicate = target.replace(b'<a ', b'<a href="/somewhere/" ', 1)
+        broken = original.replace(target, duplicate, 1)
+        with self.assertRaisesRegex(ValueError, "exactly one real href"):
+            deploy.prepare(broken, self.approved)
+
+    def test_data_href_without_real_href_is_rejected(self):
+        original = self.legacy()
+        target = deploy.find_links(original)["استعلام مدیریت منابع ←"][0]
+        malformed = target.replace(b'href=', b'data-href=', 1)
+        broken = original.replace(target, malformed, 1)
+        with self.assertRaisesRegex(ValueError, "exactly one real href"):
+            deploy.prepare(broken, self.approved)
+
     def test_successful_release_is_atomic_and_backed_up(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
