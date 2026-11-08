@@ -326,6 +326,24 @@ def inspect_error_classes(public, now_epoch=None):
         "database_programming": b"programmingerror",
         "database_integrity": b"integrityerror",
     }
+    runtime_cause_phrases = {
+        "django_initialization": (b"populate()", b"app registry", b"apps aren't loaded"),
+        "passenger_wsgi_startup": (b"passenger", b"wsgi", b"app root", b"startup", b"spawn"),
+        "python_import_environment": (b"sys.path", b"virtualenv", b"interpreter", b"import", b"module"),
+        "resource_exhaustion": (b"resource temporarily unavailable", b"out of memory",
+                                b"too many open files", b"cannot allocate memory",
+                                b"can't start new thread", b"process limit"),
+        "database_runtime": (b"database", b"sqlite", b"mysql", b"mariadb"),
+        "settings_environment": (b"settings", b"environment", b"secret_key", b"configuration"),
+        "filesystem_runtime": (b"permission", b"directory", b"file not found"),
+        "async_or_thread": (b"event loop", b"thread", b"async"),
+        "store_business_guard": (b"store", b"checkout", b"commerce", b"payment"),
+    }
+    runtime_leading_words = (
+        b"cannot", b"unable", b"failed", b"missing", b"invalid", b"no", b"the",
+        b"application", b"wsgi", b"passenger", b"django", b"settings",
+        b"public", b"staging", b"expected", b"wrong", b"store", b"source",
+    )
     shape_names = (
         "exception_message_line", "non_exception_reference",
         "module_phrase_near_marker", "module_phrase_absent_near_marker",
@@ -335,7 +353,12 @@ def inspect_error_classes(public, now_epoch=None):
               "missing_module_categories": {key: 0 for key in category_names},
               "missing_module_shapes": {key: 0 for key in shape_names},
               "exception_type_signatures": {key: 0 for key in exception_types},
+              "runtime_error_cause_buckets": {key: 0 for key in (
+                  *runtime_cause_phrases.keys(), "other_unclassified")},
+              "runtime_error_leading_words": {key.decode("ascii"): 0 for key in runtime_leading_words},
+              "runtime_error_message_distinct_capped": 0,
               "files_modified": False, "raw_log_emitted": False}
+    runtime_message_digests = set()
     for path in files:
         try:
             if (path.is_symlink() or path.parent.is_symlink() or
@@ -359,6 +382,30 @@ def inspect_error_classes(public, now_epoch=None):
                         continue
                     result["exception_type_signatures"][key] = min(
                         100, result["exception_type_signatures"][key] + 1
+                    )
+            # Bounded single-line RuntimeError messages. Emit only fixed-label
+            # categories, whitelisted leading words and a distinct count.
+            for marker in re.finditer(rb"\bruntimeerror\s*:", data):
+                prefix = data[max(0, marker.start() - 32):marker.start()]
+                if re.search(rb"\b(?:except|raise)\s+$", prefix):
+                    continue
+                message = data[marker.end():marker.end() + 256].split(b"\n", 1)[0].strip()
+                if not message:
+                    continue
+                runtime_message_digests.add(hashlib.sha256(message).digest())
+                category = "other_unclassified"
+                for label, phrases in runtime_cause_phrases.items():
+                    if any(phrase in message for phrase in phrases):
+                        category = label
+                        break
+                result["runtime_error_cause_buckets"][category] = min(
+                    100, result["runtime_error_cause_buckets"][category] + 1
+                )
+                first = re.match(rb"([a-z]{2,24})\b", message)
+                if first and first.group(1) in runtime_leading_words:
+                    fixed_word = first.group(1).decode("ascii")
+                    result["runtime_error_leading_words"][fixed_word] = min(
+                        100, result["runtime_error_leading_words"][fixed_word] + 1
                     )
             # Never emit log text, module names, or arbitrary substrings.
             # Distinguish exception messages from code references in tracebacks.
@@ -392,6 +439,7 @@ def inspect_error_classes(public, now_epoch=None):
                     )
         except (OSError, ValueError):
             continue
+    result["runtime_error_message_distinct_capped"] = min(32, len(runtime_message_digests))
     return result
 
 
