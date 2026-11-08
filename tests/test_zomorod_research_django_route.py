@@ -48,7 +48,7 @@ class ResearchGuideDjangoTests(SimpleTestCase):
         }
         self.write_manifest()
         self.write_journal()
-        self.settings_patch = override_settings(BASE_DIR=self.source_root)
+        self.settings_patch = override_settings(BASE_DIR=self.source_root, ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com"])
         self.settings_patch.enable()
         self.addCleanup(self.settings_patch.disable)
         self.env_patch = patch.dict(os.environ, {
