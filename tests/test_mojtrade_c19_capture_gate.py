@@ -77,6 +77,21 @@ class CaptureGateTests(unittest.TestCase):
         self.manifest["captures"]["deals"]["captured_utc"] = "2026-11-09T00:03:00Z"
         self.assertTrue(self.result()["coverage_plausible"])
 
+    def test_max_reference_clock_does_not_overflow(self):
+        # A valid day before the maximum representable date can be checked
+        # even when the inspection clock is at datetime.max.
+        self.manifest["day"] = "9999-12-30"
+        for name, record in self.manifest["captures"].items():
+            record["captured_utc"] = "9999-12-31T00:00:01Z"
+            if name != "positions":
+                record["from_utc_day"] = "9999-12-30"
+                record["to_utc_day"] = "9999-12-30"
+        result = gate.check_capture(
+            self.manifest, self.root,
+            now_utc=datetime.max.replace(tzinfo=timezone.utc))
+        self.assertTrue(result["coverage_plausible"])
+        self.assertFalse(result["commercial_readiness"])
+
     def test_invalid_reference_clock_is_rejected(self):
         with self.assertRaisesRegex(gate.CaptureError, "invalid_reference_clock"):
             gate.check_capture(self.manifest, self.root,
