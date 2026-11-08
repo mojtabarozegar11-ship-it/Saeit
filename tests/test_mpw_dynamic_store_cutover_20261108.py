@@ -129,7 +129,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         self.assertIn('"dynamic_confirmed": true', sink.getvalue())
         self.assertNotIn("mpw-shop-kicker", sink.getvalue())
 
-    def test_six_buyer_routes_are_read_only_and_content_checked(self):
+    def test_nine_buyer_routes_are_read_only_and_content_checked(self):
         from urllib.parse import urlsplit
         calls = []
 
@@ -166,7 +166,46 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertTrue(verify_public_buyer_routes("42425162108-before"))
         self.assertEqual(calls, [p for p, _, _ in BUYER_ROUTE_PROBES])
-        self.assertEqual(len(calls), 6)
+        self.assertEqual(len(calls), 9)
+
+    def test_detail_cta_checkout_alias_failure_blocks_cutover(self):
+        from urllib.error import HTTPError
+        from urllib.parse import urlsplit
+        sink = io.StringIO()
+
+        class Reply:
+            status = 200
+
+            def __init__(self, req):
+                self.url = req.full_url
+                route = urlsplit(req.full_url).path
+                title, action = next((t, a) for p, t, a in BUYER_ROUTE_PROBES if p == route)
+                self.body = title + b" " + action
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return self.body
+
+        def fetch(req, timeout):
+            self.assertEqual(req.get_method(), "GET")
+            if urlsplit(req.full_url).path == "/commerce/book/72/":
+                raise HTTPError(req.full_url, 404, "not found", {}, None)
+            return Reply(req)
+
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen", side_effect=fetch):
+            with contextlib.redirect_stdout(sink):
+                self.assertFalse(verify_public_buyer_routes("42425162112-before"))
+        self.assertIn('"checked": 6', sink.getvalue())
+        self.assertIn('"route_group": "checkout"', sink.getvalue())
+        self.assertIn('"category": "http_404"', sink.getvalue())
 
     def test_buyer_route_failure_forces_cutover_rollback(self):
         from scripts.mpw_dynamic_store_cutover_20261108 import PRODUCT_ROUTES
