@@ -56,6 +56,23 @@ The checker refuses partial `/v1/receipts` results (`truncated: true`),
 unsettled reservations, orphan MojTrade broker positions, missing broker
 positions, duplicated identity and missing stop/take-profit evidence.
 
+### C17 evidence-integrity tightening (source-only)
+
+For the C15 receipt schema, every receipt must now contain its original
+`created_unix_seconds` and `expires_unix_seconds`. The UTC creation day and
+90-second reservation TTL are checked against the coordinator contract.
+The independently supplied broker opening timestamp must fall within the
+reservation window, with a conservative five-second clock tolerance on either
+side; skew or clock anomalies block a consistent-evidence verdict.
+
+Duplicate CSV header names, duplicate JSON keys (including nested receipt
+objects), non-finite JSON constants and incomplete/malformed timestamps are
+rejected rather than silently accepted. These strict offline checks do **not**
+authenticate the broker export, verify the order in the broker's own system,
+turn on DEMO trading, or confer commercial readiness. A clock-synchronisation
+problem can produce a deliberate false-negative and requires operator review;
+it must never be bypassed automatically.
+
 ## CI improvement
 
 `.github/workflows/mojtrade-cbot-build.yml` now has a separate
