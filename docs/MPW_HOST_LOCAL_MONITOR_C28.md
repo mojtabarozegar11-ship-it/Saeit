@@ -23,13 +23,23 @@ and the payment-reconciliation cron is confirmed fresh. It **always** records
 `commercial_sale_or_customer_delivery_inferred=false`: the latest monitoring
 snapshot is not an independent buyer-download or blockchain audit.
 
+### C29 source-integrity hardening
+
+Each source is verified against the exact audited Git blob revision before
+execution, and its verified bytes are passed over Python standard input. A
+changed, missing, symlinked, or oversized source fails closed. The approved
+Git blob identities are pinned in `PINNED_SOURCE_BLOBS` in the runner.
+Copying a different source version, including the newer Draft PR #2204 paid
+scope classifier, requires review, updating its pin, and rerunning checks.
+The pins are version-integrity controls, not proof of site health.
+
 ## Proposed one-time installation after explicit deployment approval
 
 1. Confirm the active cPanel account `zomorod2`, Python interpreter
    `/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python`, private directory,
    and database read privileges. Do not touch the public site or production
    order tables.
-2. Review and copy this runner plus these existing read-only sources into a
+2. Review and copy this runner plus these **exact revision-pinned** read-only sources into a
    non-public directory named `mpw_readonly_sources` under the private root:
    - `scripts/mpw_payment_cron_heartbeat_readonly.py`
    - `scripts/mpw_paid_provenance_readonly_20261105.py`
