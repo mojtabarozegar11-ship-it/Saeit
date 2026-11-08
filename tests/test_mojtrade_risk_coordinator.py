@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 import importlib.util
+import json
 import threading
 import tempfile
 import unittest
@@ -245,6 +246,66 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(risk.Denied, "stale_day"):
             self.ledger.observe(invalid)
 
+    def test_operator_status_is_read_only_and_reports_risk_state(self):
+        self.seed()
+        self.ledger.observe(self.admission(1, equity="995"))
+        before = self.ledger.status("123", DAY)
+        self.assertEqual(before["baseline"], "1000.00")
+        self.assertEqual(before["last_equity"], "995")
+        self.assertFalse(before["halted"])
+        self.assertEqual(before["active_reservations"], 0)
+        self.assertTrue(before["telemetry_fresh"])
+        self.assertTrue(before["demo_reservations_enabled"])
+        with self.ledger._connection() as db:
+            updated_before = db.execute(
+                "SELECT updated FROM day_state WHERE account=? AND day=?",
+                ("123", DAY),
+            ).fetchone()[0]
+        self.now += 125
+        after = self.ledger.status("123", DAY)
+        self.assertFalse(after["telemetry_fresh"])
+        self.assertEqual(after["last_risk_update_age_seconds"], 125)
+        with self.ledger._connection() as db:
+            updated_after = db.execute(
+                "SELECT updated FROM day_state WHERE account=? AND day=?",
+                ("123", DAY),
+            ).fetchone()[0]
+        self.assertEqual(updated_before, updated_after)
+
+    def test_status_reports_latched_stop_and_expiring_reservations(self):
+        self.seed()
+        self.ledger.reserve(self.admission(1))
+        self.assertEqual(self.ledger.status("123", DAY)["active_reservations"], 1)
+        with self.assertRaisesRegex(risk.Denied, "daily_loss_reached"):
+            self.ledger.observe(self.admission(2, equity="979"))
+        self.assertTrue(self.ledger.status("123", DAY)["halted"])
+        self.now += risk.TTL_SECONDS + 1
+        self.assertEqual(self.ledger.status("123", DAY)["active_reservations"], 0)
+
+    def test_status_denies_unenrolled_or_invalid_identity(self):
+        with self.assertRaisesRegex(risk.Denied, "baseline_not_enrolled"):
+            self.ledger.status("123", DAY)
+        with self.assertRaisesRegex(risk.Denied, "invalid_identity"):
+            self.ledger.status("123;DROP", DAY)
+        with self.assertRaisesRegex(risk.Denied, "invalid_day"):
+            self.ledger.status("123", "2026-99-99")
+
+    def test_status_sqlite_connection_is_truly_read_only(self):
+        self.seed()
+        with self.ledger._readonly_connection() as db:
+            self.assertEqual(db.execute("PRAGMA query_only").fetchone()[0], 1)
+            with self.assertRaises(risk.sqlite3.OperationalError):
+                db.execute("UPDATE day_state SET halted=1 WHERE account='123'")
+        self.assertFalse(self.ledger.status("123", DAY)["halted"])
+
+    def test_status_does_not_recreate_missing_database(self):
+        fresh_path = Path(self.dir.name) / "lost.sqlite"
+        separate = risk.Ledger(str(fresh_path), enabled=False, clock=lambda: self.now)
+        fresh_path.unlink()
+        with self.assertRaises(risk.sqlite3.OperationalError):
+            separate.status("123", DAY)
+        self.assertFalse(fresh_path.exists())
+
 
 class HttpProtocolTests(unittest.TestCase):
     def setUp(self):
@@ -307,6 +368,33 @@ class HttpProtocolTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as caught:
             self.post("/v1/observe", data, token="wrong")
         self.assertEqual(caught.exception.code, 401)
+
+    def test_status_http_requires_token_and_does_not_mutate(self):
+        url = self.base + "/v1/status?account=123&day=" + DAY
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(url, timeout=2)
+        self.assertEqual(caught.exception.code, 401)
+        request = Request(url, headers={"Authorization": "Bearer " + "a" * 40})
+        with urlopen(request, timeout=2) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn("application/json", response.headers["Content-Type"])
+            snapshot = json.loads(response.read().decode("ascii"))
+        self.assertEqual(snapshot["account"], "123")
+        self.assertEqual(snapshot["baseline"], "1000")
+        self.assertFalse(snapshot["halted"])
+        with self.server.RequestHandlerClass.ledger._connection() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM reservations").fetchone()[0], 0)
+
+    def test_status_http_rejects_duplicate_and_unexpected_query(self):
+        for suffix in ("account=123&account=456&day=" + DAY,
+                       "account=123&day=" + DAY + "&secret=1"):
+            request = Request(
+                self.base + "/v1/status?" + suffix,
+                headers={"Authorization": "Bearer " + "a" * 40},
+            )
+            with self.assertRaises(HTTPError) as caught:
+                urlopen(request, timeout=2)
+            self.assertEqual(caught.exception.code, 409)
 
 
 if __name__ == "__main__":

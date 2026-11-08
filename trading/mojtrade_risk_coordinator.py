@@ -12,11 +12,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
+import json
 import os
 import re
 import sqlite3
 import time
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote, urlsplit
 
 
 ACCOUNT_RE = re.compile(r"^[0-9]{1,20}$")
@@ -118,6 +119,14 @@ class Ledger:
         db.execute("PRAGMA busy_timeout=10000")
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA synchronous=FULL")
+        return db
+
+    def _readonly_connection(self):
+        # SQLite mode=ro prevents a status query from creating a missing ledger
+        # or changing the database header; query_only blocks later writes too.
+        uri = "file:" + quote(self.db_path, safe="/") + "?mode=ro"
+        db = sqlite3.connect(uri, uri=True, timeout=10, isolation_level=None)
+        db.execute("PRAGMA query_only=ON")
         return db
 
     def seed_day(self, account: str, day: str, equity: str) -> None:
@@ -272,23 +281,84 @@ class Ledger:
         finally:
             db.close()
 
+    def status(self, account: str, day: str) -> dict[str, object]:
+        """Authenticated, non-mutating operator snapshot; not broker readiness.
+
+        No trade permission is derived from this response. A healthy coordinator
+        cannot establish that a cBot, TLS endpoint or broker is operational.
+        """
+        if not ACCOUNT_RE.fullmatch(account):
+            raise Denied("invalid_identity")
+        valid_day(day)
+        now = self.clock()
+        db = self._readonly_connection()
+        try:
+            row = db.execute(
+                "SELECT baseline,last_equity,halted,updated FROM day_state "
+                "WHERE account=? AND day=?", (account, day),
+            ).fetchone()
+            if row is None:
+                raise Denied("baseline_not_enrolled")
+            active = db.execute(
+                "SELECT COUNT(*) FROM reservations WHERE account=? AND day=? "
+                "AND state IN ('reserved','committed') AND expires>?",
+                (account, day, now),
+            ).fetchone()[0]
+        finally:
+            db.close()
+        age = max(0, int(now - row[3]))
+        today = datetime.fromtimestamp(now, timezone.utc).date().isoformat()
+        return {
+            "account": account,
+            "day": day,
+            "baseline": row[0],
+            "last_equity": row[1],
+            "halted": bool(row[2]),
+            "last_risk_update_age_seconds": age,
+            "telemetry_fresh": day == today and age <= 120,
+            "active_reservations": active,
+            "demo_reservations_enabled": self.enabled,
+        }
+
 
 class Handler(BaseHTTPRequestHandler):
     ledger: Ledger
     token: str
 
-    def _reply(self, code: int, body: str) -> None:
+    def _reply(self, code: int, body: str, content_type: str = "text/plain; charset=us-ascii") -> None:
         payload = body.encode("ascii")
         self.send_response(code)
-        self.send_header("Content-Type", "text/plain; charset=us-ascii")
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
     def do_GET(self):
-        self._reply(200 if self.path == "/health" else 404,
-                    "SERVICE_UP" if self.path == "/health" else "NOT_FOUND")
+        if self.path == "/health":
+            # Liveness only. This does not establish DB or broker readiness.
+            self._reply(200, "SERVICE_UP")
+            return
+        address = urlsplit(self.path)
+        if address.path != "/v1/status":
+            self._reply(404, "NOT_FOUND")
+            return
+        if not hmac.compare_digest(
+                self.headers.get("Authorization", ""), "Bearer " + self.token):
+            self._reply(401, "DENIED|unauthorized")
+            return
+        try:
+            fields = parse_qs(address.query, strict_parsing=True, max_num_fields=2)
+            if set(fields) != {"account", "day"} or any(
+                    len(values) != 1 for values in fields.values()):
+                raise Denied("invalid_query")
+            snapshot = self.ledger.status(fields["account"][0], fields["day"][0])
+            self._reply(200, json.dumps(snapshot, sort_keys=True),
+                        "application/json; charset=us-ascii")
+        except (Denied, ValueError, UnicodeError) as exc:
+            self._reply(409, "DENIED|" + str(exc))
+        except (sqlite3.Error, OSError):
+            self._reply(503, "DENIED|storage_unavailable")
 
     def do_POST(self):
         authorization = self.headers.get("Authorization", "")
