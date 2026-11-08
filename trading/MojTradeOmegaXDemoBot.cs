@@ -135,7 +135,9 @@ namespace MojTrade.OmegaX
 
         protected override void OnTick()
         {
-            if (Account.IsLive)
+            // Observation mode must never mutate existing positions or protective orders.
+            // This guard also preserves the hard lock on live accounts.
+            if (!EnableDemoTrading || Account.IsLive)
                 return;
 
             foreach (var position in Positions.FindAll(Label, SymbolName))
