@@ -109,6 +109,13 @@ def validate_program(program: dict) -> None:
         raise ValueError("invalid_program_schema")
     if program.get("purpose") != "offline_preissuance_planning":
         raise ValueError("invalid_program_purpose")
+    # This pre-issuance schema must not carry unchecked extra metadata that
+    # could masquerade as a wallet transfer, exchange listing or live sale.
+    if set(program) != {
+            "schema", "purpose", "assets", "commercial_release_authorized",
+            "wallet_or_private_key_required", "transactions_broadcast",
+            "verified_income", "gates"}:
+        raise ValueError("unexpected_program_fields")
     assets = program.get("assets")
     if not isinstance(assets, list) or len(assets) != SERIES_SIZE + 1:
         raise ValueError("wrong_asset_count")
@@ -127,6 +134,13 @@ def validate_program(program: dict) -> None:
             or len(set(symbols)) != len(assets)):
         raise ValueError("asset_identifier_collision")
     bitcoin = assets[0]
+    if set(bitcoin) != {
+            "id", "name", "symbol_candidate", "network",
+            "protocol_candidate", "supply_tokens", "supply_status",
+            "divisibility_proposal", "runes_etching_proposal",
+            "name_availability_verified", "issuance_state",
+            "mainnet_authorized"}:
+        raise ValueError("unexpected_asset_fields")
     if (bitcoin.get("id") != "mojoner" or bitcoin.get("name") != "Mojoner"
             or bitcoin.get("network") != "bitcoin"
             or bitcoin.get("protocol_candidate") != "runes"
@@ -146,6 +160,11 @@ def validate_program(program: dict) -> None:
         raise ValueError("runes_supply_formula_mismatch")
     last = 0
     for number, asset in enumerate(assets[1:], start=1):
+        if set(asset) != {
+                "id", "name", "symbol_candidate", "network",
+                "protocol_candidate", "supply_tokens", "supply_status",
+                "decimals", "issuance_state", "mainnet_authorized"}:
+            raise ValueError("unexpected_asset_fields")
         supply = _whole_number(asset.get("supply_tokens"))
         if (asset.get("id") != f"moj{number}"
                 or asset.get("name") != f"Moj {number}"
