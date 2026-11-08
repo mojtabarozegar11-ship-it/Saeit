@@ -118,6 +118,28 @@ class AccountingDashboardTests(TestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.memo, "revised draft")
 
+    def test_posted_journal_line_rejects_direct_model_edit_or_delete(self):
+        line = JournalLine.objects.get(entry__reference="JV-1", account=self.cash)
+        line.debit = Decimal("250.00")
+        with self.assertRaises(ValidationError):
+            line.save(update_fields=["debit"])
+        line.refresh_from_db()
+        self.assertEqual(line.debit, Decimal("100.00"))
+        with self.assertRaises(ValidationError):
+            line.delete()
+        self.assertTrue(JournalLine.objects.filter(pk=line.pk).exists())
+
+    def test_draft_journal_line_remains_editable_and_deletable(self):
+        draft = JournalEntry.objects.create(reference="JV-LINE-DRAFT", occurred_on=date(2026, 11, 8),
+                                            memo="editing", status=JournalEntry.Status.DRAFT)
+        line = JournalLine.objects.create(entry=draft, account=self.cash, debit=Decimal("10.00"))
+        line.debit = Decimal("20.00")
+        line.save(update_fields=["debit"])
+        line.refresh_from_db()
+        self.assertEqual(line.debit, Decimal("20.00"))
+        line.delete()
+        self.assertFalse(JournalLine.objects.filter(pk=line.pk).exists())
+
     def test_posted_entry_cannot_be_changed_or_deleted_from_admin(self):
         entry = JournalEntry.objects.get(reference="JV-1")
         request = RequestFactory().get("/admin/accounting/journalentry/")
