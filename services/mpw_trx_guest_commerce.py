@@ -158,6 +158,20 @@ def _dispatch(request, view, args, kwargs, *, create=False):
     return _install_cookie(response, token)
 
 
+def _record_funnel_event_best_effort(request, event, product):
+    """Optional analytics must never turn a valid buyer response into HTTP 500.
+
+    In particular, start_order may already have committed an invoice by the
+    time its instrumentation runs. Do not expose exception details or buyer data.
+    """
+    try:
+        from core.commerce_funnel import record_funnel_event
+        record_funnel_event(request, event, product)
+    except Exception:
+        return False
+    return True
+
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
@@ -184,8 +198,7 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
-    from core.commerce_funnel import record_funnel_event
-    record_funnel_event(request, "begin_checkout", product)
+    _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
@@ -269,12 +282,19 @@ def patch_commercial(namespace):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    from core.commerce_funnel import record_funnel_event
-                    from core.models import Product
-                    product_id = kwargs.get("product_id")
-                    product = Product.objects.filter(pk=product_id, active=True).first()
-                    if product is not None:
-                        record_funnel_event(request, "invoice_created", product)
+                    # Order creation and its response are authoritative. The
+                    # separate analytics lookup may be absent or unavailable.
+                    try:
+                        from core.models import Product
+                        product = Product.objects.filter(
+                            pk=kwargs.get("product_id"), active=True,
+                        ).first()
+                        if product is not None:
+                            _record_funnel_event_best_effort(
+                                request, "invoice_created", product,
+                            )
+                    except Exception:
+                        pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
