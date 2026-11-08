@@ -18,6 +18,14 @@ from moj_asset_registry import (  # noqa: E402
 
 
 class AssetRegistryTests(unittest.TestCase):
+    def test_corrupted_manifest_fails_with_explicit_verification_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "new"
+            export_bundle(self.program, target)
+            (target / "SHA256SUMS.json").write_bytes(b"not json\n")
+            with self.assertRaisesRegex(ValueError, "bundle_manifest_bytes_mismatch"):
+                verify_bundle(self.program, target)
+
     def test_oversized_supply_input_rejected_before_decimal_conversion(self):
         for invalid in ("1" * 5000, "0" * 5000, "9" * 15):
             with self.subTest(length=len(invalid)):
