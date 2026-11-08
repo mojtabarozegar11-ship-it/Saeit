@@ -18,10 +18,10 @@ class C09PackagingChecks(unittest.TestCase):
     def test_two_independent_cbot_projects(self):
         self.assertEqual(len(list(self.projects())), 2)
 
-    def test_both_target_net8(self):
+    def test_both_target_supported_ctrader_net6(self):
         for name, project in self.projects():
             with self.subTest(project=name):
-                self.assertEqual(project.findtext("./PropertyGroup/TargetFramework"), "net8.0")
+                self.assertEqual(project.findtext("./PropertyGroup/TargetFramework"), "net6.0")
 
     def test_only_one_source_class_per_project(self):
         for name, project in self.projects():
