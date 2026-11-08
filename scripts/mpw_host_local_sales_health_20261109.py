@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -30,6 +31,15 @@ PROBES = (
     ("flags", "mpw_payment_100_live_baseline_readonly_20261021.py", "MPW_PAYMENT_100_LIVE_BASELINE", 110),
     ("intake", "mpw_sales_intake_readonly_20261024.py", "MPW_INTAKE_READONLY", 180),
 )
+
+# Git blob identities of the four audited sources on main at C29 review.
+# A different revision must be reviewed and explicitly repinned before use.
+PINNED_SOURCE_BLOBS = {
+    "mpw_payment_cron_heartbeat_readonly.py": "ad23b2a395f8b62e70c3539fee5a381b88bbd152",
+    "mpw_paid_provenance_readonly_20261105.py": "f524dad12fd4809496f28c153110f4857a794f3c",
+    "mpw_payment_100_live_baseline_readonly_20261021.py": "59a7cb917b2aa11e523148889758fc9019206b30",
+    "mpw_sales_intake_readonly_20261024.py": "c4d84ca71a5162bc72aa7fd7d7bf6986e53941a0",
+}
 
 SAFE_FIELDS = {
     "cron": ("cron_readable", "entry_once_per_minute", "heartbeat_fresh",
@@ -80,17 +90,37 @@ def parse_marker(stdout: str, marker: str) -> object:
     return json.loads(matches[0])
 
 
+def git_blob_id(payload: bytes) -> str:
+    """Compare byte-for-byte against an audited GitHub source revision."""
+    header = b"blob " + str(len(payload)).encode("ascii") + b"\0"
+    return hashlib.sha1(header + payload).hexdigest()
+
+
 def run_probe(name: str, filename: str, marker: str, seconds: int,
-              *, source_dir: Path = SOURCE_DIR, python: str = sys.executable) -> dict:
+              *, source_dir: Path = SOURCE_DIR, python: str = sys.executable,
+              pins: dict | None = None) -> dict:
     script = source_dir / filename
     if (not source_dir.is_dir() or source_dir.is_symlink() or
             not script.is_file() or script.is_symlink()):
         return {"status": "missing_verified_source"}
+    pin = (PINNED_SOURCE_BLOBS if pins is None else pins).get(filename)
+    if not isinstance(pin, str) or len(pin) != 40:
+        return {"status": "source_pin_missing"}
+    try:
+        if script.stat().st_size > 256_000:
+            return {"status": "source_too_large"}
+        source = script.read_bytes()
+    except OSError:
+        return {"status": "source_unreadable"}
+    if git_blob_id(source) != pin:
+        return {"status": "source_revision_mismatch"}
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
-        proc = subprocess.run([python, "-B", str(script)], capture_output=True,
-                              text=True, timeout=seconds, env=env, check=False)
+        # Feed the exact verified bytes, avoiding a second path read by Python.
+        proc = subprocess.run([python, "-B", "-"], input=source,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=seconds, env=env, check=False)
     except subprocess.TimeoutExpired:
         return {"status": "timeout"}
     except OSError:
@@ -101,15 +131,16 @@ def run_probe(name: str, filename: str, marker: str, seconds: int,
     if len(proc.stdout) > 1_000_000:
         return {"status": "output_too_large"}
     try:
-        summary = summarize(name, parse_marker(proc.stdout, marker))
+        summary = summarize(name, parse_marker(proc.stdout.decode("utf-8", "replace"), marker))
     except (ValueError, TypeError, json.JSONDecodeError):
         return {"status": "invalid_aggregate_marker"}
     return {"status": "completed", "summary": summary}
 
 
-def build_report(*, source_dir: Path = SOURCE_DIR, python: str = sys.executable) -> dict:
+def build_report(*, source_dir: Path = SOURCE_DIR, python: str = sys.executable,
+                 pins: dict | None = None) -> dict:
     results = {name: run_probe(name, script, marker, timeout,
-                               source_dir=source_dir, python=python)
+                               source_dir=source_dir, python=python, pins=pins)
                for name, script, marker, timeout in PROBES}
     all_probes_completed = all(row["status"] == "completed" for row in results.values())
     cron_summary = results["cron"].get("summary", {})
