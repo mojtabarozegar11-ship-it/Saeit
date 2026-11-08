@@ -6,6 +6,7 @@ This module deliberately has no Django dependency. It never publishes content.
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+import hashlib
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
@@ -50,6 +51,17 @@ class NewsFetchResult:
     items: list[OfficialNewsItem]
     feeds_ok: int
     feed_errors: tuple[str, ...]
+
+
+def editorial_identity(item: OfficialNewsItem) -> tuple[str, str]:
+    """Stable per-publisher draft keys, preserving existing USDA draft IDs."""
+    digest = hashlib.sha256(item.url.encode("utf-8")).hexdigest()
+    if item.feed_url == OFFICIAL_FEEDS[0].url:
+        # Previous versions used this exact key; retain it for idempotency.
+        return f"official-usda-news:{digest}", f"usda-news-{digest[:24]}"
+    if item.feed_url == OFFICIAL_FEEDS[1].url:
+        return f"official-fao-news:{digest}", f"fao-news-{digest[:24]}"
+    raise ValueError("News item has no approved official feed identity")
 
 
 def _canonical_official_url(candidate: str, allowed_hosts: frozenset[str]) -> str | None:
