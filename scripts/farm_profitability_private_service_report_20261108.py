@@ -2,8 +2,8 @@
 """Private farm profitability / break-even service calculation.
 
 No external network, database writes, email, payments, or live farm data.
-Input is a private customer-authorized JSON; stdout contains financial summary
-only. Figures are derived strictly from supplied data, not typical market values.
+Input is a private customer-authorized JSON; financial values are written to
+an owner-private file only; stdout reveals no financial values. Figures are derived strictly from supplied data, not typical market values.
 Not a tax/audit opinion or a substitute for full economic-cost accounting.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, getcontext
 from pathlib import Path
 
 MAX_BYTES = 200_000
+MAX_FINANCIAL_INPUT = Decimal("1e18")
 MONEY = Decimal("0.01")
 ZERO = Decimal("0")
 getcontext().prec = 80
@@ -37,6 +38,8 @@ def amount(value, name, positive=False):
         raise InputError(f"{name}: invalid decimal") from err
     if not number.is_finite() or number < ZERO or (positive and number <= ZERO):
         raise InputError(f"{name}: must be {'positive' if positive else 'nonnegative'}")
+    if number > MAX_FINANCIAL_INPUT:
+        raise InputError(f"{name}: exceeds bounded calculation range")
     return number
 
 
@@ -129,17 +132,22 @@ def main():
     parser.add_argument("private_json", type=Path)
     args = parser.parse_args()
     path = args.private_json
+    private_root = Path("/home/zomorod2/.private_zomorod_farm_reports")
     try:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_BYTES:
-            raise InputError("private input is missing, unsafe, or exceeds size limit")
+        if (private_root.is_symlink() or not private_root.is_dir() or
+                (hasattr(os, "geteuid") and private_root.stat().st_uid != os.geteuid())):
+            raise InputError("private owner input directory unavailable")
+        if (path.is_symlink() or path.parent.resolve(strict=True) != private_root.resolve(strict=True) or
+                not path.is_file() or not path.name.startswith("input-") or
+                not path.name.endswith(".json") or path.stat().st_size > MAX_BYTES or
+                path.stat().st_mode & 0o077 or
+                (hasattr(os, "geteuid") and path.stat().st_uid != os.geteuid())):
+            raise InputError("customer input must be an owner-private input-*.json file")
         data = json.loads(path.read_text(encoding="utf-8"))
         result = calculate(data)
-    except (InputError, OSError, UnicodeError, json.JSONDecodeError) as err:
-        parser.exit(2, f"FARM_PRIVATE_REPORT_BLOCKED: {type(err).__name__}\n")
+    except (InputError, OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        parser.exit(2, "FARM_PRIVATE_REPORT_BLOCKED: PRIVATE_INPUT_OR_DATA\n")
     # Financial values must never land in CI logs, public stdout, or an open webroot.
-    private_root = Path("/home/zomorod2/.private_zomorod_farm_reports")
-    if private_root.is_symlink() or not private_root.parent.is_dir():
-        parser.exit(2, "FARM_PRIVATE_REPORT_BLOCKED: PRIVATE_ROOT\n")
     try:
         private_root.mkdir(mode=0o700, exist_ok=True)
         if not private_root.is_dir() or private_root.is_symlink():
