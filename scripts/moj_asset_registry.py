@@ -205,7 +205,9 @@ def offline_release_readiness(program: dict) -> dict:
     validate_program(program)
     return {
         "asset_count": len(program["assets"]),
-        "blocked_gates": sorted(program["gates"]),
+        "blocked_gates": sorted(name for name, approved in program["gates"].items() if approved is False),
+        "unselected_series_networks": sum(asset["network"] == "undecided_non_bitcoin" for asset in program["assets"][1:]),
+        "unverified_rune_name": program["assets"][0]["name_availability_verified"] is False,
         "release_ready": False,
         "on_chain_issuance_verified": False,
         "verified_revenue": False,
