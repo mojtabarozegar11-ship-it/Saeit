@@ -17,19 +17,30 @@ ALLOCATION_BPS = {
     "community_creators": 1000,
     "security_contingency": 500,
 }
+ALLOCATION_KEYS = frozenset(ALLOCATION_BPS)
+BASIS_POINTS = 10_000
+
 
 def allocation_for_supply(supply):
     if type(supply) is not int or supply <= 0:
         raise ValueError("invalid_supply")
-    if sum(ALLOCATION_BPS.values()) != 10000:
+    # Never accept accidental negative, non-integer, extraneous, or missing
+    # weights: a 100% sum alone does not prove economic validity.
+    if not isinstance(ALLOCATION_BPS, dict) or set(ALLOCATION_BPS) != ALLOCATION_KEYS:
+        raise ValueError("allocation_categories_invalid")
+    if any(type(weight) is not int or weight < 0 or weight > BASIS_POINTS
+           for weight in ALLOCATION_BPS.values()):
+        raise ValueError("allocation_weight_invalid")
+    if sum(ALLOCATION_BPS.values()) != BASIS_POINTS:
         raise ValueError("allocation_basis_points_not_10000")
-    result = {name: supply * bps // 10000
+    result = {name: supply * bps // BASIS_POINTS
               for name, bps in ALLOCATION_BPS.items()}
-    # Assign rounding dust deterministically to the reserve, not rewards.
+    # Assign rounding dust deterministically to a reserve, not rewards.
     result["security_contingency"] += supply - sum(result.values())
-    if sum(result.values()) != supply:
+    if sum(result.values()) != supply or any(x < 0 or x > supply for x in result.values()):
         raise ValueError("allocation_sum_mismatch")
     return result
+
 
 def audit():
     program = generate_program()
@@ -51,6 +62,7 @@ def audit():
             "allocation_status": "revisable_unapproved_proposal",
             "chain_transactions": 0, "verified_revenue": "0",
             "assets": assets}
+
 
 if __name__ == "__main__":
     print(json.dumps(audit(), indent=2, sort_keys=True))
