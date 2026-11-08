@@ -14,6 +14,8 @@ fi
 
 build_marker="$(mktemp)"
 trap 'rm -f "$build_marker"' EXIT
+cd "${root}/trading/build"
+echo "Selected .NET SDK in cBot build directory: $(dotnet --version)"
 
 for project in MojTradeDemoBot MojTradeOmegaXDemoBot; do
   project_dir="${root}/trading/build/${project}"
