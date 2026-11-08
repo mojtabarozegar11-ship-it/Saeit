@@ -72,6 +72,7 @@ class ResearchGuideDjangoTests(SimpleTestCase):
             "release_id": RELEASE,
             "state": state,
             "created": {f"research/guides/{SLUG}/index.html": digest or sha(HTML)},
+            "verified_urls": [f"https://zomorodmelal.ir/research/guides/{SLUG}/"] if state == "live_verified" else [],
         }), encoding="utf-8")
 
     def request(self, host="zomorodmelal.ir"):
@@ -90,6 +91,15 @@ class ResearchGuideDjangoTests(SimpleTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn("X-Robots-Tag", resp)
         self.assertEqual(verified_guide_paths(), [f"/research/guides/{SLUG}/"])
+
+    def test_verified_state_without_exact_public_url_does_not_count(self):
+        self.write_journal(state="live_verified")
+        journal = json.loads(self.journal.read_text(encoding="utf-8"))
+        journal["verified_urls"] = []
+        self.journal.write_text(json.dumps(journal), encoding="utf-8")
+        with self.assertRaises(Http404):
+            research_guide(self.request(), SLUG)
+        self.assertEqual(verified_guide_paths(), [])
 
     def test_unapproved_guide_is_not_served(self):
         self.guide["status"] = "EDITORIAL_REVIEW_REQUIRED"
