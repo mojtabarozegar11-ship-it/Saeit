@@ -4,6 +4,10 @@ The command `mojtrade_ctrader_capture_gate.py` is **read-only** and checks a
 local operator-produced manifest for three CLI exports: `positions`,
 `orders-history`, and `deals`. It does **not** sign into a broker, authenticate
 the exporter, validate the CLI JSON schema, place orders, or approve trading.
+It also refuses future-dated capture timestamps beyond a bounded 60-second
+clock-skew allowance relative to the running machine's UTC clock. This is a
+local plausibility check, **not** an independent or trusted time attestation;
+an incorrect local clock can affect the result.
 
 Official CLI semantics: positions are currently open; orders-history includes
 finished orders; deals includes closed deals and realised P&L. All dates are

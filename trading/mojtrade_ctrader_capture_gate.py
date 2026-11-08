@@ -18,6 +18,7 @@ import re
 ACCOUNT = re.compile(r"^[0-9]{1,20}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 SOURCES = frozenset({"positions", "orders_history", "deals"})
+MAX_CLOCK_SKEW = timedelta(seconds=60)
 
 
 class CaptureError(ValueError):
@@ -59,8 +60,12 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def check_capture(manifest: dict, base_dir: Path) -> dict:
+def check_capture(manifest: dict, base_dir: Path, *, now_utc: datetime | None = None) -> dict:
     """Check three SHA-bound local CLI outputs and their declared coverage."""
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+    if not isinstance(now_utc, datetime) or now_utc.tzinfo is None or now_utc.utcoffset() != timedelta(0):
+        raise CaptureError("invalid_reference_clock")
     if not isinstance(manifest, dict) or set(manifest) != {
         "account", "day", "source", "captures"
     }:
@@ -80,8 +85,11 @@ def check_capture(manifest: dict, base_dir: Path) -> dict:
 
     issues: list[str] = []
     root = base_dir.resolve()
-    day_end = datetime.combine(target_day + timedelta(days=1),
-                               datetime.min.time(), timezone.utc)
+    try:
+        day_end = datetime.combine(target_day + timedelta(days=1),
+                                   datetime.min.time(), timezone.utc)
+    except OverflowError:
+        raise CaptureError("invalid_day") from None
     for name in sorted(SOURCES):
         record = captures[name]
         required = {"file", "sha256", "captured_utc", "count"}
@@ -106,6 +114,8 @@ def check_capture(manifest: dict, base_dir: Path) -> dict:
         count = _count(record["count"])
         if captured < day_end:
             issues.append(f"capture_before_utc_day_end:{name}")
+        if captured > now_utc + MAX_CLOCK_SKEW:
+            issues.append(f"capture_in_future:{name}")
         if name in ("orders_history", "deals"):
             if record["from_utc_day"] != day or record["to_utc_day"] != day:
                 issues.append(f"incomplete_utc_day_scope:{name}")
