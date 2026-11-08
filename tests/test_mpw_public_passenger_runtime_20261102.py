@@ -139,8 +139,31 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertEqual(result["classes"]["module_missing"], 1)
             self.assertEqual(result["classes"]["python_traceback"], 1)
             self.assertEqual(result["missing_module_categories"]["other_unclassified"], 1)
+            self.assertEqual(result["missing_module_shapes"]["exception_message_line"], 1)
+            self.assertEqual(result["missing_module_shapes"]["module_phrase_near_marker"], 1)
             self.assertFalse(result["files_modified"])
             self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_module_error_shapes_and_html_quote_are_redacted(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/SECRET except ModuleNotFoundError:\n"
+                "ModuleNotFoundError: No module named &#39;config&#39;\n"
+                "ModuleNotFoundError: No module named django\n"
+                "ModuleNotFoundError occurred in code context\n",
+            )
+            result = inspect_error_classes(root)
+            shapes = result["missing_module_shapes"]
+            self.assertEqual(shapes["exception_message_line"], 2)
+            self.assertEqual(shapes["non_exception_reference"], 2)
+            self.assertEqual(shapes["module_phrase_near_marker"], 2)
+            self.assertEqual(shapes["module_phrase_absent_near_marker"], 2)
+            self.assertEqual(result["missing_module_categories"]["project_config"], 1)
+            self.assertEqual(result["missing_module_categories"]["django_dependency"], 1)
             self.assertNotIn("buyer@", json.dumps(result))
             self.assertNotIn("SECRET", json.dumps(result))
 
