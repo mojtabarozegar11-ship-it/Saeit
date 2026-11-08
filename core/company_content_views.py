@@ -5,7 +5,7 @@ from django.utils import timezone
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 from .newsletter_models import NewsletterStory
 from .company_inquiry_models import CompanyInquiry
-from .editorial_policy import blocked_story_reason, visible_story_links
+from .editorial_policy import public_story_allowed, visible_story_links
 
 
 def company_gallery(request):
@@ -16,8 +16,8 @@ def company_gallery(request):
     query = request.GET.get("q", "").strip()
     if query:
         media = media.filter(title__icontains=query)
-    safe_media = [m for m in media[:500] if not (
-        m.newsletter_story and blocked_story_reason(m.newsletter_story)
+    safe_media = [m for m in media[:500] if (
+        not m.newsletter_story or public_story_allowed(m.newsletter_story)
     )][:100]
     return render(request, "core/company_gallery.html", {"media": safe_media, "query": query, "kind": kind})
 
@@ -26,7 +26,7 @@ def company_content_feed(request, slug):
     target = f"/company/{slug.strip('/')}/" if slug != "company" else "/company/"
     links = CompanyContentLink.objects.filter(target_path=target).select_related("newsletter_story", "knowledge_article")
     links = visible_story_links([
-        x for x in links if (x.newsletter_story and x.newsletter_story.status == "published")
+        x for x in links if (x.newsletter_story and public_story_allowed(x.newsletter_story))
         or (x.knowledge_article and x.knowledge_article.published)
     ])
     if not links:
