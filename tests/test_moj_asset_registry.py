@@ -218,5 +218,14 @@ class AssetRegistryTests(unittest.TestCase):
                 verify_bundle(self.program, target)
 
 
+    def test_bundle_verifier_rejects_unexpected_empty_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "new"
+            export_bundle(self.program, target)
+            (target / "hidden-contents").mkdir()
+            with self.assertRaisesRegex(ValueError, "bundle_unexpected_directory"):
+                verify_bundle(self.program, target)
+
+
 if __name__ == "__main__":
     unittest.main()
