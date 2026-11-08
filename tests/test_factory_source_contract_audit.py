@@ -80,6 +80,35 @@ class FactorySourceContractAuditTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('"status": "blocked"', captured.getvalue())
 
+    def test_transitive_missing_import_stays_blocked(self):
+        root = self.fixture()
+        (root / "core/factory_agent_runtime.py").write_text(
+            "from .factory_missing_transitive import Handler\n", encoding="utf-8")
+        result = audit_module.audit(root)
+        self.assertTrue(any(item["code"] == "LOCAL_IMPORT_MISSING" and
+                            item["component"] == "core.factory_missing_transitive"
+                            for item in result["blockers"]))
+
+    def test_transitive_missing_model_symbol_stays_blocked(self):
+        root = self.fixture()
+        (root / "core/factory_agent_runtime.py").write_text(
+            "from .models import FactoryRun\n", encoding="utf-8")
+        result = audit_module.audit(root)
+        self.assertTrue(any(item["code"] == "MODEL_SYMBOL_MISSING" and
+                            item["component"] == "core.models.FactoryRun"
+                            for item in result["blockers"]))
+
+    def test_cyclic_local_imports_terminate(self):
+        root = self.fixture()
+        (root / "core/factory_agent_runtime.py").write_text(
+            "from .factory_tool_pack import tool\n", encoding="utf-8")
+        (root / "core/factory_tool_pack.py").write_text(
+            "from .factory_agent_runtime import worker\n", encoding="utf-8")
+        for name in ("factory_contracts", "factory_governance"):
+            (root / "core" / (name + ".py")).write_text("# fixture\n", encoding="utf-8")
+        result = audit_module.audit(root)
+        self.assertEqual(result["blockers"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
