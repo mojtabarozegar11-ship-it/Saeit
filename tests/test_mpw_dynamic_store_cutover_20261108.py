@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
-    FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
-    verify_dynamic_public,
+    BUYER_ROUTE_PROBES, FALLBACK_BLOCK, MARKER, inspect_owned_fallback,
+    perform_cutover, verify_dynamic_public, verify_public_buyer_routes,
 )
 
 
@@ -110,9 +110,10 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         sink = io.StringIO()
         with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
                    side_effect=[MARKER + b"x" * 2400] * 7 + [html]) as probe:
-            with patch("scripts.mpw_dynamic_store_cutover_20261108.time.sleep", return_value=None):
-                with contextlib.redirect_stdout(sink):
-                    self.assertTrue(verify_dynamic_public("42425162108"))
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes", return_value=True):
+                with patch("scripts.mpw_dynamic_store_cutover_20261108.time.sleep", return_value=None):
+                    with contextlib.redirect_stdout(sink):
+                        self.assertTrue(verify_dynamic_public("42425162108"))
         self.assertEqual(probe.call_count, 8)
         self.assertIn('"attempts": 8', sink.getvalue())
         self.assertIn('"still_owned_static_fallback": 7', sink.getvalue())
@@ -122,10 +123,115 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         html = b"mpw-shop-kicker mpw-store-catalog-20261026 " + b" ".join(PRODUCT_ROUTES)
         sink = io.StringIO()
         with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response", return_value=html):
-            with contextlib.redirect_stdout(sink):
-                self.assertTrue(verify_dynamic_public("42425162108"))
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes", return_value=True):
+                with contextlib.redirect_stdout(sink):
+                    self.assertTrue(verify_dynamic_public("42425162108"))
         self.assertIn('"dynamic_confirmed": true', sink.getvalue())
         self.assertNotIn("mpw-shop-kicker", sink.getvalue())
+
+    def test_six_buyer_routes_are_read_only_and_content_checked(self):
+        from urllib.parse import urlsplit
+        calls = []
+
+        class Reply:
+            status = 200
+
+            def __init__(self, req, body):
+                self.url = req.full_url
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                assert limit == 250_000
+                return self.body
+
+        def fetch(req, timeout):
+            self.assertEqual(req.get_method(), "GET")
+            self.assertEqual(timeout, 7)
+            path = urlsplit(req.full_url).path
+            self.assertTrue(req.full_url.startswith("https://mojplaywin.com/"))
+            title, action = next((title, action) for p, title, action in BUYER_ROUTE_PROBES if p == path)
+            calls.append(path)
+            return Reply(req, title + b" " + action)
+
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen", side_effect=fetch):
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertTrue(verify_public_buyer_routes("42425162108-before"))
+        self.assertEqual(calls, [p for p, _, _ in BUYER_ROUTE_PROBES])
+        self.assertEqual(len(calls), 6)
+
+    def test_buyer_route_failure_forces_cutover_rollback(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import PRODUCT_ROUTES
+        html = b"mpw-shop-kicker mpw-store-catalog-20261026 " + b" ".join(PRODUCT_ROUTES)
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response", return_value=html):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes", return_value=False):
+                with contextlib.redirect_stdout(sink):
+                    with self.assertRaisesRegex(RuntimeError, "LIVE_DYNAMIC_PUBLIC_SMOKE_FAILED"):
+                        perform_cutover(self.public, self.backups, "42425162110", lambda: verify_dynamic_public("42425162110"))
+        self.assertIn('"buyer_route_guard_failed": 1', sink.getvalue())
+        self.assertIn('"dynamic_confirmed": false', sink.getvalue())
+        self.assertEqual((self.public / ".htaccess").read_bytes(), self.original)
+        self.assertIn(MARKER, (self.public / "store/index.html").read_bytes())
+
+    def test_buyer_route_http_error_is_redacted(self):
+        from urllib.error import HTTPError
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen",
+                   side_effect=HTTPError("https://mojplaywin.com/private", 404, "not found", {}, None)):
+            with contextlib.redirect_stdout(sink):
+                self.assertFalse(verify_public_buyer_routes("42425162108-after"))
+        self.assertIn('"category": "http_404"', sink.getvalue())
+        self.assertNotIn("private", sink.getvalue())
+
+    def test_buyer_route_content_mismatch_blocks_release(self):
+        class WrongContent:
+            status = 200
+
+            def __init__(self, request):
+                self.url = request.full_url
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return b"<html>Unrelated success page</html>"
+
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen",
+                   side_effect=lambda req, timeout: WrongContent(req)):
+            with contextlib.redirect_stdout(sink):
+                self.assertFalse(verify_public_buyer_routes("42425162108-before"))
+        self.assertIn('"category": "unexpected_response"', sink.getvalue())
+        self.assertIn('"checked": 0', sink.getvalue())
+
+    def test_failed_buyer_baseline_cannot_start_cutover(self):
+        from types import SimpleNamespace
+        from scripts.mpw_dynamic_store_cutover_20261108 import main
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.pwd.getpwuid",
+                   return_value=SimpleNamespace(pw_name="zomorod2")):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.check_actual_staging_store"):
+                with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
+                           return_value=MARKER + b"x" * 2400):
+                    with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes", return_value=False):
+                        with patch("scripts.mpw_dynamic_store_cutover_20261108.perform_cutover") as cutover:
+                            with self.assertRaisesRegex(RuntimeError, "PUBLIC_BUYER_ROUTE_BASELINE_FAILED"):
+                                main("42425162111")
+        cutover.assert_not_called()
 
 
 if __name__ == "__main__":
