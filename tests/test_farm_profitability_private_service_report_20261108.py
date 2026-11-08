@@ -24,6 +24,17 @@ def baseline():
 
 
 class FarmPrivateReportTests(unittest.TestCase):
+    def test_decimal_context_is_not_leaked_to_other_calculators(self):
+        from decimal import getcontext
+
+        original_precision = getcontext().prec
+        try:
+            getcontext().prec = 28
+            self.assertEqual(mod.calculate(baseline())["operating_contribution"], "0.00")
+            self.assertEqual(getcontext().prec, 28)
+        finally:
+            getcontext().prec = original_precision
+
     def test_break_even_and_cost_scope(self):
         result = mod.calculate(baseline())
         self.assertEqual(result["operating_contribution"], "0.00")
