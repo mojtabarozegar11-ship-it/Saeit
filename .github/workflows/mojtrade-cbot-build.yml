@@ -1,4 +1,4 @@
-name: MojTrade CBot compile gate (no trading)
+name: MojTrade compile and risk regression gate (no trading)
 
 on:
   push:
@@ -10,6 +10,8 @@ on:
       - 'trading/MojTradeOmegaXDemoBot.cs'
       - 'trading/build/**'
       - 'scripts/mojtrade_build_cbots.sh'
+      - 'trading/mojtrade_*.py'
+      - 'tests/test_mojtrade_*.py'
   pull_request:
     paths:
       - '.github/workflows/mojtrade-cbot-build.yml'
@@ -17,6 +19,8 @@ on:
       - 'trading/MojTradeOmegaXDemoBot.cs'
       - 'trading/build/**'
       - 'scripts/mojtrade_build_cbots.sh'
+      - 'trading/mojtrade_*.py'
+      - 'tests/test_mojtrade_*.py'
   workflow_dispatch:
 
 permissions:
@@ -27,6 +31,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  risk-regression:
+    name: Run standard-library risk and broker-evidence checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read checked-out source only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Run fail-closed Python regression suite
+        run: python3 -m unittest discover -s tests -p 'test_mojtrade_*.py' -q
+
   compile-only:
     name: Build isolated C# cBots without credentials
     runs-on: ubuntu-24.04

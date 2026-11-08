@@ -17,10 +17,24 @@ class MojTradeC07SafetyContract(unittest.TestCase):
         self.assertGreaterEqual(OMEGA.count("Account.IsLive"), 3)
 
     def test_scalp_rechecks_at_order_boundary(self):
-        self.assertIn("if (_halted || Account.IsLive || RiskStopActive()", SCALP)
+        boundary = SCALP.split("private void TryOpen(", 1)[1].split(
+            "private bool RiskStopActive()", 1)[0]
+        for gate in ("!EnableCoordinatedDemoTrading", "!CoordinatorConfigured()",
+                     "_halted || Account.IsLive || RiskStopActive()",
+                     "SharedMojTradePositionCount() >= SharedPositionCap"):
+            self.assertIn(gate, boundary)
+        self.assertLess(boundary.index("RiskStopActive()"),
+                        boundary.index("var reservationId = ReserveCoordinatedSlot("))
 
     def test_omega_rechecks_at_order_boundary(self):
-        self.assertIn("if (!EnableDemoTrading || Account.IsLive || DailyLossReached()", OMEGA)
+        boundary = OMEGA.split("private void SubmitDemoOrder(", 1)[1].split(
+            "private double TodayAccountRealizedProfit()", 1)[0]
+        for gate in ("_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading",
+                     "!CoordinatorConfigured() || Account.IsLive || DailyLossReached()",
+                     "SharedMojTradePositionCount() >= SharedPositionCap"):
+            self.assertIn(gate, boundary)
+        self.assertLess(boundary.index("DailyLossReached()"),
+                        boundary.index("var reservationId = ReserveCoordinatedSlot("))
 
     def test_scalp_daily_stop_includes_floating_equity(self):
         self.assertIn("Account.Equity <= _dailyStartEquity - allowedLoss", SCALP)
@@ -59,8 +73,12 @@ class MojTradeC07SafetyContract(unittest.TestCase):
                 self.assertIn("ClosePosition(result.Position)", source)
 
     def test_scalp_halts_after_unprotected_result(self):
-        self.assertIn("_halted = true;", SCALP)
-        self.assertIn("if (_halted || Account.IsLive || RiskStopActive()", SCALP)
+        boundary = SCALP.split("private void TryOpen(", 1)[1].split(
+            "private bool RiskStopActive()", 1)[0]
+        unprotected = boundary.split("if (result.Position == null ||", 1)[1]
+        self.assertIn("_halted = true;", unprotected)
+        self.assertIn("Stop();", unprotected)
+        self.assertIn("_halted || Account.IsLive || RiskStopActive()", boundary)
 
     def test_omega_demo_stays_opt_in(self):
         self.assertIn('[Parameter("Enable Demo Trading", DefaultValue = false)]', OMEGA)
