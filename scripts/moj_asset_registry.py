@@ -199,6 +199,20 @@ def validate_program(program: dict) -> None:
         raise ValueError("unauthorized_release_gate")
 
 
+
+def offline_release_readiness(program: dict) -> dict:
+    """List blocking approvals; never authorize issuance or infer live evidence."""
+    validate_program(program)
+    return {
+        "asset_count": len(program["assets"]),
+        "blocked_gates": sorted(program["gates"]),
+        "release_ready": False,
+        "on_chain_issuance_verified": False,
+        "verified_revenue": False,
+        "reason": "offline_proposals_do_not_satisfy_live_release_gates",
+    }
+
+
 def f41_shasta_candidate_specs(program: dict) -> dict[str, dict]:
     """Feed the existing F41 *offline* TRC-20 generator, not a mainnet chain."""
     validate_program(program)
