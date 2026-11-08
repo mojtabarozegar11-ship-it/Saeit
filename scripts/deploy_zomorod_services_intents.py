@@ -86,8 +86,14 @@ def prepare(current: bytes, approved: bytes) -> tuple[str, bytes]:
     reversals = []
     for label, topic in LINKS:
         old_anchor = live[label][0]
-        new_anchor = old_anchor.replace(b'href="' + GENERIC_URL + b'"',
-                                        b'href="' + expected_href(topic) + b'"', 1)
+        # Replace the exact, validated href token, never an earlier data-href
+        # containing the same text. Its byte offset is within this anchor.
+        head = old_anchor[:old_anchor.index(b">")]
+        real_href = HREF.search(head)
+        if real_href is None or real_href.group(1) != GENERIC_URL:
+            raise RuntimeError("Live href changed before scoped replacement: " + label)
+        new_anchor = (old_anchor[:real_href.start(1)] + expected_href(topic)
+                      + old_anchor[real_href.end(1):])
         if new_anchor == old_anchor or updated.count(old_anchor) != 1:
             raise RuntimeError("Ambiguous scoped anchor replacement: " + label)
         updated = updated.replace(old_anchor, new_anchor, 1)
