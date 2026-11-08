@@ -54,6 +54,7 @@ namespace MojTrade.OmegaX
         private RelativeStrengthIndex _rsi;
         private AverageTrueRange _atr;
         private double _sessionStartEquity;
+        private DateTime _riskDayUtc;
         private int _consecutiveLosses;
 
         protected override void OnStart()
@@ -82,6 +83,7 @@ namespace MojTrade.OmegaX
             _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, RsiPeriod);
             _atr = Indicators.AverageTrueRange(AtrPeriod, MovingAverageType.Exponential);
             _sessionStartEquity = Account.Equity;
+            _riskDayUtc = Server.TimeInUtc.Date;
             Positions.Closed += OnPositionClosed;
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
@@ -183,6 +185,15 @@ namespace MojTrade.OmegaX
 
         private bool DailyLossReached()
         {
+            // Refresh the daily baseline only at the UTC date boundary.
+            // This guard is demo-only and does not authorize live execution.
+            var todayUtc = Server.TimeInUtc.Date;
+            if (todayUtc != _riskDayUtc)
+            {
+                _riskDayUtc = todayUtc;
+                _sessionStartEquity = Account.Equity;
+                _consecutiveLosses = 0;
+            }
             return Account.Equity <= _sessionStartEquity * (1.0 - DailyLossStopPercent / 100.0);
         }
 
