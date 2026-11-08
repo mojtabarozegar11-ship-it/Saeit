@@ -167,6 +167,29 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertNotIn("buyer@", json.dumps(result))
             self.assertNotIn("SECRET", json.dumps(result))
 
+    def test_fixed_exception_type_signatures_do_not_leak_details(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /secret/ORDER Traceback (most recent call last)\n"
+                "django.core.exceptions.DisallowedHost: private hostname\n"
+                "ValueError: hidden value\n"
+                "except AttributeError:\n"
+                "AttributeError: hidden attribute\n"
+            )
+            result = inspect_error_classes(root)
+            signatures = result["exception_type_signatures"]
+            self.assertEqual(signatures["django_disallowed_host"], 1)
+            self.assertEqual(signatures["python_value"], 1)
+            self.assertEqual(signatures["python_attribute"], 1)
+            self.assertEqual(sum(signatures.values()), 3)
+            self.assertFalse(result["files_modified"])
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("ORDER", json.dumps(result))
+            self.assertNotIn("private hostname", json.dumps(result))
+
     def test_missing_module_name_is_binned_without_exposing_raw_name(self):
         from scripts.mpw_public_passenger_runtime_readonly_20261102 import classify_missing_module
         self.assertEqual(classify_missing_module(b"config"), "project_config")
