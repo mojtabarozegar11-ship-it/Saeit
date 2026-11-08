@@ -118,6 +118,29 @@ class VPSCaptureGuardTests(unittest.TestCase):
                 self.journal, "BTC-USD", guard.observer.BINANCE_SOURCE,
                 source_dir=SOURCE.parent, now=NOW, free_bytes=EXCESS)
 
+    def test_coinbase_book_normal_mode_remains_eligible_for_quote_parsing(self):
+        payload = {"sequence": 11, "bids": [["30000", "1", 2]],
+                   "asks": [["30001", "2", 1]],
+                   "time": "2026-11-07T13:07:00+00:00", "auction_mode": False}
+        bid, ask, _, sequence = guard.quotes._coinbase_quote(payload, NOW)
+        self.assertEqual((bid, ask, sequence), (30000.0, 30001.0, 11))
+        payload.pop("auction_mode")  # Existing level-one contracts may omit it.
+        self.assertEqual(guard.quotes._coinbase_quote(payload, NOW)[0], 30000.0)
+
+    def test_coinbase_indicative_auction_prices_rejected_even_if_not_crossed(self):
+        payload = {"sequence": 11, "bids": [["30000", "1", 2]],
+                   "asks": [["30001", "2", 1]],
+                   "time": "2026-11-07T13:07:00+00:00", "auction_mode": True}
+        with self.assertRaisesRegex(guard.quotes.QuoteReject, "indicative_auction"):
+            guard.quotes._coinbase_quote(payload, NOW)
+
+    def test_coinbase_malformed_auction_flag_rejected(self):
+        payload = {"sequence": 11, "bids": [["30000", "1", 2]],
+                   "asks": [["30001", "2", 1]],
+                   "time": "2026-11-07T13:07:00+00:00", "auction_mode": "false"}
+        with self.assertRaisesRegex(guard.quotes.QuoteReject, "indicative_auction"):
+            guard.quotes._coinbase_quote(payload, NOW)
+
     def test_reject_outside_hourly_collection_window(self):
         with self.assertRaisesRegex(guard.GuardReject, "outside_safe"):
             self.check(now=NOW.replace(minute=59), require_capture_window=True)

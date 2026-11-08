@@ -62,6 +62,12 @@ def _coinbase_quote(payload, received):
             or not isinstance(payload.get("asks"), list)
             or len(payload["bids"]) != 1 or len(payload["asks"]) != 1):
         raise QuoteReject("coinbase_book_shape_invalid")
+    # Coinbase can expose indicative best bid/ask prices during auction mode.
+    # They are not executable inside-market quotes even when non-crossed.
+    # Legacy responses may omit the optional flag, but malformed flags fail closed.
+    if "auction_mode" in payload and (type(payload["auction_mode"]) is not bool
+                                      or payload["auction_mode"]):
+        raise QuoteReject("coinbase_indicative_auction_quote_forbidden")
     bid_row, ask_row = payload["bids"][0], payload["asks"][0]
     if (not isinstance(bid_row, list) or not isinstance(ask_row, list)
             or len(bid_row) != 3 or len(ask_row) != 3

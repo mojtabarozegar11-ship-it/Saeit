@@ -47,6 +47,11 @@ automatic venue fallback is allowed. It refuses attempts outside UTC minutes
 After response, it rechecks local safety, then appends only a valid same-venue
 quoted closed hourly bar to an owner-only hash-linked journal. Missing, stale,
 crossed or unquoted data fail closed: no bar is recorded.
+Coinbase Exchange level-one books with `auction_mode=true` (indicative rather
+than firm quotes) or malformed auction-mode flags are also rejected, even
+when their bid and ask are not crossed. Missing optional auction flags remain
+supported for older valid response contracts. This is a conservative source
+contract gate, **not** proof that an exchange quote was executable.
 
 Actual forward data still require **at least 100 real consecutive hours**.
 Missing hours can reset a research-eligibility streak. The separate forward
