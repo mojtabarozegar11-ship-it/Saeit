@@ -7,6 +7,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+import sys
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "zomorod_research_guides_release.py"
 SPEC = importlib.util.spec_from_file_location("zomorod_release", SCRIPT)
@@ -97,6 +99,18 @@ class GuardedPublicationTests(unittest.TestCase):
             release.apply_release(self.web, self.state, m["release_id"], "0" * 64, h, pages)
         self.assertFalse((self.web / next(iter(pages))).exists())
         self.assertFalse(self.state.exists())
+
+    def test_editorial_review_blocks_live_apply(self) -> None:
+        _, template_hash, _ = self.load()
+        args = [str(SCRIPT), "apply", "--source-root", str(self.source),
+                "--web-root", str(self.web),
+                "--manifest", "content/zomorod-research-guides/manifest.json",
+                "--confirm-release-id", "ZM-RESEARCH-GUIDES-TEST-R1",
+                "--expected-template-sha", template_hash]
+        with patch.object(sys, "argv", args):
+            with self.assertRaisesRegex(ValueError, "EDITORIAL_APPROVAL_REQUIRED"):
+                release.main()
+        self.assertFalse((self.web / "research" / "guides").exists())
 
     def test_symlink_parent_is_rejected(self) -> None:
         target = self.root / "outside"
