@@ -2,7 +2,7 @@
   "version": 1,
   "repository": "mojtabarozegar11-ship-it/Saeit",
   "pr": 2194,
-  "commit": "bbf7ff19f868bff99a02eb5b336ef0aa138cfe20",
+  "commit": "47afb81d77cb4a1dcc100c2bec83730a1102549c",
   "site": "zomorodmelal.ir",
   "mode": "READ_ONLY_PREFLIGHT",
   "files": [
@@ -34,7 +34,7 @@
     {
       "path": "core/editorial_policy.py",
       "change": "added",
-      "git_blob_sha": "171bec4bbf569d110df742d0f224100d2f41b9eb"
+      "git_blob_sha": "dfd8258db728c6ce39c082979bd553bf150452b5"
     },
     {
       "path": "core/editorial_signature.py",
