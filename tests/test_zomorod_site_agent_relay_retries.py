@@ -40,3 +40,11 @@ def test_agent_stages_cannot_run_before_verified_relay():
     verify = source.index("- name: Verify the exact Zomorod app and runtime")
     cycle = source.index("- name: Run one bounded, approval-gated site cycle")
     assert prepare < sentinel < verify < cycle
+
+
+def test_blocked_relay_requires_explicit_manual_dispatch():
+    source = WORKFLOW.read_text(encoding="utf-8")
+    events = source.split("permissions:", 1)[0]
+    assert "  workflow_dispatch:" in events
+    assert "  schedule:" not in events
+    assert "  push:" not in events
