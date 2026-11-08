@@ -1,0 +1,138 @@
+name: Release only the reviewed Zomorod services calculator
+
+# This is a deliberately MANUAL, one-page content release. GitHub Actions is
+# an optional delivery mechanism, never a dependency of the live calculator.
+on:
+  workflow_dispatch:
+    inputs:
+      release_confirmation:
+        description: "Type RELEASE_SERVICES_CALCULATOR after reviewing the source"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-services-calculator-production
+  cancel-in-progress: false
+
+jobs:
+  publish_calculator:
+    if: github.ref == 'refs/heads/main' && inputs.release_confirmation == 'RELEASE_SERVICES_CALCULATOR'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate calculator and rollback protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_services_calculator_release.py' -v
+          python3 - <<'PY'
+          import runpy
+          tests=runpy.run_path('tests/test_zomorod_services_csv_export.py')
+          tests['test_services_csv_report_has_visible_opt_in_and_input_safety']()
+          tests['test_services_csv_report_computes_and_downloads_real_values']()
+          print('ZM_SERVICES_CSV_REGRESSIONS=passed')
+          PY
+          python3 -m py_compile scripts/deploy_zomorod_services_calculator.py
+          python3 - <<'PY'
+          from pathlib import Path
+          current=Path('content/zomorod-nova-pages/services.html').read_text(encoding='utf-8')
+          for marker in ('id="zm-margin-download"', 'function resetPriorResult()', 'breakEvenPrice:yieldKg>0'):
+              if marker not in current:
+                  raise SystemExit('Reviewed calculator source incomplete: '+marker)
+          print('ZM_SERVICES_SCOPED_SOURCE=verified')
+          PY
+
+      - name: Prepare pinned VPS-to-cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-services-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "ZM_SERVICES_PINNED_RELAY=verified"
+
+      - name: Transfer only the reviewed calculator source to private cPanel staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-services-relay"
+          stage="$RUNNER_TEMP/zomorod-services-content"
+          install -d -m 700 "$stage"
+          # The pre-CSV reviewed reference, held by Git and never downloaded
+          # from a mutable third-party URL during deployment.
+          legacy_commit=e6838aff97d2e1450ec540f0605402afb94fd89f
+          git cat-file -e "${legacy_commit}^{commit}"
+          git show "$legacy_commit:content/zomorod-nova-pages/services.html" > "$stage/legacy_services.html"
+          cp content/zomorod-nova-pages/services.html "$stage/services.html"
+          cp scripts/deploy_zomorod_services_calculator.py "$stage/deploy.py"
+          run_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote="/home/zomorod2/.backups/zomorod-services-calculator/stages/$run_id"
+          ssh -F "$d/config" saeit-cpanel "umask 077; mkdir -p /home/zomorod2/.backups/zomorod-services-calculator/stages; test ! -e '$remote'; install -d -m 700 '$remote'"
+          tar -C "$stage" -cf - . | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$remote'"
+          echo "ZM_SERVICES_PRIVATE_STAGE=complete"
+
+      - name: Make one atomic page-scoped update or roll back on any verification failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-services-relay"
+          run_id="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote="/home/zomorod2/.backups/zomorod-services-calculator/stages/$run_id"
+          ssh -F "$d/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 python3 '$remote/deploy.py' '$remote' '$run_id'"
+
+      - name: Destroy temporary runner private keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-services-relay"
+          for f in "$d/vps.key" "$d/host.key"; do
+            if test -f "$f"; then shred -u "$f" || true; fi
+          done
