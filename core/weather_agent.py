@@ -108,6 +108,7 @@ def generate_research_contents(weather_summary):
 
 def run_daily_cycle():
     from .models import Agent, NewsletterSource, NewsletterStory
+    from .editorial_signature import ensure_signed
     data = province_forecast(7)
     if len(data) != len(PROVINCES) or any(len(item.get('forecast', [])) != 7 for item in data):
         raise RuntimeError('Incomplete seven-day weather forecast; publication withheld')
@@ -152,7 +153,7 @@ def run_daily_cycle():
         _, was_created = NewsletterStory.objects.get_or_create(fingerprint=fp2, defaults={
             'agent':agent,'source':src,'story_type':'report','title':title[:500],
             'slug':f'weather-research-{day.isoformat()}-{idx}','summary':item.get('summary','')[:3000],
-            'body':item.get('body',''),'author_name':'مجتبی روزگار','event_date':day,
+            'body':ensure_signed(item.get('body','')),'author_name':'مجتبی روزگار','event_date':day,
             'seo_keywords':item.get('keywords',[]) if isinstance(item.get('keywords',[]),list) else [],
             'status':'published','published_at':timezone.now(),
         })

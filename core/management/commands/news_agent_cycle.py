@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from core.models import Agent, NewsletterSource, NewsletterStory
 from core.news_feed_reader import OFFICIAL_FEEDS, editorial_identity, fetch_official_news
+from core.editorial_signature import ensure_signed
 
 
 class Command(BaseCommand):
@@ -56,7 +57,7 @@ class Command(BaseCommand):
                         "agent": agent, "source": source, "story_type": "world",
                         "title": item.title, "slug": slug,
                         "summary": summary,
-                        "body": (
+                        "body": ensure_signed(
                             "این رکورد صرفاً سرنخ تحریریه از خوراک رسمی اخبار کشاورزی است. "
                             "متن کامل خبر بازنشر نشده است.\n\n"
                             f"عنوان اصلی: {item.title}\n"

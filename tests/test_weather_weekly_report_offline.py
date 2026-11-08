@@ -33,6 +33,7 @@ class WeatherWeeklyReportTests(unittest.TestCase):
             self.assertIn(f"2026-11-{day:02d}", text)
         self.assertIn("14.0 میلی‌متر", text)
         self.assertIn("احتمال بارش ناموجود", text)
+        self.assertTrue(text.endswith("\n\n#مجتبی_روزگار"))
 
     def test_short_six_day_record_is_rejected(self):
         with self.assertRaises(ValueError):

@@ -5,6 +5,8 @@ from datetime import timedelta
 from math import isfinite
 from typing import Callable
 
+from .editorial_signature import ensure_signed
+
 
 def _value(number, suffix: str) -> str:
     return f"{number}{suffix}" if number is not None else "ناموجود"
@@ -77,4 +79,4 @@ def render_seven_day_report(
         "پرچم‌های خودکار صرفاً عبور از آستانه‌های محاسباتی هستند؛ پیش از آبیاری، "
         "سم‌پاشی، برداشت یا تصمیم مالی، شرایط واقعی مزرعه، محصول و اطلاعیهٔ رسمی منطقه را بررسی کنید.",
     ])
-    return "\n".join(lines)
+    return ensure_signed("\n".join(lines))

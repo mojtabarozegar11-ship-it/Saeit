@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .editorial_signature import ensure_signed
 
 ANALYSIS_HEADING = "توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل"
 MIN_AUTO_PUBLISH_SCORE = 90
@@ -72,7 +73,7 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     can_schedule = bool(publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
     story = NewsletterStory.objects.create(
         agent=agent, source=source, story_type=story_type, title=title.strip(),
-        slug=slug, summary=summary.strip(), body=body.strip(), event_date=event_date,
+        slug=slug, summary=summary.strip(), body=ensure_signed(body), event_date=event_date,
         fingerprint=fp, source_fingerprint=source_fingerprint,
         seo_keywords=keywords or [], published_at=publish_at if can_schedule else None,
         status="scheduled" if can_schedule else "draft",

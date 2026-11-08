@@ -3,6 +3,7 @@ from django.http import Http404
 from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .editorial_signature import has_final_signature
 
 
 EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
@@ -59,7 +60,7 @@ def newsletter_detail(request, slug):
         "image": [request.build_absolute_uri(story.image.url)] if story.image else [],
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
     }, ensure_ascii=False)
-    return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld})
+    return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld, "signature_in_body": has_final_signature(story.body)})
 
 
 # The public site never bypasses the editorial approval state. Drafts are visible only in admin/API workflows.
