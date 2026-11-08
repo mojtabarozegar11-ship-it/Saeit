@@ -2,7 +2,7 @@
   "version": 1,
   "repository": "mojtabarozegar11-ship-it/Saeit",
   "pr": 2194,
-  "commit": "dea67c8d8c57df3520bb45312711dc667ea82c84",
+  "commit": "a89d2fac1f51b0dc87bad80170330876e9cd7355",
   "site": "zomorodmelal.ir",
   "mode": "READ_ONLY_PREFLIGHT",
   "files": [
@@ -94,7 +94,7 @@
     {
       "path": "core/weather_agent.py",
       "change": "modified",
-      "git_blob_sha": "672eab0c0ff8ed315317cf561109cf9672695484"
+      "git_blob_sha": "1c689f33cfedb77271c20bc930bad1c304246456"
     },
     {
       "path": "core/weather_weekly_report.py",
