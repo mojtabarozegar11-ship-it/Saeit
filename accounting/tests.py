@@ -97,6 +97,27 @@ class AccountingDashboardTests(TestCase):
         self.assertEqual(unused.code, "1201")
         self.assertEqual(unused.kind, Account.Kind.LIABILITY)
 
+    def test_posted_journal_header_is_immutable_via_model_save(self):
+        entry = JournalEntry.objects.get(reference="JV-1")
+        entry.memo = "changed memo"
+        with self.assertRaises(ValidationError):
+            entry.save(update_fields=["memo"])
+        entry.refresh_from_db()
+        self.assertEqual(entry.memo, "فروش نمونه")
+        entry.status = JournalEntry.Status.DRAFT
+        with self.assertRaises(ValidationError):
+            entry.save(update_fields=["status"])
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, JournalEntry.Status.POSTED)
+
+    def test_draft_journal_header_remains_editable(self):
+        draft = JournalEntry.objects.create(reference="JV-OPEN", occurred_on=date(2026, 11, 8),
+                                            memo="draft", status=JournalEntry.Status.DRAFT)
+        draft.memo = "revised draft"
+        draft.save(update_fields=["memo"])
+        draft.refresh_from_db()
+        self.assertEqual(draft.memo, "revised draft")
+
     def test_posted_entry_cannot_be_changed_or_deleted_from_admin(self):
         entry = JournalEntry.objects.get(reference="JV-1")
         request = RequestFactory().get("/admin/accounting/journalentry/")
