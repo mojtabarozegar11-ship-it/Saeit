@@ -86,9 +86,19 @@ def validate_program(program: dict) -> None:
     assets = program.get("assets")
     if not isinstance(assets, list) or len(assets) != SERIES_SIZE + 1:
         raise ValueError("wrong_asset_count")
-    ids = [item.get("id") for item in assets if isinstance(item, dict)]
-    symbols = [item.get("symbol_candidate") for item in assets if isinstance(item, dict)]
-    if len(ids) != len(assets) or len(set(ids)) != len(assets) or len(set(symbols)) != len(assets):
+    if any(not isinstance(item, dict) for item in assets):
+        raise ValueError("invalid_asset_record")
+    ids = [item.get("id") for item in assets]
+    symbols = [item.get("symbol_candidate") for item in assets]
+    # Reject unhashable, malformed or whitespace-padded identifiers before
+    # set() or downstream template expansion. Fail predictably on corrupt
+    # JSON instead of raising an opaque TypeError or altering token identity.
+    if (any(type(value) is not str or not re.fullmatch(r"[a-z0-9]+", value)
+            for value in ids)
+            or any(type(value) is not str or not re.fullmatch(r"[A-Z0-9]+", value)
+                   for value in symbols)
+            or len(set(ids)) != len(assets)
+            or len(set(symbols)) != len(assets)):
         raise ValueError("asset_identifier_collision")
     bitcoin = assets[0]
     if (bitcoin.get("id") != "mojoner" or bitcoin.get("network") != "bitcoin"
