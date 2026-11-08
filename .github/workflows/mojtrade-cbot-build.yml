@@ -1,0 +1,51 @@
+name: MojTrade CBot compile gate (no trading)
+
+on:
+  push:
+    branches:
+      - 'fix/mojtrade-c*'
+    paths:
+      - '.github/workflows/mojtrade-cbot-build.yml'
+      - 'trading/MojTradeDemoBot.cs'
+      - 'trading/MojTradeOmegaXDemoBot.cs'
+      - 'trading/build/**'
+      - 'scripts/mojtrade_build_cbots.sh'
+  pull_request:
+    paths:
+      - '.github/workflows/mojtrade-cbot-build.yml'
+      - 'trading/MojTradeDemoBot.cs'
+      - 'trading/MojTradeOmegaXDemoBot.cs'
+      - 'trading/build/**'
+      - 'scripts/mojtrade_build_cbots.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtrade-cbot-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-only:
+    name: Build isolated C# cBots without credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read checked-out source only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compile both cBots and verify fresh .algo files
+        run: bash scripts/mojtrade_build_cbots.sh
+
+      - name: Record non-secret compiler version
+        if: always()
+        run: dotnet --version
