@@ -42,6 +42,17 @@ class AccountAdmin(admin.ModelAdmin):
     list_filter = ("kind", "is_active")
     search_fields = ("code", "name")
 
+    def get_readonly_fields(self, request, obj=None):
+        # Reclassifying an account with posted lines silently rewrites the
+        # historical meaning of financial statements. Lock only the ledger
+        # identity; its display name and active flag remain manageable.
+        readonly = tuple(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.journal_lines.filter(
+            entry__status=JournalEntry.Status.POSTED
+        ).exists():
+            return readonly + ("code", "kind")
+        return readonly
+
 
 @admin.register(JournalEntry)
 class JournalEntryAdmin(admin.ModelAdmin):
