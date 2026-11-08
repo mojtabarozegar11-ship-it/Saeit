@@ -7,6 +7,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const solc = require("solc");
+const {isTrustedSolidityImport} = require("./moj_evm_import_guard.cjs");
 const bundle = process.argv[2];
 
 function fail(message) {
@@ -41,6 +42,9 @@ if (!bundle || !fs.statSync(bundle, {throwIfNoEntry: false})?.isDirectory()) {
     };
     const compilerOutput = JSON.parse(solc.compile(JSON.stringify(input), {
       import: (requested) => {
+        if (!isTrustedSolidityImport(requested)) {
+          return {error: `untrusted_solidity_import:${requested}`};
+        }
         try {
           return {contents: fs.readFileSync(require.resolve(requested), "utf8")};
         } catch (error) {
