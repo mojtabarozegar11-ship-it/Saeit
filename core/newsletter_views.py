@@ -3,7 +3,7 @@ from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
 from .editorial_signature import has_final_signature, safe_news_jsonld
-from .editorial_policy import blocked_news_reason, blocked_story_reason, visible_news_stories
+from .editorial_policy import blocked_news_reason, blocked_story_reason, public_story_allowed, visible_news_stories
 
 
 EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
@@ -16,8 +16,11 @@ def newsletter_home(request):
     )
     sources = [source for source in NewsletterSource.objects.filter(active=True)[:120]
                if not blocked_news_reason(source.title, source.publisher, source.url)][:12]
-    publications = [p for p in NewsletterPublication.objects.select_related("story", "story__source").order_by("-created_at")[:200]
-                    if not blocked_story_reason(p.story)][:20]
+    publications = [p for p in NewsletterPublication.objects.filter(
+        status="published", published_at__lte=timezone.now(),
+        story__status="published", story__published_at__lte=timezone.now(),
+    ).select_related("story", "story__source").order_by("-created_at")[:200]
+                    if public_story_allowed(p.story)][:20]
     schedule = NewsletterSchedule.objects.filter(active=True).first()
     context = {
         "stories": stories,
@@ -56,7 +59,9 @@ def newsletter_detail(request, slug):
         NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now())
         .exclude(pk=story.pk).filter(story_type=story.story_type), limit=6
     )
-    publications = story.publications.order_by("channel")
+    publications = story.publications.filter(
+        status="published", published_at__lte=timezone.now(),
+    ).order_by("channel")
     article_jsonld = safe_news_jsonld({
         "@context": "https://schema.org",
         "@type": "NewsArticle",
