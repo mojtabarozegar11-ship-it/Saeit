@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.education_quality import audit_course, publication_ready
@@ -45,6 +45,7 @@ class EducationPlatformTests(TestCase):
         response = self.client.get(f"/education/course/test-course/lesson/{private.pk}/")
         self.assertEqual(response.status_code, 403)
 
+    @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
     def test_mojplaywin_education_title_uses_its_own_brand(self):
         response = self.client.get("/academy/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
