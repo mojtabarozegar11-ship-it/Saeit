@@ -8,7 +8,7 @@ if ! command -v dotnet >/dev/null 2>&1; then
 fi
 sdk_major="$(dotnet --version | cut -d. -f1)"
 if [[ "${sdk_major}" -lt 8 ]]; then
-  echo "BLOCKED: cTrader CLI requires a .NET 8 compatible cBot build." >&2
+  echo "BLOCKED: build host needs .NET 8 SDK; cTrader project target is net6.0." >&2
   exit 2
 fi
 
