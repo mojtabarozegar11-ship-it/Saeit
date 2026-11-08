@@ -65,17 +65,17 @@ def province_forecast(days=7):
 
 
 def build_public_report(data):
-    today = timezone.localdate().isoformat()
-    lines = [f'گزارش روزانه هواشناسی ایران — {today}', '', 'برآورد روزانهٔ مراکز استان‌ها از داده‌های زمان‌بندی‌شدهٔ MET Norway تهیه شده است. این داده‌ها خروجی یک ارائه‌دهنده‌اند و اجماع چند مدل نیستند. دما، باد و بارش روزانه از بازه‌های ساعتی و چندساعته برآورد شده‌اند.']
-    for item in data:
-        p = item['forecast'][0]
-        flags='، '.join(_risk_flags(p)) or 'بدون پرچم هشدار خودکار'
-        probability = f"{p['rain_probability']}٪" if p['rain_probability'] is not None else 'ناموجود در منبع'
-        rain = f"{p['rain_mm']} میلی‌متر" if p['rain_mm'] is not None else 'ناموجود'
-        wind = f"{p['wind_kmh']} km/h" if p['wind_kmh'] is not None else 'ناموجود'
-        lines.append(f"• {item['province']} ({item['capital']}): {p['min_c']} تا {p['max_c']}°C، احتمال بارش {probability}، بارش برآوردی {rain}، باد تا {wind}؛ {flags}")
-    lines += ['', f'داده: {SOURCE_ATTRIBUTION} — {SOURCE_URL}؛ مجوز انتساب CC BY 4.0: {SOURCE_LICENSE}.', 'تقسیم بارش دوره‌های چندساعته میان روزها تقریبی است؛ نبود احتمال بارش در منبع به معنی احتمال صفر نیست. این پیش‌بینی جایگزین هشدارهای رسمی سازمان هواشناسی کشور نیست.']
-    return '\n'.join(lines)
+    """Render every forecast date; don't mistake a 7-day fetch for a 1-day report."""
+    from .weather_weekly_report import render_seven_day_report
+
+    return render_seven_day_report(
+        data,
+        report_date=timezone.localdate().isoformat(),
+        flags_for_day=_risk_flags,
+        attribution=SOURCE_ATTRIBUTION,
+        source_url=SOURCE_URL,
+        license_url=SOURCE_LICENSE,
+    )
 
 
 def generate_research_contents(weather_summary):
