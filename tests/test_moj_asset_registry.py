@@ -18,6 +18,25 @@ from moj_asset_registry import (  # noqa: E402
 
 
 class AssetRegistryTests(unittest.TestCase):
+    def test_oversized_supply_input_rejected_before_decimal_conversion(self):
+        for invalid in ("1" * 5000, "0" * 5000, "9" * 15):
+            with self.subTest(length=len(invalid)):
+                self.rejects("supply_must_be_positive_integer_string",
+                             lambda p, invalid=invalid: p["assets"][1].update(supply_tokens=invalid))
+
+    def test_checksum_manifest_rejects_duplicate_keys_even_when_values_match(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "new"
+            export_bundle(self.program, target)
+            manifest = target / "SHA256SUMS.json"
+            checksums = json.loads(manifest.read_text())
+            first = sorted(checksums)[0]
+            alternate = json.dumps(checksums, indent=2, sort_keys=True)
+            alternate = alternate[:-2] + f',\n  "{first}": "{checksums[first]}"\n}}\n'
+            manifest.write_text(alternate)
+            with self.assertRaisesRegex(ValueError, "bundle_manifest_bytes_mismatch"):
+                verify_bundle(self.program, target)
+
     def test_unknown_claim_fields_are_rejected_in_program_and_assets(self):
         self.rejects("unexpected_program_fields", lambda p: p.update(exchange_listing_verified=True))
         self.rejects("unexpected_asset_fields", lambda p: p["assets"][0].update(onchain_tx_id="fake"))
