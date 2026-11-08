@@ -20,8 +20,8 @@ Response fields:
 |---|---|
 | `baseline`, `last_equity` | Persisted server-side UTC-day risk equity |
 | `halted` | Sticky daily loss stop for the specified day |
-| `last_risk_update_age_seconds` | Age of latest successful risk update |
-| `telemetry_fresh` | Same UTC day and most recent update within 120 s |
+| `last_risk_update_age_seconds` | Signed age of latest successful risk update; negative means server time is earlier than that update |
+| `telemetry_fresh` | Same UTC day and age from 0 through 120 s; a future-dated update is never considered fresh |
 | `active_reservations` | Non-expired reserved or committed short-lived slots |
 | `demo_reservations_enabled` | The service's explicit demo enable flag |
 
@@ -30,6 +30,8 @@ broker/cTrader session, TLS connection, sufficient free margin, or profitable
 strategy is ready. The status call opens SQLite in `mode=ro` with
 `query_only=ON`. It neither creates a missing database nor seeds an account
 or changes a reservation, baseline, halt latch or equity observation.
+The write-side observation/reservation handler also refuses a backwards server
+clock (`clock_rollback`) until the clock reaches the persisted update time.
 
 ## Go / no-go
 
