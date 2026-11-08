@@ -107,6 +107,8 @@ def validate_program(program: dict) -> None:
     """Fail closed on oversupply, identifier collisions and false launch claims."""
     if not isinstance(program, dict) or program.get("schema") != SCHEMA:
         raise ValueError("invalid_program_schema")
+    if program.get("purpose") != "offline_preissuance_planning":
+        raise ValueError("invalid_program_purpose")
     assets = program.get("assets")
     if not isinstance(assets, list) or len(assets) != SERIES_SIZE + 1:
         raise ValueError("wrong_asset_count")
