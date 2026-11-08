@@ -38,8 +38,9 @@ def generate_program() -> dict:
         "network": "bitcoin", "protocol_candidate": "runes",
         "supply_tokens": str(MOJONER_SUPPLY), "supply_status": "owner_specified",
         "divisibility_proposal": 0,
+        # No open mint terms: do not serialize a zero-valued terms stanza.
         "runes_etching_proposal": {"premine": str(MOJONER_SUPPLY),
-                                   "mint_amount": "0", "mint_cap": "0"},
+                                   "supply": str(MOJONER_SUPPLY), "terms": None},
         "name_availability_verified": False,
         "issuance_state": "not_issued", "mainnet_authorized": False,
     }]
@@ -102,7 +103,9 @@ def validate_program(program: dict) -> None:
     terms = bitcoin.get("runes_etching_proposal")
     if (not isinstance(terms, dict)
             or _whole_number(terms.get("premine")) != MOJONER_SUPPLY
-            or terms.get("mint_amount") != "0" or terms.get("mint_cap") != "0"):
+            or _whole_number(terms.get("supply")) != MOJONER_SUPPLY
+            or set(terms) != {"premine", "supply", "terms"}
+            or terms["terms"] is not None):
         raise ValueError("runes_supply_formula_mismatch")
     last = 0
     for number, asset in enumerate(assets[1:], start=1):
@@ -150,30 +153,108 @@ def f41_shasta_candidate_specs(program: dict) -> dict[str, dict]:
     }
 
 
-def export_bundle(program: dict, target: Path, *, include_f41: bool = True) -> dict:
+def ord_etching_fragment(program: dict) -> str:
+    """Non-executable ord batch YAML fragment; no wallet, fee or broadcast."""
+    validate_program(program)
+    bitcoin = program["assets"][0]
+    return (
+        "# CANDIDATE ONLY. Insert in a reviewed ord wallet batch YAML after\n"
+        "# verifying name availability, destination, network and wallet fees.\n"
+        "etching:\n"
+        f"  rune: {bitcoin['symbol_candidate']}\n"
+        "  divisibility: 0\n"
+        f"  premine: {bitcoin['supply_tokens']}\n"
+        f"  supply: {bitcoin['supply_tokens']}\n"
+        "# No terms: premine-only fixed supply, no open mint.\n"
+    )
+
+
+def evm_candidate_sources(program: dict) -> dict[str, str]:
+    """Distinct immutable ERC-20 source candidates, not compiled deployments.
+
+    The owner must still select the destination EVM network and initial holder,
+    independently review the source, and approve any transaction fee.
+    """
+    validate_program(program)
+    result = {}
+    for item in program["assets"][1:]:
+        units = int(item["supply_tokens"]) * 10**18
+        result[item["id"]] = (
+            "// SPDX-License-Identifier: MIT\n"
+            "pragma solidity ^0.8.20;\n"
+            'import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";\n'
+            "// Source candidate only. No owner, fees, upgrade or post-deploy mint.\n"
+            "contract MojFixedSupply is ERC20 {\n"
+            f'    constructor(address initialHolder) ERC20("{item["name"]}", "{item["symbol_candidate"]}") {{\n'
+            '        require(initialHolder != address(0), "zero_initial_holder");\n'
+            f"        _mint(initialHolder, {units});\n"
+            "    }\n"
+            "}\n"
+        )
+    return result
+
+
+def expected_documents(program: dict, *, include_f41: bool, include_evm: bool) -> dict[str, bytes]:
+    validate_program(program)
+    docs = {"asset-program.json": (
+        json.dumps(program, indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode()}
+    docs["bitcoin-runes/mojoner-etching-fragment.yaml"] = ord_etching_fragment(program).encode()
+    if include_f41:
+        docs.update({f"f41-shasta/{name}.json": (
+            json.dumps(spec, indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode()
+            for name, spec in f41_shasta_candidate_specs(program).items()})
+    if include_evm:
+        docs.update({f"evm-candidates/{name}/contracts/MojFixedSupply.sol": code.encode()
+                     for name, code in evm_candidate_sources(program).items()})
+    return docs
+
+
+def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
+                  include_evm: bool = True) -> dict:
+    """Reconstruct every expected byte and reject added, missing or edited files."""
+    documents = expected_documents(program, include_f41=include_f41, include_evm=include_evm)
+    expected = set(documents) | {"SHA256SUMS.json"}
+    if target.is_symlink() or not target.is_dir():
+        raise ValueError("bundle_directory_invalid")
+    found = set()
+    for path in target.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("untrusted_bundle_symlink")
+        if path.is_file():
+            found.add(path.relative_to(target).as_posix())
+    if found != expected:
+        raise ValueError("bundle_inventory_mismatch")
+    actual_checksums = json.loads((target / "SHA256SUMS.json").read_text("utf-8"))
+    checksums = {path: hashlib.sha256(data).hexdigest() for path, data in documents.items()}
+    if actual_checksums != checksums:
+        raise ValueError("bundle_sha256_mismatch")
+    for path, data in documents.items():
+        if (target / path).read_bytes() != data:
+            raise ValueError("bundle_content_mismatch:" + path)
+    return {"assets": len(program["assets"]), "offline_files": len(expected),
+            "sha256": checksums, "on_chain_issuance": False}
+
+
+def export_bundle(program: dict, target: Path, *, include_f41: bool = True,
+                  include_evm: bool = True) -> dict:
     """Write exactly one new offline bundle; never replace prior user data."""
     validate_program(program)
     if target.is_symlink() or target.exists() or not target.parent.is_dir():
         raise ValueError("output_must_be_new_directory")
     target.mkdir(mode=0o700)
     try:
-        docs = {"asset-program.json": program}
-        if include_f41:
-            docs.update({f"f41-shasta/{name}.json": spec
-                         for name, spec in f41_shasta_candidate_specs(program).items()})
+        docs = expected_documents(program, include_f41=include_f41, include_evm=include_evm)
         checksums = {}
-        for name, obj in docs.items():
+        for name, data in docs.items():
             path = target / name
-            path.parent.mkdir(exist_ok=True)
-            data = (json.dumps(obj, indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode()
+            path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("xb") as stream:
                 stream.write(data)
             checksums[name] = hashlib.sha256(data).hexdigest()
         with (target / "SHA256SUMS.json").open("x", encoding="utf-8") as stream:
             json.dump(checksums, stream, indent=2, sort_keys=True)
             stream.write("\n")
-        return {"assets": len(program["assets"]), "offline_files": len(docs) + 1,
-                "sha256": checksums, "on_chain_issuance": False}
+        return verify_bundle(program, target, include_f41=include_f41, include_evm=include_evm)
     except BaseException:
         # Retain failed intermediate output for inspection, never overwrite.
         raise
@@ -183,10 +264,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, help="new offline output directory")
     parser.add_argument("--no-f41", action="store_true")
+    parser.add_argument("--no-evm", action="store_true")
     args = parser.parse_args()
     program = generate_program()
     if args.out:
-        receipt = export_bundle(program, args.out, include_f41=not args.no_f41)
+        receipt = export_bundle(program, args.out, include_f41=not args.no_f41,
+                                include_evm=not args.no_evm)
         print(json.dumps({"assets": receipt["assets"], "offline_files": receipt["offline_files"],
                           "on_chain_issuance": False}, sort_keys=True))
     else:
