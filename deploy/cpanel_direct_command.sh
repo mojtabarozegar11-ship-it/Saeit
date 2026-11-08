@@ -13,11 +13,16 @@ esac
 : "${HOST_KEY:?HOST_KEY is required}"
 
 stage="prepare_key_material"
-trap 'rc=$?; printf "CPANEL_DIRECT_FAILURE_STAGE=%s EXIT=%s\n" "$stage" "$rc" >&2' ERR
 
 work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
-cleanup() { rm -rf -- "$work"; }
+cleanup() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'CPANEL_DIRECT_FAILURE_STAGE=%s EXIT=%s\n' "$stage" "$rc" >&2
+  fi
+  rm -rf -- "$work"
+}
 trap cleanup EXIT
 
 normalize_key() {
