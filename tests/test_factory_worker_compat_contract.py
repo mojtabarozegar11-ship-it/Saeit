@@ -122,5 +122,47 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
         self.assertIsInstance(tree, ast.Module)
 
 
+    def test_entrypoint_failure_is_nonzero_without_task_or_on_worker_exception(self):
+        path = ROOT / "core/management/commands/factory_product_step.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        cls = next(node for node in tree.body if isinstance(node, ast.ClassDef)
+                   and node.name == "Command")
+        class CommandError(Exception):
+            pass
+        class BaseCommand:
+            def __init__(self):
+                self.messages = []
+                self.stdout = SimpleNamespace(write=self.messages.append)
+        class FailingWorker:
+            def __init__(self, *_args):
+                pass
+            def run(self, _task_id):
+                raise RuntimeError("native recipe binding not proven")
+        task = SimpleNamespace(pk=17, status="queued", product_id=3,
+                               refresh_from_db=lambda fields: None)
+        namespace = {
+            "BaseCommand": BaseCommand,
+            "CommandError": CommandError,
+            "AgentTask": SimpleNamespace(objects=SimpleNamespace(
+                filter=lambda **kwargs: SimpleNamespace(first=lambda: task))),
+            "FactoryWorkerCompatibility": FailingWorker,
+            "FactoryAgentRuntime": lambda: None,
+            "build_factory_gateway": lambda: None,
+            "os": SimpleNamespace(environ={}),
+        }
+        exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
+        command = namespace["Command"]()
+        with self.assertRaisesRegex(CommandError, "explicit_task_id_required"):
+            command.handle()
+        with self.assertRaises(CommandError) as caught:
+            command.handle(task_id=17, product_id=3)
+        self.assertEqual(str(caught.exception), "FACTORY_TASK_NOT_COMPLETED")
+        self.assertIsInstance(caught.exception.__cause__, RuntimeError)
+        self.assertEqual(task.status, "queued")
+        self.assertTrue(any(message.startswith("FACTORY_WAIT task=17")
+                            for message in command.messages))
+
+
+
 if __name__ == "__main__":
     unittest.main()
