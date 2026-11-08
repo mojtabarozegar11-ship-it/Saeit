@@ -108,7 +108,7 @@ namespace MojTrade.OmegaX
 
             var index = Bars.Count - 1;
             var atrPrice = _atr.Result[index];
-            if (atrPrice <= 0)
+            if (double.IsNaN(atrPrice) || double.IsInfinity(atrPrice) || atrPrice <= 0)
                 return;
 
             var buyVotes = 0;
@@ -179,12 +179,22 @@ namespace MojTrade.OmegaX
                 Positions.FindAll(Label).Any(p => !p.StopLoss.HasValue))
                 return;
 
+            if (double.IsNaN(atrPrice) || double.IsInfinity(atrPrice) || atrPrice <= 0 ||
+                double.IsNaN(Symbol.PipSize) || Symbol.PipSize <= 0)
+                return;
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             var takePips = stopPips * RewardRisk;
+            if (double.IsNaN(stopPips) || double.IsInfinity(stopPips) ||
+                double.IsNaN(takePips) || double.IsInfinity(takePips) ||
+                stopPips <= 0 || takePips <= 0)
+                return;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
+            if (double.IsNaN(volume) || double.IsInfinity(volume) || volume <= 0)
+                return;
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
-            if (volume < Symbol.VolumeInUnitsMin)
+            if (double.IsNaN(volume) || double.IsInfinity(volume) ||
+                volume < Symbol.VolumeInUnitsMin || volume > Symbol.VolumeInUnitsMax)
                 return;
 
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
