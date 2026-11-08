@@ -137,6 +137,26 @@ class AssetRegistryTests(unittest.TestCase):
             self.assertNotIn("function mint", code)
             self.assertNotIn("tx.origin", code)
 
+    def test_all_50_contract_declarations_are_unique_when_compiled_together(self):
+        sources = evm_candidate_sources(self.program)
+        declarations = []
+        for number in range(1, 51):
+            code = sources[f"moj{number}"]
+            expected = f"Moj{number}FixedSupply"
+            self.assertIn(f"contract {expected} is ERC20 {{", code)
+            declarations.append(expected)
+        self.assertEqual(len(declarations), len(set(declarations)))
+        self.assertNotIn("contract MojFixedSupply is ERC20", "\n".join(sources.values()))
+
+    def test_generated_erc20_has_no_second_mint_or_admin_key(self):
+        for number, code in enumerate(evm_candidate_sources(self.program).values(), 1):
+            with self.subTest(number=number):
+                self.assertEqual(code.count("_mint("), 1)
+                self.assertNotIn("Ownable", code)
+                self.assertNotIn("delegatecall", code)
+                self.assertNotIn("function transferOwnership", code)
+                self.assertIn("require(initialHolder != address(0)", code)
+
     def test_mojoner_is_never_generated_as_erc20(self):
         self.assertNotIn("mojoner", evm_candidate_sources(self.program))
 
