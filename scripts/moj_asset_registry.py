@@ -164,8 +164,9 @@ def ord_etching_fragment(program: dict) -> str:
         f"  rune: {bitcoin['symbol_candidate']}\n"
         "  divisibility: 0\n"
         f"  premine: {bitcoin['supply_tokens']}\n"
-        f"  supply: {bitcoin['supply_tokens']}\n"
-        "# No terms: premine-only fixed supply, no open mint.\n"
+        "# Protocol etching carries premine, not an extra supply field.\n"
+        "# No mint terms: total planned issuance equals premine.\n"
+        "# A separate name commitment and confirmation procedure is required.\n"
     )
 
 
