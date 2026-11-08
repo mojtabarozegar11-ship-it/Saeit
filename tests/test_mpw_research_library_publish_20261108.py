@@ -65,7 +65,7 @@ class PublisherTests(unittest.TestCase):
     def test_clean_preflight_install_readback_and_recoverable_rollback(self):
         publisher.preflight()
         v = publisher.verify_zip(self.package)
-        self.assertEqual(len(v["files"]), 6)
+        self.assertEqual(len(v["files"]), 27)
         publisher.install(self.package, "202611080001")
         self.assertTrue((publisher.TARGET / "index.html").is_file())
         publisher.verify_directory(publisher.TARGET, v)
