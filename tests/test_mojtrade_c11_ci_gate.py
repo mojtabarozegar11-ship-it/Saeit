@@ -40,6 +40,13 @@ class C11CompileGateChecks(unittest.TestCase):
         self.assertIn("- 'fix/mojtrade-c*'", WORKFLOW)
         self.assertIn("- 'trading/build/**'", WORKFLOW)
 
+    def test_risk_coordinator_changes_trigger_independent_regression_gate(self):
+        self.assertIn("- 'trading/mojtrade_*.py'", WORKFLOW)
+        self.assertIn("- 'tests/test_mojtrade_*.py'", WORKFLOW)
+        self.assertIn("risk-regression:", WORKFLOW)
+        self.assertIn("timeout-minutes: 5", WORKFLOW)
+        self.assertIn("python3 -m unittest discover -s tests -p 'test_mojtrade_*.py' -q", WORKFLOW)
+
     def test_build_requires_two_fresh_algo_artifacts(self):
         self.assertIn("for project in MojTradeDemoBot MojTradeOmegaXDemoBot", SCRIPT)
         self.assertIn("-newer \"${build_marker}\"", SCRIPT)
