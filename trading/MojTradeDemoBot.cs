@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using cAlgo.API;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
@@ -25,6 +26,15 @@ namespace cAlgo.Robots
         private DateTime _riskDayUtc;
         private double _dailyStartEquity;
         private bool _halted;
+
+        [Parameter("Enable Coordinated Demo Trading", DefaultValue = false)]
+        public bool EnableCoordinatedDemoTrading { get; set; }
+
+        [Parameter("Risk Coordinator HTTPS URL", DefaultValue = "")]
+        public string CoordinatorUrl { get; set; }
+
+        [Parameter("Risk Coordinator Token", DefaultValue = "")]
+        public string CoordinatorToken { get; set; }
 
         [Parameter("EMA Cross", DefaultValue = true)]
         public bool EnableEmaCross { get; set; }
@@ -146,6 +156,9 @@ namespace cAlgo.Robots
             _higherFastEma = Indicators.ExponentialMovingAverage(_higherBars.ClosePrices, HigherFastEma);
             _higherSlowEma = Indicators.ExponentialMovingAverage(_higherBars.ClosePrices, HigherSlowEma);
 
+            if (!EnableCoordinatedDemoTrading || !CoordinatorConfigured())
+                Print("Observation only: coordinated demo trading is not enabled or configured.");
+
             Print("MojTrade QuantumScalp v2 started on DEMO: {0} {1}", SymbolName, TimeFrame);
             Print("Risk={0}% | max trades={1} | daily loss stop={2}%",
                 RiskPerTradePercent, MaxOpenTradesPerSymbol, MaxDailyLossPercent);
@@ -159,6 +172,8 @@ namespace cAlgo.Robots
                 Stop();
                 return;
             }
+            if (!EnableCoordinatedDemoTrading || !CoordinatorConfigured())
+                return;
             if (_halted || RiskStopActive())
             {
                 Print("BLOCKED: daily equity or closed-loss risk stop active.");
@@ -245,7 +260,8 @@ namespace cAlgo.Robots
         private void TryOpen(TradeType tradeType, string strategy)
         {
             // Re-check at the exact order boundary: several strategies may fire on one bar.
-            if (_halted || Account.IsLive || RiskStopActive() ||
+            if (!EnableCoordinatedDemoTrading || !CoordinatorConfigured() ||
+                _halted || Account.IsLive || RiskStopActive() ||
                 OpenTradeCount() >= MaxOpenTradesPerSymbol ||
                 SharedMojTradePositionCount() >= SharedPositionCap ||
                 !IsFinitePositive(Symbol.PipSize) ||
@@ -280,6 +296,10 @@ namespace cAlgo.Robots
                 return;
             }
 
+            var reservationId = ReserveCoordinatedSlot(DailyNetProfit());
+            if (reservationId == null)
+                return;
+
             var label = BaseLabel + "-" + strategy;
             var result = ExecuteMarketOrder(
                 tradeType,
@@ -289,6 +309,14 @@ namespace cAlgo.Robots
                 stopLossPips,
                 takeProfitPips,
                 "DEMO ONLY | short-term | " + strategy);
+
+            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful))
+            {
+                Print("CRITICAL: coordinator settlement failed. Adapter halted.");
+                _halted = true;
+                Stop();
+                return;
+            }
 
             if (!result.IsSuccessful)
             {
@@ -408,6 +436,81 @@ namespace cAlgo.Robots
                 if (IsMojTradePosition(position))
                     count++;
             return count;
+        }
+
+        private bool CoordinatorConfigured()
+        {
+            Uri endpoint;
+            return !string.IsNullOrWhiteSpace(CoordinatorUrl) &&
+                   Uri.TryCreate(CoordinatorUrl, UriKind.Absolute, out endpoint) &&
+                   endpoint.Scheme == Uri.UriSchemeHttps &&
+                   string.IsNullOrEmpty(endpoint.UserInfo) &&
+                   !string.IsNullOrWhiteSpace(CoordinatorToken) &&
+                   CoordinatorToken.Length >= 32;
+        }
+
+        private string ReserveCoordinatedSlot(double realizedToday)
+        {
+            if (!CoordinatorConfigured() || Account.IsLive ||
+                !IsFinitePositive(Account.Equity) || !IsFinite(realizedToday))
+                return null;
+
+            var requestId = Guid.NewGuid().ToString("N");
+            var invariant = CultureInfo.InvariantCulture;
+            var body = "mode=demo&account=" + Account.Number.ToString(invariant) +
+                       "&day=" + Server.TimeInUtc.ToString("yyyy-MM-dd", invariant) +
+                       "&request_id=" + requestId +
+                       "&equity=" + Account.Equity.ToString("R", invariant) +
+                       "&realized_today=" + realizedToday.ToString("R", invariant) +
+                       "&open_positions=" + SharedMojTradePositionCount().ToString(invariant);
+            try
+            {
+                var request = new HttpRequest(new Uri(CoordinatorUrl.TrimEnd('/') + "/v1/reserve"))
+                {
+                    Method = HttpMethod.Post,
+                    Body = body,
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                var response = Http.Send(request);
+                if (!response.IsSuccessful || response.StatusCode != 200 ||
+                    response.Body != "GRANTED|" + requestId)
+                {
+                    Print("DEMO order blocked: coordinator denied or unavailable.");
+                    return null;
+                }
+                return requestId;
+            }
+            catch (Exception)
+            {
+                Print("DEMO order blocked: coordinator connection failed.");
+                return null;
+            }
+        }
+
+        private bool SettleCoordinatedSlot(string requestId, bool filled)
+        {
+            try
+            {
+                var request = new HttpRequest(new Uri(
+                    CoordinatorUrl.TrimEnd('/') + (filled ? "/v1/commit" : "/v1/cancel")))
+                {
+                    Method = HttpMethod.Post,
+                    Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
+                           "&request_id=" + requestId,
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                var response = Http.Send(request);
+                return response.IsSuccessful && response.StatusCode == 200 &&
+                       response.Body == "SETTLED";
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private int SharedMojTradePositionCount()
