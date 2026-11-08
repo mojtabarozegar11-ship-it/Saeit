@@ -328,7 +328,9 @@ namespace cAlgo.Robots
                 takeProfitPips,
                 "DEMO ONLY | short-term | " + strategy);
 
-            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful))
+            var brokerPositionId = result.IsSuccessful && result.Position != null
+                ? result.Position.Id.ToString(CultureInfo.InvariantCulture) : "";
+            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful, brokerPositionId))
             {
                 Print("CRITICAL: coordinator settlement failed. Adapter halted.");
                 _halted = true;
@@ -553,7 +555,7 @@ namespace cAlgo.Robots
             }
         }
 
-        private bool SettleCoordinatedSlot(string requestId, bool filled)
+        private bool SettleCoordinatedSlot(string requestId, bool filled, string brokerPositionId)
         {
             // Retry only ambiguous transport/server failures with the SAME
             // request ID and outcome. The coordinator is settlement-idempotent;
@@ -567,7 +569,8 @@ namespace cAlgo.Robots
                     {
                         Method = HttpMethod.Post,
                         Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
-                               "&request_id=" + requestId,
+                               "&request_id=" + requestId +
+                               (filled ? "&broker_position_id=" + brokerPositionId : ""),
                         Timeout = TimeSpan.FromSeconds(3)
                     };
                     request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");

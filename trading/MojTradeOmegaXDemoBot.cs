@@ -234,7 +234,9 @@ namespace MojTrade.OmegaX
             if (reservationId == null)
                 return;
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
-            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful))
+            var brokerPositionId = result.IsSuccessful && result.Position != null
+                ? result.Position.Id.ToString(CultureInfo.InvariantCulture) : "";
+            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful, brokerPositionId))
             {
                 Print("CRITICAL: OMEGA coordinator settlement failed. Adapter halted.");
                 _halted = true;
@@ -376,7 +378,7 @@ namespace MojTrade.OmegaX
             }
         }
 
-        private bool SettleCoordinatedSlot(string requestId, bool filled)
+        private bool SettleCoordinatedSlot(string requestId, bool filled, string brokerPositionId)
         {
             // Retry only ambiguous transport/server failures with the SAME
             // request ID and outcome. The coordinator is settlement-idempotent;
@@ -390,7 +392,8 @@ namespace MojTrade.OmegaX
                     {
                         Method = HttpMethod.Post,
                         Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
-                               "&request_id=" + requestId,
+                               "&request_id=" + requestId +
+                               (filled ? "&broker_position_id=" + brokerPositionId : ""),
                         Timeout = TimeSpan.FromSeconds(3)
                     };
                     request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
