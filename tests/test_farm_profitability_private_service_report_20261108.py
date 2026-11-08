@@ -30,7 +30,11 @@ class FarmPrivateReportTests(unittest.TestCase):
         original_precision = getcontext().prec
         try:
             getcontext().prec = 28
-            self.assertEqual(mod.calculate(baseline())["operating_contribution"], "0.00")
+            fresh_spec = importlib.util.spec_from_file_location("farm_private_service_reimport", _MODULE)
+            fresh_mod = importlib.util.module_from_spec(fresh_spec)
+            fresh_spec.loader.exec_module(fresh_mod)
+            self.assertEqual(getcontext().prec, 28)
+            self.assertEqual(fresh_mod.calculate(baseline())["operating_contribution"], "0.00")
             self.assertEqual(getcontext().prec, 28)
         finally:
             getcontext().prec = original_precision
