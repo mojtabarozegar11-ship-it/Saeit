@@ -12,9 +12,25 @@ if [[ "${sdk_major}" -lt 8 ]]; then
   exit 2
 fi
 
+build_marker="$(mktemp)"
+trap 'rm -f "$build_marker"' EXIT
+
 for project in MojTradeDemoBot MojTradeOmegaXDemoBot; do
-  dotnet build "${root}/trading/build/${project}/${project}.csproj" \
-    --configuration Release --property:AlgoPublish=False
+  project_dir="${root}/trading/build/${project}"
+  touch "${build_marker}"
+  dotnet build "${project_dir}/${project}.csproj" \
+    --configuration Release --no-incremental --property:AlgoPublish=False
+
+  mapfile -d '' artifacts < <(find "${project_dir}" -type f -name '*.algo' \
+    -newer "${build_marker}" -print0)
+  if (( ${#artifacts[@]} == 0 )); then
+    echo "BLOCKED: ${project} compiled without a fresh .algo artifact." >&2
+    exit 3
+  fi
+  for artifact in "${artifacts[@]}"; do
+    echo "Verified fresh ${project} artifact:"
+    sha256sum "${artifact}"
+  done
 done
 
-echo "Build step finished. Independently verify .algo outputs and cTrader metadata."
+echo "Both cBots produced fresh .algo files. Broker runtime and metadata remain unverified."
