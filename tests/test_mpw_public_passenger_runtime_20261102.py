@@ -126,5 +126,37 @@ class PassengerDiagnosticTests(unittest.TestCase):
 
 
 
+    def test_error_log_probe_returns_only_fixed_categories(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/order/SECRET ModuleNotFoundError: No module named whatever\n"
+                "Traceback (most recent call last)\n",
+            )
+            result = inspect_error_classes(root)
+            self.assertEqual(result["regular_recent_error_files"], 1)
+            self.assertEqual(result["classes"]["module_missing"], 1)
+            self.assertEqual(result["classes"]["python_traceback"], 1)
+            self.assertFalse(result["files_modified"])
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_wiring_flags_are_redacted(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_passenger_wiring
+        conf = ("PassengerPython /home/zomorod2/virtualenv/other-app/3.11/bin/python\n"
+                "PassengerStartupFile passenger_wsgi.py\n"
+                "RewriteRule ^store/?$ store/index.html [END]\n")
+        result = inspect_passenger_wiring(conf, "APP='/home/zomorod2/Saeit-staging'\nfrom config.wsgi import application")
+        self.assertEqual(result["passenger_python_directives"], 1)
+        self.assertTrue(result["passenger_python_311"])
+        self.assertTrue(result["passenger_python_other_venv"])
+        self.assertFalse(result["passenger_python_stage_venv"])
+        self.assertTrue(result["wsgi_mentions_staging_source"])
+        self.assertTrue(result["wsgi_has_django_entrypoint"])
+        self.assertNotIn("other-app", json.dumps(result))
+
+
 if __name__ == "__main__":
     unittest.main()
