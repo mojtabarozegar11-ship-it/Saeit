@@ -60,6 +60,14 @@ class FarmPrivateReportTests(unittest.TestCase):
         with self.assertRaises(mod.InputError):
             mod.calculate(data)
 
+    def test_zero_valued_cost_categories_are_not_sufficient(self):
+        data = baseline()
+        data["fixed_costs"] = {"irrigation": "0"}
+        data["production_variable_costs"] = {"seed": "0"}
+        data["per_sold_kg_costs"] = {"transport": "0"}
+        with self.assertRaises(mod.InputError):
+            mod.calculate(data)
+
     def test_attestation_must_be_boolean(self):
         data = baseline()
         data["all_material_costs_documented"] = "true"
