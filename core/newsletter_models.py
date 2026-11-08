@@ -3,7 +3,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from .editorial_policy import blocked_story_reason
+from .editorial_policy import blocked_story_reason, public_story_allowed
+from .editorial_signature import has_final_signature
 
 
 class NewsletterSource(models.Model):
@@ -59,6 +60,8 @@ class NewsletterStory(models.Model):
             reason = blocked_story_reason(self)
             if reason:
                 raise ValidationError({"title": f"Publication forbidden by owner editorial policy: {reason}"})
+        if self.status == "published" and not has_final_signature(self.body):
+            raise ValidationError({"body": "Published news and weather reports require the exact final #مجتبی_روزگار signature"})
 
     def save(self, *args, **kwargs):
         # Also enforce on programmatic saves that do not use admin forms.
@@ -126,8 +129,11 @@ class NewsletterPublication(models.Model):
     def save(self, *args, **kwargs):
         if self.status != "blocked" and blocked_story_reason(self.story):
             raise ValidationError("News distribution forbidden by owner editorial policy")
-        if self.status == "published" and self.story.status != "published":
-            raise ValidationError("Cannot distribute an unreviewed or unpublished story")
+        if self.status == "published":
+            if not public_story_allowed(self.story, as_of=timezone.now()):
+                raise ValidationError("Cannot distribute an unreviewed, future, or prohibited story")
+            if not has_final_signature(self.story.body):
+                raise ValidationError("Cannot distribute news without the final #مجتبی_روزگار signature")
         return super().save(*args, **kwargs)
 
 
