@@ -102,7 +102,7 @@ namespace MojTrade.OmegaX
             if (EnableCoordinatedDemoTrading && CoordinatorConfigured())
             {
                 Timer.Start(60);
-                ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
+                ObserveCoordinatedRisk(TodayAccountRealizedProfit());
             }
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
@@ -111,7 +111,7 @@ namespace MojTrade.OmegaX
         {
             if (Account.IsLive)
                 return;
-            ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
+            ObserveCoordinatedRisk(TodayAccountRealizedProfit());
             if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
                 !CoordinatorConfigured() || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
                 return;
@@ -196,7 +196,7 @@ namespace MojTrade.OmegaX
                 Stop();
                 return;
             }
-            ObserveCoordinatedRisk(TodayRealizedMojTradeProfit());
+            ObserveCoordinatedRisk(TodayAccountRealizedProfit());
         }
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
@@ -230,7 +230,7 @@ namespace MojTrade.OmegaX
                 !IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
                 return;
 
-            var reservationId = ReserveCoordinatedSlot(TodayRealizedMojTradeProfit());
+            var reservationId = ReserveCoordinatedSlot(TodayAccountRealizedProfit());
             if (reservationId == null)
                 return;
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
@@ -263,20 +263,20 @@ namespace MojTrade.OmegaX
             }
         }
 
-        private double TodayRealizedMojTradeProfit()
+        private double TodayAccountRealizedProfit()
         {
+            // Match QuantumScalp's account-wide observation across all symbols,
+            // cBots and manual positions on this DEMO account.
             var total = 0.0;
             foreach (var trade in History)
             {
-                if (trade.ClosingTime.Date != Server.TimeInUtc.Date || trade.Label == null ||
-                    (trade.Label != Label &&
-                     !trade.Label.StartsWith(ScalpLabelPrefix, StringComparison.Ordinal)))
+                if (trade.ClosingTime.Date != Server.TimeInUtc.Date)
                     continue;
                 if (!IsFinite(trade.NetProfit))
                     return double.NaN;
                 total += trade.NetProfit;
             }
-            return total;
+            return IsFinite(total) ? total : double.NaN;
         }
 
         private bool CoordinatorConfigured()
