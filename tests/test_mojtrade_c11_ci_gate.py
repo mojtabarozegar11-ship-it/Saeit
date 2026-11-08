@@ -1,5 +1,6 @@
 """Source-only assertions for the zero-credential cBot compilation gate."""
 from pathlib import Path
+import json
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,12 @@ class C11CompileGateChecks(unittest.TestCase):
     def test_ci_uses_standard_linux_runner_and_dotnet_eight(self):
         self.assertIn("runs-on: ubuntu-24.04", WORKFLOW)
         self.assertIn("dotnet-version: '8.0.x'", WORKFLOW)
+
+    def test_sdk_is_pinned_to_eight_only_inside_cbot_build_tree(self):
+        config = json.loads((ROOT / "trading/build/global.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["sdk"]["version"], "8.0.100")
+        self.assertEqual(config["sdk"]["rollForward"], "latestFeature")
+        self.assertIn('cd "${root}/trading/build"', SCRIPT)
 
     def test_ci_is_read_only_and_does_not_keep_checkout_credential(self):
         self.assertIn("permissions:\n  contents: read", WORKFLOW)
