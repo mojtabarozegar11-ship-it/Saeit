@@ -83,14 +83,22 @@ def product_checkout(request, product_id):
 def purchases(request):
     from core.models import PaymentIntent
     from services.mpw_walletless_commercial_intent import PROVIDER,commercial_buyer_status,_decode
+    from services.mpw_purchase_history_copy import buyer_invoice_action
+    from services.mpw_trx_walletless_core import PaymentHold
     from django.utils import timezone
     _ensure_live(request,for_paid_read=True)
     cards=[]
     for pi in PaymentIntent.objects.select_related('order').filter(provider=PROVIDER,order__customer_id=request.user.pk).order_by('-pk')[:100]:
-        state=commercial_buyer_status(pi.pk,request.user.pk)
-        from services.mpw_purchase_history_copy import buyer_invoice_action
-        detail = buyer_invoice_action(
-            pi.pk, pi.status, state, _decode(pi).expires_at, timezone.now()
-        )
+        try:
+            state = commercial_buyer_status(pi.pk, request.user.pk)
+            # A paid proof already decoded its immutable invoice; an extra
+            # parse here could break the entire history for one legacy row.
+            expiry = _decode(pi).expires_at if pi.status == 'awaiting_chain' else None
+            detail = buyer_invoice_action(pi.pk, pi.status, state, expiry, timezone.now())
+        except PaymentHold:
+            # One malformed/legacy invoice must not hide other purchases.
+            # Never expose a payable invoice or download on unverifiable data.
+            detail = ('Payment or invoice needs manual verification. '
+                      'Do not pay again; contact support with your order number.')
         cards.append(f'<article><h2>Order #{pi.order_id}</h2><p>${escape(str(pi.amount))} USD</p><p>{detail}</p></article>')
     return _page('My TRX purchases',''.join(cards) or '<p>No TRX purchases yet. <a href="/commerce/trx-easy/">Browse products</a>.</p>')
