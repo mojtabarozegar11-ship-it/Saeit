@@ -12,6 +12,8 @@ namespace MojTrade.OmegaX
     public class MojTradeOmegaXDemoBot : Robot
     {
         private const string Label = "MojTrade-OMEGA-X-DEMO";
+        private const string ScalpLabelPrefix = "MojTrade-Demo-QuantumScalp-v2-";
+        private const int SharedPositionCap = 3;
 
         [Parameter("Fast EMA", DefaultValue = 8, MinValue = 2)]
         public int FastEmaPeriod { get; set; }
@@ -40,10 +42,10 @@ namespace MojTrade.OmegaX
         [Parameter("Max Positions", DefaultValue = 3, MinValue = 1, MaxValue = 3)]
         public int MaxPositions { get; set; }
 
-        [Parameter("Daily Loss Stop %", DefaultValue = 2.0, MinValue = 0.1)]
+        [Parameter("Daily Loss Stop %", DefaultValue = 2.0, MinValue = 0.1, MaxValue = 10)]
         public double DailyLossStopPercent { get; set; }
 
-        [Parameter("Consecutive Loss Stop", DefaultValue = 5, MinValue = 1)]
+        [Parameter("Consecutive Loss Stop", DefaultValue = 5, MinValue = 1, MaxValue = 10)]
         public int ConsecutiveLossStop { get; set; }
 
         [Parameter("Enable Demo Trading", DefaultValue = false)]
@@ -99,7 +101,7 @@ namespace MojTrade.OmegaX
                 return;
 
             var positions = Positions.FindAll(Label, SymbolName);
-            if (positions.Length >= MaxPositions)
+            if (positions.Length >= MaxPositions || SharedMojTradePositionCount() >= SharedPositionCap)
                 return;
 
             var index = Bars.Count - 1;
@@ -167,6 +169,21 @@ namespace MojTrade.OmegaX
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
+            // Last line of defense: entries may be invoked after feed/account changes.
+            if (!EnableDemoTrading || Account.IsLive || DailyLossReached() ||
+                _consecutiveLosses >= ConsecutiveLossStop ||
+                Positions.FindAll(Label, SymbolName).Length >= MaxPositions ||
+                SharedMojTradePositionCount() >= SharedPositionCap ||
+                !IsFinitePositive(Account.Equity) || !IsFinitePositive(Symbol.PipSize) ||
+                !IsFinitePositive(Symbol.Ask) || !IsFinitePositive(Symbol.Bid) ||
+                Symbol.Ask < Symbol.Bid || !IsFinitePositive(atrPrice) ||
+                !IsFinitePositive(RiskPercent) || RiskPercent > 1 ||
+                !IsFinitePositive(AtrStopMultiplier) || !IsFinitePositive(RewardRisk) ||
+                !IsFinitePositive(Symbol.VolumeInUnitsMin) ||
+                !IsFinitePositive(MaxSpreadPips) ||
+                !IsFinitePositive(CurrentSpreadPips()) || CurrentSpreadPips() > MaxSpreadPips)
+                return;
+
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             var takePips = stopPips * RewardRisk;
             if (!IsFinitePositive(stopPips) || !IsFinitePositive(takePips))
@@ -184,8 +201,33 @@ namespace MojTrade.OmegaX
             if (!result.IsSuccessful)
                 Print("OMEGA X order rejected: {0}", result.Error);
             else
+            {
+                if (result.Position == null || !result.Position.StopLoss.HasValue ||
+                    !result.Position.TakeProfit.HasValue)
+                {
+                    Print("CRITICAL: OMEGA demo order missing broker-side SL/TP.");
+                    if (result.Position != null)
+                    {
+                        var close = ClosePosition(result.Position);
+                        if (!close.IsSuccessful)
+                            Print("CRITICAL: unprotected OMEGA demo close failed: {0}", close.Error);
+                    }
+                    Stop();
+                    return;
+                }
                 Print("OMEGA X DEMO order: {0} volume={1} SL={2} TP={3}",
                       tradeType, volume, stopPips, takePips);
+            }
+        }
+
+        private int SharedMojTradePositionCount()
+        {
+            var count = 0;
+            foreach (var position in Positions)
+                if (position.Label == Label ||
+                    (position.Label != null && position.Label.StartsWith(ScalpLabelPrefix, StringComparison.Ordinal)))
+                    count++;
+            return count;
         }
 
         private static bool IsFinite(double value)
@@ -215,7 +257,8 @@ namespace MojTrade.OmegaX
                 _consecutiveLosses = 0;
             }
             // Fail closed if the broker/account feed is non-finite or the equity baseline is unusable.
-            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(_sessionStartEquity))
+            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(_sessionStartEquity) ||
+                !IsFinitePositive(DailyLossStopPercent) || DailyLossStopPercent > 10)
                 return true;
             return Account.Equity <= _sessionStartEquity * (1.0 - DailyLossStopPercent / 100.0);
         }

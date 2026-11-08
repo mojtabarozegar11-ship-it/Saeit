@@ -9,6 +9,8 @@ namespace cAlgo.Robots
     public class MojTradeDemoBot : Robot
     {
         private const string BaseLabel = "MojTrade-Demo-QuantumScalp-v2";
+        private const string OmegaLabel = "MojTrade-OMEGA-X-DEMO";
+        private const int SharedPositionCap = 3;
 
         private ExponentialMovingAverage _fastEma;
         private ExponentialMovingAverage _slowEma;
@@ -20,6 +22,9 @@ namespace cAlgo.Robots
         private ExponentialMovingAverage _higherSlowEma;
 
         private DateTime _lastEntryTime = DateTime.MinValue;
+        private DateTime _riskDayUtc;
+        private double _dailyStartEquity;
+        private bool _halted;
 
         [Parameter("EMA Cross", DefaultValue = true)]
         public bool EnableEmaCross { get; set; }
@@ -69,7 +74,7 @@ namespace cAlgo.Robots
         [Parameter("Max Volume (Units)", DefaultValue = 5000, MinValue = 1)]
         public double MaxVolumeInUnits { get; set; }
 
-        [Parameter("Max Open Trades / Symbol", DefaultValue = 3, MinValue = 1, MaxValue = 10)]
+        [Parameter("Max Open Trades / Symbol", DefaultValue = 3, MinValue = 1, MaxValue = 3)]
         public int MaxOpenTradesPerSymbol { get; set; }
 
         [Parameter("Max Daily Loss (%)", DefaultValue = 2.0, MinValue = 0.5, MaxValue = 10)]
@@ -122,6 +127,16 @@ namespace cAlgo.Robots
                 return;
             }
 
+            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(Account.Balance))
+            {
+                Print("BLOCKED: invalid demo-account equity or balance.");
+                Stop();
+                return;
+            }
+
+            _riskDayUtc = Server.TimeInUtc.Date;
+            _dailyStartEquity = Account.Equity;
+
             _fastEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, FastEma);
             _slowEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, SlowEma);
             _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, RsiPeriod);
@@ -138,21 +153,26 @@ namespace cAlgo.Robots
 
         protected override void OnBarClosed()
         {
-            ManageRiskStop();
+            if (Account.IsLive)
+            {
+                Print("BLOCKED: live-account transition detected.");
+                Stop();
+                return;
+            }
+            if (_halted || RiskStopActive())
+            {
+                Print("BLOCKED: daily equity or closed-loss risk stop active.");
+                return;
+            }
 
             var requiredBars = Math.Max(SlowEma, BreakoutLookback) +
                                Math.Max(AtrPeriod, RsiPeriod) + 5;
             if (Bars.Count < requiredBars || _higherBars.Count < HigherSlowEma + 5)
                 return;
 
-            if (OpenTradeCount() >= MaxOpenTradesPerSymbol)
+            if (OpenTradeCount() >= MaxOpenTradesPerSymbol ||
+                SharedMojTradePositionCount() >= SharedPositionCap)
                 return;
-
-            if (DailyNetProfit() <= -(Account.Balance * MaxDailyLossPercent / 100.0))
-            {
-                Print("Daily loss limit reached. New entries disabled.");
-                return;
-            }
 
             if (RecentConsecutiveLosses() >= MaxConsecutiveLosses)
             {
@@ -163,8 +183,11 @@ namespace cAlgo.Robots
             if ((Server.Time - _lastEntryTime).TotalSeconds < CooldownSeconds)
                 return;
 
+            if (!IsFinitePositive(Symbol.Ask) || !IsFinitePositive(Symbol.Bid) ||
+                !IsFinitePositive(Symbol.PipSize) || Symbol.Ask < Symbol.Bid)
+                return;
             var spreadPips = (Symbol.Ask - Symbol.Bid) / Symbol.PipSize;
-            if (spreadPips > MaximumSpreadPips)
+            if (!IsFinite(spreadPips) || spreadPips > MaximumSpreadPips)
                 return;
 
             var fastPrevious = _fastEma.Result.Last(2);
@@ -210,17 +233,35 @@ namespace cAlgo.Robots
 
         protected override void OnTick()
         {
+            if (Account.IsLive)
+            {
+                Print("BLOCKED: live-account transition detected on tick.");
+                Stop();
+                return;
+            }
             ManageOpenPositions();
         }
 
         private void TryOpen(TradeType tradeType, string strategy)
         {
-            if (OpenTradeCount() >= MaxOpenTradesPerSymbol)
+            // Re-check at the exact order boundary: several strategies may fire on one bar.
+            if (_halted || Account.IsLive || RiskStopActive() ||
+                OpenTradeCount() >= MaxOpenTradesPerSymbol ||
+                SharedMojTradePositionCount() >= SharedPositionCap ||
+                !IsFinitePositive(Symbol.PipSize) ||
+                !IsFinitePositive(Account.Equity) ||
+                !IsFinitePositive(RiskPerTradePercent) ||
+                !IsFinitePositive(Symbol.Ask) || !IsFinitePositive(Symbol.Bid) ||
+                Symbol.Ask < Symbol.Bid || !IsFinitePositive(Symbol.VolumeInUnitsMin) ||
+                !IsFinitePositive(MaximumSpreadPips))
                 return;
 
             var atrPips = _atr.Result.Last(1) / Symbol.PipSize;
             var stopLossPips = Math.Max(MinimumStopPips, atrPips * AtrStopMultiplier);
             var takeProfitPips = stopLossPips * RewardRisk;
+            if (!IsFinitePositive(atrPips) || !IsFinitePositive(stopLossPips) ||
+                !IsFinitePositive(takeProfitPips) || !IsFinitePositive(MaxVolumeInUnits))
+                return;
 
             var volume = Symbol.VolumeForProportionalRisk(
                 ProportionalAmountType.Equity,
@@ -228,10 +269,12 @@ namespace cAlgo.Robots
                 stopLossPips,
                 RoundingMode.Down);
 
+            if (!IsFinitePositive(volume))
+                return;
             volume = Math.Min(volume, MaxVolumeInUnits);
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
 
-            if (volume < Symbol.VolumeInUnitsMin)
+            if (!IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
             {
                 Print("{0}: calculated volume is below broker minimum.", strategy);
                 return;
@@ -253,16 +296,59 @@ namespace cAlgo.Robots
                 return;
             }
 
+            if (result.Position == null || !result.Position.StopLoss.HasValue ||
+                !result.Position.TakeProfit.HasValue)
+            {
+                Print("CRITICAL: demo order has missing broker-side protection.");
+                if (result.Position != null)
+                {
+                    var close = ClosePosition(result.Position);
+                    if (!close.IsSuccessful)
+                        Print("CRITICAL: failed to close unprotected demo position: {0}", close.Error);
+                }
+                _halted = true;
+                Stop();
+                return;
+            }
+
             _lastEntryTime = Server.Time;
             Print("{0} opened {1}: risk={2}% volume={3} SL={4:F1} TP={5:F1}",
                 strategy, tradeType, RiskPerTradePercent, volume,
                 stopLossPips, takeProfitPips);
         }
 
-        private void ManageRiskStop()
+        private bool RiskStopActive()
         {
-            if (DailyNetProfit() <= -(Account.Balance * MaxDailyLossPercent / 100.0))
-                Print("Risk stop active: daily loss cap reached.");
+            var todayUtc = Server.TimeInUtc.Date;
+            if (todayUtc != _riskDayUtc)
+            {
+                _riskDayUtc = todayUtc;
+                _dailyStartEquity = Account.Equity;
+            }
+            if (!IsFinitePositive(Account.Equity) || !IsFinitePositive(Account.Balance) ||
+                !IsFinitePositive(_dailyStartEquity) ||
+                !IsFinitePositive(MaxDailyLossPercent) || MaxDailyLossPercent > 10)
+                return true;
+
+            var closedToday = DailyNetProfit();
+            if (!IsFinite(closedToday))
+                return true;
+
+            // Equity includes current unrealized P/L; closed losses are a second guard
+            // to prevent a simple restart from erasing the entire daily loss history.
+            var allowedLoss = _dailyStartEquity * MaxDailyLossPercent / 100.0;
+            return Account.Equity <= _dailyStartEquity - allowedLoss ||
+                   closedToday <= -(Account.Balance * MaxDailyLossPercent / 100.0);
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return IsFinite(value) && value > 0;
         }
 
         private void ManageOpenPositions()
@@ -285,7 +371,11 @@ namespace cAlgo.Robots
                             Symbol.Bid - TrailingDistancePips * Symbol.PipSize);
 
                     if (!position.StopLoss.HasValue || desiredStop > position.StopLoss.Value)
-                        ModifyPosition(position, desiredStop, position.TakeProfit, ProtectionType.Absolute);
+                    {
+                        var change = ModifyPosition(position, desiredStop, position.TakeProfit, ProtectionType.Absolute);
+                        if (!change.IsSuccessful)
+                            Print("DEMO trailing-stop update failed: {0}", change.Error);
+                    }
                 }
                 else
                 {
@@ -295,7 +385,11 @@ namespace cAlgo.Robots
                             Symbol.Ask + TrailingDistancePips * Symbol.PipSize);
 
                     if (!position.StopLoss.HasValue || desiredStop < position.StopLoss.Value)
-                        ModifyPosition(position, desiredStop, position.TakeProfit, ProtectionType.Absolute);
+                    {
+                        var change = ModifyPosition(position, desiredStop, position.TakeProfit, ProtectionType.Absolute);
+                        if (!change.IsSuccessful)
+                            Print("DEMO trailing-stop update failed: {0}", change.Error);
+                    }
                 }
             }
         }
@@ -316,6 +410,16 @@ namespace cAlgo.Robots
             return count;
         }
 
+        private int SharedMojTradePositionCount()
+        {
+            var count = 0;
+            foreach (var position in Positions)
+                if (position.Label == OmegaLabel ||
+                    (position.Label != null && position.Label.StartsWith(BaseLabel + "-", StringComparison.Ordinal)))
+                    count++;
+            return count;
+        }
+
         private double DailyNetProfit()
         {
             var total = 0.0;
@@ -323,8 +427,12 @@ namespace cAlgo.Robots
             {
                 var trades = History.FindAll(label, SymbolName);
                 foreach (var trade in trades)
-                    if (trade.ClosingTime.Date == Server.Time.Date)
+                    if (trade.ClosingTime.Date == Server.TimeInUtc.Date)
+                    {
+                        if (!IsFinite(trade.NetProfit))
+                            return double.NaN;
                         total += trade.NetProfit;
+                    }
             }
             return total;
         }
