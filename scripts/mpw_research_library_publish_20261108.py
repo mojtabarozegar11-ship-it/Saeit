@@ -24,9 +24,10 @@ HOME = Path("/home/zomorod2")
 SITE = HOME / "mojplaywin.com"
 EDITORIAL = SITE / "mpw-editorial"
 PARENT = EDITORIAL / "research-library"
-TARGET = PARENT / "20261108-c4"
-PRIVATE = HOME / ".mpw-research-release-c4"
-RELEASE = "MPW-RESEARCH-C4-20261108"
+TARGET = PARENT / "20261108-c12"
+PRIVATE = HOME / ".mpw-research-release-c12"
+RELEASE = "MPW-RESEARCH-C12-20261108"
+EXPECTED_PACKAGE_SHA256 = "f567f40353fb3290a55fdf8caab595887422e65d8bf6d6cb40ce1f48a1fb0aaf"
 EXACT_FILES = frozenset({
     "index.html",
     "books/30-evidence-methods/index.html",
@@ -84,6 +85,8 @@ def verify_zip(package: Path) -> dict:
         raise RuntimeError("ZIP_MUST_BE_OWNED_INSIDE_CPANEL_HOME")
     if package.stat().st_size > 2_000_000:
         raise RuntimeError("ZIP_EXCEEDS_RELEASE_LIMIT")
+    if digest(package.read_bytes()) != EXPECTED_PACKAGE_SHA256:
+        raise RuntimeError("PINNED_PACKAGE_DIGEST_MISMATCH")
     with zipfile.ZipFile(package, "r") as z:
         if set(z.namelist()) != EXACT_FILES or len(z.infolist()) != len(EXACT_FILES):
             raise RuntimeError("WRONG_OR_DUPLICATE_ARCHIVE_FILES")
@@ -97,7 +100,7 @@ def verify_zip(package: Path) -> dict:
         if z.testzip() is not None:
             raise RuntimeError("ARCHIVE_CRC_FAILURE")
         manifest = json.loads(z.read("release.json"))
-        if manifest.get("release_id") != RELEASE or manifest.get("public_root") != "/mpw-editorial/research-library/20261108-c4/":
+        if manifest.get("release_id") != RELEASE or manifest.get("public_root") != "/mpw-editorial/research-library/20261108-c12/":
             raise RuntimeError("RELEASE_IDENTITY_MISMATCH")
         files = manifest.get("files")
         if not isinstance(files, dict) or set(files) != EXACT_FILES - {"release.json"}:

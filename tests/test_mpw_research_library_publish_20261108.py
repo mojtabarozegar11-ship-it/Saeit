@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = next((p for p in (
-    HERE / "mpw_c4_atomic_publish.py",
+    HERE / "mpw_c12_atomic_publish.py",
     HERE.parent / "scripts/mpw_research_library_publish_20261108.py",
 ) if p.is_file()), None)
 if SCRIPT is None:
@@ -38,7 +38,7 @@ class PublisherTests(unittest.TestCase):
         }
         manifest = {
             "release_id": publisher.RELEASE,
-            "public_root": "/mpw-editorial/research-library/20261108-c4/",
+            "public_root": "/mpw-editorial/research-library/20261108-c12/",
             "files": {name: {"bytes": len(data), "sha256": publisher.digest(data)} for name, data in members.items()},
         }
         members["release.json"] = json.dumps(manifest).encode("utf-8")
@@ -50,9 +50,10 @@ class PublisherTests(unittest.TestCase):
             patch.object(publisher, "SITE", site),
             patch.object(publisher, "EDITORIAL", site / "mpw-editorial"),
             patch.object(publisher, "PARENT", site / "mpw-editorial/research-library"),
-            patch.object(publisher, "TARGET", site / "mpw-editorial/research-library/20261108-c4"),
+            patch.object(publisher, "TARGET", site / "mpw-editorial/research-library/20261108-c12"),
             patch.object(publisher, "PRIVATE", self.home / ".mpw-research-release-c4"),
             patch.object(publisher, "authorized_user", return_value=True),
+            patch.object(publisher, "EXPECTED_PACKAGE_SHA256", publisher.digest(self.package.read_bytes())),
         ]
         for p in self.patches:
             p.start()
@@ -87,8 +88,20 @@ class PublisherTests(unittest.TestCase):
         with zipfile.ZipFile(tampered, "w", zipfile.ZIP_DEFLATED) as z:
             for name, data in members.items():
                 z.writestr(name, data)
-        with self.assertRaisesRegex(RuntimeError, "HASH_OR_SIZE_MISMATCH"):
-            publisher.verify_zip(tampered)
+        with patch.object(publisher, "EXPECTED_PACKAGE_SHA256", publisher.digest(tampered.read_bytes())):
+            with self.assertRaisesRegex(RuntimeError, "HASH_OR_SIZE_MISMATCH"):
+                publisher.verify_zip(tampered)
+
+    def test_pinned_release_rejects_repacked_archive(self):
+        repacked = self.home / "repacked.zip"
+        with zipfile.ZipFile(self.package) as z:
+            members = {n: z.read(n) for n in z.namelist()}
+        with zipfile.ZipFile(repacked, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, data in reversed(list(members.items())):
+                z.writestr(name, data)
+        self.assertNotEqual(publisher.digest(repacked.read_bytes()), publisher.EXPECTED_PACKAGE_SHA256)
+        with self.assertRaisesRegex(RuntimeError, "PINNED_PACKAGE_DIGEST_MISMATCH"):
+            publisher.verify_zip(repacked)
 
     def test_unknown_archive_file_refused(self):
         extra = self.home / "extra.zip"
@@ -98,8 +111,9 @@ class PublisherTests(unittest.TestCase):
         with zipfile.ZipFile(extra, "w", zipfile.ZIP_DEFLATED) as z:
             for name, data in members.items():
                 z.writestr(name, data)
-        with self.assertRaisesRegex(RuntimeError, "WRONG_OR_DUPLICATE_ARCHIVE_FILES"):
-            publisher.verify_zip(extra)
+        with patch.object(publisher, "EXPECTED_PACKAGE_SHA256", publisher.digest(extra.read_bytes())):
+            with self.assertRaisesRegex(RuntimeError, "WRONG_OR_DUPLICATE_ARCHIVE_FILES"):
+                publisher.verify_zip(extra)
 
     def test_symlinked_publication_parent_refused(self):
         elsewhere = self.home / "elsewhere"
