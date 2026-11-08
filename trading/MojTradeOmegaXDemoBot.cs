@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using cAlgo.API;
 using cAlgo.API.Indicators;
@@ -48,6 +49,15 @@ namespace MojTrade.OmegaX
         [Parameter("Consecutive Loss Stop", DefaultValue = 5, MinValue = 1, MaxValue = 10)]
         public int ConsecutiveLossStop { get; set; }
 
+        [Parameter("Enable Coordinated Demo Trading", DefaultValue = false)]
+        public bool EnableCoordinatedDemoTrading { get; set; }
+
+        [Parameter("Risk Coordinator HTTPS URL", DefaultValue = "")]
+        public string CoordinatorUrl { get; set; }
+
+        [Parameter("Risk Coordinator Token", DefaultValue = "")]
+        public string CoordinatorToken { get; set; }
+
         [Parameter("Enable Demo Trading", DefaultValue = false)]
         public bool EnableDemoTrading { get; set; }
 
@@ -58,6 +68,7 @@ namespace MojTrade.OmegaX
         private double _sessionStartEquity;
         private DateTime _riskDayUtc;
         private int _consecutiveLosses;
+        private bool _halted;
 
         protected override void OnStart()
         {
@@ -92,7 +103,8 @@ namespace MojTrade.OmegaX
 
         protected override void OnBarClosed()
         {
-            if (!EnableDemoTrading || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
+            if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
+                !CoordinatorConfigured() || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
@@ -170,7 +182,8 @@ namespace MojTrade.OmegaX
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
             // Last line of defense: entries may be invoked after feed/account changes.
-            if (!EnableDemoTrading || Account.IsLive || DailyLossReached() ||
+            if (_halted || !EnableDemoTrading || !EnableCoordinatedDemoTrading ||
+                !CoordinatorConfigured() || Account.IsLive || DailyLossReached() ||
                 _consecutiveLosses >= ConsecutiveLossStop ||
                 Positions.FindAll(Label, SymbolName).Length >= MaxPositions ||
                 SharedMojTradePositionCount() >= SharedPositionCap ||
@@ -197,7 +210,17 @@ namespace MojTrade.OmegaX
                 !IsFinitePositive(volume) || volume < Symbol.VolumeInUnitsMin)
                 return;
 
+            var reservationId = ReserveCoordinatedSlot(TodayRealizedMojTradeProfit());
+            if (reservationId == null)
+                return;
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
+            if (!SettleCoordinatedSlot(reservationId, result.IsSuccessful))
+            {
+                Print("CRITICAL: OMEGA coordinator settlement failed. Adapter halted.");
+                _halted = true;
+                Stop();
+                return;
+            }
             if (!result.IsSuccessful)
                 Print("OMEGA X order rejected: {0}", result.Error);
             else
@@ -217,6 +240,97 @@ namespace MojTrade.OmegaX
                 }
                 Print("OMEGA X DEMO order: {0} volume={1} SL={2} TP={3}",
                       tradeType, volume, stopPips, takePips);
+            }
+        }
+
+        private double TodayRealizedMojTradeProfit()
+        {
+            var total = 0.0;
+            foreach (var trade in History)
+            {
+                if (trade.ClosingTime.Date != Server.TimeInUtc.Date || trade.Label == null ||
+                    (trade.Label != Label &&
+                     !trade.Label.StartsWith(ScalpLabelPrefix, StringComparison.Ordinal)))
+                    continue;
+                if (!IsFinite(trade.NetProfit))
+                    return double.NaN;
+                total += trade.NetProfit;
+            }
+            return total;
+        }
+
+        private bool CoordinatorConfigured()
+        {
+            Uri endpoint;
+            return !string.IsNullOrWhiteSpace(CoordinatorUrl) &&
+                   Uri.TryCreate(CoordinatorUrl, UriKind.Absolute, out endpoint) &&
+                   endpoint.Scheme == Uri.UriSchemeHttps &&
+                   string.IsNullOrEmpty(endpoint.UserInfo) &&
+                   !string.IsNullOrWhiteSpace(CoordinatorToken) &&
+                   CoordinatorToken.Length >= 32;
+        }
+
+        private string ReserveCoordinatedSlot(double realizedToday)
+        {
+            if (!CoordinatorConfigured() || Account.IsLive ||
+                !IsFinitePositive(Account.Equity) || !IsFinite(realizedToday))
+                return null;
+
+            var requestId = Guid.NewGuid().ToString("N");
+            var invariant = CultureInfo.InvariantCulture;
+            var body = "mode=demo&account=" + Account.Number.ToString(invariant) +
+                       "&day=" + Server.TimeInUtc.ToString("yyyy-MM-dd", invariant) +
+                       "&request_id=" + requestId +
+                       "&equity=" + Account.Equity.ToString("R", invariant) +
+                       "&realized_today=" + realizedToday.ToString("R", invariant) +
+                       "&open_positions=" + SharedMojTradePositionCount().ToString(invariant);
+            try
+            {
+                var request = new HttpRequest(new Uri(CoordinatorUrl.TrimEnd('/') + "/v1/reserve"))
+                {
+                    Method = HttpMethod.Post,
+                    Body = body,
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                var response = Http.Send(request);
+                if (!response.IsSuccessful || response.StatusCode != 200 ||
+                    response.Body != "GRANTED|" + requestId)
+                {
+                    Print("DEMO order blocked: coordinator denied or unavailable.");
+                    return null;
+                }
+                return requestId;
+            }
+            catch (Exception)
+            {
+                Print("DEMO order blocked: coordinator connection failed.");
+                return null;
+            }
+        }
+
+        private bool SettleCoordinatedSlot(string requestId, bool filled)
+        {
+            try
+            {
+                var request = new HttpRequest(new Uri(
+                    CoordinatorUrl.TrimEnd('/') + (filled ? "/v1/commit" : "/v1/cancel")))
+                {
+                    Method = HttpMethod.Post,
+                    Body = "account=" + Account.Number.ToString(CultureInfo.InvariantCulture) +
+                           "&request_id=" + requestId,
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                request.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+                request.Headers.Add("Authorization", "Bearer " + CoordinatorToken);
+                var response = Http.Send(request);
+                return response.IsSuccessful && response.StatusCode == 200 &&
+                       response.Body == "SETTLED";
+            }
+            catch (Exception)
+            {
+                return false;
             }
         }
 
