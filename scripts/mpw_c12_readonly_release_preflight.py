@@ -2,6 +2,7 @@
 """Read-only, bounded C12 release gate. No secrets, user files, DB or network."""
 import json
 import os
+import pwd
 import stat
 from pathlib import Path
 
@@ -47,11 +48,14 @@ def main():
     else:
         zip_meta["expected_sha256_matches"] = False
     conditions = {
-        "effective_user_is_zomorod2": os.geteuid() == HOME.stat().st_uid if HOME.is_dir() else False,
+        "effective_user_is_zomorod2": pwd.getpwuid(os.geteuid()).pw_name == "zomorod2",
         "docroot_owned_directory": evidence["document_root"].get("directory") is True and evidence["document_root"].get("owned_by_effective_user") is True,
-        "application_root_present": evidence["application_root"].get("directory") is True,
-        "wsgi_regular": evidence["passenger_wsgi"].get("regular") is True,
-        "htaccess_regular": evidence["htaccess"].get("regular") is True,
+        "application_root_present": evidence["application_root"].get("directory") is True and not evidence["application_root"].get("symlink"),
+        "home_owned_directory": evidence["home"].get("directory") is True and evidence["home"].get("owned_by_effective_user") is True,
+        "versioned_parent_safe": evidence["versioned_parent"].get("exists") is False or (evidence["versioned_parent"].get("directory") is True and evidence["versioned_parent"].get("owned_by_effective_user") is True and not evidence["versioned_parent"].get("symlink")),
+        "zip_owner_regular": zip_meta.get("regular") is True and zip_meta.get("owned_by_effective_user") is True and not zip_meta.get("symlink"),
+        "wsgi_regular": evidence["passenger_wsgi"].get("regular") is True and evidence["passenger_wsgi"].get("owned_by_effective_user") is True and not evidence["passenger_wsgi"].get("symlink"),
+        "htaccess_regular": evidence["htaccess"].get("regular") is True and evidence["htaccess"].get("owned_by_effective_user") is True and not evidence["htaccess"].get("symlink"),
         "zip_hash_match": zip_meta["expected_sha256_matches"] is True,
         "versioned_target_absent": evidence["versioned_target"].get("exists") is False,
     }
