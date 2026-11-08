@@ -58,6 +58,27 @@ class AssetRegistryTests(unittest.TestCase):
     def test_duplicate_ticker_is_rejected(self):
         self.rejects("asset_identifier_collision", lambda p: p["assets"][3].update(symbol_candidate="MOJ1"))
 
+    def test_asset_id_and_symbol_must_be_plain_normalized_strings(self):
+        for field, invalid in (
+            ("id", ["moj1"]), ("id", None), ("id", "moj1 "),
+            ("symbol_candidate", ["MOJ1"]), ("symbol_candidate", True),
+            ("symbol_candidate", "MOJ 1"),
+        ):
+            with self.subTest(field=field, invalid=invalid):
+                self.rejects(
+                    "asset_identifier_collision",
+                    lambda p, field=field, invalid=invalid: p["assets"][1].update({field: invalid}),
+                )
+
+    def test_non_mapping_asset_records_are_rejected_predictably(self):
+        for invalid in (None, "moj1", ["moj1"], 42):
+            with self.subTest(invalid=invalid):
+                self.rejects(
+                    "invalid_asset_record",
+                    lambda p, invalid=invalid: p["assets"].__setitem__(1, invalid),
+                )
+
+
     def test_missing_asset_is_rejected(self):
         self.rejects("wrong_asset_count", lambda p: p["assets"].pop())
 
