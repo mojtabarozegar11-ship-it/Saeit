@@ -212,7 +212,9 @@ def expected_documents(program: dict, *, include_f41: bool, include_evm: bool) -
             json.dumps(spec, indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode()
             for name, spec in f41_shasta_candidate_specs(program).items()})
     if include_evm:
-        docs.update({f"evm-candidates/{name}/contracts/MojFixedSupply.sol": code.encode()
+        # Distinct filenames as well as distinct Solidity declarations make
+        # artifacts individually resolvable by build systems and auditors.
+        docs.update({f"evm-candidates/{name}/contracts/Moj{name[3:]}FixedSupply.sol": code.encode()
                      for name, code in evm_candidate_sources(program).items()})
     return docs
 
