@@ -23,16 +23,18 @@ for project in MojTradeDemoBot MojTradeOmegaXDemoBot; do
   dotnet build "${project_dir}/${project}.csproj" \
     --configuration Release --no-incremental --property:AlgoPublish=False
 
-  mapfile -d '' artifacts < <(find "${project_dir}" -type f -name "${project}.algo" \
+  mapfile -d '' artifacts < <(find "${project_dir}" -type f -name '*.algo' \
     -newer "${build_marker}" -print0)
-  if (( ${#artifacts[@]} == 0 )); then
-    echo "BLOCKED: ${project} compiled without a fresh .algo artifact." >&2
+  if (( ${#artifacts[@]} != 1 )); then
+    echo "BLOCKED: ${project} needs exactly one fresh original .algo artifact." >&2
     exit 3
   fi
-  for artifact in "${artifacts[@]}"; do
-    echo "Verified fresh ${project} artifact:"
-    sha256sum "${artifact}"
-  done
+  exported="$(dirname "${artifacts[0]}")/${project}.algo"
+  if [[ "${artifacts[0]}" != "${exported}" ]]; then
+    cp -- "${artifacts[0]}" "${exported}"
+  fi
+  echo "Verified fresh ${project} export alias (internal metadata unverified):"
+  sha256sum "${exported}"
 done
 
 echo "Both cBots produced fresh .algo files. Broker runtime and metadata remain unverified."

@@ -6,7 +6,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <AlgoBuild>true</AlgoBuild>
-    <AlgoName>MojTradeOmegaXDemoBot</AlgoName>
     <AlgoPublish>false</AlgoPublish>
     <IncludeSource>true</IncludeSource>
   </PropertyGroup>

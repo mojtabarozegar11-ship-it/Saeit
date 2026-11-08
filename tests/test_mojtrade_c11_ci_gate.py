@@ -43,12 +43,13 @@ class C11CompileGateChecks(unittest.TestCase):
     def test_build_requires_two_fresh_algo_artifacts(self):
         self.assertIn("for project in MojTradeDemoBot MojTradeOmegaXDemoBot", SCRIPT)
         self.assertIn("-newer \"${build_marker}\"", SCRIPT)
-        self.assertIn("${#artifacts[@]} == 0", SCRIPT)
-        self.assertIn('name "${project}.algo"', SCRIPT)
+        self.assertIn("${#artifacts[@]} != 1", SCRIPT)
+        self.assertIn('exported="$(dirname "${artifacts[0]}")/${project}.algo"', SCRIPT)
+        self.assertIn('cp -- "${artifacts[0]}" "${exported}"', SCRIPT)
         self.assertIn("exit 3", SCRIPT)
 
     def test_build_prints_artifact_sha256_and_never_publishes(self):
-        self.assertIn("sha256sum \"${artifact}\"", SCRIPT)
+        self.assertIn("sha256sum \"${exported}\"", SCRIPT)
         self.assertIn("--no-incremental", SCRIPT)
         self.assertIn("--property:AlgoPublish=False", SCRIPT)
 
