@@ -22,9 +22,13 @@ def _normalize(value: object) -> str:
 
 
 _ISRAEL = re.compile(
-    r"\b(?:israel(?:i|is|ites)?|israels|tel[\s_-]*aviv|jerusalem|zionis\w*)\b"
-    r"|اسرا[ئی]?یل|صهیون|تل[\s_-]*اویو|اورشلیم"
-    r"|ישראל|ישראלי|תל[\s_-]*אביב|ירושלים",
+    r"\b(?:israel(?:i|is|ites)?|israels|tel[\s_-]*aviv|jerusalem|zionis\w*|"
+    r"gaza|west[\s_-]*bank|knesset|netanyahu|mossad|haifa|"
+    r"ben[\s_-]*gurion|ashkelon|sderot|idf)\b"
+    r"|اسرا[ئی]?یل|صهیون|تل[\s_-]*اویو|اورشلیم|غزه|"
+    r"کرانه[\s_-]*باختری|نتانیاهو|الکنیاست|الکنیست|کنست|موساد|حیفا|"
+    r"بن[\s_-]*گوریون|اشکلون|القدس|نتنیاهو"
+    r"|ישראל|ישראלי|תל[\s_-]*אביב|ירושלים|עזה|הכנסת|נתניהו|מוסד",
     re.IGNORECASE,
 )
 
@@ -32,6 +36,8 @@ _POLITICAL = re.compile(
     r"\b(?:politic\w*|elect(?:ion|oral|ed|ions)\w*|parliament\w*|"
     r"presiden\w*|prime[\s_-]+minister\w*|minister\w*|"
     r"government\w*|governor\w*|senat\w*|congress\w*|"
+    r"lawmaker\w*|legislator\w*|foreign[\s_-]*policy|"
+    r"white[\s_-]*house|national[\s_-]*security|"
     r"diploma\w*|sanction\w*|ceasefire\w*|militar\w*|"
     r"warfare|war|geopolitic\w*|referendum\w*|coup|"
     r"legislat\w*|ambassador\w*|ballot\w*)\b"
@@ -39,7 +45,8 @@ _POLITICAL = re.compile(
     r"رئیس[\s_-]*جمهور|رییس[\s_-]*جمهور|نخست[\s_-]*وزیر|"
     r"وزیر|وزارت|دولت|حکومت|دیپلما|تحریم|(?<![\u0600-\u06ff])جنگ(?![\u0600-\u06ff])|نظامی|"
     r"آتش[\s_-]*بس|کابینه|سفیر|کودتا|رفراندوم|"
-    r"حكوم|انتخابات|وزراء|برلمان|"
+    r"حكوم|انتخابات|وزراء|برلمان|استاندار|فرماندار|کاخ[\s_-]*سفید|"
+    r"الانتخاب|الرئیس|الرییس|الوزیر|الحکومه|الجیش|"
     r"ממשלה|בחירות|פוליטיק|כנסת",
     re.IGNORECASE,
 )
