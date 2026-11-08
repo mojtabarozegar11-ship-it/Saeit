@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 import hashlib
-from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from xml.etree import ElementTree
 
 
@@ -51,6 +51,20 @@ class NewsFetchResult:
     items: list[OfficialNewsItem]
     feeds_ok: int
     feed_errors: tuple[str, ...]
+
+
+class _OfficialRedirectsOnly(HTTPRedirectHandler):
+    """Reject unapproved feed redirects *before* sending a network request."""
+
+    def __init__(self, allowed_hosts: frozenset[str]):
+        self.allowed_hosts = allowed_hosts
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urlsplit(urljoin(req.full_url, newurl))
+        if (target.scheme != "https" or target.hostname not in self.allowed_hosts
+                or target.username or target.password or target.port is not None):
+            raise ValueError("Official RSS redirect left the approved HTTPS publisher hosts")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def editorial_identity(item: OfficialNewsItem) -> tuple[str, str]:
@@ -138,7 +152,7 @@ def fetch_official_news(*, lookback_days: int = 21,
                 "User-Agent": USER_AGENT,
                 "Accept": "application/rss+xml, application/xml, text/xml",
             })
-            with urlopen(request, timeout=18) as response:
+            with build_opener(_OfficialRedirectsOnly(feed.allowed_hosts)).open(request, timeout=18) as response:
                 if urlsplit(response.url).hostname not in feed.allowed_hosts:
                     raise ValueError("RSS redirected outside the official domain")
                 payload = response.read(MAX_FEED_BYTES + 1)
