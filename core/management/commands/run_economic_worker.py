@@ -85,5 +85,13 @@ class Command(BaseCommand):
                 f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
             ))
+            # A completed catalog inspection is not permission to drain a
+            # legacy backlog of identical diagnostic-only economic tasks.
+            if (completed.output_data or {}).get("progress_class") == "diagnostic_only":
+                self.stdout.write(
+                    f"DRAIN_DIAGNOSTIC_BOUNDARY task={completed.pk} "
+                    "business_outcome_verified=false; await external evidence"
+                )
+                break
         if options["drain"]:
             self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
