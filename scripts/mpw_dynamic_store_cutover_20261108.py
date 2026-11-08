@@ -128,9 +128,14 @@ def public_response(run_id: str) -> bytes:
 
 
 def verify_dynamic_public(run_id: str) -> bool:
+    # Allow Passenger time to switch while bounding public requests and the
+    # total observation window. A fixed six probes only waited ~15 seconds.
     end = time.monotonic() + 55
     observations = {}
-    for attempt in range(6):
+    attempts = 0
+    while attempts < 18 and (attempts == 0 or time.monotonic() < end - 4):
+        attempt = attempts
+        attempts += 1
         try:
             data = public_response(run_id + "-" + str(attempt))
             if (MARKER not in data and b"mpw-shop-kicker" in data and
@@ -139,7 +144,7 @@ def verify_dynamic_public(run_id: str) -> bool:
                 print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
                     "dynamic_confirmed": True,
                     "observations": observations,
-                    "attempts": attempt + 1,
+                    "attempts": attempts,
                 }, sort_keys=True))
                 return True
             category = "still_owned_static_fallback" if MARKER in data else "unexpected_non_django_html"
@@ -150,12 +155,13 @@ def verify_dynamic_public(run_id: str) -> bool:
         except (OSError, RuntimeError, urllib.error.URLError):
             category = "network_or_response_validation_error"
         observations[category] = observations.get(category, 0) + 1
-        if attempt < 5 and time.monotonic() < end - 4:
-            time.sleep(3)
+        remaining = end - time.monotonic() - 4
+        if attempts < 18 and remaining > 0:
+            time.sleep(min(3, remaining))
     print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
         "dynamic_confirmed": False,
         "observations": observations,
-        "attempts": 6,
+        "attempts": attempts,
     }, sort_keys=True))
     return False
 
