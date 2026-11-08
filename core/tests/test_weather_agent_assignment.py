@@ -67,6 +67,10 @@ def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
     weather_agent.run_daily_cycle()
 
     assert len(calls) == 1
+    research = list(NewsletterStory.objects.filter(slug__startswith="weather-research-"))
+    assert len(research) == 2
+    assert all(story.status == "draft" and story.published_at is None for story in research)
+    assert all(has_final_signature(story.body) for story in research)
 
 
 def test_weather_does_not_publish_an_incomplete_31_province_report(monkeypatch):
