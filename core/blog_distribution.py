@@ -1,7 +1,10 @@
 from .models import BlogDistributionPlan, BlogPage, BlogPublication, ExternalBlogTarget, NewsletterStory
+from .editorial_policy import blocked_story_reason
 
 
 def queue_story_distribution(story):
+    if blocked_story_reason(story):
+        return None, 0, 0
     plan, _ = BlogDistributionPlan.objects.get_or_create(story=story, defaults={"internal_count": 50, "external_count": 10, "languages": ["fa", "en", "ar", "es", "fr", "de", "zh", "ru", "tr", "it"], "requires_owner_approval": True})
     pages = list(BlogPage.objects.filter(active=True).order_by("seo_priority", "code")[:50])
     targets = list(ExternalBlogTarget.objects.filter(active=True, authorized=True).order_by("code")[:10])
@@ -13,6 +16,8 @@ def queue_story_distribution(story):
 
 
 def publication_readiness(story):
+    if blocked_story_reason(story):
+        return {"ready": False, "reason": "owner_editorial_policy"}
     plan = getattr(story, "distribution_plan", None)
     if not plan:
         return {"ready": False, "reason": "distribution_plan_missing"}

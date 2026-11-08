@@ -4,6 +4,7 @@ from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
 from .editorial_signature import has_final_signature
+from .editorial_policy import blocked_news_reason, blocked_story_reason, visible_news_stories
 
 
 EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
@@ -11,9 +12,13 @@ EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
 
 def newsletter_home(request):
     from django.utils import timezone
-    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).select_related("source", "agent")[:50]
-    sources = NewsletterSource.objects.filter(active=True)[:12]
-    publications = NewsletterPublication.objects.select_related("story").order_by("-created_at")[:20]
+    stories = visible_news_stories(
+        NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()), limit=50
+    )
+    sources = [source for source in NewsletterSource.objects.filter(active=True)[:120]
+               if not blocked_news_reason(source.title, source.publisher, source.url)][:12]
+    publications = [p for p in NewsletterPublication.objects.select_related("story", "story__source").order_by("-created_at")[:200]
+                    if not blocked_story_reason(p.story)][:20]
     schedule = NewsletterSchedule.objects.filter(active=True).first()
     context = {
         "stories": stories,
@@ -46,7 +51,12 @@ def newsletter_detail(request, slug):
     ).first()
     if story is None:
         raise Http404("Newsletter story not found")
-    related = NewsletterStory.objects.filter(status="published").exclude(pk=story.pk).filter(story_type=story.story_type)[:6]
+    if blocked_story_reason(story):
+        raise Http404("Newsletter story unavailable under editorial policy")
+    related = visible_news_stories(
+        NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now())
+        .exclude(pk=story.pk).filter(story_type=story.story_type), limit=6
+    )
     publications = story.publications.order_by("channel")
     article_jsonld = json.dumps({
         "@context": "https://schema.org",

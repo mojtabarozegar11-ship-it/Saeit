@@ -9,6 +9,7 @@ from django.utils import timezone
 from core.models import Agent, NewsletterSource, NewsletterStory
 from core.news_feed_reader import OFFICIAL_FEEDS, editorial_identity, fetch_official_news
 from core.editorial_signature import ensure_signed
+from core.editorial_policy import blocked_news_reason
 
 
 class Command(BaseCommand):
@@ -29,8 +30,11 @@ class Command(BaseCommand):
         except Exception as exc:
             raise CommandError(f"Official RSS retrieval failed: {type(exc).__name__}: {exc}") from exc
 
-        created = duplicates = 0
+        created = duplicates = excluded = 0
         for item in report.items:
+            if blocked_news_reason(item.title, item.url, item.publisher):
+                excluded += 1
+                continue
             digest = hashlib.sha256(item.url.encode("utf-8")).hexdigest()
             fingerprint, slug = editorial_identity(item)
             with transaction.atomic():
@@ -79,7 +83,8 @@ class Command(BaseCommand):
             f"NEWS_AGENT=OK OFFICIAL_FEEDS={len(OFFICIAL_FEEDS)} "
             f"FEEDS_OK={report.feeds_ok} FEEDS_FAILED={len(report.feed_errors)} "
             f"REVIEWED={len(report.items)} "
-            f"DRAFTS_CREATED={created} DUPLICATES={duplicates} PUBLISHED=0"
+            f"DRAFTS_CREATED={created} DUPLICATES={duplicates} "
+            f"PROHIBITED_EXCLUDED={excluded} PUBLISHED=0"
         ))
         for error in report.feed_errors:
             self.stderr.write(f"NEWS_AGENT_FEED_WARNING={error}")

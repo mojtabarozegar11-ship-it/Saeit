@@ -7,6 +7,7 @@ from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
 from .editorial_signature import ensure_signed
+from .editorial_policy import blocked_news_reason
 
 ANALYSIS_HEADING = "توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل"
 MIN_AUTO_PUBLISH_SCORE = 90
@@ -53,6 +54,13 @@ def newsletter_quality_score(*, story_type, title, summary, body, source=None, e
 
 
 def create_draft(*, agent_code, story_type, title, summary, body, source=None, event_date=None, keywords=None, publish_at=None):
+    # Owner's absolute editorial exclusion applies to all newsletter categories.
+    exclusion = blocked_news_reason(
+        title, summary, body, keywords or [],
+        getattr(source, "title", ""), getattr(source, "publisher", ""), getattr(source, "url", ""),
+    )
+    if exclusion:
+        return None, f"editorial_prohibited:{exclusion}"
     agent = Agent.objects.get(code=agent_code, active=True)
     source_fingerprint = fingerprint(source.url) if source else ""
     fp = fingerprint(story_type, title, source_fingerprint, event_date or "")
@@ -70,7 +78,8 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
         slug = f"{base}-{n}"; n += 1
 
     # Research-based rule: weak/incomplete stories never enter automatic scheduling.
-    can_schedule = bool(publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
+    # Worldwide news always stays in editorial review, even after quality scoring.
+    can_schedule = bool(story_type != "world" and publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
     story = NewsletterStory.objects.create(
         agent=agent, source=source, story_type=story_type, title=title.strip(),
         slug=slug, summary=summary.strip(), body=ensure_signed(body), event_date=event_date,

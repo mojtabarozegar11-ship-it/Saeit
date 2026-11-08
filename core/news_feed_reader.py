@@ -11,6 +11,8 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from xml.etree import ElementTree
 
+from .editorial_policy import blocked_news_reason
+
 
 MAX_FEED_BYTES = 1_500_000
 USER_AGENT = "ZomorodMelalNews/1.0 (+https://zomorodmelal.ir/contact/)"
@@ -117,6 +119,9 @@ def parse_official_rss(payload: bytes, *, feed: OfficialFeed = OFFICIAL_FEEDS[0]
         raw_date = (item.findtext("pubDate") or item.findtext(
             "{http://purl.org/dc/elements/1.1/}date") or "").strip()
         if not title or not link or not raw_date or link in seen:
+            continue
+        # Discard prohibited headlines at the earliest ingestion boundary.
+        if blocked_news_reason(title, link, feed.publisher, item.findtext("description") or ""):
             continue
         try:
             try:

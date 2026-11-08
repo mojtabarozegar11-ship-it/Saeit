@@ -1,6 +1,9 @@
 import datetime
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+
+from .editorial_policy import blocked_story_reason
 
 
 class NewsletterSource(models.Model):
@@ -49,6 +52,18 @@ class NewsletterStory(models.Model):
     class Meta:
         ordering = ("-published_at", "-created_at")
         indexes = [models.Index(fields=("story_type", "status", "published_at"))]
+
+    def clean(self):
+        super().clean()
+        if self.status != "rejected":
+            reason = blocked_story_reason(self)
+            if reason:
+                raise ValidationError({"title": f"Publication forbidden by owner editorial policy: {reason}"})
+
+    def save(self, *args, **kwargs):
+        # Also enforce on programmatic saves that do not use admin forms.
+        self.clean()
+        return super().save(*args, **kwargs)
 
 
 class NewsletterSubmission(models.Model):
@@ -107,6 +122,11 @@ class NewsletterPublication(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=("story", "channel"), name="unique_newsletter_story_channel")]
         ordering = ("-created_at",)
+
+    def save(self, *args, **kwargs):
+        if self.status != "blocked" and blocked_story_reason(self.story):
+            raise ValidationError("News distribution forbidden by owner editorial policy")
+        return super().save(*args, **kwargs)
 
 
 class NewsletterSchedule(models.Model):

@@ -28,6 +28,16 @@ class OfficialRssReaderTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].url, "https://www.nass.usda.gov/Newsroom/new")
 
+    def test_political_and_israel_news_are_discarded_before_draft_creation(self):
+        raw = rss([
+            item("https://www.nass.usda.gov/news/israel/crops", title="Crop estimates"),
+            item("https://www.nass.usda.gov/news/minister", title="Minister announces crops"),
+            "<item><title>Crop report</title><link>https://www.nass.usda.gov/news/brief</link>"
+            "<description>Parliament vote</description><pubDate>Sun, 08 Nov 2026 10:00:00 GMT</pubDate></item>",
+            item("https://www.nass.usda.gov/news/yields", title="Wheat harvest data"),
+        ])
+        self.assertEqual([x.title for x in parse_official_rss(raw, now=NOW)], ["Wheat harvest data"])
+
     def test_untrusted_hosts_credentials_and_scripts_rejected(self):
         rows = parse_official_rss(rss([
             item("https://www.nass.usda.gov.evil.example/news"),

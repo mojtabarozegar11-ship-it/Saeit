@@ -1,4 +1,7 @@
 from django.db import models
+from django.core.exceptions import ValidationError
+
+from .editorial_policy import blocked_story_reason
 
 
 LANGUAGES = (("fa", "فارسی"), ("en", "English"), ("ar", "العربية"), ("es", "Español"), ("fr", "Français"), ("de", "Deutsch"), ("zh", "中文"), ("ru", "Русский"), ("tr", "Türkçe"), ("it", "Italiano"))
@@ -59,6 +62,11 @@ class BlogPublication(models.Model):
     class Meta:
         constraints = [models.CheckConstraint(condition=models.Q(internal_page__isnull=False) | models.Q(external_target__isnull=False), name="blog_publication_has_target")]
         indexes = [models.Index(fields=("status", "language"))]
+
+    def save(self, *args, **kwargs):
+        if self.status != "blocked" and blocked_story_reason(self.story):
+            raise ValidationError("Blog distribution forbidden by owner editorial policy")
+        return super().save(*args, **kwargs)
 
 
 class BlogDistributionPlan(models.Model):
