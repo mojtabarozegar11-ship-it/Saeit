@@ -11,6 +11,7 @@ on:
           - relay_preflight
           - cpanel_version
           - passenger_inventory
+          - management_passenger_process_identity
           - cpanel_preflight
           - django_check
           - django_migrations

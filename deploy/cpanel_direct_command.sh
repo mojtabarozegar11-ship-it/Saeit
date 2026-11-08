@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates|management_runtime_fingerprint|management_domain_docroot) ;;
+  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates|management_runtime_fingerprint|management_domain_docroot|management_passenger_process_identity) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -96,6 +96,12 @@ case "$operation" in
   management_runtime_fingerprint)
     # Execute the bounded read-only probe via stdin; never install on cPanel.
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'bash -s' < scripts/cpanel_management_runtime_probe.sh
+    ;;
+  management_passenger_process_identity)
+    # Read-only Passenger status via the unprivileged account; send a bounded
+    # stdlib-only probe over stdin. Never invoke the app interpreter or Django.
+    # The probe prints only classifications and inodes-match booleans, not XML.
+    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'python3 -I -' < scripts/management_passenger_status_attestation.py
     ;;
   runtime_path_diagnostics)
     # Exact-path booleans only. No file contents, directory traversal, app
