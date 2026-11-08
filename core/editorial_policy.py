@@ -5,6 +5,7 @@ All remaining news still requires human editorial review before publication.
 """
 
 from html import unescape
+from datetime import datetime, timezone
 import re
 import unicodedata
 from urllib.parse import unquote
@@ -83,22 +84,42 @@ def blocked_story_reason(story) -> str | None:
     )
 
 
-def visible_story_links(links) -> list:
-    """Remove links to prohibited news, including legacy company links."""
-    return [link for link in links if not (
-        getattr(link, "newsletter_story", None) and blocked_story_reason(link.newsletter_story)
+def public_story_allowed(story, *, as_of: datetime | None = None) -> bool:
+    """Exclude drafts, unpublished/future stories, and prohibited legacy news.
+
+    Keep this pure so all public surfaces can share the exact same gate.
+    A missing or timezone-incompatible publication timestamp fails closed.
+    """
+    if story is None or getattr(story, "status", None) != "published":
+        return False
+    published_at = getattr(story, "published_at", None)
+    if published_at is None:
+        return False
+    as_of = as_of or datetime.now(timezone.utc)
+    try:
+        if published_at > as_of:
+            return False
+    except TypeError:
+        return False
+    return blocked_story_reason(story) is None
+
+
+def visible_story_links(links, *, as_of: datetime | None = None) -> list:
+    """Remove draft, future, or prohibited stories from public company links."""
+    return [link for link in links if (
+        not getattr(link, "newsletter_story", None) or public_story_allowed(link.newsletter_story, as_of=as_of)
     )]
 
 
-def visible_news_stories(queryset, *, limit: int) -> list:
-    """Fail closed on legacy forbidden stories across public archives.
+def visible_news_stories(queryset, *, limit: int, as_of: datetime | None = None) -> list:
+    """Fail closed on unpublished, future or forbidden public stories.
 
     Only inspect a bounded selection to avoid unbounded page work. If all
     inspected records are blocked, an empty list is safer than exposing one.
     """
     visible = []
     for story in queryset.select_related("source")[: max(100, limit * 10)]:
-        if not blocked_story_reason(story):
+        if public_story_allowed(story, as_of=as_of):
             visible.append(story)
             if len(visible) == limit:
                 break
