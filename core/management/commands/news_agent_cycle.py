@@ -7,11 +7,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import Agent, NewsletterSource, NewsletterStory
-from core.news_feed_reader import OFFICIAL_FEEDS, fetch_official_news
+from core.news_feed_reader import OFFICIAL_FEEDS, editorial_identity, fetch_official_news
 
 
 class Command(BaseCommand):
-    help = "Import non-duplicated official USDA agricultural headlines as review-only news drafts."
+    help = "Import official USDA and FAO news headlines as review-only editorial drafts."
 
     def add_arguments(self, parser):
         parser.add_argument("--max-items", type=int, default=15)
@@ -31,7 +31,7 @@ class Command(BaseCommand):
         created = duplicates = 0
         for item in report.items:
             digest = hashlib.sha256(item.url.encode("utf-8")).hexdigest()
-            fingerprint = f"official-usda-news:{digest}"
+            fingerprint, slug = editorial_identity(item)
             with transaction.atomic():
                 if NewsletterStory.objects.filter(fingerprint=fingerprint).exists():
                     duplicates += 1
@@ -54,7 +54,7 @@ class Command(BaseCommand):
                     fingerprint=fingerprint,
                     defaults={
                         "agent": agent, "source": source, "story_type": "world",
-                        "title": item.title, "slug": f"usda-news-{digest[:24]}",
+                        "title": item.title, "slug": slug,
                         "summary": summary,
                         "body": (
                             "این رکورد صرفاً سرنخ تحریریه از خوراک رسمی اخبار کشاورزی است. "
