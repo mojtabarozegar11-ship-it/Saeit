@@ -1,12 +1,6 @@
 name: Zomorod site-only agents and master protected v12 release
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/zomorod-site-agent-100-stage-release.yml
-      - content/zomorod-v11/site_agents.php
-      - content/zomorod-v11/site_agent_workforce.php
-      - content/zomorod-v11/site_agent_cycle_cli.php
+  # Deployment requires an explicit owner action after independent runtime review.
   workflow_dispatch:
 permissions:
   contents: read
@@ -15,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:
