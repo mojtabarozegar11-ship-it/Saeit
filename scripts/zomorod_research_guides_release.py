@@ -183,7 +183,7 @@ def load_release(source_root: Path, web_root: Path, manifest_path: Path) -> tupl
         m = re.fullmatch(r"https://zomorodmelal\.ir/research/guides/([a-z0-9-]+)/", url)
         if not m or not SAFE_SLUG.fullmatch(m.group(1)):
             raise ValueError("INVALID_TARGET_URL " + str(url))
-        if guide.get("status") != "EDITORIAL_REVIEW_REQUIRED" or guide.get("live_verified") is not False:
+        if guide.get("status") not in ("EDITORIAL_REVIEW_REQUIRED", "APPROVED_FOR_SITE") or guide.get("live_verified") is not False:
             raise ValueError("REVIEW_GATE_NOT_PRESERVED")
         rel = Path(str(guide.get("source_path", "")))
         if rel.is_absolute() or ".." in rel.parts or rel.suffix != ".md":
@@ -218,6 +218,9 @@ def apply_release(web_root: Path, state_root: Path, release: str, expected: str,
                   actual: str, rendered: dict[str, bytes]) -> None:
     if expected != actual:
         raise ValueError("LIVE_TEMPLATE_SHA_MISMATCH")
+    live_template = secure_file(web_root / "research" / "index.html", web_root)
+    if digest(live_template.read_bytes()) != actual:
+        raise ValueError("LIVE_TEMPLATE_CHANGED_AFTER_PLAN")
     preflight(web_root, rendered)
     state_root.mkdir(parents=True, exist_ok=True)
     folder = state_root / release
@@ -292,6 +295,8 @@ def main() -> int:
         return 0
     if args.confirm_release_id != manifest["release_id"] or not args.expected_template_sha:
         raise ValueError("EXPLICIT_CONFIRMATION_AND_TEMPLATE_HASH_REQUIRED")
+    if any(g["status"] != "APPROVED_FOR_SITE" for g in manifest["guides"]):
+        raise ValueError("EDITORIAL_APPROVAL_REQUIRED_BEFORE_LIVE_WRITE")
     apply_release(web_root, state_root, manifest["release_id"],
                   args.expected_template_sha, template_sha, rendered)
     return 0
