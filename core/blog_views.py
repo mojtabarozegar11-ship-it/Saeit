@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.utils import timezone
 
 from .models import BlogPage, ExternalBlogTarget, NewsletterStory
 from .editorial_policy import visible_news_stories
@@ -6,7 +7,9 @@ from .editorial_policy import visible_news_stories
 
 def blog_home(request):
     pages = BlogPage.objects.filter(active=True).order_by("seo_priority", "code")
-    stories = visible_news_stories(NewsletterStory.objects.filter(status="published"), limit=30)
+    stories = visible_news_stories(
+        NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()), limit=30
+    )
     targets = ExternalBlogTarget.objects.all().order_by("code")
     return render(request, "core/blog.html", {"pages": pages, "stories": stories, "targets": targets})
 
@@ -17,7 +20,9 @@ def blog_page(request, slug):
         from django.http import Http404
         raise Http404("Blog page not found")
     stories = visible_news_stories(
-        NewsletterStory.objects.filter(status="published", blog_publications__internal_page=page)
+        NewsletterStory.objects.filter(
+            status="published", published_at__lte=timezone.now(), blog_publications__internal_page=page
+        )
         .distinct().order_by("-published_at"), limit=100
     )
     translations = page.translations.all().order_by("language")
