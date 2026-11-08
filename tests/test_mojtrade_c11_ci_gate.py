@@ -44,6 +44,7 @@ class C11CompileGateChecks(unittest.TestCase):
         self.assertIn("for project in MojTradeDemoBot MojTradeOmegaXDemoBot", SCRIPT)
         self.assertIn("-newer \"${build_marker}\"", SCRIPT)
         self.assertIn("${#artifacts[@]} == 0", SCRIPT)
+        self.assertIn('name "${project}.algo"', SCRIPT)
         self.assertIn("exit 3", SCRIPT)
 
     def test_build_prints_artifact_sha256_and_never_publishes(self):

@@ -183,7 +183,7 @@ namespace MojTrade.OmegaX
                     var breakEven = position.TradeType == TradeType.Buy
                         ? position.EntryPrice + Symbol.PipSize
                         : position.EntryPrice - Symbol.PipSize;
-                    ModifyPosition(position, breakEven, position.TakeProfit);
+                    ModifyPosition(position, breakEven, position.TakeProfit, ProtectionType.Absolute);
                 }
             }
         }

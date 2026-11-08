@@ -43,6 +43,10 @@ class C09PackagingChecks(unittest.TestCase):
         for name, project in self.projects():
             self.assertEqual(project.findtext("./PropertyGroup/AlgoPublish"), "false")
 
+    def test_algo_outputs_have_unique_explicit_names(self):
+        for name, project in self.projects():
+            self.assertEqual(project.findtext("./PropertyGroup/AlgoName"), name)
+
     def test_build_script_fails_without_sdk(self):
         self.assertIn("command -v dotnet", SCRIPT)
         self.assertIn("exit 2", SCRIPT)

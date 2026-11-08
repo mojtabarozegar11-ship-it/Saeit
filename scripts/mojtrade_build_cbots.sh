@@ -23,7 +23,7 @@ for project in MojTradeDemoBot MojTradeOmegaXDemoBot; do
   dotnet build "${project_dir}/${project}.csproj" \
     --configuration Release --no-incremental --property:AlgoPublish=False
 
-  mapfile -d '' artifacts < <(find "${project_dir}" -type f -name '*.algo' \
+  mapfile -d '' artifacts < <(find "${project_dir}" -type f -name "${project}.algo" \
     -newer "${build_marker}" -print0)
   if (( ${#artifacts[@]} == 0 )); then
     echo "BLOCKED: ${project} compiled without a fresh .algo artifact." >&2
