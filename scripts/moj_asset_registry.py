@@ -30,7 +30,8 @@ def mojoner_rune_name_length_gate(verified_block_height: int) -> dict:
     name commitment and owner approvals exist.
     Source: https://docs.ordinals.com/runes/specification.html
     """
-    if type(verified_block_height) is not int or verified_block_height < 0:
+    if (type(verified_block_height) is not int or verified_block_height < 0
+            or verified_block_height > 2_100_000_000):
         raise ValueError("verified_bitcoin_height_required")
     full_unlock_height = 840_000 + (13 - len("MOJONER")) * 17_500
     return {
