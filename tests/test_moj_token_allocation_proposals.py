@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from moj_token_allocation_proposals import ALLOCATION_BPS, candidate_allocations
 
@@ -24,6 +25,30 @@ class CandidateAllocationTests(unittest.TestCase):
 
     def test_basis_points_are_complete(self):
         self.assertEqual(sum(ALLOCATION_BPS.values()), 10000)
+
+    def test_invalid_weight_cannot_hide_inside_100_percent_total(self):
+        sample = dict(ALLOCATION_BPS)
+        sample["game_rewards"] = -1
+        sample["player_ecosystem_reserve"] += 3001
+        with patch.dict(ALLOCATION_BPS, sample, clear=True):
+            with self.assertRaisesRegex(ValueError, "allocation_weight_invalid"):
+                candidate_allocations()
+
+    def test_invalid_weight_type_rejected(self):
+        for bad in (True, 3000.0, "3000", None):
+            with self.subTest(bad=bad):
+                with patch.dict(ALLOCATION_BPS, {"game_rewards": bad}):
+                    with self.assertRaisesRegex(ValueError, "allocation_weight_invalid"):
+                        candidate_allocations()
+
+    def test_missing_and_extra_allocations_rejected(self):
+        missing = {key: value for key, value in ALLOCATION_BPS.items()
+                   if key != "security_and_contingency"}
+        extra = {**ALLOCATION_BPS, "unapproved": 0}
+        for invalid in (missing, extra):
+            with patch.dict(ALLOCATION_BPS, invalid, clear=True):
+                with self.assertRaisesRegex(ValueError, "allocation_categories_invalid"):
+                    candidate_allocations()
 
 
 if __name__ == "__main__":
