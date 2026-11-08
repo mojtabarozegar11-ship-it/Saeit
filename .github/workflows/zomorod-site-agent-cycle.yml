@@ -1,11 +1,8 @@
 name: Run Zomorod site agent cycle
+# Until authenticated relay and independent cPanel execution are proven,
+# allow only an explicitly authorized, bounded manual invocation.
+# Never use GitHub Actions as the continuous site-agent scheduler.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/zomorod-site-agent-cycle.yml"
-  schedule:
-    - cron: "45 4 * * *"
   workflow_dispatch:
 permissions:
   contents: read
