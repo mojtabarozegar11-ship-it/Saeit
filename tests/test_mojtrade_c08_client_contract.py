@@ -1,0 +1,64 @@
+"""Static client contract checks. Not a substitute for a cTrader C# build."""
+from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCALP = (ROOT / "trading/MojTradeDemoBot.cs").read_text(encoding="utf-8")
+OMEGA = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+
+
+class C08ClientContractTests(unittest.TestCase):
+    def test_both_demo_switches_default_off(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn('[Parameter("Enable Coordinated Demo Trading", DefaultValue = false)]', bot)
+
+    def test_both_require_https_and_no_uri_credentials(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("endpoint.Scheme == Uri.UriSchemeHttps", bot)
+            self.assertIn("string.IsNullOrEmpty(endpoint.UserInfo)", bot)
+
+    def test_both_require_long_token(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("CoordinatorToken.Length >= 32", bot)
+            self.assertIn('request.Headers.Add("Authorization", "Bearer " + CoordinatorToken)', bot)
+
+    def test_both_use_short_network_timeout(self):
+        for bot in (SCALP, OMEGA):
+            self.assertGreaterEqual(bot.count("Timeout = TimeSpan.FromSeconds(3)"), 2)
+
+    def test_order_requires_reservation(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("var reservationId = ReserveCoordinatedSlot(", bot)
+            self.assertIn("if (reservationId == null)", bot)
+            self.assertLess(bot.index("var reservationId = ReserveCoordinatedSlot("),
+                            bot.index("var result = ExecuteMarketOrder("))
+
+    def test_order_result_always_settled_before_success_path(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("SettleCoordinatedSlot(reservationId, result.IsSuccessful)", bot)
+            self.assertIn("Adapter halted.", bot)
+
+    def test_both_send_broker_observed_equity_and_position_count(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("Account.Number.ToString(invariant)", bot)
+            self.assertIn('Account.Equity.ToString("R", invariant)', bot)
+            self.assertIn("SharedMojTradePositionCount().ToString(invariant)", bot)
+
+    def test_both_preserve_live_account_lock(self):
+        for bot in (SCALP, OMEGA):
+            self.assertGreaterEqual(bot.count("Account.IsLive"), 4)
+
+    def test_old_uncoordinated_demo_entry_is_blocked(self):
+        self.assertIn("!EnableCoordinatedDemoTrading || !CoordinatorConfigured()", SCALP)
+        self.assertIn("!EnableCoordinatedDemoTrading ||", OMEGA)
+        self.assertIn("DefaultValue = false", OMEGA)
+
+    def test_http_failure_is_fail_closed(self):
+        for bot in (SCALP, OMEGA):
+            self.assertIn("if (!response.IsSuccessful || response.StatusCode != 200", bot)
+            self.assertIn('response.Body != "GRANTED|" + requestId', bot)
+            self.assertIn("return null;", bot)
+
+
+if __name__ == "__main__":
+    unittest.main()
