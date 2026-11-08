@@ -179,12 +179,16 @@ def evm_candidate_sources(program: dict) -> dict[str, str]:
     result = {}
     for item in program["assets"][1:]:
         units = int(item["supply_tokens"]) * 10**18
+        # Each asset must remain independently addressable when all fifty
+        # candidates are compiled in one project. A shared Solidity contract
+        # declaration name would cause ambiguous artifact/factory lookups.
+        contract_name = f"Moj{int(item['id'][3:])}FixedSupply"
         result[item["id"]] = (
             "// SPDX-License-Identifier: MIT\n"
             "pragma solidity ^0.8.20;\n"
             'import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";\n'
             "// Source candidate only. No owner, fees, upgrade or post-deploy mint.\n"
-            "contract MojFixedSupply is ERC20 {\n"
+            f"contract {contract_name} is ERC20 {{\n"
             f'    constructor(address initialHolder) ERC20("{item["name"]}", "{item["symbol_candidate"]}") {{\n'
             '        require(initialHolder != address(0), "zero_initial_holder");\n'
             f"        _mint(initialHolder, {units});\n"
