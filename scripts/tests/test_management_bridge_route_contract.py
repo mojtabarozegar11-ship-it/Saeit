@@ -11,13 +11,28 @@ WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/mana
 class ManagementBridgeRouteContractTests(unittest.TestCase):
     def test_runtime_probe_has_a_real_dispatch_case(self):
         source = BRIDGE.read_text(encoding="utf-8")
-        self.assertIn("runtime_python_candidates|management_runtime_fingerprint|management_domain_docroot) ;;", source)
+        # Parse the case-label tokens: appending another read-only operation
+        # must not break this contract solely because a closing ") ;;" moved.
+        allowlist = [line.strip() for line in source.splitlines()
+                     if line.strip().endswith(") ;;") and "runtime_python_candidates" in line]
+        self.assertEqual(len(allowlist), 1)
+        operations = set(allowlist[0].removesuffix(") ;;").split("|"))
+        self.assertTrue({"runtime_python_candidates", "management_runtime_fingerprint",
+                         "management_domain_docroot"}.issubset(operations))
         self.assertRegex(source, re.compile(
             r"(?m)^  management_runtime_fingerprint\)\n"
             r"(?:[^\n]*\n)*?"
             r"[^\n]*< scripts/cpanel_management_runtime_probe\.sh\n"
             r"    ;;$"
         ))
+
+    def test_new_process_identity_probe_is_explicit_and_read_only(self):
+        source = BRIDGE.read_text(encoding="utf-8")
+        workflow = (BRIDGE.parents[1] / ".github/workflows/cpanel-direct-command-bridge.yml").read_text(encoding="utf-8")
+        self.assertIn("management_passenger_process_identity", workflow)
+        self.assertIn("  management_passenger_process_identity)\n", source)
+        self.assertIn("'python3 -I -' < scripts/management_passenger_status_attestation.py", source)
+        self.assertNotIn("sudo passenger-status", source)
 
     def test_unattested_django_operations_fail_explicitly(self):
         source = BRIDGE.read_text(encoding="utf-8")
