@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "sku": "ZM-BOOK-MUSHROOM-FA-VOL2",
+  "title_fa": "راهنمای جامع پرورش قارچ — جلد دوم",
+  "language": "fa",
+  "storefront": "https://zomorodmelal.ir/store/",
+  "currency": "IRR",
+  "price_reference_irr": 4500000,
+  "discount_percent_requested": 70,
+  "discount_amount_irr": 3150000,
+  "customer_payable_irr": 1350000,
+  "customer_payable_toman": 135000,
+  "owner_pricing_decision_date": "2026-11-08",
+  "state": "draft_hold",
+  "release_enabled": false,
+  "payment_enabled": false,
+  "digital_delivery_enabled": false,
+  "discount_badge_publication_enabled": false,
+  "notes_fa": [
+    "قیمت ۴۵۰٬۰۰۰ تومان و تخفیف موردنظر ۷۰ درصد است؛ مبلغ محاسبه‌شده ۱۳۵٬۰۰۰ تومان.",
+    "این فایل سفارش، موجودی قابل‌فروش، انتشار یا ثبت مستقیم در پایگاه‌داده زنده ایجاد نمی‌کند.",
+    "نمایش عمومی عنوان «۷۰٪ تخفیف» مشروط به معتبر و واقعی بودن قیمت مبنا و رعایت قواعد قیمت‌گذاری است.",
+    "متن فارسی جلد دوم هنوز در وضعیت پیش‌نویس است و بخش‌هایی از فصل‌های ۲۱ تا ۳۰ کامل نشده‌اند.",
+    "فعال‌سازی پس از ممیزی علمی، تأیید نهایی اثر، احراز مالکیت نسخه تحویل و آماده‌شدن پرداخت و تحویل امن مجاز است."
+  ]
+}
