@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
-WORKSPACE = HERE.parents[1]
 spec = importlib.util.spec_from_file_location("c4publisher", HERE / "mpw_c4_atomic_publish.py")
 publisher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(publisher)
@@ -27,7 +26,19 @@ class PublisherTests(unittest.TestCase):
         (site / ".htaccess").write_text("RewriteEngine On\n")
         (site / "passenger_wsgi.py").write_text("application=None\n")
         self.package = self.home / "source.zip"
-        shutil.copyfile(WORKSPACE / "output/MojPlayWin_Research_Library_20261108_C4.zip", self.package)
+        members = {
+            name: (b"%PDF-1.4\nfixture\n" if name.endswith(".pdf") else b"<!doctype html><title>Fixture</title>")
+            for name in publisher.EXACT_FILES - {"release.json"}
+        }
+        manifest = {
+            "release_id": publisher.RELEASE,
+            "public_root": "/mpw-editorial/research-library/20261108-c4/",
+            "files": {name: {"bytes": len(data), "sha256": publisher.digest(data)} for name, data in members.items()},
+        }
+        members["release.json"] = json.dumps(manifest).encode("utf-8")
+        with zipfile.ZipFile(self.package, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, data in members.items():
+                z.writestr(name, data)
         self.patches = [
             patch.object(publisher, "HOME", self.home),
             patch.object(publisher, "SITE", site),
