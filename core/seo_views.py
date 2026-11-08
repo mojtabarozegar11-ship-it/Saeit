@@ -11,6 +11,7 @@ from .models import KnowledgeArticle, Product
 from .knowledge_agent_models import KnowledgeBook, KnowledgeDomain
 from .newsletter_models import NewsletterStory
 from .blog_models import BlogPage
+from .research_guide_views import verified_guide_paths
 
 INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
 
@@ -83,6 +84,8 @@ def indexnow_key(request, key):
 @require_GET
 def sitemap_xml(request):
     urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
+    # Add only journal-verified, hash-matching research guides. Never index drafts.
+    urls += verified_guide_paths()
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
