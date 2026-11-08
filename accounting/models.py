@@ -47,10 +47,10 @@ class JournalEntry(models.Model):
         return f"{self.reference} — {self.memo}"
 
     def validate_balanced(self):
-        totals = self.lines.aggregate(debit=models.Sum("debit"), credit=models.Sum("credit"))
+        totals = self.lines.aggregate(lines=models.Count("pk"), debit=models.Sum("debit"), credit=models.Sum("credit"))
         debit = totals["debit"] or Decimal("0")
         credit = totals["credit"] or Decimal("0")
-        if debit <= 0 or debit != credit:
+        if totals["lines"] < 2 or debit <= 0 or debit != credit:
             raise ValidationError("سند باید حداقل دو ردیف و جمع بدهکار و بستانکار برابر داشته باشد.")
         return debit
 
