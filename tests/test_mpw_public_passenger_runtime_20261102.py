@@ -131,7 +131,7 @@ class PassengerDiagnosticTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "error_log").write_text(
-                "buyer@example.com /private/order/SECRET ModuleNotFoundError: No module named whatever\n"
+                "buyer@example.com /private/order/SECRET ModuleNotFoundError: No module named 'whatever'\n"
                 "Traceback (most recent call last)\n",
             )
             result = inspect_error_classes(root)
