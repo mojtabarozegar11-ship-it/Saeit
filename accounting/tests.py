@@ -55,6 +55,8 @@ class AccountingDashboardTests(TestCase):
         self.assertFalse(ledger_summary()["integrity"]["balanced_posted_entries"])
 
     def test_posted_account_identity_is_readonly_in_admin(self):
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
         request = RequestFactory().get("/admin/accounting/account/")
         request.user = self.user
         model_admin = AccountAdmin(Account, admin.site)
@@ -65,12 +67,35 @@ class AccountingDashboardTests(TestCase):
             self.assertIn("name", form.base_fields)
 
     def test_unused_account_identity_remains_editable_in_admin(self):
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_superuser"])
         unused = Account.objects.create(code="1200", name="Unused", kind=Account.Kind.ASSET)
         request = RequestFactory().get("/admin/accounting/account/")
         request.user = self.user
         form = AccountAdmin(Account, admin.site).get_form(request, unused)
         self.assertIn("code", form.base_fields)
         self.assertIn("kind", form.base_fields)
+
+    def test_posted_account_identity_is_rejected_on_model_save(self):
+        self.cash.kind = Account.Kind.EXPENSE
+        with self.assertRaises(ValidationError):
+            self.cash.save(update_fields=["kind"])
+        self.cash.refresh_from_db()
+        self.assertEqual(self.cash.kind, Account.Kind.ASSET)
+        self.cash.code = "1199"
+        with self.assertRaises(ValidationError):
+            self.cash.save(update_fields=["code"])
+        self.cash.refresh_from_db()
+        self.assertEqual(self.cash.code, "1100")
+
+    def test_unused_account_identity_can_change_on_model_save(self):
+        unused = Account.objects.create(code="1200", name="Unused", kind=Account.Kind.ASSET)
+        unused.code = "1201"
+        unused.kind = Account.Kind.LIABILITY
+        unused.save(update_fields=["code", "kind"])
+        unused.refresh_from_db()
+        self.assertEqual(unused.code, "1201")
+        self.assertEqual(unused.kind, Account.Kind.LIABILITY)
 
     def test_posted_entry_cannot_be_changed_or_deleted_from_admin(self):
         entry = JournalEntry.objects.get(reference="JV-1")
