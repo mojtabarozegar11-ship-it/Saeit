@@ -81,6 +81,21 @@ class FactoryMigrationForkAuditTests(unittest.TestCase):
         result = module.audit(self.current, self.reference)
         self.assertEqual(result["status"], "no_source_fork_detected")
 
+    def test_unshared_data_migration_is_flagged_for_manual_review(self):
+        for root in (self.current, self.reference):
+            self.add(root, "0039_base")
+        folder = self.reference / "core" / "migrations"
+        (folder / "0040_seed.py").write_text(
+            "class Migration:\n"
+            "    dependencies = [('core', '0039_base')]\n"
+            "    operations = [migrations.RunPython(seed_records)]\n",
+            encoding="utf-8")
+        self.add(self.current, "0040_other", ("0039_base",))
+        result = module.audit(self.current, self.reference)
+        self.assertEqual(result["reference_unshared_data_operations"], [
+            {"migration": "0040_seed", "operations": ["RunPython"]}])
+        self.assertFalse(result["database_schema_verified"])
+
     def test_missing_history_never_passes(self):
         result = module.audit(self.current, self.reference)
         self.assertEqual(result["status"], "blocked")
