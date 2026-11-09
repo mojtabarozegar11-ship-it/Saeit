@@ -45,11 +45,17 @@ jobs:
             h="$VPS_HOST"; u="$VPS_USER"; p="$VPS_PORT"; k="$VPS_KEY"; known="$VPS_KNOWN"
           fi
           [[ -n "$h" && -n "$u" && -n "$k" ]] || { echo "Missing SSH credentials for selected target"; exit 1; }
-          if [[ "$TARGET" == vps && -z "$known" ]]; then
-            known="$(ssh-keyscan -T 10 -t rsa "$h" 2>/dev/null)"
-            [[ -n "$known" ]] || { echo "VPS SSH host key unavailable"; exit 1; }
-            fingerprint="$(printf '%s\n' "$known" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
-            [[ "$fingerprint" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "Unexpected VPS SSH host fingerprint"; exit 1; }
+          if [[ "$TARGET" == vps ]]; then
+            # Offline, previously verified host key; do not depend on live keyscan.
+            if [[ -z "$known" ]]; then
+              known='178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU='
+            fi
+            if ! fingerprint_output="$(printf '%s\n' "$known" | ssh-keygen -lf - -E sha256 2>/dev/null)"; then
+              echo "VPS_PINNED_KEY=INVALID"
+              exit 1
+            fi
+            fingerprint="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+            [[ "$fingerprint" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS_PINNED_KEY=MISMATCH"; exit 1; }
           fi
           [[ -n "$known" ]] || { echo "Missing pinned host key"; exit 1; }
           [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || exit 1
