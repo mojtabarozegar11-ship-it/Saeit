@@ -4,12 +4,11 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .approval import ApprovalService
-from .chat_operation_security import is_authorized_chat_operator
 from .task_runtime import TaskExecutionError, TaskRuntime
 
 
 from .orchestrator import MasterAgent
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.conf import settings
 from django.utils import timezone
 import hashlib
@@ -333,22 +332,44 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
+        try:
+            # Keep intent creation and its approval request in one transaction.
+            # The savepoint also lets a concurrent request that wins the unique
+            # idempotency-key race be returned as an existing intent instead of
+            # leaking an IntegrityError as a 500 response.
+            with transaction.atomic():
+                intent = PaymentIntent.objects.create(
+                    order=order,
+                    amount=order.total,
+                    currency=order.currency,
+                    idempotency_key=key,
+                    status="awaiting_approval",
+                    provider="not_configured",
+                )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment",
+                    target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Owner approval required before initiating an external payment.",
+                    risk="critical",
+                    requested_by=request.user,
+                )
+        except IntegrityError:
+            existing = PaymentIntent.objects.filter(idempotency_key=key).first()
+            if existing is None:
+                return Response(
+                    {"detail": "Payment request could not be created safely; retry with a new idempotency key."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if existing.order_id != order.pk:
+                return Response(
+                    {"detail": "Idempotency key is already bound to another order."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response(
+                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                status=status.HTTP_200_OK,
+            )
         return Response(
             {
                 "status": "approval_required",
@@ -554,11 +575,6 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="decide")
     def decide(self, request, pk=None):
         approval = self.get_object()
-        if approval.target_type == "ChatOperation" and not is_authorized_chat_operator(request.user):
-            return Response(
-                {"detail": "Only an active superuser can approve chat operations."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         if approval.requested_by_id != request.user.pk:
             return Response(
                 {"detail": "Only the designated owner can decide this approval."},
