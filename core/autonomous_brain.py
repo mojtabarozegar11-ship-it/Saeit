@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, Product, Order, LedgerEntry
+from django.db import DatabaseError
+from core.models import AgentTask, Product, Order, LedgerEntry, CommerceFunnelEvent
 
 @dataclass(frozen=True)
 class Candidate:
@@ -76,6 +77,22 @@ class AutonomousBrain:
             seen_at is not None and (last_review_at is None or seen_at > last_review_at)
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
+        latest_funnel_review = economic_tasks.filter(
+            capability_code="income_funnel_audit", status="completed",
+        ).order_by("-updated_at", "-pk").first()
+        try:
+            latest_funnel_event_at = CommerceFunnelEvent.objects.order_by(
+                "-created_at",
+            ).values_list("created_at", flat=True).first()
+        except DatabaseError:
+            # A missing/unapplied commerce migration cannot crash the master.
+            # This is not proof that customer activity is absent.
+            latest_funnel_event_at = None
+        funnel_event_needs_review = bool(
+            latest_funnel_event_at is not None
+            and (latest_funnel_review is None
+                 or latest_funnel_event_at > latest_funnel_review.updated_at)
+        )
         return {
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
@@ -89,6 +106,7 @@ class AutonomousBrain:
             "orders": Order.objects.count(),
             "paid_orders": Order.objects.filter(status__in=("paid","completed")).count(),
             "financial_event_needs_reconcile": financial_event_needs_reconcile,
+            "funnel_event_needs_review": funnel_event_needs_review,
             "self_improvement_complete": self_improvement_complete,
             "self_improvement_failed": self_improvement_failed,
             "self_improvement_unverified": self_improvement_unverified,
@@ -102,6 +120,12 @@ class AutonomousBrain:
         # prerequisite. Check evidence first; never infer settled revenue.
         if s.get("financial_event_needs_reconcile", False):
             return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+        if s.get("funnel_event_needs_review", False):
+            return [Candidate(
+                "income_funnel_audit",
+                "New local commerce events require a read-only funnel diagnostic; telemetry is not settled cash.",
+                10, 10, 9, 1,
+            )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
             return [Candidate(
                 "await_external_self_improvement_review",
