@@ -398,3 +398,32 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def validate_offline_allocations(program: dict, allocations: dict[str, dict[str, str]]) -> dict[str, int]:
+    """Check proposed token distribution against fixed supplies without transfers.
+
+    Holder labels are planning identifiers, not wallet addresses. No allocation
+    is a payment, entitlement, live balance or authorization to deploy.
+    """
+    validate_program(program)
+    if not isinstance(allocations, dict):
+        raise ValueError("invalid_allocation_manifest")
+    assets = {asset["id"]: asset for asset in program["assets"]}
+    if set(allocations) != set(assets):
+        raise ValueError("allocation_asset_coverage_mismatch")
+    totals = {}
+    for asset_id, holders in allocations.items():
+        if not isinstance(holders, dict) or not holders:
+            raise ValueError("invalid_allocation_holders")
+        total = 0
+        for label, quantity in holders.items():
+            if (type(label) is not str or not label.strip()
+                    or label != label.strip() or len(label) > 100):
+                raise ValueError("invalid_allocation_holder_label")
+            total += _whole_number(quantity)
+        expected = _whole_number(assets[asset_id]["supply_tokens"])
+        if total != expected:
+            raise ValueError("allocation_supply_mismatch")
+        totals[asset_id] = total
+    return totals
