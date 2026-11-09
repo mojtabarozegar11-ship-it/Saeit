@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """CPanel-local, privacy-minimized MojPlayWin operational evidence collector.
 
-This is a deployment candidate, not an installed task. It executes only the
-four audited read-only probes, stores whitelisted aggregate fields, and never
+This is a deployment candidate, not an installed task. It executes only three
+revision-pinned aggregate probes, stores validated fields, and never
 contacts GitHub, an SSH relay, a payment network, or a mail sender.
 
-The four probe sources must first be reviewed and installed in SOURCE_DIR.
+All three probe sources must first be reviewed and installed in SOURCE_DIR.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -27,54 +28,111 @@ LOCK = PRIVATE_ROOT / "mpw_readonly_health.lock"
 
 PROBES = (
     ("cron", "mpw_payment_cron_heartbeat_readonly.py", "MPW_PAYMENT_CRON_HEARTBEAT", 65),
-    ("paid", "mpw_paid_provenance_readonly_20261105.py", "MPW_PAID_PROVENANCE_READONLY", 100),
+    ("paid", "mpw_paid_aggregate_readonly_c31.py", "MPW_PAID_AGGREGATE_READONLY", 100),
     ("flags", "mpw_payment_100_live_baseline_readonly_20261021.py", "MPW_PAYMENT_100_LIVE_BASELINE", 110),
-    ("intake", "mpw_sales_intake_readonly_20261024.py", "MPW_INTAKE_READONLY", 180),
 )
 
-# Git blob identities of the four audited sources on main at C29 review.
+# Git blob identities of the three audited sources. The cron source has been
+# extended to report successful reconciliation; all copies must be repinned.
 # A different revision must be reviewed and explicitly repinned before use.
 PINNED_SOURCE_BLOBS = {
-    "mpw_payment_cron_heartbeat_readonly.py": "ad23b2a395f8b62e70c3539fee5a381b88bbd152",
-    "mpw_paid_provenance_readonly_20261105.py": "f524dad12fd4809496f28c153110f4857a794f3c",
+    "mpw_payment_cron_heartbeat_readonly.py": "4fdd9c7ccdcaad2443550708262bbeec35252334",
+    "mpw_paid_aggregate_readonly_c31.py": "951405ef7e6e7f511db29c505cef8a6729b48404",
     "mpw_payment_100_live_baseline_readonly_20261021.py": "59a7cb917b2aa11e523148889758fc9019206b30",
-    "mpw_sales_intake_readonly_20261024.py": "c4d84ca71a5162bc72aa7fd7d7bf6986e53941a0",
 }
 
 SAFE_FIELDS = {
     "cron": ("cron_readable", "entry_once_per_minute", "heartbeat_fresh",
-             "observed_run_count_last_five_minutes", "cron_heartbeat_distinguished_from_manual"),
+             "observed_run_count_last_five_minutes", "cron_heartbeat_distinguished_from_manual",
+             "last_reconciler_success"),
     "paid": ("paid_intent_count", "rows_examined", "truncated",
              "walletless_persisted_credit_verified", "sku_scope_counts_examined",
              "sku_scope_verified_credits_examined", "customer_download_e2e_performed",
              "independent_mainnet_recheck_performed", "production_db_writes"),
     "flags": ("checkout_scope", "payment_flow_assessment",
               "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
-    "intake": ("result", "production_db_writes", "mail_content_read",
-               "raw_identifiers_printed"),
 }
+
+REQUIRED = {
+    "cron": SAFE_FIELDS["cron"],
+    "paid": ("paid_intent_count", "rows_examined", "truncated",
+             "walletless_persisted_credit_verified", "customer_download_e2e_performed",
+             "independent_mainnet_recheck_performed", "production_db_writes"),
+    "flags": ("checkout_scope", "payment_flow_assessment",
+              "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
+}
+BOOLEAN_FIELDS = {
+    "cron": ("cron_readable", "entry_once_per_minute", "heartbeat_fresh",
+             "cron_heartbeat_distinguished_from_manual", "last_reconciler_success"),
+    "paid": ("truncated", "customer_download_e2e_performed",
+             "independent_mainnet_recheck_performed", "production_db_writes"),
+    "flags": ("live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
+}
+COUNT_FIELDS = {
+    "cron": ("observed_run_count_last_five_minutes",),
+    "paid": ("paid_intent_count", "rows_examined", "walletless_persisted_credit_verified"),
+    "flags": (),
+}
+SKU_SCOPES = frozenset((
+    "historical_trial_779", "mixed_with_trial_779", "configured_nontrial_public_sku",
+    "outside_configured_public_sku", "public_allowlist_unavailable", "no_valid_products",
+))
+
+
+def private_directory_ok(path: Path) -> bool:
+    """A 0600 file is not enough if its parent is accessible to others."""
+    try:
+        st = path.lstat()
+    except OSError:
+        return False
+    return (stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid()
+            and stat.S_IMODE(st.st_mode) == 0o700)
 
 
 def summarize(name: str, obj: object) -> dict:
-    """Discard rows, emails, IDs, hashes, and unrecognized future fields."""
+    """Accept only typed aggregate evidence; reject even whitelisted PII shapes."""
     if not isinstance(obj, dict):
         raise ValueError("unexpected_marker_shape")
+    if any(key not in obj for key in REQUIRED[name]):
+        raise ValueError("missing_required_aggregate_fields")
     safe = {key: obj[key] for key in SAFE_FIELDS[name] if key in obj}
+    for key in BOOLEAN_FIELDS[name]:
+        if key in safe and type(safe[key]) is not bool:
+            raise ValueError("non_boolean_aggregate_field")
+    for key in COUNT_FIELDS[name]:
+        if key in safe and (type(safe[key]) is not int or safe[key] < 0):
+            raise ValueError("invalid_aggregate_count")
+    if name == "paid":
+        if (safe["rows_examined"] > min(safe["paid_intent_count"], 100)
+                or safe["walletless_persisted_credit_verified"] > safe["rows_examined"]
+                or safe["truncated"] != (safe["paid_intent_count"] > safe["rows_examined"])):
+            raise ValueError("inconsistent_paid_aggregate")
+        if any(safe[field] for field in ("production_db_writes",
+                                         "customer_download_e2e_performed",
+                                         "independent_mainnet_recheck_performed")):
+            raise ValueError("unexpected_mutating_or_e2e_probe")
+    if name == "flags":
+        if (safe["checkout_scope"] != "cryptocurrency_only"
+                or safe["payment_flow_assessment"] != "NOT_TESTED_BY_READ_ONLY_PROBE"
+                or safe["private_data_emitted"] or safe["live_paid_end_to_end_verified_by_this_probe"]):
+            raise ValueError("unexpected_flags_or_scope")
     if name == "flags":
         runtime_flags = obj.get("crypto_runtime_feature_flags")
-        if isinstance(runtime_flags, dict):
-            safe["enabled_flag_count"] = sum(value is True for value in runtime_flags.values())
-            safe["reported_flag_count"] = len(runtime_flags)
+        if (not isinstance(runtime_flags, dict) or not runtime_flags
+                or len(runtime_flags) > 32 or any(
+                    not isinstance(k, str) or type(v) is not bool
+                    for k, v in runtime_flags.items())):
+            raise ValueError("unexpected_runtime_flags")
+        safe["enabled_flag_count"] = sum(runtime_flags.values())
+        safe["reported_flag_count"] = len(runtime_flags)
     if name == "paid":
         for key in ("sku_scope_counts_examined", "sku_scope_verified_credits_examined"):
             if key in safe:
                 values = safe[key]
                 if not isinstance(values, dict) or not all(
-                    isinstance(k, str) and k in (
-                        "historical_trial_779", "mixed_with_trial_779",
-                        "configured_nontrial_public_sku", "outside_configured_public_sku",
-                        "public_allowlist_unavailable", "no_valid_products")
-                    and type(v) is int and v >= 0 for k, v in values.items()
+                    isinstance(k, str) and k in SKU_SCOPES
+                    and type(v) is int and 0 <= v <= safe["rows_examined"]
+                    for k, v in values.items()
                 ):
                     raise ValueError("unexpected_scope_counts")
     # Strict JSON serialization check guards accidental leakage through objects.
@@ -148,6 +206,9 @@ def build_report(*, source_dir: Path = SOURCE_DIR, python: str = sys.executable,
         cron_summary.get("cron_readable") is True
         and cron_summary.get("entry_once_per_minute") is True
         and cron_summary.get("heartbeat_fresh") is True
+        and cron_summary.get("cron_heartbeat_distinguished_from_manual") is True
+        and cron_summary.get("last_reconciler_success") is True
+        and cron_summary.get("observed_run_count_last_five_minutes", 0) >= 2
     )
     return {
         "schema": 1,
@@ -163,7 +224,7 @@ def build_report(*, source_dir: Path = SOURCE_DIR, python: str = sys.executable,
 
 def write_private_atomic(report: dict, *, destination: Path = REPORT) -> None:
     parent = destination.parent
-    if not parent.is_dir() or parent.is_symlink() or destination.is_symlink():
+    if not private_directory_ok(parent) or destination.is_symlink():
         raise RuntimeError("invalid_private_report_directory")
     fd, pending = tempfile.mkstemp(prefix=".mpw-health-", suffix=".tmp", dir=parent)
     try:
@@ -180,10 +241,13 @@ def write_private_atomic(report: dict, *, destination: Path = REPORT) -> None:
 
 
 def main() -> int:
-    if not PRIVATE_ROOT.is_dir() or PRIVATE_ROOT.is_symlink():
+    if not private_directory_ok(PRIVATE_ROOT):
         return 3
     lock_fd = os.open(str(LOCK), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
+        st = os.fstat(lock_fd)
+        if st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o600:
+            return 3
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -199,3 +263,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
