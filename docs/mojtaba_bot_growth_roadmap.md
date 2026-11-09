@@ -4,6 +4,43 @@ Owner: Mojtaba Rozegar — Zomorod Melal
 Decision recorded: 2026-11-09  
 Status: engineering plan; **not a deployed change or purchase authorization**.
 
+## Revenue-first operating loop — required before infrastructure purchases
+
+Mojtaba.bot must seek **more collected business revenue**, not merely lower
+infrastructure costs or describe hypothetical opportunities. The first
+commercial priorities are to make existing Zomorod Melal services and
+MojPlayWin digital offers actually purchasable and deliverable; do not open
+new speculative storefronts while existing checkout/delivery problems remain.
+
+1. Check pending paid orders; deliver outstanding purchases before pursuing
+   new sales. Preserve guest purchase by valid email and verified server-side
+   payment confirmation. Reject duplicate payment references.
+2. Verify a live checkout path, an actual useful offer, and receipt-backed
+   digital delivery. A 200 HTTP response or a draft listing is not revenue.
+3. Record qualified interested customers from consented channels, their
+   purchase conversions, and reasons for legitimate purchase dropoff. Prepare
+   free acquisition work first; external marketing and publication retain
+   their specific approval gates.
+4. Reconcile finalized payment provider records to unique delivered orders;
+   do not treat invoices, pending transactions, internal ledger counters or
+   test purchases as settled collected revenue.
+5. Compute a period-matched operating surplus: **reconciled settled revenue
+   minus actual current costs, prior commitments and protected reserves**.
+   If any input is unknown, do not claim cost coverage or spendable surplus.
+6. Reinvest only after these gates and an owner-specific purchase approval;
+   measure subsequent monthly recurring costs and the new capacity's effect
+   on additional verified customer receipts.
+
+`core/revenue_growth_engine.py` ranks these blockers with a fail-closed pure
+decision function; it is a planning component, **not** a deployed commercial
+funnel, traffic source, payment gateway, autonomous purchaser or proof of sales.
+
+Every reporting period must separate: customer-ready offers; qualified leads;
+paid orders; fulfilled orders; externally reconciled collected cash; actual
+operating costs; commitments; protected reserves; available operating surplus;
+and the number of orders awaiting delivery. Until read from a trusted source,
+each amount is **unknown**, never guessed as zero or displayed as progress.
+
 ## Stage 1 — grow on the existing VPS
 
 1. Confirm the actual active Mojtaba.bot/master-agent process, version, task queue,
