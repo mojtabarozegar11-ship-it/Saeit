@@ -83,3 +83,30 @@ def test_invalid_token_characters_rejected():
             pass
         else:
             raise AssertionError("Invalid token header accepted")
+
+
+def test_preflight_performs_only_unauthenticated_https_get():
+    response = type("Response", (), {
+        "status": 200,
+        "__enter__": lambda self: self,
+        "__exit__": lambda self, *args: False,
+    })()
+    with patch.object(client.request, "build_opener") as factory:
+        factory.return_value.open.return_value = response
+        result = client.probe_transport()
+        req = factory.return_value.open.call_args.args[0]
+    assert req.full_url == "https://zohal.pws-dns.net:2083/"
+    assert req.get_method() == "GET"
+    assert "Authorization" not in req.headers
+    assert result["CPANEL_HTTPS_TLS"] == "VERIFIED"
+    assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
+
+
+def test_preflight_does_not_claim_login_without_token():
+    out = io.StringIO()
+    with patch.dict("os.environ", {client.TOKEN_ENV: ""}), \
+            patch.object(client, "probe_transport", return_value={"CPANEL_HTTPS_TLS": "VERIFIED"}), \
+            redirect_stdout(out):
+        assert client.main(["client", "preflight"]) == 0
+    assert "CPANEL_API_TOKEN_STATUS=NOT_CONFIGURED" in out.getvalue()
+    assert "CPANEL_HTTPS_AUTH=VERIFIED" not in out.getvalue()
