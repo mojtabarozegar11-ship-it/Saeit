@@ -417,10 +417,15 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
         if not isinstance(holders, dict) or not holders:
             raise ValueError("invalid_allocation_holders")
         total = 0
+        normalized_labels = set()
         for label, quantity in holders.items():
             if (type(label) is not str or not label.strip()
                     or label != label.strip() or len(label) > 100):
                 raise ValueError("invalid_allocation_holder_label")
+            normalized = label.casefold()
+            if normalized in normalized_labels:
+                raise ValueError("duplicate_allocation_holder_label")
+            normalized_labels.add(normalized)
             total += _whole_number(quantity)
         expected = _whole_number(assets[asset_id]["supply_tokens"])
         if total != expected:
