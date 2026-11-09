@@ -80,7 +80,7 @@ jobs:
           case "$CHECK" in
             identity) remote='id -un; hostname' ;;
             staging_directory) remote='test -d /home/zomorod2/Saeit-staging && echo STAGING_DIRECTORY_PRESENT || echo STAGING_DIRECTORY_MISSING' ;;
-            staging_processes) remote='ps -eo pid,comm,args | grep -E "[f]actory_staging_tick|[s]tage1_10s_loop" | cut -c1-180 | head -20 || true' ;;
+            staging_processes) remote='processes="$(ps -ww -eo args=)" || { echo "STAGING_PROCESS_READBACK=UNAVAILABLE"; exit 1; }; printf "%s\n" "$processes" | awk "/[f]actory_staging_tick/ {f++} /[s]tage1_10s_loop/ {l++} END {printf \"STAGING_FACTORY_COUNT=%d\\nSTAGING_LOOP_COUNT=%d\\n\", f+0, l+0}"' ;;
             *) exit 1 ;;
           esac
           ssh -i "$HOME/.ssh/id_staging" -p "$SSH_PORT" \
