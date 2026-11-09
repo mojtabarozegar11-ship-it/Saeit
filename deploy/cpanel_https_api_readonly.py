@@ -109,7 +109,8 @@ def probe_transport() -> dict[str, str | int]:
         request.HTTPSHandler(context=ssl.create_default_context()),
         RefuseRedirect(),
     )
-    def check(path: str, accept: str) -> int:
+
+    def check(path: str, accept: str) -> tuple[int, str]:
         req = request.Request(
             f"https://{CPANEL_HOST}:2083/{path}",
             headers={"Accept": accept, "User-Agent": "Saeit-cPanel-Transport-Probe/1"},
@@ -117,22 +118,33 @@ def probe_transport() -> dict[str, str | int]:
         )
         try:
             with opener.open(req, timeout=20) as response:
-                return response.status
+                # Content type distinguishes a 200 login HTML page from an
+                # API response. Never read or log private response bodies.
+                media_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+                return response.status, media_type
         except error.HTTPError as exc:
             # Authentication challenges and redirects prove endpoint reachability.
             # We never follow redirects and never read private response bodies.
-            return exc.code
+            media_type = exc.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() if exc.headers else ""
+            return exc.code, media_type
         except (error.URLError, TimeoutError, ssl.SSLError, OSError):
             raise ValueError("CPANEL_HTTPS_TRANSPORT_UNAVAILABLE") from None
 
-    status = check("", "text/html")
-    api_status = check("execute/Version/get", "application/json")
+    status, _ = check("", "text/html")
+    api_status, api_media_type = check("execute/Version/get", "application/json")
     if not (200 <= status < 500 and 200 <= api_status < 500):
         raise ValueError("CPANEL_HTTPS_SERVICE_UNHEALTHY")
+    if api_media_type == "text/html":
+        api_response_kind = "HTML_NOT_API_RESULT"
+    elif api_media_type == "application/json":
+        api_response_kind = "JSON_AUTH_UNVERIFIED"
+    else:
+        api_response_kind = "OTHER_AUTH_UNVERIFIED"
     return {
         "CPANEL_HTTPS_TLS": "VERIFIED",
         "CPANEL_HTTPS_HTTP_STATUS": status,
         "CPANEL_UAPI_UNAUTH_HTTP_STATUS": api_status,
+        "CPANEL_UAPI_UNAUTH_RESPONSE_KIND": api_response_kind,
         "CPANEL_HTTPS_AUTH": "NOT_ATTEMPTED",
     }
 
