@@ -31,6 +31,23 @@ new speculative storefronts while existing checkout/delivery problems remain.
    measure subsequent monthly recurring costs and the new capacity's effect
    on additional verified customer receipts.
 
+**Owner allocation rule (2026-11-09):** no more than **40% of independently
+reconciled, actually collected revenue** may fund Mojtaba.bot development.
+This is a **maximum**, not an automatic transfer or spending target. For one
+verified accounting period in one currency, the remaining budget is:
+
+`max(0, min(0.40 * settled_revenue, max(0, settled_revenue - operating_costs - existing_commitments - protected_reserves)) - development_spend_to_date)`
+
+Any requested development purchase (new VPS capacity, dedicated server,
+equipment, software or components) must fit this remaining budget **and**
+receive separate owner-specific approval. Existing operating obligations
+cannot be sacrificed to reach the 40% allocation. Include taxes and all
+binding purchase/setup/running commitments in the proposal; do not conceal
+future subscription obligations. Unsettled payments, quoted token values and
+unreconciled currency conversions are excluded. A missing accounting input
+closes the gate. The code lives in `core/development_budget_policy.py` and
+does not initiate payments.
+
 `core/revenue_growth_engine.py` ranks these blockers with a fail-closed pure
 decision function; it is a planning component, **not** a deployed commercial
 funnel, traffic source, payment gateway, autonomous purchaser or proof of sales.
