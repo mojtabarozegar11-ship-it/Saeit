@@ -2,6 +2,8 @@
 set -euo pipefail
 
 # Direct cPanel bridge. Read-only allowlist only.
+# The fingerprint-pinned SSH node is 178.239.147.125:1396; the zohal
+# public HTTPS login hostname currently resolves to a different address.
 # Prefer the pinned direct SSH host; retain the pinned VPS relay as fallback.
 operation="${1:-}"
 case "$operation" in
@@ -44,14 +46,14 @@ Host saeit-vps
   IdentityFile $work/vps.key
   UserKnownHostsFile $work/vps.known
 Host saeit-cpanel-direct
-  HostName zohal.pws-dns.net
+  HostName 178.239.147.125
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
   UserKnownHostsFile $work/host.known
   ProxyJump none
 Host saeit-cpanel
-  HostName zohal.pws-dns.net
+  HostName 178.239.147.125
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -75,7 +77,7 @@ cpanel_target=""
 stage="verify_direct_cpanel_host_key"
 # The direct path must pass the same independently pinned fingerprint.
 # Never replace a fingerprint mismatch with an unverified trust-on-first-use key.
-if ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net > "$work/host.known" 2>/dev/null && test -s "$work/host.known"; then
+if ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null && test -s "$work/host.known"; then
   direct_fingerprint="$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)"
   if [ "$direct_fingerprint" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]; then
     echo "CPANEL_DIRECT_HOST_FINGERPRINT_MISMATCH" >&2
@@ -114,7 +116,7 @@ if [ -z "$route" ]; then
   done
 
   stage="verify_cpanel_host_key_via_vps"
-  if ! timeout 45s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null; then
+  if ! timeout 45s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null; then
     echo "CPANEL_RELAY_HOST_KEY_UNREACHABLE" >&2
     exit 1
   fi
