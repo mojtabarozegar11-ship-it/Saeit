@@ -18,4 +18,23 @@ class F01QualityGateTests(unittest.TestCase):
   p=self.evidence/"evidence/F01-01-1.json"; p.parent.mkdir(parents=True,exist_ok=True); p.write_text("[]"); r=evaluate(self.package,self.catalog,self.evidence); self.assertEqual(r["machine_documentary_points"],0); self.assertIn("F01-01-1",r["missing_criteria"])
  def test_missing_evidence_root_is_zero_not_crash(self):
   r=evaluate(self.package,self.catalog,self.root/"not-created"); self.assertEqual(r["machine_documentary_points"],0); self.assertEqual(len(r["missing_criteria"]),100)
+ def test_cyclic_evidence_symlink_is_missing_not_crash(self):
+  self.write_evidence(["F01-20-5"])
+  p=self.evidence/"evidence/F01-01-1.json"; p.parent.mkdir(parents=True,exist_ok=True); p.symlink_to(p.name)
+  r=evaluate(self.package,self.catalog,self.evidence)
+  self.assertEqual(r["machine_documentary_points"],10)
+  self.assertIn("F01-01-1",r["missing_criteria"])
+  self.assertFalse(r["commercial_release_allowed"])
+ def test_cyclic_parent_symlink_is_missing_not_crash(self):
+  (self.evidence/"evidence").symlink_to("evidence",target_is_directory=True)
+  r=evaluate(self.package,self.catalog,self.evidence)
+  self.assertEqual(r["machine_documentary_points"],0)
+  self.assertEqual(len(r["missing_criteria"]),100)
+  self.assertFalse(r["professional_qc1000_certified"])
+ def test_cyclic_evidence_root_is_missing_not_crash(self):
+  bad_root=self.root/"cyclic-root"; bad_root.symlink_to(bad_root.name,target_is_directory=True)
+  r=evaluate(self.package,self.catalog,bad_root)
+  self.assertEqual(r["machine_documentary_points"],0)
+  self.assertEqual(len(r["missing_criteria"]),100)
+  self.assertFalse(r["commercial_release_allowed"])
 if __name__=="__main__": unittest.main()
