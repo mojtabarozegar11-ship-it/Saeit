@@ -81,6 +81,20 @@ class ProductReleaseSourceGuard(unittest.TestCase):
             self.source.index("PRODUCT_DETAILS_NOT_LIVE_"),
         )
 
+    def test_lost_ssh_success_response_still_attempts_guarded_rollback(self):
+        # A cPanel replace can succeed even when its SSH response is lost.
+        # The runner must not leave that partial install live merely because
+        # it has not yet reached DEPLOYED=1.
+        install = self.source.split("      - name: Install full template and verify", 1)[1]
+        self.assertIn("INSTALL_ATTEMPTED=0", install)
+        self.assertIn('if [ "$INSTALL_ATTEMPTED" = 1 ]; then', install)
+        self.assertIn("ROLLBACK_REFUSES_CHANGED_TARGET", install)
+        self.assertLess(
+            install.index("          INSTALL_ATTEMPTED=1"),
+            install.index('          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "TEMPLATE_B64='),
+        )
+        self.assertLess(install.index("INSTALL_ATTEMPTED=1"), install.index("DEPLOYED=1"))
+
     def test_no_remote_connection_in_preflight_step(self):
         preflight = self.source.split("      - name: Pin reviewed source before any host connection", 1)[1]
         preflight = preflight.split("      - name: Relay", 1)[0]
