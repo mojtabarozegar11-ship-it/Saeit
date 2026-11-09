@@ -1,4 +1,4 @@
-# MojPlayWin — cPanel-local commerce observability (C28–C32)
+# MojPlayWin — cPanel-local commerce observability (C28–C33)
 
 ## Why
 
@@ -73,11 +73,37 @@ The pins are version-integrity controls, not proof of site health.
   not validate the real cPanel account or eliminate the need for an independent
   least-privilege review.
 
+### C33 pre-Django credential isolation
+
+- The paid probe **cannot** start Django with the storefront's default
+  `DATABASE_URL`. Before importing Django, it requires a distinct, protected
+  credential file at the fixed path
+  `/home/zomorod2/.private_mojplaywin_main_agents/mpw_readonly_db_url.secret`.
+  Its parent must be owner-only `0700`, and the regular credential file must
+  be owner-only `0600` with no symlinks. Missing or unsafe credentials abort
+  without falling back to the production application database account.
+- The file must contain precisely a local `mysql://` URI for a separately
+  provisioned **SELECT-only** cPanel MariaDB user. The URI is never printed or
+  committed. After Django initializes, the probe checks its actual database
+  name and verifies the actual MariaDB grants and session read-only mode
+  before paid-state queries. Account creation/permissions are not automated.
+- The flags/route probe forces an ephemeral in-memory SQLite database *before*
+  `django.setup()`. Configuration/route inspection therefore cannot silently
+  inherit the storefront's real MariaDB credentials. This remains route
+  configuration evidence only.
+- Do **not** put database passwords in crontab arguments, GitHub secrets,
+  source code, reports, or web-accessible directories. The protected local
+  credential file is a **future installation prerequisite**, not a file that
+  this PR has created on the host.
+
 ## Proposed one-time installation after explicit deployment approval
 
 1. Confirm the active cPanel account `zomorod2`, Python interpreter
    `/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python`, private directory,
-   and an independently verified SELECT-only database role. Do not modify the
+   and an independently verified SELECT-only database role. Provision the
+   separate owner-only `0600` `mpw_readonly_db_url.secret` file outside the
+   web root **only after separate authorization**, using no live storefront
+   database credentials. Do not modify the
    public site or production order tables; reject deployment if it would run
    with unrestricted Django DB credentials.
 2. Review and copy this runner plus these **exact revision-pinned** read-only sources into a

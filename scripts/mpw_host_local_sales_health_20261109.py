@@ -37,8 +37,8 @@ PROBES = (
 # A different revision must be reviewed and explicitly repinned before use.
 PINNED_SOURCE_BLOBS = {
     "mpw_payment_cron_heartbeat_readonly.py": "4fdd9c7ccdcaad2443550708262bbeec35252334",
-    "mpw_paid_aggregate_readonly_c31.py": "4baa575c841434aaff8dfefc67154220ed97f6ca",
-    "mpw_runtime_flags_aggregate_readonly_c32.py": "cd79c83adaa7dfa1b54fd6dff31f0c4c9540e465",
+    "mpw_paid_aggregate_readonly_c31.py": "a65155e9724fdcfc640b936673aa60e7a873a2b7",
+    "mpw_runtime_flags_aggregate_readonly_c32.py": "b96e5ff0627baa3aab19fe2ca236af4b18018fb3",
 }
 
 SAFE_FIELDS = {

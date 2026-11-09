@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.parse import urlsplit
+import stat
+import re
 
 import mpw_host_local_sales_health_20261109 as health
 
@@ -228,7 +231,8 @@ class LocalHealthContract(unittest.TestCase):
 
         namespace = {"PaymentIntent": FakeModel, "PROVIDER": "test-provider",
                      "verified_walletless_credit": lambda order, intent: True,
-                     "assert_readonly_database_session": lambda: None,
+                     "assert_readonly_database_session": lambda expected: None,
+                     "MONITOR_DATABASE_NAME": "synthetic",
                      "json": json}
         exec(compile(ast.Module(body=[func], type_ignores=[]), "aggregate_run", "exec"),
              namespace)
@@ -300,10 +304,52 @@ class LocalHealthContract(unittest.TestCase):
         self.assertEqual(denied.calls, ["SHOW GRANTS FOR CURRENT_USER"])
         allowed = Cursor(["GRANT USAGE ON *.* TO 'monitor'@'localhost'", read])
         namespace["connection"] = Connection(allowed)
-        namespace["assert_readonly_database_session"]()
+        namespace["assert_readonly_database_session"]("orders")
         self.assertEqual(allowed.calls, ["SHOW GRANTS FOR CURRENT_USER",
                                          "SET SESSION TRANSACTION READ ONLY",
                                          "SELECT @@session.transaction_read_only"])
+        other = Cursor(["GRANT SELECT ON `orders`.* TO 'monitor'@'localhost'"])
+        namespace["connection"] = Connection(other)
+        with self.assertRaisesRegex(RuntimeError, "DATABASE_NAME_UNAVAILABLE"):
+            namespace["assert_readonly_database_session"]("unrelated")
+        self.assertEqual(other.calls, [])
+
+    def test_paid_probe_requires_separate_private_credentials_before_django_setup(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" /
+                  "mpw_paid_aggregate_readonly_c31.py").read_text(encoding="utf-8")
+        self.assertLess(source.index("MONITOR_DATABASE_NAME = load_monitor_database_identity()"),
+                        source.index("import django\n"))
+        func = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef)
+                    and n.name == "load_monitor_database_identity")
+        namespace = {"os": os, "stat": stat, "re": re, "urlsplit": urlsplit,
+                     "MONITOR_CREDENTIAL_FILE": Path("/nonexistent/synthetic.secret")}
+        exec(compile(ast.Module(body=[func], type_ignores=[]), "monitor_db_identity", "exec"),
+             namespace)
+        load = namespace["load_monitor_database_identity"]
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            os.chmod(root, 0o700)
+            credentials = root / "synthetic.secret"
+            credentials.write_text("mysql://monitor:synthetic-only@localhost/mpw_reporting\n",
+                                   encoding="utf-8")
+            os.chmod(credentials, 0o600)
+            with patch.dict(os.environ, {"DATABASE_URL": "mysql://store:synthetic@localhost/main"}):
+                self.assertEqual(load(credentials), "mpw_reporting")
+                self.assertEqual(os.environ["DATABASE_URL"],
+                                 "mysql://monitor:synthetic-only@localhost/mpw_reporting")
+            os.chmod(credentials, 0o644)
+            with self.assertRaisesRegex(RuntimeError, "FILE_UNSAFE"):
+                load(credentials)
+            os.chmod(credentials, 0o600)
+            credentials.write_text("mysql://monitor:synthetic-only@remote.example/mpw_reporting")
+            with self.assertRaisesRegex(RuntimeError, "URL_INVALID"):
+                load(credentials)
+            credentials.unlink()
+            credentials.symlink_to(root / "target")
+            with self.assertRaises(OSError):
+                load(credentials)
 
     def test_cron_log_classification_rejects_disabled_and_failures(self):
         source = (Path(__file__).resolve().parents[1] / "scripts" /
@@ -328,6 +374,7 @@ class LocalHealthContract(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] / "scripts" /
                   "mpw_runtime_flags_aggregate_readonly_c32.py").read_text(encoding="utf-8")
         self.assertNotIn("from django.test import Client", source)
+        self.assertIn('os.environ["DATABASE_URL"] = "sqlite:///:memory:"', source)
         func = next(n for n in ast.parse(source).body
                     if isinstance(n, ast.FunctionDef) and n.name == "route_coverage")
         class Resolver404(Exception): pass

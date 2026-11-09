@@ -17,7 +17,11 @@ if not ROOT.is_dir() or ROOT.is_symlink():
     raise RuntimeError("UNEXPECTED_LIVE_RUNTIME_ROOT")
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# Route resolution must never inherit the storefront's real DATABASE_URL.
+# If an application import unexpectedly queries the database, it reaches only
+# an ephemeral SQLite memory database, never any production order tables.
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 
 import django
 django.setup()
