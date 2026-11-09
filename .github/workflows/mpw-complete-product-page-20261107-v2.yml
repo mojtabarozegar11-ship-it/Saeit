@@ -42,8 +42,8 @@ jobs:
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
           chmod 600 "$d/"*; ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null; test "$(ssh-keygen -lf "$d/vk" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          printf 'Host v\n HostName 178.239.147.150\n User githubops\n IdentityFile %s\n UserKnownHostsFile %s\nHost h\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s\n UserKnownHostsFile %s\n ProxyJump v\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n RequestTTY no\n' "$d/v" "$d/vk" "$d/h" "$d/hk" > "$d/c"
-          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hk" 2>/dev/null; test "$(ssh-keygen -lf "$d/hk" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host v\n HostName 178.239.147.150\n User githubops\n IdentityFile %s\n UserKnownHostsFile %s\nHost h\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s\n UserKnownHostsFile %s\n ProxyJump v\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n RequestTTY no\n' "$d/v" "$d/vk" "$d/h" "$d/hk" > "$d/c"
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125' > "$d/hk" 2>/dev/null; test "$(ssh-keygen -lf "$d/hk" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
       - name: Install full template and verify
         env:
           EXPECTED_SOURCE_SHA256: ${{ inputs.expected_source_sha256 }}
