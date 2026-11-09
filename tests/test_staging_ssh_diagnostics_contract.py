@@ -102,5 +102,16 @@ class StagingSshPinTest(unittest.TestCase):
                          ["STAGING_FACTORY_COUNT=0", "STAGING_LOOP_COUNT=0"])
         self.assertNotIn("SECRET_OTHER", run.stdout)
 
+
+    def test_factory_and_inventory_use_offline_pinned_vps_key(self):
+        for name in ("agent-fleet-vps-readonly-audit.yml", "vps-factory-production-continuity.yml"):
+            with self.subTest(workflow=name):
+                content = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+                self.assertNotIn("ssh-keyscan", content)
+                self.assertIn(self.fallback_key, content)
+                self.assertIn(EXPECTED_FP, content)
+                self.assertIn("StrictHostKeyChecking=yes", content)
+                self.assertNotIn("StrictHostKeyChecking=no", content)
+
 if __name__ == "__main__":
     unittest.main()
