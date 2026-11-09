@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}اخبار علمی و کشاورزی | زمرد ملل{% endblock %}
+{% block meta_description %}خبرهای منتشرشده و بررسی‌شده درباره کشاورزی، اقتصاد تولید و فعالیت‌های مستند شرکت کشت و صنعت زمرد ملل.{% endblock %}
+{% block content %}
+<section class="zm-reviewed-news" dir="rtl" style="max-width:1120px;margin:2rem auto;padding:1.5rem">
+  <header>
+    <p>زمرد ملل · اطلاع‌رسانی مسئولانه</p>
+    <h1>خبرهای علمی، کشاورزی و فعالیت‌های مستند شرکت</h1>
+    <p>تنها مطالبی نمایش داده می‌شوند که قبلاً تأیید و منتشر شده‌اند و منبع و نویسنده مشخص دارند. گردآوری خودکار خبر به‌معنای انتشار خودکار نیست.</p>
+  </header>
+  <section aria-label="فهرست اخبار بررسی‌شده" style="display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))">
+    {% for story in stories %}
+      <article style="border:1px solid #ccc;border-radius:12px;padding:1rem">
+        <small>{{ story.published_at|date:"Y/m/d H:i" }} · {{ story.get_story_type_display }}</small>
+        <h2><a href="{% url 'newsletter_detail' story.slug %}">{{ story.title }}</a></h2>
+        <p>{{ story.summary }}</p>
+        <p>نویسنده: {{ story.author_name }}</p>
+        {% if story.source %}<p>منبع: {{ story.source.publisher }}</p>{% endif %}
+      </article>
+    {% empty %}
+      <p>در حال حاضر خبر بررسی‌شده و قابل انتشار تازه‌ای در این بخش ثبت نشده است. مطالب تأییدنشده نمایش داده نمی‌شوند.</p>
+    {% endfor %}
+  </section>
+  <p>برای مشاهده گزارش‌ها، پژوهش‌ها و بولتن‌های هواشناسی به <a href="{% url 'newsletter' %}">خبرنامه زمرد ملل</a> مراجعه کنید.</p>
+  <footer><p>مسئولیت تحریریه و پژوهش: مجتبی روزگار</p><p>#مجتبی_روزگار</p></footer>
+</section>
+{% endblock %}

@@ -12,6 +12,7 @@ from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
+from core.news_views import news_home
 from core.academy_views import (
     academy, education, education_course_detail, education_enroll,
     education_lesson, education_lesson_complete, education_bookmark,
@@ -72,6 +73,7 @@ urlpatterns = [
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
     path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False), name="contact"),
     path("weather/", weather, name="weather"),
+    path("news/", news_home, name="news"),
     # Canonical education platform under the requested company path.
     path("amozeshgah/", education, name="education"),
     path("amozeshgah/dashboard/", education_dashboard, name="education_dashboard"),
