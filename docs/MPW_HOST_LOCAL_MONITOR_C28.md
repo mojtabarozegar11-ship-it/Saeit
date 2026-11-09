@@ -1,4 +1,4 @@
-# MojPlayWin — cPanel-local commerce observability (C28–C33)
+# MojPlayWin — cPanel-local commerce observability (C28–C34)
 
 ## Why
 
@@ -104,6 +104,24 @@ The pins are version-integrity controls, not proof of site health.
   credential file is a **future installation prerequisite**, not a file that
   this PR has created on the host.
 
+### C34 bounded execution and resource safety
+
+- Each Python source read is limited to **256,000 bytes** even if a source
+  changes between size-check and read. It is still Git-blob pinned and fails
+  on a revision mismatch.
+- A probe receives exactly the verified source through a short-lived anonymous
+  temporary file under the private source directory. The subprocess output is
+  **streamed** through a pipe and capped in memory at **65,536 bytes**; an
+  overflow returns only `output_too_large` and terminates the entire child
+  process group. No stdout or stderr from the probe is retained in the
+  report. There is no growing output file.
+- Existing independent timeouts (cron 65s, paid 100s, flags 110s) terminate
+  child groups if they hang. A successful subprocess exit alone does not
+  bypass marker schema validation or heartbeat checks.
+- The cPanel Python memory/CPU allocations have **not** been measured. This
+  bounded-output improvement does not establish host capacity, nor does it
+  turn a historical hourly snapshot into continuous live payment proof.
+
 ## Proposed one-time installation after explicit deployment approval
 
 1. Confirm the active cPanel account `zomorod2`, Python interpreter
@@ -123,8 +141,9 @@ The pins are version-integrity controls, not proof of site health.
    trial-versus-configured-product classification. Neither is evidence of
    actual nontrial sales or successful customer downloads; Draft changes are
    **not** assumed deployed.
-4. Grant the private directory `0700` and source files appropriate private
-   read permission. Keep all output outside `public_html`, web roots, mail,
+4. Grant the private directory and the private source directory `0700`, with
+   private source-file read permission and owner ability to create the
+   short-lived anonymous source input. Keep all output outside `public_html`, web roots, mail,
    and customer download directories.
 5. Add **one** cPanel-local hourly cron entry after a single controlled
    observation of expected output:

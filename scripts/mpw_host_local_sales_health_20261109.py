@@ -16,10 +16,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import selectors
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 PRIVATE_ROOT = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 SOURCE_DIR = PRIVATE_ROOT / "mpw_readonly_sources"
@@ -82,6 +85,8 @@ SKU_SCOPES = frozenset((
     "historical_trial_779", "mixed_with_trial_779", "configured_nontrial_public_sku",
     "outside_configured_public_sku", "public_allowlist_unavailable", "no_valid_products",
 ))
+MAX_SOURCE_BYTES = 256_000
+MAX_PROBE_STDOUT_BYTES = 65_536
 
 
 def private_directory_ok(path: Path) -> bool:
@@ -164,42 +169,90 @@ def git_blob_id(payload: bytes) -> str:
     return hashlib.sha1(header + payload).hexdigest()
 
 
+def bounded_probe_execution(source: bytes, *, python: str, seconds: int,
+                            source_dir: Path, env: dict) -> tuple[str, bytes]:
+    """Stream bounded stdout; on timeout or overflow kill the whole child group.
+
+    A temporary anonymous source file avoids pipe deadlock when the probe
+    emits output before consuming all its already-verified Python source.
+    Neither stdout nor stderr is ever written to a durable probe log.
+    """
+    output = bytearray()
+    with tempfile.TemporaryFile(mode="w+b", dir=source_dir) as source_file:
+        source_file.write(source)
+        source_file.seek(0)
+        proc = subprocess.Popen([python, "-B", "-"], stdin=source_file,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                env=env, start_new_session=True)
+        outcome = "completed"
+        deadline = time.monotonic() + seconds
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(proc.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        outcome = "timeout"
+                        break
+                    chunk = os.read(proc.stdout.fileno(),
+                                    min(8192, MAX_PROBE_STDOUT_BYTES + 1 - len(output)))
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+                    if len(output) > MAX_PROBE_STDOUT_BYTES:
+                        outcome = "output_too_large"
+                        break
+            if outcome == "completed":
+                try:
+                    proc.wait(timeout=max(0.001, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    outcome = "timeout"
+                if outcome == "completed" and proc.returncode:
+                    outcome = "nonzero_exit"
+        finally:
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            proc.wait()
+            if proc.stdout is not None:
+                proc.stdout.close()
+    return outcome, bytes(output) if outcome == "completed" else b""
+
+
 def run_probe(name: str, filename: str, marker: str, seconds: int,
               *, source_dir: Path = SOURCE_DIR, python: str = sys.executable,
               pins: dict | None = None) -> dict:
     script = source_dir / filename
-    if (not source_dir.is_dir() or source_dir.is_symlink() or
-            not script.is_file() or script.is_symlink()):
+    if not private_directory_ok(source_dir):
+        return {"status": "unsafe_verified_source_directory"}
+    if not script.is_file() or script.is_symlink():
         return {"status": "missing_verified_source"}
     pin = (PINNED_SOURCE_BLOBS if pins is None else pins).get(filename)
     if not isinstance(pin, str) or len(pin) != 40:
         return {"status": "source_pin_missing"}
     try:
-        if script.stat().st_size > 256_000:
-            return {"status": "source_too_large"}
-        source = script.read_bytes()
+        with script.open("rb") as handle:
+            source = handle.read(MAX_SOURCE_BYTES + 1)
     except OSError:
         return {"status": "source_unreadable"}
+    if len(source) > MAX_SOURCE_BYTES:
+        return {"status": "source_too_large"}
     if git_blob_id(source) != pin:
         return {"status": "source_revision_mismatch"}
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
-        # Feed the exact verified bytes, avoiding a second path read by Python.
-        proc = subprocess.run([python, "-B", "-"], input=source,
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                              timeout=seconds, env=env, check=False)
-    except subprocess.TimeoutExpired:
-        return {"status": "timeout"}
-    except OSError:
+        outcome, stdout = bounded_probe_execution(source, python=python,
+                                                  seconds=seconds, source_dir=source_dir,
+                                                  env=env)
+    except (OSError, ValueError, subprocess.SubprocessError):
         return {"status": "execution_unavailable"}
-    if proc.returncode:
-        # Do not record stderr, tracebacks or untrusted output.
-        return {"status": "nonzero_exit"}
-    if len(proc.stdout) > 1_000_000:
-        return {"status": "output_too_large"}
+    if outcome != "completed":
+        return {"status": outcome}
     try:
-        summary = summarize(name, parse_marker(proc.stdout.decode("utf-8", "replace"), marker))
+        summary = summarize(name, parse_marker(stdout.decode("utf-8", "replace"), marker))
     except (ValueError, TypeError, json.JSONDecodeError):
         return {"status": "invalid_aggregate_marker"}
     return {"status": "completed", "summary": summary}

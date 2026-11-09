@@ -114,6 +114,49 @@ class LocalHealthContract(unittest.TestCase):
                                       source_dir=root, pins={"probe.py": previous_pin})
             self.assertEqual(result["status"], "source_revision_mismatch")
 
+    def test_stdout_overflow_is_bounded_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            script = root / "loud.py"
+            script.write_text("import sys\nsys.stdout.write('X' * 90000)\n",
+                              encoding="utf-8")
+            result = health.run_probe("cron", "loud.py", "X", 3,
+                                      source_dir=root,
+                                      pins={"loud.py": health.git_blob_id(script.read_bytes())})
+            self.assertEqual(result, {"status": "output_too_large"})
+            self.assertEqual({p.name for p in root.iterdir()}, {"loud.py"})
+
+    def test_probe_timeout_kills_child_without_output(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            script = root / "sleep.py"
+            script.write_text("import time\ntime.sleep(5)\n", encoding="utf-8")
+            result = health.run_probe("cron", "sleep.py", "X", 1,
+                                      source_dir=root,
+                                      pins={"sleep.py": health.git_blob_id(script.read_bytes())})
+            self.assertEqual(result, {"status": "timeout"})
+
+    def test_probe_source_read_does_not_grow_unbounded(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            script = root / "oversized.py"
+            script.write_bytes(b"#" * (health.MAX_SOURCE_BYTES + 1))
+            result = health.run_probe("cron", "oversized.py", "X", 1,
+                                      source_dir=root, pins={"oversized.py": "0" * 40})
+            self.assertEqual(result, {"status": "source_too_large"})
+
+    def test_probe_failed_process_does_not_expose_stderr(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            script = root / "failure.py"
+            script.write_text("raise RuntimeError('PRIVATE_MARKER_DO_NOT_LOG')\n",
+                              encoding="utf-8")
+            result = health.run_probe("cron", "failure.py", "X", 2,
+                                      source_dir=root,
+                                      pins={"failure.py": health.git_blob_id(script.read_bytes())})
+            self.assertEqual(result, {"status": "nonzero_exit"})
+            self.assertNotIn("PRIVATE_MARKER", str(result))
+
     def test_missing_pin_fails_closed(self):
         with tempfile.TemporaryDirectory() as dirname:
             root = Path(dirname)
@@ -148,6 +191,17 @@ class LocalHealthContract(unittest.TestCase):
                 health.run_probe("cron", "probe.py", "MARKER", 1, source_dir=root)["status"],
                 "missing_verified_source",
             )
+
+    def test_refuse_public_or_other_owned_source_directory(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            root = Path(dirname)
+            os.chmod(root, 0o755)
+            try:
+                self.assertEqual(
+                    health.run_probe("cron", "none.py", "X", 1, source_dir=root),
+                    {"status": "unsafe_verified_source_directory"})
+            finally:
+                os.chmod(root, 0o700)
 
     def test_reject_email_in_numeric_count(self):
         with self.assertRaises(ValueError):
