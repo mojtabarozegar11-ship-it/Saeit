@@ -4,12 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "7 * * * *"
-  push:
-    branches:
-      - main
-    paths:
-      - scripts/mojtrade_observe_market.py
-      - .github/workflows/mojtrade-readonly-relay.yml
 
 permissions:
   contents: read
@@ -20,7 +14,7 @@ concurrency:
 
 jobs:
   relay:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
