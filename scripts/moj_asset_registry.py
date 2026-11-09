@@ -360,7 +360,8 @@ def export_bundle(program: dict, target: Path, *, include_f41: bool = True,
                   include_evm: bool = True) -> dict:
     """Write exactly one new offline bundle; never replace prior user data."""
     validate_program(program)
-    if target.is_symlink() or target.exists() or not target.parent.is_dir():
+    if (target.is_symlink() or target.exists() or not target.parent.is_dir()
+            or target.parent.is_symlink()):
         raise ValueError("output_must_be_new_directory")
     target.mkdir(mode=0o700)
     try:
