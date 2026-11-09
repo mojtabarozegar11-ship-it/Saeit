@@ -22,8 +22,10 @@ def good_summary(name):
                 "cron_heartbeat_distinguished_from_manual": True,
                 "last_reconciler_success": True}
     if name == "paid":
-        return {"paid_intent_count": 2, "rows_examined": 2,
-                "walletless_persisted_credit_verified": 1, "truncated": False,
+        return {"paid_intent_count": 2, "rows_examined": 0,
+                "walletless_persisted_credit_verified": 0, "truncated": True,
+                "payment_intent_detail_read_performed": False,
+                "walletless_credit_verification_performed": False,
                 "customer_download_e2e_performed": False,
                 "independent_mainnet_recheck_performed": False,
                 "production_db_writes": False}
@@ -42,13 +44,12 @@ class LocalHealthContract(unittest.TestCase):
     def test_discard_sensitive_paid_rows(self):
         payload = good_summary("paid") | {
             "rows": [{"tx_hash": "a_private_hash", "customer_email": "private@example.com"}],
-            "sku_scope_counts_examined": {"historical_trial_779": 2},
         }
         result = health.summarize("paid", payload)
         data = json.dumps(result)
         self.assertNotIn("a_private_hash", data)
         self.assertNotIn("private@example.com", data)
-        self.assertEqual(result["sku_scope_counts_examined"]["historical_trial_779"], 2)
+        self.assertFalse(result["payment_intent_detail_read_performed"])
 
     def test_reject_arbitrary_sku_counts(self):
         with self.assertRaises(ValueError):
@@ -209,28 +210,24 @@ class LocalHealthContract(unittest.TestCase):
                              health.PINNED_SOURCE_BLOBS[filename])
 
     def test_paid_aggregate_source_only_emits_counts(self):
-        """Execute only the parsed pure run() function with synthetic ORM stubs."""
+        """Run() must request COUNT only and never materialize any payment row."""
         source = (Path(__file__).resolve().parents[1] / "scripts" /
                   "mpw_paid_aggregate_readonly_c31.py").read_text(encoding="utf-8")
         func = next(n for n in ast.parse(source).body
                     if isinstance(n, ast.FunctionDef) and n.name == "run")
 
-        class Intent:
-            provider = "test-provider"
-            order = "PRIVATE_ORDER_DO_NOT_LOG"
-
         class FakeQuery:
             def filter(self, **kwargs): return self
-            def select_related(self, *args): return self
-            def order_by(self, *args): return self
             def count(self): return 2
-            def __getitem__(self, key): return [Intent(), Intent()]
+            def select_related(self, *args): raise AssertionError("DETAIL_QUERY_FORBIDDEN")
+            def order_by(self, *args): raise AssertionError("DETAIL_QUERY_FORBIDDEN")
+            def __getitem__(self, key): raise AssertionError("DETAIL_QUERY_FORBIDDEN")
+            def __iter__(self): raise AssertionError("DETAIL_QUERY_FORBIDDEN")
 
         class FakeModel:
             objects = FakeQuery()
 
-        namespace = {"PaymentIntent": FakeModel, "PROVIDER": "test-provider",
-                     "verified_walletless_credit": lambda order, intent: True,
+        namespace = {"PaymentIntent": FakeModel,
                      "assert_readonly_database_session": lambda expected: None,
                      "MONITOR_DATABASE_NAME": "synthetic",
                      "json": json}
@@ -240,11 +237,22 @@ class LocalHealthContract(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             namespace["run"]()
         line = output.getvalue()
-        self.assertNotIn("PRIVATE_ORDER_DO_NOT_LOG", line)
         self.assertTrue(line.startswith("MPW_PAID_AGGREGATE_READONLY="))
         payload = json.loads(line.split("=", 1)[1])
-        self.assertEqual(payload["walletless_persisted_credit_verified"], 2)
+        self.assertEqual(payload["walletless_persisted_credit_verified"], 0)
+        self.assertEqual(payload["rows_examined"], 0)
+        self.assertTrue(payload["truncated"])
+        self.assertFalse(payload["payment_intent_detail_read_performed"])
+        self.assertFalse(payload["walletless_credit_verification_performed"])
         self.assertEqual(set(payload), set(health.REQUIRED["paid"]))
+
+    def test_never_accept_detail_scan_or_unperformed_verification_claim(self):
+        for change in ({"rows_examined": 1},
+                       {"walletless_persisted_credit_verified": 1},
+                       {"payment_intent_detail_read_performed": True},
+                       {"walletless_credit_verification_performed": True}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                health.summarize("paid", good_summary("paid") | change)
 
     def test_database_grant_gate_rejects_write_privileges_and_roles(self):
         source = (Path(__file__).resolve().parents[1] / "scripts" /

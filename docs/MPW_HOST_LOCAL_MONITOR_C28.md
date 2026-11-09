@@ -91,6 +91,14 @@ The pins are version-integrity controls, not proof of site health.
   `django.setup()`. Configuration/route inspection therefore cannot silently
   inherit the storefront's real MariaDB credentials. This remains route
   configuration evidence only.
+- A second privacy pass removed all per-intent ORM iteration and joins to
+  Order records. The only commerce query is an aggregate `COUNT` of paid
+  payment-intent states. No row-level buyer, order, blockchain receipt, or
+  provider-reference data are materialized by the observer.
+  `walletless_persisted_credit_verified=0` now means **not checked**;
+  both `walletless_credit_verification_performed` and
+  `payment_intent_detail_read_performed` are explicitly `false`. Do not
+  interpret these zeros as evidence of no credited sales.
 - Do **not** put database passwords in crontab arguments, GitHub secrets,
   source code, reports, or web-accessible directories. The protected local
   credential file is a **future installation prerequisite**, not a file that

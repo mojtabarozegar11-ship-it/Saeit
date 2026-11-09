@@ -37,7 +37,7 @@ PROBES = (
 # A different revision must be reviewed and explicitly repinned before use.
 PINNED_SOURCE_BLOBS = {
     "mpw_payment_cron_heartbeat_readonly.py": "4fdd9c7ccdcaad2443550708262bbeec35252334",
-    "mpw_paid_aggregate_readonly_c31.py": "a65155e9724fdcfc640b936673aa60e7a873a2b7",
+    "mpw_paid_aggregate_readonly_c31.py": "f854a3220f1d9078e780b49363af1aec0350f90d",
     "mpw_runtime_flags_aggregate_readonly_c32.py": "b96e5ff0627baa3aab19fe2ca236af4b18018fb3",
 }
 
@@ -48,7 +48,8 @@ SAFE_FIELDS = {
     "paid": ("paid_intent_count", "rows_examined", "truncated",
              "walletless_persisted_credit_verified", "sku_scope_counts_examined",
              "sku_scope_verified_credits_examined", "customer_download_e2e_performed",
-             "independent_mainnet_recheck_performed", "production_db_writes"),
+             "independent_mainnet_recheck_performed", "production_db_writes",
+             "payment_intent_detail_read_performed", "walletless_credit_verification_performed"),
     "flags": ("checkout_scope", "payment_flow_assessment",
               "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted",
               "route_count_checked", "route_count_resolved", "http_view_invocations"),
@@ -58,7 +59,8 @@ REQUIRED = {
     "cron": SAFE_FIELDS["cron"],
     "paid": ("paid_intent_count", "rows_examined", "truncated",
              "walletless_persisted_credit_verified", "customer_download_e2e_performed",
-             "independent_mainnet_recheck_performed", "production_db_writes"),
+             "independent_mainnet_recheck_performed", "production_db_writes",
+             "payment_intent_detail_read_performed", "walletless_credit_verification_performed"),
     "flags": ("checkout_scope", "payment_flow_assessment",
               "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted",
               "route_count_checked", "route_count_resolved", "http_view_invocations"),
@@ -67,7 +69,8 @@ BOOLEAN_FIELDS = {
     "cron": ("cron_readable", "entry_once_per_minute", "heartbeat_fresh",
              "cron_heartbeat_distinguished_from_manual", "last_reconciler_success"),
     "paid": ("truncated", "customer_download_e2e_performed",
-             "independent_mainnet_recheck_performed", "production_db_writes"),
+             "independent_mainnet_recheck_performed", "production_db_writes",
+             "payment_intent_detail_read_performed", "walletless_credit_verification_performed"),
     "flags": ("live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
 }
 COUNT_FIELDS = {
@@ -105,13 +108,15 @@ def summarize(name: str, obj: object) -> dict:
         if key in safe and (type(safe[key]) is not int or safe[key] < 0):
             raise ValueError("invalid_aggregate_count")
     if name == "paid":
-        if (safe["rows_examined"] > min(safe["paid_intent_count"], 100)
-                or safe["walletless_persisted_credit_verified"] > safe["rows_examined"]
-                or safe["truncated"] != (safe["paid_intent_count"] > safe["rows_examined"])):
+        if (safe["rows_examined"] != 0
+                or safe["walletless_persisted_credit_verified"] != 0
+                or safe["truncated"] != (safe["paid_intent_count"] > 0)):
             raise ValueError("inconsistent_paid_aggregate")
         if any(safe[field] for field in ("production_db_writes",
                                          "customer_download_e2e_performed",
-                                         "independent_mainnet_recheck_performed")):
+                                         "independent_mainnet_recheck_performed",
+                                         "payment_intent_detail_read_performed",
+                                         "walletless_credit_verification_performed")):
             raise ValueError("unexpected_mutating_or_e2e_probe")
     if name == "flags":
         if (safe["checkout_scope"] != "cryptocurrency_only"

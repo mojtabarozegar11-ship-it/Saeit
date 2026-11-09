@@ -73,7 +73,6 @@ import django
 django.setup()
 
 from core.models import PaymentIntent
-from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
 from django.db import connection
 
 
@@ -117,25 +116,23 @@ def assert_readonly_database_session(expected_database_name=None):
 
 
 def run():
-    # Refuse privileged connections before any query of paid orders.
+    # Refuse privileged connections before any query of payment state.
     assert_readonly_database_session(MONITOR_DATABASE_NAME)
-    qs = PaymentIntent.objects.filter(status="paid").select_related("order")
-    total = qs.count()
-    examined = 0
-    verified_credits = 0
-    for intent in qs.order_by("pk")[:100]:
-        examined += 1
-        if (intent.provider == PROVIDER
-                and verified_walletless_credit(intent.order, intent)):
-            verified_credits += 1
+    # The sole commerce query returns one integer. No PaymentIntent or Order
+    # record, including their identifiers, references, and customer fields,
+    # is materialized in this process. Verification needs a separate gate.
+    total = PaymentIntent.objects.filter(status="paid").count()
 
-    # Emit strictly aggregate scalars; never serialize order/intent records,
-    # addresses, emails, customer IDs, product item lists, or transaction hashes.
+    # Zero verified credits means NOT MEASURED, not zero actual credited sales.
+    # The explicit false flags prevent this conservative count from being
+    # mistaken for payment correctness, receipts or customer delivery.
     print("MPW_PAID_AGGREGATE_READONLY=" + json.dumps({
         "paid_intent_count": total,
-        "rows_examined": examined,
-        "truncated": total > examined,
-        "walletless_persisted_credit_verified": verified_credits,
+        "rows_examined": 0,
+        "truncated": total > 0,
+        "walletless_persisted_credit_verified": 0,
+        "payment_intent_detail_read_performed": False,
+        "walletless_credit_verification_performed": False,
         "independent_mainnet_recheck_performed": False,
         "customer_download_e2e_performed": False,
         "production_db_writes": False,
