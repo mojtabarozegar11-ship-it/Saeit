@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Read-only operation to execute through the VPS-to-cPanel relay
+        description: Read-only cPanel check via pinned direct SSH; VPS relay only as fallback
         required: true
         type: choice
         options:
@@ -40,6 +40,5 @@ jobs:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VPS_KEY"
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
