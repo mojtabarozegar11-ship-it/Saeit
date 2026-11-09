@@ -130,7 +130,8 @@ def validate_program(program: dict) -> None:
     symbols = [item.get("symbol_candidate") for item in assets]
     # Display names are user-facing asset identities; prevent ambiguous labels.
     names = [item.get("name") for item in assets]
-    if (any(type(name) is not str or not name.strip() for name in names)
+    if (any(type(name) is not str or not name.strip() or name != name.strip()
+            for name in names)
             or len(set(names)) != len(names)):
         raise ValueError("asset_name_collision")
     # Reject unhashable, malformed or whitespace-padded identifiers before
