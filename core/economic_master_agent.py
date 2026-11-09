@@ -5,6 +5,7 @@ verified revenue. Research is supporting work, not the terminal output.
 Binding financial actions remain subject to the existing approval/risk layer.
 """
 from .self_funding_policy import authorize_operating_expense
+from .revenue_growth_engine import prioritize_revenue_growth
 
 AGENT_CODE = "economic-master-agent"
 AGENT_TITLE = "Economic Master Agent"
@@ -78,6 +79,11 @@ class EconomicMasterAgent:
         return {
             "primary_goal": "verified_cash_profit_and_increasing_agent_factory_capability",
             "selection_rule": "rank_by_collected_cash_impact_delivery_readiness_risk_and_cost",
+            "revenue_funnel_priority": (
+                "fulfill_paid_orders_then_verify_checkout_and_delivery_then_convert_qualified_leads_"
+                "then_reconcile_settlements_then_cover_costs_then_scale_proven_offers"
+            ),
+            "hardware_expansion_gate": "settled_surplus_after_all_costs_commitments_reserves_and_specific_owner_approval",
             "continuity": "continue_until_verified_result_or_explicit_blocker",
             "on_blocker": "record_blocker_and_create_remediation_work",
             "on_success": "verify_evidence_then_select_next_highest_impact_work",
@@ -127,6 +133,10 @@ class EconomicMasterAgent:
     def authorize_self_funded_expense(self, **evidence):
         """Apply the bounded self-funding gate; payment execution stays separate."""
         return authorize_operating_expense(**evidence)
+
+    def prioritize_revenue_growth(self, evidence_snapshot):
+        """Select evidence-backed commercial work without spending or publishing."""
+        return prioritize_revenue_growth(evidence_snapshot)
 
     def system_architecture(self):
         return {
