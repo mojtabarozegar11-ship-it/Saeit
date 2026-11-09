@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 SCHEMA = "saeit.moj.asset-program.v1"
@@ -422,7 +423,7 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
             if (type(label) is not str or not label.strip()
                     or label != label.strip() or len(label) > 100):
                 raise ValueError("invalid_allocation_holder_label")
-            normalized = label.casefold()
+            normalized = unicodedata.normalize("NFKC", label).casefold()
             if normalized in normalized_labels:
                 raise ValueError("duplicate_allocation_holder_label")
             normalized_labels.add(normalized)
