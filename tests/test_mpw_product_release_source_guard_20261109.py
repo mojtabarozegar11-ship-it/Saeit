@@ -65,6 +65,22 @@ class ProductReleaseSourceGuard(unittest.TestCase):
         ):
             self.assertIn(marker, self.source)
 
+    def test_live_verification_failure_requires_exact_run_rollback(self):
+        for marker in (
+            'RELEASE_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            "rollback_if_needed()",
+            "trap rollback_if_needed ERR",
+            "ROLLBACK_REFUSES_CHANGED_TARGET",
+            "MPW_ROLLBACK_COMPLETE",
+            "DEPLOYED=1",
+            "PRODUCT_DETAILS_NOT_LIVE_",
+        ):
+            self.assertIn(marker, self.source)
+        self.assertLess(
+            self.source.index("DEPLOYED=1"),
+            self.source.index("PRODUCT_DETAILS_NOT_LIVE_"),
+        )
+
     def test_no_remote_connection_in_preflight_step(self):
         preflight = self.source.split("      - name: Pin reviewed source before any host connection", 1)[1]
         preflight = preflight.split("      - name: Relay", 1)[0]
