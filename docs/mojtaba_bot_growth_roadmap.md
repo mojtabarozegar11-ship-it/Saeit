@@ -41,6 +41,20 @@ output is proof of successful deployment or commercial operation.
 - Trigger: measured VPS limitations, an audited workload, realistic total
   cost of ownership, collected revenue, and **specific owner approval** for
   every purchase and commitment.
+- **Binding self-funding gate:** no server, hardware, component, recurring
+  subscription or manufacturing equipment purchase unless actual settled and
+  reconciled business income has first covered all due operating obligations,
+  protected reserves, existing commitments, the full purchase amount, and a
+  documented buffer for the new recurring running costs. Forecasts, expected
+  token appreciation, invoices awaiting payment, simulated trades, test orders
+  and unrealized revenue do not count as available cash.
+- Even when the financial gate is satisfied, record the vendor, price,
+  warranty, ongoing power/cooling/hosting costs, delivered capability,
+  downside risk and the owner's purchase-specific approval. Never infer
+  permission to spend from a generic automation or agent instruction.
+- If the gate is not satisfied, continue only cost-free, reversible VPS work
+  supported by the existing approved infrastructure. Do not incur new
+  subscription, API, cloud, renewal or equipment charges.
 - Produce an itemized bill of materials with supported accelerator memory,
   CPU/RAM/storage, networking, power, cooling, warranty, backups and data
   migration. Do not treat a GPU memory figure as sufficient by itself.
@@ -92,3 +106,7 @@ live, or commercially productive.
 No stage transition authorizes deletion, deployment, payment, publication,
 external messages, physical machine movement or other consequential action
 without the corresponding approval and safety gates.
+
+The project is not permitted to finance its own expansion with debt, credit,
+unsettled receipts, undocumented third-party funds or an assumed future
+return; every phase must be funded from verified, available operating surplus.
