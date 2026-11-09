@@ -2,8 +2,8 @@
 """Read-only HTTP continuity check for MojPlayWin and its protected child sites.
 
 The real sub-sites are URL prefixes beneath mojplaywin.com, not unverified
-hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ and
-/picm/ intentionally do not support HEAD.
+hostnames such as taniya.mojplaywin.com. Only GET is used. PICM was
+explicitly retired: its public route must stay HTTP 404.
 """
 
 from __future__ import annotations
@@ -53,9 +53,9 @@ REQUIRED_PATHS = (
     "/taniya/",
     "/studio.Roham/",
     "/zahra$$/",
-    "/picm/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
+RETIRED_PATHS = ("/picm/",)
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -68,8 +68,8 @@ CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_
 # Only approved public pages and the two established login endpoints may be
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
-REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
-    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset(RETIRED_PATHS) | frozenset({
+    "/sitemap.xml", "/accounts/login/",
     *CHECKOUT_PATHS,
 })
 
@@ -163,7 +163,8 @@ def _approved_direct_get(url: str) -> bool:
         return False
 
 
-def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check, bytes]:
+def get(url: str, *, max_bytes: int = 950000, attempts: int = 3,
+        allow_retired_404: bool = False) -> tuple[Check, bytes]:
     if not _approved_direct_get(url):
         raise UnsafeRedirect("Direct GET outside exact public MojPlayWin scope")
     last_error: Exception | None = None
@@ -191,6 +192,13 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
                           round(time.monotonic() - start, 2)),
                     data,
                 )
+        except urllib.error.HTTPError as error:
+            if (allow_retired_404 and url == ORIGIN + "/picm/" and
+                    error.code == 404 and error.geturl() == url):
+                return (Check(url, url, 404, round(time.monotonic() - start, 2)), b"")
+            last_error = error
+            if attempt < attempts - 1:
+                time.sleep(1.5 * (attempt + 1))
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
             last_error = error
             if attempt < attempts - 1:
@@ -200,7 +208,7 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
 
 def check_site_page(path: str) -> Check:
     check, data = get(ORIGIN + path)
-    expected_final = ORIGIN + ("/picm/login/" if path == "/picm/" else path)
+    expected_final = ORIGIN + path
     parsed_final = urllib.parse.urlsplit(check.effective)
     # Optional query params added by the application are allowed. A route that
     # silently resolves to / or to an unrelated app is not considered healthy.
@@ -225,6 +233,14 @@ def check_site_page(path: str) -> Check:
         ):
             raise RuntimeError("Personal website home identity/hub no longer matches baseline")
     check.title = document.title[:150]
+    return check
+
+
+def check_retired_picm() -> Check:
+    """Only the explicitly retired PICM route may yield HTTP 404."""
+    check, _ = get(ORIGIN + "/picm/", allow_retired_404=True)
+    if check.status != 404 or check.effective != ORIGIN + "/picm/":
+        raise RuntimeError("Retired PICM unexpectedly became publicly accessible")
     return check
 
 
@@ -283,18 +299,22 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 6
+        assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
         assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
-        assert "/picm/" in REQUIRED_PATHS
+        assert "/picm/" not in REQUIRED_PATHS
+        assert RETIRED_PATHS == ("/picm/",)
+        assert _approved_direct_get(ORIGIN + "/picm/")
+        assert not _approved_direct_get(ORIGIN + "/picm/login/")
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
         return 0
 
     checks = [check_site_page(path) for path in REQUIRED_PATHS]
+    retired_picm = check_retired_picm()
     sitemap, sitemap_count = check_sitemap()
     auth_checks = [check_authentication_gate(pk) for pk in PROTECTED_PRODUCT_IDS]
     results = {
@@ -302,6 +322,7 @@ def main() -> int:
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
         "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
         "protected_children": list(PROTECTED_CHILDREN),
+        "retired_picm": asdict(retired_picm),
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
     }
@@ -312,6 +333,7 @@ def main() -> int:
             summary.write("## MojPlayWin protected subsite continuity\n\n")
             summary.write(f"- Main and child GET pages: {len(checks)} passed\n")
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
+            summary.write("- Retired PICM: expected HTTP 404 confirmed\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
             summary.write("- Anonymous product checkout guards: 3 passed\n")
