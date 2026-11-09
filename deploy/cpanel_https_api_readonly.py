@@ -103,10 +103,54 @@ def query(operation: str, token: str) -> dict[str, str | int]:
     return summarize(operation, document)
 
 
+def probe_transport() -> dict[str, str | int]:
+    """Verify TLS and HTTP reachability without sending credentials or cookies."""
+    req = request.Request(
+        f"https://{CPANEL_HOST}:2083/",
+        headers={"Accept": "text/html", "User-Agent": "Saeit-cPanel-Transport-Probe/1"},
+        method="GET",
+    )
+    opener = request.build_opener(
+        request.HTTPSHandler(context=ssl.create_default_context()),
+        RefuseRedirect(),
+    )
+    try:
+        with opener.open(req, timeout=20) as response:
+            status = response.status
+    except error.HTTPError as exc:
+        # A login redirect or authentication challenge still proves that TLS
+        # reached the server; the redirect is never followed.
+        status = exc.code
+    except (error.URLError, TimeoutError, ssl.SSLError, OSError):
+        raise ValueError("CPANEL_HTTPS_TRANSPORT_UNAVAILABLE") from None
+    if not 200 <= status < 500:
+        raise ValueError("CPANEL_HTTPS_SERVICE_UNHEALTHY")
+    return {
+        "CPANEL_HTTPS_TLS": "VERIFIED",
+        "CPANEL_HTTPS_HTTP_STATUS": status,
+        "CPANEL_HTTPS_AUTH": "NOT_ATTEMPTED",
+    }
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in ALLOWED:
+    if len(argv) != 2 or argv[1] not in (*ALLOWED, "preflight"):
         print("CPANEL_HTTPS_OPERATION_DENIED", file=sys.stderr)
         return 64
+    if argv[1] == "preflight":
+        try:
+            result = probe_transport()
+        except ValueError as exc:
+            print("CPANEL_HTTPS_CHECK_FAILED=" + str(exc), file=sys.stderr)
+            return 1
+        for key, value in result.items():
+            print(f"{key}={value}")
+        if not os.environ.get(TOKEN_ENV):
+            print("CPANEL_API_TOKEN_STATUS=NOT_CONFIGURED")
+            return 0
+        print("CPANEL_API_TOKEN_STATUS=CONFIGURED_UNVERIFIED")
+        # An existing token is checked only by an explicitly selected inventory
+        # operation; preflight never consumes it or claims authentication.
+        return 0
     token = os.environ.get(TOKEN_ENV, "")
     if not token:
         print("CPANEL_HTTPS_TOKEN_NOT_CONFIGURED", file=sys.stderr)
