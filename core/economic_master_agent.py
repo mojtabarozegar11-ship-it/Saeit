@@ -6,6 +6,7 @@ Binding financial actions remain subject to the existing approval/risk layer.
 """
 from .self_funding_policy import authorize_operating_expense
 from .revenue_growth_engine import prioritize_revenue_growth
+from .development_budget_policy import assess_development_budget
 
 AGENT_CODE = "economic-master-agent"
 AGENT_TITLE = "Economic Master Agent"
@@ -84,6 +85,9 @@ class EconomicMasterAgent:
                 "then_reconcile_settlements_then_cover_costs_then_scale_proven_offers"
             ),
             "hardware_expansion_gate": "settled_surplus_after_all_costs_commitments_reserves_and_specific_owner_approval",
+            "maximum_development_share_of_collected_revenue": "0.40",
+            "development_allocation_rule": "minimum_of_40_percent_settled_revenue_and_verified_available_surplus_less_prior_development_spend",
+            "development_purchase_always_requires_specific_owner_approval": True,
             "continuity": "continue_until_verified_result_or_explicit_blocker",
             "on_blocker": "record_blocker_and_create_remediation_work",
             "on_success": "verify_evidence_then_select_next_highest_impact_work",
@@ -137,6 +141,10 @@ class EconomicMasterAgent:
     def prioritize_revenue_growth(self, evidence_snapshot):
         """Select evidence-backed commercial work without spending or publishing."""
         return prioritize_revenue_growth(evidence_snapshot)
+
+    def assess_development_request(self, **financial_evidence):
+        """Check the owner's 40% ceiling; never authorize a purchase itself."""
+        return assess_development_budget(**financial_evidence)
 
     def system_architecture(self):
         return {
