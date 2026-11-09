@@ -53,10 +53,9 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                         self.request, None, 302, "redirect", {}, url
                     )
 
-    def test_login_redirect_and_known_child_are_allowed(self):
+    def test_account_login_redirect_and_known_live_child_are_allowed(self):
         for url in (
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
@@ -65,6 +64,13 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                     self.request, None, 302, "redirect", {}, url
                 )
                 self.assertEqual(result.full_url, url)
+
+    def test_retired_picm_login_redirect_is_denied(self):
+        with self.assertRaises(guard.UnsafeRedirect):
+            guard.ScopedRedirect().redirect_request(
+                self.request, None, 302, "redirect", {},
+                guard.ORIGIN + "/picm/login/"
+            )
 
     def test_redirect_query_cannot_change_login_return_or_child_route(self):
         rejected = (
