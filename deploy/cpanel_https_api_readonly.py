@@ -104,30 +104,35 @@ def query(operation: str, token: str) -> dict[str, str | int]:
 
 
 def probe_transport() -> dict[str, str | int]:
-    """Verify TLS and HTTP reachability without sending credentials or cookies."""
-    req = request.Request(
-        f"https://{CPANEL_HOST}:2083/",
-        headers={"Accept": "text/html", "User-Agent": "Saeit-cPanel-Transport-Probe/1"},
-        method="GET",
-    )
+    """Check the service and UAPI path without sending credentials or cookies."""
     opener = request.build_opener(
         request.HTTPSHandler(context=ssl.create_default_context()),
         RefuseRedirect(),
     )
-    try:
-        with opener.open(req, timeout=20) as response:
-            status = response.status
-    except error.HTTPError as exc:
-        # A login redirect or authentication challenge still proves that TLS
-        # reached the server; the redirect is never followed.
-        status = exc.code
-    except (error.URLError, TimeoutError, ssl.SSLError, OSError):
-        raise ValueError("CPANEL_HTTPS_TRANSPORT_UNAVAILABLE") from None
-    if not 200 <= status < 500:
+    def check(path: str, accept: str) -> int:
+        req = request.Request(
+            f"https://{CPANEL_HOST}:2083/{path}",
+            headers={"Accept": accept, "User-Agent": "Saeit-cPanel-Transport-Probe/1"},
+            method="GET",
+        )
+        try:
+            with opener.open(req, timeout=20) as response:
+                return response.status
+        except error.HTTPError as exc:
+            # Authentication challenges and redirects prove endpoint reachability.
+            # We never follow redirects and never read private response bodies.
+            return exc.code
+        except (error.URLError, TimeoutError, ssl.SSLError, OSError):
+            raise ValueError("CPANEL_HTTPS_TRANSPORT_UNAVAILABLE") from None
+
+    status = check("", "text/html")
+    api_status = check("execute/Version/get", "application/json")
+    if not (200 <= status < 500 and 200 <= api_status < 500):
         raise ValueError("CPANEL_HTTPS_SERVICE_UNHEALTHY")
     return {
         "CPANEL_HTTPS_TLS": "VERIFIED",
         "CPANEL_HTTPS_HTTP_STATUS": status,
+        "CPANEL_UAPI_UNAUTH_HTTP_STATUS": api_status,
         "CPANEL_HTTPS_AUTH": "NOT_ATTEMPTED",
     }
 
