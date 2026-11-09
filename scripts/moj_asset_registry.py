@@ -317,7 +317,8 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
     """Reconstruct every expected byte and reject added, missing or edited files."""
     documents = expected_documents(program, include_f41=include_f41, include_evm=include_evm)
     expected = set(documents) | {"SHA256SUMS.json"}
-    if target.is_symlink() or not target.is_dir():
+    if (target.is_symlink() or not target.is_dir()
+            or any(parent.is_symlink() for parent in target.parents)):
         raise ValueError("bundle_directory_invalid")
     found = set()
     expected_directories = {
