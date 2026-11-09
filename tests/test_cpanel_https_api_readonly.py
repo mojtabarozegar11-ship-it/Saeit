@@ -88,6 +88,7 @@ def test_invalid_token_characters_rejected():
 def test_preflight_performs_only_unauthenticated_https_get():
     response = type("Response", (), {
         "status": 200,
+        "headers": {"Content-Type": "text/html; charset=UTF-8"},
         "__enter__": lambda self: self,
         "__exit__": lambda self, *args: False,
     })()
@@ -103,12 +104,14 @@ def test_preflight_performs_only_unauthenticated_https_get():
     assert all("Authorization" not in req.headers for req in requests)
     assert result["CPANEL_HTTPS_TLS"] == "VERIFIED"
     assert result["CPANEL_UAPI_UNAUTH_HTTP_STATUS"] == 200
+    assert result["CPANEL_UAPI_UNAUTH_RESPONSE_KIND"] == "HTML_NOT_API_RESULT"
     assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
 
 
 def test_preflight_reports_unauthenticated_api_challenge_without_claiming_login():
     response = type("Response", (), {
         "status": 200,
+        "headers": {"Content-Type": "text/html"},
         "__enter__": lambda self: self,
         "__exit__": lambda self, *args: False,
     })()
@@ -119,6 +122,20 @@ def test_preflight_reports_unauthenticated_api_challenge_without_claiming_login(
         )]
         result = client.probe_transport()
     assert result["CPANEL_UAPI_UNAUTH_HTTP_STATUS"] == 401
+    assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
+
+
+def test_preflight_json_content_type_still_does_not_claim_authentication():
+    response = type("Response", (), {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "__enter__": lambda self: self,
+        "__exit__": lambda self, *args: False,
+    })()
+    with patch.object(client.request, "build_opener") as factory:
+        factory.return_value.open.return_value = response
+        result = client.probe_transport()
+    assert result["CPANEL_UAPI_UNAUTH_RESPONSE_KIND"] == "JSON_AUTH_UNVERIFIED"
     assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
 
 
