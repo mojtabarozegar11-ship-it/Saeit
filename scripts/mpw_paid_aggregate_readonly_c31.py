@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -25,9 +26,50 @@ django.setup()
 
 from core.models import PaymentIntent
 from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
+from django.db import connection
+
+
+def grant_is_select_only(grant, database_name=None):
+    """Fail closed for broad grants, roles, DML, DDL, and GRANT OPTION."""
+    if not isinstance(grant, str) or " WITH GRANT OPTION" in grant.upper():
+        return False
+    normalized = grant.strip()
+    if not re.match(r"^GRANT (?:USAGE|SELECT(?:, SHOW VIEW)?) ON ",
+                    normalized, flags=re.IGNORECASE):
+        return False
+    if normalized.upper().startswith("GRANT SELECT"):
+        target = re.search(r"\sON\s+(`[^`]+`|[A-Za-z0-9_]+)\.",
+                           normalized, flags=re.IGNORECASE)
+        if not target or target.group(1).strip("`") == "*":
+            return False
+        if database_name is not None and target.group(1).strip("`") != database_name:
+            return False
+    return True
+
+
+def assert_readonly_database_session():
+    """Validate account privileges and additionally lock session transactions."""
+    if connection.vendor != "mysql":
+        raise RuntimeError("MONITOR_REQUIRES_MARIADB_SELECT_ONLY")
+    database_name = connection.settings_dict.get("NAME")
+    if not isinstance(database_name, str) or not database_name:
+        raise RuntimeError("MONITOR_DATABASE_NAME_UNAVAILABLE")
+    with connection.cursor() as cursor:
+        cursor.execute("SHOW GRANTS FOR CURRENT_USER")
+        grants = [str(row[0]) for row in cursor.fetchall()]
+        if (not grants or not all(grant_is_select_only(g, database_name) for g in grants)
+                or not any(g.strip().upper().startswith("GRANT SELECT") for g in grants)):
+            raise RuntimeError("MONITOR_DATABASE_GRANTS_NOT_SELECT_ONLY")
+        cursor.execute("SET SESSION TRANSACTION READ ONLY")
+        cursor.execute("SELECT @@session.transaction_read_only")
+        state = cursor.fetchone()
+        if not state or state[0] not in (1, True, "1"):
+            raise RuntimeError("MONITOR_READONLY_SESSION_NOT_CONFIRMED")
 
 
 def run():
+    # Refuse privileged connections before any query of paid orders.
+    assert_readonly_database_session()
     qs = PaymentIntent.objects.filter(status="paid").select_related("order")
     total = qs.count()
     examined = 0

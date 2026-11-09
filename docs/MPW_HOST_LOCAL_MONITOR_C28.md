@@ -1,4 +1,4 @@
-# MojPlayWin — cPanel-local commerce observability (C28–C31)
+# MojPlayWin — cPanel-local commerce observability (C28–C32)
 
 ## Why
 
@@ -55,6 +55,24 @@ The pins are version-integrity controls, not proof of site health.
   Prior to any deployment, the actual runtime must be proven to use a
   SELECT-only database role with no DML, DDL, mail, or payment permissions.
 
+### C32 view-side-effect reduction
+
+- `mpw_runtime_flags_aggregate_readonly_c32.py` replaces the old payment
+  baseline probe for this collector. It uses Django URL resolution and reads
+  boolean feature flags but never creates a `django.test.Client`, performs a
+  GET request, or invokes a checkout/login view.
+- The runner requires all six known routes to resolve and zero HTTP view
+  invocations. This is configuration-only evidence, not a real user journey.
+- The aggregate paid probe inspects `SHOW GRANTS FOR CURRENT_USER` before its
+  first paid-state query, rejecting privileged, role-based, or global SELECT
+  grants and SELECT grants outside the configured database. It then sets
+  `SET SESSION TRANSACTION READ ONLY` and verifies MariaDB
+  11.x `@@session.transaction_read_only`. Neither step changes sales records.
+- The 28 targeted offline tests cover the C31 privacy/fail-closed cases, C32
+  view-free route resolution, and SELECT-only grant/session guards. They do
+  not validate the real cPanel account or eliminate the need for an independent
+  least-privilege review.
+
 ## Proposed one-time installation after explicit deployment approval
 
 1. Confirm the active cPanel account `zomorod2`, Python interpreter
@@ -66,7 +84,7 @@ The pins are version-integrity controls, not proof of site health.
    non-public directory named `mpw_readonly_sources` under the private root:
    - `scripts/mpw_payment_cron_heartbeat_readonly.py`
    - `scripts/mpw_paid_aggregate_readonly_c31.py`
-   - `scripts/mpw_payment_100_live_baseline_readonly_20261021.py`
+   - `scripts/mpw_runtime_flags_aggregate_readonly_c32.py`
 3. Keep the aggregate paid count separate from Draft PR #2204's proposed
    trial-versus-configured-product classification. Neither is evidence of
    actual nontrial sales or successful customer downloads; Draft changes are

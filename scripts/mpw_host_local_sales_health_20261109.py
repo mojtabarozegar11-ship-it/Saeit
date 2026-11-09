@@ -29,7 +29,7 @@ LOCK = PRIVATE_ROOT / "mpw_readonly_health.lock"
 PROBES = (
     ("cron", "mpw_payment_cron_heartbeat_readonly.py", "MPW_PAYMENT_CRON_HEARTBEAT", 65),
     ("paid", "mpw_paid_aggregate_readonly_c31.py", "MPW_PAID_AGGREGATE_READONLY", 100),
-    ("flags", "mpw_payment_100_live_baseline_readonly_20261021.py", "MPW_PAYMENT_100_LIVE_BASELINE", 110),
+    ("flags", "mpw_runtime_flags_aggregate_readonly_c32.py", "MPW_RUNTIME_FLAGS_AGGREGATE_READONLY", 110),
 )
 
 # Git blob identities of the three audited sources. The cron source has been
@@ -37,8 +37,8 @@ PROBES = (
 # A different revision must be reviewed and explicitly repinned before use.
 PINNED_SOURCE_BLOBS = {
     "mpw_payment_cron_heartbeat_readonly.py": "4fdd9c7ccdcaad2443550708262bbeec35252334",
-    "mpw_paid_aggregate_readonly_c31.py": "951405ef7e6e7f511db29c505cef8a6729b48404",
-    "mpw_payment_100_live_baseline_readonly_20261021.py": "59a7cb917b2aa11e523148889758fc9019206b30",
+    "mpw_paid_aggregate_readonly_c31.py": "4baa575c841434aaff8dfefc67154220ed97f6ca",
+    "mpw_runtime_flags_aggregate_readonly_c32.py": "cd79c83adaa7dfa1b54fd6dff31f0c4c9540e465",
 }
 
 SAFE_FIELDS = {
@@ -50,7 +50,8 @@ SAFE_FIELDS = {
              "sku_scope_verified_credits_examined", "customer_download_e2e_performed",
              "independent_mainnet_recheck_performed", "production_db_writes"),
     "flags": ("checkout_scope", "payment_flow_assessment",
-              "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
+              "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted",
+              "route_count_checked", "route_count_resolved", "http_view_invocations"),
 }
 
 REQUIRED = {
@@ -59,7 +60,8 @@ REQUIRED = {
              "walletless_persisted_credit_verified", "customer_download_e2e_performed",
              "independent_mainnet_recheck_performed", "production_db_writes"),
     "flags": ("checkout_scope", "payment_flow_assessment",
-              "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted"),
+              "live_paid_end_to_end_verified_by_this_probe", "private_data_emitted",
+              "route_count_checked", "route_count_resolved", "http_view_invocations"),
 }
 BOOLEAN_FIELDS = {
     "cron": ("cron_readable", "entry_once_per_minute", "heartbeat_fresh",
@@ -71,7 +73,7 @@ BOOLEAN_FIELDS = {
 COUNT_FIELDS = {
     "cron": ("observed_run_count_last_five_minutes",),
     "paid": ("paid_intent_count", "rows_examined", "walletless_persisted_credit_verified"),
-    "flags": (),
+    "flags": ("route_count_checked", "route_count_resolved", "http_view_invocations"),
 }
 SKU_SCOPES = frozenset((
     "historical_trial_779", "mixed_with_trial_779", "configured_nontrial_public_sku",
@@ -114,7 +116,10 @@ def summarize(name: str, obj: object) -> dict:
     if name == "flags":
         if (safe["checkout_scope"] != "cryptocurrency_only"
                 or safe["payment_flow_assessment"] != "NOT_TESTED_BY_READ_ONLY_PROBE"
-                or safe["private_data_emitted"] or safe["live_paid_end_to_end_verified_by_this_probe"]):
+                or safe["private_data_emitted"] or safe["live_paid_end_to_end_verified_by_this_probe"]
+                or safe["route_count_checked"] != 6
+                or safe["route_count_resolved"] != safe["route_count_checked"]
+                or safe["http_view_invocations"] != 0):
             raise ValueError("unexpected_flags_or_scope")
     if name == "flags":
         runtime_flags = obj.get("crypto_runtime_feature_flags")
@@ -177,7 +182,7 @@ def run_probe(name: str, filename: str, marker: str, seconds: int,
     try:
         # Feed the exact verified bytes, avoiding a second path read by Python.
         proc = subprocess.run([python, "-B", "-"], input=source,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                               timeout=seconds, env=env, check=False)
     except subprocess.TimeoutExpired:
         return {"status": "timeout"}

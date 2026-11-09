@@ -29,6 +29,8 @@ def good_summary(name):
                 "payment_flow_assessment": "NOT_TESTED_BY_READ_ONLY_PROBE",
                 "live_paid_end_to_end_verified_by_this_probe": False,
                 "private_data_emitted": False,
+                "route_count_checked": 6, "route_count_resolved": 6,
+                "http_view_invocations": 0,
                 "crypto_runtime_feature_flags": {"downloads": True, "settlement": False}}
     raise ValueError("unexpected_probe")
 
@@ -198,7 +200,8 @@ class LocalHealthContract(unittest.TestCase):
     def test_new_probe_sources_are_revision_pinned(self):
         root = Path(__file__).resolve().parents[1] / "scripts"
         for filename in ("mpw_payment_cron_heartbeat_readonly.py",
-                         "mpw_paid_aggregate_readonly_c31.py"):
+                         "mpw_paid_aggregate_readonly_c31.py",
+                         "mpw_runtime_flags_aggregate_readonly_c32.py"):
             self.assertEqual(health.git_blob_id((root / filename).read_bytes()),
                              health.PINNED_SOURCE_BLOBS[filename])
 
@@ -225,6 +228,7 @@ class LocalHealthContract(unittest.TestCase):
 
         namespace = {"PaymentIntent": FakeModel, "PROVIDER": "test-provider",
                      "verified_walletless_credit": lambda order, intent: True,
+                     "assert_readonly_database_session": lambda: None,
                      "json": json}
         exec(compile(ast.Module(body=[func], type_ignores=[]), "aggregate_run", "exec"),
              namespace)
@@ -237,6 +241,69 @@ class LocalHealthContract(unittest.TestCase):
         payload = json.loads(line.split("=", 1)[1])
         self.assertEqual(payload["walletless_persisted_credit_verified"], 2)
         self.assertEqual(set(payload), set(health.REQUIRED["paid"]))
+
+    def test_database_grant_gate_rejects_write_privileges_and_roles(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" /
+                  "mpw_paid_aggregate_readonly_c31.py").read_text(encoding="utf-8")
+        func = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "grant_is_select_only")
+        import re
+        namespace = {"re": re}
+        exec(compile(ast.Module(body=[func], type_ignores=[]), "grant_guard", "exec"),
+             namespace)
+        allowed = namespace["grant_is_select_only"]
+        self.assertTrue(allowed("GRANT USAGE ON *.* TO 'monitor'@'localhost'"))
+        self.assertTrue(allowed("GRANT SELECT ON `orders`.* TO 'monitor'@'localhost'"))
+        self.assertTrue(allowed("GRANT SELECT, SHOW VIEW ON `orders`.* TO 'monitor'@'localhost'"))
+        self.assertFalse(allowed("GRANT SELECT ON `other_db`.* TO 'monitor'@'localhost'", "orders"))
+        for bad in ("GRANT ALL PRIVILEGES ON *.* TO 'monitor'@'localhost'",
+                    "GRANT SELECT ON *.* TO 'monitor'@'localhost'",
+                    "GRANT SELECT, UPDATE ON `orders`.* TO 'monitor'@'localhost'",
+                    "GRANT DELETE ON `orders`.* TO 'monitor'@'localhost'",
+                    "GRANT SELECT ON *.* TO 'monitor'@'localhost' WITH GRANT OPTION",
+                    "GRANT `writer_role` TO 'monitor'@'localhost'"):
+            with self.subTest(bad=bad):
+                self.assertFalse(allowed(bad))
+
+    def test_database_session_guard_fails_before_paid_query(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" /
+                  "mpw_paid_aggregate_readonly_c31.py").read_text(encoding="utf-8")
+        funcs = [n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)
+                 and n.name in ("grant_is_select_only", "assert_readonly_database_session")]
+
+        class Cursor:
+            def __init__(self, grants, read_only=1):
+                self.grants, self.read_only = grants, read_only
+                self.calls = []
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def execute(self, sql): self.calls.append(sql)
+            def fetchall(self): return [(g,) for g in self.grants]
+            def fetchone(self): return (self.read_only,)
+
+        class Connection:
+            vendor = "mysql"
+            settings_dict = {"NAME": "orders"}
+            def __init__(self, cursor): self._cursor = cursor
+            def cursor(self): return self._cursor
+
+        import re
+        namespace = {"re": re}
+        exec(compile(ast.Module(body=funcs, type_ignores=[]), "db_guard", "exec"),
+             namespace)
+        read = "GRANT SELECT ON `orders`.* TO 'monitor'@'localhost'"
+        write = "GRANT INSERT ON `orders`.* TO 'monitor'@'localhost'"
+        denied = Cursor([read, write])
+        namespace["connection"] = Connection(denied)
+        with self.assertRaisesRegex(RuntimeError, "NOT_SELECT_ONLY"):
+            namespace["assert_readonly_database_session"]()
+        self.assertEqual(denied.calls, ["SHOW GRANTS FOR CURRENT_USER"])
+        allowed = Cursor(["GRANT USAGE ON *.* TO 'monitor'@'localhost'", read])
+        namespace["connection"] = Connection(allowed)
+        namespace["assert_readonly_database_session"]()
+        self.assertEqual(allowed.calls, ["SHOW GRANTS FOR CURRENT_USER",
+                                         "SET SESSION TRANSACTION READ ONLY",
+                                         "SELECT @@session.transaction_read_only"])
 
     def test_cron_log_classification_rejects_disabled_and_failures(self):
         source = (Path(__file__).resolve().parents[1] / "scripts" /
@@ -256,6 +323,32 @@ class LocalHealthContract(unittest.TestCase):
                          (False, True))
         self.assertEqual(classify("reconcile_MPW_COMMERCE_RECONCILE_state=scanned reconcile_exception"),
                          (False, True))
+
+    def test_flags_probe_resolves_without_calling_views(self):
+        source = (Path(__file__).resolve().parents[1] / "scripts" /
+                  "mpw_runtime_flags_aggregate_readonly_c32.py").read_text(encoding="utf-8")
+        self.assertNotIn("from django.test import Client", source)
+        func = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "route_coverage")
+        class Resolver404(Exception): pass
+        namespace = {"Resolver404": Resolver404}
+        exec(compile(ast.Module(body=[func], type_ignores=[]), "route_coverage", "exec"),
+             namespace)
+        invoked = []
+        class Match:
+            def __call__(self):
+                invoked.append("VIEW_CALLED")
+        def resolver(path):
+            if path == "/missing/": raise Resolver404()
+            return Match()
+        self.assertEqual(namespace["route_coverage"](resolver, ["/ok/", "/missing/"]),
+                         [True, False])
+        self.assertEqual(invoked, [])
+
+    def test_flags_rejects_unresolved_routes_or_http_invocations(self):
+        for change in ({"route_count_resolved": 5}, {"http_view_invocations": 1}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                health.summarize("flags", good_summary("flags") | change)
 
 
 if __name__ == "__main__":
