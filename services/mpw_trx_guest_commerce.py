@@ -285,13 +285,16 @@ def _checkout_page(request, product_id, pages_namespace):
     from mpw_commerce.buyer_orders import _eligible
     from services.mpw_trx_commercial_context import rights_cleared_for_sale
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
-    from services.mpw_walletless_commercial_intent import _commercial_db
+    from services.mpw_walletless_commercial_intent import (
+        _commercial_db, require_active_merchant_wallet,
+    )
 
     if not _host_ok(request) or type(product_id) is not int:
         raise Http404
     try:
         _commercial_db(settings, connection)
-        _configured_receiver()
+        receiver = _configured_receiver()
+        require_active_merchant_wallet(settings, receiver)
     except Exception as exc:
         from services.mpw_trx_walletless_core import PaymentHold
         if isinstance(exc, PaymentHold):
