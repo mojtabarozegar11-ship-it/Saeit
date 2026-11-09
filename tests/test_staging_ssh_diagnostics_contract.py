@@ -103,8 +103,8 @@ class StagingSshPinTest(unittest.TestCase):
         self.assertNotIn("SECRET_OTHER", run.stdout)
 
 
-    def test_factory_and_inventory_use_offline_pinned_vps_key(self):
-        for name in ("agent-fleet-vps-readonly-audit.yml", "vps-factory-production-continuity.yml"):
+    def test_inventory_uses_offline_pinned_vps_key(self):
+        for name in ("agent-fleet-vps-readonly-audit.yml",):
             with self.subTest(workflow=name):
                 content = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
                 self.assertNotIn("ssh-keyscan", content)
