@@ -2,10 +2,15 @@
   "version": 1,
   "repository": "mojtabarozegar11-ship-it/Saeit",
   "pr": 2194,
-  "commit": "90dd0ac305d7405f62f7382a8cf4c3904f539bd8",
+  "commit": "27605bea82c2e3f3df1a08edb2520b8c5b382ec8",
   "site": "zomorodmelal.ir",
   "mode": "READ_ONLY_PREFLIGHT",
   "files": [
+    {
+      "path": "config/urls.py",
+      "change": "modified",
+      "git_blob_sha": "243f3f84d2d81a943863a1f905df8cf66e4e5c57"
+    },
     {
       "path": "core/blog_distribution.py",
       "change": "modified",
@@ -57,6 +62,11 @@
       "git_blob_sha": "c4aaa11b287f98e7ab53de21dc9b741a22b6f4f8"
     },
     {
+      "path": "core/news_views.py",
+      "change": "added",
+      "git_blob_sha": "b6dfda86f79050c1ebd51a32a4ed41378e47a531"
+    },
+    {
       "path": "core/newsletter_engine.py",
       "change": "modified",
       "git_blob_sha": "56693b22683830a330e676353c3a277bc1614ee7"
@@ -75,6 +85,11 @@
       "path": "core/seo_views.py",
       "change": "modified",
       "git_blob_sha": "2647e5d784f9ff162a02a8db2ede7a6433d76098"
+    },
+    {
+      "path": "core/templates/core/news.html",
+      "change": "added",
+      "git_blob_sha": "a3eff5a4efac95ad804f9c2c5570ca94ac5ff0df"
     },
     {
       "path": "core/templates/core/newsletter_detail.html",

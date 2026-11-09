@@ -42,10 +42,10 @@ Scope: `zomorodmelal.ir` / `Saeit` on cPanel. **No GitHub Actions runtime.**
 PR #2194 ships two additional release files:
 `deploy/newsroom_release_manifest_20261108.json` and
 `deploy/newsroom_release_preflight.py`. The manifest pins the Git blob SHAs of
-**19 exact application files**, including the published-page templates. It does
+**22 exact application files**, including the published-page templates. It does
 not grant deployment authority and the checker **cannot write files**.
 The manifest's `commit` is the immutable application-code snapshot whose
-19 file hashes are enumerated (cycle 12: `dea67c8d`); a later documentation-only
+22 file hashes are enumerated (cycle 20: `27605bea`); a later documentation-only
 commit may carry that manifest without changing the application snapshot.
 
 Cycle 10 also HTML-script-escapes untrusted JSON-LD values in public newsletter
@@ -173,6 +173,42 @@ agents, approved-news semantics or cron operate correctly: complete separate
 browser/Passenger/release checks before declaring the service operational.
 This script is not part of the live application release manifest and cannot
 be used to bypass cPanel authentication or the host-key safety gate.
+
+## Public routing diagnosis and curated news source (cycle 20, 2026-11-09)
+
+- Fresh public `/api/weather/` returned `status=ok`, **31 distinct
+  provinces and 217 daily records**, exactly seven dates (November 9–15,
+  2026) for each province. All 217 precipitation-probability values were
+  `null`: do not manufacture a rain chance. The API is live even while its
+  main public display is not.
+- HTTP headers for `/weather/` show `Last-Modified: 2026-11-06`,
+  `Accept-Ranges: bytes` and a static 8,055-byte HTML response. `/news/`
+  similarly shows `Last-Modified: 2026-10-18`, range support and 7,435
+  HTML bytes. The Django newsletter detail instead returns `Vary: Cookie`
+  and `X-Frame-Options: DENY`. This is strong evidence that **different
+  serving paths** govern the old public pages and the live Django API;
+  precisely which document-root/rewrite rule wins still requires authenticated
+  cPanel/Passenger inspection.
+- `config/urls.py` already routes `/weather/` to `core.weather_views.weather`,
+  and `core/templates/core/weather.html` already contains an API-powered
+  seven-day dashboard. Do not rewrite the working backend merely to conceal
+  the static-route precedence issue.
+- The code previously had no Django `/news/` route. This PR now adds
+  `core/news_views.py`, `core/templates/core/news.html`, and the exact
+  `config/urls.py` route. It lists only **published**, non-prohibited,
+  individually signed company news or sourced world news; ingested RSS remains
+  draft-only and cannot appear merely by being fetched. These are source
+  changes only; the live static `/news/` page is **not** thereby replaced.
+- The official Pars Web Server portal loaded in the cloud browser but showed
+  a sign-in form without an authenticated session. No credential entry or
+  server change occurred. The earlier read-only GitHub→VPS→cPanel bridge
+  failed at the pinned VPS host-key preflight; no key was auto-trusted or
+  security check disabled.
+- Before any live routing change: authenticate legitimately, identify actual
+  document root and Passenger route ownership, inspect the known 141 local
+  cPanel modifications, back up each specific conflicting file, reconcile
+  the 22 pinned application files individually, and verify HTTP response
+  contents and the seven-day report after an explicitly authorized deploy.
 
 Never pay for a source, emit email, publish RSS news automatically, or enable
 unreviewed promotional or financial material. Drafts need factual human review.
