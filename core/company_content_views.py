@@ -5,6 +5,7 @@ from django.utils import timezone
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 from .newsletter_models import NewsletterStory
 from .company_inquiry_models import CompanyInquiry
+from .editorial_policy import public_story_allowed, visible_story_links
 
 
 def company_gallery(request):
@@ -15,13 +16,19 @@ def company_gallery(request):
     query = request.GET.get("q", "").strip()
     if query:
         media = media.filter(title__icontains=query)
-    return render(request, "core/company_gallery.html", {"media": media[:100], "query": query, "kind": kind})
+    safe_media = [m for m in media[:500] if (
+        not m.newsletter_story or public_story_allowed(m.newsletter_story)
+    )][:100]
+    return render(request, "core/company_gallery.html", {"media": safe_media, "query": query, "kind": kind})
 
 
 def company_content_feed(request, slug):
     target = f"/company/{slug.strip('/')}/" if slug != "company" else "/company/"
     links = CompanyContentLink.objects.filter(target_path=target).select_related("newsletter_story", "knowledge_article")
-    links = [x for x in links if (x.newsletter_story and x.newsletter_story.status == "published") or (x.knowledge_article and x.knowledge_article.published)]
+    links = visible_story_links([
+        x for x in links if (x.newsletter_story and public_story_allowed(x.newsletter_story))
+        or (x.knowledge_article and x.knowledge_article.published)
+    ])
     if not links:
         raise Http404("Company content feed not found")
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})

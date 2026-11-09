@@ -11,6 +11,7 @@ from .models import KnowledgeArticle, Product
 from .knowledge_agent_models import KnowledgeBook, KnowledgeDomain
 from .newsletter_models import NewsletterStory
 from .blog_models import BlogPage
+from .editorial_policy import visible_news_stories
 
 INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
 
@@ -43,8 +44,8 @@ def site_search(request):
     if q:
         stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).filter(
             Q(title__icontains=q) | Q(summary__icontains=q) | Q(body__icontains=q) | Q(seo_keywords__icontains=q)
-        )[:50]
-        for x in stories:
+        )
+        for x in visible_news_stories(stories, limit=50):
             results.append((_score(q, x.title, x.summary, x.body), {"type": "خبر", "title": x.title, "summary": x.summary, "url": f"/newsletter/{x.slug}/"}))
         articles = KnowledgeArticle.objects.filter(published=True).filter(Q(title__icontains=q) | Q(content__icontains=q))[:50]
         for x in articles:
@@ -87,8 +88,9 @@ def sitemap_xml(request):
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
         urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
-    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
-    urls += [f"/newsletter/{slug}/" for slug in stories]
+    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now())
+    # Sitemaps must not keep exposing old prohibited headlines.
+    urls += [f"/newsletter/{story.slug}/" for story in visible_news_stories(stories, limit=2000)]
     articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
     urls += [f"/knowledge/article/{slug}/" for slug in articles]
     books = KnowledgeBook.objects.values_list("code", flat=True)

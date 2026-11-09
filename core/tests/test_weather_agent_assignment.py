@@ -1,6 +1,7 @@
 import pytest
 
 from core import weather_agent
+from core.editorial_signature import has_final_signature
 from core.models import Agent, NewsletterStory
 
 
@@ -33,7 +34,9 @@ def test_weather_assigns_report_to_content_director(monkeypatch):
 
     result = weather_agent.run_daily_cycle()
 
-    assert NewsletterStory.objects.get(pk=result["weather_story_id"]).agent_id == director.id
+    story = NewsletterStory.objects.get(pk=result["weather_story_id"])
+    assert story.agent_id == director.id
+    assert has_final_signature(story.body)
 
 
 def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
@@ -64,6 +67,10 @@ def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
     weather_agent.run_daily_cycle()
 
     assert len(calls) == 1
+    research = list(NewsletterStory.objects.filter(slug__startswith="weather-research-"))
+    assert len(research) == 2
+    assert all(story.status == "draft" and story.published_at is None for story in research)
+    assert all(has_final_signature(story.body) for story in research)
 
 
 def test_weather_does_not_publish_an_incomplete_31_province_report(monkeypatch):

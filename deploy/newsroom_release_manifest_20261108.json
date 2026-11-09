@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "pr": 2194,
+  "commit": "27605bea82c2e3f3df1a08edb2520b8c5b382ec8",
+  "site": "zomorodmelal.ir",
+  "mode": "READ_ONLY_PREFLIGHT",
+  "files": [
+    {
+      "path": "config/urls.py",
+      "change": "modified",
+      "git_blob_sha": "243f3f84d2d81a943863a1f905df8cf66e4e5c57"
+    },
+    {
+      "path": "core/blog_distribution.py",
+      "change": "modified",
+      "git_blob_sha": "d81739e1af5a801eda5c5b2639eac1d7154834cf"
+    },
+    {
+      "path": "core/blog_models.py",
+      "change": "modified",
+      "git_blob_sha": "eadde5e7235efd0330d86021ede3a28212f70a14"
+    },
+    {
+      "path": "core/blog_views.py",
+      "change": "modified",
+      "git_blob_sha": "f9d17f8809b1cfb152b654dc6f97f38142539738"
+    },
+    {
+      "path": "core/company_content_views.py",
+      "change": "modified",
+      "git_blob_sha": "ea8c4b07f373b2e10c6bb977c7c968016d2fecb5"
+    },
+    {
+      "path": "core/editorial_audit.py",
+      "change": "added",
+      "git_blob_sha": "d5edd96a1f7ae0c42d907ecbec02a67d426b8b32"
+    },
+    {
+      "path": "core/editorial_policy.py",
+      "change": "added",
+      "git_blob_sha": "6b5f06790c4a71f72df7844a5374f11a37e46861"
+    },
+    {
+      "path": "core/editorial_signature.py",
+      "change": "added",
+      "git_blob_sha": "f88a11e6456c65ee78ffec3a717463296f5eeab5"
+    },
+    {
+      "path": "core/management/commands/news_agent_cycle.py",
+      "change": "added",
+      "git_blob_sha": "34e862aa1399a403e68e189d0e64eb1be3d945e4"
+    },
+    {
+      "path": "core/management/commands/news_editorial_audit.py",
+      "change": "added",
+      "git_blob_sha": "330ecd5bc8df81f711b6bd639a551e1242a84204"
+    },
+    {
+      "path": "core/news_feed_reader.py",
+      "change": "added",
+      "git_blob_sha": "c4aaa11b287f98e7ab53de21dc9b741a22b6f4f8"
+    },
+    {
+      "path": "core/news_views.py",
+      "change": "added",
+      "git_blob_sha": "b6dfda86f79050c1ebd51a32a4ed41378e47a531"
+    },
+    {
+      "path": "core/newsletter_engine.py",
+      "change": "modified",
+      "git_blob_sha": "56693b22683830a330e676353c3a277bc1614ee7"
+    },
+    {
+      "path": "core/newsletter_models.py",
+      "change": "modified",
+      "git_blob_sha": "278037286f312aa3791eb60a6bd427a1493b182a"
+    },
+    {
+      "path": "core/newsletter_views.py",
+      "change": "modified",
+      "git_blob_sha": "894b371344a9f9dfa911139dbd031db5a2b995ee"
+    },
+    {
+      "path": "core/seo_views.py",
+      "change": "modified",
+      "git_blob_sha": "2647e5d784f9ff162a02a8db2ede7a6433d76098"
+    },
+    {
+      "path": "core/templates/core/news.html",
+      "change": "added",
+      "git_blob_sha": "a3eff5a4efac95ad804f9c2c5570ca94ac5ff0df"
+    },
+    {
+      "path": "core/templates/core/newsletter_detail.html",
+      "change": "modified",
+      "git_blob_sha": "8df27efaf344fb3bcf98046502206e73bfaad960"
+    },
+    {
+      "path": "core/templates/core/weather.html",
+      "change": "modified",
+      "git_blob_sha": "c319a2ae308daa21f722b50bb9ecde783939e4a9"
+    },
+    {
+      "path": "core/views.py",
+      "change": "modified",
+      "git_blob_sha": "15fa79f9e42ebc6f6770d3a15602fd3a3ec8afa3"
+    },
+    {
+      "path": "core/weather_agent.py",
+      "change": "modified",
+      "git_blob_sha": "d1a8c2df76534f954f615ffd6d11f9a0e5775ee9"
+    },
+    {
+      "path": "core/weather_weekly_report.py",
+      "change": "added",
+      "git_blob_sha": "48aa2a30019c56308f60ba1d724c194767017cd2"
+    }
+  ]
+}

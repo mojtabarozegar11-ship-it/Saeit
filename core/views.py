@@ -1,6 +1,7 @@
 import os
 from django.conf import settings
 from .company_content_models import CompanyContentLink
+from .editorial_policy import blocked_story_reason, visible_news_stories, visible_story_links
 from django.db import connection
 from django.db.utils import DatabaseError
 from django.http import Http404
@@ -274,7 +275,10 @@ def platform_page(request, section):
         page["product_chain_count"] = len(page.get("product_chains", []))
         from django.utils import timezone
         from .models import NewsletterStory
-        page["company_activity_stories"] = NewsletterStory.objects.filter(story_type="company", status="published", published_at__lte=timezone.now()).exclude(company_activity_kind="").order_by("-published_at", "-created_at")[:24]
+        page["company_activity_stories"] = visible_news_stories(
+            NewsletterStory.objects.filter(story_type="company", status="published", published_at__lte=timezone.now())
+            .exclude(company_activity_kind="").order_by("-published_at", "-created_at"), limit=24
+        )
         from .company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
         activity_plan = CompanyActivityAgentPlan.objects.filter(code="company-activity-intelligence").first()
         page["company_activity_agent"] = {
@@ -320,7 +324,7 @@ def platform_page(request, section):
             from django.utils import timezone
             from .models import NewsletterStory
             story = NewsletterStory.objects.select_related("agent").filter(pk=index + 1, story_type="company", status="published", published_at__lte=timezone.now()).first()
-            if story is None:
+            if story is None or blocked_story_reason(story):
                 raise Http404
             activity_path = f"/company/activity-{story.pk}/"
             related_links = CompanyContentLink.objects.filter(newsletter_story=story).exclude(target_path=activity_path).select_related("newsletter_story", "knowledge_article")
@@ -529,7 +533,7 @@ def platform_page(request, section):
                     rel_prefix = {"department":"department","unit":"unit","project":"project","genetics":"genetics","product":"product","statutory":"statutory","craft":"craft","channel":"channel","social":"social","future":"future"}[rel_kind]
                     for rid, rtitle in rel_items:
                         related_nodes.append({"kind": rel_kind, "title": rtitle, "url": f"/company/{rel_prefix}-{rid}/"})
-                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article"), "related_nodes": related_nodes, "breadcrumb_jsonld": __import__("json").dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":f"https://zomorodmelal.ir{request.path}#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"},{"@type":"ListItem","position":2,"name":title,"item":f"https://zomorodmelal.ir{request.path}"}]}, ensure_ascii=False)}
+                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": visible_story_links(CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "newsletter_story__source", "knowledge_article")), "related_nodes": related_nodes, "breadcrumb_jsonld": __import__("json").dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":f"https://zomorodmelal.ir{request.path}#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"},{"@type":"ListItem","position":2,"name":title,"item":f"https://zomorodmelal.ir{request.path}"}]}, ensure_ascii=False)}
                 if index > 0:
                     detail_context["prev_url"] = f"/company/{prefix}-{index}/"
                     detail_context["prev_label"] = records[index - 1].get("title", "مورد قبلی") if isinstance(records[index - 1], dict) else str(records[index - 1])
@@ -555,7 +559,10 @@ def platform_page(request, section):
             {"department":"معاونت مسئولیت اجتماعی و فرهنگی","unit":"واحد مسئولیت اجتماعی","outputs":"برنامه‌های مذهبی، فرهنگی، ورزشی و گزارش اثر اجتماعی","targets":[("مسئولیت اجتماعی","/company/#company-social-responsibility"),("پروژه‌ها","/company/#company-projects"),("همکاری","/company/#company-collaboration")]},
         ]
     if section == "company":
-        page["company_content_links"] = CompanyContentLink.objects.filter(target_path="/company/").select_related("newsletter_story", "knowledge_article")
+        page["company_content_links"] = visible_story_links(
+            CompanyContentLink.objects.filter(target_path="/company/")
+            .select_related("newsletter_story", "newsletter_story__source", "knowledge_article")
+        )
         page["company_page_jsonld"] = _json.dumps({
             "@context": "https://schema.org",
             "@type": "WebPage",

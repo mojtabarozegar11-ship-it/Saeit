@@ -6,6 +6,8 @@ from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .editorial_signature import ensure_signed
+from .editorial_policy import blocked_news_reason
 
 ANALYSIS_HEADING = "توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل"
 MIN_AUTO_PUBLISH_SCORE = 90
@@ -52,6 +54,13 @@ def newsletter_quality_score(*, story_type, title, summary, body, source=None, e
 
 
 def create_draft(*, agent_code, story_type, title, summary, body, source=None, event_date=None, keywords=None, publish_at=None):
+    # Owner's absolute editorial exclusion applies to all newsletter categories.
+    exclusion = blocked_news_reason(
+        title, summary, body, keywords or [],
+        getattr(source, "title", ""), getattr(source, "publisher", ""), getattr(source, "url", ""),
+    )
+    if exclusion:
+        return None, f"editorial_prohibited:{exclusion}"
     agent = Agent.objects.get(code=agent_code, active=True)
     source_fingerprint = fingerprint(source.url) if source else ""
     fp = fingerprint(story_type, title, source_fingerprint, event_date or "")
@@ -69,10 +78,12 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
         slug = f"{base}-{n}"; n += 1
 
     # Research-based rule: weak/incomplete stories never enter automatic scheduling.
-    can_schedule = bool(publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
+    # Absolute exclusion demands semantic editorial review; a keyword filter alone
+    # cannot certify that any class of news is entirely nonpolitical.
+    can_schedule = False
     story = NewsletterStory.objects.create(
         agent=agent, source=source, story_type=story_type, title=title.strip(),
-        slug=slug, summary=summary.strip(), body=body.strip(), event_date=event_date,
+        slug=slug, summary=summary.strip(), body=ensure_signed(body), event_date=event_date,
         fingerprint=fp, source_fingerprint=source_fingerprint,
         seo_keywords=keywords or [], published_at=publish_at if can_schedule else None,
         status="scheduled" if can_schedule else "draft",
@@ -85,7 +96,7 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     if story.status == "draft":
         from .blog_distribution import queue_story_distribution
         queue_story_distribution(story)
-    return story, "created" if can_schedule or not publish_at else "quality_hold"
+    return story, "created" if not publish_at else "editorial_review_required"
 
 
 @transaction.atomic
@@ -188,7 +199,9 @@ def daily_quota_snapshot(day=None):
     for key, limit in (("company", company_limit), ("world", schedule.world_news_daily), ("report", schedule.reports_daily)):
         counts[key] = {"target": limit, "published": NewsletterStory.objects.filter(story_type=key, status="published", published_at__date=day).count()}
         counts[key]["remaining"] = max(0, limit - counts[key]["published"])
-    return {"date": day.isoformat(), "configured": True, "approval_required": schedule.publication_requires_approval, "quality_threshold": MIN_AUTO_PUBLISH_SCORE, "counts": counts}
+    return {"date": day.isoformat(), "configured": True, "approval_required": True,
+            "owner_policy_requires_editorial_review": True,
+            "quality_threshold": MIN_AUTO_PUBLISH_SCORE, "counts": counts}
 
 
 def register_source(*, publisher, title, url, kind="world", content_hash=""):
