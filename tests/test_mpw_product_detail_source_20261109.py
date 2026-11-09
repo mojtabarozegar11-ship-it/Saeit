@@ -3,6 +3,8 @@
 These checks deliberately do not submit orders or imply that production is deployed.
 """
 from pathlib import Path
+from decimal import Decimal
+from types import SimpleNamespace
 import re
 import unittest
 
@@ -74,6 +76,43 @@ class ProductTemplateSourceContract(unittest.TestCase):
         self.assertNotIn("<form", self.html.lower())
         self.assertNotIn("mailto:", self.html.lower())
         self.assertFalse(re.search(r'on(?:click|load|error)\s*=', self.html, re.I))
+
+    def _render_with_django(self, product_id, currency="USD", title="Example"):
+        try:
+            from django.conf import settings
+            from django.template import Context, Engine
+        except ImportError:
+            self.skipTest("Django is unavailable in this local environment")
+        if not settings.configured:
+            self.skipTest("Django settings are not configured")
+        template = Engine(
+            dirs=[str(TEMPLATE.parent.parent.parent)],
+            autoescape=True,
+        ).get_template("brands/mojplaywin/product.html")
+        product = SimpleNamespace(
+            pk=product_id, title=title, price=Decimal("7.50"),
+            currency=currency, description="Untrusted source text",
+        )
+        return template.render(Context({"product": product}))
+
+    def test_django_render_has_one_distinct_offer_per_current_sku(self):
+        for product_id, detail in (
+            (72, "415 pages"), (225, "40 pages"), (879, "five original SVG"),
+        ):
+            with self.subTest(sku=product_id):
+                html = self._render_with_django(product_id)
+                self.assertIn(detail, html)
+                self.assertIn(f'/commerce/book/{product_id}/', html)
+                self.assertIn("US $7.50", html)
+
+    def test_django_render_never_advertises_trial_or_wrong_currency(self):
+        self.assertNotIn('/commerce/book/779/', self._render_with_django(779))
+        self.assertNotIn('/commerce/book/72/', self._render_with_django(72, "EUR"))
+
+    def test_django_render_escapes_untrusted_product_title(self):
+        html = self._render_with_django(72, title='<img src=x onerror=alert(1)>')
+        self.assertIn('&lt;img src=x onerror=alert(1)&gt;', html)
+        self.assertNotIn('<img src=x onerror=alert(1)>', html)
 
 
 if __name__ == "__main__":
