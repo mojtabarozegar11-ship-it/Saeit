@@ -48,17 +48,47 @@ jobs:
         env:
           EXPECTED_SOURCE_SHA256: ${{ inputs.expected_source_sha256 }}
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          RELEASE_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          DEPLOYED=0
+          rollback_if_needed() {
+            previous=$?
+            trap - ERR
+            if [ "$DEPLOYED" = 1 ]; then
+              timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "EXPECTED_SOURCE_SHA256='$EXPECTED_SOURCE_SHA256' RELEASE_ID='$RELEASE_ID' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import hashlib,os,re
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');T=A/'core/templates/brands/mojplaywin/product.html'
+          release_id=os.environ['RELEASE_ID'];expected=os.environ['EXPECTED_SOURCE_SHA256'].lower()
+          if not re.fullmatch(r'[0-9]+-[0-9]+',release_id): raise RuntimeError('INVALID_RELEASE_ID')
+          backup=T.with_name('product.html.mpw-backup-'+release_id)
+          if A.is_symlink() or W.is_symlink() or T.is_symlink() or backup.is_symlink() or not backup.is_file(): raise RuntimeError('UNTRUSTED_ROLLBACK_TARGET')
+          if hashlib.sha256(T.read_bytes()).hexdigest()!=expected: raise RuntimeError('ROLLBACK_REFUSES_CHANGED_TARGET')
+          previous=backup.read_bytes();rb=T.with_name('.mpw-rollback-'+release_id)
+          fd=os.open(str(rb),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o640)
+          with os.fdopen(fd,'wb') as f:f.write(previous);f.flush();os.fsync(f.fileno())
+          os.replace(rb,T)
+          for folder in (A/'tmp',W.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True);flag=folder/'restart.txt';rfd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600);os.close(rfd);os.utime(flag,None)
+          if T.read_bytes()!=previous: raise RuntimeError('ROLLBACK_CONTENT_MISMATCH')
+          print('MPW_ROLLBACK_COMPLETE')
+          PY
+            fi
+            exit "$previous"
+          }
+          trap rollback_if_needed ERR
           TEMPLATE_B64="$(base64 -w0 core/templates/brands/mojplaywin/product.html)"
-          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "TEMPLATE_B64='$TEMPLATE_B64' EXPECTED_SOURCE_SHA256='$EXPECTED_SOURCE_SHA256' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
-          import os,sys,base64,hashlib,stat
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "TEMPLATE_B64='$TEMPLATE_B64' EXPECTED_SOURCE_SHA256='$EXPECTED_SOURCE_SHA256' RELEASE_ID='$RELEASE_ID' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,base64,hashlib,re
           from pathlib import Path
           A=Path('/home/zomorod2/Saeit-staging');W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');T=A/'core/templates/brands/mojplaywin/product.html'
           if A.is_symlink() or W.is_symlink() or not T.is_file() or T.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text(errors='replace'): raise RuntimeError('UNTRUSTED_TARGET')
+          release_id=os.environ['RELEASE_ID']
+          if not re.fullmatch(r'[0-9]+-[0-9]+',release_id): raise RuntimeError('INVALID_RELEASE_ID')
           raw=base64.b64decode(os.environ['TEMPLATE_B64']);expected=os.environ['EXPECTED_SOURCE_SHA256'].lower()
           if hashlib.sha256(raw).hexdigest()!=expected: raise RuntimeError('TRANSFER_SHA256_MISMATCH')
           new=raw.decode('utf8')
-          old=T.read_text('utf8'); backup=T.with_name('product.html.mpw-pre-full-v2-'+hashlib.sha256(old.encode()).hexdigest()[:12])
+          old=T.read_text('utf8'); backup=T.with_name('product.html.mpw-backup-'+release_id)
           if backup.exists():
               if backup.is_symlink() or backup.read_bytes()!=old.encode('utf8'): raise RuntimeError('UNTRUSTED_EXISTING_BACKUP')
           else:
@@ -93,12 +123,16 @@ jobs:
               print('MPW_TEMPLATE_ROLLED_BACK_AFTER_LOCAL_CHECK_FAILURE',file=sys.stderr)
               raise
           PY
+          DEPLOYED=1
           python3 - <<'PY'
           import urllib.request,urllib.error,json
           ps=('/store/','/store/product/72/','/store/product/225/','/store/product/879/','/commerce/trx-easy/','/commerce/book/72/','/commerce/book/225/','/commerce/book/879/','/commerce/trx-easy/purchases/','/sitemap.xml');o={}
+          detail_markers={'/store/product/72/':'415 pages','/store/product/225/':'40 pages','/store/product/879/':'five original SVG'}
           for p in ps:
               try:
-                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=30) as r:o[p]=r.status
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                      o[p]=r.status
+                      if p in detail_markers and detail_markers[p] not in r.read(200000).decode('utf8','replace'): raise RuntimeError('PRODUCT_DETAILS_NOT_LIVE_'+p)
               except urllib.error.HTTPError as e:o[p]=e.code
           print('MPW_ROUTES='+json.dumps(o,sort_keys=True))
           if any(v!=200 for v in o.values()):raise RuntimeError('ROUTE_QA_FAILED')
