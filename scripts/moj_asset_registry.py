@@ -133,7 +133,7 @@ def validate_program(program: dict) -> None:
     names = [item.get("name") for item in assets]
     if (any(type(name) is not str or not name.strip() or name != name.strip()
             for name in names)
-            or len(set(names)) != len(names)):
+            or len(set(unicodedata.normalize("NFKC", name).casefold() for name in names)) != len(names)):
         raise ValueError("asset_name_collision")
     # Reject unhashable, malformed or whitespace-padded identifiers before
     # set() or downstream template expansion. Fail predictably on corrupt
