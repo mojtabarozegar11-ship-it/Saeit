@@ -94,11 +94,31 @@ def test_preflight_performs_only_unauthenticated_https_get():
     with patch.object(client.request, "build_opener") as factory:
         factory.return_value.open.return_value = response
         result = client.probe_transport()
-        req = factory.return_value.open.call_args.args[0]
-    assert req.full_url == "https://zohal.pws-dns.net:2083/"
-    assert req.get_method() == "GET"
-    assert "Authorization" not in req.headers
+        requests = [call.args[0] for call in factory.return_value.open.call_args_list]
+    assert [req.full_url for req in requests] == [
+        "https://zohal.pws-dns.net:2083/",
+        "https://zohal.pws-dns.net:2083/execute/Version/get",
+    ]
+    assert all(req.get_method() == "GET" for req in requests)
+    assert all("Authorization" not in req.headers for req in requests)
     assert result["CPANEL_HTTPS_TLS"] == "VERIFIED"
+    assert result["CPANEL_UAPI_UNAUTH_HTTP_STATUS"] == 200
+    assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
+
+
+def test_preflight_reports_unauthenticated_api_challenge_without_claiming_login():
+    response = type("Response", (), {
+        "status": 200,
+        "__enter__": lambda self: self,
+        "__exit__": lambda self, *args: False,
+    })()
+    with patch.object(client.request, "build_opener") as factory:
+        factory.return_value.open.side_effect = [response, client.error.HTTPError(
+            "https://zohal.pws-dns.net:2083/execute/Version/get", 401,
+            "Unauthorized", {}, None,
+        )]
+        result = client.probe_transport()
+    assert result["CPANEL_UAPI_UNAUTH_HTTP_STATUS"] == 401
     assert result["CPANEL_HTTPS_AUTH"] == "NOT_ATTEMPTED"
 
 
