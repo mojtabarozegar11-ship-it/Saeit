@@ -17,6 +17,7 @@ on:
           - https_preflight
           - https_domains
           - https_passenger
+          - network_preflight
 
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
           fetch-depth: 1
 
       - name: Execute selected read-only cPanel SSH operation
-        if: ${{ !startsWith(inputs.operation, 'https_') }}
+        if: ${{ !startsWith(inputs.operation, 'https_') && inputs.operation != 'network_preflight' }}
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -64,3 +65,46 @@ jobs:
             https_passenger) python3 deploy/cpanel_https_api_readonly.py passenger ;;
             *) echo "CPANEL_HTTPS_OPERATION_DENIED" >&2; exit 64 ;;
           esac
+
+      - name: Check fixed TCP routes without SSH credentials
+        if: ${{ inputs.operation == 'network_preflight' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import errno
+          import socket
+
+          targets = (
+              ("VPS_PORT_22", "178.239.147.150", 22),
+              ("CPANEL_PORT_1396", "zohal.pws-dns.net", 1396),
+              ("CPANEL_PORT_22", "zohal.pws-dns.net", 22),
+          )
+          for label, host, port in targets:
+              try:
+                  addresses = socket.getaddrinfo(
+                      host, port, socket.AF_INET, socket.SOCK_STREAM
+                  )
+              except socket.gaierror:
+                  print(f"{label}=DNS_UNAVAILABLE")
+                  continue
+              result = "UNREACHABLE"
+              for address in addresses:
+                  try:
+                      with socket.socket(address[0], address[1], address[2]) as conn:
+                          conn.settimeout(8)
+                          conn.connect(address[4])
+                          conn.settimeout(3)
+                          try:
+                              banner = conn.recv(64)
+                              result = ("TCP_OPEN_SSH_BANNER" if
+                                        banner.startswith(b"SSH-") else "TCP_OPEN_BANNER_UNVERIFIED")
+                          except socket.timeout:
+                              result = "TCP_OPEN_BANNER_TIMEOUT"
+                          break
+                  except socket.timeout:
+                      result = "TIMEOUT"
+                  except OSError as exc:
+                      result = "CONNECTION_REFUSED" if exc.errno == errno.ECONNREFUSED else "UNREACHABLE"
+              print(f"{label}={result}")
+          PY
