@@ -15,6 +15,7 @@ from .factory_native_review_gateway import inspect_family
 from .factory_f41_gateway import build_verified_order
 
 from .models import AgentTask, Product
+from .commercial_funnel_policy import EVENT_NAMES, decide_funnel_followup
 from .production_gate import ProductionGate
 from .tool_gateway import ToolGateway, ToolSpec
 
@@ -41,6 +42,46 @@ def market_research(payload):
         "verified_effect": True,
         "evidence": _evidence("database_measurement", {"active_products": active_products, "queued_tasks": queued}),
         "next_action": "income_opportunity_score",
+    }
+
+
+def funnel_audit(payload):
+    """Measure actual Django commerce telemetry without claiming sales or cash.
+
+    This is deliberately a read-only query. Guest checkout on other sites and
+    provider settlement may live outside these Django tables; their absence
+    here is *not* evidence of zero orders or zero revenue.
+    """
+    from datetime import timedelta
+    from django.db.models import Count
+    from .models import CommerceFunnelEvent
+
+    period_end = timezone.now()
+    period_start = period_end - timedelta(days=30)
+    rows = CommerceFunnelEvent.objects.filter(
+        created_at__gte=period_start,
+        created_at__lt=period_end,
+    ).values("event_name").annotate(total=Count("pk"))
+    counts = {name: 0 for name in EVENT_NAMES}
+    for row in rows:
+        if row["event_name"] in counts:
+            counts[row["event_name"]] = row["total"]
+    offers = Product.objects.filter(active=True, price__gt=0).count()
+    followup = decide_funnel_followup(counts, offers)
+    snapshot = {
+        **followup,
+        "period_start_utc": period_start.isoformat(),
+        "period_end_utc": period_end.isoformat(),
+        "source": "local_django_commerce_funnel_events_only",
+        "guest_checkout_other_systems_included": False,
+    }
+    return {
+        "action_performed": "Measured 30-day local commerce-funnel events and selected a nonbinding investigation.",
+        "verified_effect": True,  # observation performed, NOT a sale
+        "evidence": _evidence("commerce_funnel_internal_telemetry", snapshot),
+        "verified_revenue": None,
+        "revenue_status": "external_reconciliation_required",
+        "next_action": followup["next_diagnostic"],
     }
 
 
@@ -410,6 +451,7 @@ def build_economic_gateway():
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
+        ToolSpec(code="income_funnel_audit", handler=funnel_audit, risk="low"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
         ToolSpec(code="income_mvp_build", handler=mvp_build, risk="medium"),
