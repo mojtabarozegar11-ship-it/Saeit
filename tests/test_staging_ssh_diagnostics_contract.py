@@ -65,5 +65,42 @@ class StagingSshPinTest(unittest.TestCase):
         self.assertIn("*) exit 1 ;;", self.diag)
         self.assertNotIn("sudo ", self.diag)
 
+    def _process_script(self):
+        row = next(line for line in self.diag.splitlines()
+                   if "staging_processes) remote=" in line)
+        return row.split("remote='", 1)[1].rsplit("' ;;", 1)[0]
+
+    def test_staging_process_mode_cannot_print_command_arguments(self):
+        self.assertNotIn("pid,comm,args", self.diag)
+        self.assertNotIn("cut -c1-180", self.diag)
+        self.assertIn("STAGING_FACTORY_COUNT", self.diag)
+        self.assertIn("STAGING_LOOP_COUNT", self.diag)
+
+    def test_staging_processes_emit_counts_not_secrets(self):
+        mock = 'ps() { printf "%s\n" "python3 factory_staging_tick --token=SECRET_ALPHA" "python3 stage1_10s_loop --password=SECRET_BETA"; }; '
+        run = subprocess.run(["bash", "-c", mock + self._process_script()],
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(run.stdout.splitlines(),
+                         ["STAGING_FACTORY_COUNT=1", "STAGING_LOOP_COUNT=1"])
+        self.assertNotIn("SECRET_ALPHA", run.stdout)
+        self.assertNotIn("SECRET_BETA", run.stdout)
+
+    def test_unavailable_process_readback_fails_closed(self):
+        run = subprocess.run(["bash", "-c",
+                              "ps() { return 2; }; " + self._process_script()],
+                             capture_output=True, text=True)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(run.stdout.strip(), "STAGING_PROCESS_READBACK=UNAVAILABLE")
+
+    def test_no_matching_staging_processes_returns_zero_counts(self):
+        mock = 'ps() { printf "%s\n" "bash --password=SECRET_OTHER"; }; '
+        run = subprocess.run(["bash", "-c", mock + self._process_script()],
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(run.stdout.splitlines(),
+                         ["STAGING_FACTORY_COUNT=0", "STAGING_LOOP_COUNT=0"])
+        self.assertNotIn("SECRET_OTHER", run.stdout)
+
 if __name__ == "__main__":
     unittest.main()
