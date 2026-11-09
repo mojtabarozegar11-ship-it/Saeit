@@ -36,11 +36,14 @@ MANAGEMENT_LOG = Path("/home/zomorod2/.private/zomorod-business/command-scan-cro
 LOG_TAIL_BYTES = 16384
 
 
+def _cron_marked_entries(entries, marker):
+    """Match an exact terminal cron comment, never a token in a command."""
+    pattern = re.compile(r"(?:^|\s)#\s*" + re.escape(marker) + r"\s*$")
+    return [line for line in entries if pattern.search(line)]
+
 
 def _management_cron_state(entries):
-    marked = [line for line in entries if re.search(
-        r"(?:^|\s)#\s*" + MANAGEMENT_MARKER + r"\s*$", line
-    )]
+    marked = _cron_marked_entries(entries, MANAGEMENT_MARKER)
     if not marked:
         return "ABSENT"
     if len(marked) != 1:
@@ -112,7 +115,7 @@ def summarize_cron(raw):
     result["MANAGEMENT_COMMAND_LOG"] = _management_log_state()
     result["MANAGEMENT_CRON_EXECUTION_PROVEN"] = "NO"
     result["MANAGEMENT_CRON_TIMEZONE_VERIFIED"] = "NO"
-    site = [line for line in entries if SITE_MARKER in line]
+    site = _cron_marked_entries(entries, SITE_MARKER.lstrip("# "))
     if not site:
         result["SITE_AGENTS_TEN_MINUTE"] = "ABSENT"
     elif len(site) > 1:
@@ -122,7 +125,7 @@ def summarize_cron(raw):
     else:
         result["SITE_AGENTS_TEN_MINUTE"] = "SCHEDULE_MISMATCH"
     for label, marker in ROBOT_MARKERS:
-        count = sum(marker in entry for entry in entries)
+        count = len(_cron_marked_entries(entries, marker))
         result[label] = "PRESENT_ONCE" if count == 1 else ("ABSENT" if count == 0 else "DUPLICATE")
     result["WORKER_EXECUTION_PROVEN"] = "NO"
     result["PRIVATE_DURABLE_RECEIPT_PROVEN"] = "NO"
