@@ -164,3 +164,39 @@ without the corresponding approval and safety gates.
 The project is not permitted to finance its own expansion with debt, credit,
 unsettled receipts, undocumented third-party funds or an assumed future
 return; every phase must be funded from verified, available operating surplus.
+
+## Engineering checkpoint — 2026-11-09 (development branch only)
+
+The following capabilities are source-coded, but **not yet deployed or
+end-to-end proven on the live VPS**:
+
+- `EconomicMasterAgent.authorize_self_funded_expense` checks development
+  purchases against the period-matched, same-currency 40% settled-revenue
+  ceiling **and** the existing operating-spend gate.
+- `core/development_approval_adapter.py` independently verifies the stored
+  approved, unexpired, unused, one-purpose owner grant for that exact vendor,
+  expense type, amount, currency and accounting period. This is a read-only
+  eligibility check; a future purchasing executor must use an atomic
+  transaction to consume the one-use grant **and** reserve the correct cash
+  ledger balance. A successful eligibility check is not a purchase permit.
+- `core/commercial_funnel_policy.py` ranks local checkout, payment-event and
+  delivery-event gaps without interpreting event counts as unique users,
+  provider receipts or settled cash.
+- `core/economic_tool_pack.py` exposes the read-only
+  `income_funnel_audit` capability. `core/autonomous_brain.py` prioritizes it
+  when newly recorded local funnel events have not yet been reviewed, and
+  `seed_online_income_agents.py` registers the capability. The audit does not
+  capture traffic from external storefront databases or payment providers.
+
+Run the focused isolated regression tests from the repository checkout:
+
+```bash
+python -m unittest discover -s tests -p 'test_*py' -q
+```
+
+This partial-checkout command passed 70 tests on 2026-11-09, including fake
+Django integration tests. It is **not** the full project's Django test suite,
+and cannot verify migrations, external payment reconciliation, production
+delivery, the live scheduler or operator-facing flows. Before deployment,
+run the complete repository tests with the actual dependencies and perform a
+read-only VPS preflight, then request separate release authorization.
