@@ -51,10 +51,15 @@ jobs:
           set -Eeuo pipefail
           RELEASE_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           DEPLOYED=0
+          INSTALL_ATTEMPTED=0
           rollback_if_needed() {
             previous=$?
             trap - ERR
-            if [ "$DEPLOYED" = 1 ]; then
+            # SSH can disconnect after cPanel atomically replaces the template
+            # but before its success response reaches the runner. A failed
+            # install attempt therefore needs the same digest-guarded rollback
+            # as a failed post-install check. An unchanged target is refused.
+            if [ "$INSTALL_ATTEMPTED" = 1 ]; then
               timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "EXPECTED_SOURCE_SHA256='$EXPECTED_SOURCE_SHA256' RELEASE_ID='$RELEASE_ID' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
           import hashlib,os,re
           from pathlib import Path
@@ -78,6 +83,7 @@ jobs:
           }
           trap rollback_if_needed ERR
           TEMPLATE_B64="$(base64 -w0 core/templates/brands/mojplaywin/product.html)"
+          INSTALL_ATTEMPTED=1
           timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "TEMPLATE_B64='$TEMPLATE_B64' EXPECTED_SOURCE_SHA256='$EXPECTED_SOURCE_SHA256' RELEASE_ID='$RELEASE_ID' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
           import os,sys,base64,hashlib,re
           from pathlib import Path
