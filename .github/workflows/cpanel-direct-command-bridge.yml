@@ -81,8 +81,13 @@ jobs:
               ("CPANEL_PORT_1396", "zohal.pws-dns.net", 1396),
               ("CPANEL_PORT_22", "zohal.pws-dns.net", 22),
           )
+          controls = (
+              ("CONTROL_GITHUB_SSH_22", "github.com", 22),
+              ("CONTROL_GITHUB_SSH_443", "ssh.github.com", 443),
+              ("CONTROL_CPANEL_HTTPS_2083", "zohal.pws-dns.net", 2083),
+          )
           any_open = False
-          for label, host, port in targets:
+          for label, host, port in (*targets, *controls):
               try:
                   addresses = socket.getaddrinfo(
                       host, port, socket.AF_INET, socket.SOCK_STREAM
@@ -94,7 +99,7 @@ jobs:
               for address in addresses:
                   try:
                       with socket.socket(address[0], address[1], address[2]) as conn:
-                          conn.settimeout(8)
+                          conn.settimeout(6)
                           conn.connect(address[4])
                           conn.settimeout(3)
                           try:
@@ -103,7 +108,8 @@ jobs:
                                         banner.startswith(b"SSH-") else "TCP_OPEN_BANNER_UNVERIFIED")
                           except socket.timeout:
                               result = "TCP_OPEN_BANNER_TIMEOUT"
-                          any_open = True
+                          if not label.startswith("CONTROL_"):
+                              any_open = True
                           break
                   except socket.timeout:
                       result = "TIMEOUT"
