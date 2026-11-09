@@ -77,6 +77,7 @@ jobs:
 
           targets = (
               ("VPS_PORT_22", "178.239.147.150", 22),
+              ("CPANEL_PINNED_SSH_PORT_1396", "178.239.147.125", 1396),
               ("CPANEL_PORT_1396", "zohal.pws-dns.net", 1396),
               ("CPANEL_PORT_22", "zohal.pws-dns.net", 22),
           )
