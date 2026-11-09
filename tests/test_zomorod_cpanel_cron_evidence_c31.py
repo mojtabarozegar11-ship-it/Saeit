@@ -38,6 +38,34 @@ class CronEvidenceTest(unittest.TestCase):
             "DUPLICATE",
         )
 
+    def test_site_marker_inside_command_is_not_a_cron_comment(self):
+        raw = '*/10 * * * * echo "zm-site-agents-only-v100"\n'
+        self.assertEqual(self.summarize(raw)["SITE_AGENTS_TEN_MINUTE"], "ABSENT")
+
+    def test_site_marker_prefix_is_not_a_match(self):
+        raw = "*/10 * * * * worker # zm-site-agents-only-v100_EXTRA"
+        self.assertEqual(self.summarize(raw)["SITE_AGENTS_TEN_MINUTE"], "ABSENT")
+
+    def test_robot_marker_inside_command_is_not_present(self):
+        marker = self.module["ROBOT_MARKERS"][0][1]
+        raw = "0 * * * * echo " + marker
+        self.assertEqual(self.summarize(raw)["MPW_V91"], "ABSENT")
+
+    def test_robot_marker_prefix_is_not_present(self):
+        marker = self.module["ROBOT_MARKERS"][0][1]
+        raw = "0 * * * * worker # " + marker + "_OTHER"
+        self.assertEqual(self.summarize(raw)["MPW_V91"], "ABSENT")
+
+    def test_exact_robot_marker_duplicate_is_rejected(self):
+        marker = self.module["ROBOT_MARKERS"][0][1]
+        job = "0 * * * * worker # " + marker
+        self.assertEqual(self.summarize(job + "\n" + job)["MPW_V91"], "DUPLICATE")
+
+    def test_marker_not_at_end_is_not_present(self):
+        marker = self.module["ROBOT_MARKERS"][0][1]
+        raw = "0 * * * * worker # " + marker + " # other-tag"
+        self.assertEqual(self.summarize(raw)["MPW_V91"], "ABSENT")
+
     def test_wrong_interval_is_not_verified(self):
         self.assertEqual(
             self.summarize("0 * * * * worker # zm-site-agents-only-v100")
