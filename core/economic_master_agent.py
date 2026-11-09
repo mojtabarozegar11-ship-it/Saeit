@@ -4,9 +4,10 @@ The agent's permanent mission is to increase verified project completion and
 verified revenue. Research is supporting work, not the terminal output.
 Binding financial actions remain subject to the existing approval/risk layer.
 """
-from .self_funding_policy import authorize_operating_expense
+from .self_funding_policy import ExpenseDecision, authorize_operating_expense
 from .revenue_growth_engine import prioritize_revenue_growth
 from .development_budget_policy import assess_development_budget
+from .development_approval_adapter import verify_owner_development_grant
 
 AGENT_CODE = "economic-master-agent"
 AGENT_TITLE = "Economic Master Agent"
@@ -135,8 +136,65 @@ class EconomicMasterAgent:
         }
 
     def authorize_self_funded_expense(self, **evidence):
-        """Apply the bounded self-funding gate; payment execution stays separate."""
-        return authorize_operating_expense(**evidence)
+        """Check bounded spending; new development needs two additional gates.
+
+        Infrastructure and business-software *acquisitions* must pass the
+        owner's 40% ceiling and an independently checked, case-specific owner
+        grant. A vendor name or caller-provided approval flag alone is never
+        proof. An actual payment executor must separately lock the cash
+        ledger and consume the one-use approval grant atomically.
+        """
+        expense_type = evidence.get("expense_type")
+        development_evidence = evidence.pop("development_financial_evidence", None)
+        approval_reference = evidence.pop("owner_approval_reference", None)
+        approval_checker = evidence.pop("owner_approval_checker", None)
+        account_currency = evidence.pop("account_currency", None)
+        # All new infrastructure and business-software acquisitions are
+        # development expenses. Existing subscriptions remain within the
+        # separate recurring-service ROI and budget policy.
+        if expense_type in {"infrastructure", "business_software"}:
+            if not isinstance(development_evidence, dict):
+                return ExpenseDecision(False, "development_budget_evidence_required")
+            financials = dict(development_evidence)
+            if (not isinstance(account_currency, str)
+                    or account_currency != financials.get("currency")):
+                return ExpenseDecision(False, "accounting_currency_mismatch_or_missing")
+            # The amount checked for the 40% cap must be the *same* amount
+            # checked by the vendor/budget policy; never trust a cheaper
+            # amount supplied in a separate development snapshot.
+            financials["proposed_development_cost"] = evidence.get("amount")
+            try:
+                decision = assess_development_budget(**financials)
+            except (TypeError, ValueError):
+                return ExpenseDecision(False, "invalid_development_financial_evidence")
+            if not decision.eligible_for_owner_approval:
+                return ExpenseDecision(False, decision.reason)
+            if not isinstance(approval_reference, str) or not approval_reference.strip():
+                return ExpenseDecision(False, "specific_owner_approval_reference_required")
+            if approval_checker is None:
+                approval_checker = verify_owner_development_grant
+            if not callable(approval_checker):
+                return ExpenseDecision(False, "specific_owner_approval_verifier_required")
+            try:
+                case_approved = approval_checker(
+                    approval_reference=approval_reference,
+                    expense_type=expense_type,
+                    vendor=evidence.get("vendor"),
+                    amount=evidence.get("amount"),
+                    currency=financials["currency"],
+                    accounting_period=financials["accounting_period"],
+                ) is True
+            except Exception:
+                case_approved = False
+            if not case_approved:
+                return ExpenseDecision(False, "specific_owner_approval_not_verified")
+
+        base = authorize_operating_expense(**evidence)
+        if not base.allowed:
+            return base
+        if expense_type in {"infrastructure", "business_software"}:
+            return ExpenseDecision(True, "development_eligible_with_verified_owner_case_approval")
+        return base
 
     def prioritize_revenue_growth(self, evidence_snapshot):
         """Select evidence-backed commercial work without spending or publishing."""
