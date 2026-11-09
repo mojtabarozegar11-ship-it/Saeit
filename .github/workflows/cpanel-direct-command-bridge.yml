@@ -14,6 +14,9 @@ on:
           - cpanel_preflight
           - django_check
           - django_migrations
+          - https_preflight
+          - https_domains
+          - https_passenger
 
 permissions:
   contents: read
@@ -24,7 +27,10 @@ concurrency:
 
 jobs:
   cpanel:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.actor == 'mojtabarozegar11-ship-it' ||
+       github.actor == 'chatgpt-codex-connector[bot]')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -34,11 +40,27 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
 
-      - name: Execute selected read-only cPanel operation
+      - name: Execute selected read-only cPanel SSH operation
+        if: ${{ !startsWith(inputs.operation, 'https_') }}
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          CPANEL_OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           test -n "$HOST_KEY"
-          bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
+          bash deploy/cpanel_direct_command.sh "$CPANEL_OPERATION"
+
+      - name: Inspect direct HTTPS cPanel route (no SSH)
+        if: ${{ startsWith(inputs.operation, 'https_') }}
+        env:
+          SAEIT_CPANEL_HTTPS_API_TOKEN: ${{ secrets.SAEIT_CPANEL_HTTPS_API_TOKEN }}
+          CPANEL_OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          case "$CPANEL_OPERATION" in
+            https_preflight) python3 deploy/cpanel_https_api_readonly.py preflight ;;
+            https_domains) python3 deploy/cpanel_https_api_readonly.py domains ;;
+            https_passenger) python3 deploy/cpanel_https_api_readonly.py passenger ;;
+            *) echo "CPANEL_HTTPS_OPERATION_DENIED" >&2; exit 64 ;;
+          esac
