@@ -128,6 +128,11 @@ def validate_program(program: dict) -> None:
         raise ValueError("invalid_asset_record")
     ids = [item.get("id") for item in assets]
     symbols = [item.get("symbol_candidate") for item in assets]
+    # Display names are user-facing asset identities; prevent ambiguous labels.
+    names = [item.get("name") for item in assets]
+    if (any(type(name) is not str or not name.strip() for name in names)
+            or len(set(names)) != len(names)):
+        raise ValueError("asset_name_collision")
     # Reject unhashable, malformed or whitespace-padded identifiers before
     # set() or downstream template expansion. Fail predictably on corrupt
     # JSON instead of raising an opaque TypeError or altering token identity.
