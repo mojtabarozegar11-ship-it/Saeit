@@ -105,6 +105,58 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_SOURCE_MISSING"):
             release.verify_staged_recovery_migration_parent(self.stage)
 
+    def test_known_host_migration_baseline_refuses_unapplied_recovery_parent(self):
+        report = {
+            "vendor": "mysql", "m39": True, "m49": False,
+            "unreviewed_core_migrations": list(release.EXPECTED_LIVE_CORE_MIGRATIONS),
+            "tables": [], "enabled": False, "mail": False,
+        }
+        with patch.object(release, "db_state", return_value=report):
+            with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_NOT_APPLIED"):
+                release.require_before_schema()
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_unapplied_parent_blocks_additive_release_before_source_changes(self):
+        run = "202611110001"
+        report = {
+            "vendor": "mysql", "m39": True, "m49": False,
+            "unreviewed_core_migrations": list(release.EXPECTED_LIVE_CORE_MIGRATIONS),
+            "tables": [], "enabled": False, "mail": False,
+        }
+        with patch.object(release, "db_state", return_value=report):
+            with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_NOT_APPLIED"):
+                release.publish_additive(self.stage, run)
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+        self.assertFalse((self.app / release.FILES["recovery"]).exists())
+        self.assertFalse((self.backups / run).exists())
+
+    def test_competing_0040_applied_branch_refuses_unverified_merge(self):
+        report = {
+            "unreviewed_core_migrations": [
+                "0040_agenttask_bridge_idempotency", "0040_commercefunnelevent"
+            ],
+        }
+        with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_0040_BRANCH_CONFLICT"):
+            release.require_recorded_recovery_parent(report)
+
+    def test_exact_parent_record_is_accepted_without_database_reads(self):
+        self.assertTrue(release.require_recorded_recovery_parent({
+            "unreviewed_core_migrations": ["0040_commercefunnelevent"],
+        }))
+        with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_NOT_APPLIED"):
+            release.require_recorded_recovery_parent({
+                "unreviewed_core_migrations": "0040_commercefunnelevent",
+            })
+
+    def test_activation_does_not_write_flags_when_parent_not_applied(self):
+        original = (self.app / release.FILES["settings"]).read_bytes()
+        with patch.object(release, "db_state", return_value={
+            "unreviewed_core_migrations": list(release.EXPECTED_LIVE_CORE_MIGRATIONS)
+        }):
+            with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_NOT_APPLIED"):
+                release.activate("202611110002")
+        self.assertEqual((self.app / release.FILES["settings"]).read_bytes(), original)
+
     def test_preflight_is_pure_and_builds_expected_changes(self):
         old, new = release.build_plan(self.stage)
         self.assertEqual(len(old), 7)
