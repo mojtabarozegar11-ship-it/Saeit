@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.mpw_search_readonly_provenance import TARGETS, audit, inspect_file
+from scripts.mpw_search_readonly_provenance import TARGETS, SITE_TARGETS, audit, inspect_file
 
 
 class ProvenanceTests(unittest.TestCase):
@@ -51,10 +51,31 @@ class ProvenanceTests(unittest.TestCase):
             (app / TARGETS["urlconf"]).write_text("robots.txt sitemap.xml", encoding="utf-8")
             site.mkdir()
             (site / "passenger_wsgi.py").write_text("APP='Saeit-staging'", encoding="utf-8")
+            php = site / SITE_TARGETS["sitemap_php"]
+            php.parent.mkdir(parents=True, exist_ok=True)
+            php.write_text('<?php $paths = []; // https://mojplaywin.com', encoding="utf-8")
+            (site / SITE_TARGETS["site_htaccess"]).write_text("RewriteRule ^sitemap.xml$ ...", encoding="utf-8")
             result = audit(app, site)
             self.assertTrue(all(entry["state"] == "present" for entry in result["files"].values()))
             self.assertTrue(all(result["signals"].values()))
             self.assertNotIn("<script", str(result))
+
+
+    def test_missing_php_source_is_observed_not_assumed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            app, site = root / "app", root / "site"
+            for relative in TARGETS.values():
+                target = app / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("placeholder", encoding="utf-8")
+            site.mkdir()
+            (site / "passenger_wsgi.py").write_text("placeholder", encoding="utf-8")
+            (site / SITE_TARGETS["site_htaccess"]).write_text("RewriteRule", encoding="utf-8")
+            result = audit(app, site)
+            self.assertEqual(result["files"]["sitemap_php"]["state"], "missing")
+            self.assertFalse(result["signals"]["php_sitemap_has_paths_array"])
+            self.assertFalse(result["signals"]["php_sitemap_mentions_mpw_origin"])
 
 
 if __name__ == "__main__":
