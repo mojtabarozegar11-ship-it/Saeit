@@ -4,6 +4,7 @@ Never invoke the command, a database, the production site, or an order writer.
 """
 import ast
 import runpy
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,9 +12,9 @@ from pathlib import Path
 PROBE = Path(__file__).resolve().parents[1] / "scripts/mpw_guest_runtime_readonly_readiness.py"
 SOURCE = PROBE.read_text(encoding="utf-8")
 TREE = ast.parse(SOURCE)
-ROOT_MATCH = runpy.run_path(str(PROBE), run_name="mpw_offline_only")[
-    "registered_passenger_root"
-]
+HELPERS = runpy.run_path(str(PROBE), run_name="mpw_offline_only")
+ROOT_MATCH = HELPERS["registered_passenger_root"]
+SOURCE_SHAPE = HELPERS["checkout_source_shape"]
 
 
 def literal_assignment(name):
@@ -137,6 +138,72 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
             if isinstance(node.func, (ast.Attribute, ast.Name))
         }
         self.assertFalse(invoked & forbidden_calls)
+
+    def test_missing_checkout_modules_have_no_source_shape_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = SOURCE_SHAPE(Path(directory))
+        self.assertEqual(
+            evidence["meaning"], "source_shape_only_not_runtime_or_payment_proof")
+        self.assertFalse(any(value for key, value in evidence.items()
+                             if key != "meaning"))
+
+    def test_static_contract_detects_bound_order_claim_and_atomic_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            services = Path(directory) / "services"
+            services.mkdir()
+            (services / "mpw_trx_guest_commerce.py").write_text(
+                "def _dispatch(request):\n"
+                "    return bound_checkout(request)\n", encoding="utf-8")
+            (services / "mpw_trx_email_recovery.py").write_text(
+                "def _posted_email(request):\n"
+                "    return request\n"
+                "def bound_checkout(request):\n"
+                "    with transaction.atomic():\n"
+                "        GuestOrderEmail.objects.create()\n", encoding="utf-8")
+            evidence = SOURCE_SHAPE(Path(directory))
+        self.assertTrue(all(value for key, value in evidence.items()
+                            if key != "meaning"))
+
+    def test_syntactically_invalid_recovery_never_passes_source_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            services = Path(directory) / "services"
+            services.mkdir()
+            (services / "mpw_trx_guest_commerce.py").write_text(
+                "def _dispatch(request):\n"
+                "    return bound_checkout(request)\n", encoding="utf-8")
+            (services / "mpw_trx_email_recovery.py").write_text(
+                "def bound_checkout(:\n", encoding="utf-8")
+            evidence = SOURCE_SHAPE(Path(directory))
+        self.assertTrue(evidence["adapter_dispatch_calls_bound_checkout"])
+        self.assertFalse(evidence["recovery_syntax_valid"])
+        self.assertFalse(evidence["recovery_defines_bound_checkout"])
+
+    def test_plain_binding_name_without_atomic_claim_is_insufficient(self):
+        with tempfile.TemporaryDirectory() as directory:
+            services = Path(directory) / "services"
+            services.mkdir()
+            (services / "mpw_trx_guest_commerce.py").write_text(
+                "def _dispatch(request):\n"
+                "    return bound_checkout(request)\n", encoding="utf-8")
+            (services / "mpw_trx_email_recovery.py").write_text(
+                "def _posted_email(request): return request\n"
+                "def bound_checkout(request): return request\n", encoding="utf-8")
+            evidence = SOURCE_SHAPE(Path(directory))
+        self.assertTrue(evidence["recovery_defines_bound_checkout"])
+        self.assertFalse(evidence[
+            "recovery_bound_checkout_references_guest_order_claim"])
+        self.assertFalse(evidence[
+            "recovery_bound_checkout_references_atomic_scope"])
+
+    def test_missing_route_is_isolated_from_migration_evidence(self):
+        route_guard = [
+            node for node in ast.walk(TREE) if isinstance(node, ast.ExceptHandler)
+            and isinstance(node.type, ast.Name) and node.type.id == "Resolver404"
+        ]
+        self.assertEqual(len(route_guard), 1)
+        self.assertIn('"resolved": False', SOURCE)
+        self.assertIn('"migration_evidence": migration_evidence', SOURCE)
+        self.assertIn('"checkout_code_source_shape_only": checkout_source_shape(APP)', SOURCE)
 
     def test_output_never_certifies_commercial_release(self):
         self.assertIn('"commercial_release_certified": False', SOURCE)
