@@ -290,6 +290,39 @@ def verify_guest_order_claim_schema(guest_order_email_model, database_connection
         raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_UNIQUE_ORDER_MISSING")
 
 
+
+def verify_staging_recovery_migration_graph(loader_factory) -> None:
+    """Verify the installed Django migration graph without opening a database.
+
+    The recovery 0049 migration depends on the commerce-funnel 0040 migration.
+    Successful isolated tests can mask a missing migration parent. Require the
+    actual staged files, a consistent graph and no competing core leaves.
+    This does not assert that any migration has run on production.
+    """
+    required = {
+        ("core", "0040_commercefunnelevent"),
+        ("core", "0049_mpw_guest_email_recovery"),
+        ("mpw_commerce", "0001_initial"),
+    }
+    try:
+        loader = loader_factory(None)
+        disk = loader.disk_migrations
+        if not required.issubset(disk):
+            raise RuntimeError("STAGING_RECOVERY_MIGRATION_SOURCE_MISSING")
+        recovery = disk[("core", "0049_mpw_guest_email_recovery")]
+        if ("core", "0040_commercefunnelevent") not in recovery.dependencies:
+            raise RuntimeError("STAGING_RECOVERY_MIGRATION_PARENT_MISMATCH")
+        loader.graph.validate_consistency()
+        conflicts = loader.detect_conflicts()
+        if any(app in conflicts for app in ("core", "mpw_commerce")):
+            raise RuntimeError("STAGING_RECOVERY_MIGRATION_CONFLICT")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("STAGING_RECOVERY_MIGRATION_GRAPH_UNAVAILABLE") from exc
+
+
+
 def verify_buyer_route_resolution(resolver):
     """Verify the actual Django URL table, not only a directly imported view.
 
@@ -342,6 +375,7 @@ def check_actual_staging_store() -> None:
     import django
     django.setup()
     from django.db import connection
+    from django.db.migrations.loader import MigrationLoader
     from django.test import RequestFactory
     from django.urls import resolve
     from core.models import GuestOrderEmail
@@ -354,6 +388,7 @@ def check_actual_staging_store() -> None:
             or not callable(getattr(recovery_module, "_posted_email", None))
             or not callable(getattr(recovery_module, "bound_checkout", None))):
         raise RuntimeError("STAGING_GUEST_RECOVERY_IMPORT_ORIGIN_MISMATCH")
+    verify_staging_recovery_migration_graph(MigrationLoader)
     verify_guest_order_claim_schema(GuestOrderEmail, connection)
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
