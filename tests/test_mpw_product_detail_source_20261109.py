@@ -47,6 +47,19 @@ class ProductTemplateSourceContract(unittest.TestCase):
         self.assertIn("five original SVG", self.html)
         self.assertIn("Demo photographs are", self.html)
 
+    def test_product_specific_contents_and_original_browser_recovery(self):
+        for phrase in (
+            "Critical-position worksheets",
+            "40 landscape-format pages",
+            "no exact age band is claimed",
+            "Project gallery and inquiry handoff",
+            "arrange hosting, branding details",
+            '/commerce/trx-easy/purchases/',
+            "original browser session",
+        ):
+            self.assertIn(phrase, self.html)
+        self.assertIn("Email receipts and cross-device email recovery are not currently available", self.html)
+
     def test_prices_are_dynamic_and_currency_gated(self):
         self.assertIn('product.currency == "USD"', self.html)
         self.assertIn("product.price|floatformat:2", self.html)
