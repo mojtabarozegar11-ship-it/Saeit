@@ -1,4 +1,4 @@
-# Mojtaba.bot — defensive incident response (draft)
+# Mojtaba.bot.ai — defensive incident response (draft)
 
 This module **does not mean that production protection is enabled**. It adds a
 side-effect-free defensive triage and evidence-record implementation for the
@@ -38,7 +38,7 @@ a separate deployment task.
 
 ## Required release gates
 
-- Identify actual live Mojtaba.bot deployment and its explicit scope of assets.
+- Identify actual live Mojtaba.bot.ai deployment and its explicit scope of assets.
 - Integrate authenticated telemetry and immutable external evidence storage;
   verify detection sensitivity, false positives, audit access and retention.
 - Verify offline/off-host backups and restore on an isolated owned system.
