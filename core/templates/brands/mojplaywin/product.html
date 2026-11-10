@@ -86,7 +86,11 @@
     {% if product.pk == 72 or product.pk == 225 or product.pk == 879 %}
       {% if product.currency == "USD" %}
         <p class="price">US ${{ product.price|floatformat:2 }}</p>
-        <a class="button" href="/commerce/book/{{ product.pk }}/">Continue to guest TRX checkout</a>
+        {% if product.active and product.metadata.asset_verified and product.metadata.license_verified and product.metadata.quality_approved and product.metadata.factory_publication_permission and product.metadata.checkout_enabled and product.metadata.rights_review_status == "independently_cleared" %}
+          <a class="button" href="/commerce/book/{{ product.pk }}/">Continue to guest TRX checkout</a>
+        {% else %}
+          <p class="note">New purchases are on hold until the file, third-party licenses, seller rights and independent review have been verified. Do not send any payment for this offer.</p>
+        {% endif %}
       {% else %}
         <p class="note">Checkout is unavailable until the catalog currency is reconciled. Please contact support; do not send a payment.</p>
       {% endif %}
