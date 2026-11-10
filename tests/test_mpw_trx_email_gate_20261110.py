@@ -121,24 +121,59 @@ class NewPurchaseEmailContract(unittest.TestCase):
         identity.assert_not_called()
         invoice.assert_not_called()
 
-    def test_valid_email_passes_to_original_invoice_handler(self):
-        guest = SimpleNamespace()
-        identity = Mock(return_value=(guest, "signed-token"))
-        invoice = Mock(return_value="invoice-response")
+    def test_valid_email_delegates_to_durable_order_binding(self):
+        # No invoice is created by this isolated test: the host recovery
+        # service owns the atomic GuestOrderEmail claim and invoice mapping.
+        identity = Mock()
+        invoice = Mock()
+        installer = Mock()
+        bound = Mock(return_value="bound-invoice-response")
+        recovery = types.ModuleType("services.mpw_trx_email_recovery")
+        recovery.bound_checkout = bound
+        rights = Mock()
+        email = Mock(return_value="buyer@example.com")
+        dispatch = source_function("_dispatch", {
+            "_host_ok": lambda request: True,
+            "_require_new_sale_rights": rights,
+            "_require_buyer_email": email,
+            "_identity": identity,
+            "_install_cookie": installer,
+            "Http404": MissingBuyerEmail,
+        })
+        req = request_with_emails("buyer@example.com")
+        with patch.dict(sys.modules, {
+            "services": types.ModuleType("services"),
+            "services.mpw_trx_email_recovery": recovery,
+        }):
+            result = dispatch(req, invoice, (), {"product_id": 72},
+                              create=True, require_new_sale=True)
+        self.assertEqual(result, "bound-invoice-response")
+        rights.assert_called_once_with(72)
+        email.assert_called_once_with(req)
+        bound.assert_called_once_with(
+            req, invoice, identity, installer, (), {"product_id": 72})
+        identity.assert_not_called()
+        invoice.assert_not_called()
+
+    def test_missing_order_binding_service_blocks_new_invoice(self):
+        guest = Mock()
+        invoice = Mock()
         dispatch = source_function("_dispatch", {
             "_host_ok": lambda request: True,
             "_require_new_sale_rights": Mock(),
             "_require_buyer_email": Mock(return_value="buyer@example.com"),
-            "_identity": identity,
-            "_install_cookie": lambda response, token: (response, token),
+            "_identity": guest,
+            "_install_cookie": Mock(),
             "Http404": MissingBuyerEmail,
         })
         req = request_with_emails("buyer@example.com")
-        result = dispatch(req, invoice, (), {"product_id": 72},
-                          create=True, require_new_sale=True)
-        self.assertEqual(result, ("invoice-response", "signed-token"))
-        self.assertIs(req.user, guest)
-        invoice.assert_called_once_with(req, product_id=72)
+        with patch.dict(sys.modules, {"services.mpw_trx_email_recovery": None}):
+            with self.assertRaisesRegex(
+                    MissingBuyerEmail, "Email-bound checkout is unavailable"):
+                dispatch(req, invoice, (), {"product_id": 72},
+                         create=True, require_new_sale=True)
+        guest.assert_not_called()
+        invoice.assert_not_called()
 
     def test_paid_invoice_recovery_does_not_require_email_again(self):
         identity = Mock(return_value=(SimpleNamespace(), "existing-token"))
