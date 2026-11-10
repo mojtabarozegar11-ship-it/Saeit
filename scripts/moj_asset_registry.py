@@ -446,7 +446,8 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
             # indistinguishable in human-reviewed allocation manifests.
             if any(unicodedata.category(char).startswith("C") for char in label):
                 raise ValueError("invalid_allocation_holder_label")
-            normalized = unicodedata.normalize("NFKC", label).casefold()
+            normalized = (unicodedata.normalize("NFKC", label).casefold()
+                          .replace("ي", "ی").replace("ك", "ک"))
             if normalized in normalized_labels:
                 raise ValueError("duplicate_allocation_holder_label")
             normalized_labels.add(normalized)
