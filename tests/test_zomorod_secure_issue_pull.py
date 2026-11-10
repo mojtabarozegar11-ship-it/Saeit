@@ -3,6 +3,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -145,3 +146,24 @@ def test_probe_never_invokes_ingress(tmp_path):
     ):
         assert pull.main(["--probe"]) == 0
     assert not list(tmp_path.iterdir())
+
+
+def test_real_ingress_cli_expects_positional_accept(tmp_path):
+    ingress = tmp_path / "company_ingress.py"
+    db = tmp_path / "command-center.sqlite3"
+    hmac_key = tmp_path / ".company-bridge.key"
+    recipient_key = tmp_path / ".issue-pull-recipient.pem"
+    for path in (ingress, db, hmac_key, recipient_key):
+        path.write_bytes(b"placeholder")
+        path.chmod(0o600)
+    with patch.object(
+        pull.subprocess, "run",
+        return_value=SimpleNamespace(returncode=0, stdout=b"ACCEPTED\n"),
+    ) as run:
+        pull.accept_envelope(
+            "{}", ingress=ingress, db=db,
+            hmac_key=hmac_key, recipient_key=recipient_key,
+        )
+    arguments = run.call_args.args[0]
+    assert arguments[3] == "accept"
+    assert "--action" not in arguments
