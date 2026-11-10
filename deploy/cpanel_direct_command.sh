@@ -142,13 +142,11 @@ case "$operation" in
     timeout 60s ssh -T -F "$work/config" "$cpanel_target" 'uapi --output=json PassengerApps list_applications' |
       python3 scripts/mojplaywin_cpanel_readonly_inventory.py
     ;;
-  cpanel_preflight)
-    timeout 90s ssh -T -F "$work/config" "$cpanel_target" 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'
-    ;;
-  django_check)
-    timeout 90s ssh -T -F "$work/config" "$cpanel_target" 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py check'
-    ;;
-  django_migrations)
-    timeout 90s ssh -T -F "$work/config" "$cpanel_target" 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+  cpanel_preflight|django_check|django_migrations)
+    # Stream this branch's auditable verifier to the pinned remote shell.
+    # It reads the public Passenger bootstrap and explicitly rejects a
+    # mismatched app root, interpreter, database configuration or fallback DB.
+    # Neither the verifier nor any application file is written to the host.
+    timeout 90s ssh -T -F "$work/config" "$cpanel_target" "python3 - $operation" < deploy/cpanel_public_runtime_readonly.py
     ;;
 esac
