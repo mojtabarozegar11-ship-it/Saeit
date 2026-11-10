@@ -55,3 +55,15 @@ Read-only Google Drive and Dropbox filename/content searches were performed for 
 | Changes to live checkout, VPS, cPanel or customer records | 0 |
 
 **Status:** investigative source crosswalk only. Remains **not legally cleared by this review**; this does not prove infringement. Keep PR in Draft, with no merge, deployment, email, financial commitment or live checkout mutation absent separate approval.
+
+## 6. Cycle 43 — Sites-owned preview provenance, not commercial-stock provenance
+
+The Sites owner account's metadata exposed the **actual preview project ID** `appgprj_6ad8bc1db4748191af8fb37df7c793aa`, slug `atelier-interior-kit-demo`, and the same URL that appears in the historical product catalog. As of 2026-11-10 the current Sites project **metadata title** is `PLT WorldForge — Project Decision Workspace`, even though its description still refers to a professional interior-design website kit. This is a **metadata identity discrepancy**, not proof of what the current browser actually renders.
+
+The project has 14 saved versions. The oldest listed version has a 12-file Sites release archive, the latest has 29 files, and the latest source revision is `831f38b000d60e19c3306b3f85ac362bdc45017b`. Those archives and the historical **11-member private paid ZIP** are independently identified artifact families, with different SHA-256 digests. They have **not** been byte-comparison audited or proven equivalent.
+
+The separate source-owned product template explicitly labels the Sites link a **related concept**, warns that WorldForge/planner tools and demo photographs are not sold, and refers to `/site-preview`. The Sites title drift confirms why the related concept must never be presented as the paid ZIP or as a copyright/redistribution-rights certificate.
+
+New source evidence snapshot: `catalog/mojplaywin/atelier_demo_identity_snapshot_20261110.json`. A read-only, fail-closed validator and six offline contract tests detect claims that Sites metadata alone confirms copyright, exact paid ZIP equivalence or commercial rights. They cannot independently authenticate a third-party asset license.
+
+**Source-only remediation in the Draft PR:** `core/templates/brands/mojplaywin/product.html` is now designed to withhold the guest checkout link unless the product is active, all relevant stock/licensing/publication flags are true and its rights review explicitly says `independently_cleared`. This is *conditional rendering*, not an independently verified live clearance process; the underlying evidence and live deployment still require separate review. Existing production was not changed.
