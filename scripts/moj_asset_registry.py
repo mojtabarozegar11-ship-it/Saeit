@@ -433,7 +433,7 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
         raise ValueError("allocation_asset_coverage_mismatch")
     totals = {}
     for asset_id, holders in allocations.items():
-        if not isinstance(holders, dict) or not holders:
+        if not isinstance(holders, dict) or not holders or len(holders) > 10_000:
             raise ValueError("invalid_allocation_holders")
         expected = _whole_number(assets[asset_id]["supply_tokens"])
         total = 0
