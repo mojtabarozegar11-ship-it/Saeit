@@ -427,6 +427,10 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
             if (type(label) is not str or not label.strip()
                     or label != label.strip() or len(label) > 100):
                 raise ValueError("invalid_allocation_holder_label")
+            # Invisible format/control characters can make distinct holder labels
+            # indistinguishable in human-reviewed allocation manifests.
+            if any(unicodedata.category(char).startswith("C") for char in label):
+                raise ValueError("invalid_allocation_holder_label")
             normalized = unicodedata.normalize("NFKC", label).casefold()
             if normalized in normalized_labels:
                 raise ValueError("duplicate_allocation_holder_label")
