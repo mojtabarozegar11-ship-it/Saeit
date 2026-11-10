@@ -326,7 +326,7 @@ def patch_commercial(namespace):
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
+    if isinstance(patterns, (tuple, list)):
         rebuilt = []
         route_names = (
             ("/start/", "start_order"), ("/invoice/", "show_invoice"),
@@ -337,5 +337,8 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+        namespace["COMMERCIAL_URLPATTERNS"] = type(patterns)(rebuilt)
+    elif patterns is not None:
+        # Do not claim a successful route patch for an unknown URL table type.
+        raise RuntimeError("Unsupported commercial route table")
     namespace["_mpw_guest_checkout_installed"] = True
