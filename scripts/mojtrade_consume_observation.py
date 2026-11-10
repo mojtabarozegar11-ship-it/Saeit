@@ -22,6 +22,8 @@ ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
+    "bitstamp-public-ohlc",
+    "binance-public-klines",
 })
 
 
