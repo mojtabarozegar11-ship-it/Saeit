@@ -207,6 +207,55 @@ def verify_guest_email_ownership_source(source: bytes) -> None:
         raise RuntimeError("STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN")
 
 
+
+def verify_guest_recovery_checkout_source(source: bytes) -> None:
+    """Refuse a staged email-claim adapter without its checkout dependency.
+
+    The public GET forms cannot exercise this module; a missing or stale
+    recovery dependency otherwise breaks invoice POST after the store switch.
+    This is a structural, read-only preflight, not a paid-order test.
+    """
+    if not 200 < len(source) < 120_000:
+        raise RuntimeError("STAGING_GUEST_RECOVERY_SOURCE_INVALID")
+    try:
+        tree = ast.parse(source.decode("utf-8"), filename="services/mpw_trx_email_recovery.py")
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError("STAGING_GUEST_RECOVERY_SOURCE_INVALID") from exc
+    functions = {
+        name: [item for item in tree.body if isinstance(item, ast.FunctionDef)
+               and item.name == name]
+        for name in ("_posted_email", "bound_checkout")
+    }
+    if any(len(nodes) != 1 for nodes in functions.values()):
+        raise RuntimeError("STAGING_GUEST_RECOVERY_CHECKOUT_NOT_PROVEN")
+    bound = functions["bound_checkout"][0]
+    calls = [node.func for node in ast.walk(bound) if isinstance(node, ast.Call)]
+    direct = {node.id for node in calls if isinstance(node, ast.Name)}
+    attributes = {node.attr for node in calls if isinstance(node, ast.Attribute)}
+    claim_create = any(
+        isinstance(node, ast.Attribute) and node.attr == "create"
+        and isinstance(node.value, ast.Attribute) and node.value.attr == "objects"
+        and isinstance(node.value.value, ast.Name)
+        and node.value.value.id == "GuestOrderEmail"
+        for node in calls
+    )
+    atomic = any(
+        isinstance(node, ast.Attribute) and node.attr == "atomic"
+        and isinstance(node.value, ast.Name) and node.value.id == "transaction"
+        for node in calls
+    )
+    import_claim = any(
+        isinstance(node, ast.ImportFrom) and node.level == 0
+        and node.module == "core.models"
+        and any(alias.name == "GuestOrderEmail" for alias in node.names)
+        for node in tree.body
+    )
+    if not (import_claim and "_posted_email" in direct and "_digest" in direct
+            and claim_create and atomic and
+            {"connect", "disconnect", "fullmatch"}.issubset(attributes)):
+        raise RuntimeError("STAGING_GUEST_RECOVERY_CHECKOUT_NOT_PROVEN")
+
+
 def verify_guest_order_claim_schema(guest_order_email_model, database_connection) -> None:
     """Read-only validation of the columns and one-order-one-claim DB constraint.
 
@@ -275,13 +324,16 @@ def check_actual_staging_store() -> None:
     target = APP / "core/mojplaywin_views.py"
     funnel = APP / "core/commerce_funnel.py"
     guest_adapter = APP / "services/mpw_trx_guest_commerce.py"
+    guest_recovery = APP / "services/mpw_trx_email_recovery.py"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
             not target.is_file() or funnel.is_symlink() or
             (funnel.exists() and not funnel.is_file()) or
-            guest_adapter.is_symlink() or not guest_adapter.is_file()):
+            guest_adapter.is_symlink() or not guest_adapter.is_file() or
+            guest_recovery.is_symlink() or not guest_recovery.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     verify_guarded_store_source(target.read_bytes())
     verify_guest_email_ownership_source(guest_adapter.read_bytes())
+    verify_guest_recovery_checkout_source(guest_recovery.read_bytes())
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -294,6 +346,14 @@ def check_actual_staging_store() -> None:
     from django.urls import resolve
     from core.models import GuestOrderEmail
     from core import mojplaywin_views
+    try:
+        from services import mpw_trx_email_recovery as recovery_module
+    except ImportError as exc:
+        raise RuntimeError("STAGING_GUEST_RECOVERY_IMPORT_UNAVAILABLE") from exc
+    if (Path(getattr(recovery_module, "__file__", "")).resolve() != guest_recovery.resolve()
+            or not callable(getattr(recovery_module, "_posted_email", None))
+            or not callable(getattr(recovery_module, "bound_checkout", None))):
+        raise RuntimeError("STAGING_GUEST_RECOVERY_IMPORT_ORIGIN_MISMATCH")
     verify_guest_order_claim_schema(GuestOrderEmail, connection)
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
