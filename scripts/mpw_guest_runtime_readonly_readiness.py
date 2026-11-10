@@ -32,6 +32,9 @@ SOURCE_PATHS = (
     "services/mpw_trx_guest_commerce.py",
     "services/mpw_trx_email_recovery.py",
     "services/mpw_trx_commercial_web.py",
+    "services/mpw_trx_commercial_context.py",
+    "services/mpw_trx_public_catalog.py",
+    "services/mpw_trx_guest_delivery.py",
     "services/mpw_trx_public_pages.py",
     "config/urls.py",
 )
@@ -154,6 +157,9 @@ def main() -> None:
             "route_evidence": route_evidence,
             "feature_flags_boolean": flags,
             "source_sha256": fingerprints,
+            "source_inventory_complete": all(
+                digest != "unavailable" for digest in fingerprints.values()
+            ),
             "schema_consistent": all_schemas,
             "recovery_email_currently_approved": flags[
                 "MPW_GUEST_RECOVERY_EMAIL_APPROVED"

@@ -42,6 +42,20 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
         self.assertEqual(mapping[("mpw_commerce", "0004_guesttrxdelivery")], {
             "mpw_commerce_guesttrxdelivery"})
 
+    def test_critical_runtime_module_fingerprints_are_explicit(self):
+        self.assertEqual(set(literal_assignment("SOURCE_PATHS")), {
+            "services/mpw_trx_guest_commerce.py",
+            "services/mpw_trx_email_recovery.py",
+            "services/mpw_trx_commercial_web.py",
+            "services/mpw_trx_commercial_context.py",
+            "services/mpw_trx_public_catalog.py",
+            "services/mpw_trx_guest_delivery.py",
+            "services/mpw_trx_public_pages.py",
+            "config/urls.py",
+        })
+        self.assertIn('"source_inventory_complete": all(', SOURCE)
+        self.assertNotIn(".env", literal_assignment("SOURCE_PATHS"))
+
     def test_recovery_send_and_invoice_send_remain_separate_flags(self):
         self.assertEqual(set(literal_assignment("FEATURE_FLAGS")), {
             "MPW_GUEST_EMAIL_SEND_APPROVED",
