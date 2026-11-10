@@ -6,6 +6,15 @@ Saeit master agent. Integration with authorized application telemetry, external
 log retention, incident notifications, approvals, and backup infrastructure is
 a separate deployment task.
 
+## Single-robot identity
+
+The only authorized *top-level* product identity is **Mojtaba.bot.ai**,
+with stable identifier `mojtaba.bot.ai`. The former public shorthand
+`Mojtaba.bot` resolves to this same identity; it does not create a second bot.
+Research, trading, security, factory and other specialist agents are internal
+components. `core.bot_identity` validates proposed top-level registries but
+does not migrate, disable, delete, or merge any live workers or database rows.
+
 ## Design and operating controls
 
 1. **Ingest:** `core.cyber_defense.make_security_event` accepts only fixed
