@@ -152,12 +152,16 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=False):
-    user, token = _identity(request, create=create)
     if require_new_sale:
+        # No guest principal or invoice is created for a rights-held offer.
+        # Existing POST CSRF and identity-rate checks still run for eligible offers.
+        if not _host_ok(request):
+            raise Http404
         product_id = kwargs.get("product_id") if "product_id" in kwargs else (
             args[0] if len(args) == 1 else None
         )
         _require_new_sale_rights(product_id)
+    user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
