@@ -47,12 +47,17 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
     call_command("audit_agent_fleet", stdout=output)
     report = json.loads(output.getvalue())
     assert report["mode"] == "read_only"
+    assert report["single_bot_contract"]["public_bot_id"] == "mojtaba.bot.ai"
+    assert report["single_bot_contract"]["declared_top_level_bot_count"] == 1
+    assert report["single_bot_contract"]["runtime_process_topology_attested"] is False
+    assert report["single_bot_contract"]["economic_orchestrator_active"] is True
     assert report["live_scheduler_attested"] is False
     assert report["verified_revenue_attested"] is False
     assert report["summary"]["unsupported_known_queue_tasks"] == 1
     assert report["summary"]["stale_running_tasks"] == 1
     assert report["summary"]["exact_duplicate_role_groups"] == 1
     rows = {row["code"]: row for row in report["agents"]}
+    assert all(row["public_bot_id"] == "mojtaba.bot.ai" for row in report["agents"])
     assert rows["economic-master-agent"]["known_registered_handlers"] == ["income_market_research"]
     assert "queued_task_not_supported_by_known_executor" in rows["economic-master-agent"]["findings"]
     assert "inactive_agent_has_pending_tasks" in rows["disabled-specialist"]["findings"]
