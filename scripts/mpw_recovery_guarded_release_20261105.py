@@ -147,6 +147,42 @@ def _source(stage, key):
     return data
 
 
+
+def verify_staged_recovery_migration_parent(stage):
+    """Fail before any write when the reviewed 0049 parent is not on cPanel.
+
+    The release tar includes the 0040 source for comparison only; this
+    operation does not install the parent, migrate it, or inspect order rows.
+    The host must already contain the exact reviewed parent migration.
+    """
+    relative_parent = Path("core/migrations/0040_commercefunnelevent.py")
+    staged_parent = stage / relative_parent
+    installed_parent = APP / relative_parent
+    for root, path in ((stage, staged_parent), (APP, installed_parent)):
+        if (root.is_symlink() or not root.is_dir() or path.is_symlink()
+                or not path.resolve().is_relative_to(root.resolve())):
+            fail("RECOVERY_MIGRATION_PARENT_PATH_UNSAFE")
+        if not path.is_file() or not (100 < path.stat().st_size < 20_000):
+            fail("RECOVERY_MIGRATION_PARENT_SOURCE_MISSING")
+    staged_bytes = staged_parent.read_bytes()
+    if installed_parent.read_bytes() != staged_bytes:
+        fail("RECOVERY_MIGRATION_PARENT_SOURCE_DRIFT")
+    try:
+        compile(staged_bytes.decode("utf-8"), str(staged_parent), "exec")
+        tree = ast.parse(_source(stage, "migration").decode("utf-8"))
+        migration = next(node for node in tree.body
+                         if isinstance(node, ast.ClassDef) and node.name == "Migration")
+        dependency_node = next(stmt.value for stmt in migration.body
+                               if isinstance(stmt, ast.Assign)
+                               and any(isinstance(name, ast.Name) and name.id == "dependencies"
+                                       for name in stmt.targets))
+        dependencies = ast.literal_eval(dependency_node)
+    except (StopIteration, SyntaxError, UnicodeDecodeError, ValueError, TypeError) as exc:
+        fail("RECOVERY_MIGRATION_PARENT_UNVERIFIABLE")
+    if ("core", "0040_commercefunnelevent") not in dependencies:
+        fail("RECOVERY_MIGRATION_PARENT_MISMATCH")
+    return True
+
 def build_plan(stage):
     """Pure source transform: no writes, Django imports or DB access."""
     old = {}
@@ -444,6 +480,7 @@ def publish_additive(stage, run):
     flag remain hard-coded OFF.
     """
     guard_host()
+    verify_staged_recovery_migration_parent(stage)
     old, new = build_plan(stage)
     baseline = require_before_schema()
     folder, manifest = private_backup(run, old, new)
@@ -475,6 +512,7 @@ def publish_additive(stage, run):
 
 def publish(stage, run, backup_sha):
     guard_host()
+    verify_staged_recovery_migration_parent(stage)
     old, new = build_plan(stage)
     require_before_schema()
     require_db_snapshot_evidence(run, backup_sha)
@@ -665,6 +703,7 @@ def main(argv):
         }, sort_keys=True), flush=True)
         print("MPW_RECOVERY01_LIVE_DB_STATE=" + json.dumps(db_state(), sort_keys=True),
               flush=True)
+        verify_staged_recovery_migration_parent(Path(argv[2]))
         old, new = build_plan(Path(argv[2]))
         require_before_schema()
         print("MPW_RECOVERY01_PREFLIGHT=" + json.dumps({
