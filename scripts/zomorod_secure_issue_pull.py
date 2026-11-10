@@ -271,7 +271,17 @@ def accept_envelope(
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PullError("INGRESS_EXECUTION_UNAVAILABLE") from exc
-    if result.returncode != 0 or result.stdout.strip() != b"ACCEPTED":
+    # The installed private ingress prints a multi-line receipt, not a bare
+    # "ACCEPTED" token.  It also emits the *next* one-use public key after
+    # rotating the recipient key.  Requiring the exact two success markers
+    # prevents a successful DB import from being misclassified as a failure
+    # (and leaving the write-ahead checkpoint permanently pending).
+    output_lines = set(result.stdout.splitlines())
+    if (
+        result.returncode != 0
+        or b"COMMAND_RECEIPT=ACCEPTED" not in output_lines
+        or b"COMMAND_QUEUE=UPDATED" not in output_lines
+    ):
         raise PullError("INGRESS_NOT_ACCEPTED")
 
 
