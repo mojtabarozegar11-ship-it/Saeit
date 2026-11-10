@@ -162,6 +162,17 @@ def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=Fal
         )
         _require_new_sale_rights(product_id)
         _require_buyer_email(request)
+    if create and require_new_sale:
+        # The host's recovery service atomically claims the exact new order
+        # with GuestOrderEmail. Validation alone is insufficient for recovery.
+        # If absent, fail closed before the invoice creator runs.
+        try:
+            from services.mpw_trx_email_recovery import bound_checkout
+        except ImportError as exc:
+            raise Http404("Email-bound checkout is unavailable") from exc
+        return bound_checkout(
+            request, view, _identity, _install_cookie, args, kwargs,
+        )
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -171,8 +182,8 @@ def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=Fal
 def _require_buyer_email(request):
     """Validate the submitted email before any new buyer account or invoice.
 
-    This is a guard only; the authoritative order handler must separately
-    persist the buyer/email association and own the delivery/recovery flow.
+    The new-sale dispatch must subsequently use bound_checkout to persist
+    an immutable per-order email claim, independent of outbound mail.
     """
     from django.core.exceptions import ValidationError
     from django.core.validators import validate_email
