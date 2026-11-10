@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Direct cPanel bridge. Read-only allowlist only.
 # The runner reaches cPanel through the pinned VPS jump host.
