@@ -447,6 +447,57 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                                 main("42425162111")
         cutover.assert_not_called()
 
+    def test_buyer_probe_deadline_aborts_remaining_gets(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import BUYER_ROUTE_TOTAL_SECONDS
+        self.assertLessEqual(BUYER_ROUTE_TOTAL_SECONDS, 25)
+        sink = io.StringIO()
+
+        class Reply:
+            status = 200
+
+            def __init__(self, request):
+                self.url = request.full_url
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return b"The Science and Practice of Chess Improvement Buy securely with native TRX"
+
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.time.monotonic",
+                   side_effect=[100, 100, 126]):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen",
+                       side_effect=lambda request, timeout: Reply(request)) as get:
+                with contextlib.redirect_stdout(sink):
+                    self.assertFalse(verify_public_buyer_routes("42425162108-before"))
+        self.assertEqual(get.call_count, 1)
+        self.assertIn('"checked": 1', sink.getvalue())
+        self.assertIn('"category": "probe_deadline_exceeded"', sink.getvalue())
+
+    def test_preparation_budget_refuses_mutation_before_ssh_timeout(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import PREFLIGHT_BUDGET_SECONDS, main
+        self.assertLessEqual(PREFLIGHT_BUDGET_SECONDS, 40)
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.pwd.getpwuid",
+                   return_value=SimpleNamespace(pw_name="zomorod2")):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.check_actual_staging_store"):
+                with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
+                           return_value=MARKER + b"x" * 2400):
+                    with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes",
+                               return_value=True):
+                        with patch("scripts.mpw_dynamic_store_cutover_20261108.time.monotonic",
+                                   side_effect=[100, 141]):
+                            with patch("scripts.mpw_dynamic_store_cutover_20261108.perform_cutover") as cutover:
+                                with self.assertRaisesRegex(RuntimeError,
+                                                            "CUTOVER_PREPARATION_TIME_BUDGET_EXCEEDED"):
+                                    main("42425162111")
+        cutover.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
