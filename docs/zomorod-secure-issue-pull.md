@@ -18,6 +18,15 @@ cron; not yet proven for a new encrypted owner command end-to-end**.
   The old version was backed up as `.issue-pull.before-receipt-fix-20261110.py`.
   Both `COMMAND_RECEIPT=ACCEPTED` and `COMMAND_QUEUE=UPDATED` are now
   required from the private importer's real multi-line output.
+- During the next cycle, the private checkpoint was checked directly:
+  `last_id=6719225487`, `pending=null`. The current public key was extracted
+  to an owner-only file outside `public_html` and matched the documented
+  fingerprint. A narrowly scoped sales-receipt **read-only** task was sealed
+  offline (1982 UTF-8 bytes, SHA256
+  `d4764b9e5e87ab96ca5e23961c0434f4a75012b790ba26b7dea58afe0d85ad92`).
+  It was **not posted, imported or executed**. The ciphertext is kept as an
+  intermediate local artifact and must be regenerated if the recipient key
+  rotates before authorization.
 
 ## Trust and operation
 
@@ -124,6 +133,9 @@ VPS and SSH configuration remain untouched.
 - [x] Cron enabled and successful second-cycle operation observed.
 - [x] Private ingress receipt mismatch corrected and tested.
 - [x] Offline encryption producer verified with independent OpenSSL round-trip.
+- [x] Actual recipient public key fingerprint verified, offline owner command
+      sealed, and ciphertext format checked against the exact live poller
+      contract (33 local tests passed).
 - [ ] VPS outbound pull or another permitted command route separately proven.
 
 No merge, paid resource, GitHub Action dispatch, VPS change, outgoing GitHub
