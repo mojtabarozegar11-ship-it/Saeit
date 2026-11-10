@@ -18,6 +18,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 
 
@@ -218,6 +219,52 @@ def public_response(run_id: str) -> bytes:
     return data
 
 
+class _InvoiceFormScanner(HTMLParser):
+    """Inspect GET-rendered forms only; never execute or disclose CSRF tokens."""
+
+    def __init__(self, action: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.action = action
+        self.active = None
+        self.verified = False
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "form":
+            self.active = {
+                "method": (attributes.get("method") or "").lower(),
+                "action": attributes.get("action"),
+                "email": False,
+                "csrf": False,
+            }
+        elif tag == "input" and self.active is not None:
+            if (attributes.get("name") == "email" and
+                    (attributes.get("type") or "").lower() == "email" and
+                    "required" in attributes):
+                self.active["email"] = True
+            if (attributes.get("name") == "csrfmiddlewaretoken" and
+                    bool(attributes.get("value"))):
+                self.active["csrf"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "form" and self.active is not None:
+            self.verified |= (self.active["method"] == "post" and
+                              self.active["action"] == self.action and
+                              self.active["email"] and self.active["csrf"])
+            self.active = None
+
+
+def has_guarded_guest_invoice_form(body: bytes, product_id: int) -> bool:
+    """Require the exact product-specific POST form, email input and CSRF."""
+    scanner = _InvoiceFormScanner(f"/commerce/trx-easy/start/{product_id}/")
+    try:
+        scanner.feed(body.decode("utf-8"))
+        scanner.close()
+    except (UnicodeDecodeError, ValueError):
+        return False
+    return scanner.verified
+
+
 def verify_public_buyer_routes(run_id: str) -> bool:
     """Require nine buyer-facing GET pages before and after public cutover.
 
@@ -238,8 +285,11 @@ def verify_public_buyer_routes(run_id: str) -> bool:
                 if reply.status == 200 and reply.geturl() == url:
                     body = reply.read(250_000)
                     if title in body and action in body:
-                        checked += 1
-                        continue
+                        checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
+                        if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
+                            checked += 1
+                            continue
+                        category = "checkout_form_invalid"
         except urllib.error.HTTPError as exc:
             category = ("http_" + str(exc.code) if exc.code in
                         (403, 404, 429, 500, 502, 503, 504) else "http_other")
