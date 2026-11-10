@@ -54,6 +54,30 @@ class ObservationConsumerTests(unittest.TestCase):
             self.assertEqual(report["orders"], 0)
             self.assertEqual([s["symbol"] for s in report["signals"]], ["BTC/USD", "ETH/USD"])
 
+    def test_all_documented_fallback_sources_are_research_only(self):
+        sources = (
+            "coinbase-exchange-public-candles",
+            "kraken-spot-public-ohlc",
+            "bitfinex-public-candles",
+            "bitstamp-public-ohlc",
+            "binance-public-klines",
+        )
+        with tempfile.TemporaryDirectory() as root:
+            private = Path(root) / "private"
+            private.mkdir(mode=0o700)
+            source = private / "observation.json"
+            for provider in sources:
+                item = payload(self.now)
+                for signal in item["signals"]:
+                    signal["data_source"] = provider
+                source.write_text(json.dumps(item), encoding="utf-8")
+                os.chmod(source, 0o600)
+                report = consumer.read_observation(source, self.now)
+                self.assertEqual(report["execution"], "disabled")
+                self.assertEqual(report["orders"], 0)
+                self.assertEqual(report["action"], "research_only")
+                self.assertEqual({s["data_source"] for s in report["signals"]}, {provider})
+
     def test_rejects_expired_or_future_payload(self):
         with tempfile.TemporaryDirectory() as root:
             private = Path(root) / "private"
