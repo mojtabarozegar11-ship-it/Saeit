@@ -57,6 +57,18 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
         self.assertIn('"source_inventory_complete": all(', SOURCE)
         self.assertNotIn(".env", literal_assignment("SOURCE_PATHS"))
 
+    def test_every_current_offer_and_recovery_url_is_resolved_independently(self):
+        self.assertEqual(set(literal_assignment("PUBLIC_ROUTE_PATHS")), {
+            "/commerce/book/72/",
+            "/commerce/book/225/",
+            "/commerce/book/879/",
+            "/commerce/trx-easy/start/72/",
+            "/commerce/trx-easy/start/225/",
+            "/commerce/trx-easy/start/879/",
+            "/commerce/trx-easy/recover/",
+        })
+        self.assertIn("for path in PUBLIC_ROUTE_PATHS:", SOURCE)
+
     def test_recovery_send_and_invoice_send_remain_separate_flags(self):
         self.assertEqual(set(literal_assignment("FEATURE_FLAGS")), {
             "MPW_GUEST_EMAIL_SEND_APPROVED",
@@ -215,3 +227,4 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
