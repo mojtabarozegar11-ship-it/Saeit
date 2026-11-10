@@ -162,7 +162,7 @@ def main(argv: list[str]) -> int:
         for key, value in result.items():
             print(f"{key}={value}")
         if not os.environ.get(TOKEN_ENV):
-            print("CPANEL_API_TOKEN_STATUS=NOT_CONFIGURED")
+            print("CPANEL_API_TOKEN_STATUS=NOT_PROVIDED_TO_PREFLIGHT")
             return 0
         print("CPANEL_API_TOKEN_STATUS=CONFIGURED_UNVERIFIED")
         # An existing token is checked only by an explicitly selected inventory
