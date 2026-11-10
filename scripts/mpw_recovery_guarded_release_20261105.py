@@ -289,6 +289,26 @@ def db_state():
         fail("DB_PREFLIGHT_UNEXPECTED_OUTPUT")
 
 
+
+def require_recorded_recovery_parent(report):
+    """Reject an unapplied or parallel 0040 parent before any release mutation.
+
+    A migration file being present on disk does not prove it is recorded in
+    django_migrations. Read only the existing migration-name summary; never
+    inspect buyers, payments or credentials.
+    """
+    parent = "0040_commercefunnelevent"
+    applied = report.get("unreviewed_core_migrations")
+    if not isinstance(applied, list) or parent not in applied:
+        fail("RECOVERY_MIGRATION_PARENT_NOT_APPLIED")
+    competing = [name for name in applied
+                 if isinstance(name, str) and name.startswith("0040_")
+                 and name != parent]
+    if competing:
+        fail("RECOVERY_MIGRATION_0040_BRANCH_CONFLICT")
+    return True
+
+
 def require_before_schema():
     report = db_state()
     before = {"vendor": "mysql", "m39": True, "m49": False,
@@ -304,6 +324,7 @@ def require_before_schema():
     # additive state. Any customer/payment/schema drift remains a hard stop.
     if report not in (before, post_additive, post_additive_active):
         fail("MIGRATION_BASELINE_DRIFT:" + json.dumps(report, sort_keys=True, separators=(",", ":")))
+    require_recorded_recovery_parent(report)
     return report
 
 
@@ -558,6 +579,7 @@ def rollback(run):
 def activate(run):
     """Open the already staged recovery route after explicit owner approval."""
     guard_host()
+    require_recorded_recovery_parent(db_state())
     if not re.fullmatch(r"[0-9]{8,20}", run):
         fail("INVALID_RUN_ID")
     path = APP / FILES["settings"]
@@ -672,6 +694,7 @@ def disable_flags(run):
 def verify():
     guard_host()
     report = db_state()
+    require_recorded_recovery_parent(report)
     if (report["vendor"] != "mysql" or not report["m49"] or
             report["unreviewed_core_migrations"] != EXPECTED_LIVE_CORE_MIGRATIONS or
             len(report["tables"]) != 3 or report["enabled"] or report["mail"]):
