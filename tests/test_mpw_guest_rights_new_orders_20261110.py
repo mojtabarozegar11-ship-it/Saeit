@@ -75,7 +75,9 @@ class GuestRightsNewOrdersOnly(unittest.TestCase):
         blocked_calls = [n for stmt in guard.body for n in ast.walk(stmt) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "issue"]
         allowed_calls = [n for stmt in guard.orelse for n in ast.walk(stmt) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "issue"]
         self.assertEqual(blocked_calls, [])
-        self.assertEqual(len(allowed_calls), 1)
+        self.assertEqual(allowed_calls, [])
+        self.assertNotIn("from .guest_orders import issue", VIEW.read_text("utf-8"))
+        self.assertIn("cannot bind your email", VIEW.read_text("utf-8"))
 
     def test_prior_paid_download_and_verification_are_not_new_invoice_gated(self):
         source = DOWNLOAD.read_text("utf-8")
