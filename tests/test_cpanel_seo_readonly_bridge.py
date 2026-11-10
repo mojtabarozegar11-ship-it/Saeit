@@ -1,5 +1,6 @@
 """Safety regression checks for the explicit, read-only cPanel SEO provenance relay."""
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,37 @@ def test_unsupported_operation_stops_before_key_requirements():
     )
     assert process.returncode == 64
     assert "CPANEL_DIRECT_OPERATION_DENIED" in process.stderr
+
+
+
+def test_invalid_vps_key_reports_safe_failure_stage(tmp_path):
+    env = os.environ.copy()
+    env.update({
+        "RUNNER_TEMP": str(tmp_path),
+        "VPS_KEY": "invalid-private-key-for-readonly-regression",
+        "HOST_KEY": "invalid-cpanel-key-for-readonly-regression",
+    })
+    process = subprocess.run(
+        ["bash", str(BRIDGE), "seo_provenance"],
+        env=env, check=False, capture_output=True, text=True, timeout=10,
+    )
+    assert process.returncode != 0
+    assert "CPANEL_BRIDGE_FAILURE_STAGE=vps_private_key_validation" in process.stderr
+    assert env["VPS_KEY"] not in process.stdout + process.stderr
+    assert env["HOST_KEY"] not in process.stdout + process.stderr
+
+
+def test_relay_stages_differentiate_host_key_and_remote_failures():
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    for stage in (
+        "vps_private_key_validation", "cpanel_private_key_validation",
+        "vps_host_keyscan", "vps_host_fingerprint",
+        "vps_to_cpanel_keyscan", "cpanel_host_fingerprint",
+        "seo_provenance_local_source", "seo_provenance_remote_readonly",
+    ):
+        assert f'bridge_stage="{stage}"' in bridge
+    assert "CPANEL_BRIDGE_FAILURE_STAGE=%s EXIT=%s" in bridge
+    assert "trap report_bridge_error ERR" in bridge
 
 
 def test_probe_contains_no_live_mutation_or_network_calls():
