@@ -9,8 +9,11 @@ from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     BUYER_ROUTE_PROBES, FALLBACK_BLOCK, MARKER, inspect_owned_fallback,
-    has_guarded_guest_invoice_form, perform_cutover, verify_buyer_route_resolution, verify_dynamic_public,
-    verify_guarded_store_source, verify_public_buyer_routes,
+    check_actual_staging_store, has_guarded_guest_invoice_form, perform_cutover,
+    verify_buyer_route_resolution, verify_dynamic_public,
+    verify_guarded_store_source, verify_guest_email_ownership_source,
+    verify_guest_order_claim_schema,
+    verify_public_buyer_routes,
 )
 
 
@@ -26,6 +29,19 @@ def store(request):
   logging.getLogger(__name__).warning("Optional analytics unavailable")
  return render(request, "mojplaywin/store.html", {"products": PRODUCTS})
 '''
+
+SAFE_GUEST_EMAIL_SOURCE = b'''from services.mpw_trx_email_recovery import _posted_email, bound_checkout
+def _new_user(request):
+    address = _posted_email(request)
+    user = request.user
+    user.email = address
+    user.save(update_fields=["email"])
+    return user
+def _dispatch(request, view, args, kwargs, *, create=False):
+    if create:
+        return bound_checkout(request, view, args, kwargs)
+    return view(request, *args, **kwargs)
+''' + b'# synthetic source guard\n' * 20
 
 
 def public_buyer_body(route, title, action):
@@ -135,6 +151,53 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                 b"mojplaywin/store.html", b"mojplaywin/other.html"))
         with self.assertRaisesRegex(RuntimeError, "STAGING_GUARDED_VIEW_NOT_PROVEN"):
             verify_guarded_store_source(SAFE_STORE_SOURCE + SAFE_STORE_SOURCE)
+
+    def test_staged_checkout_must_validate_and_persist_email_ownership(self):
+        verify_guest_email_ownership_source(SAFE_GUEST_EMAIL_SOURCE)
+        variants = (
+            SAFE_GUEST_EMAIL_SOURCE.replace(b"_posted_email(request)", b"request.POST.get('email')"),
+            SAFE_GUEST_EMAIL_SOURCE.replace(b"user.email = address", b"user.name = address"),
+            SAFE_GUEST_EMAIL_SOURCE.replace(b'user.save(update_fields=["email"])', b'user.save()'),
+            SAFE_GUEST_EMAIL_SOURCE.replace(b"return bound_checkout(", b"return view("),
+            SAFE_GUEST_EMAIL_SOURCE.replace(b"from services.mpw_trx_email_recovery import",
+                                            b"from unknown_module import"),
+        )
+        for invalid in variants:
+            with self.subTest(invalid=invalid[:90]):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN"):
+                    verify_guest_email_ownership_source(invalid)
+
+    def test_unparseable_guest_adapter_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_OWNER_SOURCE_INVALID"):
+            verify_guest_email_ownership_source(b"def _new_user(:" + b"#" * 600)
+
+    def test_guest_order_claim_requires_real_schema_in_default_db(self):
+        model = SimpleNamespace(_meta=SimpleNamespace(db_table="core_guestorderemail"))
+        connection = SimpleNamespace(introspection=SimpleNamespace(
+            table_names=lambda: ["core_order", "core_guestorderemail"]))
+        verify_guest_order_claim_schema(model, connection)
+        missing = SimpleNamespace(introspection=SimpleNamespace(
+            table_names=lambda: ["core_order"]))
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_SCHEMA_MISSING"):
+            verify_guest_order_claim_schema(model, missing)
+        unavailable = SimpleNamespace(introspection=SimpleNamespace(
+            table_names=lambda: 1 / 0))
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_SCHEMA_UNKNOWN"):
+            verify_guest_order_claim_schema(model, unavailable)
+
+    def test_old_unbound_adapter_blocks_before_any_dynamic_store_mutation(self):
+        with tempfile.TemporaryDirectory() as root:
+            app = Path(root)
+            (app / "core").mkdir()
+            (app / "services").mkdir()
+            (app / "core/mojplaywin_views.py").write_bytes(SAFE_STORE_SOURCE)
+            # Matches the old logic's missing buyer-email binding while staying parseable.
+            old_source = SAFE_GUEST_EMAIL_SOURCE.replace(
+                b"return bound_checkout(", b"return view(")
+            (app / "services/mpw_trx_guest_commerce.py").write_bytes(old_source)
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", app):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN"):
+                    check_actual_staging_store()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
