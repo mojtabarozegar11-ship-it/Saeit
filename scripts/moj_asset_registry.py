@@ -132,6 +132,7 @@ def validate_program(program: dict) -> None:
     # Display names are user-facing asset identities; prevent ambiguous labels.
     names = [item.get("name") for item in assets]
     if (any(type(name) is not str or not name.strip() or name != name.strip()
+            or any(unicodedata.category(char).startswith("C") for char in name)
             for name in names)
             or len(set(unicodedata.normalize("NFKC", name).casefold() for name in names)) != len(names)):
         raise ValueError("asset_name_collision")
