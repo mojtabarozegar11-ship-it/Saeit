@@ -174,6 +174,17 @@ class ReadonlyExecutionTests(unittest.TestCase):
         self.assertIn('VPS_HOST_FINGERPRINT_MISMATCH', shell)
         self.assertNotIn('StrictHostKeyChecking no', shell)
 
+    def test_fallback_uses_proven_cpanel_hostname_without_weakening_direct_pin(self):
+        shell = (Path(__file__).resolve().parents[1] / "deploy" / "cpanel_direct_command.sh").read_text(encoding="utf-8")
+        direct = shell.split('Host saeit-cpanel-direct\n', 1)[1].split('Host saeit-cpanel\n', 1)[0]
+        relay = shell.split('Host saeit-cpanel\n', 1)[1].split('Host *\n', 1)[0]
+        self.assertIn('HostName 178.239.147.125', direct)
+        self.assertIn('ProxyJump none', direct)
+        self.assertIn('HostName zohal.pws-dns.net', relay)
+        self.assertIn('ProxyJump saeit-vps', relay)
+        self.assertIn('ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net', shell)
+        self.assertIn('SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04', shell)
+
     def test_verifier_never_executes_public_passenger_bootstrap(self):
         source = (Path(__file__).resolve().parents[1] / "deploy" / "cpanel_public_runtime_readonly.py").read_text(encoding="utf-8")
         self.assertIn('ast.parse(bootstrap)', source)

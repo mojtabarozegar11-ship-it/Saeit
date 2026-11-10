@@ -4,7 +4,9 @@ set -euo pipefail
 # Direct cPanel bridge. Read-only allowlist only.
 # The fingerprint-pinned SSH node is 178.239.147.125:1396; the zohal
 # public HTTPS login hostname currently resolves to a different address.
-# Prefer the pinned direct SSH host; retain the pinned VPS relay as fallback.
+# Prefer the pinned direct SSH host. The VPS relay must retain the separately
+# proven cPanel hostname, rather than assuming its SSH IP matches the direct
+# node. Both paths still require the pinned host-key fingerprint.
 operation="${1:-}"
 case "$operation" in
   relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
@@ -53,7 +55,7 @@ Host saeit-cpanel-direct
   UserKnownHostsFile $work/host.known
   ProxyJump none
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -116,7 +118,7 @@ if [ -z "$route" ]; then
   done
 
   stage="verify_cpanel_host_key_via_vps"
-  if ! timeout 45s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null; then
+  if ! timeout 45s ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null; then
     echo "CPANEL_RELAY_HOST_KEY_UNREACHABLE" >&2
     exit 1
   fi
