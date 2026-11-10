@@ -220,3 +220,46 @@ For commit `74f3d08a9f2f4b807a3de0d1e3c94d77a2e4270a`, GitHub reports Django CI,
 - Invoice POST, on-chain payment, customer data read, new email, ticket, host edit, merge and deployment performed in this cycle: **0**.
 
 **Fail-closed next gate:** confirm the effective running URL resolution and schema migration state without changing customer data, review the host-vs-repository source divergence and exact paid artifact rights, and only then propose a narrowly reviewed integration plan. The live email-recovery message remains “not yet available” and must not be contradicted by marketing. Preserve existing paid customers while withholding unverified new sales.
+
+## 16. Cycle 54 — strengthen cPanel read-only probe root provenance (2026-11-10)
+
+The Cycle-53 branch introduced `scripts/mpw_guest_runtime_readonly_readiness.py` and
+`tests/test_mpw_guest_runtime_readonly_readiness_20261110.py`. The script is
+**not a production release tool**. It limits database access to schema metadata
+(`django_migrations` and table introspection) and does not read customer/order
+rows, create invoices, send email, deploy, or migrate.
+
+**New, actionable correction in Cycle 54:** before importing Django or making
+the schema/route inspection, the probe now verifies the cPanel public
+`.htaccess` explicitly declares **exactly one** `PassengerAppRoot` pointing
+to the known `mojplaywin.com` public root. A missing, symlinked or oversized
+file (>100000 bytes), no directive, duplicate directive, malformed quotes or
+root of another site yields a generic blocked reason and aborts. This closes
+a possible false positive where an otherwise correct `passenger_wsgi.py`
+file belongs to an unregistered or differently registered website. It is
+a **configuration-file validation**, not a claim to have inspected the
+effective running Passenger worker or its cached code.
+
+**Evidence checks:**
+- Prior Cycle-53 commit `94a47375cdcce649b7e78fa5926c8536c105351d`:
+  all three PR workflows (CI, Django CI and Factory Evidence Quality Policy
+  Tests) were verified **completed/success (3/3)**.
+- Current Cycle-54 probe and contract-test source files compile successfully
+  offline. The 13 contract-test methods were executed against the exact
+  branch contents in a no-filesystem-write, in-memory harness; **13/13 passed**.
+  Seven additional parser fixtures were checked separately and **7/7 passed**.
+  These results are checks of a read-only diagnostic and do not establish
+  release readiness or live runtime state.
+- At the first check for Cycle-54 head
+  `7fd9693b35a39b849fdb90de89ea481d12e51c08`, Factory Evidence
+  Quality was successful, while CI and Django CI were pending. Do not
+  count these pending runs as successes without a new check.
+- The production cPanel diagnostic itself was **not run** in this cycle:
+  the previous authenticated browser session had expired. Therefore actual
+  applied migration state, live flags, process-level URL resolution and
+  operational cross-browser recovery remain **UNKNOWN**.
+
+**Unchanged release hold:** independent SKU 72/225/879 rights packets
+authenticated here **0/3**; no live invoice/payment/delivery validation
+and no permission to merge or deploy. No payment, email, support ticket,
+server write, order creation, or deletion occurred.
