@@ -4,11 +4,13 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
-    verify_dynamic_public, verify_guarded_store_source,
+    verify_buyer_route_resolution, verify_dynamic_public,
+    verify_guarded_store_source,
 )
 
 
@@ -27,6 +29,48 @@ def store(request):
 
 
 class DynamicStoreCutoverTests(unittest.TestCase):
+    @staticmethod
+    def sample_route_resolver(path):
+        def handler(request):
+            return request
+        if path == "/store/":
+            return SimpleNamespace(url_name="store", args=(), kwargs={}, func=handler)
+        for product_id in (72, 225, 879):
+            if path == f"/store/product/{product_id}/checkout/":
+                return SimpleNamespace(url_name="product_checkout", args=(),
+                                       kwargs={"product_id": product_id}, func=handler)
+        raise LookupError("unknown route")
+
+    def test_all_three_real_buyer_url_routes_must_resolve(self):
+        callback = verify_buyer_route_resolution(self.sample_route_resolver)
+        self.assertTrue(callable(callback))
+
+    def test_missing_checkout_route_refuses_store_cutover(self):
+        def incomplete(path):
+            if path.endswith("/879/checkout/"):
+                raise LookupError("404")
+            return self.sample_route_resolver(path)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_BUYER_ROUTE_UNAVAILABLE"):
+            verify_buyer_route_resolution(incomplete)
+
+    def test_checkout_route_with_wrong_product_refuses_cutover(self):
+        def incorrect(path):
+            match = self.sample_route_resolver(path)
+            if path.endswith("/225/checkout/"):
+                match.kwargs = {"product_id": 72}
+            return match
+        with self.assertRaisesRegex(RuntimeError, "STAGING_BUYER_CHECKOUT_ROUTE_INVALID"):
+            verify_buyer_route_resolution(incorrect)
+
+    def test_wrong_store_url_handler_refuses_cutover(self):
+        def incorrect(path):
+            match = self.sample_route_resolver(path)
+            if path == "/store/":
+                match.url_name = "old_static_store"
+            return match
+        with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_URL_NOT_RESOLVED"):
+            verify_buyer_route_resolution(incorrect)
+
     def test_optional_existing_funnel_module_is_not_an_automatic_cutover_block(self):
         verify_guarded_store_source(SAFE_STORE_SOURCE)
 
