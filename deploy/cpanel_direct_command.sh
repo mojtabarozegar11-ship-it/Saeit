@@ -17,21 +17,36 @@ install -d -m 700 "$work"
 cleanup() { rm -rf -- "$work"; }
 trap cleanup EXIT
 
+# Report only the coarse failure stage; never log private keys or SSH output.
+bridge_stage="bootstrap"
+report_bridge_error() {
+  local result="$?"
+  printf 'CPANEL_BRIDGE_FAILURE_STAGE=%s EXIT=%s\n' "$bridge_stage" "$result" >&2
+}
+trap report_bridge_error ERR
+
 normalize_key() {
   local value="$1" destination="$2"
   printf '%s' "$value" | python3 -c 'import sys; s=sys.stdin.read(); s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n"; sys.stdout.write(s)' > "$destination"
   chmod 600 "$destination"
   ssh-keygen -y -P "" -f "$destination" >/dev/null
 }
+bridge_stage="vps_private_key_validation"
 normalize_key "$VPS_KEY" "$work/vps.key"
+bridge_stage="cpanel_private_key_validation"
 normalize_key "$HOST_KEY" "$work/host.key"
 
+bridge_stage="vps_host_keyscan"
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
+bridge_stage="vps_host_fingerprint"
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
+bridge_stage="vps_to_cpanel_keyscan"
 ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
+bridge_stage="cpanel_host_fingerprint"
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
+bridge_stage="ssh_config"
 cat > "$work/config" <<EOF
 Host saeit-vps
   HostName 178.239.147.150
@@ -58,6 +73,7 @@ Host *
 EOF
 chmod 600 "$work/config"
 
+bridge_stage="operation_${operation}"
 case "$operation" in
   relay_preflight)
     timeout 45s ssh -T -F "$work/config" saeit-vps 'printf "VPS_RELAY=READY\n"'
@@ -81,7 +97,9 @@ case "$operation" in
     ;;
   seo_provenance)
     # Execute the audited read-only probe over SSH stdin; do not install code on cPanel.
+    bridge_stage="seo_provenance_local_source"
     test -r scripts/mpw_search_readonly_provenance.py
+    bridge_stage="seo_provenance_remote_readonly"
     timeout 60s ssh -T -F "$work/config" saeit-cpanel \
       'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
       < scripts/mpw_search_readonly_provenance.py
