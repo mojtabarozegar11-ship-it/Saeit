@@ -27,6 +27,31 @@ class RightsEvidenceContract(unittest.TestCase):
             with self.subTest(sku=item["sku"]):
                 self.assertIsNone(item["evidence"]["independent_signed_rights_review"])
                 self.assertIsNone(item["evidence"]["author_to_seller_distribution_authority"])
+                self.assertEqual(set(item["evidence"]), rights.REQUIRED_EVIDENCE[item["sku"]])
+
+    def test_removed_required_license_field_is_rejected(self):
+        changed = copy.deepcopy(self.document)
+        del changed["products"][2]["evidence"]["one_site_client_resale_license_authority"]
+        with self.assertRaisesRegex(ValueError, "INCOMPLETE_OR_UNRECOGNIZED"):
+            rights.audit(changed)
+
+    def test_added_unrecognized_evidence_field_is_rejected(self):
+        changed = copy.deepcopy(self.document)
+        changed["products"][0]["evidence"]["automatic_approval"] = "yes"
+        with self.assertRaisesRegex(ValueError, "INCOMPLETE_OR_UNRECOGNIZED"):
+            rights.audit(changed)
+
+    def test_boolean_license_claim_is_not_evidence(self):
+        changed = copy.deepcopy(self.document)
+        changed["products"][1]["evidence"]["illustrations_and_third_party_assets_commercial_licenses"] = True
+        with self.assertRaisesRegex(ValueError, "INVALID_UNVERIFIED_EVIDENCE_REFERENCE"):
+            rights.audit(changed)
+
+    def test_empty_string_is_not_evidence(self):
+        changed = copy.deepcopy(self.document)
+        changed["products"][2]["evidence"]["independent_signed_rights_review"] = " \t "
+        with self.assertRaisesRegex(ValueError, "INVALID_UNVERIFIED_EVIDENCE_REFERENCE"):
+            rights.audit(changed)
 
     def test_duplicate_product_rejected(self):
         changed = copy.deepcopy(self.document)
