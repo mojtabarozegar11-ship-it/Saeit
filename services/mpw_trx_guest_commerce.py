@@ -151,8 +151,13 @@ def _install_cookie(response, token):
     return response
 
 
-def _dispatch(request, view, args, kwargs, *, create=False):
+def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=False):
     user, token = _identity(request, create=create)
+    if require_new_sale:
+        product_id = kwargs.get("product_id") if "product_id" in kwargs else (
+            args[0] if len(args) == 1 else None
+        )
+        _require_new_sale_rights(product_id)
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
@@ -172,13 +177,31 @@ def _record_funnel_event_best_effort(request, event, product):
     return True
 
 
+def _require_new_sale_rights(product_id):
+    """Fail closed before a NEW invoice; do not touch paid entitlement paths."""
+    from django.conf import settings
+    from core.models import Product
+    from mpw_commerce.buyer_orders import _eligible
+    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from services.mpw_trx_new_sale_policy import reviewed_for_new_sale
+
+    if (type(product_id) is not int or
+            product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())):
+        raise Http404("Product not available for a new order")
+    product = Product.objects.select_related("knowledge_article").filter(
+        pk=product_id, active=True,
+    ).first()
+    if (product is None or not _eligible(product) or
+            not rights_cleared_for_sale(product) or
+            not reviewed_for_new_sale(product)):
+        raise Http404("Independent product rights review is incomplete")
+    return product
+
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
     from django.shortcuts import render
-    from core.models import Product
-    from mpw_commerce.buyer_orders import _eligible
-    from services.mpw_trx_commercial_context import rights_cleared_for_sale
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
 
@@ -192,12 +215,7 @@ def _checkout_page(request, product_id, pages_namespace):
         if isinstance(exc, PaymentHold):
             raise Http404("TRX checkout is temporarily unavailable") from exc
         raise
-    if product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ()):
-        raise Http404
-    product = Product.objects.select_related("knowledge_article").filter(
-        pk=product_id, active=True).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
-        raise Http404
+    product = _require_new_sale_rights(product_id)
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
@@ -280,7 +298,10 @@ def patch_commercial(namespace):
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
-                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(
+                    request, view, args, kwargs, create=make_claim,
+                    require_new_sale=(view_name == "start_order"),
+                )
                 if view_name == "start_order":
                     # Order creation and its response are authoritative. The
                     # separate analytics lookup may be absent or unavailable.
