@@ -148,11 +148,33 @@ def verify_buyer_route_resolution(resolver):
             if (match.args or match.kwargs != {"product_id": product_id} or
                     not callable(match.func)):
                 raise RuntimeError("STAGING_BUYER_CHECKOUT_ROUTE_INVALID")
+            start_match = resolver(f"/commerce/trx-easy/start/{product_id}/")
+            if (start_match.args or
+                    start_match.kwargs != {"product_id": product_id} or
+                    not callable(start_match.func)):
+                raise RuntimeError("STAGING_INVOICE_START_ROUTE_INVALID")
     except RuntimeError:
         raise
     except Exception as exc:
         raise RuntimeError("STAGING_BUYER_ROUTE_UNAVAILABLE") from exc
     return store_match.func
+
+
+def verify_invoice_start_rejects_get(resolver, request_factory) -> None:
+    """Require POST-only invoice handlers without submitting an order.
+
+    The live checkout form posts to these targets. A GET must return 405 before
+    touching guest identity, ledger or an invoice; redirects or HTTP 200 could
+    mean the request is caught by an unrelated route.
+    """
+    for product_id in (72, 225, 879):
+        path = f"/commerce/trx-easy/start/{product_id}/"
+        match = resolver(path)
+        request = request_factory.get(path, secure=True, HTTP_HOST="mojplaywin.com")
+        response = match.func(request)
+        if (response.status_code != 405 or
+                "POST" not in response.get("Allow", "").upper().split(", ")):
+            raise RuntimeError("STAGING_INVOICE_START_POST_ONLY_NOT_PROVEN")
 
 
 def check_actual_staging_store() -> None:
@@ -177,7 +199,9 @@ def check_actual_staging_store() -> None:
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
     store_callback = verify_buyer_route_resolution(resolve)
-    page = store_callback(RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
+    factory = RequestFactory()
+    verify_invoice_start_rejects_get(resolve, factory)
+    page = store_callback(factory.get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
     if page.status_code != 200 or len(page.content) < 2000 or any(
             route not in page.content for route in PRODUCT_ROUTES):
         raise RuntimeError("REAL_STAGING_STORE_RENDER_FAILED")
