@@ -56,7 +56,7 @@ class ProductTemplateSourceContract(unittest.TestCase):
             "40 landscape-format pages",
             "no exact age band is claimed",
             "Project gallery and inquiry handoff",
-            "arrange hosting, branding details",
+            "hosting, branding details and photographs must be arranged separately",
             '/commerce/trx-easy/purchases/',
             "original browser session",
         ):
