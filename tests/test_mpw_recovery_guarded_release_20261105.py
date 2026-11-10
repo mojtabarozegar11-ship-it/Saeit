@@ -60,6 +60,13 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             (self.stage / release.FILES[name]).write_bytes(
                 (SOURCE / release.FILES[name]).read_bytes()
             )
+        # Match the reviewed migration parent without publishing anything.
+        self.parent_migration = Path("core/migrations/0040_commercefunnelevent.py")
+        reviewed_parent = (SOURCE / self.parent_migration).read_bytes()
+        for root_dir in (self.app, self.stage):
+            target = root_dir / self.parent_migration
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(reviewed_parent)
         self.patches = [
             patch.object(release, "APP", self.app),
             patch.object(release, "BACKUPS", self.backups),
@@ -73,6 +80,30 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         for patcher in reversed(self.patches):
             patcher.stop()
         self.tmp.cleanup()
+
+    def test_recovery_parent_source_matches_before_any_write(self):
+        self.assertTrue(release.verify_staged_recovery_migration_parent(self.stage))
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_missing_host_parent_blocks_additive_release_before_any_write(self):
+        (self.app / self.parent_migration).unlink()
+        with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_SOURCE_MISSING"):
+            release.publish_additive(self.stage, "202611100001")
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+        self.assertFalse((self.app / release.FILES["recovery"]).exists())
+
+    def test_divergent_host_parent_blocks_additive_release_before_any_write(self):
+        target = self.app / self.parent_migration
+        target.write_bytes(target.read_bytes() + b"\\n# unreconciled live migration\\n")
+        with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_SOURCE_DRIFT"):
+            release.publish_additive(self.stage, "202611100002")
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+        self.assertFalse((self.app / release.FILES["recovery"]).exists())
+
+    def test_missing_staged_parent_blocks_preflight(self):
+        (self.stage / self.parent_migration).unlink()
+        with self.assertRaisesRegex(RuntimeError, "RECOVERY_MIGRATION_PARENT_SOURCE_MISSING"):
+            release.verify_staged_recovery_migration_parent(self.stage)
 
     def test_preflight_is_pure_and_builds_expected_changes(self):
         old, new = release.build_plan(self.stage)
