@@ -41,11 +41,12 @@ jobs:
             exit 2
           fi
           echo AGENT_FLEET_PREFLIGHT_PRIVATE_KEY=valid_format
-          if ! ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null || ! test -s "$d/known"; then
-            echo AGENT_FLEET_PREFLIGHT_FAILURE=host_key_scan_unavailable
-            echo AGENT_FLEET_RUNTIME_STATUS=unknown_no_ssh_session
-            exit 3
-          fi
+          # The canonical RSA host public key was recorded through the owner's
+          # previously verified private relay. Its SHA256 pin is checked below.
+          # Reuse the known public key: live ssh-keyscan can time out before SSH
+          # can return its actual transport/authentication/identity diagnosis.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/known"
+          echo AGENT_FLEET_PREFLIGHT_HOST_KEY_SOURCE=verified_repository_pin
           if ! observed="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"; then
             echo AGENT_FLEET_PREFLIGHT_FAILURE=host_key_unreadable
             exit 3
@@ -62,7 +63,10 @@ jobs:
           else
             status=$?
             if test "$status" -eq 255; then
-              if grep -qi 'permission denied' "$d/ssh.stderr"; then
+              if grep -Eqi 'host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|no matching host key type found' "$d/ssh.stderr"; then
+                echo AGENT_FLEET_PREFLIGHT_FAILURE=ssh_host_identity_rejected
+                echo AGENT_FLEET_RUNTIME_STATUS=unknown_identity_not_verified
+              elif grep -qi 'permission denied' "$d/ssh.stderr"; then
                 echo AGENT_FLEET_PREFLIGHT_FAILURE=ssh_authentication_denied
               elif grep -Eqi 'timed out|no route to host|network is unreachable' "$d/ssh.stderr"; then
                 echo AGENT_FLEET_PREFLIGHT_FAILURE=ssh_transport_unreachable
