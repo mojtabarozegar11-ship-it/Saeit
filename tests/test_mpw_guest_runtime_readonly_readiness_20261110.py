@@ -3,6 +3,7 @@
 Never invoke the command, a database, the production site, or an order writer.
 """
 import ast
+import runpy
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from pathlib import Path
 PROBE = Path(__file__).resolve().parents[1] / "scripts/mpw_guest_runtime_readonly_readiness.py"
 SOURCE = PROBE.read_text(encoding="utf-8")
 TREE = ast.parse(SOURCE)
+ROOT_MATCH = runpy.run_path(str(PROBE), run_name="mpw_offline_only")[
+    "registered_passenger_root"
+]
 
 
 def literal_assignment(name):
@@ -71,11 +75,39 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
         self.assertFalse(any(word in s.upper().split()[:1]
                              for s in strings for word in forbidden))
 
+    def test_single_declared_absolute_passenger_root_is_accepted(self):
+        self.assertTrue(ROOT_MATCH("PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"))
+        self.assertTrue(ROOT_MATCH(
+            'PassengerAppRoot "/home/zomorod2/mojplaywin.com/" # cPanel\\n'
+        ))
+
+    def test_single_declared_relative_passenger_root_is_accepted(self):
+        self.assertTrue(ROOT_MATCH("PassengerAppRoot mojplaywin.com\\n"))
+        self.assertTrue(ROOT_MATCH("passengerapproot 'mojplaywin.com'\\n"))
+
+    def test_comments_and_absent_passenger_root_fail_closed(self):
+        self.assertFalse(ROOT_MATCH("# PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"))
+        self.assertFalse(ROOT_MATCH("PassengerAppEnv production\\n"))
+
+    def test_duplicate_and_wrong_passenger_root_fail_closed(self):
+        self.assertFalse(ROOT_MATCH(
+            "PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"
+            "PassengerAppRoot /home/zomorod2/other-site\\n"
+        ))
+        self.assertFalse(ROOT_MATCH("PassengerAppRoot /home/zomorod2/other-site\\n"))
+
+    def test_malformed_quoted_passenger_root_fails_closed(self):
+        self.assertFalse(ROOT_MATCH("PassengerAppRoot '/home/zomorod2/mojplaywin.com\\n"))
+        self.assertFalse(ROOT_MATCH('PassengerAppRoot /home/zomorod2/mojplaywin.com"\\n'))
+
     def test_production_user_and_bootstrap_guards_are_present(self):
         self.assertIn("WRONG_CPANEL_USER", SOURCE)
         self.assertIn("PUBLIC_BOOTSTRAP_MISMATCH", SOURCE)
         self.assertIn("PRODUCTION_ENV_NOT_EXPLICIT", SOURCE)
         self.assertIn("UNEXPECTED_DJANGO_SETTINGS", SOURCE)
+        self.assertIn("PUBLIC_PASSENGER_ROOT_UNSAFE", SOURCE)
+        self.assertIn("PUBLIC_PASSENGER_ROOT_MISMATCH", SOURCE)
+        self.assertIn('"passenger_registered_root_matches_public": True', SOURCE)
         self.assertIn("APP='/home/zomorod2/Saeit-staging'", SOURCE)
 
     def test_no_mail_order_or_migration_command_invocation(self):
