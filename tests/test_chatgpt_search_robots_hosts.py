@@ -2,6 +2,7 @@
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from core.seo_views import robots_txt, sitemap_xml
+from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeBook
 
 
 @override_settings(ALLOWED_HOSTS=[
@@ -61,3 +62,28 @@ class PublicSitemapCoverageTests(TestCase):
             with self.subTest(path=path):
                 noncanonical = f"<loc>https://zomorodmelal.ir/{path}</loc>"
                 self.assertNotIn(noncanonical.encode("utf-8"), response.content)
+
+    def test_sitemap_includes_published_books_only(self):
+        plan = KnowledgeAgentPlan.objects.create(
+            code="seo-publication-test", title="SEO visibility test",
+            mission="Test public publication state", goal="Avoid unfinished indexing",
+        )
+        for status in ("planned", "drafting", "review", "approved", "published"):
+            KnowledgeBook.objects.create(
+                plan=plan, code=f"seo-{status}-book", title=f"{status} book",
+                domain="SEO", objective="Visibility by publication state", status=status,
+            )
+        request = RequestFactory().get("/sitemap.xml", HTTP_HOST="zomorodmelal.ir")
+        response = sitemap_xml(request)
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn(
+            "<loc>https://zomorodmelal.ir/knowledge/book/seo-published-book/</loc>",
+            body,
+        )
+        for status in ("planned", "drafting", "review", "approved"):
+            with self.subTest(status=status):
+                self.assertNotIn(
+                    f"<loc>https://zomorodmelal.ir/knowledge/book/seo-{status}-book/</loc>",
+                    body,
+                )
