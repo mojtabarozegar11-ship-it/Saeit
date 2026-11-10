@@ -12,7 +12,7 @@ from scripts.mpw_dynamic_store_cutover_20261108 import (
     check_actual_staging_store, has_guarded_guest_invoice_form, perform_cutover,
     verify_buyer_route_resolution, verify_dynamic_public,
     verify_guarded_store_source, verify_guest_email_ownership_source,
-    verify_guest_order_claim_schema,
+    verify_guest_recovery_checkout_source, verify_guest_order_claim_schema,
     verify_public_buyer_routes,
 )
 
@@ -42,6 +42,27 @@ def _dispatch(request, view, args, kwargs, *, create=False):
         return bound_checkout(request, view, args, kwargs)
     return view(request, *args, **kwargs)
 ''' + b'# synthetic source guard\n' * 20
+
+
+SAFE_RECOVERY_CHECKOUT_SOURCE = b'''from core.models import GuestOrderEmail
+from django.db import transaction
+from django.db.models.signals import post_save
+import re
+INVOICE_RE = re.compile(r"invoice/(\\d+)/")
+def _posted_email(request):
+    return request.POST["email"]
+def _digest(email):
+    return email
+def bound_checkout(request, view, identity, install_cookie, args, kwargs):
+    email = _posted_email(request)
+    digest = _digest(email)
+    with transaction.atomic():
+        post_save.connect(lambda **kwargs: None)
+        GuestOrderEmail.objects.create(email_address=email, email_digest=digest)
+        post_save.disconnect()
+        match = INVOICE_RE.fullmatch("invoice/1/")
+    return match
+''' + b'# checkout dependency fixture\n' * 15
 
 
 def public_buyer_body(route, title, action):
@@ -170,6 +191,45 @@ class DynamicStoreCutoverTests(unittest.TestCase):
     def test_unparseable_guest_adapter_is_refused(self):
         with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_OWNER_SOURCE_INVALID"):
             verify_guest_email_ownership_source(b"def _new_user(:" + b"#" * 600)
+
+    def test_staging_recovery_dependency_must_bind_order_email_atomically(self):
+        verify_guest_recovery_checkout_source(SAFE_RECOVERY_CHECKOUT_SOURCE)
+        variants = (
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(b"def _posted_email(", b"def _unsafe_email("),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"email = _posted_email(request)", b"email = request.POST.get('email')"),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"GuestOrderEmail.objects.create(", b"OtherModel.objects.create("),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"with transaction.atomic():", b"with other_context():"),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"post_save.connect(", b"post_save.noop("),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"post_save.disconnect(", b"post_save.noop("),
+            SAFE_RECOVERY_CHECKOUT_SOURCE.replace(
+                b"INVOICE_RE.fullmatch(", b"INVOICE_RE.match("),
+        )
+        for invalid in variants:
+            with self.subTest(invalid=invalid[:90]):
+                with self.assertRaisesRegex(
+                        RuntimeError, "STAGING_GUEST_RECOVERY_CHECKOUT_NOT_PROVEN"):
+                    verify_guest_recovery_checkout_source(invalid)
+
+    def test_unparseable_recovery_dependency_is_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_RECOVERY_SOURCE_INVALID"):
+            verify_guest_recovery_checkout_source(b"def bound_checkout(:" + b"#" * 800)
+
+    def test_missing_staged_recovery_module_aborts_before_django_or_public_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "core").mkdir()
+            (root / "services").mkdir()
+            (root / "core/mojplaywin_views.py").write_bytes(SAFE_STORE_SOURCE)
+            (root / "services/mpw_trx_guest_commerce.py").write_bytes(
+                SAFE_GUEST_EMAIL_SOURCE)
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", root):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_SOURCE_DRIFT"):
+                    check_actual_staging_store()
 
     @staticmethod
     def _guest_order_schema(*, present=True, columns=None, unique=True, broken=False):
