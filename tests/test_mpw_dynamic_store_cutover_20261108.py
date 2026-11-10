@@ -287,6 +287,10 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             old_source = SAFE_GUEST_EMAIL_SOURCE.replace(
                 b"return bound_checkout(", b"return view(")
             (app / "services/mpw_trx_guest_commerce.py").write_bytes(old_source)
+            # Keep the new recovery dependency valid so this test isolates the
+            # older guest-adapter ownership failure rather than missing files.
+            (app / "services/mpw_trx_email_recovery.py").write_bytes(
+                SAFE_RECOVERY_CHECKOUT_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", app):
                 with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN"):
                     check_actual_staging_store()
