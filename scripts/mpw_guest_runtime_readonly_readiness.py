@@ -9,6 +9,7 @@ Run only in the authorized cPanel Python environment, with SAEIT_ENV=production.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -64,6 +65,68 @@ def registered_passenger_root(text: str) -> bool:
     return value.rstrip("/") in (str(PUBLIC), "mojplaywin.com")
 
 
+
+def checkout_source_shape(root: Path) -> dict:
+    """Inspect syntax and names only; never import checkout or recovery code.
+
+    A matching source shape is not proof that an invoice can be paid or
+    recovered, nor that migrations have been applied.
+    """
+    def syntax_tree(relative: str):
+        path = root / relative
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 300000:
+            return None
+        try:
+            return ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError):
+            return None
+
+    def function(tree, name: str):
+        if tree is None:
+            return None
+        return next(
+            (node for node in tree.body
+             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and node.name == name),
+            None,
+        )
+
+    def calls(node, name: str) -> bool:
+        return node is not None and any(
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+            and child.func.id == name
+            for child in ast.walk(node)
+        )
+
+    adapter = syntax_tree("services/mpw_trx_guest_commerce.py")
+    recovery = syntax_tree("services/mpw_trx_email_recovery.py")
+    dispatch = function(adapter, "_dispatch")
+    bound = function(recovery, "bound_checkout")
+    records_claim = bound is not None and any(
+        isinstance(node, ast.Name) and node.id == "GuestOrderEmail"
+        for node in ast.walk(bound)
+    )
+    uses_atomic = bound is not None and any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "atomic"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "transaction"
+        for node in ast.walk(bound)
+    )
+    return {
+        "meaning": "source_shape_only_not_runtime_or_payment_proof",
+        "adapter_syntax_valid": adapter is not None,
+        "adapter_dispatch_calls_bound_checkout": calls(dispatch, "bound_checkout"),
+        "recovery_syntax_valid": recovery is not None,
+        "recovery_defines_posted_email": function(recovery, "_posted_email") is not None,
+        "recovery_defines_bound_checkout": bound is not None,
+        "recovery_bound_checkout_references_guest_order_claim": records_claim,
+        "recovery_bound_checkout_references_atomic_scope": uses_atomic,
+    }
+
+
 def main() -> None:
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         stop("WRONG_CPANEL_USER")
@@ -95,7 +158,7 @@ def main() -> None:
         django.setup()
         from django.conf import settings
         from django.db import connections
-        from django.urls import resolve
+        from django.urls import Resolver404, resolve
 
         connection = connections["default"]
         with connection.cursor() as cursor:
@@ -125,12 +188,17 @@ def main() -> None:
 
         route_evidence = {}
         for path in ("/commerce/book/879/", "/commerce/trx-easy/start/879/"):
-            match = resolve(path)
-            route_evidence[path] = {
-                "resolved": True,
-                "handler_module": getattr(match.func, "__module__", "unknown"),
-                "handler_name": getattr(match.func, "__name__", "unknown"),
-            }
+            try:
+                match = resolve(path)
+            except Resolver404:
+                # A missing route must not erase independent schema evidence.
+                route_evidence[path] = {"resolved": False}
+            else:
+                route_evidence[path] = {
+                    "resolved": True,
+                    "handler_module": getattr(match.func, "__module__", "unknown"),
+                    "handler_name": getattr(match.func, "__name__", "unknown"),
+                }
 
         fingerprints = {}
         for relative in SOURCE_PATHS:
@@ -157,6 +225,7 @@ def main() -> None:
             "route_evidence": route_evidence,
             "feature_flags_boolean": flags,
             "source_sha256": fingerprints,
+            "checkout_code_source_shape_only": checkout_source_shape(APP),
             "source_inventory_complete": all(
                 digest != "unavailable" for digest in fingerprints.values()
             ),
