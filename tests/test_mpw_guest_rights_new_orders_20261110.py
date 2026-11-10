@@ -85,9 +85,12 @@ class GuestRightsNewOrdersOnly(unittest.TestCase):
         self.assertIn('elif action=="verify"', checkout_source)
         self.assertIn("confirm(order,", checkout_source)
 
-    def test_payment_initiation_is_never_executed_in_these_tests(self):
-        self.assertIn("source", "source")
-        self.assertNotIn("issue(", GATE.read_text("utf-8"))
+    def test_gate_is_pure_and_cannot_issue_or_download_files(self):
+        source = GATE.read_text("utf-8")
+        self.assertNotIn("issue(", source)
+        self.assertNotIn("from django", source)
+        self.assertNotIn("import django", source)
+        self.assertNotIn("FileResponse", source)
 
 
 if __name__ == "__main__":
