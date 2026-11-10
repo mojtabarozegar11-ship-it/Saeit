@@ -110,7 +110,7 @@ def main() -> None:
             if p.is_symlink() or not p.is_file() or p.stat().st_size > 300000:
                 fingerprints[relative] = "unavailable"
             else:
-                fingerprints[relative] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+                fingerprints[relative] = hashlib.sha256(p.read_bytes()).hexdigest()
 
         flags = {name: getattr(settings, name, False) is True
                  for name in FEATURE_FLAGS}
@@ -127,7 +127,7 @@ def main() -> None:
             "migration_evidence": migration_evidence,
             "route_evidence": route_evidence,
             "feature_flags_boolean": flags,
-            "source_sha256_prefix": fingerprints,
+            "source_sha256": fingerprints,
             "schema_consistent": all_schemas,
             "recovery_email_currently_approved": flags[
                 "MPW_GUEST_RECOVERY_EMAIL_APPROVED"
