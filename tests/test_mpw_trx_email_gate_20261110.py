@@ -51,6 +51,22 @@ class NewPurchaseEmailContract(unittest.TestCase):
                              "buyer@example.com")
         validator.assert_called_once_with("buyer@example.com")
 
+    def test_alternate_checkout_emails_cannot_override_required_email(self):
+        for alias in ("buyer_email", "customer_email", "purchaser_email",
+                      "purchase_email"):
+            for payload in (["other@example.com"], [""]):
+                with self.subTest(alias=alias, value=payload):
+                    posted = {"email": ["buyer@example.com"], alias: payload}
+                    request = SimpleNamespace(POST=SimpleNamespace(
+                        getlist=lambda name: posted.get(name, [])))
+                    validator = Mock()
+                    with patch.dict(sys.modules, fake_validator_modules(validator)):
+                        verify = source_function("_require_buyer_email",
+                                                 {"Http404": MissingBuyerEmail})
+                        with self.assertRaises(MissingBuyerEmail):
+                            verify(request)
+                    validator.assert_not_called()
+
     def test_missing_duplicate_or_blank_email_is_rejected(self):
         for values in ((), ("",), ("a@example.com", "b@example.com")):
             with self.subTest(values=values):
