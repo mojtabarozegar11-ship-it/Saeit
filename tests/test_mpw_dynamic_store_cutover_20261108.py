@@ -1,4 +1,5 @@
-"""Offline synthetic checks; never contacts cPanel or the public store."""
+"""Offline safety checks; never contacts cPanel or the public store."""
+import ast
 import contextlib
 import io
 import tempfile
@@ -13,6 +14,7 @@ from scripts.mpw_dynamic_store_cutover_20261108 import (
     verify_buyer_route_resolution, verify_dynamic_public,
     verify_guarded_store_source, verify_guest_email_ownership_source,
     verify_guest_recovery_checkout_source, verify_guest_order_claim_schema,
+    verify_staging_recovery_migration_graph,
     verify_public_buyer_routes,
 )
 
@@ -230,6 +232,85 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", root):
                 with self.assertRaisesRegex(RuntimeError, "STAGING_SOURCE_DRIFT"):
                     check_actual_staging_store()
+
+    def test_real_repository_recovery_migrations_have_complete_parent_chain(self):
+        root = Path(__file__).resolve().parents[1]
+        names = (
+            "0039_educationassessment_educationattempt_and_more",
+            "0040_commercefunnelevent",
+            "0049_mpw_guest_email_recovery",
+        )
+        migrations = {name: root / "core/migrations" / (name + ".py")
+                      for name in names}
+        self.assertTrue(all(path.is_file() for path in migrations.values()))
+
+        def dependencies(path):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            migration = next(node for node in tree.body
+                             if isinstance(node, ast.ClassDef) and node.name == "Migration")
+            binding = next(node.value for node in migration.body
+                           if isinstance(node, ast.Assign) and
+                           any(isinstance(target, ast.Name) and target.id == "dependencies"
+                               for target in node.targets))
+            return ast.literal_eval(binding)
+
+        self.assertIn(("core", names[0]), dependencies(migrations[names[1]]))
+        self.assertIn(("core", names[1]), dependencies(migrations[names[2]]))
+
+    @staticmethod
+    def _migration_loader(*, missing=None, parent=None, conflicts=None, broken=False):
+        required = {
+            ("core", "0040_commercefunnelevent"): SimpleNamespace(dependencies=[]),
+            ("core", "0049_mpw_guest_email_recovery"): SimpleNamespace(
+                dependencies=[parent or ("core", "0040_commercefunnelevent")]),
+            ("mpw_commerce", "0001_initial"): SimpleNamespace(dependencies=[]),
+        }
+        if missing:
+            required.pop(missing, None)
+
+        class Loader:
+            def __init__(self, connection):
+                if connection is not None:
+                    raise AssertionError("Migration graph must never inspect a database")
+                self.disk_migrations = required
+                self.graph = SimpleNamespace(validate_consistency=self.validate)
+
+            @staticmethod
+            def validate():
+                if broken:
+                    raise ValueError("missing migration dependency")
+
+            @staticmethod
+            def detect_conflicts():
+                return conflicts or {}
+
+        return Loader
+
+    def test_staged_migration_graph_verification_is_read_only(self):
+        verify_staging_recovery_migration_graph(self._migration_loader())
+
+    def test_missing_migration_source_or_wrong_parent_blocks_cutover(self):
+        for missing in (("core", "0040_commercefunnelevent"),
+                        ("core", "0049_mpw_guest_email_recovery"),
+                        ("mpw_commerce", "0001_initial")):
+            with self.subTest(missing=missing):
+                with self.assertRaisesRegex(
+                        RuntimeError, "STAGING_RECOVERY_MIGRATION_SOURCE_MISSING"):
+                    verify_staging_recovery_migration_graph(
+                        self._migration_loader(missing=missing))
+        with self.assertRaisesRegex(
+                RuntimeError, "STAGING_RECOVERY_MIGRATION_PARENT_MISMATCH"):
+            verify_staging_recovery_migration_graph(
+                self._migration_loader(parent=("core", "0039_legacy")))
+
+    def test_conflicting_or_corrupt_migration_graph_blocks_cutover(self):
+        with self.assertRaisesRegex(RuntimeError, "STAGING_RECOVERY_MIGRATION_CONFLICT"):
+            verify_staging_recovery_migration_graph(
+                self._migration_loader(conflicts={"core": ["0049", "0048"]}))
+        with self.assertRaisesRegex(
+                RuntimeError, "STAGING_RECOVERY_MIGRATION_GRAPH_UNAVAILABLE"):
+            verify_staging_recovery_migration_graph(
+                self._migration_loader(broken=True))
 
     @staticmethod
     def _guest_order_schema(*, present=True, columns=None, unique=True, broken=False):
