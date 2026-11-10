@@ -290,6 +290,49 @@ def db_state():
 
 
 
+def classify_migration_lineage(report):
+    """Classify migration metadata, not permission to change a live schema."""
+    if not isinstance(report, dict):
+        return "unknown_metadata"
+    migrations = report.get("unreviewed_core_migrations")
+    if (not isinstance(migrations, list) or
+            any(not isinstance(name, str) for name in migrations)):
+        return "unknown_metadata"
+    if report.get("vendor") != "mysql" or report.get("m39") is not True:
+        return "unexpected_database_baseline"
+    parent = "0040_commercefunnelevent"
+    competing = [name for name in migrations
+                 if name.startswith("0040_") and name != parent]
+    if parent in migrations and competing:
+        return "competing_0040_branches"
+    if migrations == EXPECTED_LIVE_CORE_MIGRATIONS and parent not in migrations:
+        return "known_factory_branch_needs_reconciliation"
+    if parent in migrations:
+        return "reviewed_recovery_parent_recorded_verify_other_gates"
+    return "unrecognized_migration_lineage"
+
+
+def audit_host_read_only():
+    """Report cPanel migration metadata; no staging, mail, restart or writes."""
+    guard_host()
+    report = db_state()
+    classification = classify_migration_lineage(report)
+    migrations = report.get("unreviewed_core_migrations")
+    print("MPW_RECOVERY01_READONLY_LINEAGE=" + json.dumps({
+        "classification": classification,
+        "release_authorized": False,
+        "migration_names_only": migrations,
+        "required_parent_applied": (
+            isinstance(migrations, list) and
+            "0040_commercefunnelevent" in migrations),
+        "recovery_migration_applied": report.get("m49"),
+        "recovery_tables_present": report.get("tables"),
+        "recovery_flag_enabled": report.get("enabled"),
+        "mail_flag_enabled": report.get("mail"),
+    }, sort_keys=True), flush=True)
+    return classification
+
+
 def require_recorded_recovery_parent(report):
     """Reject an unapplied or parallel 0040 parent before any release mutation.
 
@@ -709,7 +752,9 @@ def verify():
 
 
 def main(argv):
-    if len(argv) == 3 and argv[1] == "preflight":
+    if len(argv) == 2 and argv[1] == "audit":
+        audit_host_read_only()
+    elif len(argv) == 3 and argv[1] == "preflight":
         guard_host()
         # Read-only summary to distinguish an existing reviewed marker from
         # partial source staging; report no customer, payment or secret data.
@@ -749,7 +794,7 @@ def main(argv):
     elif len(argv) == 3 and argv[1] == "rollback":
         rollback(argv[2])
     else:
-        raise SystemExit("Usage: release.py preflight STAGE | publish_additive STAGE RUN_ID | publish STAGE RUN_ID DB_BACKUP_SHA256 | activate RUN_ID | verify | rollback RUN_ID")
+        raise SystemExit("Usage: release.py audit | preflight STAGE | publish_additive STAGE RUN_ID | publish STAGE RUN_ID DB_BACKUP_SHA256 | activate RUN_ID | verify | rollback RUN_ID")
 
 
 if __name__ == "__main__":
