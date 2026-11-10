@@ -90,3 +90,20 @@ The checked branch includes `mpw_guest_trx_20261020/guest_product.py`, which che
 Before removing the rights hold, obtain and examine, for each exact current sellable file: (1) current private-file hash and readable manifest, (2) dated editable creation history, (3) component-by-component authorship and third-party asset/license inventory, (4) the actual grant from author to the named selling entity and proposed buyer terms, (5) independent review of scope and authenticity, and (6) effective server-side direct-URL checkout and entitlement gates. The last item requires authorized read-only access to the deployed runtime/source, not merely CI or metadata booleans.
 
 **Cycle 44 conclusions:** GitHub workflows 3/3 green for the prior head; accessible independent documentary rights packets 0/3; live host and transactions untouched; no email, ticket, fee, merge or deployment.
+
+
+## 8. Cycles 45–46 — new-invoice gate without rewriting prior paid entitlements
+
+**Cycle 45:** source-only template regression was repaired at commit `18a4a2311dc083e4bcbb7bb62090c4de5766a930`; the three PR-triggered workflows completed successfully for that commit. A read-only visit to `https://cpanel.zomorodmelal.ir/` reached a login form only. Authenticated live source, effective direct checkout URL, stock hash and account state were **not** inspected; this cannot be claimed as a production verification.
+
+**Cycle 46 change, Draft branch only:**
+
+- Added `mpw_guest_trx_20261020/guest_rights.py`: a fail-closed **new-order-only** predicate for books 72 and 225. It requires an active product, `rights_review_status == "independently_cleared"`, and every five named release flag to be exactly boolean `true`. SKU 879 is intentionally outside this historical two-book route.
+- In `mpw_guest_trx_20261020/guest_checkout_view.py`, the `action == "start"` POST branch now checks the predicate *before* calling `issue()`; if the check fails, a user-facing hold notice explicitly says not to send funds.
+- Existing `action == "verify"`, `guest_download.py`, `guest_product.py`, receipt records and private files were **not** changed by this gate. Not adding a new hold to those code paths is important for preserving prior purchaser entitlements, but does not prove every earlier paid order can be retrieved in production.
+- Added eight offline regression methods in `tests/test_mpw_guest_rights_new_orders_20261110.py` covering affirmative and negative cases, strict boolean flags, invalid metadata, AST placement before `issue()`, separation from paid receipt/download and a pure helper.
+- The last test-only update is `e2f1f14e4bfad35ce158e74de86d44787631e17a`. As of initial review, the Factory Evidence Quality workflow passed while the two broader CI workflows were still pending; their final outcome must be checked separately.
+
+**Narrow applicability:** This change protects only the tracked *legacy* two-book guest-invoice start function if that function is actually deployed and invoked. It **does not demonstrate** that the live `/commerce/book/<id>/` route uses this handler, nor does it cover other order-creation APIs or the SKU 879 paid offer. A metadata status is a workflow switch, not independently authenticated rights documentation. No status was set to `independently_cleared` here.
+
+**Unchanged measured evidence:** exact three-product independently verified legal packets **0/3**; live deployment/merge **0**; paid buyer-flow transactions initiated in this review **0**. Retain the legal hold pending independently documented file/source provenance, seller authority, third-party component rights and authenticated route-by-route production review. No outbound mail/ticket, host write, financial commitment or live order mutation.
