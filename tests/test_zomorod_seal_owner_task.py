@@ -10,6 +10,7 @@ import subprocess
 import pytest
 
 from scripts import zomorod_seal_owner_task as seal
+from scripts import zomorod_secure_issue_pull as pull
 
 
 @pytest.fixture(scope="module")
@@ -125,3 +126,19 @@ def test_invalid_key_cannot_produce_envelope(keys, task, tmp_path):
     malformed.write_text("not a public key", encoding="utf-8")
     with pytest.raises(seal.SealError, match="ENCRYPTION_FAILED"):
         seal.seal_task(malformed, task)
+
+
+def test_sealed_comment_matches_real_github_receiver_contract(keys, task):
+    body = seal.seal_task(keys[1], task)
+    assert len(body.encode("utf-8")) <= pull.MAX_ENVELOPE_BYTES + len(pull.MARKER) + 1
+    assert body.startswith(pull.MARKER)
+    assert task["detail"] not in body  # Public issue contains ciphertext only.
+    candidate = {
+        "id": 6719225488,
+        "user": {"login": pull.OWNER_LOGIN, "id": pull.OWNER_USER_ID},
+        "author_association": "OWNER",
+        "created_at": "2026-11-10T06:00:00Z",
+        "updated_at": "2026-11-10T06:00:00Z",
+        "body": body,
+    }
+    assert pull.eligible_envelope(candidate) == body[len(pull.MARKER):]
