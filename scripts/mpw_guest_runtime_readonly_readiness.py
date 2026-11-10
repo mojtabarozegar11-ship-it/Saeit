@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import pwd
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,23 @@ def stop(code: str) -> None:
     raise SystemExit(2)
 
 
+def registered_passenger_root(text: str) -> bool:
+    """Validate the declared Passenger root, without trusting a bootstrap alone.
+
+    A checked-in or stale passenger_wsgi.py is not proof that .htaccess is
+    configured to serve it. Require a single unambiguous PassengerAppRoot.
+    """
+    roots = re.findall(r"(?im)^[ \\t]*PassengerAppRoot[ \\t]+([^\\r\\n#]+)", text)
+    if len(roots) != 1:
+        return False
+    value = roots[0].strip()
+    if len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
+        value = value[1:-1]
+    elif "'" in value or '"' in value:
+        return False
+    return value.rstrip("/") in (str(PUBLIC), "mojplaywin.com")
+
+
 def main() -> None:
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         stop("WRONG_CPANEL_USER")
@@ -54,6 +72,13 @@ def main() -> None:
             or "APP='/home/zomorod2/Saeit-staging'"
             not in bootstrap.read_text(encoding="utf-8", errors="replace")):
         stop("PUBLIC_BOOTSTRAP_MISMATCH")
+    htaccess = PUBLIC / ".htaccess"
+    if (htaccess.is_symlink() or not htaccess.is_file()
+            or htaccess.stat().st_size > 100000):
+        stop("PUBLIC_PASSENGER_ROOT_UNSAFE")
+    if not registered_passenger_root(
+            htaccess.read_text(encoding="utf-8", errors="replace")):
+        stop("PUBLIC_PASSENGER_ROOT_MISMATCH")
     if os.environ.get("SAEIT_ENV") != "production":
         stop("PRODUCTION_ENV_NOT_EXPLICIT")
     if os.environ.get("DJANGO_SETTINGS_MODULE") not in (None, "config.settings"):
@@ -123,7 +148,8 @@ def main() -> None:
             "probe": "mpw_guest_runtime_readiness",
             "read_only": True,
             "status": "evidence_collected",
-            "scope": "schema_route_flags_and_source_fingerprints_only",
+            "scope": "passenger_schema_route_flags_and_source_fingerprints_only",
+            "passenger_registered_root_matches_public": True,
             "migration_evidence": migration_evidence,
             "route_evidence": route_evidence,
             "feature_flags_boolean": flags,
