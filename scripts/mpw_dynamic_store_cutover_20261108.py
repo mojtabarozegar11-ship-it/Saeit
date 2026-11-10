@@ -6,6 +6,7 @@ present Passenger restart marker. Never changes invoices, payments or mail.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -82,18 +83,63 @@ def inspect_owned_fallback(public: Path) -> tuple[bytes, bytes, int]:
     return conf, changed, stat.S_IMODE(ht.stat().st_mode)
 
 
+def verify_guarded_store_source(source: bytes) -> None:
+    """Accept source drift only when the actual fail-open storefront contract holds.
+
+    Optional funnel instrumentation may exist, yet have no installed model/table.
+    A fixed file length or an absent funnel module is not evidence of safety.
+    Instead require that the recorder call is inside a broad, non-raising handler;
+    the live Django render and public HTTPS check remain mandatory afterward.
+    """
+    if len(source) < 200 or len(source) > 64_000:
+        raise RuntimeError("STAGING_VIEW_SOURCE_SIZE_REFUSED")
+    try:
+        tree = ast.parse(source.decode("utf-8"), filename="core/mojplaywin_views.py")
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError("STAGING_VIEW_SOURCE_INVALID") from exc
+    views = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+             and node.name == "store" and len(node.args.args) == 1
+             and node.args.args[0].arg == "request"]
+    if len(views) != 1:
+        raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
+    view = views[0]
+    guarded = [node for node in view.body if isinstance(node, ast.Try)
+               and any(isinstance(handler.type, ast.Name)
+                       and handler.type.id == "Exception" and handler.body
+                       and not any(isinstance(item, ast.Raise)
+                                   for item in ast.walk(handler))
+                       for handler in node.handlers)]
+    safe_recorder = any(
+        any(isinstance(node, ast.ImportFrom) and node.level == 1
+            and node.module == "commerce_funnel"
+            and any(alias.name == "record_funnel_event" for alias in node.names)
+            for child in guarded_try.body for node in ast.walk(child))
+        and any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "record_funnel_event"
+                for child in guarded_try.body for node in ast.walk(child))
+        for guarded_try in guarded
+    )
+    store_render = any(
+        isinstance(node, ast.Return) and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name) and node.value.func.id == "render"
+        and len(node.value.args) >= 2
+        and isinstance(node.value.args[1], ast.Constant)
+        and node.value.args[1].value == "mojplaywin/store.html"
+        for node in view.body
+    )
+    if not safe_recorder or not store_render:
+        raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
+
+
 def check_actual_staging_store() -> None:
     """Import and render the real store view; never supply a metrics stub."""
     target = APP / "core/mojplaywin_views.py"
+    funnel = APP / "core/commerce_funnel.py"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
-            not target.is_file() or (APP / "core/commerce_funnel.py").exists()):
+            not target.is_file() or funnel.is_symlink() or
+            (funnel.exists() and not funnel.is_file())):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
-    source = target.read_bytes()
-    guard = b"def store(request):\n # Analytics must never make the public storefront unavailable."
-    if (len(source) != 16371 or source.count(guard) != 1 or
-            source.count(b"def store(request):") != 1 or
-            b"except Exception as exc:" not in source[source.index(guard):source.index(guard) + 800]):
-        raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
+    verify_guarded_store_source(target.read_bytes())
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -102,7 +148,10 @@ def check_actual_staging_store() -> None:
     import django
     django.setup()
     from django.test import RequestFactory
-    from core.mojplaywin_views import store
+    from core import mojplaywin_views
+    if Path(mojplaywin_views.__file__).resolve() != target.resolve():
+        raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
+    store = mojplaywin_views.store
     page = store(RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
     if page.status_code != 200 or len(page.content) < 2000 or any(
             route not in page.content for route in PRODUCT_ROUTES):
@@ -242,3 +291,4 @@ if __name__ == "__main__":
     except BaseException as err:
         print("MPW_DYNAMIC_STORE_CUTOVER=BLOCKED_OR_REVERTED;ERROR_CLASS=" + type(err).__name__, file=sys.stderr)
         raise SystemExit(1)
+
