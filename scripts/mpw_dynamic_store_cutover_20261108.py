@@ -50,6 +50,10 @@ BUYER_ROUTE_PROBES = (
     ("/commerce/book/225/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
     ("/commerce/book/879/", b"Atelier Interior", b"Create my TRX payment invoice"),
 )
+# The owner-gated relay has a 150-second outer SSH timeout. Keep the complete
+# mutable interval well below it so Python, not the relay, controls rollback.
+BUYER_ROUTE_TOTAL_SECONDS = 25
+PREFLIGHT_BUDGET_SECONDS = 40
 
 
 def atomic_replace(target: Path, content: bytes, mode: int) -> None:
@@ -272,6 +276,7 @@ def verify_public_buyer_routes(run_id: str) -> bool:
     Only coarse failure categories are emitted, without customer information.
     """
     checked = 0
+    deadline = time.monotonic() + BUYER_ROUTE_TOTAL_SECONDS
     for route, title, action in BUYER_ROUTE_PROBES:
         url = "https://mojplaywin.com" + route + "?mpw_cutover_probe=" + run_id
         request = urllib.request.Request(url, headers={
@@ -280,21 +285,25 @@ def verify_public_buyer_routes(run_id: str) -> bool:
             "Pragma": "no-cache",
         }, method="GET")
         category = "unexpected_response"
-        try:
-            with urllib.request.urlopen(request, timeout=7) as reply:
-                if reply.status == 200 and reply.geturl() == url:
-                    body = reply.read(250_000)
-                    if title in body and action in body:
-                        checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
-                        if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
-                            checked += 1
-                            continue
-                        category = "checkout_form_invalid"
-        except urllib.error.HTTPError as exc:
-            category = ("http_" + str(exc.code) if exc.code in
-                        (403, 404, 429, 500, 502, 503, 504) else "http_other")
-        except (OSError, TimeoutError, RuntimeError, urllib.error.URLError):
-            category = "network_or_read_error"
+        remaining = deadline - time.monotonic()
+        if remaining < 0.5:
+            category = "probe_deadline_exceeded"
+        else:
+            try:
+                with urllib.request.urlopen(request, timeout=min(7, remaining)) as reply:
+                    if reply.status == 200 and reply.geturl() == url:
+                        body = reply.read(250_000)
+                        if title in body and action in body:
+                            checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
+                            if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
+                                checked += 1
+                                continue
+                            category = "checkout_form_invalid"
+            except urllib.error.HTTPError as exc:
+                category = ("http_" + str(exc.code) if exc.code in
+                            (403, 404, 429, 500, 502, 503, 504) else "http_other")
+            except (OSError, TimeoutError, RuntimeError, urllib.error.URLError):
+                category = "network_or_read_error"
         print("MPW_BUYER_ROUTE_PROBE=" + json.dumps({
             "checked": checked, "passed": False,
             "route_group": ("checkout" if ("/checkout/" in route or
@@ -413,12 +422,15 @@ def main(run_id: str) -> None:
         raise RuntimeError("UNEXPECTED_CPANEL_ACCOUNT")
     if not re.fullmatch(r"[0-9]{8,12}", run_id):
         raise RuntimeError("INVALID_RUN_ID")
+    started = time.monotonic()
     check_actual_staging_store()
     baseline = public_response(run_id + "-before")
     if MARKER not in baseline:
         raise RuntimeError("PUBLIC_FALLBACK_BASELINE_NOT_PROVEN")
     if not verify_public_buyer_routes(run_id + "-before"):
         raise RuntimeError("PUBLIC_BUYER_ROUTE_BASELINE_FAILED")
+    if time.monotonic() - started > PREFLIGHT_BUDGET_SECONDS:
+        raise RuntimeError("CUTOVER_PREPARATION_TIME_BUDGET_EXCEEDED")
     print("MPW_STATIC_FALLBACK_BASELINE=CONFIRMED")
     perform_cutover(PUBLIC, BACKUP_BASE, run_id, lambda: verify_dynamic_public(run_id))
 
