@@ -25,6 +25,11 @@ TARGETS = {
     "seo_views": "core/seo_views.py",
     "urlconf": "config/urls.py",
 }
+SITE_TARGETS = {
+    "passenger_wsgi": "passenger_wsgi.py",
+    "sitemap_php": "design-preview-20261017/_mpw_sitemap_three_indexable_20261017.php",
+    "site_htaccess": ".htaccess",
+}
 
 
 def _unsafe_symlink(path: Path) -> bool:
@@ -59,7 +64,8 @@ def audit(app: Path, site: Path) -> dict:
     contents = {}
     for name, relative in TARGETS.items():
         files[name], contents[name] = inspect_file(app / relative)
-    files["passenger_wsgi"], contents["passenger_wsgi"] = inspect_file(site / "passenger_wsgi.py")
+    for name, relative in SITE_TARGETS.items():
+        files[name], contents[name] = inspect_file(site / relative)
 
     template = contents["product_template"] or ""
     lower = template.lower()
@@ -67,6 +73,8 @@ def audit(app: Path, site: Path) -> dict:
     canonical = bool(re.search(r"rel\s*=\s*['\"]canonical['\"]", lower))
     wsgi = contents["passenger_wsgi"] or ""
     urls = contents["urlconf"] or ""
+    sitemap_php = contents["sitemap_php"] or ""
+    htaccess = contents["site_htaccess"] or ""
     return {
         "audit_version": "mpw-organic-discovery-provenance-v1",
         "read_only": True,
@@ -78,9 +86,13 @@ def audit(app: Path, site: Path) -> dict:
             "product_template_product_type_literal": bool(re.search(r'@type[^\n]{0,160}Product', template)),
             "urlconf_mentions_robots": "robots.txt" in urls,
             "urlconf_mentions_sitemap": "sitemap.xml" in urls,
+            "php_sitemap_has_paths_array": bool(re.search(r"\\$paths\\s*=", sitemap_php)),
+            "php_sitemap_mentions_mpw_origin": "https://mojplaywin.com" in sitemap_php,
+            "htaccess_mentions_sitemap": "sitemap.xml" in htaccess,
         },
         "limits": [
             "Source evidence is not proof that HTTP requests use these files.",
+            "PHP sitemap source identity and .htaccess matching are advisory, not proof of serving.",
             "A static template scan cannot certify rendered JSON-LD correctness.",
             "Runtime imports, web requests, payments and email are not performed.",
         ],
