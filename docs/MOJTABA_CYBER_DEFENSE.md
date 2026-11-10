@@ -15,6 +15,15 @@ Research, trading, security, factory and other specialist agents are internal
 components. `core.bot_identity` validates proposed top-level registries but
 does not migrate, disable, delete, or merge any live workers or database rows.
 
+For a read-only inventory of the actual Django agent records, execute
+`python manage.py audit_agent_fleet` on the verified owned runtime. Its
+`single_bot_contract` section reports the canonical public identity, the
+separate internal Agent record count, and the presence/activation of known
+economic and factory component records. This does **not** attest VPS cron,
+processes, other agent ledgers, external payments or end-to-end operation.
+The existing `consolidate_legacy_agents` command remains a preview by default;
+deactivation (`--apply`) is outside this change and is not authorized here.
+
 ## Design and operating controls
 
 1. **Ingest:** `core.cyber_defense.make_security_event` accepts only fixed
