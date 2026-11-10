@@ -7,6 +7,10 @@ on:
       - .github/workflows/mpw-guest-email-alias-c23.yml
       - services/mpw_trx_guest_commerce.py
       - tests/test_mpw_guest_email_only_checkout_20261108.py
+      - scripts/mpw_dynamic_store_cutover_20261108.py
+      - tests/test_mpw_dynamic_store_cutover_20261108.py
+      - .github/workflows/mpw-dynamic-store-cutover-20261108.yml
+      - core/mojplaywin_views.py
 
 permissions:
   contents: read
@@ -37,3 +41,8 @@ jobs:
           set -euo pipefail
           python -m py_compile services/mpw_trx_guest_commerce.py tests/test_mpw_guest_email_only_checkout_20261108.py
           pytest -q --ds=tests.mpw_recovery_test_settings tests/test_mpw_guest_email_only_checkout_20261108.py
+      - name: Verify integrated store cutover safeguards without server access
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py tests/test_mpw_dynamic_store_cutover_20261108.py
+          pytest -q tests/test_mpw_dynamic_store_cutover_20261108.py
