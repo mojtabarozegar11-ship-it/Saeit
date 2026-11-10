@@ -86,7 +86,7 @@ def audit(app: Path, site: Path) -> dict:
             "product_template_product_type_literal": bool(re.search(r'@type[^\n]{0,160}Product', template)),
             "urlconf_mentions_robots": "robots.txt" in urls,
             "urlconf_mentions_sitemap": "sitemap.xml" in urls,
-            "php_sitemap_has_paths_array": bool(re.search(r"\\$paths\\s*=", sitemap_php)),
+            "php_sitemap_has_paths_array": bool(re.search(r"\$paths\s*=", sitemap_php)),
             "php_sitemap_mentions_mpw_origin": "https://mojplaywin.com" in sitemap_php,
             "htaccess_mentions_sitemap": "sitemap.xml" in htaccess,
         },
