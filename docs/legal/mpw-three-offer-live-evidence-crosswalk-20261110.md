@@ -169,3 +169,33 @@ The historical `scripts/mpw_guest_checkout_live_release.py` adds `patch_commerci
 The live release script also demands an exact historical guest module SHA-256 before an upgrade. Therefore the new source is **not automatically deployable** by that script; any eventual release needs separately authorized, reviewed preflight and compatibility work, not an override or weakened digest check.
 
 The underlying cPanel module `services/mpw_trx_commercial_web.py` is referenced in source and historical runtime scripts but not present as a GitHub-tracked file at the referenced path. The adapter validates email formatting; **email persistence to a paid invoice and cross-browser recovery remain UNKNOWN** without read-only runtime inspection. No live order or invoice was created, and no release, mail or payment action was taken.
+
+
+## 14. Cycle 51 — cPanel read-only source bridge and live recovery disclosure (2026-11-10)
+
+### Read-only evidence and exact limits
+
+- The authenticated cPanel File Manager showed `/home/zomorod2/Saeit-staging/services/mpw_trx_commercial_web.py` (listed as modified 2026-11-06). Its `_start_order` calls `_select_order`, then `services.mpw_trx_guest_delivery.record_invoice(invoice_id, request.user)`, before returning the invoice redirect. The file defines the five standard `COMMERCIAL_URLPATTERNS` and invokes `patch_commercial(globals())`.
+- `/home/zomorod2/mojplaywin.com/passenger_wsgi.py` explicitly sets `APP='/home/zomorod2/Saeit-staging'`, inserts that app path into `sys.path`, changes working directory to the same path and sets `SAEIT_ENV='production'` before loading `config.wsgi.application`. This establishes the **configured public application source path**. It is not direct proof of the exact modules currently cached by an already-running Passenger worker.
+- The cPanel guest adapter `services/mpw_trx_guest_commerce.py` (listed as modified 2026-11-07) persists a submitted guest email to `user.email` when that field exists, rejects a different email on a reused guest principal, and wraps the five commerce handlers. Its **deployed-file listing and viewed source lack the new Cycle-49 single-`email` / Django-validator preflight and Cycle-50 all-handler/route-table preflight now on the Draft GitHub branch**. The public app is therefore not proven to have these latest Draft-only protections.
+- `services/mpw_trx_guest_delivery.py` uses `GuestTrxDelivery.objects.get_or_create(order=pi.order, defaults={'email': email})` to bind the guest email to the order's existing payment intent. The invoice/receipt outbox sender checks `MPW_GUEST_EMAIL_SEND_APPROVED`. Code presence proves an intended persistence pathway, **not** database migration completion, outbox success, actual email transmission, or independent recovery from another device.
+- `services/mpw_trx_email_recovery.py` defines `GuestOrderEmail` claims, recovery tokens, and guarded recovery routes. Its request endpoint requires `MPW_GUEST_RECOVERY_EMAIL_APPROVED=True` to issue recovery mail. Actual runtime flags and migration `0040` were **not inspected**; no outbound mail was sent.
+- The publicly visible checkout `https://mojplaywin.com/commerce/book/879/` shows an email-entry field and a TRX invoice button. It expressly discloses **'Email recovery on another device is not yet available.'** No submit was made, and no order or invoice was created.
+
+### Revised evidence classification
+
+| Question | Cycle-51 evidence classification |
+|---|---|
+| Is cPanel direct File Manager access working? | PROVEN — authenticated and used read-only |
+| Does the public Passenger bootstrap point to `Saeit-staging`? | PROVEN — bootstrap source |
+| Is there source code for guest-email persistence and order-email binding? | PROVEN — inspected commerce, guest and delivery modules |
+| Is the new strict Cycle-49/50 Draft guard present in the examined cPanel adapter? | NO — older adapter present; Draft improvements not deployed |
+| Is email recovery available across devices to public customers? | NOT RELEASED according to public checkout disclosure; backend operational state still requires checking |
+| Were schema migrations, merchant wallet activation, actual sales or outbound delivery verified? | UNKNOWN — no DB/customer records, credentials, payment or email actions |
+| Are the three offer-rights packets independently cleared? | 0/3 independently cleared in the current rights register; do not infer rights from checkout visibility |
+
+### Release boundary and CI
+
+For commit `74f3d08a9f2f4b807a3de0d1e3c94d77a2e4270a`, GitHub reports Django CI, CI, and Factory Evidence Quality Policy Tests all **completed / success (3/3)**. These are source-workflow results, not proof of an approved deployment or commercial readiness.
+
+**No merge, deploy, file mutation on cPanel, deletion, order, settlement, email or support ticket occurred.** The immediate next safe checks are a read-only comparison of live adapter digests, recovery schema/migration existence and non-sensitive runtime feature readiness. Do not bypass the historical release SHA gate or expose secrets/customer data.
