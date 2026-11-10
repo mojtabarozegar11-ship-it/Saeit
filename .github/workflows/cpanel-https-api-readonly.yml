@@ -7,7 +7,7 @@ on:
         description: Direct HTTPS cPanel inventory, no SSH or provider portal
         required: true
         type: choice
-        options: [domains, passenger]
+        options: [preflight, domains, passenger]
 
 permissions:
   contents: read
@@ -30,7 +30,15 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+      - name: Check HTTPS and UAPI reachability without a token
+        if: inputs.operation == 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deploy/cpanel_https_api_readonly.py preflight
+
       - name: Make one authenticated read-only HTTPS request
+        if: inputs.operation != 'preflight'
         env:
           SAEIT_CPANEL_HTTPS_API_TOKEN: ${{ secrets.SAEIT_CPANEL_HTTPS_API_TOKEN }}
           CPANEL_OPERATION: ${{ inputs.operation }}
