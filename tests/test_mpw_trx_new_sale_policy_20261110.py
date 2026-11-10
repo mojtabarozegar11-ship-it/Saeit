@@ -101,7 +101,12 @@ class NewSaleRightsPolicyTests(unittest.TestCase):
                        if isinstance(node, ast.Call)
                        and isinstance(node.func, ast.Name)
                        and node.func.id == "view")
-        self.assertLess(target.lineno, invoice.lineno)
+        identity = next(node for node in ast.walk(dispatch)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name)
+                        and node.func.id == "_identity")
+        self.assertLess(target.lineno, identity.lineno)
+        self.assertLess(identity.lineno, invoice.lineno)
 
     def test_only_start_order_sets_new_sale_flag(self):
         source = ADAPTER.read_text("utf8")
