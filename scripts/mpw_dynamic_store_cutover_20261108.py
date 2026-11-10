@@ -147,6 +147,77 @@ def verify_guarded_store_source(source: bytes) -> None:
         raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
 
 
+def verify_guest_email_ownership_source(source: bytes) -> None:
+    """Require the staged checkout adapter to enforce buyer-email ownership.
+
+    A required email input in the public HTML does not prove that the invoice
+    handler validates and persists its owner. This structural gate does not
+    create an invoice, send email, or claim a completed paid delivery.
+    """
+    if not 500 < len(source) < 100_000:
+        raise RuntimeError("STAGING_GUEST_OWNER_SOURCE_INVALID")
+    try:
+        tree = ast.parse(source.decode("utf-8"), filename="services/mpw_trx_guest_commerce.py")
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError("STAGING_GUEST_OWNER_SOURCE_INVALID") from exc
+    functions = {
+        name: [node for node in tree.body if isinstance(node, ast.FunctionDef)
+               and node.name == name]
+        for name in ("_new_user", "_dispatch")
+    }
+    if any(len(nodes) != 1 for nodes in functions.values()):
+        raise RuntimeError("STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN")
+    new_user = functions["_new_user"][0]
+    dispatch = functions["_dispatch"][0]
+
+    def calls(node, function_name):
+        return any(isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
+                   and item.func.id == function_name for item in ast.walk(node))
+
+    def imports_from_recovery(node, function_name):
+        return any(
+            isinstance(item, ast.ImportFrom)
+            and item.level == 0 and item.module == "services.mpw_trx_email_recovery"
+            and any(alias.name == function_name and alias.asname in (None, function_name)
+                    for alias in item.names)
+            for item in ast.walk(node)
+        )
+
+    # New guests need an address persisted on their authenticated principal;
+    # existing and new guests both require a durable per-order email claim.
+    persists_email = any(
+        isinstance(item, ast.Assign)
+        and any(isinstance(target, ast.Attribute) and target.attr == "email"
+                for target in item.targets)
+        for item in ast.walk(new_user)
+    )
+    saves_email = any(
+        isinstance(item, ast.Call) and isinstance(item.func, ast.Attribute)
+        and item.func.attr == "save"
+        and any(keyword.arg == "update_fields" and isinstance(keyword.value, (ast.List, ast.Tuple))
+                and any(isinstance(field, ast.Constant) and field.value == "email"
+                        for field in keyword.value.elts)
+                for keyword in item.keywords)
+        for item in ast.walk(new_user)
+    )
+    if not (imports_from_recovery(tree, "_posted_email")
+            and imports_from_recovery(tree, "bound_checkout")
+            and calls(new_user, "_posted_email") and persists_email
+            and saves_email and calls(dispatch, "bound_checkout")):
+        raise RuntimeError("STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN")
+
+
+def verify_guest_order_claim_schema(guest_order_email_model, database_connection) -> None:
+    """Read the live default DB schema before advertising email-owned orders."""
+    table = guest_order_email_model._meta.db_table
+    try:
+        names = database_connection.introspection.table_names()
+    except Exception as exc:
+        raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_SCHEMA_UNKNOWN") from exc
+    if not isinstance(table, str) or not table or table not in names:
+        raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_SCHEMA_MISSING")
+
+
 def verify_buyer_route_resolution(resolver):
     """Verify the actual Django URL table, not only a directly imported view.
 
@@ -180,11 +251,14 @@ def check_actual_staging_store() -> None:
     """Import and render the real store view; never supply a metrics stub."""
     target = APP / "core/mojplaywin_views.py"
     funnel = APP / "core/commerce_funnel.py"
+    guest_adapter = APP / "services/mpw_trx_guest_commerce.py"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
             not target.is_file() or funnel.is_symlink() or
-            (funnel.exists() and not funnel.is_file())):
+            (funnel.exists() and not funnel.is_file()) or
+            guest_adapter.is_symlink() or not guest_adapter.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     verify_guarded_store_source(target.read_bytes())
+    verify_guest_email_ownership_source(guest_adapter.read_bytes())
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -192,9 +266,12 @@ def check_actual_staging_store() -> None:
     sys.path.insert(0, str(APP))
     import django
     django.setup()
+    from django.db import connection
     from django.test import RequestFactory
     from django.urls import resolve
+    from core.models import GuestOrderEmail
     from core import mojplaywin_views
+    verify_guest_order_claim_schema(GuestOrderEmail, connection)
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
     store_callback = verify_buyer_route_resolution(resolve)
