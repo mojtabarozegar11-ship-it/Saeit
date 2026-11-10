@@ -113,7 +113,7 @@ def sitemap_xml(request):
     urls += [f"/newsletter/{slug}/" for slug in stories]
     articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
     urls += [f"/knowledge/article/{slug}/" for slug in articles]
-    books = KnowledgeBook.objects.values_list("code", flat=True)
+    books = KnowledgeBook.objects.filter(status="published").values_list("code", flat=True)
     urls += [f"/knowledge/book/{code}/" for code in books]
     domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
     urls += [f"/knowledge/domain/{code}/" for code in domains]
