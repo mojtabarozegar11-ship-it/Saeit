@@ -348,7 +348,10 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
     # A valid checksum mapping with duplicate JSON keys or reformatted bytes
     # is not the deterministic, signed-off manifest that export_bundle wrote.
     canonical_manifest = (json.dumps(checksums, indent=2, sort_keys=True) + "\n").encode()
-    if (target / "SHA256SUMS.json").read_bytes() != canonical_manifest:
+    manifest_path = target / "SHA256SUMS.json"
+    if manifest_path.stat().st_size != len(canonical_manifest):
+        raise ValueError("bundle_manifest_size_mismatch")
+    if manifest_path.read_bytes() != canonical_manifest:
         raise ValueError("bundle_manifest_bytes_mismatch")
     # Only parse trusted, canonical bytes; malformed or duplicate-key JSON
     # cannot reach the parser or trigger an uncontrolled decode exception.
