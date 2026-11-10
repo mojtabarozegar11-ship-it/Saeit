@@ -123,3 +123,14 @@ The previous two-book `mpw_guest_trx_20261020/guest_checkout_view.py` is **not**
 **What remains unproven:** the effective deployed URL resolver and server versions, especially any unwrapped direct `_start_order`, alternative POST/API or direct `/commerce/book/<id>/` handler, must be compared through authorized authenticated read-only inspection before declaring every live invoice path protected. Historical workflows contain a reversible cPanel rights patch, but its presence in GitHub does not verify installation or current rights metadata. No change was made to the live host in Cycle 47.
 
 **Status carried forward:** CI for the preceding Cycle-46 commit `32e931268474e73facb2b8f8c05476cac1343496` is **3/3 successful**. The current Cycle-47 code needs its own fresh run result; this historical green result is not transferred to a later commit. Legally authenticated exact-SKU rights packets remain **0/3**. Draft/no merge/no deployment/no payment/no email/no ticket.
+
+
+## 10. Cycle 48 — URL table binding coverage, without deployment
+
+**Prior head verification:** Commit `096bab9a97b1ca00fbb868f14f65db90c1976376` completed **3/3 successful** PR-triggered workflows (CI, Django CI and Factory Evidence Quality). This validates the preceding Draft source, not the live checkout.
+
+**New source correction:** `services/mpw_trx_guest_commerce.patch_commercial` previously rebound registered `COMMERCIAL_URLPATTERNS` only when its type was `tuple`; an equally legitimate `list` container would have skipped the final URL callback rewrite while still marking the checkout adapter as installed. The Draft source now supports both `tuple` and `list` and preserves the original collection type. An explicitly supplied unsupported collection type fails rather than silently claiming installation. `None` remains allowed for legacy integrations that attach views later; this is still a live-route provenance limitation.
+
+**Two targeted offline checks** were added to `tests/test_mpw_guest_telemetry_isolation_20261108.py`: one confirms a list-based table binds new-order, invoice and paid-download URLs to their respective wrapped functions; the other confirms an unsupported table does not set the installed flag. They do not create orders, send email or call the chain.
+
+**Remaining release evidence:** authenticated actual deployed `COMMERCIAL_URLPATTERNS` type/callback identity and the effective `/commerce/trx-easy/start/<id>/` route must be captured read-only, with original paid download/recovery proven unaffected. Exact product rights packets independently authenticated: **0/3**. All current Cycle-48 changes remain GitHub Draft only, without merge, cPanel/VPS write, payment, ticket or email.
