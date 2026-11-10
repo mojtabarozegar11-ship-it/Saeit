@@ -161,10 +161,34 @@ def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=Fal
             args[0] if len(args) == 1 else None
         )
         _require_new_sale_rights(product_id)
+        _require_buyer_email(request)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
+
+
+def _require_buyer_email(request):
+    """Validate the submitted email before any new buyer account or invoice.
+
+    This is a guard only; the authoritative order handler must separately
+    persist the buyer/email association and own the delivery/recovery flow.
+    """
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    submitted = request.POST.getlist("email")
+    if len(submitted) != 1:
+        raise Http404("Exactly one valid email address is required")
+    value = submitted[0]
+    if (type(value) is not str or not 3 <= len(value) <= 254 or
+            value != value.strip()):
+        raise Http404("A valid email address is required before purchasing")
+    try:
+        validate_email(value)
+    except ValidationError as exc:
+        raise Http404("A valid email address is required before purchasing") from exc
+    return value
 
 
 def _record_funnel_event_best_effort(request, event, product):
@@ -333,10 +357,17 @@ def patch_commercial(namespace):
             ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
             ("/download/", "download_paid"),
         )
+        found_start_route = False
         for route, view in patterns:
             route_name = next((name for token, name in route_names if token in route), None)
+            if route_name == "start_order":
+                found_start_route = True
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
+        if not found_start_route:
+            # Never claim protection of the payment entrypoint unless its
+            # actual published URL callback was replaced.
+            raise RuntimeError("Missing TRX start route in commercial table")
         namespace["COMMERCIAL_URLPATTERNS"] = type(patterns)(rebuilt)
     elif patterns is not None:
         # Do not claim a successful route patch for an unknown URL table type.
