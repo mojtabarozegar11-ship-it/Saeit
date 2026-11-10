@@ -78,5 +78,42 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertEqual(dispatch.call_count, 2)
 
 
+    def test_list_route_table_rebinds_real_invoice_and_paid_routes(self):
+        old_views = {name: Mock(name="old_" + name) for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        namespace = {"_" + name: old for name, old in old_views.items()}
+        routes = [
+            ("/commerce/trx-easy/start/<int:product_id>/", old_views["start_order"]),
+            ("/commerce/trx-easy/invoice/<int:invoice_id>/", old_views["show_invoice"]),
+            ("/commerce/trx-easy/download/<int:invoice_id>/", old_views["download_paid"]),
+        ]
+        namespace["COMMERCIAL_URLPATTERNS"] = routes
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            installer(namespace)
+        changed = namespace["COMMERCIAL_URLPATTERNS"]
+        self.assertIsInstance(changed, list)
+        self.assertIs(changed[0][1], namespace["start_order"])
+        self.assertIs(changed[1][1], namespace["show_invoice"])
+        self.assertIs(changed[2][1], namespace["download_paid"])
+        self.assertTrue(namespace["_mpw_guest_checkout_installed"])
+
+    def test_unsupported_route_table_cannot_claim_installed(self):
+        namespace = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        namespace["COMMERCIAL_URLPATTERNS"] = object()
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            with self.assertRaisesRegex(RuntimeError, "Unsupported commercial route table"):
+                installer(namespace)
+        self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
+
+
 if __name__ == "__main__":
     unittest.main()
