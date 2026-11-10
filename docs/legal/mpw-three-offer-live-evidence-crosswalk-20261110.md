@@ -155,9 +155,17 @@ The product 72 form also contained a CSRF hidden input, visible invoice-creation
 
 Source-only additions to `services/mpw_trx_guest_commerce.py`:
 
-- A supplied tuple/list `COMMERCIAL_URLPATTERNS` must contain a recognized `/start/` entry. An empty list or invoice-only table now raises rather than asserting `_mpw_guest_checkout_installed=True` while the purchase entrypoint remains unpatched. An absent table continues the older late-binding path; its actual integration remains **unverified**.
+- A supplied tuple/list `COMMERCIAL_URLPATTERNS` must contain a recognized `/start/` entry. An empty list or invoice-only table raises rather than asserting `_mpw_guest_checkout_installed=True` while the purchase entrypoint remains unpatched. Cycle 50 strengthens this: absent, malformed, or duplicated start routes now also fail **before any public callback is modified**; all five original handlers must be callable.
 - Every new `start_order` call runs the existing SKU/rights guard, then checks that **exactly one** submitted `email` value is present, unpadded, at most 254 characters and accepted by Django's `validate_email`, **before** creating a guest identity or calling the invoice handler.
 - Invalid new-sale email input is denied without creating a guest principal or invoice in isolated tests. Existing invoice lookup, payment reconciliation and paid download do not demand a second email or new rights authorization.
 - `tests/test_mpw_trx_email_gate_20261110.py` and an additional route-table regression in `tests/test_mpw_guest_telemetry_isolation_20261108.py` cover normal, missing, duplicate, malformed and whitespace emails, denial before mutation, and continuity of paid-invoice access.
 
 **Limits:** This source patch is not deployed. It proves neither how `services.mpw_trx_commercial_web._start_order` stores the submitted email nor whether the production system sends a receipt or supports cross-browser recovery. The referenced underlying runtime module is not available at this GitHub path, so email-to-order persistence still requires an authorized cPanel/server read-only inspection. A green CI run is not a rights packet or a successful real checkout. Do not issue invoices or send payments during rights HOLD.
+
+## 13. Cycle 50 — verify deployment-hook shape before route mutation
+
+The historical `scripts/mpw_guest_checkout_live_release.py` adds `patch_commercial(globals())` after `COMMERCIAL_URLPATTERNS` is defined, so an absent table is not a valid expected production integration. Preflight now checks the entire route table and all five underlying handlers before replacing any `start_order`, invoice, reconciliation or download callback. Isolated regressions cover absent, duplicated, malformed and missing-handler cases. A successfully installed marker can no longer arise from these invalid shapes in this adapter.
+
+The live release script also demands an exact historical guest module SHA-256 before an upgrade. Therefore the new source is **not automatically deployable** by that script; any eventual release needs separately authorized, reviewed preflight and compatibility work, not an override or weakened digest check.
+
+The underlying cPanel module `services/mpw_trx_commercial_web.py` is referenced in source and historical runtime scripts but not present as a GitHub-tracked file at the referenced path. The adapter validates email formatting; **email persistence to a paid invoice and cross-browser recovery remain UNKNOWN** without read-only runtime inspection. No live order or invoice was created, and no release, mail or payment action was taken.
