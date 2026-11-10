@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     BUYER_ROUTE_PROBES, FALLBACK_BLOCK, MARKER, inspect_owned_fallback,
-    perform_cutover, verify_buyer_route_resolution, verify_dynamic_public,
+    has_guarded_guest_invoice_form, perform_cutover, verify_buyer_route_resolution, verify_dynamic_public,
     verify_guarded_store_source, verify_public_buyer_routes,
 )
 
@@ -26,6 +26,18 @@ def store(request):
   logging.getLogger(__name__).warning("Optional analytics unavailable")
  return render(request, "mojplaywin/store.html", {"products": PRODUCTS})
 '''
+
+
+def public_buyer_body(route, title, action):
+    body = title + b" " + action
+    if b"Create my TRX payment invoice" not in action:
+        return body
+    product_id = int(route.split("/")[3])
+    return (body +
+            f'<form method="post" action="/commerce/trx-easy/start/{product_id}/">'.encode() +
+            b'<input type="email" name="email" required>' +
+            b'<input type="hidden" name="csrfmiddlewaretoken" value="synthetic-token">' +
+            b'</form>')
 
 
 class DynamicStoreCutoverTests(unittest.TestCase):
@@ -271,7 +283,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             self.assertTrue(req.full_url.startswith("https://mojplaywin.com/"))
             title, action = next((title, action) for p, title, action in BUYER_ROUTE_PROBES if p == path)
             calls.append(path)
-            return Reply(req, title + b" " + action)
+            return Reply(req, public_buyer_body(path, title, action))
 
         with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen", side_effect=fetch):
             with contextlib.redirect_stdout(io.StringIO()):
@@ -291,7 +303,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                 self.url = req.full_url
                 path = urlsplit(req.full_url).path
                 title, action = next((t, a) for p, t, a in BUYER_ROUTE_PROBES if p == path)
-                self.body = title + b" " + action
+                self.body = public_buyer_body(path, title, action)
 
             def __enter__(self):
                 return self
@@ -367,6 +379,60 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                 self.assertFalse(verify_public_buyer_routes("42425162108-before"))
         self.assertIn('"category": "unexpected_response"', sink.getvalue())
         self.assertIn('"checked": 0', sink.getvalue())
+
+    def test_checkout_form_requires_exact_post_email_and_csrf(self):
+        expected = (b'<form method="post" action="/commerce/trx-easy/start/225/">'
+                    b'<input name="email" type="email" required>'
+                    b'<input name="csrfmiddlewaretoken" value="synthetic">'
+                    b'</form>')
+        self.assertTrue(has_guarded_guest_invoice_form(expected, 225))
+        variants = (
+            expected.replace(b'method="post"', b'method="get"'),
+            expected.replace(b'/start/225/', b'/start/72/'),
+            expected.replace(b'name="email"', b'name="other"'),
+            expected.replace(b' type="email"', b' type="text"'),
+            expected.replace(b' required', b''),
+            expected.replace(b'name="csrfmiddlewaretoken"', b'name="other"'),
+            expected.replace(b'value="synthetic"', b'value=""'),
+            expected.replace(b'</form>', b''),
+        )
+        for invalid in variants:
+            with self.subTest(invalid=invalid):
+                self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
+
+    def test_checkout_page_with_wrong_form_blocks_public_route_gate(self):
+        from urllib.parse import urlsplit
+        sink = io.StringIO()
+
+        class Reply:
+            status = 200
+
+            def __init__(self, req):
+                self.url = req.full_url
+                route = urlsplit(req.full_url).path
+                title, action = next((t, a) for p, t, a in BUYER_ROUTE_PROBES if p == route)
+                self.body = public_buyer_body(route, title, action)
+                if route == "/store/product/72/checkout/":
+                    self.body = self.body.replace(b'method="post"', b'method="get"')
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return self.body
+
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen",
+                   side_effect=lambda req, timeout: Reply(req)):
+            with contextlib.redirect_stdout(sink):
+                self.assertFalse(verify_public_buyer_routes("42425162108-before"))
+        self.assertIn('"checked": 3', sink.getvalue())
+        self.assertIn('"category": "checkout_form_invalid"', sink.getvalue())
 
     def test_failed_buyer_baseline_cannot_start_cutover(self):
         from scripts.mpw_dynamic_store_cutover_20261108 import main
