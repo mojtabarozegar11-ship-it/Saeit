@@ -60,6 +60,17 @@ class ProductTemplateSourceContract(unittest.TestCase):
             self.assertIn(phrase, self.html)
         self.assertIn("Email receipts and cross-device email recovery are not currently available", self.html)
 
+    def test_verified_preview_media_is_explicitly_not_paid_stock(self):
+        self.assertIn('/static/site/mojplaywin-products/chess-improvement.webp', self.html)
+        self.assertIn('/static/site/mojplaywin-products/taniya-baker-worms.webp', self.html)
+        self.assertIn("Book cover artwork, not a preview of the paid PDF pages", self.html)
+        self.assertIn("Storybook promotional artwork, not a sample of its 40 PDF pages", self.html)
+        self.assertIn("/site-preview", self.html)
+        self.assertIn('rel="noopener noreferrer"', self.html)
+        self.assertIn('not</strong> the exact downloadable ZIP', self.html)
+        self.assertIn("project planner, Studio Desk and WorldForge tools are not part of product 879", self.html)
+        self.assertNotIn("free PDF sample", self.html.lower())
+
     def test_prices_are_dynamic_and_currency_gated(self):
         self.assertIn('product.currency == "USD"', self.html)
         self.assertIn("product.price|floatformat:2", self.html)
@@ -118,6 +129,20 @@ class ProductTemplateSourceContract(unittest.TestCase):
                 self.assertIn(f'/commerce/book/{product_id}/', html)
                 self.assertIn("US $7.50", html)
 
+    def test_django_preview_stays_in_its_own_product_branch(self):
+        chess = self._render_with_django(72)
+        story = self._render_with_django(225)
+        site = self._render_with_django(879)
+        self.assertIn('chess-improvement.webp', chess)
+        self.assertNotIn('taniya-baker-worms.webp', chess)
+        self.assertNotIn('/site-preview', chess)
+        self.assertIn('taniya-baker-worms.webp', story)
+        self.assertNotIn('chess-improvement.webp', story)
+        self.assertNotIn('/site-preview', story)
+        self.assertIn('/site-preview', site)
+        self.assertNotIn('chess-improvement.webp', site)
+        self.assertNotIn('taniya-baker-worms.webp', site)
+
     def test_django_render_never_advertises_trial_or_wrong_currency(self):
         self.assertNotIn('/commerce/book/779/', self._render_with_django(779))
         self.assertNotIn('/commerce/book/72/', self._render_with_django(72, "EUR"))
@@ -130,3 +155,4 @@ class ProductTemplateSourceContract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
