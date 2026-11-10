@@ -10,6 +10,7 @@ on:
       - services/mpw_trx_email_recovery.py
       - services/mpw_trx_guest_commerce.py
       - core/guest_recovery_models.py
+      - core/migrations/0040_commercefunnelevent.py
       - core/migrations/0049_mpw_guest_email_recovery.py
       - core/management/commands/mpw_purge_recovery_ephemeral.py
   workflow_dispatch:
@@ -42,7 +43,7 @@ jobs:
       - name: Validate exact integrated recovery source, no secrets or production access
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0049_mpw_guest_email_recovery.py
+          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0040_commercefunnelevent.py core/migrations/0049_mpw_guest_email_recovery.py
           python3 - <<'PY'
           import hashlib, importlib.util, pathlib
           release_path = pathlib.Path('scripts/mpw_recovery_guarded_release_20261105.py')
@@ -141,6 +142,7 @@ jobs:
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
             core/guest_recovery_models.py \
+            core/migrations/0040_commercefunnelevent.py \
             core/migrations/0049_mpw_guest_email_recovery.py \
             core/management/commands/mpw_purge_recovery_ephemeral.py \
           | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
