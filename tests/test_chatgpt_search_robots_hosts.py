@@ -52,3 +52,12 @@ class PublicSitemapCoverageTests(TestCase):
             with self.subTest(path=path):
                 expected = f"<loc>https://zomorodmelal.ir/{path}</loc>"
                 self.assertIn(expected.encode("utf-8"), response.content)
+
+    def test_noncanonical_or_gated_routes_are_not_advertised(self):
+        request = RequestFactory().get("/sitemap.xml", HTTP_HOST="zomorodmelal.ir")
+        response = sitemap_xml(request)
+        self.assertEqual(response.status_code, 200)
+        for path in ("about/", "contact/", "education/", "business/"):
+            with self.subTest(path=path):
+                noncanonical = f"<loc>https://zomorodmelal.ir/{path}</loc>"
+                self.assertNotIn(noncanonical.encode("utf-8"), response.content)
