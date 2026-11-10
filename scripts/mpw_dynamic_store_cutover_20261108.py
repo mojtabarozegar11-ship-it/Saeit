@@ -131,6 +131,30 @@ def verify_guarded_store_source(source: bytes) -> None:
         raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
 
 
+def verify_buyer_route_resolution(resolver):
+    """Verify the actual Django URL table, not only a directly imported view.
+
+    Rendering a function by hand is insufficient if /store/ still resolves to
+    a different handler, or if the three catalogue checkout links are 404s.
+    No request is submitted here, so no order, invoice or payment is created.
+    """
+    try:
+        store_match = resolver("/store/")
+        if (store_match.url_name != "store" or store_match.args or
+                store_match.kwargs or not callable(store_match.func)):
+            raise RuntimeError("STAGING_STORE_URL_NOT_RESOLVED")
+        for product_id in (72, 225, 879):
+            match = resolver(f"/store/product/{product_id}/checkout/")
+            if (match.args or match.kwargs != {"product_id": product_id} or
+                    not callable(match.func)):
+                raise RuntimeError("STAGING_BUYER_CHECKOUT_ROUTE_INVALID")
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError("STAGING_BUYER_ROUTE_UNAVAILABLE") from exc
+    return store_match.func
+
+
 def check_actual_staging_store() -> None:
     """Import and render the real store view; never supply a metrics stub."""
     target = APP / "core/mojplaywin_views.py"
@@ -148,11 +172,12 @@ def check_actual_staging_store() -> None:
     import django
     django.setup()
     from django.test import RequestFactory
+    from django.urls import resolve
     from core import mojplaywin_views
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
-    store = mojplaywin_views.store
-    page = store(RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
+    store_callback = verify_buyer_route_resolution(resolve)
+    page = store_callback(RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
     if page.status_code != 200 or len(page.content) < 2000 or any(
             route not in page.content for route in PRODUCT_ROUTES):
         raise RuntimeError("REAL_STAGING_STORE_RENDER_FAILED")
