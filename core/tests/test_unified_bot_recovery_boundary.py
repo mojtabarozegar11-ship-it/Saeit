@@ -16,7 +16,7 @@ from core.task_runtime import TaskExecutionError, TaskRuntime
 @pytest.fixture
 def economic_agent(db):
     agent = Agent.objects.create(
-        code="economic-master-agent", name="Mojtaba.bot executor",
+        code="mojtaba-bot-ai", name="Mojtaba.bot executor",
         mission="Bounded economic execution", active=True,
     )
     cap = AgentCapability.objects.create(

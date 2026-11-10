@@ -44,7 +44,7 @@ def test_market_research_and_scoring_are_verified_before_offer_design():
 class VerifiedEconomicCycleTests(TestCase):
     def setUp(self):
         self.agent = Agent.objects.create(
-            code="economic-master-agent",
+            code="mojtaba-bot-ai",
             name="Economic Master Agent",
             mission="Test-only economic cycle",
             active=True,

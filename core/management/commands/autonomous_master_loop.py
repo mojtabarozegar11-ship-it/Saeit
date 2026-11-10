@@ -5,6 +5,7 @@ from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
+from core.unified_bot_identity import BOT_CODE, non_factory_task_scope
 
 class Command(BaseCommand):
     help = "Autonomous observe-decide-execute-verify-replan loop."
@@ -30,7 +31,7 @@ class Command(BaseCommand):
             self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")
         for step in range(steps):
             in_flight = AgentTask.objects.filter(
-                agent__code="economic-master-agent", agent__active=True, status="running"
+                agent__code=BOT_CODE, agent__active=True, status="running"
             ).order_by("updated_at", "pk").first()
             if in_flight:
                 self.stdout.write(
@@ -44,8 +45,8 @@ class Command(BaseCommand):
                 active=self._next_eligible_task(supported)
             if not active:
                 unsupported = AgentTask.objects.filter(
-                    agent__code="economic-master-agent", agent__active=True, status="queued",
-                ).exclude(
+                    agent__code=BOT_CODE, agent__active=True, status="queued",
+                ).filter(non_factory_task_scope()).exclude(
                     capability_code__in=supported,
                     action_type=F("capability_code"),
                 ).order_by("created_at", "pk").first()
@@ -101,7 +102,7 @@ class Command(BaseCommand):
     @staticmethod
     def _next_eligible_task(supported):
         return AgentTask.objects.filter(
-            agent__code="economic-master-agent", agent__active=True, status="queued",
+            agent__code=BOT_CODE, agent__active=True, status="queued",
             capability_code__in=supported,
             action_type=F("capability_code"),
         ).order_by("created_at", "pk").first()

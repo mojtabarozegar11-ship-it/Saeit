@@ -8,6 +8,7 @@ from datetime import timedelta
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_risk, requires_owner_approval
+from .unified_bot_identity import BOT_CODE
 
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -30,10 +31,10 @@ class TaskRuntime:
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
 
-        # The economic executor is an internal lane of the single Mojtaba.bot.
+        # One execution owner across economic and factory lanes of Mojtaba.bot.ai.
         # On row-locking databases select_for_update also locks the joined
         # agent row, serializing claims of different tasks by this agent.
-        if task.agent.code == "economic-master-agent" and AgentTask.objects.filter(
+        if task.agent.code == BOT_CODE and AgentTask.objects.filter(
             agent_id=task.agent_id, status="running"
         ).exclude(pk=task.pk).exists():
             raise TaskExecutionError(
@@ -111,7 +112,7 @@ class TaskRuntime:
             task.output_data = {
                 "error": "Execution became stale and retry budget was exhausted"
             }
-        elif task.agent.code == "economic-master-agent":
+        elif task.agent.code == BOT_CODE:
             # Staleness is not proof of failure: a previous economic action
             # might already have made a private or external change.  Never
             # replay such work until the previous effect has been reconciled.

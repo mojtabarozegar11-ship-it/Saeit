@@ -3,8 +3,9 @@ from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
+from core.unified_bot_identity import BOT_CODE, non_factory_task_scope
 
-MASTER_AGENT_CODE = "economic-master-agent"
+MASTER_AGENT_CODE = BOT_CODE
 
 class Command(BaseCommand):
     help = "Let the master agent observe state and autonomously choose its next work."
@@ -19,16 +20,19 @@ class Command(BaseCommand):
             raise CommandError("stale-after-seconds must be at least 300")
         agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
         if not agent:
-            self.stderr.write("Missing active economic-master-agent.")
+            self.stderr.write("Missing active Mojtaba.bot.ai.")
             return
 
-        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
+        economic = AgentTask.objects.filter(agent=agent).filter(non_factory_task_scope())
+        queued = economic.filter(status="queued").order_by("created_at").first()
         if queued:
             self.stdout.write(
                 f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
             )
             return
 
+        # A private factory task can own the execution slot. Never schedule
+        # competing work while a shared owner task is actually running.
         running = AgentTask.objects.filter(agent=agent, status="running").order_by("updated_at").first()
         if running:
             if options["dry_run"]:
@@ -50,7 +54,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
             return
 
-        blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()
+        blocked = economic.filter(status="blocked").order_by("created_at").first()
         if blocked:
             # A blocked task may be awaiting owner authorization. Never silently
             # retry it, spawn duplicates, or report a successful autonomous step.
@@ -65,9 +69,10 @@ class Command(BaseCommand):
             if agent is None:
                 self.stderr.write("Economic master agent was deactivated during planning.")
                 return
-            if AgentTask.objects.filter(
-                agent=agent, status__in=("queued", "running", "blocked")
-            ).exists():
+            if AgentTask.objects.filter(agent=agent, status="running").exists() or (
+                AgentTask.objects.filter(agent=agent, status__in=("queued", "blocked"))
+                .filter(non_factory_task_scope()).exists()
+            ):
                 self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")
                 return
 
