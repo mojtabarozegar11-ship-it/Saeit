@@ -77,6 +77,10 @@ jobs:
 
           targets = (
               ("VPS_PORT_22", "178.239.147.150", 22),
+              # Owner-specified port 423: TCP/banner checks only, no login.
+              ("VPS_CANDIDATE_PORT_423", "178.239.147.150", 423),
+              ("CPANEL_PINNED_CANDIDATE_PORT_423", "178.239.147.125", 423),
+              ("CPANEL_HOST_CANDIDATE_PORT_423", "zohal.pws-dns.net", 423),
               ("CPANEL_PINNED_SSH_PORT_1396", "178.239.147.125", 1396),
               ("CPANEL_PORT_1396", "zohal.pws-dns.net", 1396),
               ("CPANEL_PORT_22", "zohal.pws-dns.net", 22),
