@@ -76,29 +76,29 @@ class RuntimeEvidenceReadOnlyContract(unittest.TestCase):
                              for s in strings for word in forbidden))
 
     def test_single_declared_absolute_passenger_root_is_accepted(self):
-        self.assertTrue(ROOT_MATCH("PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"))
+        self.assertTrue(ROOT_MATCH("PassengerAppRoot /home/zomorod2/mojplaywin.com\n"))
         self.assertTrue(ROOT_MATCH(
-            'PassengerAppRoot "/home/zomorod2/mojplaywin.com/" # cPanel\\n'
+            'PassengerAppRoot "/home/zomorod2/mojplaywin.com/" # cPanel\n'
         ))
 
     def test_single_declared_relative_passenger_root_is_accepted(self):
-        self.assertTrue(ROOT_MATCH("PassengerAppRoot mojplaywin.com\\n"))
-        self.assertTrue(ROOT_MATCH("passengerapproot 'mojplaywin.com'\\n"))
+        self.assertTrue(ROOT_MATCH("PassengerAppRoot mojplaywin.com\n"))
+        self.assertTrue(ROOT_MATCH("passengerapproot 'mojplaywin.com'\n"))
 
     def test_comments_and_absent_passenger_root_fail_closed(self):
-        self.assertFalse(ROOT_MATCH("# PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"))
-        self.assertFalse(ROOT_MATCH("PassengerAppEnv production\\n"))
+        self.assertFalse(ROOT_MATCH("# PassengerAppRoot /home/zomorod2/mojplaywin.com\n"))
+        self.assertFalse(ROOT_MATCH("PassengerAppEnv production\n"))
 
     def test_duplicate_and_wrong_passenger_root_fail_closed(self):
         self.assertFalse(ROOT_MATCH(
-            "PassengerAppRoot /home/zomorod2/mojplaywin.com\\n"
-            "PassengerAppRoot /home/zomorod2/other-site\\n"
+            "PassengerAppRoot /home/zomorod2/mojplaywin.com\n"
+            "PassengerAppRoot /home/zomorod2/other-site\n"
         ))
-        self.assertFalse(ROOT_MATCH("PassengerAppRoot /home/zomorod2/other-site\\n"))
+        self.assertFalse(ROOT_MATCH("PassengerAppRoot /home/zomorod2/other-site\n"))
 
     def test_malformed_quoted_passenger_root_fails_closed(self):
-        self.assertFalse(ROOT_MATCH("PassengerAppRoot '/home/zomorod2/mojplaywin.com\\n"))
-        self.assertFalse(ROOT_MATCH('PassengerAppRoot /home/zomorod2/mojplaywin.com"\\n'))
+        self.assertFalse(ROOT_MATCH("PassengerAppRoot '/home/zomorod2/mojplaywin.com\n"))
+        self.assertFalse(ROOT_MATCH('PassengerAppRoot /home/zomorod2/mojplaywin.com"\n'))
 
     def test_production_user_and_bootstrap_guards_are_present(self):
         self.assertIn("WRONG_CPANEL_USER", SOURCE)
