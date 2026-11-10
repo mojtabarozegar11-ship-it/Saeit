@@ -309,6 +309,18 @@ def patch_public(namespace):
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
+    # The real release hook is appended after COMMERCIAL_URLPATTERNS exists.
+    # Check every route and handler before replacing any namespace callback.
+    patterns = namespace.get("COMMERCIAL_URLPATTERNS")
+    if not isinstance(patterns, (tuple, list)):
+        raise RuntimeError("Unsupported commercial route table")
+    if not all(
+            isinstance(item, (tuple, list)) and len(item) == 2 and
+            isinstance(item[0], str) and callable(item[1])
+            for item in patterns):
+        raise RuntimeError("Malformed commercial route table")
+    if sum("/start/" in route for route, _ in patterns) != 1:
+        raise RuntimeError("Expected exactly one TRX start route")
     from django.views.decorators.cache import never_cache
     from django.views.decorators.csrf import csrf_protect
     from django.views.decorators.http import require_GET, require_POST
@@ -319,10 +331,11 @@ def patch_commercial(namespace):
         "reconcile_invoice": ("_reconcile_invoice", False, require_POST, True),
         "download_paid": ("_download_paid", False, require_GET, False),
     }
-    for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
-        inner = namespace.get(inner_name)
-        if inner is None:
+    for inner_name, _, _, _ in targets.values():
+        if not callable(namespace.get(inner_name)):
             raise RuntimeError("Expected TRX handler missing: " + inner_name)
+    for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
+        inner = namespace[inner_name]
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
@@ -349,27 +362,15 @@ def patch_commercial(namespace):
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
-    patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, (tuple, list)):
-        rebuilt = []
-        route_names = (
-            ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-            ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-            ("/download/", "download_paid"),
-        )
-        found_start_route = False
-        for route, view in patterns:
-            route_name = next((name for token, name in route_names if token in route), None)
-            if route_name == "start_order":
-                found_start_route = True
-            replacement = namespace.get(route_name, view)
-            rebuilt.append((route, replacement))
-        if not found_start_route:
-            # Never claim protection of the payment entrypoint unless its
-            # actual published URL callback was replaced.
-            raise RuntimeError("Missing TRX start route in commercial table")
-        namespace["COMMERCIAL_URLPATTERNS"] = type(patterns)(rebuilt)
-    elif patterns is not None:
-        # Do not claim a successful route patch for an unknown URL table type.
-        raise RuntimeError("Unsupported commercial route table")
+    rebuilt = []
+    route_names = (
+        ("/start/", "start_order"), ("/invoice/", "show_invoice"),
+        ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
+        ("/download/", "download_paid"),
+    )
+    for route, view in patterns:
+        route_name = next((name for token, name in route_names if token in route), None)
+        replacement = namespace.get(route_name, view)
+        rebuilt.append((route, replacement))
+    namespace["COMMERCIAL_URLPATTERNS"] = type(patterns)(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
