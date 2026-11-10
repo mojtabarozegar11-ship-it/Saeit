@@ -1,0 +1,67 @@
+name: MPW guest purchase-email ownership contract
+
+on:
+  pull_request:
+    branches: [main, integration/mpw-recovery-main-20261107]
+    paths:
+      - .github/workflows/mpw-guest-email-alias-c23.yml
+      - services/mpw_trx_guest_commerce.py
+      - tests/test_mpw_guest_email_only_checkout_20261108.py
+      - scripts/mpw_dynamic_store_cutover_20261108.py
+      - tests/test_mpw_dynamic_store_cutover_20261108.py
+      - .github/workflows/mpw-dynamic-store-cutover-20261108.yml
+      - core/mojplaywin_views.py
+      - core/migrations/0040_commercefunnelevent.py
+      - core/migrations/0049_mpw_guest_email_recovery.py
+      - mpw_commerce/migrations/**
+
+permissions:
+  contents: read
+
+jobs:
+  guest-email-alias:
+    if: github.event_name == 'pull_request' && contains(fromJSON('["main","integration/mpw-recovery-main-20261107"]'), github.base_ref)
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-guest-ownership-only"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - name: Read repository source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare isolated Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install existing project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Check real Django migration graph without a database connection
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python -B - <<'PY'
+          import django
+          django.setup()
+          from django.db.migrations.loader import MigrationLoader
+          from scripts.mpw_dynamic_store_cutover_20261108 import verify_staging_recovery_migration_graph
+          loader = MigrationLoader(None)
+          loader.graph.validate_consistency()
+          verify_staging_recovery_migration_graph(MigrationLoader)
+          print("MPW_REAL_MIGRATION_LOADER=PASS;DATABASE_CONNECTION=NONE")
+          PY
+      - name: Verify guest-email source and exact regression tests with isolated settings
+        run: |
+          set -euo pipefail
+          python -m py_compile services/mpw_trx_guest_commerce.py tests/test_mpw_guest_email_only_checkout_20261108.py
+          pytest -q --ds=tests.mpw_recovery_test_settings tests/test_mpw_guest_email_only_checkout_20261108.py
+      - name: Verify integrated store cutover safeguards without server access
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py tests/test_mpw_dynamic_store_cutover_20261108.py
+          pytest -q tests/test_mpw_dynamic_store_cutover_20261108.py
