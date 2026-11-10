@@ -426,6 +426,7 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
     for asset_id, holders in allocations.items():
         if not isinstance(holders, dict) or not holders:
             raise ValueError("invalid_allocation_holders")
+        expected = _whole_number(assets[asset_id]["supply_tokens"])
         total = 0
         normalized_labels = set()
         for label, quantity in holders.items():
@@ -441,7 +442,10 @@ def validate_offline_allocations(program: dict, allocations: dict[str, dict[str,
                 raise ValueError("duplicate_allocation_holder_label")
             normalized_labels.add(normalized)
             total += _whole_number(quantity)
-        expected = _whole_number(assets[asset_id]["supply_tokens"])
+            # Reject oversupply immediately, rather than processing an entire
+            # untrusted allocation manifest after the cap is exceeded.
+            if total > expected:
+                raise ValueError("allocation_supply_exceeded")
         if total != expected:
             raise ValueError("allocation_supply_mismatch")
         totals[asset_id] = total
