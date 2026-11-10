@@ -29,6 +29,15 @@ class Command(BaseCommand):
         if requested_steps>steps:
             self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")
         for step in range(steps):
+            in_flight = AgentTask.objects.filter(
+                agent__code="economic-master-agent", agent__active=True, status="running"
+            ).order_by("updated_at", "pk").first()
+            if in_flight:
+                self.stdout.write(
+                    f"AUTO_WAIT_RUNNING task={in_flight.pk} "
+                    "prevents_parallel_execution=true revenue_not_assessed=true"
+                )
+                return
             active=self._next_eligible_task(supported)
             if not active:
                 call_command("online_income_cycle")

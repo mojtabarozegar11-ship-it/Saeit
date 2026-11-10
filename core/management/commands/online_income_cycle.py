@@ -41,7 +41,13 @@ class Command(BaseCommand):
             except TaskExecutionError:
                 self.stdout.write(f"BRAIN_RUNNING task={running.pk} awaiting_heartbeat_or_recovery")
                 return
-            self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
+            if recovered.status == "blocked":
+                self.stdout.write(
+                    f"BRAIN_RECONCILIATION_REQUIRED task={recovered.pk} "
+                    "automatic_replay_allowed=false requires_review=true"
+                )
+            else:
+                self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
             return
 
         blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()

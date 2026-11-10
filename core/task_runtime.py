@@ -30,6 +30,16 @@ class TaskRuntime:
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
 
+        # The economic executor is an internal lane of the single Mojtaba.bot.
+        # On row-locking databases select_for_update also locks the joined
+        # agent row, serializing claims of different tasks by this agent.
+        if task.agent.code == "economic-master-agent" and AgentTask.objects.filter(
+            agent_id=task.agent_id, status="running"
+        ).exclude(pk=task.pk).exists():
+            raise TaskExecutionError(
+                "Unified economic executor already has a running task; wait for completion or recovery"
+            )
+
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)
         if not capability:
@@ -101,6 +111,17 @@ class TaskRuntime:
             task.output_data = {
                 "error": "Execution became stale and retry budget was exhausted"
             }
+        elif task.agent.code == "economic-master-agent":
+            # Staleness is not proof of failure: a previous economic action
+            # might already have made a private or external change.  Never
+            # replay such work until the previous effect has been reconciled.
+            task.status = "blocked"
+            task.output_data = {
+                "error": "Stale economic execution requires reconciliation before any retry",
+                "requires_review": True,
+                "automatic_replay_allowed": False,
+                "previous_execution_id": previous_execution_id,
+            }
         else:
             task.status = "queued"
             task.execution_id = ""
@@ -119,6 +140,7 @@ class TaskRuntime:
                 "previous_execution_id": previous_execution_id,
                 "attempt": task.attempt_count,
                 "stale_after_seconds": seconds,
+                "requires_review": task.status == "blocked",
             },
             trace_execution_id=previous_execution_id,
         )

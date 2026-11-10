@@ -37,6 +37,15 @@ class Command(BaseCommand):
         )
         runner = None
         for _ in range(limit):
+            in_flight = AgentTask.objects.filter(
+                agent__code="economic-master-agent", agent__active=True, status="running"
+            ).order_by("updated_at", "pk").first()
+            if in_flight:
+                self.stdout.write(
+                    f"WAIT_RUNNING task={in_flight.pk} "
+                    "prevents_parallel_execution=true revenue_not_assessed=true"
+                )
+                break
             # Never retry the same queued identity within this invocation.
             # A failed or re-queued task is left for the normal retry policy.
             task_query = (

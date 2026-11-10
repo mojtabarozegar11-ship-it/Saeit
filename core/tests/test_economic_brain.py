@@ -200,7 +200,7 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(task.attempt_count, 0)
         self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
 
-    def test_stale_running_task_is_recovered_without_duplicate_task(self):
+    def test_stale_running_task_requires_reconciliation_without_duplicate_task(self):
         task = AgentTask.objects.create(
             agent=self.agent, action_type="income_market_research",
             capability_code="income_market_research", status="running",
@@ -212,10 +212,12 @@ class VerifiedEconomicCycleTests(TestCase):
         output = StringIO()
         call_command("online_income_cycle", stdout=output)
         task.refresh_from_db()
-        self.assertEqual(task.status, "queued")
-        self.assertEqual(task.execution_id, "")
+        self.assertEqual(task.status, "blocked")
+        self.assertEqual(task.execution_id, "obsolete-worker")
+        self.assertTrue(task.output_data["requires_review"])
+        self.assertFalse(task.output_data["automatic_replay_allowed"])
         self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
-        self.assertIn("BRAIN_RECOVERED", output.getvalue())
+        self.assertIn("BRAIN_RECONCILIATION_REQUIRED", output.getvalue())
 
     def test_blocked_task_requires_review_without_spawning_replacement(self):
         task = AgentTask.objects.create(
