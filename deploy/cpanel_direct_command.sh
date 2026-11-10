@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|seo_provenance) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -78,5 +78,12 @@ case "$operation" in
     ;;
   django_migrations)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+    ;;
+  seo_provenance)
+    # Execute the audited read-only probe over SSH stdin; do not install code on cPanel.
+    test -r scripts/mpw_search_readonly_provenance.py
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel \
+      'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+      < scripts/mpw_search_readonly_provenance.py
     ;;
 esac
