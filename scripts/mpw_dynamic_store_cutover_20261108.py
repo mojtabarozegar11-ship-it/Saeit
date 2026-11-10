@@ -208,14 +208,37 @@ def verify_guest_email_ownership_source(source: bytes) -> None:
 
 
 def verify_guest_order_claim_schema(guest_order_email_model, database_connection) -> None:
-    """Read the live default DB schema before advertising email-owned orders."""
+    """Read-only validation of the columns and one-order-one-claim DB constraint.
+
+    Merely finding the table name is insufficient: an interrupted migration or
+    an unrelated legacy table can lack the fields needed to bind an invoice to
+    its buyer, or the unique order constraint that prevents duplicate claims.
+    """
     table = guest_order_email_model._meta.db_table
+    required = {field.column for field in guest_order_email_model._meta.concrete_fields}
+    if not isinstance(table, str) or not table or "order_id" not in required:
+        raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_MODEL_INVALID")
     try:
-        names = database_connection.introspection.table_names()
+        with database_connection.cursor() as cursor:
+            introspection = database_connection.introspection
+            names = introspection.table_names(cursor)
+            if table in names:
+                columns = {
+                    item.name for item in introspection.get_table_description(cursor, table)
+                }
+                constraints = introspection.get_constraints(cursor, table)
     except Exception as exc:
         raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_SCHEMA_UNKNOWN") from exc
-    if not isinstance(table, str) or not table or table not in names:
+    if table not in names:
         raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_SCHEMA_MISSING")
+    if not required.issubset(columns):
+        raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_COLUMNS_MISSING")
+    if not any(
+        details.get("unique") is True
+        and tuple(details.get("columns") or ()) == ("order_id",)
+        for details in constraints.values()
+    ):
+        raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_UNIQUE_ORDER_MISSING")
 
 
 def verify_buyer_route_resolution(resolver):
