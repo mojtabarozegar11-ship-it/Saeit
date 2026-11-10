@@ -46,4 +46,9 @@ class PublicSitemapCoverageTests(TestCase):
         request = RequestFactory().get("/sitemap.xml", HTTP_HOST="zomorodmelal.ir")
         response = sitemap_xml(request)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"<loc>https://zomorodmelal.ir/faremah/</loc>", response.content)
+        for path in (
+            "faremah/", "gold/", "vehicles/", "marketing/", "chain-stores/",
+        ):
+            with self.subTest(path=path):
+                expected = f"<loc>https://zomorodmelal.ir/{path}</loc>"
+                self.assertIn(expected.encode("utf-8"), response.content)
