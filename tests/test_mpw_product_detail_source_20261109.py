@@ -44,7 +44,10 @@ class ProductTemplateSourceContract(unittest.TestCase):
         self.assertIn("40 pages", self.html)
         self.assertIn("landscape PDF", self.html)
         self.assertIn("product.pk == 879", self.html)
-        self.assertIn("five original SVG", self.html)
+        self.assertIn("five SVG illustrations", self.html)
+        self.assertNotIn("five original SVG", self.html)
+        self.assertNotIn("One-site/client usage license;", self.html)
+        self.assertIn("not a verified license grant", self.html)
         self.assertIn("Demo photographs are", self.html)
 
     def test_product_specific_contents_and_original_browser_recovery(self):
@@ -90,6 +93,8 @@ class ProductTemplateSourceContract(unittest.TestCase):
         ):
             self.assertIn(condition, self.html)
         self.assertIn("New purchases are on hold until the file, third-party licenses", self.html)
+        self.assertIn('product.metadata.rights_review_status != "independently_cleared"', self.html)
+        self.assertIn("Do not pay until verification is complete", self.html)
 
     def test_no_trial_or_unknown_product_checkout(self):
         # Buyer CTA is nested under the three-SKU allowlist and USD guard.
@@ -146,7 +151,7 @@ class ProductTemplateSourceContract(unittest.TestCase):
 
     def test_django_render_has_one_distinct_offer_per_current_sku(self):
         for product_id, detail in (
-            (72, "415 pages"), (225, "40 pages"), (879, "five original SVG"),
+            (72, "415 pages"), (225, "40 pages"), (879, "five SVG illustrations"),
         ):
             with self.subTest(sku=product_id):
                 html = self._render_with_django(product_id)
@@ -178,6 +183,7 @@ class ProductTemplateSourceContract(unittest.TestCase):
                 html = self._render_with_django(sku, rights_ready=False)
                 self.assertNotIn(f'/commerce/book/{sku}/', html)
                 self.assertIn('New purchases are on hold', html)
+                self.assertIn('Rights and source provenance have not been independently cleared', html)
 
     def test_django_render_blocks_sale_if_any_release_flag_is_false(self):
         for flag in (
