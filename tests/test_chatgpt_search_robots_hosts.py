@@ -1,7 +1,7 @@
 """Regression checks for public ChatGPT Search crawler discovery on both site hosts."""
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
-from core.seo_views import robots_txt
+from core.seo_views import robots_txt, sitemap_xml
 
 
 @override_settings(ALLOWED_HOSTS=[
@@ -38,3 +38,12 @@ class PublicRobotsHostTests(SimpleTestCase):
                 self.assertIn("Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n", body)
                 self.assertNotIn("mojplaywin.com", body)
                 self.assertIn("Disallow: /site-heritage/\n", body)
+
+
+@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir"])
+class PublicSitemapCoverageTests(TestCase):
+    def test_faremah_services_landing_is_in_company_sitemap(self):
+        request = RequestFactory().get("/sitemap.xml", HTTP_HOST="zomorodmelal.ir")
+        response = sitemap_xml(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"<loc>https://zomorodmelal.ir/faremah/</loc>", response.content)
