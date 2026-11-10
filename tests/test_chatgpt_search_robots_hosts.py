@@ -1,4 +1,4 @@
-"""Regression checks for public ChatGPT Search crawler discovery on both site hosts."""
+"""Regression checks for crawler-agnostic search discovery on both public hosts."""
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from core.seo_views import robots_txt, sitemap_xml
@@ -39,6 +39,26 @@ class PublicRobotsHostTests(SimpleTestCase):
                 self.assertIn("Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n", body)
                 self.assertNotIn("mojplaywin.com", body)
                 self.assertIn("Disallow: /site-heritage/\n", body)
+
+
+    def test_public_robots_is_crawler_agnostic(self):
+        # Exemplars only: User-agent * is the interoperable rule for all compliant
+        # search crawlers, not a fixed allowlist of named AI providers.
+        user_agents = (
+            "Googlebot", "bingbot", "DuckDuckBot", "Applebot", "YandexBot",
+            "Baiduspider", "OAI-SearchBot", "Claude-SearchBot", "PerplexityBot",
+        )
+        for host in ("zomorodmelal.ir", "mojplaywin.com"):
+            baseline = self._body(host)
+            for user_agent in user_agents:
+                with self.subTest(host=host, user_agent=user_agent):
+                    request = RequestFactory().get(
+                        "/robots.txt", HTTP_HOST=host, HTTP_USER_AGENT=user_agent,
+                    )
+                    response = robots_txt(request)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content.decode("utf-8"), baseline)
+                    self.assertNotIn("Disallow: /\\n", baseline)
 
 
 @override_settings(ALLOWED_HOSTS=["zomorodmelal.ir"])
