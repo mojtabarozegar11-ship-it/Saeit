@@ -49,6 +49,7 @@ BUYER_ROUTE_PROBES = (
     ("/commerce/book/72/", b"The Science and Practice of Chess Improvement", b"Create my TRX payment invoice"),
     ("/commerce/book/225/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
     ("/commerce/book/879/", b"Atelier Interior", b"Create my TRX payment invoice"),
+    ("/commerce/trx-easy/purchases/", b"TRX purchase recovery", b"No active purchase session was found"),
 )
 # The owner-gated relay has a 150-second outer SSH timeout. Keep the complete
 # mutable interval well below it so Python, not the relay, controls rollback.
@@ -335,6 +336,10 @@ def verify_buyer_route_resolution(resolver):
         if (store_match.url_name != "store" or store_match.args or
                 store_match.kwargs or not callable(store_match.func)):
             raise RuntimeError("STAGING_STORE_URL_NOT_RESOLVED")
+        purchases_match = resolver("/commerce/trx-easy/purchases/")
+        if (purchases_match.args or purchases_match.kwargs or
+                not callable(purchases_match.func)):
+            raise RuntimeError("STAGING_PURCHASE_RECOVERY_ROUTE_INVALID")
         for product_id in (72, 225, 879):
             match = resolver(f"/store/product/{product_id}/checkout/")
             if (match.args or match.kwargs != {"product_id": product_id} or
@@ -465,7 +470,7 @@ def has_guarded_guest_invoice_form(body: bytes, product_id: int) -> bool:
 
 
 def verify_public_buyer_routes(run_id: str) -> bool:
-    """Require nine buyer-facing GET pages before and after public cutover.
+    """Require ten buyer-facing GET pages before and after public cutover.
 
     These probes never submit forms, create invoices, transfer funds or send mail.
     Only coarse failure categories are emitted, without customer information.
@@ -501,8 +506,10 @@ def verify_public_buyer_routes(run_id: str) -> bool:
                 category = "network_or_read_error"
         print("MPW_BUYER_ROUTE_PROBE=" + json.dumps({
             "checked": checked, "passed": False,
-            "route_group": ("checkout" if ("/checkout/" in route or
-                                           route.startswith("/commerce/book/")) else "detail"),
+            "route_group": ("recovery" if route.endswith("/purchases/")
+                            else "checkout" if ("/checkout/" in route or
+                                               route.startswith("/commerce/book/"))
+                            else "detail"),
             "category": category,
         }, sort_keys=True))
         return False

@@ -86,6 +86,8 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             return request
         if path == "/store/":
             return SimpleNamespace(url_name="store", args=(), kwargs={}, func=handler)
+        if path == "/commerce/trx-easy/purchases/":
+            return SimpleNamespace(url_name="purchases", args=(), kwargs={}, func=handler)
         for product_id in (72, 225, 879):
             if path == f"/store/product/{product_id}/checkout/":
                 return SimpleNamespace(url_name="product_checkout", args=(),
@@ -98,6 +100,23 @@ class DynamicStoreCutoverTests(unittest.TestCase):
     def test_all_three_real_buyer_url_routes_must_resolve(self):
         callback = verify_buyer_route_resolution(self.sample_route_resolver)
         self.assertTrue(callable(callback))
+
+    def test_missing_purchase_recovery_url_refuses_cutover(self):
+        def incomplete(path):
+            if path == "/commerce/trx-easy/purchases/":
+                raise LookupError("404")
+            return self.sample_route_resolver(path)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_BUYER_ROUTE_UNAVAILABLE"):
+            verify_buyer_route_resolution(incomplete)
+
+    def test_misbound_purchase_recovery_url_refuses_cutover(self):
+        def incorrect(path):
+            match = self.sample_route_resolver(path)
+            if path == "/commerce/trx-easy/purchases/":
+                match.kwargs = {"invoice_id": 72}
+            return match
+        with self.assertRaisesRegex(RuntimeError, "STAGING_PURCHASE_RECOVERY_ROUTE_INVALID"):
+            verify_buyer_route_resolution(incorrect)
 
     def test_missing_checkout_route_refuses_store_cutover(self):
         def incomplete(path):
@@ -529,7 +548,51 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertTrue(verify_public_buyer_routes("42425162108-before"))
         self.assertEqual(calls, [p for p, _, _ in BUYER_ROUTE_PROBES])
-        self.assertEqual(len(calls), 9)
+        self.assertEqual(len(calls), 10)
+
+    def test_unavailable_purchase_recovery_blocks_public_cutover(self):
+        """All product pages passing cannot conceal a broken orders page."""
+        from urllib.error import HTTPError
+        from urllib.parse import urlsplit
+        checked = []
+
+        class Reply:
+            status = 200
+
+            def __init__(self, req, body):
+                self.url = req.full_url
+                self.body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return self.url
+
+            def read(self, limit):
+                return self.body
+
+        def fetch(req, timeout):
+            path = urlsplit(req.full_url).path
+            checked.append(path)
+            if path == "/commerce/trx-easy/purchases/":
+                raise HTTPError(req.full_url, 503, "unavailable", {}, None)
+            title, action = next((title, action) for p, title, action
+                                 in BUYER_ROUTE_PROBES if p == path)
+            return Reply(req, public_buyer_body(path, title, action))
+
+        sink = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.urllib.request.urlopen",
+                   side_effect=fetch):
+            with contextlib.redirect_stdout(sink):
+                self.assertFalse(verify_public_buyer_routes("42425162108-before"))
+        self.assertEqual(len(checked), 10)
+        self.assertIn('"checked": 9', sink.getvalue())
+        self.assertIn('"route_group": "recovery"', sink.getvalue())
+        self.assertIn('"category": "http_503"', sink.getvalue())
 
     def test_alias_http_error_blocks_release(self):
         from urllib.error import HTTPError
