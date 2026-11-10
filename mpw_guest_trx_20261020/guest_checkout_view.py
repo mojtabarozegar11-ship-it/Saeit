@@ -7,7 +7,6 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.cache import never_cache
-from .guest_orders import issue
 from .guest_receipts import COOKIE,LIFETIME,get_order
 from .guest_settlement import confirm
 from .guest_product import approved_item
@@ -28,11 +27,10 @@ def checkout(request,product_id):
    if not may_start_new_order(product):
     error="New orders are on hold until independent product rights review is complete. Do not send any funds."
    else:
-    try:
-     token=issue(product,request.POST.get("sender","").strip())
-     order=get_order(token)
-    except Exception:
-     error="A secure TRX quote could not be issued. Do not send any funds."
+    # This legacy SQLite order schema has no durable buyer-email column.
+    # Do not issue email-less invoices even if independent rights are cleared.
+    error=("This legacy checkout cannot bind your email to an invoice. "
+           "New purchases are unavailable here. Do not send funds.")
   elif action=="verify" and order and order["product_id"]==product_id:
    try:
     confirm(order,request.POST.get("txid","").strip())
