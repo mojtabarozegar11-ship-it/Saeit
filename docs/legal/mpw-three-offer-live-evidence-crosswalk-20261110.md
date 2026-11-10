@@ -67,3 +67,26 @@ The separate source-owned product template explicitly labels the Sites link a **
 New source evidence snapshot: `catalog/mojplaywin/atelier_demo_identity_snapshot_20261110.json`. A read-only, fail-closed validator and six offline contract tests detect claims that Sites metadata alone confirms copyright, exact paid ZIP equivalence or commercial rights. They cannot independently authenticate a third-party asset license.
 
 **Source-only remediation in the Draft PR:** `core/templates/brands/mojplaywin/product.html` is now designed to withhold the guest checkout link unless the product is active, all relevant stock/licensing/publication flags are true and its rights review explicitly says `independently_cleared`. This is *conditional rendering*, not an independently verified live clearance process; the underlying evidence and live deployment still require separate review. Existing production was not changed.
+
+
+## 7. Cycle 44 — confirmed CI, marketing claims correction, and limits of code visibility
+
+**CI result for Cycle 43 head `41636f4d2e7f287d6bb8d4b605c3b9c316bfc544`:** all three GitHub workflows (`CI`, `Django CI`, `Factory Evidence Quality Policy Tests`) completed successfully. The PR remained Draft and unmerged at this observation. Green CI validates the checked source and tests, **not live rights or a completed payment/delivery**.
+
+Additional connected Google Drive searches for `atelier`, `taniya` and `chess` returned only unrelated agricultural economics or gemology documents. Corresponding scoped Dropbox searches returned zero matches; exact SKU 72, 225 or 879 creation projects, authorship grants and redistribution licenses were **not identified** in accessible results. A search miss cannot prove nonexistence elsewhere. No file was shared, copied or deleted.
+
+**Specific issue corrected in Draft source only:** the product 879 marketing text previously described five SVGs as `original` and one-site/client usage as an already-granted `license`, despite missing signed rights evidence. Those claims were softened to unverified historical catalog descriptions, a rights-pending warning was added for all three products, and source tests were updated. This reduces unsupported assertions; it does not establish new ownership, transfer IP, or change the live store.
+
+The checked branch includes `mpw_guest_trx_20261020/guest_product.py`, which checks flags for the **two book SKUs**, but **the referenced `mpw_commerce/product_checkout_page.py`, `mpw_commerce/buyer_orders.py`, and `core/cryptopay_checkout.py` paths were not retrievable from that GitHub branch** (404 from the file API). This is a repository-source visibility gap, **not a claim that the live Django runtime lacks those modules**. A template-only CTA guard is insufficient to prove a direct checkout URL cannot create invoices. No checkout POST was attempted.
+
+### General rights standard used for documentation, not an individual legal ruling
+
+- WIPO explains that copyright protection ordinarily arises automatically and that licensing means authorization of uses within a defined scope: <https://www.wipo.int/en/web/copyright/faq-copyright>.
+- WIPO identifies literary, artistic, photographic and software works among potentially protected categories, with originality relevant to protection: <https://www.wipo.int/en/web/copyright/protection>.
+- The U.S. Copyright Office's permission guidance cautions that a composite work may incorporate separately owned content even if one person publishes the whole: <https://www.copyright.gov/circs/m10.pdf>. This is a useful evidence principle, **not a finding about governing law for MojPlayWin**.
+
+### Release gate still open
+
+Before removing the rights hold, obtain and examine, for each exact current sellable file: (1) current private-file hash and readable manifest, (2) dated editable creation history, (3) component-by-component authorship and third-party asset/license inventory, (4) the actual grant from author to the named selling entity and proposed buyer terms, (5) independent review of scope and authenticity, and (6) effective server-side direct-URL checkout and entitlement gates. The last item requires authorized read-only access to the deployed runtime/source, not merely CI or metadata booleans.
+
+**Cycle 44 conclusions:** GitHub workflows 3/3 green for the prior head; accessible independent documentary rights packets 0/3; live host and transactions untouched; no email, ticket, fee, merge or deployment.
