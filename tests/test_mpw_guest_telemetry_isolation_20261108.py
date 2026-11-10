@@ -115,5 +115,21 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
         self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
 
 
+    def test_missing_start_route_never_claims_installation(self):
+        for routes in ([], [("/commerce/trx-easy/invoice/<int:invoice_id>/", Mock())]):
+            with self.subTest(routes=len(routes)):
+                namespace = {"_" + name: Mock() for name in (
+                    "start_order", "show_invoice", "invoice_status",
+                    "reconcile_invoice", "download_paid")}
+                namespace["COMMERCIAL_URLPATTERNS"] = list(routes)
+                with patch.dict(sys.modules, stub_modules(Mock(), object())):
+                    installer = source_function("patch_commercial", {
+                        "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+                    })
+                    with self.assertRaisesRegex(RuntimeError, "Missing TRX start route"):
+                        installer(namespace)
+                self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
+
+
 if __name__ == "__main__":
     unittest.main()
