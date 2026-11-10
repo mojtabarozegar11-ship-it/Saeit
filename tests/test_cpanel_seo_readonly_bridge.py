@@ -78,6 +78,7 @@ def test_relay_stages_differentiate_host_key_and_remote_failures():
         assert f'bridge_stage="{stage}"' in bridge
     assert "CPANEL_BRIDGE_FAILURE_STAGE=%s EXIT=%s" in bridge
     assert "trap report_bridge_error ERR" in bridge
+    assert "set -Eeuo pipefail" in bridge
 
 
 def test_probe_contains_no_live_mutation_or_network_calls():
