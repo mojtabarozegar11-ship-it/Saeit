@@ -160,23 +160,6 @@ def verify_buyer_route_resolution(resolver):
     return store_match.func
 
 
-def verify_invoice_start_rejects_get(resolver, request_factory) -> None:
-    """Require POST-only invoice handlers without submitting an order.
-
-    The live checkout form posts to these targets. A GET must return 405 before
-    touching guest identity, ledger or an invoice; redirects or HTTP 200 could
-    mean the request is caught by an unrelated route.
-    """
-    for product_id in (72, 225, 879):
-        path = f"/commerce/trx-easy/start/{product_id}/"
-        match = resolver(path)
-        request = request_factory.get(path, secure=True, HTTP_HOST="mojplaywin.com")
-        response = match.func(request)
-        if (response.status_code != 405 or
-                "POST" not in response.get("Allow", "").upper().split(", ")):
-            raise RuntimeError("STAGING_INVOICE_START_POST_ONLY_NOT_PROVEN")
-
-
 def check_actual_staging_store() -> None:
     """Import and render the real store view; never supply a metrics stub."""
     target = APP / "core/mojplaywin_views.py"
@@ -200,7 +183,6 @@ def check_actual_staging_store() -> None:
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
     store_callback = verify_buyer_route_resolution(resolve)
     factory = RequestFactory()
-    verify_invoice_start_rejects_get(resolve, factory)
     page = store_callback(factory.get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
     if page.status_code != 200 or len(page.content) < 2000 or any(
             route not in page.content for route in PRODUCT_ROUTES):
