@@ -3,6 +3,7 @@ import ast
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +126,56 @@ class NewSaleRightsPolicyTests(unittest.TestCase):
         self.assertIn("download_paid", source)
         self.assertIn("reconcile_invoice", source)
         self.assertNotIn("_require_new_sale_rights", PAID.read_text("utf8"))
+
+
+    def test_denied_new_sale_creates_neither_guest_nor_invoice(self):
+        source = ADAPTER.read_text("utf8")
+        node = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "_dispatch")
+        class Held(Exception):
+            pass
+        guest = Mock(return_value=(SimpleNamespace(), "signed"))
+        view = Mock()
+        reject = Mock(side_effect=Held("unreviewed"))
+        scope = {
+            "_host_ok": lambda request: True,
+            "_require_new_sale_rights": reject,
+            "_identity": guest,
+            "_install_cookie": Mock(),
+        }
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     str(ADAPTER), "exec"), scope)
+        with self.assertRaises(Held):
+            scope["_dispatch"](SimpleNamespace(), view, (),
+                               {"product_id": 72}, create=True, require_new_sale=True)
+        reject.assert_called_once_with(72)
+        guest.assert_not_called()
+        view.assert_not_called()
+
+    def test_existing_invoice_access_does_not_run_new_sale_gate(self):
+        source = ADAPTER.read_text("utf8")
+        node = next(n for n in ast.parse(source).body
+                    if isinstance(n, ast.FunctionDef) and n.name == "_dispatch")
+        guest_user = SimpleNamespace()
+        guest = Mock(return_value=(guest_user, "original-session"))
+        reject = Mock(side_effect=AssertionError("rights gate must not run"))
+        view = Mock(return_value="paid-order-view")
+        install = Mock(side_effect=lambda response, token: (response, token))
+        scope = {
+            "_host_ok": lambda request: True,
+            "_require_new_sale_rights": reject,
+            "_identity": guest,
+            "_install_cookie": install,
+        }
+        exec(compile(ast.Module(body=[node], type_ignores=[]),
+                     str(ADAPTER), "exec"), scope)
+        request = SimpleNamespace()
+        response = scope["_dispatch"](request, view, (),
+                                      {"invoice_id": 99}, require_new_sale=False)
+        self.assertEqual(response, ("paid-order-view", "original-session"))
+        self.assertIs(request.user, guest_user)
+        reject.assert_not_called()
+        view.assert_called_once_with(request, invoice_id=99)
 
 
 if __name__ == "__main__":
