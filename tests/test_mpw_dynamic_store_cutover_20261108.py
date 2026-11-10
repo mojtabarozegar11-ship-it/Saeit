@@ -171,19 +171,51 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_OWNER_SOURCE_INVALID"):
             verify_guest_email_ownership_source(b"def _new_user(:" + b"#" * 600)
 
+    @staticmethod
+    def _guest_order_schema(*, present=True, columns=None, unique=True, broken=False):
+        required = ("id", "order_id", "email_address", "email_digest", "created_at")
+        model = SimpleNamespace(_meta=SimpleNamespace(
+            db_table="core_guestorderemail",
+            concrete_fields=[SimpleNamespace(column=field) for field in required],
+        ))
+        if columns is None:
+            columns = required
+        connection = SimpleNamespace(
+            cursor=lambda: contextlib.nullcontext(object()),
+            introspection=SimpleNamespace(
+                table_names=(lambda _cursor: 1 / 0) if broken else
+                    (lambda _cursor: ["core_order"] + (["core_guestorderemail"] if present else [])),
+                get_table_description=lambda _cursor, _table: [
+                    SimpleNamespace(name=field) for field in columns
+                ],
+                get_constraints=lambda _cursor, _table: {
+                    "unique_order": {"unique": unique, "columns": ["order_id"]}
+                },
+            ),
+        )
+        return model, connection
+
     def test_guest_order_claim_requires_real_schema_in_default_db(self):
-        model = SimpleNamespace(_meta=SimpleNamespace(db_table="core_guestorderemail"))
-        connection = SimpleNamespace(introspection=SimpleNamespace(
-            table_names=lambda: ["core_order", "core_guestorderemail"]))
+        model, connection = self._guest_order_schema()
         verify_guest_order_claim_schema(model, connection)
-        missing = SimpleNamespace(introspection=SimpleNamespace(
-            table_names=lambda: ["core_order"]))
+        _, missing = self._guest_order_schema(present=False)
         with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_SCHEMA_MISSING"):
             verify_guest_order_claim_schema(model, missing)
-        unavailable = SimpleNamespace(introspection=SimpleNamespace(
-            table_names=lambda: 1 / 0))
+        _, unavailable = self._guest_order_schema(broken=True)
         with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_SCHEMA_UNKNOWN"):
             verify_guest_order_claim_schema(model, unavailable)
+
+    def test_guest_claim_missing_columns_blocks_release(self):
+        model, connection = self._guest_order_schema(columns=(
+            "id", "order_id", "email_address", "created_at",
+        ))
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_COLUMNS_MISSING"):
+            verify_guest_order_claim_schema(model, connection)
+
+    def test_guest_claim_without_unique_order_constraint_blocks_release(self):
+        model, connection = self._guest_order_schema(unique=False)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_ORDER_EMAIL_UNIQUE_ORDER_MISSING"):
+            verify_guest_order_claim_schema(model, connection)
 
     def test_old_unbound_adapter_blocks_before_any_dynamic_store_mutation(self):
         with tempfile.TemporaryDirectory() as root:
