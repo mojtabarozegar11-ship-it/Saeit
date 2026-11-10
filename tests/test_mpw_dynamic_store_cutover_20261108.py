@@ -8,11 +8,49 @@ from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
-    verify_dynamic_public,
+    verify_dynamic_public, verify_guarded_store_source,
 )
 
 
+SAFE_STORE_SOURCE = b'''from django.shortcuts import render
+PRODUCTS = []
+def store(request):
+ # Optional analytics cannot hide the storefront or leak visitor details.
+ try:
+  from .commerce_funnel import record_funnel_event
+  record_funnel_event(request, "view_store")
+ except Exception as exc:
+  import logging
+  logging.getLogger(__name__).warning("Optional analytics unavailable")
+ return render(request, "mojplaywin/store.html", {"products": PRODUCTS})
+'''
+
+
 class DynamicStoreCutoverTests(unittest.TestCase):
+    def test_optional_existing_funnel_module_is_not_an_automatic_cutover_block(self):
+        verify_guarded_store_source(SAFE_STORE_SOURCE)
+
+    def test_unguarded_funnel_call_is_refused(self):
+        source = SAFE_STORE_SOURCE.replace(b" try:\n", b" if True:\n").replace(
+            b" except Exception as exc:\n", b" else:\n")
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUARDED_VIEW_NOT_PROVEN"):
+            verify_guarded_store_source(source)
+
+    def test_analytics_handler_that_raises_is_refused(self):
+        source = SAFE_STORE_SOURCE.replace(
+            b'  logging.getLogger(__name__).warning("Optional analytics unavailable")',
+            b'  raise RuntimeError("fail closed")',
+        )
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUARDED_VIEW_NOT_PROVEN"):
+            verify_guarded_store_source(source)
+
+    def test_mismatched_template_and_duplicate_view_are_refused(self):
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUARDED_VIEW_NOT_PROVEN"):
+            verify_guarded_store_source(SAFE_STORE_SOURCE.replace(
+                b"mojplaywin/store.html", b"mojplaywin/other.html"))
+        with self.assertRaisesRegex(RuntimeError, "STAGING_GUARDED_VIEW_NOT_PROVEN"):
+            verify_guarded_store_source(SAFE_STORE_SOURCE + SAFE_STORE_SOURCE)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -130,3 +168,4 @@ class DynamicStoreCutoverTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
