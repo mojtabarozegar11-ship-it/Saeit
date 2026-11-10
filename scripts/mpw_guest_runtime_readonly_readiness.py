@@ -50,7 +50,7 @@ def registered_passenger_root(text: str) -> bool:
     A checked-in or stale passenger_wsgi.py is not proof that .htaccess is
     configured to serve it. Require a single unambiguous PassengerAppRoot.
     """
-    roots = re.findall(r"(?im)^[ \\t]*PassengerAppRoot[ \\t]+([^\\r\\n#]+)", text)
+    roots = re.findall(r"(?im)^[ \t]*PassengerAppRoot[ \t]+([^\r\n#]+)", text)
     if len(roots) != 1:
         return False
     value = roots[0].strip()
