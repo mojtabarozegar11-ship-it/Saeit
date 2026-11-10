@@ -359,7 +359,13 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
     if actual_checksums != checksums:
         raise ValueError("bundle_sha256_mismatch")
     for path, data in documents.items():
-        if (target / path).read_bytes() != data:
+        candidate = target / path
+        # Refuse oversized files before allocating their contents in memory.
+        # An untrusted offline bundle must not turn verification into a
+        # resource-exhaustion operation even when its inventory is valid.
+        if candidate.stat().st_size != len(data):
+            raise ValueError("bundle_file_size_mismatch:" + path)
+        if candidate.read_bytes() != data:
             raise ValueError("bundle_content_mismatch:" + path)
     return {"assets": len(program["assets"]), "offline_files": len(expected),
             "sha256": checksums, "on_chain_issuance": False}
