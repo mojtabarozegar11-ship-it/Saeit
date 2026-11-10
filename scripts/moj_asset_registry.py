@@ -332,6 +332,10 @@ def verify_bundle(program: dict, target: Path, *, include_f41: bool = True,
             raise ValueError("untrusted_bundle_symlink")
         relative = path.relative_to(target).as_posix()
         if path.is_file():
+            # Reject hard-linked files: verification must not read or trust a
+            # bundle entry that can be mutated through an external path.
+            if path.stat().st_nlink != 1:
+                raise ValueError("bundle_hardlink_invalid")
             found.add(relative)
         elif path.is_dir():
             if relative not in expected_directories:
