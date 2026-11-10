@@ -11,7 +11,7 @@
   <meta name="description" content="A 40-page illustrated English PDF storybook in landscape format, created for young readers and shared family reading.">
   {% elif product.pk == 879 %}
   <title>Atelier Interior: Editable Website Kit | MojPlayWin</title>
-  <meta name="description" content="An editable interior-studio HTML, CSS and JavaScript website kit with five original SVG illustrations, a setup guide and one-site/client license.">
+  <meta name="description" content="Historic listing of an interior-studio HTML, CSS and JavaScript website kit. Exact stock, asset provenance and license scope remain unverified.">
   {% else %}
   <title>{{ product.title }} | MojPlayWin</title>
   <meta name="description" content="Product information and availability at MojPlayWin. Contact support before any payment.">
@@ -54,6 +54,9 @@
   </nav>
   <article class="panel">
     <span class="eyebrow">Digital product · private delivery</span>
+    {% if product.metadata.rights_review_status != "independently_cleared" %}
+      <p class="note">Rights and source provenance have not been independently cleared for this offer. The details below describe historic catalog claims, not verified delivery rights. Do not pay until verification is complete.</p>
+    {% endif %}
     <h1>{{ product.title }}</h1>
     {% if product.pk == 72 %}
       <p class="lead">An English 415-page PDF chess study guide with an 84-day training plan. It includes critical-position worksheets, game-review guidance and progress tracking.</p>
@@ -72,14 +75,14 @@
       <h2>Reading format and contents</h2>
       <ul class="contents"><li>One illustrated English PDF containing 40 landscape-format pages.</li><li>Designed for shared family reading and read-aloud storytime.</li><li>Choose suitability for the individual child; no exact age band is claimed here.</li></ul>
     {% elif product.pk == 879 %}
-      <p class="lead">An editable HTML, CSS and JavaScript website kit for an interior-design studio, including five original SVG interior illustrations and a setup guide.</p>
+      <p class="lead">The historic catalog describes an editable HTML, CSS and JavaScript interior-studio kit with five SVG illustrations and a setup guide. Exact contents, authorship and resale permission remain unverified.</p>
       <p><a class="button secondary" href="https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/site-preview" target="_blank" rel="noopener noreferrer">View related interior website concept</a></p>
-      <p class="note">This public concept preview is <strong>not</strong> the exact downloadable ZIP. Its JPEG photographs, project planner, Studio Desk and WorldForge tools are not part of product 879. The purchased kit contains the files described below.</p>
-      <div class="facts"><div><strong>Format</strong><span>Website source files</span></div><div><strong>Included</strong><span>5 original SVG illustrations</span></div><div><strong>License</strong><span>One site/client</span></div></div>
+      <p class="note">This public concept preview is <strong>not</strong> the exact downloadable ZIP. Its JPEG photographs, project planner, Studio Desk and WorldForge tools are not part of product 879. The historic product listing describes the files below; the current paid ZIP has not been independently matched to them.</p>
+      <div class="facts"><div><strong>Format</strong><span>Website source files</span></div><div><strong>Included</strong><span>5 SVGs (catalog claim)</span></div><div><strong>License</strong><span>Unverified</span></div></div>
       <h2>Important file and license details</h2>
-      <p>Edit the studio's branding, contact information and project gallery to suit your client. Demo photographs are <strong>not</strong> included. The one-site/client license does not transfer copyright or grant unlimited redistribution.</p>
+      <p>Demo photographs are <strong>not</strong> described as included. The historic proposed one-site/client usage terms are <strong>not a verified license grant</strong>. Do not assume rights to edit, distribute or resell any bundled third-party material until the relevant grant is checked.</p>
       <h2>What is included</h2>
-      <ul class="contents"><li>Editable HTML, CSS and JavaScript website source files.</li><li>Project gallery and inquiry handoff for an interior-design studio.</li><li>Five original SVG interior illustrations and a setup guide.</li><li>One-site/client usage license; arrange hosting, branding details and any additional photographs separately.</li></ul>
+      <ul class="contents"><li>Editable HTML, CSS and JavaScript website source files.</li><li>Project gallery and inquiry handoff for an interior-design studio.</li><li>Five SVG interior illustrations and a setup guide are claimed in the historic listing, with the current package still unverified.</li><li>Proposed one-site/client terms are pending independent rights review; hosting, branding details and photographs must be arranged separately.</li></ul>
     {% else %}
       <p class="lead">This product is not among the three current public MojPlayWin digital offers. No new order should be initiated from this page.</p>
     {% endif %}
