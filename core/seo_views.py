@@ -71,24 +71,24 @@ def robots_txt(request):
     host = request.get_host().split(":")[0].lower()
     if host in {"mojplaywin.com", "www.mojplaywin.com"}:
         body = (
-            "User-agent: *\\n"
-            "Allow: /\\n"
-            "Disallow: /admin/\\n"
-            "Disallow: /api/\\n"
-            "Sitemap: https://mojplaywin.com/sitemap.xml\\n"
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Sitemap: https://mojplaywin.com/sitemap.xml\n"
         )
     else:
         body = (
-            "User-agent: *\\n"
-            "Allow: /\\n"
-            "Disallow: /admin/\\n"
-            "Disallow: /api/\\n"
-            "Disallow: /__zm_\\n"
-            "Disallow: /site-heritage/\\n"
-            "Disallow: /zm-agriculture-guides/\\n"
-            "Sitemap: https://zomorodmelal.ir/sitemap.xml\\n"
-            "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml\\n"
-            "Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\\n"
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Disallow: /__zm_\n"
+            "Disallow: /site-heritage/\n"
+            "Disallow: /zm-agriculture-guides/\n"
+            "Sitemap: https://zomorodmelal.ir/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
         )
     return HttpResponse(body, content_type="text/plain; charset=utf-8")
 
