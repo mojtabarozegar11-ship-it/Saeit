@@ -177,6 +177,12 @@ def _require_buyer_email(request):
     from django.core.exceptions import ValidationError
     from django.core.validators import validate_email
 
+    # Other email field names are rejected so downstream legacy handlers
+    # cannot bind a different recipient to the same new invoice.
+    for alias in ("buyer_email", "customer_email", "purchaser_email", "purchase_email"):
+        if request.POST.getlist(alias):
+            raise Http404("Conflicting checkout email fields are not accepted")
+
     submitted = request.POST.getlist("email")
     if len(submitted) != 1:
         raise Http404("Exactly one valid email address is required")
