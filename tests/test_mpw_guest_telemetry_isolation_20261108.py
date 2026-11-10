@@ -69,6 +69,9 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                 "start_order", "show_invoice", "invoice_status",
                 "reconcile_invoice", "download_paid",
             )}
+            namespace["COMMERCIAL_URLPATTERNS"] = [
+                ("/commerce/trx-easy/start/<int:product_id>/", Mock()),
+            ]
             installer(namespace)
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
@@ -126,9 +129,73 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                     installer = source_function("patch_commercial", {
                         "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
                     })
-                    with self.assertRaisesRegex(RuntimeError, "Missing TRX start route"):
+                    with self.assertRaisesRegex(RuntimeError, "Expected exactly one TRX start route"):
                         installer(namespace)
                 self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
+                self.assertNotIn("start_order", namespace)
+
+
+
+    def test_absent_route_table_cannot_mark_installed(self):
+        namespace = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            with self.assertRaisesRegex(RuntimeError, "Unsupported commercial route table"):
+                installer(namespace)
+        self.assertNotIn("start_order", namespace)
+        self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
+
+    def test_duplicate_start_routes_fail_before_mutation(self):
+        namespace = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        namespace["COMMERCIAL_URLPATTERNS"] = [
+            ("/commerce/trx-easy/start/<int:product_id>/", Mock()),
+            ("/legacy/start/<int:product_id>/", Mock()),
+        ]
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            with self.assertRaisesRegex(RuntimeError, "Expected exactly one TRX start route"):
+                installer(namespace)
+        self.assertNotIn("start_order", namespace)
+        self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
+
+    def test_bad_route_member_fails_before_mutation(self):
+        namespace = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid")}
+        namespace["COMMERCIAL_URLPATTERNS"] = [
+            ("/commerce/trx-easy/start/<int:product_id>/", Mock()),
+            ("/commerce/trx-easy/invoice/", None),
+        ]
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            with self.assertRaisesRegex(RuntimeError, "Malformed commercial route table"):
+                installer(namespace)
+        self.assertNotIn("start_order", namespace)
+
+    def test_missing_handler_fails_before_public_callbacks_replaced(self):
+        namespace = {"_" + name: Mock() for name in (
+            "start_order", "show_invoice", "invoice_status", "reconcile_invoice")}
+        namespace["COMMERCIAL_URLPATTERNS"] = [
+            ("/commerce/trx-easy/start/<int:product_id>/", Mock()),
+        ]
+        with patch.dict(sys.modules, stub_modules(Mock(), object())):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(), "_record_funnel_event_best_effort": Mock(),
+            })
+            with self.assertRaisesRegex(RuntimeError, "Expected TRX handler missing: _download_paid"):
+                installer(namespace)
+        self.assertNotIn("start_order", namespace)
+        self.assertIsNot(namespace.get("_mpw_guest_checkout_installed"), True)
 
 
 if __name__ == "__main__":
