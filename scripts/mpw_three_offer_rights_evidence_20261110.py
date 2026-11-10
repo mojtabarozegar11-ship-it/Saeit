@@ -18,6 +18,26 @@ KNOWN = {
     879: "98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa",
 }
 SCHEMA = "mojplaywin.three-offer-rights-register.v1"
+COMMON = {
+    "author_identity_and_alias_document",
+    "author_to_seller_distribution_authority",
+    "independent_signed_rights_review",
+}
+REQUIRED_EVIDENCE = {
+    72: COMMON | {
+        "original_editable_work_and_creation_history",
+        "cover_and_third_party_assets_commercial_licenses",
+    },
+    225: COMMON | {
+        "original_editable_work_and_creation_history",
+        "illustrations_and_third_party_assets_commercial_licenses",
+    },
+    879: COMMON | {
+        "original_source_and_creation_history",
+        "all_svg_fonts_images_scripts_dependency_rights",
+        "one_site_client_resale_license_authority",
+    },
+}
 
 
 def audit(document):
@@ -43,8 +63,11 @@ def audit(document):
         evidence = item.get("evidence")
         if type(evidence) is not dict or not evidence:
             raise ValueError("MISSING_EVIDENCE_CHECKLIST")
-        if "independent_signed_rights_review" not in evidence:
-            raise ValueError("MISSING_INDEPENDENT_REVIEW_REQUIREMENT")
+        if set(evidence) != REQUIRED_EVIDENCE[sku]:
+            raise ValueError("INCOMPLETE_OR_UNRECOGNIZED_EVIDENCE_SCHEMA")
+        if any(type(value) is not str or not value.strip()
+               for value in evidence.values() if value is not None):
+            raise ValueError("INVALID_UNVERIFIED_EVIDENCE_REFERENCE")
         missing = sorted(key for key, value in evidence.items() if value is None)
         invalid = sorted(key for key, value in evidence.items() if value is not None)
         # Future references must undergo separate verification of source, signature
