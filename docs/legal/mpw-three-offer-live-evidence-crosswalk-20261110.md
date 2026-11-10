@@ -149,3 +149,15 @@ A read-only cloud-browser visit on **2026-11-10** to three public checkout pages
 The product 72 form also contained a CSRF hidden input, visible invoice-creation button and text warning that cross-device email recovery remains unavailable. The SKU 879 public checkout **currently presents an invoice-creation form despite the historical preview-only catalog and absent independent rights packet**. This is a buyer-facing configuration discrepancy, not proof that the POST succeeds or that rights are infringed.
 
 **Not performed:** no input was filled, no POST or invoice creation attempted, no chain transaction, customer session mutation, email, ticket or deployment. Required HTML email attributes are **client-side affordances**, not independent proof of server-side email validation. The Draft-only rights guard would need a separately approved deployment and authenticated production-source comparison to affect this live form.
+
+
+## 12. Cycle 49 — fail-closed start URL binding and single-email preflight
+
+Source-only additions to `services/mpw_trx_guest_commerce.py`:
+
+- A supplied tuple/list `COMMERCIAL_URLPATTERNS` must contain a recognized `/start/` entry. An empty list or invoice-only table now raises rather than asserting `_mpw_guest_checkout_installed=True` while the purchase entrypoint remains unpatched. An absent table continues the older late-binding path; its actual integration remains **unverified**.
+- Every new `start_order` call runs the existing SKU/rights guard, then checks that **exactly one** submitted `email` value is present, unpadded, at most 254 characters and accepted by Django's `validate_email`, **before** creating a guest identity or calling the invoice handler.
+- Invalid new-sale email input is denied without creating a guest principal or invoice in isolated tests. Existing invoice lookup, payment reconciliation and paid download do not demand a second email or new rights authorization.
+- `tests/test_mpw_trx_email_gate_20261110.py` and an additional route-table regression in `tests/test_mpw_guest_telemetry_isolation_20261108.py` cover normal, missing, duplicate, malformed and whitespace emails, denial before mutation, and continuity of paid-invoice access.
+
+**Limits:** This source patch is not deployed. It proves neither how `services.mpw_trx_commercial_web._start_order` stores the submitted email nor whether the production system sends a receipt or supports cross-browser recovery. The referenced underlying runtime module is not available at this GitHub path, so email-to-order persistence still requires an authorized cPanel/server read-only inspection. A green CI run is not a rights packet or a successful real checkout. Do not issue invoices or send payments during rights HOLD.
