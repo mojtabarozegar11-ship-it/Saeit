@@ -145,5 +145,18 @@ def test_preflight_does_not_claim_login_without_token():
             patch.object(client, "probe_transport", return_value={"CPANEL_HTTPS_TLS": "VERIFIED"}), \
             redirect_stdout(out):
         assert client.main(["client", "preflight"]) == 0
-    assert "CPANEL_API_TOKEN_STATUS=NOT_CONFIGURED" in out.getvalue()
+    assert "CPANEL_API_TOKEN_STATUS=NOT_PROVIDED_TO_PREFLIGHT" in out.getvalue()
     assert "CPANEL_HTTPS_AUTH=VERIFIED" not in out.getvalue()
+
+
+def test_manual_preflight_is_available_without_injecting_api_token():
+    workflow = (SOURCE.parents[1] / ".github/workflows/cpanel-https-api-readonly.yml").read_text(encoding="utf-8")
+    assert "options: [preflight, domains, passenger]" in workflow
+    unauthenticated_step = workflow.split("      - name: Check HTTPS and UAPI reachability without a token", 1)[1].split(
+        "      - name: Make one authenticated read-only HTTPS request", 1
+    )[0]
+    authenticated_step = workflow.split("      - name: Make one authenticated read-only HTTPS request", 1)[1]
+    assert "if: inputs.operation == 'preflight'" in unauthenticated_step
+    assert "SAEIT_CPANEL_HTTPS_API_TOKEN" not in unauthenticated_step
+    assert "if: inputs.operation != 'preflight'" in authenticated_step
+    assert "SAEIT_CPANEL_HTTPS_API_TOKEN:" in authenticated_step
