@@ -4,9 +4,12 @@ Defines a continuous-improvement charter without bypassing approval, security,
 financial, destructive-change, publication, or credential controls.
 """
 
+from .bot_identity import BOT_ID, BOT_NAME
+
 MASTER_AGENT_CAPABILITY_PACK = {
-    "version": "1.1.0",
-    "title": "Master Agent Continuous Evolution Capability Pack",
+    "version": "1.2.0",
+    "bot_id": BOT_ID,
+    "title": f"{BOT_NAME} Unified Master Agent Capability Pack",
     "capabilities": [
         "creativity", "innovation", "scientific_economics",
         "business_economics", "scientific_business_management",
@@ -32,6 +35,9 @@ def capability_pack_prompt():
     loop = " -> ".join(MASTER_AGENT_CAPABILITY_PACK["operating_loop"])
     return (
         "MASTER AGENT CAPABILITY CHARTER\n"
+        f"Identity: {BOT_NAME} (id: {BOT_ID}) is the sole top-level robot. "
+        "Specialist agents, schedulers, workers, trading, research, security "
+        "and factory processes are internal capabilities, not separate bots.\n"
         f"Capabilities: {caps}.\n"
         f"Continuous improvement loop: {loop}.\n"
         "Use scientific and evidence-based reasoning; track assumptions, costs, "
