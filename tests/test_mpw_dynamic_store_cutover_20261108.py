@@ -10,6 +10,7 @@ from unittest.mock import patch
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
     verify_buyer_route_resolution, verify_dynamic_public,
+    verify_invoice_start_rejects_get,
     verify_guarded_store_source,
 )
 
@@ -38,6 +39,9 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         for product_id in (72, 225, 879):
             if path == f"/store/product/{product_id}/checkout/":
                 return SimpleNamespace(url_name="product_checkout", args=(),
+                                       kwargs={"product_id": product_id}, func=handler)
+            if path == f"/commerce/trx-easy/start/{product_id}/":
+                return SimpleNamespace(url_name="trx_invoice_start", args=(),
                                        kwargs={"product_id": product_id}, func=handler)
         raise LookupError("unknown route")
 
@@ -70,6 +74,41 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             return match
         with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_URL_NOT_RESOLVED"):
             verify_buyer_route_resolution(incorrect)
+
+    def test_missing_invoice_start_route_refuses_cutover(self):
+        def incomplete(path):
+            if path == "/commerce/trx-easy/start/225/":
+                raise LookupError("404")
+            return self.sample_route_resolver(path)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_BUYER_ROUTE_UNAVAILABLE"):
+            verify_buyer_route_resolution(incomplete)
+
+    def test_invoice_start_route_with_wrong_product_refuses_cutover(self):
+        def incorrect(path):
+            match = self.sample_route_resolver(path)
+            if path == "/commerce/trx-easy/start/879/":
+                match.kwargs = {"product_id": 72}
+            return match
+        with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_START_ROUTE_INVALID"):
+            verify_buyer_route_resolution(incorrect)
+
+    def test_invoice_start_get_must_return_post_only_405(self):
+        factory = SimpleNamespace(get=lambda path, **kwargs: object())
+        def good(path):
+            match = self.sample_route_resolver(path)
+            match.func = lambda request: SimpleNamespace(
+                status_code=405, get=lambda key, default="": "POST" if key == "Allow" else default)
+            return match
+        verify_invoice_start_rejects_get(good, factory)
+
+        def unsafe(path):
+            match = good(path)
+            if path == "/commerce/trx-easy/start/72/":
+                match.func = lambda request: SimpleNamespace(
+                    status_code=200, get=lambda key, default="": "GET")
+            return match
+        with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_START_POST_ONLY_NOT_PROVEN"):
+            verify_invoice_start_rejects_get(unsafe, factory)
 
     def test_optional_existing_funnel_module_is_not_an_automatic_cutover_block(self):
         verify_guarded_store_source(SAFE_STORE_SOURCE)
