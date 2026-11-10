@@ -158,7 +158,16 @@ def test_real_ingress_cli_expects_positional_accept(tmp_path):
         path.chmod(0o600)
     with patch.object(
         pull.subprocess, "run",
-        return_value=SimpleNamespace(returncode=0, stdout=b"ACCEPTED\n"),
+        return_value=SimpleNamespace(
+            returncode=0,
+            stdout=(b"COMMAND_RECEIPT=ACCEPTED\n"
+                    b"COMMAND_QUEUE=UPDATED\n"
+                    b"COMMAND_PUBLIC_KEY_BEGIN\n"
+                    b"-----BEGIN PUBLIC KEY-----\n"
+                    b"public-key-for-next-command\n"
+                    b"-----END PUBLIC KEY-----\n"
+                    b"COMMAND_PUBLIC_KEY_END\n"),
+        ),
     ) as run:
         pull.accept_envelope(
             "{}", ingress=ingress, db=db,
@@ -167,3 +176,25 @@ def test_real_ingress_cli_expects_positional_accept(tmp_path):
     arguments = run.call_args.args[0]
     assert arguments[3] == "accept"
     assert "--action" not in arguments
+
+
+@pytest.mark.parametrize("exit_code,receipt", [
+    (0, b"ACCEPTED\n"),  # Bare success token is not the ingress contract.
+    (0, b"COMMAND_RECEIPT=ACCEPTED\n"),  # No queue update proof.
+    (0, b"COMMAND_QUEUE=UPDATED\n"),  # No acceptance receipt.
+    (0, b"COMMAND_RECEIPT=REJECTED\nCOMMAND_QUEUE=UNCHANGED\n"),
+    (2, b"COMMAND_RECEIPT=ACCEPTED\nCOMMAND_QUEUE=UPDATED\n"),
+])
+def test_ingress_requires_real_receipt_and_queue_update(tmp_path, exit_code, receipt):
+    paths = [tmp_path / name for name in (
+        "company_ingress.py", "db.sqlite3", "hmac.key", "recipient.pem"
+    )]
+    for path in paths:
+        path.write_bytes(b"fixture")
+        path.chmod(0o600)
+    with patch.object(pull.subprocess, "run", return_value=SimpleNamespace(
+        returncode=exit_code, stdout=receipt,
+    )):
+        with pytest.raises(pull.PullError, match="INGRESS_NOT_ACCEPTED"):
+            pull.accept_envelope("{}", ingress=paths[0], db=paths[1],
+                                 hmac_key=paths[2], recipient_key=paths[3])
