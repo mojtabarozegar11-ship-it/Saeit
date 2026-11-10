@@ -39,6 +39,15 @@ SOURCE_PATHS = (
     "services/mpw_trx_public_pages.py",
     "config/urls.py",
 )
+PUBLIC_ROUTE_PATHS = (
+    "/commerce/book/72/",
+    "/commerce/book/225/",
+    "/commerce/book/879/",
+    "/commerce/trx-easy/start/72/",
+    "/commerce/trx-easy/start/225/",
+    "/commerce/trx-easy/start/879/",
+    "/commerce/trx-easy/recover/",
+)
 
 
 def stop(code: str) -> None:
@@ -187,7 +196,7 @@ def main() -> None:
             }
 
         route_evidence = {}
-        for path in ("/commerce/book/879/", "/commerce/trx-easy/start/879/"):
+        for path in PUBLIC_ROUTE_PATHS:
             try:
                 match = resolve(path)
             except Resolver404:
@@ -250,3 +259,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
