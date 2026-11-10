@@ -134,3 +134,18 @@ The previous two-book `mpw_guest_trx_20261020/guest_checkout_view.py` is **not**
 **Two targeted offline checks** were added to `tests/test_mpw_guest_telemetry_isolation_20261108.py`: one confirms a list-based table binds new-order, invoice and paid-download URLs to their respective wrapped functions; the other confirms an unsupported table does not set the installed flag. They do not create orders, send email or call the chain.
 
 **Remaining release evidence:** authenticated actual deployed `COMMERCIAL_URLPATTERNS` type/callback identity and the effective `/commerce/trx-easy/start/<id>/` route must be captured read-only, with original paid download/recovery proven unaffected. Exact product rights packets independently authenticated: **0/3**. All current Cycle-48 changes remain GitHub Draft only, without merge, cPanel/VPS write, payment, ticket or email.
+
+
+## 11. Cycle 48 — fresh public buyer-form observation, GET only
+
+A read-only cloud-browser visit on **2026-11-10** to three public checkout pages returned populated page titles and visibly rendered buyer forms, with these exact DOM facts:
+
+| Public GET page | Observed form action | Method | Required HTML email input | Visible price |
+| --- | --- | --- | --- | --- |
+| `/commerce/book/72/` | `/commerce/trx-easy/start/72/` | POST | `type=email`, `required=true`, `name=email` | USD 7.50 |
+| `/commerce/book/225/` | `/commerce/trx-easy/start/225/` | POST | `type=email`, `required=true` | USD 4.00 historically; price not reread in this browser step |
+| `/commerce/book/879/` | `/commerce/trx-easy/start/879/` | POST | `type=email`, `required=true` | USD 6.80 |
+
+The product 72 form also contained a CSRF hidden input, visible invoice-creation button and text warning that cross-device email recovery remains unavailable. The SKU 879 public checkout **currently presents an invoice-creation form despite the historical preview-only catalog and absent independent rights packet**. This is a buyer-facing configuration discrepancy, not proof that the POST succeeds or that rights are infringed.
+
+**Not performed:** no input was filled, no POST or invoice creation attempted, no chain transaction, customer session mutation, email, ticket or deployment. Required HTML email attributes are **client-side affordances**, not independent proof of server-side email validation. The Draft-only rights guard would need a separately approved deployment and authenticated production-source comparison to affect this live form.
