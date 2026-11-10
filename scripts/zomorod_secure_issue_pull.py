@@ -260,7 +260,7 @@ def accept_envelope(
     if not db.is_file() or db.is_symlink():
         raise PullError("DATABASE_UNAVAILABLE")
     command = [
-        sys.executable, "-B", str(ingress), "--action", "accept",
+        sys.executable, "-B", str(ingress), "accept",
         "--db", str(db), "--hmac-key", str(hmac_key),
         "--recipient-key", str(recipient_key),
     ]
