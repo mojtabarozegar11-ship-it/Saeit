@@ -25,6 +25,7 @@ class GuestCheckoutSecurityTests(unittest.TestCase):
         self.assertEqual(report['commercial_email_block'],
                          'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE')
         self.assertEqual(report['email_based_recovery_end_to_end'], 'not_examined')
+        self.assertEqual(report['checkout_template_email_input'], 'not_examined')
 
     def test_email_appearance_without_validation_does_not_clear_block(self):
         source = self.source.replace('def _new_user(request):',
@@ -32,6 +33,44 @@ class GuestCheckoutSecurityTests(unittest.TestCase):
         report = MODULE.audit_source(source)
         self.assertTrue(report['buyer_email_post_read_in_identity_source'])
         self.assertTrue(report['buyer_email_stored_in_identity_source'])
+        self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
+        self.assertIsNotNone(report['commercial_email_block'])
+
+    def test_reachable_shared_guest_email_validator_clears_source_indicator(self):
+        helper = '''
+def _submitted_purchase_email(request):
+    from django.core.validators import validate_email
+    posted = getattr(request, "POST", None)
+    addresses = []
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
+        for value in posted.getlist(key):
+            validate_email(value)
+            addresses.append(value)
+    return addresses[0]
+'''
+        source = self.source.replace(
+            '    _rate_limit(request)\n    Model = get_user_model()',
+            '    submitted_email = _submitted_purchase_email(request)\n'
+            '    _rate_limit(request)\n    Model = get_user_model()', 1)
+        source = source.replace('    token = signing.dumps(',
+                                '    user.email = submitted_email\n'
+                                '    user.save(update_fields=["email"])\n'
+                                '    token = signing.dumps(', 1)
+        report = MODULE.audit_source(source + helper)
+        self.assertTrue(report['buyer_email_validator_in_identity_source'])
+        self.assertTrue(report['buyer_email_post_read_in_identity_source'])
+        self.assertTrue(report['buyer_email_stored_in_identity_source'])
+        self.assertTrue(report['buyer_email_before_invoice_source_indicators'])
+        self.assertIsNone(report['commercial_email_block'])
+
+    def test_unreachable_email_helper_never_clears_identity_gate(self):
+        source = self.source + '''
+def _unrelated_email_helper(request):
+    from django.core.validators import validate_email
+    validate_email(request.POST.get("email"))
+    user.email = "not a checkout identity"
+'''
+        report = MODULE.audit_source(source)
         self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
         self.assertIsNotNone(report['commercial_email_block'])
 
