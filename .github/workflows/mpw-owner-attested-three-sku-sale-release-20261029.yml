@@ -5,7 +5,9 @@ on:
       - ".github/workflows/mpw-owner-attested-three-sku-sale-release-20261029.yml"
       - "scripts/mpw_owner_attested_sku_metadata_20261029.py"
       - "scripts/mpw_trx_rights_live_guard_20261028.py"
-      - "scripts/mpw_checkout_csp_zero_script_guard_20261029.py"
+      - "scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py"
+      - "tests/test_mpw_three_sku_guest_checkout_security_preflight_20261111.py"
+      - "tests/test_mpw_trx_rights_live_guard_20261028.py"
   workflow_dispatch:
     inputs:
       operation:
@@ -29,8 +31,8 @@ jobs:
       - name: Validate release scripts without production access
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_checkout_csp_zero_script_guard_20261029.py
-          python3 scripts/mpw_checkout_csp_zero_script_guard_20261029.py selftest
+          python3 -m py_compile scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mpw_three_sku_guest_checkout_security_preflight_20261111 tests.test_mpw_trx_rights_live_guard_20261028
   live:
     needs: contract
     if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
@@ -88,8 +90,8 @@ jobs:
           d="$RUNNER_TEMP/mpw-owner-release"
           remote="/home/zomorod2/.mpw-owner-release-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$remote' && install -d -m 700 '$remote'"
-          timeout 50s scp -q -F "$d/config" scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_checkout_csp_zero_script_guard_20261029.py "saeit-cpanel:$remote/"
-      - name: Run read-only data, rights-gate and checkout preflights
+          timeout 50s scp -q -F "$d/config" scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py "saeit-cpanel:$remote/"
+      - name: Run read-only rights, version and real guest-checkout security preflights
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-owner-release"
@@ -97,8 +99,8 @@ jobs:
           py="/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' check"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py - check" < scripts/mpw_trx_rights_live_guard_20261028.py
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' preview"
-      - name: Apply owner declaration, checkout repair and rights gate with rollback
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_three_sku_guest_checkout_security_preflight_20261111.py'"
+      - name: Apply verified owner declaration and rights gate with rollback
         if: inputs.operation == 'apply'
         shell: bash
         run: |
@@ -107,15 +109,11 @@ jobs:
           remote="/home/zomorod2/.mpw-owner-release-$GITHUB_RUN_ID"
           py="/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python"
           owner_applied=0
-          csp_applied=0
           rights_apply_armed=0
           rollback() {
             trap - ERR
             if [ "$rights_apply_armed" = 1 ]; then
               timeout 90s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_trx_rights_live_guard_20261028.py' recover '$GITHUB_RUN_ID'" || true
-            fi
-            if [ "$csp_applied" = 1 ]; then
-              timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' rollback '$GITHUB_RUN_ID'" || true
             fi
             if [ "$owner_applied" = 1 ]; then
               timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' rollback '$GITHUB_RUN_ID'" || true
@@ -125,15 +123,11 @@ jobs:
           trap rollback ERR
           owner_applied=1
           timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' apply '$GITHUB_RUN_ID'"
-          csp_applied=1
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "MPW_CSP_RELEASE_APPROVED=YES $py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' publish '$GITHUB_RUN_ID'"
           rights_apply_armed=1
           timeout 110s ssh -T -F "$d/config" saeit-cpanel "$py - apply '$GITHUB_RUN_ID'" < scripts/mpw_trx_rights_live_guard_20261028.py
           timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' verify '$GITHUB_RUN_ID'"
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' verify '$GITHUB_RUN_ID'"
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "$py - verify '$GITHUB_RUN_ID'" < scripts/mpw_trx_rights_live_guard_20261028.py
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "$py - verify-current" < scripts/mpw_trx_rights_live_guard_20261028.py
           rights_apply_armed=0
-          csp_applied=0
           owner_applied=0
           trap - ERR
           echo 'MPW_OWNER_ATTESTED_SALE_RELEASE=VERIFIED; ORDERS=0; PAYMENTS=0'
