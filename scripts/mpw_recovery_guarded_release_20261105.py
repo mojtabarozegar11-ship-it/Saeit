@@ -519,6 +519,23 @@ def rollback(run):
     print("MPW_RECOVERY01_CODE_ROLLED_BACK;SCHEMA_TABLES_RETAINED=TRUE")
 
 
+def _active_recovery_page(status, body, headers):
+    """A successful HTTP status alone can be the disabled recovery page."""
+    if status != 200 or not isinstance(body, bytes) or len(body) > 32768:
+        return False
+    content = body.decode("utf-8", "replace")
+    return (
+        "<h1>Recover a TRX purchase</h1>" in content
+        and '<form method="post" action="/commerce/trx-easy/recover/">' in content
+        and 'name="email" type="email"' in content
+        and 'name="csrfmiddlewaretoken"' in content
+        and "<button type=\"submit\">Request code</button>" in content
+        and "Email recovery is not yet available" not in content
+        and "no-store" in headers.get("Cache-Control", "")
+        and headers.get("X-Robots-Tag") == "noindex, nofollow"
+    )
+
+
 def activate(run):
     """Open the already staged recovery route after explicit owner approval."""
     guard_host()
@@ -542,17 +559,21 @@ def activate(run):
             fail("RECOVERY_FLAGS_NOT_ACTIVE")
         import time, urllib.request
         last_status = None
+        page_active = False
         for attempt in range(1, 7):
             try:
                 with urllib.request.urlopen("https://mojplaywin.com/commerce/trx-easy/recover/", timeout=25) as response:
                     last_status = response.status
+                    page_active = _active_recovery_page(
+                        last_status, response.read(32769), response.headers
+                    )
             except urllib.error.HTTPError as exc:
                 last_status = exc.code
-            if last_status == 200:
+            if page_active:
                 break
             if attempt < 6:
                 time.sleep(5)
-        if last_status != 200:
+        if not page_active:
             # Emit a bounded local resolver diagnostic before rollback. This
             # distinguishes missing Django registration from public Passenger
             # routing/cache behavior without reading customer data.
