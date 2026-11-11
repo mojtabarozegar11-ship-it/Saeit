@@ -173,11 +173,11 @@ class EvolutionTests(unittest.TestCase):
         review = runtime.propose_code_change("Improve accuracy", trusted_files=self.snapshot)
         self.assertEqual(review.owner_id, runtime.owner_id)
         self.assertEqual(runtime.status().code_reviews, 1)
-        bundle = runtime.approve_code_handoff(
-            review.review_id, evidence=self.evidence(review),
-            authorize=lambda owner, _: owner == "owner",
-        )
-        self.assertEqual(bundle.review.review_id, review.review_id)
+        with self.assertRaises(PermissionError):
+            runtime.approve_code_handoff(
+                review.review_id, evidence=self.evidence(review),
+                authorize=lambda owner, _: owner == "owner",
+            )
         self.assertEqual(runtime.status().memory_items, 0)
         self.assertFalse(runtime.status().physical_actuation_enabled)
 
