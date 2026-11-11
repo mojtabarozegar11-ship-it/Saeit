@@ -118,6 +118,20 @@ class Ava:
     def forget(self, memory_id: str) -> bool:
         return self._memory.delete(self.owner_id, memory_id)
 
+    def export_memories(self, *, consent: bool = False) -> tuple[dict[str, str], ...]:
+        """Export only this owner's records after explicit export consent.
+
+        Returns plain data to the authenticated host; it never writes files,
+        sends messages, or performs an external transfer.
+        """
+        if not consent:
+            raise ConsentError("Explicit permission is required to export memory")
+        return tuple(
+            {"id": item.id, "owner_id": item.owner_id,
+             "text": item.text, "created_at": item.created_at}
+            for item in self._memory.list_for_owner(self.owner_id)
+        )
+
     def converse(self, message: str, *, use_memories: bool = False) -> AvaReply:
         if not message or not message.strip():
             raise ValueError("Message must not be blank")
