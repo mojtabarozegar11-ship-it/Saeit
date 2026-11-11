@@ -14,6 +14,7 @@ flowchart TD
   R --> A["Personality and affect"]
   R --> M["Consent-scoped memory"]
   R --> G["Internal goals"]
+  R --> V["Code evolution review"]
   R --> E["Embodiment"]
   E --> S["Simulation only"]
 ```
@@ -31,6 +32,10 @@ flowchart TD
    refuses replay and physical device control, and returns a simulation receipt.
 5. `AvaRuntime.status` reports real boundaries: it does not claim a verified
    model or enabled physical actuators.
+6. `AvaRuntime.propose_code_change` lets an injected code author prepare a
+   bounded code change. The same runtime stages it as an immutable diff,
+   verifies its source version and parses its Python syntax without executing
+   the code. Any tested handoff requires separate host evidence and permission.
 
 ## Required future integrations
 
@@ -42,6 +47,7 @@ flowchart TD
 | Goal planning | `GoalProposer` | Internal goal ranking only |
 | Embodiment | `RobotAdapter` | Read-only status and simulation |
 | Unified coordination | `AvaRuntime` | Tested composition root |
+| Self-coding | `CodeEvolutionDirector` | In-memory proposal/diff/AST review; no execution, commit or deployment |
 
 To operate beyond this development library, the same runtime must gain:
 
@@ -49,8 +55,8 @@ To operate beyond this development library, the same runtime must gain:
 - A host-managed private key, isolated storage permissions, secure backups,
   recovery and rotation for the encrypted-memory adapter.
 - Secure tool adapter with audited per-action authorization and real receipts.
-- A self-coding workflow: isolated changes, test/security gates, human-approved
-  release when required, independent verification and rollback.
+- A trusted isolated code test runner, security review, authenticated release
+  governance, independent verification and reversible deployment/rollback.
 - Camera/audio perception with privacy permission, retention and deletion.
 - Vendor SDK, hard physical safety limits, collision prevention, emergency
   stop and independent certification before any real motion.
@@ -95,3 +101,47 @@ verified backup/restore, privacy policy, per-request owner authentication,
 multi-process stress tests and secure deletion of all backups. File permissions
 alone do not guarantee isolation against an attacker controlling the same user
 account or a compromised host. Deleting a record does not erase prior backups.
+
+## Self-coding in the same runtime — review-only boundary
+
+The provider-neutral `CodeProposer` may use a host-approved model to suggest
+`CodeProposal` objects. The director stages only up to five Python edits within
+`ava_core/` and `tests/test_ava*.py`, requires exact SHA-256 base matches,
+parses source without executing it, and returns immutable diffs and hashes.
+It cannot see files not passed by the authenticated host. It never writes to
+the repository, invokes subprocesses, sends messages or publishes code.
+
+```python
+from ava_core import AvaRuntime, CodeEdit, CodeProposal
+
+def code_proposer(goal, trusted_files):
+    source = trusted_files["ava_core/example.py"]
+    from hashlib import sha256
+    return CodeProposal(
+        goal=goal, rationale="A bounded internal improvement",
+        edits=(CodeEdit(
+            path="ava_core/example.py",
+            expected_sha256=sha256(source.encode()).hexdigest(),
+            new_source="value = 2\n",
+        ),),
+    )
+
+runtime = AvaRuntime(
+    owner_id="authenticated-owner", brain=verified_brain,
+    propose_goals=goal_proposer, code_proposer=code_proposer,
+)
+review = runtime.propose_code_change(
+    "Improve an internal function",
+    trusted_files={"ava_core/example.py": "value = 1\n"},
+)
+assert review.syntax_checked
+```
+
+The example callback is deterministic demonstration code, not an installed
+model. **Syntax checks are not security checks.** To obtain an
+`ApprovedCodeBundle`, a separate authenticated host must supply a
+`CheckEvidence` receipt tied to the exact review hash, positive results from
+an isolated test environment, and an independent approval callback. Even a
+successful bundle is only a handoff; it does **not** commit, merge or deploy.
+The review pipeline does not yet supply an OS-level isolated test runner,
+persisted release audit log, cryptographic attestation, or rollback machinery.
