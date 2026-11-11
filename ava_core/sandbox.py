@@ -19,7 +19,7 @@ import tempfile
 import time
 from typing import Mapping
 
-from .evolution import CheckEvidence, CodeEvolutionDirector, CodeProposalError, CodeReview
+from .evolution import CheckEvidence, CodeEvolutionDirector, CodeProposalError, CodeReview, DevelopmentScope
 
 
 class IsolationUnavailable(RuntimeError):
@@ -50,16 +50,28 @@ class IsolatedReviewRunner:
     MAX_RESULT_BYTES = 256 * 1024
 
     def __init__(self, *, owner_id: str, timeout_seconds: int = 20,
-                 memory_limit_mb: int = 512) -> None:
+                 memory_limit_mb: int = 512,
+                 scope: DevelopmentScope | None = None,
+                 max_files: int = MAX_FILES,
+                 max_source_bytes: int = MAX_SOURCE_BYTES) -> None:
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("owner_id is required")
         if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 60:
             raise ValueError("timeout_seconds must be in [1, 60]")
         if type(memory_limit_mb) is not int or not 256 <= memory_limit_mb <= 2048:
             raise ValueError("memory_limit_mb must be in [256, 2048]")
+        if scope is not None and not isinstance(scope, DevelopmentScope):
+            raise TypeError("scope must be a DevelopmentScope")
+        if type(max_files) is not int or max_files < 1:
+            raise ValueError("max_files must be positive")
+        if type(max_source_bytes) is not int or max_source_bytes < 1:
+            raise ValueError("max_source_bytes must be positive")
         self.owner_id = owner_id
         self.timeout_seconds = timeout_seconds
         self.memory_limit_mb = memory_limit_mb
+        self.scope = scope if scope is not None else DevelopmentScope()
+        self.max_files = max_files
+        self.max_source_bytes = max_source_bytes
 
     @staticmethod
     def _limits(cpu_seconds: int, memory_bytes: int, output_bytes: int) -> None:
@@ -81,22 +93,26 @@ class IsolatedReviewRunner:
             raise PermissionError("Review owner mismatch")
         if review.syntax_checked is not True:
             raise CodeProposalError("Only syntax-checked reviews may be evaluated")
-        if not isinstance(source_tree, Mapping) or not 1 <= len(source_tree) <= self.MAX_FILES:
-            raise CodeProposalError("Source tree must have 1-150 tracked files")
+        if not isinstance(source_tree, Mapping) or not 1 <= len(source_tree) <= self.max_files:
+            raise CodeProposalError("Source tree exceeds the isolated review file budget")
         clean = {}
         total = 0
         for path, source in source_tree.items():
-            if not isinstance(path, str) or not CodeEvolutionDirector._ALLOWED_PATH.fullmatch(path):
+            if not self.scope.allows(path):
                 raise CodeProposalError("Unsafe source-tree path")
             if not isinstance(source, str):
                 raise CodeProposalError("Source-tree values must be text")
             total += len(source.encode("utf-8"))
-            if total > self.MAX_SOURCE_BYTES:
+            if total > self.max_source_bytes:
                 raise CodeProposalError("Source-tree size limit exceeded")
             clean[path] = source
         if not any(path.startswith("tests/test_ava") for path in clean):
             raise CodeProposalError("A trusted AVA regression suite is required")
         for changed in review.files:
+            if not self.scope.allows(changed.path):
+                raise CodeProposalError("Reviewed path is outside the isolated evaluation scope")
+            if not (changed.path.startswith("ava_core/") or changed.path.startswith("tests/test_ava")):
+                raise CodeProposalError("A different project needs its own verified isolated test runner")
             if changed.path in clean:
                 if CodeEvolutionDirector.digest(clean[changed.path]) != changed.old_sha256:
                     raise CodeProposalError("Stale code snapshot: cannot run a different version")
