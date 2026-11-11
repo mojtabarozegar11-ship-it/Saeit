@@ -15,6 +15,7 @@ flowchart TD
   R --> M["Consent-scoped memory"]
   R --> G["Internal goals"]
   R --> V["Code evolution review"]
+  R --> J["Optional audit journal"]
   R --> E["Embodiment"]
   E --> S["Simulation only"]
 ```
@@ -48,6 +49,8 @@ flowchart TD
 | Embodiment | `RobotAdapter` | Read-only status and simulation |
 | Unified coordination | `AvaRuntime` | Tested composition root |
 | Self-coding | `CodeEvolutionDirector` | In-memory proposal/diff/AST review; no execution, commit or deployment |
+| Code audit | `SQLiteCodeAuditTrail` | Optional HMAC-chained private journal for stage, tests, handoff and rollback plans |
+| Rollback | `CodeRollbackPlan` | Immutable reversal intent checked against old/current SHA-256; no file operations |
 
 To operate beyond this development library, the same runtime must gain:
 
@@ -161,3 +164,36 @@ of test results, durable release audit, or a production rollback facility. If
 namespace creation fails, evaluation **fails closed**; no direct-execution
 fallback exists. A trusted host must separately verify evidence and explicitly
 authorize a handoff; even then there is no commit, deployment or merge.
+
+## Audited code handoff and rollback intent
+
+The host may inject `SQLiteCodeAuditTrail` into the same `AvaRuntime` using the
+`code_audit` argument. It must provide a distinct secret 32-byte key, a private
+SQLite file path and authenticated owner identity. The journal keeps only event
+kinds and cryptographic digests, not generated code, conversation content or
+secret values. Each owner's events form an HMAC-SHA256 hash chain with a
+separately stored current head and key verifier. The verifier detects modified
+rows, reordered events and incomplete deletion of the tail; the store refuses
+to append to an already-invalid chain. Reopening the file preserves events.
+
+The runtime records `review_staged`, `review_evaluated_pass` / `fail`,
+`handoff_approved` and `rollback_prepared`. When audit is configured, a
+previously unlogged review cannot be evaluated. Only a successful `CheckEvidence`
+actually returned by that runtime's isolated review runner may authorize a
+handoff; fabricated or stale external claims are denied. These decisions share
+the existing runtime owner identity and authority boundaries.
+
+`AvaRuntime.prepare_code_rollback(review_id, trusted_before, trusted_current)`
+compares every proposed file against its original and current SHA-256 digest.
+For an existing file it creates an immutable instruction to restore its exact
+old source; for a newly added file it creates an instruction to remove that
+file. If either snapshot differs from the reviewed versions, the plan is
+rejected. No source file is overwritten, removed or deployed by generating the
+plan. An independently authorized deployment adapter, backup and actual
+production recovery process must be built and verified separately.
+
+**Integrity limit:** HMAC chaining does not stop whole-database replay or
+coordinated rollback of both chain and head by someone who controls the journal.
+Strong independent proof requires a periodically exported head commitment in
+a separate trusted location and controlled key rotation. The locally generated
+test receipt is not cryptographically signed or independently certified.
