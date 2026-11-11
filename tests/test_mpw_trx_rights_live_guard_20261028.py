@@ -224,7 +224,8 @@ class GuardTests(unittest.TestCase):
 
     def test_runtime_receipt_rejects_missing_required_sku(self):
         def receipt(missing=None):
-            products={str(sku):{"exists":sku!=missing,"explicit_rights":False}
+            products={str(sku):{"exists":sku!=missing,"explicit_rights":False,
+                                "exact_asset_hash_verified":False}
                       for sku in (72,225,879)}
             return "MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\n"
         for missing in (72,225,879):
@@ -238,6 +239,16 @@ class GuardTests(unittest.TestCase):
                           return_value=SimpleNamespace(returncode=0,stdout=receipt(),
                                                        stderr="")):
             guard.runtime_validate()
+
+    def test_runtime_receipt_refuses_rights_for_changed_buyer_file(self):
+        products={str(sku):{"exists":True,"explicit_rights":True,
+                            "exact_asset_hash_verified":sku!=225}
+                  for sku in (72,225,879)}
+        output="MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\n"
+        with patch.object(guard.subprocess,"run",return_value=SimpleNamespace(
+                returncode=0,stdout=output,stderr="")):
+            with self.assertRaisesRegex(RuntimeError,"RIGHTS_RUNTIME_ASSET_HASH_MISMATCH"):
+                guard.runtime_validate()
 
     def test_directory_durability_failure_aborts_before_source_edits(self):
         with tempfile.TemporaryDirectory() as d:
