@@ -12,6 +12,13 @@ esac
 : "${VPS_KEY:?VPS_KEY is required}"
 : "${HOST_KEY:?HOST_KEY is required}"
 
+# The alternate port is opt-in and cannot weaken host-key pinning.
+VPS_SSH_PORT="${VPS_SSH_PORT:-22}"
+case "$VPS_SSH_PORT" in
+  22|423) ;;
+  *) echo "VPS_SSH_PORT_DENIED" >&2; exit 64 ;;
+esac
+
 work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
 cleanup() { rm -rf -- "$work"; }
@@ -37,12 +44,12 @@ bridge_stage="cpanel_private_key_validation"
 normalize_key "$HOST_KEY" "$work/host.key"
 
 bridge_stage="vps_host_keyscan"
-ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
+ssh-keyscan -T 10 -p "$VPS_SSH_PORT" -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
 bridge_stage="vps_host_fingerprint"
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
 bridge_stage="vps_to_cpanel_keyscan"
-ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
+ssh -T -p "$VPS_SSH_PORT" -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
 bridge_stage="cpanel_host_fingerprint"
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
@@ -50,6 +57,7 @@ bridge_stage="ssh_config"
 cat > "$work/config" <<EOF
 Host saeit-vps
   HostName 178.239.147.150
+  Port $VPS_SSH_PORT
   User githubops
   IdentityFile $work/vps.key
   UserKnownHostsFile $work/vps.known

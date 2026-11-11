@@ -15,6 +15,14 @@ on:
           - django_check
           - django_migrations
           - seo_provenance
+      vps_ssh_port:
+        description: VPS SSH port; host fingerprint remains pinned
+        required: true
+        default: "22"
+        type: choice
+        options:
+          - "22"
+          - "423"
 
 permissions:
   contents: read
@@ -38,6 +46,7 @@ jobs:
       - name: Execute selected read-only cPanel operation
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_PORT: ${{ inputs.vps_ssh_port }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail

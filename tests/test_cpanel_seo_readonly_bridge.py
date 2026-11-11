@@ -91,3 +91,31 @@ def test_probe_contains_no_live_mutation_or_network_calls():
         "os.remove(", "os.makedirs(", "os.chmod(",
     ):
         assert forbidden not in source
+
+
+def test_optional_vps_port_requires_exact_allowlist_and_same_pinning():
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert 'VPS_SSH_PORT="${VPS_SSH_PORT:-22}"' in bridge
+    assert '  22|423) ;;' in bridge
+    assert 'VPS_SSH_PORT_DENIED' in bridge
+    assert 'ssh-keyscan -T 10 -p "$VPS_SSH_PORT" -t rsa' in bridge
+    assert 'ssh -T -p "$VPS_SSH_PORT" -i "$work/vps.key"' in bridge
+    assert "  Port $VPS_SSH_PORT" in bridge
+    assert 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' in bridge
+    assert '      vps_ssh_port:\n' in workflow
+    assert '          VPS_SSH_PORT: ${{ inputs.vps_ssh_port }}\n' in workflow
+    assert '          - "423"\n' in workflow
+
+
+def test_invalid_vps_port_stops_without_ssh_or_secrets(tmp_path):
+    env = os.environ.copy()
+    env.update({"RUNNER_TEMP": str(tmp_path), "VPS_SSH_PORT": "423;echo unsafe",
+                "VPS_KEY": "dummy-secret", "HOST_KEY": "dummy-host-secret"})
+    process = subprocess.run(["bash", str(BRIDGE), "relay_preflight"],
+                             env=env, check=False, capture_output=True, text=True,
+                             timeout=5)
+    assert process.returncode == 64
+    assert "VPS_SSH_PORT_DENIED" in process.stderr
+    assert "dummy-secret" not in process.stdout + process.stderr
+    assert "dummy-host-secret" not in process.stdout + process.stderr
