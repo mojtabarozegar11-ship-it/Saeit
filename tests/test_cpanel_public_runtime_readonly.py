@@ -153,6 +153,12 @@ class InterpreterBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(runtime.EvidenceUnavailable, "OUT_OF_SCOPE"):
             runtime.passenger_interpreter("PassengerPython /usr/bin/python3")
 
+    def test_virtualenv_parent_traversal_rejected(self):
+        with self.assertRaisesRegex(runtime.EvidenceUnavailable, "OUT_OF_SCOPE"):
+            runtime.passenger_interpreter(
+                "PassengerPython /home/zomorod2/virtualenv/../../../../usr/bin/python3"
+            )
+
     def test_nonexecutable_interpreter_rejected(self):
         with synthetic_public_runtime() as (_, __, py):
             py.chmod(0o600)
