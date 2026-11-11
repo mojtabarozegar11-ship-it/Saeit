@@ -108,8 +108,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $_SESSION['mpw_inquiry_token']=bin2hex(random_bytes(24));
       $token=$_SESSION['mpw_inquiry_token'];
       $sent=true;
-      $body="MojPlayWin commercial inquiry received and stored privately.\nService: ".$title."\nReference: ".$reference."\n\nReview the private cPanel revenue-inquiries record. No customer data is logged to CI.\n";
-      @mail('support@mojplaywin.com','New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
+      // No outbound emails are sent by public intake. Owner notifications require explicit per-send approval.
     } catch (Throwable $e) {$errors[]='We could not securely save the request. Please use the email fallback.';error_log('MPW_INQUIRY_STORAGE_FAILURE');}
   }
 }

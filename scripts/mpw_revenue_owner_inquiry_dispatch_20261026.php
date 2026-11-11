@@ -43,6 +43,9 @@ try {
  $allow=['general','website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care'];
  foreach ($all as $file) {
   if (!preg_match('/^[0-9]{8}-[A-F0-9]{18}\.json$/',$file))continue;
+  // A scoped approval only inspects its exact private reference, not unrelated customer records.
+  $approvedRef=(string)(getenv('MPW_OWNER_DISPATCH_APPROVED_REFERENCE') ?: '');
+  if (!preg_match('/^[A-F0-9]{18}$/D',$approvedRef) || !hash_equals(substr($file,9,18),$approvedRef)) continue;
   if ($stats['scanned']>=25)break;
   $stats['scanned']++;
   $path=$root.'/'.$file;
@@ -55,6 +58,9 @@ try {
   $email=(string)($lead['email']??'');
   if (!in_array($slug,$allow,true)||!filter_var($email,FILTER_VALIDATE_EMAIL)){$stats['invalid_private_record']++;continue;}
   $reference=substr($file,9,18);
+  // No automatic owner email. Explicit single-reference approval is required per dispatch.
+  $approved=(string)(getenv('MPW_OWNER_DISPATCH_APPROVED_REFERENCE') ?: '');
+  if (!hash_equals($reference,$approved)) continue;
   $subject='MojPlayWin owner inquiry '.$slug.' '.$reference;
   $body="MojPlayWin first-party inquiry | Owner notification\n".
         "Reference: ".$reference."\nService: ".$slug."\n".
