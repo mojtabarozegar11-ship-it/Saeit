@@ -21,6 +21,35 @@ SPEC.loader.exec_module(release)
 
 
 class GuardedRecoveryReleaseTests(unittest.TestCase):
+    @staticmethod
+    def _active_page_fixture():
+        body = (
+            '<h1>Recover a TRX purchase</h1>'
+            '<form method="post" action="/commerce/trx-easy/recover/">'
+            '<input name="csrfmiddlewaretoken" value="not-a-live-token">'
+            '<input name="email" type="email" required>'
+            '<button type="submit">Request code</button></form>'
+        ).encode("utf-8")
+        headers = {"Cache-Control": "private, no-store, max-age=0",
+                   "X-Robots-Tag": "noindex, nofollow"}
+        return body, headers
+
+    def test_activation_rejects_200_disabled_page(self):
+        body, headers = self._active_page_fixture()
+        disabled = b'<h1>Email recovery is not yet available</h1>'
+        self.assertFalse(release._active_recovery_page(200, disabled, headers))
+        self.assertFalse(release._active_recovery_page(200, body.replace(
+            b"Recover a TRX purchase", b"Email recovery is not yet available"), headers))
+
+    def test_activation_requires_actual_email_form_and_privacy_headers(self):
+        body, headers = self._active_page_fixture()
+        self.assertTrue(release._active_recovery_page(200, body, headers))
+        self.assertFalse(release._active_recovery_page(302, body, headers))
+        self.assertFalse(release._active_recovery_page(200, body * 200, headers))
+        self.assertFalse(release._active_recovery_page(200, body.replace(
+            b'name="email" type="email"', b'name="username" type="text"'), headers))
+        self.assertFalse(release._active_recovery_page(200, body, {"Cache-Control": "public"}))
+
     def _snapshot(self, run):
         self.backups.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.backups.chmod(0o700)
