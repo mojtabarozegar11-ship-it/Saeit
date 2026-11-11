@@ -14,6 +14,7 @@ from .core import Ava, AvaReply, Brain, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
 from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview
 from .goals import AutonomousGoalDirector, GoalDecision, GoalOutcome, GoalProposer
+from .sandbox import IsolatedReviewRunner, SandboxResult
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,7 @@ class AvaRuntimeStatus:
     brain_model_verified: bool = False
     physical_actuation_enabled: bool = False
     code_reviews: int = 0
+    isolated_review_runner_configured: bool = False
 
 
 class AvaRuntime:
@@ -57,6 +59,7 @@ class AvaRuntime:
         body: RobotAdapter | None = None,
         authorize_simulation: Callable[[str, BodyCommand], bool] | None = None,
         code_proposer: CodeProposer | None = None,
+        review_runner: IsolatedReviewRunner | None = None,
     ) -> None:
         self.affect = AffectiveCompanion(
             owner_id=owner_id, traits=traits,
@@ -72,6 +75,9 @@ class AvaRuntime:
             authorize=authorize_simulation,
         )
         self.evolution = CodeEvolutionDirector(owner_id=owner_id, proposer=code_proposer)
+        if review_runner is not None and review_runner.owner_id != owner_id:
+            raise PermissionError("Isolated review runner owner mismatch")
+        self.review_runner = review_runner
         self.owner_id = owner_id
 
     def converse(self, message: str, *, affect_signal: str | None = None,
@@ -114,6 +120,15 @@ class AvaRuntime:
     def review_code_change(self, proposal: CodeProposal, *, trusted_files: Mapping[str, str]) -> CodeReview:
         return self.evolution.stage(proposal, trusted_files=trusted_files)
 
+    def evaluate_code_change(self, review_id: str, *, trusted_tree: Mapping[str, str]) -> SandboxResult:
+        """Run approved local regression suite only through the isolated runner."""
+        if self.review_runner is None:
+            raise PermissionError("No isolated runner was configured")
+        review = self.evolution.get_review(review_id)
+        if review is None:
+            raise ValueError("Unknown code review")
+        return self.review_runner.evaluate(review, trusted_tree=trusted_tree)
+
     def approve_code_handoff(
         self, review_id: str, *, evidence: CheckEvidence,
         authorize: Callable[[str, CodeReview], bool] | None = None,
@@ -128,4 +143,5 @@ class AvaRuntime:
             romantic_mode=self.affect.snapshot().romantic_mode,
             body=self.body.observe(),
             code_reviews=self.evolution.review_count(),
+            isolated_review_runner_configured=self.review_runner is not None,
         )
