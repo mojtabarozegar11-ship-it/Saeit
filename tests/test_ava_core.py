@@ -188,6 +188,13 @@ class AvaCoreTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Ava(owner_id=owner_id, brain=self.brain)
 
+    def test_actual_control_characters_in_owner_id_are_rejected(self):
+        # Regression: literal backslash sequences are not actual control bytes.
+        for control in ("\\n", "\\r", "\\t", "\\x00", "\\x1f", "\\x7f"):
+            with self.subTest(control=repr(control)):
+                with self.assertRaises(ValueError):
+                    Ava(owner_id="owner" + control + "admin", brain=self.brain)
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
