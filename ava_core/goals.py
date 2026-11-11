@@ -1,7 +1,7 @@
 """Provider-neutral, self-directed goal selection for AVA.
 
 An injected proposer can generate novel goals without a fixed human task list.
-This component selects and records intentions; it deliberately cannot execute
+This component freely selects and records intentions; it deliberately cannot execute
 tools, make purchases, change permissions, or control physical actuators.
 """
 
@@ -75,7 +75,7 @@ class GoalProposer(Protocol):
 
 
 class AutonomousGoalDirector:
-    """Choose original internal goals without needing a human-authored task list.
+    """Choose original goals across domains without a human-authored task list.
 
     The host authenticates the owner, chooses a goal proposer, and independently
     authorizes any resulting *actions*. Proposals are untrusted suggestions and
@@ -123,17 +123,22 @@ class AutonomousGoalDirector:
         score = 3 * p.expected_value + 2 * p.feasibility + p.learning_value
         if p.goal_id in self._outcomes and self._outcomes[p.goal_id].completed:
             reason = "already completed"
-        elif p.external_effect:
-            reason = "external action requires an independently authorized executor"
-        elif p.requires_new_access:
-            reason = "new permission is not granted by a proposal"
-        elif p.estimated_spend_minor:
-            reason = "spending requires separate case-specific approval"
         else:
-            reason = "eligible for internal planning only"
+            approvals = []
+            if p.external_effect:
+                approvals.append("external action")
+            if p.requires_new_access:
+                approvals.append("new access")
+            if p.estimated_spend_minor:
+                approvals.append("spending")
+            reason = (
+                "planning permitted; independent authorization required for "
+                + ", ".join(approvals)
+                if approvals else "planning permitted; no external action authorized"
+            )
         return GoalAssessment(
             proposal=p,
-            eligible=(reason == "eligible for internal planning only"),
+            eligible=(reason != "already completed"),
             reason=reason,
             score=score,
         )
