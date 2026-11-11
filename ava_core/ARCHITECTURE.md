@@ -1,4 +1,4 @@
-# Mojtaba.bot.ai — one bot, one runtime
+# mojtaba.bot.ai — one bot, one runtime
 
 ## Single composition root
 
@@ -26,7 +26,7 @@ flowchart TD
 ## Shared lifecycle
 
 1. The host authenticates the owner and injects an approved reasoning engine.
-   Mojtaba.bot.ai does not discover credentials or silently select a paid provider.
+   mojtaba.bot.ai does not discover credentials or silently select a paid provider.
 2. `MojtabaBot.converse` optionally records a host-classified event in the
    synthetic-affect engine, then passes current expression guidance and only
    opt-in memories to the brain.
@@ -142,7 +142,7 @@ account or a compromised host. Deleting a record does not erase prior backups.
 
 ## Open-ended planning and coding — review-only boundary
 
-**Freedom is an architectural principle:** Mojtaba.bot.ai can imagine and choose goals
+**Freedom is an architectural principle:** mojtaba.bot.ai can imagine and choose goals
 for any field, including goals that would eventually require a payment, a new
 permission, an external message or a physical device. These goals are *plans*,
 not permissions. The decision carries an explicit reminder of any needed
