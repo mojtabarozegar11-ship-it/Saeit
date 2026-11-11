@@ -131,25 +131,32 @@ async function refreshDirectory(){
  const status=document.getElementById("agent-directory-status");
  area.replaceChildren();
  try{
-  const response=await fetch("{% url 'command_center_unified_bot_modules_api' %}",{credentials:"same-origin",cache:"no-store"});
-  if(!response.ok)throw new Error("unavailable");
-  const data=await response.json();
-  if(data.bot?.identity!=="mojtaba.bot.ai"||data.bot?.identity_count!==1)throw new Error("wrong identity");
-  const unit=document.createElement("article"),unitTitle=document.createElement("h3"),unitState=document.createElement("small");
-  unit.className="card";unitTitle.textContent=data.bot.identity;
-  unitState.textContent=isEn?"Sole bot identity; live integration not verified":"تنها هویت ربات؛ اتصال زنده هنوز تأیید نشده است";
-  unit.append(unitTitle,unitState);area.append(unit);
-  for(const module of (data.modules||[])){
-   const card=document.createElement("article"),heading=document.createElement("h3"),mission=document.createElement("p"),meta=document.createElement("small");
-   card.className="card";
-   heading.textContent=(isEn?"Module: ":"ماژول: ")+module.module_code;
-   mission.textContent=module.mission;
-   meta.textContent=(isEn?"Source record: ":"ثبت قبلی: ")+module.id+
-    " | "+(isEn?"Live integration unverified":"اتصال اجرایی تأیید نشده");
-   card.append(heading,mission,meta);area.append(card);
+  const root=document.createElement("article"),heading=document.createElement("h3"),description=document.createElement("small");
+  root.className="card";heading.textContent="mojtaba.bot.ai";
+  description.textContent=isEn?"Sole bot identity; live integration not verified":"تنها هویت ربات؛ اتصال زنده هنوز تأیید نشده است";
+  root.append(heading,description);area.append(root);
+  let offset=0,seen=0;
+  while(offset!==null){
+   const url="{% url 'command_center_unified_bot_modules_api' %}"+"?offset="+offset;
+   const response=await fetch(url,{credentials:"same-origin",cache:"no-store"});
+   if(!response.ok)throw new Error("unavailable");
+   const data=await response.json();
+   if(data.bot?.identity!=="mojtaba.bot.ai"||data.bot?.identity_count!==1)throw new Error("wrong identity");
+   for(const module of (data.modules||[])){
+    const card=document.createElement("article"),name=document.createElement("h3"),mission=document.createElement("p"),meta=document.createElement("small");
+    card.className="card";name.textContent=(isEn?"Module: ":"ماژول: ")+module.module_code;
+    mission.textContent=module.mission;
+    meta.textContent=(isEn?"Legacy record: ":"ثبت قدیمی: ")+module.id+
+     " | "+(isEn?"Live integration unverified":"اتصال اجرایی تأیید نشده");
+    card.append(name,mission,meta);area.append(card);
+    seen++;
+   }
+   const next=data.next_offset;
+   if(next!==null&&(!Number.isInteger(next)||next<=offset))throw new Error("invalid page cursor");
+   offset=next;
   }
-  status.textContent=data.truncated?(isEn?"First 200 module records":"۲۰۰ ثبت اول ماژول‌ها"):"";
- }catch(e){status.textContent=isEn?"Unified module directory unavailable":"فهرست ماژول‌های واحد در دسترس نیست";}
+  status.textContent=(isEn?"Module records: ":"تعداد سوابق ماژول: ")+seen;
+ }catch(e){status.textContent=isEn?"Unified module directory unavailable or incomplete":"فهرست ماژول‌های واحد ناقص یا در دسترس نیست";}
 }
 refreshDirectory();
 document.getElementById("refresh").addEventListener("click",refreshDirectory);
