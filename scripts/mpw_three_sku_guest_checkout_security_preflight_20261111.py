@@ -83,9 +83,45 @@ def audit_source(source: str) -> dict:
             or "'unsafe-inline'" in script_directives[0]
             or "'unsafe-eval'" in script_directives[0]):
         raise RuntimeError('GUEST_CSP_SECURITY_DIRECTIVES_INCOMPLETE')
+    # A CSP/rights pass is not evidence that the buyer has a usable recovery
+    # email. Inspect the specific pre-invoice identity functions independently.
+    # These are indicators only; even positive source indicators would need a
+    # database and mailbox delivery proof before declaring recovery operational.
+    funcs = {node.name: node for node in tree.body
+             if isinstance(node, ast.FunctionDef)}
+    identity_nodes = [funcs[name] for name in ('_identity', '_new_user', '_dispatch')
+                      if name in funcs]
+    identity_calls = [node for fn in identity_nodes for node in ast.walk(fn)
+                      if isinstance(node, ast.Call)]
+    email_validator_seen = any(
+        (isinstance(call.func, ast.Name) and call.func.id == 'validate_email')
+        or (isinstance(call.func, ast.Attribute) and call.func.attr == 'validate_email')
+        for call in identity_calls)
+    post_email_seen = any(
+        isinstance(call.func, ast.Attribute) and call.func.attr in ('get', '__getitem__')
+        and isinstance(call.func.value, ast.Attribute)
+        and call.func.value.attr == 'POST'
+        and isinstance(call.func.value.value, ast.Name)
+        and call.func.value.value.id == 'request'
+        and bool(call.args) and isinstance(call.args[0], ast.Constant)
+        and call.args[0].value in ('email', 'buyer_email', 'customer_email')
+        for call in identity_calls)
+    email_stored_seen = any(
+        isinstance(node, ast.Attribute) and node.attr == 'email'
+        and isinstance(node.ctx, ast.Store)
+        for fn in identity_nodes for node in ast.walk(fn))
+    email_before_invoice_source_indicators = (
+        email_validator_seen and post_email_seen and email_stored_seen)
     return {'guest_handler_found': True, 'commercial_db_checked': True,
             'merchant_receiver_checked': True, 'rights_gate_checked': True,
             'strict_guest_csp': True, 'orders_created': 0, 'payments_created': 0,
+            'buyer_email_validator_in_identity_source': email_validator_seen,
+            'buyer_email_post_read_in_identity_source': post_email_seen,
+            'buyer_email_stored_in_identity_source': email_stored_seen,
+            'buyer_email_before_invoice_source_indicators': email_before_invoice_source_indicators,
+            'email_based_recovery_end_to_end': 'not_examined',
+            'commercial_email_block': None if email_before_invoice_source_indicators
+                else 'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE',
             'read_only': True}
 
 
