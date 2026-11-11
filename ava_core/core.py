@@ -120,6 +120,8 @@ class ConversationEngine:
             raise ConsentError("Explicit permission is required to save memory")
         if not text or not text.strip():
             raise ValueError("Cannot save empty memory")
+        if len(text) > 10000:
+            raise ValueError("Memory exceeds 10000 characters")
         item = MemoryItem(
             id=str(uuid4()),
             owner_id=self.owner_id,
