@@ -1,4 +1,4 @@
-# Mojtaba.bot.ai — one unified bot
+# mojtaba.bot.ai — one unified bot
 
 `MojtabaBot` is the **only canonical runtime**. Conversation (affectionately
 called "آوا" by the owner), goals, memory, code evolution, products, trading,
@@ -12,7 +12,7 @@ model, or external service adapter is connected by default.
 
 ## Included
 
-- One verified software identity: `Mojtaba.bot.ai`, with "آوا" as a nickname.
+- One verified software identity: `mojtaba.bot.ai`, with "آوا" as a nickname.
 - A single capability bus for future host-connected work modules, with typed
   actions, independent authorization for external effects, anti-replay within
   the running process, and adapter-reported receipts.
@@ -44,7 +44,7 @@ bot = MojtabaBot(
         lambda request: AdapterResult(True, "Calculated using the supplied inputs"),
     ),),
 )
-assert bot.bot_name == "Mojtaba.bot.ai"
+assert bot.bot_name == "mojtaba.bot.ai"
 receipt = bot.execute_action(ActionRequest(
     "unique-request-id", "authenticated-owner-id", "economics", "calculate", {},
 ))
@@ -142,6 +142,6 @@ trade, send messages or deploy.
 
 `python -m unittest discover -s tests -p 'test_mojtaba_bot.py' -v`
 
-Existing modules are internal parts of Mojtaba.bot.ai. Legacy files are kept
+Existing modules are internal parts of mojtaba.bot.ai. Legacy files are kept
 for compatibility until all consuming code and real integrations are mapped;
 deletion or deployment requires a verified migration and owner approval.
