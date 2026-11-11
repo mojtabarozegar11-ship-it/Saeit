@@ -116,6 +116,18 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.ava.list_memories(), (original,))
         self.assertEqual(other.list_memories(), ())
 
+    def test_memory_store_rejects_invalid_records(self):
+        original = self.ava.remember("valid", consent=True)
+        for invalid in (
+            MemoryItem("", "owner-1", "text", original.created_at),
+            MemoryItem("bad-owner", " ", "text", original.created_at),
+            MemoryItem("bad-text", "owner-1", " ", original.created_at),
+        ):
+            with self.subTest(memory_id=invalid.id):
+                with self.assertRaises(ValueError):
+                    self.shared_store.add(invalid)
+        self.assertEqual(self.ava.list_memories(), (original,))
+
     def test_untrusted_store_cannot_leak_foreign_owner_memory(self):
         class LeakyStore(AvaMemory):
             def list_for_owner(self, owner_id):
