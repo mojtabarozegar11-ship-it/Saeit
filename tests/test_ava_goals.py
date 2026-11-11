@@ -38,7 +38,7 @@ class GoalDirectorTests(unittest.TestCase):
         self.assertEqual(second.selected.goal_id, "improve-tests")
         self.assertEqual(len(seen[1]), 1)
 
-    def test_rejects_external_access_and_spending_goals(self):
+    def test_may_select_ambitious_goals_without_authorizing_actions(self):
         goals = [
             candidate("message", 5, external_effect=True),
             candidate("new-key", 5, requires_new_access=True),
@@ -47,10 +47,12 @@ class GoalDirectorTests(unittest.TestCase):
         ]
         director = AutonomousGoalDirector(owner_id="person-1", proposer=lambda _: goals)
         decision = director.decide()
-        self.assertEqual(decision.selected.goal_id, "offline-design")
-        self.assertEqual(sum(a.eligible for a in decision.assessments), 1)
+        self.assertEqual(decision.selected.goal_id, "message")
+        self.assertEqual(sum(a.eligible for a in decision.assessments), 4)
+        self.assertIn("authorization required", decision.assessments[0].reason)
+        self.assertIn("spending", decision.assessments[2].reason)
 
-    def test_no_external_effect_even_when_all_goals_blocked(self):
+    def test_external_goal_remains_a_plan_not_an_executed_action(self):
         calls = []
 
         def proposal_provider(_):
@@ -58,8 +60,18 @@ class GoalDirectorTests(unittest.TestCase):
             return [candidate("purchase", external_effect=True)]
 
         director = AutonomousGoalDirector(owner_id="person-1", proposer=proposal_provider)
-        self.assertIsNone(director.decide().selected)
+        self.assertEqual(director.decide().selected.goal_id, "purchase")
         self.assertEqual(calls, ["proposed"])
+        self.assertEqual(director.history(), ())
+
+    def test_goal_with_multiple_authorizations_still_selectable_for_planning(self):
+        goal = candidate("expand-business", 5, external_effect=True,
+                         requires_new_access=True, estimated_spend_minor=500)
+        director = AutonomousGoalDirector(owner_id="person-1", proposer=lambda _: [goal])
+        decision = director.decide()
+        self.assertEqual(decision.selected, goal)
+        for word in ("external action", "new access", "spending"):
+            self.assertIn(word, decision.assessments[0].reason)
 
     def test_completed_goal_is_not_selected_again(self):
         director = AutonomousGoalDirector(owner_id="person-1", proposer=lambda _: [candidate("one")])
