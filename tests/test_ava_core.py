@@ -18,6 +18,12 @@ class AvaCoreTests(unittest.TestCase):
         self.shared_store = AvaMemory()
         self.ava = Ava(owner_id="owner-1", brain=brain, memory=self.shared_store)
 
+    def test_oversized_consented_memory_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Memory exceeds 10000 characters"):
+            self.ava.remember("x" * 10001, consent=True)
+        self.assertEqual(self.ava.list_memories(), ())
+        self.assertEqual(self.calls, [])
+
     def test_no_implicit_memory_writes(self):
         self.ava.converse("سلام")
         self.assertEqual(len(self.ava.list_memories()), 0)
