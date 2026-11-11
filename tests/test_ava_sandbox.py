@@ -108,6 +108,15 @@ class SandboxTests(unittest.TestCase):
         with self.assertRaises(CodeProposalError):
             self.runner.evaluate(self.review, trusted_tree=tree)
 
+    def test_broad_creative_review_needs_project_specific_isolated_evaluator(self):
+        proposal = CodeProposal("Improve customer website", "Add helpful feature", (
+            CodeEdit("projects/customer/app.py", None, "result = 42\n"),
+        ))
+        review = self.director.stage(proposal, trusted_files={})
+        self.assertTrue(review.syntax_checked)
+        with self.assertRaisesRegex(CodeProposalError, "different project"):
+            self.runner.evaluate(review, trusted_tree=self.tree)
+
     def test_other_owner_cannot_evaluate_review(self):
         foreign = IsolatedReviewRunner(owner_id="someone-else")
         with self.assertRaises(PermissionError):
