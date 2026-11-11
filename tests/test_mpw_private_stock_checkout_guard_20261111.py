@@ -107,7 +107,7 @@ class GuestCheckoutPrivateStockTests(TestCase):
 
 
 class ExistingInvoicePrivateStockTests(TestCase):
-    def existing_invoice(self, asset, *, product_exists=True):
+    def existing_invoice(self, asset, *, product_exists=True, approved_hash_matches=True):
         now = datetime(2026, 11, 11, tzinfo=timezone.utc)
         modules = {}
         product = SimpleNamespace(pk=72, price=Decimal('7.50'))
@@ -146,6 +146,8 @@ class ExistingInvoicePrivateStockTests(TestCase):
                 'WAITING': 'awaiting_chain',
                 '_decode': lambda invoice: SimpleNamespace(expires_at=now+timedelta(minutes=4)),
                 'rights_cleared_for_sale': lambda p: True,
+                'private_artifact_sha_matches_approved':
+                    lambda product, path: approved_hash_matches,
                 'reserve_commercial_intent': Mock(),
             })
             try:
@@ -172,12 +174,64 @@ class ExistingInvoicePrivateStockTests(TestCase):
     def test_does_not_reuse_invoice_for_symlink_stock(self):
         self.assertIsNone(self.existing_invoice(private_asset(symlink=True))[0])
 
+    def test_does_not_reuse_invoice_when_private_bytes_differ_from_approval(self):
+        result, private_calls, invoice_queries = self.existing_invoice(
+            private_asset(), approved_hash_matches=False)
+        self.assertIsNone(result)
+        self.assertEqual(private_calls, 1)
+        self.assertEqual(invoice_queries, 0)
+
     def test_deleted_product_fails_closed_without_invoice_or_asset_lookup(self):
         result, private_calls, invoice_queries = self.existing_invoice(
             private_asset(), product_exists=False)
         self.assertIsNone(result)
         self.assertEqual(private_calls, 0)
         self.assertEqual(invoice_queries, 0)
+
+
+class StartOrderAllowlistContractTests(TestCase):
+    def start_order(self, *, public_ids=None, setting_present=True, product_id=72):
+        modules = {}
+        select = Mock(return_value=123)
+        setting_values = ({'MPW_TRX_PUBLIC_PRODUCT_IDS': public_ids}
+                          if setting_present else {})
+        put(modules, 'django')
+        put(modules, 'django.conf', settings=SimpleNamespace(**setting_values))
+        put(modules, 'django.http', Http404=NotFound,
+            HttpResponseRedirect=lambda target: target)
+        request = SimpleNamespace(user=SimpleNamespace(pk=7))
+        with patch.dict(sys.modules, modules):
+            view = isolate_function('services/mpw_trx_commercial_web.py', '_start_order', {
+                '_ensure_live': lambda r: SimpleNamespace(alias='default'),
+                '_select_order': select,
+                '_nocache': lambda response: response,
+                'PaymentHold': PaymentHold,
+            })
+            try:
+                result = view(request, product_id)
+            except NotFound:
+                result = None
+        return result, select.call_count
+
+    def test_missing_allowlist_rejects_invoice_before_order_selection(self):
+        self.assertEqual(self.start_order(setting_present=False), (None, 0))
+
+    def test_none_and_empty_allowlist_reject_invoice(self):
+        for public_ids in (None, (), []):
+            with self.subTest(public_ids=public_ids):
+                self.assertEqual(self.start_order(public_ids=public_ids), (None, 0))
+
+    def test_unlisted_product_rejected(self):
+        self.assertEqual(self.start_order(public_ids=(225, 879)), (None, 0))
+
+    def test_malformed_allowlist_rejected(self):
+        for public_ids in ('72', 72, {'72': True}):
+            with self.subTest(public_ids=public_ids):
+                self.assertEqual(self.start_order(public_ids=public_ids), (None, 0))
+
+    def test_explicitly_listed_product_keeps_checkout_working(self):
+        self.assertEqual(self.start_order(public_ids=(72, 225, 879)),
+                         ('/commerce/trx-easy/invoice/123/', 1))
 
 
 if __name__ == '__main__':

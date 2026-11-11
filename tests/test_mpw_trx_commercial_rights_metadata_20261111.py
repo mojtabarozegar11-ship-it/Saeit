@@ -1,7 +1,9 @@
 """Rights metadata linkage must be fail-closed; no DB or customer records."""
 import importlib.util
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
+import tempfile
 import unittest
 
 
@@ -48,6 +50,60 @@ class RightsMetadataContract(unittest.TestCase):
         for product in (None,SimpleNamespace(metadata=None),SimpleNamespace(metadata=[]),
                         SimpleNamespace(metadata={})):
             self.assertFalse(CONTEXT.rights_cleared_for_sale(product))
+
+    def test_real_private_file_digest_must_equal_approved_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / 'product.pdf'
+            original = b'%PDF-1.4\nOwner approved version\n'
+            artifact.write_bytes(original)
+            digest = hashlib.sha256(original).hexdigest()
+            metadata = evidence()
+            metadata.update(sha256=digest, rights_asset_sha256=digest)
+            product = SimpleNamespace(metadata=metadata)
+            self.assertTrue(CONTEXT.private_artifact_sha_matches_approved(product, artifact))
+            artifact.write_bytes(b'%PDF-1.4\nSubstituted after approval\n')
+            self.assertFalse(CONTEXT.private_artifact_sha_matches_approved(product, artifact))
+
+    def test_missing_empty_and_symlink_private_file_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            metadata = evidence()
+            product = SimpleNamespace(metadata=metadata)
+            missing = Path(tmp) / 'missing.pdf'
+            empty = Path(tmp) / 'empty.pdf'
+            empty.write_bytes(b'')
+            symlink = Path(tmp) / 'link.pdf'
+            symlink.symlink_to(empty)
+            for artifact in (missing, empty, symlink):
+                with self.subTest(artifact=artifact.name):
+                    self.assertFalse(CONTEXT.private_artifact_sha_matches_approved(product, artifact))
+
+    def test_symlink_to_matching_approved_file_is_still_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            approved = Path(tmp) / 'approved.pdf'
+            payload = b'%PDF-1.4\nApproved exact content\n'
+            approved.write_bytes(payload)
+            metadata = evidence()
+            metadata.update(sha256=hashlib.sha256(payload).hexdigest(),
+                            rights_asset_sha256=hashlib.sha256(payload).hexdigest())
+            product = SimpleNamespace(metadata=metadata)
+            self.assertTrue(CONTEXT.private_artifact_sha_matches_approved(product, approved))
+            shortcut = Path(tmp) / 'shortcut.pdf'
+            shortcut.symlink_to(approved)
+            self.assertFalse(CONTEXT.private_artifact_sha_matches_approved(product, shortcut))
+
+    def test_hardlinked_approved_file_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            approved = Path(tmp) / 'approved.zip'
+            payload = b'ZIP test fixture bytes, not a production archive'
+            approved.write_bytes(payload)
+            digest = hashlib.sha256(payload).hexdigest()
+            metadata = evidence()
+            metadata.update(sha256=digest, rights_asset_sha256=digest)
+            second = Path(tmp) / 'second-link.zip'
+            import os
+            os.link(approved, second)
+            self.assertFalse(CONTEXT.private_artifact_sha_matches_approved(
+                SimpleNamespace(metadata=metadata), approved))
 
 
 if __name__=="__main__":

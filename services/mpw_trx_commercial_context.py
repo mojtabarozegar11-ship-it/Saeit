@@ -42,3 +42,38 @@ def rights_cleared_for_sale(product):
             and _sha256_hex(rights_sha)
             and _sha256_hex(document_sha)
             and catalog_sha.lower()==rights_sha.lower())
+
+
+def private_artifact_sha_matches_approved(product, path):
+    """Check the real private file's bytes against the approved version.
+
+    This supplements, but cannot substitute for, independent rights evidence.
+    It is used when issuing an invoice, not when accessing an old paid order.
+    """
+    import hashlib
+    import hmac
+    import os
+    import stat
+
+    if not rights_cleared_for_sale(product):
+        return False
+    expected=product.metadata["sha256"].lower()
+    try:
+        flags=os.O_RDONLY | getattr(os,"O_NOFOLLOW",0) | getattr(os,"O_CLOEXEC",0)
+        descriptor=os.open(os.fspath(path),flags)
+        with os.fdopen(descriptor,"rb") as stream:
+            before=os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode)
+                    or before.st_nlink != 1 or before.st_size <= 0):
+                return False
+            digest=hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024*1024),b""):
+                digest.update(chunk)
+            after=os.fstat(stream.fileno())
+            # A file replaced or edited during verification is not verified.
+            if ((before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)
+                    != (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns)):
+                return False
+            return hmac.compare_digest(digest.hexdigest(),expected)
+    except (OSError,TypeError,ValueError):
+        return False

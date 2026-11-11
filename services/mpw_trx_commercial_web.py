@@ -10,7 +10,9 @@ from decimal import Decimal
 from html import escape
 
 from services.mpw_trx_walletless_core import PaymentHold
-from services.mpw_trx_commercial_context import rights_cleared_for_sale
+from services.mpw_trx_commercial_context import (
+    rights_cleared_for_sale, private_artifact_sha_matches_approved,
+)
 from services.mpw_trx_walletless_one_tap_ui import render_one_tap_invoice
 from services.mpw_walletless_commercial_intent import (
     PROVIDER, WAITING, _decode, reserve_commercial_intent,
@@ -81,6 +83,8 @@ def _select_order(product_id: int, buyer_id: int, connection):
                 raise PaymentHold("Private product file is not ready")
         except (OSError, ValueError) as exc:
             raise PaymentHold("Private product file is not ready") from exc
+        if not private_artifact_sha_matches_approved(product,file):
+            raise PaymentHold("Private product version differs from approved artifact")
         for old in Order.objects.select_for_update().filter(
             customer_id=buyer_id,status="pending",currency="USD",
             created_at__gte=timezone.now()-timedelta(minutes=9),
@@ -109,8 +113,11 @@ def _start_order(request, product_id):
     db=_ensure_live(request)
     if type(product_id) is not int or product_id<=0:
         raise Http404
-    approved_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",None)
-    if approved_ids is not None and product_id not in approved_ids:
+    # Match the public catalogue/GET gate: an absent or malformed allowlist
+    # never grants permission to issue a direct-POST payment invoice.
+    approved_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",())
+    if (type(approved_ids) not in (tuple,list,set,frozenset)
+            or product_id not in approved_ids):
         raise Http404("Product is not available for public TRX purchase")
     try:
         invoice_id=_select_order(product_id,request.user.pk,db)
