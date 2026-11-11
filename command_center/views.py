@@ -52,6 +52,8 @@ def overview_api(request):
         data["live_connected"] = True
     data["runtime_history"] = runtime_history
     data["bot_identity"] = BOT_ID
+    data["bot"] = db["bot"]
+    data["module_records"] = db["module_records"]
     data["database_snapshot"] = {
         "captured_at": db["captured_at"], "source": db["source"],
         "scope": db["scope"], "agents": db["agents"],
