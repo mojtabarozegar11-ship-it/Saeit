@@ -119,7 +119,12 @@ class Ava:
         return item
 
     def list_memories(self) -> Sequence[MemoryItem]:
-        return self._memory.list_for_owner(self.owner_id)
+        # Defense in depth: never trust a host-provided store to enforce
+        # tenant scoping correctly. Fail closed for foreign-owner records.
+        return tuple(
+            item for item in self._memory.list_for_owner(self.owner_id)
+            if item.owner_id == self.owner_id
+        )
 
     def forget(self, memory_id: str) -> bool:
         return self._memory.delete(self.owner_id, memory_id)
@@ -135,7 +140,7 @@ class Ava:
         return tuple(
             {"id": item.id, "owner_id": item.owner_id,
              "text": item.text, "created_at": item.created_at}
-            for item in self._memory.list_for_owner(self.owner_id)
+            for item in self.list_memories()
         )
 
     def converse(self, message: str, *, use_memories: bool = False) -> AvaReply:
