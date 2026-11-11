@@ -275,7 +275,7 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertEqual(GuestRecoveryRate.objects.count(), 0)
 
     @override_settings(MPW_GUEST_RECOVERY_ENABLED=True)
-    def test_recovery_urls_are_grafted_without_replacing_existing_handlers(self):
+    def test_guest_adapter_does_not_register_email_recovery_routes(self):
         def handler(*a, **k):
             return HttpResponse()
         names = {"_start_order": handler, "_show_invoice": handler,
@@ -287,10 +287,9 @@ class RecoveryIsolationTests(unittest.TestCase):
         )
         guest_adapter.patch_commercial(names)
         routes = dict(names["COMMERCIAL_URLPATTERNS"])
-        self.assertEqual(len(routes), 6)
-        self.assertIn("commerce/trx-easy/recover/download/<int:invoice_id>/", routes)
-        self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
-        self.assertIs(names["_start_order"], handler)
+        self.assertEqual(len(routes), 2)
+        self.assertFalse(any("recover" in key for key in routes))
+        self.assertIsNot(names["start_order"], handler)
 
     def _legacy_public_adapter(self):
         """Build the old public route shape without a live web server."""
@@ -311,46 +310,19 @@ class RecoveryIsolationTests(unittest.TestCase):
         }
         return public_module, namespace, old_calls
 
-    def test_legacy_recovery_fallback_routes_each_action_to_correct_handler(self):
+    def test_guest_adapter_preserves_legacy_public_routing_without_email_import(self):
         public_module, namespace, old_calls = self._legacy_public_adapter()
         with patch.dict(sys.modules, {"services.mpw_trx_public_pages": public_module}), \
-             patch.object(module, "recovery_request", return_value=HttpResponse(b"request")) as ask, \
-             patch.object(module, "recovery_verify", return_value=HttpResponse(b"verify")) as verify, \
-             patch.object(module, "recovery_orders", return_value=HttpResponse(b"orders")) as orders, \
-             patch.object(module, "recovery_download", return_value=HttpResponse(b"file")) as download:
+             patch.object(module, "recovery_download", side_effect=AssertionError("Recovery not used")):
             guest_adapter.patch_public(namespace)
-            expected = (
-                ("/commerce/trx-easy/recover/", b"request"),
-                ("/commerce/trx-easy/recover/verify/", b"verify"),
-                ("/commerce/trx-easy/recover/orders/", b"orders"),
-                ("/commerce/trx-easy/recover/download/125/", b"file"),
-            )
-            for url, body in expected:
-                with self.subTest(url=url):
-                    self.assertEqual(public_module.public_shop(self.rf.get(url)).content, body)
-            ask.assert_called_once()
-            verify.assert_called_once()
-            orders.assert_called_once()
-            download.assert_called_once()
-            self.assertEqual(download.call_args.kwargs, {"invoice_id": 125})
-        self.assertEqual(old_calls, [])
-
-    def test_legacy_recovery_fallback_rejects_malformed_download_and_unknown_routes(self):
-        public_module, namespace, old_calls = self._legacy_public_adapter()
-        with patch.dict(sys.modules, {"services.mpw_trx_public_pages": public_module}), \
-             patch.object(module, "recovery_download") as download:
-            guest_adapter.patch_public(namespace)
-            for url in (
-                "/commerce/trx-easy/recover/download/0/",
-                "/commerce/trx-easy/recover/download/-1/",
-                "/commerce/trx-easy/recover/download/abc/",
-                "/commerce/trx-easy/recover/download/" + "9" * 30 + "/",
-                "/commerce/trx-easy/recover/unknown/",
-            ):
-                with self.subTest(url=url), self.assertRaises(Http404):
-                    public_module.public_shop(self.rf.get(url))
-            download.assert_not_called()
-        self.assertEqual(old_calls, [])
+            self.assertEqual(namespace["PUBLIC_URLPATTERNS"],
+                             (("product_checkout", public_module.public_shop),
+                              ("purchases", public_module.public_shop)))
+            self.assertFalse(any("recover" in str(route) for route, _ in
+                                 namespace["PUBLIC_URLPATTERNS"]))
+            original_response = public_module.public_shop(self.rf.get("/old-public/"))
+            self.assertEqual(original_response.content, b"original public route")
+            self.assertEqual(len(old_calls), 1)
 
     def test_legacy_recovery_fallback_keeps_nonrecovery_public_routes(self):
         public_module, namespace, old_calls = self._legacy_public_adapter()
