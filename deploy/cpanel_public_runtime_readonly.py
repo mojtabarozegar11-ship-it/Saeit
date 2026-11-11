@@ -41,7 +41,11 @@ def declared_app_root(bootstrap: str) -> str:
             isinstance(target, ast.Name) and target.id == "APP"
             for target in stmt.targets
         ):
-            assignments.append(stmt.value.value if isinstance(stmt.value, ast.Constant) else None)
+            # A nested/dead-branch or function-local APP does not select the WSGI app.
+            assignments.append(
+                stmt.value.value if stmt in module.body and isinstance(stmt.value, ast.Constant)
+                else None
+            )
         elif isinstance(stmt, (ast.AugAssign, ast.AnnAssign)) and isinstance(stmt.target, ast.Name) and stmt.target.id == "APP":
             assignments.append(None)
     if len(assignments) != 1 or not isinstance(assignments[0], str):
