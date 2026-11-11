@@ -170,20 +170,39 @@ def restart():
 
 def runtime_validate():
     """Read-only Django import + SKU flags; no order creation."""
-    code='''import json,os,sys
+    code='''import hashlib,json,os,sys
 os.chdir("/home/zomorod2/Saeit-staging");sys.path.insert(0,os.getcwd())
 os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
 import django
 django.setup()
 from core.models import Product
+from mpw_commerce.downloads import _private_file
+from types import SimpleNamespace
 from services.mpw_trx_commercial_context import rights_cleared_for_sale
 from services.mpw_trx_commercial_web import _select_order
 from services.mpw_trx_public_pages import public_shop,product_checkout
 data={}
 for sku in (72,225,879):
     p=Product.objects.filter(pk=sku).first()
+    asset_matches=False
+    if p is not None:
+        try:
+            asset=_private_file(SimpleNamespace(product=p))
+            metadata=p.metadata if type(p.metadata) is dict else {}
+            if (asset.is_file() and not asset.is_symlink()
+                    and 0<asset.stat().st_size<=150*1024*1024):
+                h=hashlib.sha256()
+                with asset.open("rb") as stream:
+                    for piece in iter(lambda:stream.read(1024*1024),b""):
+                        h.update(piece)
+                actual=h.hexdigest()
+                asset_matches=(actual==metadata.get("sha256")
+                    and actual==metadata.get("rights_asset_sha256"))
+        except (OSError,ValueError,TypeError,AttributeError):
+            pass
     data[str(sku)]={"exists":p is not None,
-      "explicit_rights":rights_cleared_for_sale(p) if p is not None else False}
+      "explicit_rights":rights_cleared_for_sale(p) if p is not None else False,
+      "exact_asset_hash_verified":asset_matches}
 print("MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"read_only":True,"no_invoices_created":True,
  "gate_imports_ok":True,"products":data},sort_keys=True))
 '''
@@ -200,6 +219,10 @@ print("MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"read_only":True,"no_invoices_create
         products=payload["products"]
         if any(products[str(sku)]["exists"] is not True for sku in (72,225,879)):
             raise RuntimeError("RIGHTS_REQUIRED_PRODUCT_MISSING")
+        if any(products[str(sku)].get("explicit_rights") is True and
+               products[str(sku)].get("exact_asset_hash_verified") is not True
+               for sku in (72,225,879)):
+            raise RuntimeError("RIGHTS_RUNTIME_ASSET_HASH_MISMATCH")
     except (ValueError,KeyError,TypeError) as exc:
         raise RuntimeError("RIGHTS_RUNTIME_RECEIPT_INVALID") from exc
     print(evidence[0])
