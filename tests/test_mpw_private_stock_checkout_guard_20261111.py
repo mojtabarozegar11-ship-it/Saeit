@@ -51,7 +51,8 @@ def private_asset(*, present=True, size=1024, symlink=False):
 
 
 class GuestCheckoutPrivateStockTests(TestCase):
-    def checkout(self, asset, *, public_ids=(72,225,879), setting_present=True):
+    def checkout(self, asset, *, public_ids=(72,225,879), setting_present=True,
+                 approved_hash_matches=True):
         modules = {}
         render = Mock(return_value={})
         query = Mock()
@@ -72,7 +73,8 @@ class GuestCheckoutPrivateStockTests(TestCase):
         put(modules, 'mpw_commerce.downloads', _private_file=private)
         put(modules, 'services')
         put(modules, 'services.mpw_trx_commercial_context',
-            rights_cleared_for_sale=lambda p: True, public_product_ids=public_product_ids)
+            rights_cleared_for_sale=lambda p: True, public_product_ids=public_product_ids,
+            private_artifact_sha_matches_approved=lambda product, path: approved_hash_matches)
         put(modules, 'services.mpw_trx_commercial_web',
             _configured_receiver=lambda: True, _nocache=lambda response: response)
         put(modules, 'services.mpw_walletless_commercial_intent', _commercial_db=lambda s,c: True)
@@ -110,6 +112,10 @@ class GuestCheckoutPrivateStockTests(TestCase):
 
     def test_non_file_asset_never_renders_checkout(self):
         self.assertEqual(self.checkout(private_asset(present=False))[1], 0)
+
+    def test_changed_private_bytes_never_render_guest_checkout(self):
+        self.assertEqual(self.checkout(private_asset(), approved_hash_matches=False),
+                         (None, 0, 1))
 
     def test_bad_or_missing_allowlist_never_renders_checkout_or_reads_stock(self):
         for public_ids in (None, '72', 72, {'72': True}, (72, '225')):

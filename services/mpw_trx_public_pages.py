@@ -3,9 +3,12 @@ from html import escape
 from django.http import HttpResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
-from services.mpw_trx_commercial_web import _ensure_live, _nocache
+from services.mpw_trx_commercial_web import _ensure_live, _nocache, _configured_receiver
 from services.mpw_trx_walletless_core import PaymentHold
-from services.mpw_trx_commercial_context import rights_cleared_for_sale, public_product_ids
+from services.mpw_trx_commercial_context import (
+    rights_cleared_for_sale, public_product_ids,
+    private_artifact_sha_matches_approved,
+)
 
 
 def _checkout_csrf_referrer(response):
@@ -40,7 +43,9 @@ def public_shop(request):
     from types import SimpleNamespace
     if request.get_host().split(':')[0].lower() not in ('mojplaywin.com','www.mojplaywin.com') or not request.is_secure():
         raise Http404
-    try: _commercial_db(settings,connection)
+    try:
+        _commercial_db(settings,connection)
+        _configured_receiver()
     except PaymentHold: raise Http404
     cards=[]
     for p in Product.objects.filter(pk__in=public_product_ids(settings),active=True).order_by('pk'):
@@ -49,6 +54,7 @@ def public_shop(request):
             f=_private_file(SimpleNamespace(product=p))
             if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: continue
         except (OSError,ValueError): continue
+        if not private_artifact_sha_matches_approved(p,f): continue
         cards.append(f'<article><h2>{escape(p.title)}</h2><p>${escape(str(p.price))} USD · Pay the quoted equivalent in TRX</p><a class="button" href="/commerce/book/{p.pk}/">Buy with TRX</a></article>')
     return _page('Buy digital products with TRX','<p>Choose a product and enter your purchase email to request an invoice. No account signup, wallet connection or wallet signature is needed. Pay the exact TRX amount on TRON mainnet; your private download becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
 
@@ -70,6 +76,7 @@ def product_checkout(request, product_id):
         raise Http404
     f=_private_file(SimpleNamespace(product=product))
     if f.is_symlink() or not f.is_file() or f.stat().st_size<=0: raise Http404
+    if not private_artifact_sha_matches_approved(product,f): raise Http404
     response=_nocache(render(request,'mpw_commerce/product_checkout.html',{
         'product':product,'price_usd':format(product.price,'.2f'),
         'mpw_trx_easy_enabled':True}))

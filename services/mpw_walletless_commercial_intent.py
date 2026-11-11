@@ -166,11 +166,9 @@ def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
     if not callable(rate_provider) or not callable(configured_receiver):
         raise PaymentHold("Trusted quote and merchant address are missing")
     recipient = configured_receiver()
-    from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
-    try:
-        tron_address_to_hex(recipient)  # validates Base58Check, not merely shape
-    except (TypeError, ValueError) as exc:
-        raise PaymentHold("Invalid merchant-owned TRON address") from exc
+    from scripts.f41_merchant_audit_cli import tron_address
+    if not tron_address(recipient):  # validates Base58Check, not merely shape
+        raise PaymentHold("Invalid merchant-owned TRON address")
     current = now or django_timezone.now()
 
     # Other payment rails are disabled in this controlled test. This check

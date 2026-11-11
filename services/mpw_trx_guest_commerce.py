@@ -222,7 +222,10 @@ def _checkout_page(request, product_id, pages_namespace):
     from mpw_commerce.buyer_orders import _eligible
     from mpw_commerce.downloads import _private_file
     from types import SimpleNamespace
-    from services.mpw_trx_commercial_context import rights_cleared_for_sale, public_product_ids
+    from services.mpw_trx_commercial_context import (
+        rights_cleared_for_sale, public_product_ids,
+        private_artifact_sha_matches_approved,
+    )
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
 
@@ -250,6 +253,8 @@ def _checkout_page(request, product_id, pages_namespace):
             raise Http404("Digital file not available")
     except (OSError, ValueError) as exc:
         raise Http404("Digital file not available") from exc
+    if not private_artifact_sha_matches_approved(product, asset):
+        raise Http404("Approved digital product version is unavailable")
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),

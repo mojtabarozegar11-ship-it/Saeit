@@ -44,10 +44,13 @@ def _rate_provider():
 
 def _configured_receiver():
     from mpw_commerce.invoicing import RECEIVERS
+    from scripts.f41_merchant_audit_cli import tron_address
     data=RECEIVERS.get("TRX")
     if (not isinstance(data,(tuple,list)) or len(data)!=3
         or data[0]!="tron-mainnet" or data[2]!=6):
         raise PaymentHold("Merchant native TRX destination not configured")
+    if not tron_address(data[1]):
+        raise PaymentHold("Merchant native TRX destination is invalid")
     return data[1]
 
 

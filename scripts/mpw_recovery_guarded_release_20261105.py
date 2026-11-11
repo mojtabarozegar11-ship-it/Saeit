@@ -44,7 +44,7 @@ FILES = {
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 # C16: exact integrated guest/recovery source is cryptographically pinned; NEVER auto-enable email.
 SOURCE_DIGESTS = {
-    "guest": "9e6aca8d16a79968c32ec786377e3b9baf0dfd12ad8a8cd1f707cbd5809097ff",
+    "guest": "51d6f74f51ca97cabb9ef8595be2b0be8724eb98becc1e0f7190b84ca15b7ac8",
     "recovery": "b359ff68da842a0dfc04f2a70f6e2b155a837bd34e68a336d98bcdc1b023661a",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "9913e106dee36cefab78137fb54936339c65bd68fefd6d72e616c36011866572",
