@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   configure:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 8
     steps:
       - name: Install VPS-local factory watchdog
