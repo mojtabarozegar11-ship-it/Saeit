@@ -69,7 +69,9 @@ def classify(log: str) -> dict:
             ("private_file_ready", "PRIVATE_FILE_NOT_READY"),
             ("stored_rights", "EXPLICIT_RIGHTS_FLAG_MISSING"),
             ("explicit_rights", "RUNTIME_RIGHTS_CHECK_DENIED"),
-            ("rights_hash_reference_matches_asset", "RIGHTS_DOCUMENT_HASH_NOT_LINKED"),
+            ("canonical_catalog_sha_matches_asset", "CANONICAL_CATALOG_SHA_MISMATCH"),
+            ("rights_hash_reference_matches_asset", "RIGHTS_ASSET_HASH_NOT_LINKED"),
+            ("rights_document_hash_well_formed", "RIGHTS_DOCUMENT_HASH_INVALID"),
         ):
             if item.get(key) is not True:
                 blocks.append(label)

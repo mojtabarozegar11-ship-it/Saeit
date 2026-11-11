@@ -347,6 +347,9 @@ jobs:
                                     len(fields[k].strip())>0]
               stored_rights=fields.get("rights_cleared") is True
               rights=(rights_cleared_for_sale(product) is True) if rights_cleared_for_sale else False
+              def sha256_hex(value):
+                return (type(value) is str and len(value)==64 and
+                    all(character in "0123456789abcdef" for character in value.lower()))
               artifact_sha=None
               try:
                 asset=_private_file(SimpleNamespace(product=product))
@@ -380,10 +383,18 @@ jobs:
                   "quality_approved":fields.get("quality_approved") is True,
                   "license_verified":fields.get("license_verified") is True,
               }
+              canonical_sha_ok=bool(artifact_sha and sha256_hex(fields.get("sha256"))
+                  and fields["sha256"].lower()==artifact_sha)
+              rights_asset_sha_ok=bool(artifact_sha and
+                  sha256_hex(fields.get("rights_asset_sha256")) and
+                  fields["rights_asset_sha256"].lower()==artifact_sha)
+              rights_document_sha_ok=sha256_hex(fields.get("rights_document_sha256"))
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
                   and public_allowed and release_authorized
-                  and commercial_db_ready and merchant_receiver_ready)
+                  and commercial_db_ready and merchant_receiver_ready
+                  and canonical_sha_ok and rights_asset_sha_ok and rights_document_sha_ok
+                  and fields.get("publication_approved") is True)
               record={"id":sku,"exists":True,"active":product.active is True,
                  "eligible":eligible,"public_product_allowed":public_allowed,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
                  "product_internal_gates":internal_gates,
@@ -391,9 +402,9 @@ jobs:
                  "rights_metadata_keys":rights_keys[:40],
                  "rights_reference_keys":rights_reference_keys[:40],
                  "asset_sha256_prefix":artifact_sha[:16] if artifact_sha else None,
-                 "rights_hash_reference_matches_asset":bool(artifact_sha and
-                    any(fields.get(key)==artifact_sha for key in
-                    ("rights_asset_sha256","rights_artifact_sha256","rights_file_sha256","approved_artifact_sha256"))),
+                 "canonical_catalog_sha_matches_asset":canonical_sha_ok,
+                 "rights_hash_reference_matches_asset":rights_asset_sha_ok,
+                 "rights_document_hash_well_formed":rights_document_sha_ok,
                  "existing_catalog_hash_matches_asset":[key for key in
                     ("asset_sha256","final_pdf_sha256","pdf_sha256","sha256")
                     if artifact_sha and type(fields.get(key)) is str

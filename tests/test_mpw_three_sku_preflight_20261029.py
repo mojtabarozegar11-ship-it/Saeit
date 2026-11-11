@@ -23,7 +23,9 @@ def fixture():
             "public_product_allowed": True,
             "private_file_ready": True, "stored_rights": True,
             "explicit_rights": True,
+            "canonical_catalog_sha_matches_asset": True,
             "rights_hash_reference_matches_asset": True,
+            "rights_document_hash_well_formed": True,
             "existing_catalog_hash_matches_asset": ["sha256"],
             "existing_approval_flags": {"publication_approved": True},
             "product_internal_gates": {key: True for key, _ in POLICY.INTERNAL_GATES},
@@ -70,7 +72,8 @@ class PreflightContract(unittest.TestCase):
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
             "exists", "active", "public_product_allowed", "eligible", "private_file_ready",
-            "stored_rights", "explicit_rights", "rights_hash_reference_matches_asset",
+            "stored_rights", "explicit_rights", "canonical_catalog_sha_matches_asset",
+            "rights_hash_reference_matches_asset", "rights_document_hash_well_formed",
         )
         for sku in POLICY.SKU_IDS:
             for key in keys:
@@ -168,6 +171,11 @@ class PreflightContract(unittest.TestCase):
         self.assertIn('and commercial_db_ready and merchant_receiver_ready', body)
         self.assertIn('"commercial_db_ready":commercial_db_ready', body)
         self.assertIn('"merchant_receiver_ready":merchant_receiver_ready', body)
+        self.assertIn('"canonical_catalog_sha_matches_asset":', body)
+        self.assertIn('"rights_document_hash_well_formed":', body)
+        self.assertIn('"rights_asset_sha256"', body)
+        self.assertIn('"rights_document_sha256"', body)
+        self.assertIn('and canonical_sha_ok and rights_asset_sha_ok and rights_document_sha_ok', body)
 
 
 if __name__ == "__main__":
