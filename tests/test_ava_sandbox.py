@@ -143,6 +143,25 @@ class SandboxTests(unittest.TestCase):
         self.assertEqual(bundle.review.review_id, own_review.review_id)
         self.assertEqual(self.tree[self.path], self.original)
 
+    def test_failed_second_evaluation_invalidates_previous_approval(self):
+        runtime = AvaRuntime(owner_id="owner", brain=lambda _: "hi",
+                             propose_goals=lambda _: (), review_runner=self.runner)
+        review = runtime.review_code_change(
+            CodeProposal("Improve code", "Small fix", (
+                CodeEdit(self.path, self.director.digest(self.original), self.changed),
+            )), trusted_files={self.path: self.original},
+        )
+        result = runtime.evaluate_code_change(review.review_id, trusted_tree=self.tree)
+        self.assertTrue(result.evidence.passed)
+        with self.assertRaises(CodeProposalError):
+            runtime.evaluate_code_change(
+                review.review_id, trusted_tree={**self.tree, self.path: "value=999\n"},
+            )
+        with self.assertRaises(PermissionError):
+            runtime.approve_code_handoff(
+                review.review_id, evidence=result.evidence, authorize=lambda *_: True,
+            )
+
     def test_runtime_default_denies_execution_without_runner(self):
         runtime = AvaRuntime(owner_id="owner", brain=lambda _: "hello",
                              propose_goals=lambda _: ())
