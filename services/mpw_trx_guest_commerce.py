@@ -87,48 +87,10 @@ def _guest_username(request):
     return "mpwguest_" + digest
 
 
-def _submitted_purchase_email(request):
-    """Accept all supported checkout aliases, but never conflicting addresses.
-
-    Each nonempty value is validated before guest creation.  This check must
-    work even when the optional recovery module has not been installed yet.
-    """
-    from django.core.exceptions import ValidationError
-    from django.core.validators import validate_email
-
-    posted = getattr(request, "POST", None)
-    if posted is None or not hasattr(posted, "getlist"):
-        raise Http404("Valid purchase email required")
-    addresses = []
-    for key in ("email", "buyer_email", "customer_email",
-                "purchase_email", "purchaser_email"):
-        for raw in posted.getlist(key):
-            if not raw:
-                continue
-            if not isinstance(raw, str):
-                raise Http404("Invalid purchase email")
-            email = raw.strip().casefold()
-            if len(email) > 254 or "\r" in email or "\n" in email:
-                raise Http404("Invalid purchase email")
-            try:
-                validate_email(email)
-            except ValidationError as exc:
-                raise Http404("Valid purchase email required") from exc
-            addresses.append(email)
-    if not addresses or any(value != addresses[0] for value in addresses):
-        raise Http404("Missing or conflicting purchase email")
-    return addresses[0]
-
-
 def _new_user(request):
     """Resolve both simultaneous first orders to one unique password-disabled user."""
     from django.contrib.auth import get_user_model
     from django.db import IntegrityError, transaction
-
-    # The guest principal is the durable owner of the order.  Persist the
-    # address submitted by the checkout form before invoice binding; otherwise
-    # record_invoice() correctly refuses to create an unowned delivery record.
-    submitted_email = _submitted_purchase_email(request)
 
     _rate_limit(request)
     Model = get_user_model()
@@ -156,29 +118,10 @@ def _new_user(request):
                 raise
     if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
-    if hasattr(user, "email"):
-        existing_email = str(getattr(user, "email", "") or "").strip().lower()
-        if existing_email and existing_email != submitted_email:
-            raise Http404("Guest email identity mismatch")
-        if not existing_email:
-            user.email = submitted_email
-            user.save(update_fields=["email"])
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
         raise Http404("Guest receipt could not be issued")
     return user, token
-
-
-def _bind_guest_email(request, user):
-    """Bind a submitted address only to this existing guest principal."""
-    submitted_email = _submitted_purchase_email(request)
-    existing_email = str(getattr(user, "email", "") or "").strip().lower()
-    if existing_email and existing_email != submitted_email:
-        raise Http404("Guest email identity mismatch")
-    if not existing_email and hasattr(user, "email"):
-        user.email = submitted_email
-        user.save(update_fields=["email"])
-    return user
 
 
 def _identity(request, *, create=False):
@@ -191,8 +134,6 @@ def _identity(request, *, create=False):
     token = None
     if user is None and create:
         user, token = _new_user(request)
-    elif user is not None and create and str(getattr(user, "username", "")).startswith("mpwguest_"):
-        user = _bind_guest_email(request, user)
     if user is None:
         raise Http404("Guest purchase session missing or expired")
     return user, token
@@ -213,11 +154,6 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False):
-    if create:
-        from django.conf import settings
-        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
-            from services.mpw_trx_email_recovery import bound_checkout
-            return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -284,13 +220,6 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
-            from django.conf import settings
-            recovery_link = (
-                '<p><a href="/commerce/trx-easy/recover/">Recover using purchase email</a></p>'
-                if (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
-                    and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
-                else ""
-            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -301,7 +230,6 @@ def patch_public(namespace):
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
-                + recovery_link +
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
