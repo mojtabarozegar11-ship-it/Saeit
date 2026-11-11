@@ -82,6 +82,44 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Order.objects.count(), 0)
 
+    def test_guest_checkout_accepts_all_purchase_email_aliases(self):
+        for key in ("email", "buyer_email", "customer_email",
+                    "purchase_email", "purchaser_email"):
+            with self.subTest(key=key):
+                request = self.rf.post("/commerce/trx-easy/start/72/",
+                                       {key: " Buyer@Example.com "}, secure=True)
+                self.assertEqual(guest_adapter._submitted_purchase_email(request),
+                                 "buyer@example.com")
+
+    def test_guest_checkout_rejects_alias_and_duplicate_conflicts(self):
+        cases = (
+            {"email": "buyer@example.com", "buyer_email": "other@example.com"},
+            {"email": ["buyer@example.com", "other@example.com"]},
+        )
+        for fields in cases:
+            with self.subTest(fields=fields):
+                request = self.rf.post("/commerce/trx-easy/start/72/", fields,
+                                       secure=True)
+                with self.assertRaises(Http404):
+                    guest_adapter._submitted_purchase_email(request)
+
+    def test_guest_checkout_rejects_malformed_email_before_creating_user(self):
+        for email in ("", "not-an-address", "buyer@invalid", "buyer@example.com\nBcc:bad"):
+            with self.subTest(email=email):
+                request = self.rf.post("/commerce/trx-easy/start/72/",
+                                       {"email": email}, secure=True)
+                with self.assertRaises(Http404):
+                    guest_adapter._submitted_purchase_email(request)
+
+    def test_new_guest_binds_valid_email_without_recovery_flag(self):
+        request = self.rf.post("/commerce/trx-easy/start/72/",
+                               {"purchase_email": "Buyer@Example.com"}, secure=True)
+        with patch.object(guest_adapter, "_rate_limit"), patch.object(
+                guest_adapter, "_guest_username", return_value="mpwguest_" + secrets.token_hex(12)):
+            new_user, token = guest_adapter._new_user(request)
+        self.assertEqual(new_user.email, "buyer@example.com")
+        self.assertTrue(token)
+
     def test_alias_email_field_works_but_conflicting_values_fail_closed(self):
         req = self.rf.post("/commerce/trx-easy/start/72/",
                            {"buyer_email": "buyer@example.com"},
