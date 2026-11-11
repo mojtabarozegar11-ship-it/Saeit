@@ -59,6 +59,18 @@ class AvaCoreTests(unittest.TestCase):
         self.assertTrue(self.ava.forget(saved.id))
         self.assertEqual(self.ava.export_memories(consent=True), ())
 
+    def test_memory_context_is_bounded_and_owner_scoped(self):
+        for i in range(25):
+            self.ava.remember(f"memory-{i}", consent=True)
+        other = Ava(owner_id="owner-2", brain=self.brain, memory=self.shared_store)
+        other.remember("other-owner-secret", consent=True)
+        reply = self.ava.converse("سلام", use_memories=True)
+        self.assertEqual(reply.memories_used, 20)
+        context = str(self.calls[-1])
+        self.assertNotIn("memory-0", context)
+        self.assertIn("memory-24", context)
+        self.assertNotIn("other-owner-secret", context)
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
