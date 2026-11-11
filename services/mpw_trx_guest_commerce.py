@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import time
 
@@ -460,12 +461,22 @@ def patch_public(namespace):
                 continue
             def _recovery_first(request, *args, _old=_old_public, **kwargs):
                 _path = str(getattr(request, "path_info", "")).rstrip("/")
-                if _path in (
-                    "/commerce/trx-easy/recover",
-                    "/commerce/trx-easy/recover/verify",
-                    "/commerce/trx-easy/recover/orders",
-                ) or _path.startswith("/commerce/trx-easy/recover/download/"):
+                _root = "/commerce/trx-easy/recover"
+                if _path == _root:
                     return recovery_request(request)
+                if _path == _root + "/verify":
+                    return recovery_verify(request)
+                if _path == _root + "/orders":
+                    return recovery_orders(request)
+                match = re.fullmatch(
+                    re.escape(_root) + r"/download/([1-9][0-9]{0,18})", _path
+                )
+                if match:
+                    return recovery_download(request, invoice_id=int(match.group(1)))
+                # Never send malformed recovery URLs into a checkout or
+                # purchase handler through the legacy public catch-all.
+                if _path.startswith(_root + "/"):
+                    raise Http404("Unknown recovery route")
                 return _old(request, *args, **kwargs)
             setattr(_public_module, _name, _recovery_first)
         _public_module._mpw_recovery_dispatch_installed = True
