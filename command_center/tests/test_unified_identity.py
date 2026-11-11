@@ -25,6 +25,15 @@ class UnifiedIdentityTests(unittest.TestCase):
         self.assertEqual(header["integration_state"], "unverified")
         self.assertEqual(identity_snapshot([], 0)["bot"], header)
 
+    def test_dashboard_uses_canonical_bot_identity_context(self):
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "templates" / "command_center" / "dashboard.html"
+        template = path.read_text(encoding="utf-8")
+        self.assertNotIn("mojtaba.bot.ai", template)
+        self.assertIn("{{ bot_identity }}", template)
+        self.assertIn("{{ bot_identity|escapejs }}", template)
+        self.assertIn("data?.bot?.identity!==publicBotId", template)
+
     def test_source_rows_are_not_claimed_as_new_bots(self):
         raw = [{"id": 9, "code": "trading-legacy", "name": "Old robot",
                 "mission": "Trade", "risk_level": "high", "active": True}]
