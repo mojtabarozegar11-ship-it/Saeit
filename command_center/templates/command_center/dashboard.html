@@ -121,44 +121,71 @@ async function refreshAgentMetrics(){
     fill.style.width=(total?Math.min(100,100*done/total):0)+"%";
     track.append(fill);card.append(heading,track,meta);chart.append(card);
    }
-   if(!chart.childElementCount){chart.textContent=isEn?"No module records":"هیچ ثبت ماژولی در پایگاه داده وجود ندارد";}
+   if(!Array.isArray(data.per_agent))throw new Error("Missing module preview");
+   if(!data.per_agent.length){chart.textContent=isEn?"No module records":"هیچ ثبت ماژولی در پایگاه داده وجود ندارد";}
+   if(data.per_agent_truncated){
+    const warning=document.createElement("p");
+    warning.textContent=isEn?"Preview limited to 200 legacy records; complete paginated directory below.":"این نمودار فقط ۲۰۰ سابقهٔ نخست را نشان می‌دهد؛ فهرست کامل صفحه‌بندی‌شده پایین آمده است.";
+    chart.append(warning);
+   }
   }
  }catch(e){el.textContent=isEn?"Legacy module data unavailable":"سوابق ماژول‌های قدیمی در دسترس نیست";}
 }
 refreshAgentMetrics();
 document.getElementById("refresh").addEventListener("click",refreshAgentMetrics);
 
+function validateModulePage(data,offset,expectedTotal,seenIds,seenCodes){
+ if(data?.bot?.identity!=="mojtaba.bot.ai"||data.bot.identity_count!==1)throw new Error("wrong identity");
+ if(!Array.isArray(data.modules)||!Number.isSafeInteger(data.source_module_total)||data.source_module_total<0)throw new Error("invalid module page");
+ if(expectedTotal!==null&&data.source_module_total!==expectedTotal)throw new Error("module count changed during pagination");
+ for(const module of data.modules){
+  if(!Number.isSafeInteger(module.id)||typeof module.module_code!=="string"||!module.module_code.trim()||
+     seenIds.has(module.id)||seenCodes.has(module.module_code))throw new Error("duplicate or invalid module");
+  seenIds.add(module.id);seenCodes.add(module.module_code);
+ }
+ const next=data.next_offset;
+ if(next!==null&&(!Number.isSafeInteger(next)||next!==offset+data.modules.length||next<=offset))throw new Error("invalid page cursor");
+ if(data.truncated!==(next!==null))throw new Error("inconsistent pagination flag");
+ return {nextOffset:next,total:data.source_module_total};
+}
 async function refreshDirectory(){
  const area=document.getElementById("agent-directory");
  const status=document.getElementById("agent-directory-status");
  area.replaceChildren();
+ status.textContent=isEn?"Loading complete module roster...":"در حال دریافت فهرست کامل ماژول‌ها...";
  try{
+  const content=document.createDocumentFragment();
   const root=document.createElement("article"),heading=document.createElement("h3"),description=document.createElement("small");
   root.className="card";heading.textContent="mojtaba.bot.ai";
   description.textContent=isEn?"Sole bot identity; live integration not verified":"تنها هویت ربات؛ اتصال زنده هنوز تأیید نشده است";
-  root.append(heading,description);area.append(root);
-  let offset=0,seen=0;
+  root.append(heading,description);content.append(root);
+  let offset=0,seen=0,expectedTotal=null;
+  const seenIds=new Set(),seenCodes=new Set();
   while(offset!==null){
    const url="{% url 'command_center_unified_bot_modules_api' %}"+"?offset="+offset;
    const response=await fetch(url,{credentials:"same-origin",cache:"no-store"});
    if(!response.ok)throw new Error("unavailable");
    const data=await response.json();
-   if(data.bot?.identity!=="mojtaba.bot.ai"||data.bot?.identity_count!==1)throw new Error("wrong identity");
-   for(const module of (data.modules||[])){
+   const page=validateModulePage(data,offset,expectedTotal,seenIds,seenCodes);
+   expectedTotal=page.total;
+   for(const module of data.modules){
     const card=document.createElement("article"),name=document.createElement("h3"),mission=document.createElement("p"),meta=document.createElement("small");
     card.className="card";name.textContent=(isEn?"Module: ":"ماژول: ")+module.module_code;
     mission.textContent=module.mission;
     meta.textContent=(isEn?"Legacy record: ":"ثبت قدیمی: ")+module.id+
      " | "+(isEn?"Live integration unverified":"اتصال اجرایی تأیید نشده");
-    card.append(name,mission,meta);area.append(card);
+    card.append(name,mission,meta);content.append(card);
     seen++;
    }
-   const next=data.next_offset;
-   if(next!==null&&(!Number.isInteger(next)||next<=offset))throw new Error("invalid page cursor");
-   offset=next;
+   offset=page.nextOffset;
   }
-  status.textContent=(isEn?"Module records: ":"تعداد سوابق ماژول: ")+seen;
- }catch(e){status.textContent=isEn?"Unified module directory unavailable or incomplete":"فهرست ماژول‌های واحد ناقص یا در دسترس نیست";}
+  if(seen!==expectedTotal)throw new Error("incomplete module roster");
+  area.replaceChildren(content);
+  status.textContent=(isEn?"Complete module records: ":"فهرست کامل سوابق ماژول: ")+seen;
+ }catch(e){
+  area.replaceChildren();
+  status.textContent=isEn?"Unified module directory unavailable or incomplete":"فهرست ماژول‌های واحد ناقص یا در دسترس نیست";
+ }
 }
 refreshDirectory();
 document.getElementById("refresh").addEventListener("click",refreshDirectory);
