@@ -313,10 +313,14 @@ jobs:
           },sort_keys=True))
           sale_ready=0
           blocked=[]
+          configured_public_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",())
+          if type(configured_public_ids) not in (tuple,list,set,frozenset):
+            configured_public_ids=()
           for sku in (72,225,879):
+            public_allowed = sku in configured_public_ids
             product=Product.objects.filter(pk=sku).first()
             if product is None:
-              record={"id":sku,"exists":False,"is_sellable":False}
+              record={"id":sku,"exists":False,"public_product_allowed":public_allowed,"is_sellable":False}
               blocked.append(sku)
             else:
               metadata=product.metadata
@@ -362,9 +366,9 @@ jobs:
               }
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
-                  and release_authorized)
+                  and public_allowed and release_authorized)
               record={"id":sku,"exists":True,"active":product.active is True,
-                 "eligible":eligible,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
+                 "eligible":eligible,"public_product_allowed":public_allowed,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
                  "product_internal_gates":internal_gates,
                  "is_sellable":is_sellable,
                  "rights_metadata_keys":rights_keys[:40],

@@ -19,6 +19,7 @@ def fixture():
     products = {
         sku: {
             "id": sku, "exists": True, "active": True, "eligible": True,
+            "public_product_allowed": True,
             "private_file_ready": True, "stored_rights": True,
             "explicit_rights": True,
             "rights_hash_reference_matches_asset": True,
@@ -56,7 +57,7 @@ class PreflightContract(unittest.TestCase):
 
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
-            "exists", "active", "eligible", "private_file_ready",
+            "exists", "active", "public_product_allowed", "eligible", "private_file_ready",
             "stored_rights", "explicit_rights", "rights_hash_reference_matches_asset",
         )
         for sku in POLICY.SKU_IDS:
@@ -67,6 +68,21 @@ class PreflightContract(unittest.TestCase):
                     r = POLICY.classify(render(f, p))
                     self.assertEqual(r["preflight"], "blocked")
                     self.assertEqual(r["products"][str(sku)]["preflight"], "blocked")
+
+    def test_missing_or_false_public_allowlist_has_exact_blocker(self):
+        for sku in POLICY.SKU_IDS:
+            for value in (False, None, 1, "true"):
+                with self.subTest(sku=sku, value=value):
+                    flags, products = fixture()
+                    if value is None:
+                        products[sku].pop("public_product_allowed")
+                    else:
+                        products[sku]["public_product_allowed"] = value
+                    result = POLICY.classify(render(flags, products))
+                    self.assertEqual(result["preflight"], "blocked")
+                    self.assertIn("PRODUCT_NOT_IN_PUBLIC_TRX_ALLOWLIST",
+                                  result["products"][str(sku)]["blocks"])
+                    self.assertEqual(result["products"][str(next(k for k in POLICY.SKU_IDS if k != sku))]["preflight"], "passed")
 
     def test_publication_and_catalog_sha_are_mandatory(self):
         f, p = fixture()
@@ -134,6 +150,9 @@ class PreflightContract(unittest.TestCase):
         for key, _ in POLICY.INTERNAL_GATES:
             self.assertIn('"' + key + '":', body)
         self.assertIn('"product_internal_gates":internal_gates', body)
+        self.assertIn('"public_product_allowed":public_allowed', body)
+        self.assertIn('public_allowed = sku in configured_public_ids', body)
+        self.assertIn('and public_allowed and release_authorized', body)
 
 
 if __name__ == "__main__":

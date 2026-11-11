@@ -62,6 +62,7 @@ def classify(log: str) -> dict:
         for key, label in (
             ("exists", "SKU_MISSING"),
             ("active", "SKU_INACTIVE"),
+            ("public_product_allowed", "PRODUCT_NOT_IN_PUBLIC_TRX_ALLOWLIST"),
             ("eligible", "SKU_INELIGIBLE"),
             ("private_file_ready", "PRIVATE_FILE_NOT_READY"),
             ("stored_rights", "EXPLICIT_RIGHTS_FLAG_MISSING"),
