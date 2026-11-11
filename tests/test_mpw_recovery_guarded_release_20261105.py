@@ -90,6 +90,17 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
                 self.assertEqual(release.digest((SOURCE / release.FILES[key]).read_bytes()),
                                  expected)
 
+    def test_repeat_preflight_accepts_only_exact_previously_staged_guest(self):
+        path = self.app / release.FILES["guest"]
+        reviewed = (SOURCE / release.FILES["guest"]).read_bytes()
+        path.write_bytes(reviewed)
+        old, new = release.build_plan(self.stage)
+        self.assertEqual(old["guest"], reviewed)
+        self.assertEqual(new["guest"], reviewed)
+        path.write_bytes(reviewed + b"\n# unreviewed mutation\n")
+        with self.assertRaisesRegex(RuntimeError, "UNRECOGNIZED_GUEST_BASE"):
+            release.build_plan(self.stage)
+
     def test_unreviewed_payload_fails_closed_without_writing_app(self):
         path = self.stage / release.FILES["recovery"]
         path.write_bytes(path.read_bytes() + b"\n# arbitrary code drift\n")
