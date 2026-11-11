@@ -66,7 +66,7 @@ grep -Fq "ZM-AGRC-GEN-1405-001" "$stage/genetics-center.php" || exit 3
 
 # Reserve room for the SQLite online backup and both source copies.
 db_bytes="$(stat -c %s "$db_file")"
-free_bytes="$(df -P --output=avail -B1 "$private" | tail -n 1 | tr -d ' ')"
+free_bytes="$(df --output=avail -B1 "$private" | tail -n 1 | tr -d ' ')"
 [[ "$db_bytes" =~ ^[0-9]+$ && "$free_bytes" =~ ^[0-9]+$ ]] || exit 3
 (( free_bytes > db_bytes * 2 + 104857600 )) || { echo 'GUARD=insufficient_disk_for_backup' >&2; exit 3; }
 
