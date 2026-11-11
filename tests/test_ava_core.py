@@ -169,6 +169,12 @@ class AvaCoreTests(unittest.TestCase):
                     assistant.converse("سلام")
                 self.assertEqual(assistant.list_memories(), ())
 
+    def test_oversized_message_never_reaches_model(self):
+        with self.assertRaisesRegex(ValueError, "10000 characters"):
+            self.ava.converse("x" * 10001)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.ava.list_memories(), ())
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
