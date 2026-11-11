@@ -1,11 +1,12 @@
-"""Bilingual navigation and agent capability catalog. No execution side effects."""
+"""Bilingual navigation for one bot and its internal capability modules."""
+
+from ava_core.identity import BOT_ID
+
 MODULES = (
     ("overview", "داشبورد فرماندهی", "Command Dashboard"),
     ("factory", "مدیریت کارخانه", "Factory Management"),
     ("sites", "مدیریت سایت‌ها", "Website Management"),
-    ("master", "مستر ایجنت", "Master Agent"),
-    ("agents", "مدیریت ایجنت‌ها", "Agent Control Center"),
-    ("bots", "مدیریت ربات‌ها", "Bot Management"),
+    ("unified_bot", BOT_ID + " — فرماندهی یکپارچه", BOT_ID + " — Unified Command"),
     ("content", "استودیوی محتوا", "Content Studio"),
     ("publishing", "مدیریت انتشار", "Publishing Center"),
     ("seo", "مدیریت سئو", "SEO Management"),
@@ -22,10 +23,10 @@ MODULES = (
 )
 MODULE_URLS = {
     "overview": "/staff/command-center/",
+    "unified_bot": "/staff/command-center/",
     "sites": "/company/",
     "projects": "/research/projects/",
     "staff": "/staff/",
-    "agents": "/staff/command-center/mpw-agents/",
     "content": "#staff-content",
     "finance": "/staff/command-center/accounting/",
     "approvals": "#staff-approvals",
@@ -40,13 +41,24 @@ AGENT_SETTINGS = (
     ("resources", "منابع مجاز", "Allowed Resources"),
     ("model_budget", "مدل و بودجه", "Model & Budget"),
     ("quality", "کنترل کیفیت", "Quality Control"),
-    ("collaboration", "همکاری ایجنت‌ها", "Agent Collaboration"),
+    ("collaboration", "هماهنگی ماژول‌های داخلی", "Internal Module Coordination"),
     ("publishing", "انتشار", "Publishing"),
     ("recovery", "مدیریت خطا", "Error Recovery"),
     ("performance", "گزارش عملکرد", "Performance"),
 )
+
+
 def localized(rows, lang):
     if lang not in ("fa", "en"):
         raise ValueError("Unsupported language")
     index = 1 if lang == "fa" else 2
-    return [{"id": row[0], "label": row[index], "url": MODULE_URLS.get(row[0], ""), "connected": row[0] in {"overview", "sites", "projects", "staff", "agents", "content", "approvals", "infrastructure", "finance", "analytics"}} for row in rows]
+    connected = {
+        "overview", "sites", "projects", "staff", "unified_bot",
+        "content", "approvals", "infrastructure", "finance", "analytics",
+    }
+    return [
+        {"id": row[0], "label": row[index],
+         "url": MODULE_URLS.get(row[0], ""),
+         "connected": row[0] in connected}
+        for row in rows
+    ]
