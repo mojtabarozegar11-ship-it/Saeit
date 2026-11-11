@@ -45,6 +45,20 @@ class AvaCoreTests(unittest.TestCase):
         self.assertTrue(self.ava.forget(memory.id))
         self.assertEqual(len(self.ava.list_memories()), 0)
 
+    def test_export_requires_consent_and_is_owner_scoped(self):
+        saved = self.ava.remember("private export", consent=True)
+        other = Ava(owner_id="owner-2", brain=self.brain, memory=self.shared_store)
+        with self.assertRaises(ConsentError):
+            self.ava.export_memories()
+        self.assertEqual(other.export_memories(consent=True), ())
+        exported = self.ava.export_memories(consent=True)
+        self.assertEqual(len(exported), 1)
+        self.assertEqual(exported[0]["id"], saved.id)
+        self.assertEqual(exported[0]["owner_id"], "owner-1")
+        self.assertEqual(exported[0]["text"], "private export")
+        self.assertTrue(self.ava.forget(saved.id))
+        self.assertEqual(self.ava.export_memories(consent=True), ())
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
