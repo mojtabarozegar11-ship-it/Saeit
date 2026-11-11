@@ -24,14 +24,18 @@ def legacy_modules(rows):
     return result
 
 
-def identity_snapshot(rows, total):
+def identity_snapshot(rows, total, *, offset=0):
     """One identity, any number of source modules, no unverified 'connected' flag."""
+    if offset < 0 or total < 0:
+        raise ValueError("Invalid module page")
     modules = legacy_modules(rows)
+    next_offset = offset + len(modules)
     return {
         "bot": {"identity": BOT_ID, "identity_count": 1,
                 "runtime_verified": None, "integration_state": "unverified"},
         "modules": modules,
         "source_module_total": total,
-        "truncated": total > len(modules),
+        "truncated": total > next_offset,
+        "next_offset": next_offset if next_offset < total and modules else None,
         "changes_require_approval": True,
     }
