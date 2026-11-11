@@ -21,6 +21,8 @@ def check_manifest(data):
         return ["Root must contain a tokens array."]
     tokens = data["tokens"]
     names = [t.get("id") for t in tokens if isinstance(t, dict)]
+    if any(not isinstance(name, str) for name in names):
+        return ["Every token ID must be a string."]
     if len(tokens) != 51:
         errors.append(f"Expected 51 entries, got {len(tokens)}.")
     if len(names) != len(tokens) or len(names) != len(set(names)):
