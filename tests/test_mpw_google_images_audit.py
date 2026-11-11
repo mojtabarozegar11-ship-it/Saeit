@@ -29,6 +29,27 @@ I = module.ORIGIN + "/static/game-cover.webp"
 
 
 class TestImageAudit(unittest.TestCase):
+    def test_srcset_does_not_duplicate_empty_alt_tag_count(self):
+        html = (b'<picture><source srcset="/static/a.webp 1x, /static/b.webp 2x">'
+                b'<img src="/static/a.webp" srcset="/static/a.webp 1x, /static/b.webp 2x" alt=""></picture>')
+        def loader(url, method):
+            return 200, "text/html", html, P, ""
+        report, _ = module.audit(sitemap(P), loader)
+        self.assertEqual(report["html_img_tags"], 1)
+        self.assertEqual(report["empty_alt_occurrences"], 1)
+        self.assertEqual(report["pages_with_empty_alt_tags"], [{"url": P, "count": 1}])
+        self.assertEqual(report["alt_counting_mode"], "per_html_img_tag")
+
+    def test_missing_alt_and_empty_alt_are_distinct_per_tag(self):
+        html = b'<img src="/static/a.webp"><img src="/static/b.webp" alt><img src="/static/c.webp" alt="Decorative"><img src="/static/d.webp" alt="  ">'
+        def loader(url, method):
+            return 200, "text/html", html, P, ""
+        report, _ = module.audit(sitemap(P), loader)
+        self.assertEqual(report["missing_alt_occurrences"], 1)
+        self.assertEqual(report["empty_alt_occurrences"], 2)
+        self.assertEqual(report["pages_with_missing_alt_tags"], [{"url": P, "count": 1}])
+        self.assertEqual(report["pages_with_empty_alt_tags"], [{"url": P, "count": 2}])
+
     def test_valid_small_inline_jpeg_signature(self):
         data = base64.b64encode(b"\xff\xd8\xff\xe0real-image-payload\xff\xd9").decode("ascii")
         self.assertTrue(module.valid_embedded_image_data_uri("data:image/jpeg;base64," + data))

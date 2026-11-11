@@ -53,6 +53,15 @@ Read-only scan of **all 152 / 152** listed pages completed successfully (0 skipp
 
 The initial machine-readable report is `docs/seo/evidence/mpw-image-coverage-20261111.json`. Its counts represent **crawl discovery, not Google indexing**. The full HTTP validation was completed separately afterward, as recorded below; Google Search Console indexing evidence remains unavailable.
 
+**Counting correction in later Draft code:** the 32 empty-alt value above is a
+historical *image-reference occurrence* count; a single `<img>` with both `src`
+and multiple `srcset` sources can inflate it. The new read-only auditor counts
+missing/empty `alt` **once per actual HTML `<img>` tag**, adds per-page aggregate
+counts, and labels its mode `per_html_img_tag`. Until a new full live crawl is
+successfully performed, **do not present 32 as the current distinct-tag count**.
+An empty `alt` can be correct for purely decorative artwork and requires
+human/contextual review before replacing it.
+
 ## Subsequent full HTTP image verification — 2026-11-11
 
 A second bounded public crawl checked all 152 sitemap URLs with three concurrent

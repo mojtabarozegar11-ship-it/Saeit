@@ -149,6 +149,8 @@ class PageImages(HTMLParser):
         # or a srcset-only placeholder is not proof of an embedded image.
         self.direct_img_sources: list[tuple[str, str | None]] = []
         self.html_img_tags = 0
+        self.missing_alt_tags = 0
+        self.empty_alt_tags = 0
         self.embedded_data_image_tags = 0
         self.invalid_embedded_data_image_tags = 0
         self.deferred_image_tags = 0
@@ -162,6 +164,10 @@ class PageImages(HTMLParser):
             self._in_head = True
         if tag == "img":
             self.html_img_tags += 1
+            if "alt" not in d:
+                self.missing_alt_tags += 1
+            elif not (d.get("alt") or "").strip():
+                self.empty_alt_tags += 1
             if (d.get("src") or "").strip().lower().startswith("data:"):
                 self.embedded_data_image_tags += 1
                 if not valid_embedded_image_data_uri((d.get("src") or "").strip()):
@@ -221,11 +227,13 @@ def audit(
               "invalid_embedded_data_image_tags": 0,
               "deferred_image_tags": 0,
               "missing_alt_occurrences": 0, "empty_alt_occurrences": 0,
+              "alt_counting_mode": "per_html_img_tag",
               "verified_image_urls": 0, "skipped_pages": [], "excluded_images": [],
               "unverified_images": [], "pages_without_images": [],
               "pages_without_html_img_tags": [], "pages_without_public_html_img_urls": [],
               "pages_with_embedded_data_images": [], "pages_with_deferred_images": [],
               "pages_with_invalid_embedded_data_images": [],
+              "pages_with_missing_alt_tags": [], "pages_with_empty_alt_tags": [],
               "pages_with_metadata_only_images": []}
     image_pages: dict[str, list[str]] = {}
     all_images: set[str] = set()
@@ -245,6 +253,12 @@ def audit(
                 continue
             report["indexable_pages"] += 1
             report["html_img_tags"] += parsed.html_img_tags
+            report["missing_alt_occurrences"] += parsed.missing_alt_tags
+            report["empty_alt_occurrences"] += parsed.empty_alt_tags
+            if parsed.missing_alt_tags:
+                report["pages_with_missing_alt_tags"].append({"url": page, "count": parsed.missing_alt_tags})
+            if parsed.empty_alt_tags:
+                report["pages_with_empty_alt_tags"].append({"url": page, "count": parsed.empty_alt_tags})
             report["embedded_data_image_tags"] += parsed.embedded_data_image_tags
             report["invalid_embedded_data_image_tags"] += parsed.invalid_embedded_data_image_tags
             report["deferred_image_tags"] += parsed.deferred_image_tags
@@ -260,10 +274,6 @@ def audit(
             public_html_image_urls = set()
             for raw, alt, is_img in parsed.images:
                 report["image_references"] += 1
-                if is_img and alt is None:
-                    report["missing_alt_occurrences"] += 1
-                elif is_img and not alt.strip():
-                    report["empty_alt_occurrences"] += 1
                 src = normalized_url(raw, page, image=True)
                 if not src:
                     report["excluded_images"].append({
