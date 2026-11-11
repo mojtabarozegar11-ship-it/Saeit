@@ -220,6 +220,8 @@ def _checkout_page(request, product_id, pages_namespace):
     from django.shortcuts import render
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.downloads import _private_file
+    from types import SimpleNamespace
     from services.mpw_trx_commercial_context import rights_cleared_for_sale
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
@@ -240,6 +242,14 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
+    # A sellable-looking checkout must not appear when its private stock is absent.
+    # Keep the guest GET as strict as the live catalogue and paid-order path.
+    try:
+        asset = _private_file(SimpleNamespace(product=product))
+        if asset.is_symlink() or not asset.is_file() or asset.stat().st_size <= 0:
+            raise Http404("Digital file not available")
+    except (OSError, ValueError) as exc:
+        raise Http404("Digital file not available") from exc
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),

@@ -73,6 +73,14 @@ def _select_order(product_id: int, buyer_id: int, connection):
         if (not _eligible(product) or not rights_cleared_for_sale(product)
                 or not Decimal("0") < Decimal(product.price) <= Decimal("1000")):
             raise PaymentHold("Digital product not presently eligible")
+        # Reject missing or empty private stock before reusing an existing
+        # payable invoice as well as before issuing a new one.
+        try:
+            file = _private_file(SimpleNamespace(product=product))
+            if file.is_symlink() or not file.is_file() or file.stat().st_size <= 0:
+                raise PaymentHold("Private product file is not ready")
+        except (OSError, ValueError) as exc:
+            raise PaymentHold("Private product file is not ready") from exc
         for old in Order.objects.select_for_update().filter(
             customer_id=buyer_id,status="pending",currency="USD",
             created_at__gte=timezone.now()-timedelta(minutes=9),
@@ -85,10 +93,6 @@ def _select_order(product_id: int, buyer_id: int, connection):
                 claim=_decode(pi)
                 if claim.expires_at>timezone.now():
                     return pi.pk
-        # Never issue a payable invoice for a missing or symlinked product.
-        file=_private_file(SimpleNamespace(product=product))
-        if file.is_symlink() or not file.is_file():
-            raise PaymentHold("Private product file is not ready")
         order=Order.objects.create(customer_id=buyer_id,status="pending",
             total=product.price,currency="USD")
         OrderItem.objects.create(order=order,product=product,quantity=1,
