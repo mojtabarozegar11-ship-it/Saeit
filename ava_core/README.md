@@ -68,6 +68,24 @@ gate must verify every eventual action; a goal proposal's self-declared flags
 are untrusted. It does not infer consciousness or independent subjective wishes.
 It neither removes human accountability nor grants itself access or money.
 
+## Personality and synthetic emotional expression (draft; not yet verified)
+
+`ava_core/affect.py` defines a trait profile (warmth, curiosity, humor, empathy,
+initiative), ephemeral mood-like responses to host-classified events, and a
+non-explicit romantic text-style option. These are **simulated affective states**,
+not genuine emotions, subjective understanding, sentience, or biological lust.
+The component stores no message text and invokes no hardware or outside service.
+
+The romantic mode defaults to off. A trusted host callback must verify adult
+status and informed, current consent before enabling each session. Revocation
+clears its simulated attraction value. An untrusted model assertion is never
+proof of age or consent. Physical intimacy is not supported.
+
+This standalone module is **not connected to the conversational brain**. Its
+new regression tests have **not run** because the Python environment is
+unavailable. Run `python -m unittest discover -s tests -p 'test_ava_affect.py' -v`
+before integration, merge, or deployment.
+
 ## Host integration
 
 ```python
