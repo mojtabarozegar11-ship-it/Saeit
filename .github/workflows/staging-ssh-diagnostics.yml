@@ -41,30 +41,81 @@ jobs:
           umask 077
           if [[ "$TARGET" == host ]]; then
             h="$HOST_HOST"; u="$HOST_USER"; p="$HOST_PORT"; k="$HOST_KEY"; known="$HOST_KNOWN"
+            [[ -n "$VPS_KEY" ]] || { echo "VPS relay credential is required for cPanel"; exit 1; }
           else
             h="$VPS_HOST"; u="$VPS_USER"; p="$VPS_PORT"; k="$VPS_KEY"; known="$VPS_KNOWN"
           fi
           [[ -n "$h" && -n "$u" && -n "$k" ]] || { echo "Missing SSH credentials for selected target"; exit 1; }
-          if [[ "$TARGET" == vps && -z "$known" ]]; then
-            known="$(ssh-keyscan -T 10 -t rsa "$h" 2>/dev/null)"
-            [[ -n "$known" ]] || { echo "VPS SSH host key unavailable"; exit 1; }
-            fingerprint="$(printf '%s\n' "$known" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
-            [[ "$fingerprint" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "Unexpected VPS SSH host fingerprint"; exit 1; }
-          fi
-          [[ -n "$known" ]] || { echo "Missing pinned host key"; exit 1; }
           [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || exit 1
           [[ "$h" =~ ^[a-zA-Z0-9.:-]+$ ]] || exit 1
           p="${p:-22}"
           [[ "$p" =~ ^[0-9]{1,5}$ ]] && ((p >= 1 && p <= 65535)) || exit 1
-          mkdir -p "$HOME/.ssh"
+
+          # Both targets use the same pinned first-hop identity; never attempt
+          # a direct GitHub-hosted-runner connection to allowlisted cPanel SSH.
+          vps_known="$VPS_KNOWN"
+          if [[ -z "$vps_known" ]]; then
+            vps_known="$(ssh-keyscan -T 10 -p 22 -t rsa "$VPS_HOST" 2>/dev/null)"
+          fi
+          [[ -n "$vps_known" ]] || { echo "VPS first-hop SSH transport unavailable"; exit 1; }
+          fingerprint="$(printf '%s\n' "$vps_known" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$fingerprint" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "Unexpected VPS SSH host fingerprint"; exit 1; }
+
+          if [[ "$TARGET" == vps ]]; then
+            known="$vps_known"
+          fi
+          [[ -n "$known" ]] || { echo "Missing pinned cPanel host key"; exit 1; }
+          install -d -m 700 "$HOME/.ssh"
           printf '%s\n' "$k" > "$HOME/.ssh/id_staging"
           printf '%s\n' "$known" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/"*
-          {
-            printf 'SSH_TARGET=%s\n' "$h"
-            printf 'SSH_USER=%s\n' "$u"
-            printf 'SSH_PORT=%s\n' "$p"
-          } >> "$GITHUB_ENV"
+          if [[ "$TARGET" == host ]]; then
+            printf '%s\n' "$VPS_KEY" > "$HOME/.ssh/id_staging_vps"
+            printf '%s\n' "$vps_known" >> "$HOME/.ssh/known_hosts"
+            cat > "$HOME/.ssh/staging_config" <<EOF
+          Host saeit-vps-relay
+            HostName $VPS_HOST
+            User $VPS_USER
+            Port $VPS_PORT
+            IdentityFile $HOME/.ssh/id_staging_vps
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+          Host saeit-cpanel
+            HostName $h
+            User $u
+            Port $p
+            IdentityFile $HOME/.ssh/id_staging
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            ProxyJump saeit-vps-relay
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+            alias=saeit-cpanel
+          else
+            cat > "$HOME/.ssh/staging_config" <<EOF
+          Host saeit-vps
+            HostName $h
+            User $u
+            Port $p
+            IdentityFile $HOME/.ssh/id_staging
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+            alias=saeit-vps
+          fi
+          chmod 600 "$HOME/.ssh/id_staging" "$HOME/.ssh/known_hosts" "$HOME/.ssh/staging_config"
+          [[ "$TARGET" != host ]] || chmod 600 "$HOME/.ssh/id_staging_vps"
+          printf 'SSH_ALIAS=%s\n' "$alias" >> "$GITHUB_ENV"
       - name: Run one allowlisted diagnostic
         shell: bash
         env:
@@ -77,7 +128,4 @@ jobs:
             staging_processes) remote='ps -eo pid,comm,args | grep -E "[f]actory_staging_tick|[s]tage1_10s_loop" | cut -c1-180 | head -20 || true' ;;
             *) exit 1 ;;
           esac
-          ssh -i "$HOME/.ssh/id_staging" -p "$SSH_PORT" \
-            -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-            "$SSH_USER@$SSH_TARGET" "$remote"
+          ssh -F "$HOME/.ssh/staging_config" "$SSH_ALIAS" "$remote"
