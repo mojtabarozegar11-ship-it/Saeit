@@ -1,10 +1,14 @@
 """AVA: a private, provider-neutral conversational assistant core."""
 
-from .core import Ava, AvaMemory, AvaReply, ConsentError, MemoryItem
+from .core import Ava, AvaMemory, AvaReply, ConsentError, ConversationEngine, MemoryItem
 from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .embodiment import BodyCommand, EmbodimentError, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
 from .goals import AutonomousGoalDirector, GoalAssessment, GoalDecision, GoalOutcome, GoalProposal
-from .runtime import AvaRuntime, AvaRuntimeStatus, AvaTurn
+from .runtime import AvaRuntime, AvaRuntimeStatus, AvaTurn, MojtabaBot
+from .capabilities import (
+    ActionReceipt, ActionRequest, AdapterResult, CapabilityAdapter, CapabilityHub,
+    CapabilitySpec, OperationSpec,
+)
 from .storage import EncryptedSQLiteMemory, MemoryIntegrityError, MemoryKeyError
 from .evolution import (
     ApprovedCodeBundle, CheckEvidence, CodeEdit, CodeEvolutionDirector,
@@ -15,7 +19,9 @@ from .audit import AuditEvent, AuditIntegrityError, AuditKeyError, AuditVerifica
 from .evolution import CodeRollbackPlan, RollbackFile
 
 __all__ = [
-    "Ava", "AvaMemory", "AvaReply", "ConsentError", "MemoryItem",
+    "Ava", "AvaMemory", "AvaReply", "ConsentError", "ConversationEngine", "MemoryItem",
+    "MojtabaBot", "ActionReceipt", "ActionRequest", "AdapterResult",
+    "CapabilityAdapter", "CapabilityHub", "CapabilitySpec", "OperationSpec",
     "AutonomousGoalDirector", "GoalAssessment", "GoalDecision", "GoalOutcome", "GoalProposal",
     "BodyCommand", "EmbodimentError", "EmbodimentGateway", "RobotAdapter", "RobotState",
     "SimulatedBody", "SimulationReceipt",
