@@ -209,6 +209,8 @@ class ConversationEngine:
         result = self._brain(tuple(messages))
         if not isinstance(result, str):
             raise TypeError("Brain must return a string")
+        if not result.strip():
+            raise ValueError("Brain returned an empty response")
         return AvaReply(text=result, memories_used=len(items))
 
 
