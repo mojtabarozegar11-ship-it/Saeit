@@ -1,4 +1,4 @@
-"""Single composition root for AVA's memory, reasoning, goals and embodiment.
+"""Single composition root for Mojtaba.bot.ai and all its capabilities.
 
 All capabilities share one authenticated owner and lifecycle. Nothing here
 automatically invokes external tools, performs trades, or actuates real robots.
@@ -13,7 +13,11 @@ from typing import Callable, Mapping
 
 from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .audit import SQLiteCodeAuditTrail
-from .core import Ava, AvaReply, Brain, MemoryItem, MemoryStore
+from .capabilities import (
+    ActionReceipt, ActionRequest, CapabilityAdapter, CapabilityHub, CapabilitySpec,
+    OperationSpec,
+)
+from .core import AvaReply, Brain, ConversationEngine, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
 from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview, CodeRollbackPlan, DevelopmentScope
 from .goals import AutonomousGoalDirector, GoalDecision, GoalOutcome, GoalProposer
@@ -42,10 +46,12 @@ class AvaRuntimeStatus:
     isolated_review_runner_configured: bool = False
     code_audit_enabled: bool = False
     code_audit_events: int = 0
+    bot_name: str = "Mojtaba.bot.ai"
+    connected_capabilities: tuple[str, ...] = ()
 
 
-class AvaRuntime:
-    """One owner-scoped runtime; collaborators are injected, never discovered.
+class MojtabaBot:
+    """The only owner-scoped bot runtime; all features are internal modules.
 
     The host authenticates owner_id and configures model/provider, memory,
     approvals and (future) read-only robot interface. In particular a goal
@@ -67,12 +73,14 @@ class AvaRuntime:
         development_scope: DevelopmentScope | None = None,
         review_runner: IsolatedReviewRunner | None = None,
         code_audit: SQLiteCodeAuditTrail | None = None,
+        capabilities: tuple[tuple[CapabilitySpec, CapabilityAdapter], ...] = (),
+        authorize_action: Callable[[str, ActionRequest, OperationSpec], bool] | None = None,
     ) -> None:
         self.affect = AffectiveCompanion(
             owner_id=owner_id, traits=traits,
             authorize_romantic_session=authorize_romantic_session,
         )
-        self.assistant = Ava(
+        self.assistant = ConversationEngine(
             owner_id=owner_id, brain=brain, memory=memory,
             style_guidance=self.affect.style_guidance,
         )
@@ -90,6 +98,23 @@ class AvaRuntime:
         self.code_audit = code_audit
         self._verified_checks: dict[str, CheckEvidence] = {}
         self.owner_id = owner_id
+        self.capabilities = CapabilityHub(owner_id=owner_id, authorize=authorize_action)
+        if not isinstance(capabilities, tuple):
+            raise TypeError("capabilities must be a tuple of registered adapters")
+        for spec, adapter in capabilities:
+            self.capabilities.register(spec, adapter)
+
+    @property
+    def bot_name(self) -> str:
+        return "Mojtaba.bot.ai"
+
+    def connected_capabilities(self) -> tuple[CapabilitySpec, ...]:
+        """Connected adapters only; names do not imply deployed integrations."""
+        return self.capabilities.registered()
+
+    def execute_action(self, request: ActionRequest) -> ActionReceipt:
+        """Route an action through the one bot and its host authorization."""
+        return self.capabilities.execute(request)
 
     def converse(self, message: str, *, affect_signal: str | None = None,
                  use_memories: bool = False) -> AvaTurn:
@@ -210,4 +235,9 @@ class AvaRuntime:
             code_audit_enabled=self.code_audit is not None,
             code_audit_events=(self.code_audit.verify(self.owner_id).event_count
                                if self.code_audit is not None else 0),
+            connected_capabilities=tuple(spec.name for spec in self.connected_capabilities()),
         )
+
+
+# Legacy import compatibility, not a second instance, process, or product.
+AvaRuntime = MojtabaBot
