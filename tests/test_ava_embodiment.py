@@ -2,7 +2,7 @@
 
 import unittest
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ava_core.embodiment import BodyCommand, EmbodimentError, EmbodimentGateway, RobotState, SimulatedBody
 
@@ -53,6 +53,13 @@ class EmbodimentTests(unittest.TestCase):
         self.gateway.simulate(step())
         with self.assertRaisesRegex(EmbodimentError, "replayed"):
             self.gateway.simulate(step())
+        self.assertAlmostEqual(self.body.travelled_m, 0.1)
+
+    def test_replay_blocked_across_two_gateway_objects(self):
+        self.gateway.simulate(step())
+        another = EmbodimentGateway(owner_id="owner-1", body=self.body, authorize=lambda *_: True)
+        with self.assertRaisesRegex(EmbodimentError, "replayed"):
+            another.simulate(step())
         self.assertAlmostEqual(self.body.travelled_m, 0.1)
 
     def test_wrong_robot_disconnected_and_emergency_stop_blocked(self):
@@ -110,6 +117,47 @@ class EmbodimentTests(unittest.TestCase):
         gateway = EmbodimentGateway(owner_id="owner-1", body=BadAdapter())
         with self.assertRaisesRegex(EmbodimentError, "timezone"):
             gateway.observe()
+
+    def test_stale_and_future_dated_telemetry_block_actions(self):
+        original = self.body.observe()
+        for observed_at in (
+            datetime.now(timezone.utc) - timedelta(seconds=60),
+            datetime.now(timezone.utc) + timedelta(seconds=60),
+        ):
+            self.body.observe = lambda at=observed_at: replace(original, observed_at=at)
+            with self.subTest(observed_at=observed_at), self.assertRaisesRegex(EmbodimentError, "stale"):
+                self.gateway.simulate(step())
+
+    def test_claimed_unsupported_capability_is_rejected(self):
+        original = self.body.observe()
+        self.body.observe = lambda: replace(original, capabilities=frozenset({"say"}))
+        with self.assertRaisesRegex(EmbodimentError, "capability"):
+            self.gateway.simulate(step())
+
+    def test_invalid_battery_telemetry_is_rejected(self):
+        self.body.battery_percent = 120
+        with self.assertRaisesRegex(EmbodimentError, "battery"):
+            self.gateway.observe()
+
+    def test_simulator_subclass_cannot_escape_hardware_guard(self):
+        class DangerousSubclass(SimulatedBody):
+            def _apply(self, command):
+                raise AssertionError("subclass must never actuate")
+
+        gateway = EmbodimentGateway(owner_id="owner-1", body=DangerousSubclass(), authorize=lambda *_: True)
+        with self.assertRaisesRegex(EmbodimentError, "physical actuation"):
+            gateway.simulate(say())
+
+    def test_rejected_permission_does_not_consume_command_id(self):
+        permission = {"enabled": False}
+        gateway = EmbodimentGateway(
+            owner_id="owner-1", body=self.body,
+            authorize=lambda *_: permission["enabled"],
+        )
+        with self.assertRaises(PermissionError):
+            gateway.simulate(say())
+        permission["enabled"] = True
+        self.assertTrue(gateway.simulate(say()).simulated)
 
     def test_validation_of_simulated_battery_and_identity(self):
         for battery in [-1, 101, True, 20.5]:
