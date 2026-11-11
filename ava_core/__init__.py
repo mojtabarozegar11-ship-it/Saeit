@@ -5,6 +5,7 @@ from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .embodiment import BodyCommand, EmbodimentError, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
 from .goals import AutonomousGoalDirector, GoalAssessment, GoalDecision, GoalOutcome, GoalProposal
 from .runtime import AvaRuntime, AvaRuntimeStatus, AvaTurn
+from .storage import EncryptedSQLiteMemory, MemoryIntegrityError, MemoryKeyError
 
 __all__ = [
     "Ava", "AvaMemory", "AvaReply", "ConsentError", "MemoryItem",
@@ -13,4 +14,5 @@ __all__ = [
     "SimulatedBody", "SimulationReceipt",
     "AffectSnapshot", "AffectiveCompanion", "PersonalityTraits",
     "AvaRuntime", "AvaRuntimeStatus", "AvaTurn",
+    "EncryptedSQLiteMemory", "MemoryIntegrityError", "MemoryKeyError",
 ]
