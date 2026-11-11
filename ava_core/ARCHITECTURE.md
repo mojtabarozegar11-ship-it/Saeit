@@ -143,5 +143,21 @@ model. **Syntax checks are not security checks.** To obtain an
 `CheckEvidence` receipt tied to the exact review hash, positive results from
 an isolated test environment, and an independent approval callback. Even a
 successful bundle is only a handoff; it does **not** commit, merge or deploy.
-The review pipeline does not yet supply an OS-level isolated test runner,
-persisted release audit log, cryptographic attestation, or rollback machinery.
+The review pipeline now also supports an **optional Linux-only disposable test
+runner** (`IsolatedReviewRunner`). It uses `unshare -Urn` followed by `bwrap`
+with inherited empty network namespace, read-only source and system libraries,
+fresh temporary filesystems, no host configuration mount, cleared environment,
+CPU/memory/output limits and a wall-time timeout. The runner reconstructs an
+allowlisted AVA Python tree entirely from the authenticated host's snapshot,
+applies edits only inside a temporary directory, runs `test_ava*.py`, records
+test counts/exit status/output digests, and destroys the staging directory.
+The unified `AvaRuntime.evaluate_code_change` method is **disabled by default**
+unless the host injects that runner.
+
+The sandbox's successful execution and disposable cleanup have been tested on
+the development environment, including network-denial and read-only checks.
+They do not establish security certification, independent cryptographic proof
+of test results, durable release audit, or a production rollback facility. If
+namespace creation fails, evaluation **fails closed**; no direct-execution
+fallback exists. A trusted host must separately verify evidence and explicitly
+authorize a handoff; even then there is no commit, deployment or merge.
