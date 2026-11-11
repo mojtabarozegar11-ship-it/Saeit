@@ -35,7 +35,7 @@ BACKUPS = Path("/home/zomorod2/.local/share/mpw-guest-no-email")
 RESTART = PUBLIC / "tmp/restart.txt"
 
 # The reviewed no-email guest module, not an arbitrary uploaded Python file.
-APPROVED_GUEST_SHA256 = "f663562dc4ef3c01dc43ff3d0d5af641310a9758b4efd122932c45e3c4cc5aa6"
+APPROVED_GUEST_SHA256 = "ff13ecccceb9a260b1c08688d7f732b9f6e6abb9684becb46907ef5329809280"
 # Both are previously reviewed cPanel upgrade candidates; unknown versions stop.
 PREVIOUS_GUEST_SHA256 = {
     "ef74a3ed84686e0c171f628932c2015338328ef93213e106834c2add7cdb1b2e",
