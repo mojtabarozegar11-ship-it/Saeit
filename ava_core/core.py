@@ -172,6 +172,9 @@ class ConversationEngine:
     def converse(self, message: str, *, use_memories: bool = False) -> AvaReply:
         if not message or not message.strip():
             raise ValueError("Message must not be blank")
+        # Bound untrusted input before forwarding it to a potentially billed model.
+        if len(message) > 10000:
+            raise ValueError("Message exceeds 10000 characters")
         # Bound private context sent to a host-provided model to limit accidental
         # disclosure and unbounded token usage. Newest memories take precedence.
         # Bound both record count and total text size.
