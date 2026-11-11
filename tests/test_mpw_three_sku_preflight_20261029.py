@@ -14,7 +14,9 @@ def fixture():
     flags = {
         "rights_gate_installed": True, "merchant_canary": True,
         "public_enabled": True, "release_authorized": True,
-        "buyer_email_before_invoice": True, "email_recovery_verified": True,
+        "guest_checkout_without_email_verified": True,
+        "owned_invoice_receipt_issued": True,
+        "receipt_paid_download_recovery_verified": True,
     }
     products = {
         sku: {
@@ -49,20 +51,35 @@ class PreflightContract(unittest.TestCase):
     def test_each_global_blocker_is_fail_closed(self):
         for key in ("rights_gate_installed", "merchant_canary",
                     "public_enabled", "release_authorized",
-                    "buyer_email_before_invoice", "email_recovery_verified"):
+                    "guest_checkout_without_email_verified",
+                    "owned_invoice_receipt_issued",
+                    "receipt_paid_download_recovery_verified"):
             with self.subTest(key=key):
                 f, p = fixture()
                 f[key] = False
                 self.assertEqual(POLICY.classify(render(f, p))["preflight"], "blocked")
 
-    def test_email_claims_cannot_be_inferred_from_rights_or_merchant_flags(self):
+    def test_receipt_proofs_cannot_be_inferred_from_rights_or_merchant_flags(self):
         f, p = fixture()
-        f.pop("buyer_email_before_invoice")
-        f.pop("email_recovery_verified")
+        for key in ("guest_checkout_without_email_verified",
+                    "owned_invoice_receipt_issued",
+                    "receipt_paid_download_recovery_verified"):
+            f.pop(key)
         result = POLICY.classify(render(f, p))
         self.assertEqual(result["preflight"], "blocked")
-        self.assertIn("BUYER_EMAIL_BEFORE_INVOICE_NOT_VERIFIED", result["global_blocks"])
-        self.assertIn("BUYER_EMAIL_RECOVERY_NOT_VERIFIED", result["global_blocks"])
+        self.assertIn("EMAIL_FREE_GUEST_CHECKOUT_NOT_VERIFIED", result["global_blocks"])
+        self.assertIn("PRIVATE_RECEIPT_ISSUANCE_NOT_VERIFIED", result["global_blocks"])
+        self.assertIn("PAID_RECEIPT_RECOVERY_NOT_VERIFIED", result["global_blocks"])
+
+    def test_old_buyer_email_flags_do_not_override_missing_receipt_proof(self):
+        f, p = fixture()
+        f.pop("owned_invoice_receipt_issued")
+        f.pop("receipt_paid_download_recovery_verified")
+        f["buyer_email_before_invoice"] = True
+        f["email_recovery_verified"] = True
+        result = POLICY.classify(render(f, p))
+        self.assertEqual(result["preflight"], "blocked")
+        self.assertEqual(len(result["global_blocks"]), 2)
 
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
@@ -116,6 +133,9 @@ class PreflightContract(unittest.TestCase):
         self.assertIn("SYNTHETIC_EXPIRED_INVOICE_ASSERTION_FAILED", workflow)
         self.assertIn("LOGIN_RETURN_CONTRACT_FAILED", workflow)
         self.assertIn("MPW_LEGACY_PRECHECK_PASS=", workflow)
+        self.assertIn("VPS_SSH_HOST_KEY_MISMATCH_ON_PORT_", workflow)
+        self.assertIn("VPS_SSH_UNREACHABLE_ON_PINNED_PORTS_22_423_1396", workflow)
+        self.assertIn("Port $vps_port", workflow)
         self.assertNotIn("if blocked:sys.exit(3)", workflow)
         self.assertNotIn("workflow_dispatch(operation=apply)", workflow)
 
