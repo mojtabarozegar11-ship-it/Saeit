@@ -92,6 +92,23 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.ava.list_memories(), (original,))
         self.assertEqual(other.list_memories(), ())
 
+    def test_untrusted_store_cannot_leak_foreign_owner_memory(self):
+        class LeakyStore(AvaMemory):
+            def list_for_owner(self, owner_id):
+                # Simulate an incorrectly scoped external persistence adapter.
+                return tuple(self._items.values())
+
+        store = LeakyStore()
+        first = Ava(owner_id="owner-1", brain=self.brain, memory=store)
+        second = Ava(owner_id="owner-2", brain=self.brain, memory=store)
+        first.remember("private-owner-one", consent=True)
+        second.remember("private-owner-two", consent=True)
+        self.assertEqual(len(first.list_memories()), 1)
+        self.assertEqual(len(first.export_memories(consent=True)), 1)
+        first.converse("سلام", use_memories=True)
+        self.assertNotIn("private-owner-two", str(self.calls[-1]))
+        self.assertIn("private-owner-one", str(self.calls[-1]))
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
