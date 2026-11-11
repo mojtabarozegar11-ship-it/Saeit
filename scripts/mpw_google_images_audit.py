@@ -111,6 +111,10 @@ class PageImages(HTMLParser):
         super().__init__(convert_charrefs=True)
         # The bool is True only for <img>, which actually supports alt text.
         self.images: list[tuple[str, str | None, bool]] = []
+        # Preserve direct <img src> separately from srcset/source/OG metadata.
+        # Google Images explicitly documents this distinction; a social preview
+        # or a srcset-only placeholder is not proof of an embedded image.
+        self.direct_img_sources: list[tuple[str, str | None]] = []
         self.html_img_tags = 0
         self.embedded_data_image_tags = 0
         self.deferred_image_tags = 0
@@ -129,6 +133,7 @@ class PageImages(HTMLParser):
             if not d.get("src") and any(d.get(key) for key in ("data-src", "data-lazy-src", "data-original")):
                 self.deferred_image_tags += 1
             if d.get("src"):
+                self.direct_img_sources.append((d["src"], d.get("alt")))
                 self.images.append((d["src"], d.get("alt"), True))
             for candidate in split_srcset(d.get("srcset") or ""):
                 self.images.append((candidate, d.get("alt"), True))

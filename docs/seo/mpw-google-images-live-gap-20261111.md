@@ -80,3 +80,38 @@ live verification, while keeping the original `/sitemap.xml` unchanged.
 `scripts/mpw_google_images_audit.py` crawls sitemap-listed public pages in **read-only mode** and can write a **new** image sitemap when image URLs pass HTTP HEAD checks. Its report flags pages without `<img>` tags, pages without public `<img src>` URLs, embedded Base64 images, lazy image placeholders, and metadata-only image references. It does not touch live files or request Google indexing.
 
 **Release status:** Live image SEO repair **not deployed**. Google Images indexed count **unknown** without Search Console evidence. No emails, tickets, payments, production rewrites, or merges are part of this evidence report.
+
+## Commerce image release gate — subsequent cycle, 2026-11-11
+
+The read-only `scripts/mpw_product_image_live_gate.py` fetched the **actual live**
+store landing page, three product pages, and `/taniya/`, and verified both
+existing WebP covers by HTTP status, MIME type and image robots header.
+It is independent of the inactive Django store template and does not change
+site appearance.
+
+| Live URL | Ordinary public `<img src>` | Release issue |
+| --- | ---: | --- |
+| `/store/` | 0 | Two verified covers absent; **missing canonical** |
+| `/store/product/72/` | 0 | Chess cover absent |
+| `/store/product/225/` | 0 | Taniya storybook cover absent |
+| `/store/product/879/` | 0 | Atelier cover absent; actual public asset URL unknown |
+| `/taniya/` | 0 | One embedded Base64 image is not a public image URL |
+
+Outcome: **5/5 pages have a release issue; two of two known cover files
+remain fetchable; commercial image release gate = HOLD.** The `/taniya/`
+page has one `<img>` element, but its `src` is a data URI rather than a
+standalone public URL. The gate requires real ordinary HTML image references,
+meaningful alt text, self-canonical landing URLs, a verified public image file,
+and no `noimageindex` restriction. It never treats OG metadata or CSS
+background images as a substitute for `<img src>`.
+
+Offline validation: **30/30 image-audit and commercial-gate tests passed**.
+
+**Owner design freeze:** the existing visual layout, templates and source/live
+route ownership must remain unchanged until a separately approved release.
+In particular, do not execute the pre-existing static-store cutover script,
+replace `store/index.html`, or update the live product template from an older
+workflow to force green image checks. First read and reconcile the active
+cPanel files and create a visual-preserving, owner-approved placement for
+the real image assets. A source-only Draft PR and green CI do not authorize
+deployment or establish Google indexing.
