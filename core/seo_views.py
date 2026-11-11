@@ -103,6 +103,18 @@ def indexnow_key(request, key):
 
 @require_GET
 def sitemap_xml(request):
+    # The two brands share a Django URLconf but must never share sitemap origins.
+    # Independent cPanel sitemap sources are outside this Django fallback.
+    host = request.get_host().split(":")[0].lower()
+    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+        # The native store route exists for this host; the shared Product detail
+        # view deliberately returns 404 on MojPlayWin, so exclude product URLs.
+        url = "https://mojplaywin.com/store/"
+        item = f"<url><loc>{xml_escape(url)}</loc></url>"
+        return HttpResponse(
+            f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{item}</urlset>',
+            content_type="application/xml",
+        )
     # Sitemap entries must be canonical public destinations, not redirects or gated pages.
     urls = ["/", "/company/", "/company/executive/", "/services/", "/amozeshgah/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/gold/", "/vehicles/", "/marketing/", "/chain-stores/", "/agents/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/faremah/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
