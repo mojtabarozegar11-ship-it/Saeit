@@ -7,6 +7,7 @@ changes store copies, assigns professional scores, or certifies quality1000.
 import hashlib
 import html.parser
 import json
+import posixpath
 import re
 import shutil
 import statistics
@@ -461,9 +462,19 @@ def audit_zip(path):
                 if not ref:
                     continue
                 candidate = PurePosixPath(ref)
-                resolved = (parent / candidate)
-                options = {str(resolved), str(candidate)}
-                if not any(x in names for x in options):
+                # PurePosixPath does not collapse '..' when joining archive
+                # member paths. A legitimate page in pages/ may reference
+                # ../assets/app.css; compare canonical paths within the ZIP.
+                resolved = posixpath.normpath(posixpath.join(str(parent), str(candidate)))
+                within_archive = (not candidate.is_absolute()
+                                  and resolved != '..'
+                                  and not resolved.startswith('../')
+                                  and not resolved.startswith('/'))
+                options = {resolved}
+                # Retain the prior ZIP-root fallback only for simple paths.
+                if '..' not in candidate.parts:
+                    options.add(posixpath.normpath(str(candidate)))
+                if not within_archive or not any(x in names for x in options):
                     unresolved.append(ref[:180])
             missing_local.extend(unresolved)
             pages.append({
