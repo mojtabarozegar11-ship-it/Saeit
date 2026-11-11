@@ -16,6 +16,9 @@ def fixture():
         "rights_gate_installed": True, "merchant_canary": True,
         "commercial_db_ready": True, "merchant_receiver_ready": True,
         "public_enabled": True, "release_authorized": True,
+        "guest_checkout_without_email_verified": True,
+        "owned_invoice_receipt_issued": True,
+        "receipt_paid_download_recovery_verified": True,
     }
     products = {
         sku: {
@@ -49,11 +52,15 @@ class PreflightContract(unittest.TestCase):
         self.assertEqual(result["authenticated_download_e2e"], "not_examined")
         self.assertEqual(result["independent_legal_clearance"],
                          "not_established_by_metadata")
+        self.assertIs(result["commercial_sale_proven"], False)
 
     def test_each_global_blocker_is_fail_closed(self):
         for key in ("rights_gate_installed", "merchant_canary",
                     "commercial_db_ready", "merchant_receiver_ready",
-                    "public_enabled", "release_authorized"):
+                    "public_enabled", "release_authorized",
+                    "guest_checkout_without_email_verified",
+                    "owned_invoice_receipt_issued",
+                    "receipt_paid_download_recovery_verified"):
             with self.subTest(key=key):
                 f, p = fixture()
                 f[key] = False
@@ -68,6 +75,19 @@ class PreflightContract(unittest.TestCase):
                 result = POLICY.classify(render(flags, products))
                 self.assertIn(code, result["global_blocks"])
                 self.assertEqual(result["preflight"], "blocked")
+
+    def test_email_is_optional_but_receipt_delivery_proofs_are_not(self):
+        flags, products = fixture()
+        flags["buyer_email_before_invoice"] = False
+        flags["email_recovery_verified"] = False
+        self.assertEqual(POLICY.classify(render(flags, products))["preflight"], "passed")
+        flags.pop("owned_invoice_receipt_issued")
+        flags.pop("receipt_paid_download_recovery_verified")
+        result = POLICY.classify(render(flags, products))
+        self.assertEqual(result["preflight"], "blocked")
+        self.assertIn("PRIVATE_RECEIPT_ISSUANCE_NOT_VERIFIED", result["global_blocks"])
+        self.assertIn("PAID_RECEIPT_RECOVERY_NOT_VERIFIED", result["global_blocks"])
+        self.assertIs(result["commercial_sale_proven"], False)
 
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
@@ -153,6 +173,9 @@ class PreflightContract(unittest.TestCase):
         self.assertIn("SYNTHETIC_EXPIRED_INVOICE_ASSERTION_FAILED", workflow)
         self.assertIn("LOGIN_RETURN_CONTRACT_FAILED", workflow)
         self.assertIn("MPW_LEGACY_PRECHECK_PASS=", workflow)
+        self.assertIn("VPS_SSH_HOST_KEY_MISMATCH_ON_PORT_", workflow)
+        self.assertIn("VPS_SSH_UNREACHABLE_ON_PINNED_PORTS_22_423_1396", workflow)
+        self.assertIn("Port $vps_port", workflow)
         self.assertNotIn("if blocked:sys.exit(3)", workflow)
         self.assertNotIn("workflow_dispatch(operation=apply)", workflow)
 
