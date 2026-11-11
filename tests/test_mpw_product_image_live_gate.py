@@ -83,6 +83,8 @@ class TestCommercialImageGate(unittest.TestCase):
         report = gate.inspect(loader_for(embedded=True), atelier_cover=ATELIER)
         self.assertEqual(report["release_gate"], "HOLD")
         self.assertIn("embedded_image_data_uri", report["pages"][-1]["issues"])
+        self.assertIn("invalid_embedded_image_data_uri", report["pages"][-1]["issues"])
+        self.assertEqual(report["pages"][-1]["invalid_embedded_data_img_count"], 1)
         self.assertNotIn("SECRET", str(report))
 
     def test_head_405_get_fallback_for_cover_asset(self):
@@ -92,3 +94,4 @@ class TestCommercialImageGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

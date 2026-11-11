@@ -1,6 +1,7 @@
 """Offline regression tests; no live server or external Google accounts used."""
 
 import importlib.util
+import base64
 from pathlib import Path
 import tempfile
 import unittest
@@ -28,6 +29,34 @@ I = module.ORIGIN + "/static/game-cover.webp"
 
 
 class TestImageAudit(unittest.TestCase):
+    def test_valid_small_inline_jpeg_signature(self):
+        data = base64.b64encode(b"\xff\xd8\xff\xe0real-image-payload\xff\xd9").decode("ascii")
+        self.assertTrue(module.valid_embedded_image_data_uri("data:image/jpeg;base64," + data))
+
+    def test_inline_jpeg_rejects_truncation_warning_without_logging_contents(self):
+        studio = module.ORIGIN + "/taniya/"
+        payload = "Warning: truncated output (original token count: 30756)\\nTotal output lines: 1\\n\\n/9j/4A...10756 tokens truncated..."
+        source = "data:image/jpeg;base64," + payload
+        html = f'<img src="{source}" alt="Taniya">'.encode()
+        def loader(url, method):
+            return 200, "text/html", html, studio, ""
+        report, entries = module.audit(sitemap(studio), loader)
+        self.assertFalse(module.valid_embedded_image_data_uri(source))
+        self.assertEqual(report["invalid_embedded_data_image_tags"], 1)
+        self.assertEqual(report["pages_with_invalid_embedded_data_images"], [studio])
+        self.assertEqual(report["embedded_data_image_tags"], 1)
+        self.assertFalse(entries)
+        self.assertNotIn("30756", str(report))
+        self.assertNotIn("10756 tokens", str(report))
+
+    def test_invalid_inline_jpeg_without_eoi_is_counted(self):
+        payload = base64.b64encode(b"\xff\xd8\xff\xe0unfinished").decode("ascii")
+        self.assertFalse(module.valid_embedded_image_data_uri("data:image/jpeg;base64," + payload))
+
+    def test_invalid_inline_base64_rejected(self):
+        self.assertFalse(module.valid_embedded_image_data_uri("data:image/png;base64,not-valid!"))
+        self.assertFalse(module.valid_embedded_image_data_uri("data:image/png;base64,"))
+
     def test_untrusted_host_rejected(self):
         self.assertFalse(module.public_url("https://evil.example/static/x.webp", image=True))
         self.assertFalse(module.public_url("http://mojplaywin.com/static/x.webp", image=True))
@@ -240,3 +269,4 @@ class TestImageAudit(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

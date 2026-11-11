@@ -57,7 +57,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
         url = ORIGIN + path
         result = {"url": url, "status": "unavailable", "html_img_count": 0,
                   "public_direct_img_count": 0, "descriptive_alt_count": 0,
-                  "embedded_data_img_count": 0, "issues": []}
+                  "embedded_data_img_count": 0,
+                  "invalid_embedded_data_img_count": 0, "issues": []}
         try:
             status, mime, html, final, header_robots = loader(url, "GET")
             if status != 200 or mime != "text/html" or final != url:
@@ -69,6 +70,7 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
             result["status"] = "fetched"
             result["html_img_count"] = parsed.html_img_tags
             result["embedded_data_img_count"] = parsed.embedded_data_image_tags
+            result["invalid_embedded_data_img_count"] = parsed.invalid_embedded_data_image_tags
             direct = [
                 (image, alt) for raw, alt in parsed.direct_img_sources
                 if (image := normalized_url(raw, url, image=True))
@@ -88,6 +90,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
                 result["issues"].append("direct_img_missing_descriptive_alt_review")
             if parsed.embedded_data_image_tags:
                 result["issues"].append("embedded_image_data_uri")
+            if parsed.invalid_embedded_data_image_tags:
+                result["issues"].append("invalid_embedded_image_data_uri")
 
             if path == "/store/":
                 for product_id, cover in expected.items():
@@ -126,3 +130,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

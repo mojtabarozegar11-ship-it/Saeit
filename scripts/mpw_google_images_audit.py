@@ -18,6 +18,8 @@ It does not submit to Google, modify the website, or access private purchases.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 import json
@@ -106,6 +108,37 @@ def split_srcset(value: str) -> list[str]:
     return [candidate.strip().split()[0] for candidate in value.split(",") if candidate.strip()]
 
 
+def valid_embedded_image_data_uri(reference: str) -> bool:
+    """Conservatively reject malformed inline images without logging image bytes.
+
+    This is a *syntax and signature* check, not a full image decoder.  Inline
+    images are never eligible for the public HTTP image sitemap even if valid.
+    """
+    if not reference.lower().startswith("data:image/"):
+        return False
+    header, separator, payload = reference.partition(",")
+    if not separator or not payload or len(payload) > 4_000_000:
+        return False
+    if not header.lower().endswith(";base64"):
+        # A non-base64 data URI may be valid, but this check cannot assert that
+        # arbitrary percent-encoded XML or SVG is a decodable bitmap.
+        return True
+    try:
+        data = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    mime = header[5:].split(";", 1)[0].lower()
+    if mime in ("image/jpeg", "image/jpg"):
+        return len(data) >= 4 and data.startswith(b"\xff\xd8\xff") and data.endswith(b"\xff\xd9")
+    if mime == "image/png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n") and data.endswith(b"\x00\x00\x00\x00IEND\xaeB`\x82")
+    if mime == "image/gif":
+        return data.startswith((b"GIF87a", b"GIF89a")) and data.endswith(b";")
+    if mime == "image/webp":
+        return len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    return bool(data)
+
+
 class PageImages(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -117,6 +150,7 @@ class PageImages(HTMLParser):
         self.direct_img_sources: list[tuple[str, str | None]] = []
         self.html_img_tags = 0
         self.embedded_data_image_tags = 0
+        self.invalid_embedded_data_image_tags = 0
         self.deferred_image_tags = 0
         self.robots: list[str] = []
         self.canonical: str | None = None
@@ -130,6 +164,8 @@ class PageImages(HTMLParser):
             self.html_img_tags += 1
             if (d.get("src") or "").strip().lower().startswith("data:"):
                 self.embedded_data_image_tags += 1
+                if not valid_embedded_image_data_uri((d.get("src") or "").strip()):
+                    self.invalid_embedded_data_image_tags += 1
             if not d.get("src") and any(d.get(key) for key in ("data-src", "data-lazy-src", "data-original")):
                 self.deferred_image_tags += 1
             if d.get("src"):
@@ -182,12 +218,14 @@ def audit(
     report = {"origin": ORIGIN, "sitemap_pages": len(pages), "pages_checked": 0,
               "indexable_pages": 0, "image_references": 0, "unique_public_images": 0,
               "html_img_tags": 0, "embedded_data_image_tags": 0,
+              "invalid_embedded_data_image_tags": 0,
               "deferred_image_tags": 0,
               "missing_alt_occurrences": 0, "empty_alt_occurrences": 0,
               "verified_image_urls": 0, "skipped_pages": [], "excluded_images": [],
               "unverified_images": [], "pages_without_images": [],
               "pages_without_html_img_tags": [], "pages_without_public_html_img_urls": [],
               "pages_with_embedded_data_images": [], "pages_with_deferred_images": [],
+              "pages_with_invalid_embedded_data_images": [],
               "pages_with_metadata_only_images": []}
     image_pages: dict[str, list[str]] = {}
     all_images: set[str] = set()
@@ -208,11 +246,14 @@ def audit(
             report["indexable_pages"] += 1
             report["html_img_tags"] += parsed.html_img_tags
             report["embedded_data_image_tags"] += parsed.embedded_data_image_tags
+            report["invalid_embedded_data_image_tags"] += parsed.invalid_embedded_data_image_tags
             report["deferred_image_tags"] += parsed.deferred_image_tags
             if parsed.html_img_tags == 0:
                 report["pages_without_html_img_tags"].append(page)
             if parsed.embedded_data_image_tags:
                 report["pages_with_embedded_data_images"].append(page)
+            if parsed.invalid_embedded_data_image_tags:
+                report["pages_with_invalid_embedded_data_images"].append(page)
             if parsed.deferred_image_tags:
                 report["pages_with_deferred_images"].append(page)
             discovered = []
@@ -400,3 +441,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

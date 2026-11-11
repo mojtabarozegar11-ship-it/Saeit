@@ -8,6 +8,7 @@
 - The source `core/templates/mojplaywin/store.html` contains four `<img>` elements, but this is **not** the HTML served at `/store/`.
 - The repo's existing `scripts/mpw_dynamic_store_cutover_20261108.py` identifies an owned **`MPW_STATIC_STORE_FALLBACK_V1`** rewrite mapping live `/store/` to `store/index.html`. This explains the source/live discrepancy; it is not a license to run the cutover script.
 - The live `/taniya/` page uses an embedded `data:image/jpeg;base64,...` HTML image, not an independently fetchable public image URL.
+- **New blocking defect, verified in public HTML and repository `templates/taniya_studio/index.html`:** the inline JPEG source contains literal diagnostics beginning `Warning: truncated output (original token count: 30756)` and later `10756 tokens truncated`, inserted into the encoded data. Its HTML `src` attribute is approximately 80 KB and **not valid Base64**. This is a confirmed broken inline image reference, independent of search indexing; the complete original image cannot be reconstructed from the abbreviated payload. Browser rendering of that element still needs visual confirmation. **Do not remove arbitrary text to reconstruct it**, and do not substitute the separately verified Taniya book cover without confirming the studio page's intended artwork.
 - Two existing cover assets open successfully and decode as **1122 x 1402 WebP** files:
   - `https://mojplaywin.com/static/site/mojplaywin-products/chess-improvement.webp?v=20261026`
   - `https://mojplaywin.com/static/site/mojplaywin-products/taniya-baker-worms.webp?v=20261026`
@@ -115,3 +116,4 @@ workflow to force green image checks. First read and reconcile the active
 cPanel files and create a visual-preserving, owner-approved placement for
 the real image assets. A source-only Draft PR and green CI do not authorize
 deployment or establish Google indexing.
+
