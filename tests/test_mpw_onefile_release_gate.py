@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,11 +49,11 @@ class OneFileReleaseGateTests(unittest.TestCase):
         self.exercise()
 
     def test_unknown_existing_guest_base_fails_closed(self):
-        with self.assertRaisesRegex(RuntimeError, "ONE_FILE_EXACT_OLD_SHA_REQUIRED"):
+        with self.assertRaisesRegex(RuntimeError, "ONE_FILE_APPROVED_SOURCE_RECEIPT_REQUIRED"):
             self.exercise(guest_bytes=b"unknown")
 
     def test_guest_missing_fails_closed(self):
-        with self.assertRaisesRegex(RuntimeError, "ONE_FILE_EXACT_OLD_SHA_REQUIRED"):
+        with self.assertRaisesRegex(RuntimeError, "ONE_FILE_GUEST_SOURCE_REQUIRED"):
             self.exercise(guest_bytes=None)
 
     def test_public_pages_change_fails_closed(self):
@@ -66,6 +67,74 @@ class OneFileReleaseGateTests(unittest.TestCase):
     def test_idempotent_or_not_needed_plan_does_not_publish(self):
         with self.assertRaisesRegex(RuntimeError, "ONE_FILE_ONLY_PLAN_REQUIRED"):
             self.exercise(needed=False)
+
+
+class VerifiedUpgradeReceiptTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.backups = Path(self.directory.name) / "private-backups"
+        self.backups.mkdir(mode=0o700)
+        self.folder = self.backups / "42346897461"
+        self.folder.mkdir(mode=0o700)
+        self.sources = {"pages": b"public unchanged", "web": b"commercial unchanged"}
+        self.guest = b"approved previously deployed guest code"
+        self.manifest = self.folder / "manifest.json"
+        self.receipt = {
+            "run": self.folder.name,
+            "guest_after": release.digest(self.guest),
+            "after": {key: release.digest(value) for key, value in self.sources.items()},
+        }
+        self.manifest.write_text(json.dumps(self.receipt), encoding="utf8")
+        self.manifest.chmod(0o600)
+
+    def approved(self, guest=None, sources=None):
+        with mock.patch.object(release, "BACKUPS", self.backups):
+            return release.approved_guest_upgrade_base(
+                self.guest if guest is None else guest,
+                self.sources if sources is None else sources,
+            )
+
+    def test_exact_private_receipt_allows_successive_reviewed_upgrade(self):
+        self.assertTrue(self.approved())
+
+    def test_unrelated_guest_source_is_never_approved(self):
+        self.assertFalse(self.approved(guest=b"arbitrary module"))
+
+    def test_public_or_commercial_hook_drift_invalidates_receipt(self):
+        changed = dict(self.sources, web=b"unexpected commercial change")
+        self.assertFalse(self.approved(sources=changed))
+
+    def test_modified_or_unprotected_receipt_is_rejected(self):
+        self.manifest.chmod(0o644)
+        self.assertFalse(self.approved())
+        self.manifest.chmod(0o600)
+        self.receipt["run"] = "not-the-folder"
+        self.manifest.write_text(json.dumps(self.receipt), encoding="utf8")
+        self.assertFalse(self.approved())
+
+    def test_guarded_onefile_plan_accepts_exact_previous_release_receipt(self):
+        app = Path(self.directory.name) / "app"
+        app.mkdir()
+        guest = app / "guest.py"
+        guest.write_text("def patch_public(namespace):\n    return None\n"
+                         "def patch_commercial(namespace):\n    return None\n", encoding="utf8")
+        pages = app / "pages.py"
+        web = app / "web.py"
+        for key, path in (("pages", pages), ("web", web)):
+            kind = "public" if key == "pages" else "commercial"
+            path.write_text(release.MARKERS[key] + "\n" +
+                            release.IMPORT.format(kind=kind), encoding="utf8")
+        targets = {"guest": guest, "pages": pages, "web": web}
+        self.receipt["guest_after"] = release.digest(guest.read_bytes())
+        self.receipt["after"] = {
+            key: release.digest(targets[key].read_bytes()) for key in ("pages", "web")}
+        self.manifest.write_text(json.dumps(self.receipt), encoding="utf8")
+        with (mock.patch.object(release, "TARGETS", targets),
+              mock.patch.object(release, "BACKUPS", self.backups)):
+            old, new, needed = release.plan(b"new valid reviewed guest source")
+        self.assertTrue(needed)
+        self.assertEqual(old, new)
 
 
 
