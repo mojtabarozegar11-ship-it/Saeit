@@ -33,6 +33,10 @@ def classify(log: str) -> dict:
             ("merchant_canary", "MERCHANT_CANARY_NOT_VERIFIED"),
             ("public_enabled", "PUBLIC_CHECKOUT_DISABLED"),
             ("release_authorized", "PUBLIC_RELEASE_NOT_AUTHORIZED"),
+            # Rights metadata and a merchant flag cannot override the owner's
+            # no-invoice-without-valid-email and recover-by-email rules.
+            ("buyer_email_before_invoice", "BUYER_EMAIL_BEFORE_INVOICE_NOT_VERIFIED"),
+            ("email_recovery_verified", "BUYER_EMAIL_RECOVERY_NOT_VERIFIED"),
         ) if state.get(key) is not True
     ]
     results = {}
@@ -71,6 +75,7 @@ def classify(log: str) -> dict:
         "paid_receipt": "not_examined",
         "authenticated_download_e2e": "not_examined",
         "independent_legal_clearance": "not_established_by_metadata",
+        "commercial_sale_proven": False,
     }
 
 
