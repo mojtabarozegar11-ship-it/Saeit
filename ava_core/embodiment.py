@@ -78,19 +78,26 @@ class SimulatedBody:
         self.emergency_stop = False
         self.travelled_m = 0.0
         self.last_speech = ""
+        self._processed: set[str] = set()
+        self._lock = RLock()
 
     def observe(self) -> RobotState:
         return RobotState(self.robot_id, datetime.now(timezone.utc), self.connected,
                           self.emergency_stop, self.battery_percent, frozenset({"say", "step"}))
 
     def _apply(self, command: BodyCommand) -> SimulationReceipt:
-        if command.kind == "say":
-            self.last_speech = command.text
-            detail = "speech stored in simulator only"
-        else:
-            self.travelled_m += command.distance_m
-            detail = f"simulated forward movement of {command.distance_m:.3f}m"
-        return SimulationReceipt(command.request_id, self.robot_id, command.kind, True, detail)
+        with self._lock:
+            # Also reject replay across separate gateways sharing one body.
+            if command.request_id in self._processed:
+                raise EmbodimentError("replayed command on simulated body")
+            if command.kind == "say":
+                self.last_speech = command.text
+                detail = "speech stored in simulator only"
+            else:
+                self.travelled_m += command.distance_m
+                detail = f"simulated forward movement of {command.distance_m:.3f}m"
+            self._processed.add(command.request_id)
+            return SimulationReceipt(command.request_id, self.robot_id, command.kind, True, detail)
 
 
 class EmbodimentGateway:
@@ -118,7 +125,7 @@ class EmbodimentGateway:
         state = self._body.observe()
         if not isinstance(state, RobotState) or not isinstance(state.robot_id, str) or not state.robot_id.strip():
             raise EmbodimentError("invalid robot state or identity")
-        if not isinstance(state.observed_at, datetime) or state.observed_at.tzinfo is None:
+        if not isinstance(state.observed_at, datetime) or state.observed_at.utcoffset() is None:
             raise EmbodimentError("timestamp must be timezone-aware")
         if type(state.connected) is not bool or type(state.emergency_stop) is not bool:
             raise EmbodimentError("invalid safety flags")
