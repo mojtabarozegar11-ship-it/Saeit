@@ -12,12 +12,72 @@ from dataclasses import dataclass
 import difflib
 import hashlib
 import json
-import re
 from typing import Callable, Mapping, Protocol
 
 
 class CodeProposalError(ValueError):
-    """A generated code proposal violates the bounded review contract."""
+    """A generated code proposal violates its review contract."""
+
+
+@dataclass(frozen=True)
+class DevelopmentScope:
+    """Host-configurable creative workspace, not an authorization to deploy.
+
+    By default AVA can propose edits in any ordinary source subdirectory, not
+    just its own package. The trusted host still decides which file snapshots
+    to provide. Prefixes can narrow access for an individual work session.
+    """
+
+    project_roots: tuple[str, ...] = ("",)
+    max_edits: int = 128
+    max_file_bytes: int = 2 * 1024 * 1024
+    max_total_bytes: int = 32 * 1024 * 1024
+
+    _SUFFIXES = frozenset({
+        ".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
+        ".html", ".css", ".scss", ".json", ".yaml", ".yml",
+        ".toml", ".md", ".rst", ".txt", ".sql", ".sh", ".bash",
+        ".go", ".rs", ".java", ".kt", ".swift", ".c", ".h",
+        ".cpp", ".hpp", ".cs", ".php", ".rb", ".xml", ".svg",
+    })
+    _PLAIN_NAMES = frozenset({"Dockerfile", "Makefile", "Containerfile", "Justfile"})
+    _SENSITIVE_NAMES = frozenset({
+        "id_rsa", "id_ed25519", "credentials", "secrets", "token",
+        "authorized_keys", "known_hosts", "passwd", "shadow",
+    })
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.project_roots, tuple) or not self.project_roots:
+            raise ValueError("project_roots must be a nonempty tuple")
+        for root in self.project_roots:
+            if root != "" and not self._safe_segments(root):
+                raise ValueError("Unsafe development project root")
+        for bound in (self.max_edits, self.max_file_bytes, self.max_total_bytes):
+            if type(bound) is not int or bound < 1:
+                raise ValueError("Development review resource bounds must be positive integers")
+
+    @staticmethod
+    def _safe_segments(path: str) -> bool:
+        if not isinstance(path, str) or not path or "\\" in path or ":" in path:
+            return False
+        segments = path.split("/")
+        return all(
+            segment not in ("", ".", "..")
+            and not segment.startswith(".")
+            and not any(ord(c) < 32 or ord(c) == 127 for c in segment)
+            for segment in segments
+        )
+
+    def allows(self, path: str) -> bool:
+        if not self._safe_segments(path):
+            return False
+        leaf = path.rsplit("/", 1)[-1]
+        if leaf.casefold() in self._SENSITIVE_NAMES:
+            return False
+        suffix = "." + leaf.rsplit(".", 1)[-1].lower() if "." in leaf else ""
+        if suffix not in self._SUFFIXES and leaf not in self._PLAIN_NAMES:
+            return False
+        return any(not root or path.startswith(root + "/") for root in self.project_roots)
 
 
 @dataclass(frozen=True)
@@ -103,25 +163,22 @@ class CodeRollbackPlan:
 class CodeEvolutionDirector:
     """One owner-scoped control plane for model-generated code review.
 
-    Only paths in the deliberately narrow AVA Python source/test namespace are
-    accepted. Callers pass trusted file snapshots; proposals cannot fetch
-    files or command the host. AST parsing checks syntax, not safety or quality.
+    Paths and review size are configured per trusted host, with broadly useful
+    defaults. Callers pass trusted file snapshots; proposals cannot fetch files
+    or command the host. Python AST parsing checks syntax, not safety or quality.
     """
 
-    _ALLOWED_PATH = re.compile(
-        r"(?:ava_core/[a-z_][a-z0-9_]*|tests/test_ava[a-z0-9_]*)\.py\Z"
-    )
-    _MAX_EDITS = 5
-    _MAX_FILE_BYTES = 64 * 1024
-    _MAX_TOTAL_BYTES = 160 * 1024
-
-    def __init__(self, *, owner_id: str, proposer: CodeProposer | None = None) -> None:
+    def __init__(self, *, owner_id: str, proposer: CodeProposer | None = None,
+                 scope: DevelopmentScope | None = None) -> None:
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("Authenticated owner_id is required")
         if proposer is not None and not callable(proposer):
             raise TypeError("proposer must be callable")
+        if scope is not None and not isinstance(scope, DevelopmentScope):
+            raise TypeError("scope must be a DevelopmentScope")
         self.owner_id = owner_id
         self._proposer = proposer
+        self.scope = scope if scope is not None else DevelopmentScope()
         self._reviews: dict[str, CodeReview] = {}
 
     @staticmethod
@@ -141,15 +198,15 @@ class CodeEvolutionDirector:
 
     @staticmethod
     def _validate_goal(goal: str) -> None:
-        if not isinstance(goal, str) or not goal.strip() or len(goal) > 500:
-            raise CodeProposalError("Goal must be 1-500 characters")
+        if not isinstance(goal, str) or not goal.strip():
+            raise CodeProposalError("Goal must be nonempty")
 
     def _validate_snapshot(self, files: Mapping[str, str]) -> None:
         if not isinstance(files, Mapping):
             raise TypeError("Trusted file snapshot must be a mapping")
         for path, contents in files.items():
-            if not isinstance(path, str) or not self._ALLOWED_PATH.fullmatch(path):
-                raise CodeProposalError("Snapshot path is outside AVA source/test boundary")
+            if not self.scope.allows(path):
+                raise CodeProposalError("Snapshot path is outside the configured source scope")
             if not isinstance(contents, str):
                 raise CodeProposalError("Snapshot must contain source text only")
 
@@ -159,10 +216,10 @@ class CodeEvolutionDirector:
             raise CodeProposalError("Expected a typed CodeProposal")
         self._validate_goal(proposal.goal)
         self._validate_snapshot(trusted_files)
-        if not isinstance(proposal.rationale, str) or not proposal.rationale.strip() or len(proposal.rationale) > 2000:
-            raise CodeProposalError("A bounded explanation is required")
-        if not isinstance(proposal.edits, tuple) or not 1 <= len(proposal.edits) <= self._MAX_EDITS:
-            raise CodeProposalError("One to five file edits are allowed")
+        if not isinstance(proposal.rationale, str) or not proposal.rationale.strip():
+            raise CodeProposalError("An explanation is required")
+        if not isinstance(proposal.edits, tuple) or not 1 <= len(proposal.edits) <= self.scope.max_edits:
+            raise CodeProposalError("Edit count exceeds the configured review budget")
 
         seen: set[str] = set()
         changed: list[ReviewedFile] = []
@@ -170,8 +227,8 @@ class CodeEvolutionDirector:
         for edit in proposal.edits:
             if not isinstance(edit, CodeEdit):
                 raise CodeProposalError("Every edit must be a CodeEdit")
-            if not isinstance(edit.path, str) or not self._ALLOWED_PATH.fullmatch(edit.path):
-                raise CodeProposalError("Unsafe or unrelated file path")
+            if not self.scope.allows(edit.path):
+                raise CodeProposalError("Unsafe file path or outside configured project scope")
             if edit.path in seen:
                 raise CodeProposalError("Repeated file path")
             seen.add(edit.path)
@@ -179,8 +236,8 @@ class CodeEvolutionDirector:
                 raise CodeProposalError("Code must be UTF-8 text")
             size = len(edit.new_source.encode("utf-8"))
             total_bytes += size
-            if not 0 < size <= self._MAX_FILE_BYTES or total_bytes > self._MAX_TOTAL_BYTES:
-                raise CodeProposalError("Code exceeds bounded review size")
+            if not 0 < size <= self.scope.max_file_bytes or total_bytes > self.scope.max_total_bytes:
+                raise CodeProposalError("Code exceeds the configured review budget")
 
             old_source = trusted_files.get(edit.path)
             expected = self.digest(old_source) if old_source is not None else None
@@ -188,10 +245,16 @@ class CodeEvolutionDirector:
                 raise CodeProposalError("Source version mismatch; refresh the trusted snapshot")
             if old_source == edit.new_source:
                 raise CodeProposalError("Empty change is not a self-improvement")
-            try:
-                ast.parse(edit.new_source, filename=edit.path, mode="exec")
-            except (SyntaxError, ValueError, RecursionError) as exc:
-                raise CodeProposalError(f"Python syntax invalid for {edit.path}") from exc
+            if edit.path.endswith((".py", ".pyi")):
+                try:
+                    ast.parse(edit.new_source, filename=edit.path, mode="exec")
+                except (SyntaxError, ValueError, RecursionError) as exc:
+                    raise CodeProposalError(f"Python syntax invalid for {edit.path}") from exc
+            elif edit.path.endswith(".json"):
+                try:
+                    json.loads(edit.new_source)
+                except (ValueError, RecursionError) as exc:
+                    raise CodeProposalError(f"JSON syntax invalid for {edit.path}") from exc
 
             diff = "".join(difflib.unified_diff(
                 (old_source or "").splitlines(keepends=True),
@@ -214,7 +277,8 @@ class CodeEvolutionDirector:
         review_id = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         review = CodeReview(
             review_id=review_id, owner_id=self.owner_id, goal=proposal.goal,
-            rationale=proposal.rationale, files=tuple(changed), syntax_checked=True,
+            rationale=proposal.rationale, files=tuple(changed),
+            syntax_checked=all(f.path.endswith((".py", ".pyi")) for f in changed),
         )
         self._reviews[review_id] = review
         return review
