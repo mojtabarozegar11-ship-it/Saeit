@@ -7,6 +7,7 @@ from .overview import build_overview
 from .zomorod_status import read_zomorod_health
 from .adapters import snapshot
 from .catalog import MODULES, AGENT_SETTINGS, localized
+from ava_core.identity import BOT_ID
 from core.models import Agent, ApprovalRequest, NewsletterStory
 from django.contrib.auth import get_user_model
 
@@ -20,6 +21,7 @@ def dashboard(request):
         lang = "fa"
     response = render(request, "command_center/dashboard.html", {
         "components": COMPONENTS, "lang": lang,
+        "bot_identity": BOT_ID,
         "modules": localized(MODULES, lang),
         "agent_settings": localized(AGENT_SETTINGS, lang),
         "staff_counts": {
@@ -49,6 +51,7 @@ def overview_api(request):
         data["health"] = {"overall": "failed" if any(x["state"] == "failed" for x in observations) else "stale" if any(x["state"] == "stale" for x in observations) else "degraded" if any(x["state"] == "degraded" for x in observations) else "healthy" if all(x["state"] == "healthy" for x in observations) else "unknown", "components": observations, "total": len(observations)}
         data["live_connected"] = True
     data["runtime_history"] = runtime_history
+    data["bot_identity"] = BOT_ID
     data["database_snapshot"] = {
         "captured_at": db["captured_at"], "source": db["source"],
         "scope": db["scope"], "agents": db["agents"],
