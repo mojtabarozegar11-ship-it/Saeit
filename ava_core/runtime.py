@@ -1,4 +1,4 @@
-"""Single composition root for Mojtaba.bot.ai and all its capabilities.
+"""Single composition root for mojtaba.bot.ai and all its capabilities.
 
 All capabilities share one authenticated owner and lifecycle. Nothing here
 automatically invokes external tools, performs trades, or actuates real robots.
@@ -21,6 +21,7 @@ from .core import AvaReply, Brain, ConversationEngine, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
 from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview, CodeRollbackPlan, DevelopmentScope
 from .goals import AutonomousGoalDirector, GoalDecision, GoalOutcome, GoalProposer
+from .identity import BOT_ID
 from .sandbox import IsolatedReviewRunner, SandboxResult
 
 
@@ -46,7 +47,7 @@ class AvaRuntimeStatus:
     isolated_review_runner_configured: bool = False
     code_audit_enabled: bool = False
     code_audit_events: int = 0
-    bot_name: str = "Mojtaba.bot.ai"
+    bot_name: str = BOT_ID
     connected_capabilities: tuple[str, ...] = ()
 
 
@@ -106,7 +107,7 @@ class MojtabaBot:
 
     @property
     def bot_name(self) -> str:
-        return "Mojtaba.bot.ai"
+        return BOT_ID
 
     def connected_capabilities(self) -> tuple[CapabilitySpec, ...]:
         """Connected adapters only; names do not imply deployed integrations."""
