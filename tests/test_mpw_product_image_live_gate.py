@@ -91,6 +91,19 @@ class TestCommercialImageGate(unittest.TestCase):
         report = gate.inspect(loader_for(head_405=True), atelier_cover=ATELIER)
         self.assertEqual(report["release_gate"], "PASS")
 
+    def test_static_fallback_marker_is_reported_even_when_django_template_has_images(self):
+        delegate = loader_for(commercial_images=False)
+        def loader(url, method):
+            status, mime, data, final, robots = delegate(url, method)
+            if url == gate.ORIGIN + "/store/" and method == "GET":
+                data += b"<!-- MPW_STATIC_STORE_FALLBACK_V1 -->"
+            return status, mime, data, final, robots
+        report = gate.inspect(loader)
+        self.assertEqual(report["release_gate"], "HOLD")
+        self.assertEqual(report["store_live_renderer_marker"],
+                         "MPW_STATIC_STORE_FALLBACK_V1")
+        self.assertEqual(report["pages"][0]["html_img_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,7 +58,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
         result = {"url": url, "status": "unavailable", "html_img_count": 0,
                   "public_direct_img_count": 0, "descriptive_alt_count": 0,
                   "embedded_data_img_count": 0,
-                  "invalid_embedded_data_img_count": 0, "issues": []}
+                  "invalid_embedded_data_img_count": 0,
+                  "renderer_marker": "not_detected", "issues": []}
         try:
             status, mime, html, final, header_robots = loader(url, "GET")
             if status != 200 or mime != "text/html" or final != url:
@@ -68,6 +69,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
             parsed = PageImages()
             parsed.feed(html.decode("utf-8", errors="replace"))
             result["status"] = "fetched"
+            if path == "/store/" and b"MPW_STATIC_STORE_FALLBACK_V1" in html:
+                result["renderer_marker"] = "MPW_STATIC_STORE_FALLBACK_V1"
             result["html_img_count"] = parsed.html_img_tags
             result["embedded_data_img_count"] = parsed.embedded_data_image_tags
             result["invalid_embedded_data_img_count"] = parsed.invalid_embedded_data_image_tags
@@ -113,6 +116,7 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
     release_ready = (failures == 0 and len(expected) == 3 and validated == 3)
     return {"site": ORIGIN, "read_only": True, "release_gate":
             "PASS" if release_ready else "HOLD", "pages_checked": len(pages),
+            "store_live_renderer_marker": pages[0]["renderer_marker"],
             "pages_with_issues": failures, "known_cover_urls": len(expected),
             "verified_cover_urls": validated, "covers": covers, "pages": pages,
             "scope": "five commercial/editorial landing pages, not all site images",
