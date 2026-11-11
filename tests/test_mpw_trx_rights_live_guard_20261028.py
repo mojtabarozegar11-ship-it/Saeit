@@ -132,6 +132,23 @@ class GuardTests(unittest.TestCase):
                 self.assertNotEqual(before["context"],after["context"])
                 for key in ("web","pages"):
                     self.assertEqual(before[key],after[key])
+                with patch.object(guard,"guard"), patch("builtins.print") as output:
+                    guard.operation("check")
+                    record=output.call_args[0][0]
+                    self.assertTrue(record.startswith("MPW_TRX_RIGHTS_PREFLIGHT="))
+                    state=json.loads(record.split("=",1)[1])
+                    self.assertTrue(state["needs_v1_to_v2_upgrade"])
+                    self.assertFalse(state["needs_fresh_install"])
+
+    def test_missing_download_module_denies_checkout_instead_of_500(self):
+        context,_=guard.transform("context",fixture()["context"])
+        namespace={}
+        exec(context,namespace)
+        product=SimpleNamespace(metadata={"rights_cleared":True,
+            "publication_approved":True,"sha256":"a"*64,
+            "rights_asset_sha256":"a"*64,"rights_document_sha256":"b"*64})
+        with patch.dict(sys.modules,{"mpw_commerce":None}):
+            self.assertFalse(namespace["rights_cleared_for_sale"](product))
 
     def test_weak_legacy_helper_is_rejected_by_structure_gate(self):
         context,_=guard.transform("context",fixture()["context"])
