@@ -83,43 +83,41 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Order.objects.count(), 0)
 
-    def test_guest_checkout_accepts_all_purchase_email_aliases(self):
-        for key in ("email", "buyer_email", "customer_email",
-                    "purchase_email", "purchaser_email"):
-            with self.subTest(key=key):
-                request = self.rf.post("/commerce/trx-easy/start/72/",
-                                       {key: " Buyer@Example.com "}, secure=True)
-                self.assertEqual(guest_adapter._submitted_purchase_email(request),
-                                 "buyer@example.com")
-
-    def test_guest_checkout_rejects_alias_and_duplicate_conflicts(self):
-        cases = (
-            {"email": "buyer@example.com", "buyer_email": "other@example.com"},
-            {"email": ["buyer@example.com", "other@example.com"]},
-        )
-        for fields in cases:
+    def test_new_guest_has_no_email_requirement_or_collection(self):
+        for fields in ({}, {"email": "Buyer@Example.com"},
+                       {"buyer_email": "invalid-address"}):
             with self.subTest(fields=fields):
                 request = self.rf.post("/commerce/trx-easy/start/72/", fields,
-                                       secure=True)
-                with self.assertRaises(Http404):
-                    guest_adapter._submitted_purchase_email(request)
+                                       secure=True, HTTP_HOST="mojplaywin.com")
+                with patch.object(guest_adapter, "_rate_limit"), patch.object(
+                        guest_adapter, "_guest_username",
+                        return_value="mpwguest_" + secrets.token_hex(12)):
+                    new_user, token = guest_adapter._new_user(request)
+                self.assertEqual(new_user.email, "")
+                self.assertFalse(new_user.has_usable_password())
+                self.assertTrue(token)
 
-    def test_guest_checkout_rejects_malformed_email_before_creating_user(self):
-        for email in ("", "not-an-address", "buyer@invalid", "buyer@example.com\nBcc:bad"):
-            with self.subTest(email=email):
-                request = self.rf.post("/commerce/trx-easy/start/72/",
-                                       {"email": email}, secure=True)
-                with self.assertRaises(Http404):
-                    guest_adapter._submitted_purchase_email(request)
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True)
+    def test_checkout_dispatch_never_enters_email_recovery_binding(self):
+        from django.contrib.auth.models import AnonymousUser
+        request = self.rf.post("/commerce/trx-easy/start/72/", {},
+                               secure=True, HTTP_HOST="mojplaywin.com")
+        request.user = AnonymousUser()
+        called = []
 
-    def test_new_guest_binds_valid_email_without_recovery_flag(self):
-        request = self.rf.post("/commerce/trx-easy/start/72/",
-                               {"purchase_email": "Buyer@Example.com"}, secure=True)
+        def original(req, product_id):
+            called.append((req.user.pk, product_id))
+            return HttpResponse(status=302, headers={"Location": "/commerce/trx-easy/invoice/10/"})
+
         with patch.object(guest_adapter, "_rate_limit"), patch.object(
-                guest_adapter, "_guest_username", return_value="mpwguest_" + secrets.token_hex(12)):
-            new_user, token = guest_adapter._new_user(request)
-        self.assertEqual(new_user.email, "buyer@example.com")
-        self.assertTrue(token)
+                guest_adapter, "_guest_username",
+                return_value="mpwguest_" + secrets.token_hex(12)), patch.object(
+                module, "bound_checkout", side_effect=AssertionError("No recovery binding in checkout")):
+            response = guest_adapter._dispatch(request, original, (72,), {}, create=True)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(called[0][1], 72)
+        self.assertTrue(response.cookies.get(guest_adapter.COOKIE))
+        self.assertFalse(GuestOrderEmail.objects.exists())
 
     def test_alias_email_field_works_but_conflicting_values_fail_closed(self):
         req = self.rf.post("/commerce/trx-easy/start/72/",
