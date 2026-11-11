@@ -104,6 +104,8 @@ class ConversationEngine:
     ) -> None:
         if not owner_id or not owner_id.strip():
             raise ValueError("owner_id is required")
+        if owner_id != owner_id.strip() or any(ch in owner_id for ch in "\\r\\n\\x00"):
+            raise ValueError("owner_id must be a canonical single-line identifier")
         if not callable(brain):
             raise TypeError("brain must be callable")
         if style_guidance is not None and not callable(style_guidance):
