@@ -103,9 +103,11 @@ async function refreshAgentMetrics(){
   const res=await fetch(agentEndpoint,{credentials:"same-origin",cache:"no-store"});
   if(!res.ok)throw new Error("Unavailable");
   const data=await res.json();
+  const moduleRecords=data.module_records||(data.agents?{total:data.agents.total,source_active:data.agents.enabled}:null);
+  if(!moduleRecords)throw new Error("Missing module counts");
   el.textContent=isEn
-   ? "Legacy module records: "+data.agents.total+" | Enabled records: "+data.agents.enabled+" | Queued tasks: "+data.tasks.queued+" | Running tasks: "+data.tasks.running+" | Pending approvals: "+data.approvals.pending
-   : "سوابق ماژول قدیمی: "+data.agents.total+" | سوابق فعال: "+data.agents.enabled+" | وظایف در صف: "+data.tasks.queued+" | در حال اجرا: "+data.tasks.running+" | تأییدهای معلق: "+data.approvals.pending;
+   ? "Legacy module records: "+moduleRecords.total+" | Enabled records: "+moduleRecords.source_active+" | Queued tasks: "+data.tasks.queued+" | Running tasks: "+data.tasks.running+" | Pending approvals: "+data.approvals.pending
+   : "سوابق ماژول قدیمی: "+moduleRecords.total+" | سوابق فعال: "+moduleRecords.source_active+" | وظایف در صف: "+data.tasks.queued+" | در حال اجرا: "+data.tasks.running+" | تأییدهای معلق: "+data.approvals.pending;
   const chart=document.getElementById("zm-agent-task-chart");
   if(chart){
    chart.replaceChildren();
