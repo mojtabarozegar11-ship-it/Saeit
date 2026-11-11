@@ -60,6 +60,30 @@ class AvaCoreTests(unittest.TestCase):
         self.assertTrue(self.ava.forget(saved.id))
         self.assertEqual(self.ava.export_memories(consent=True), ())
 
+    def test_forget_all_requires_consent_and_preserves_other_owner(self):
+        self.ava.remember("one", consent=True)
+        self.ava.remember("two", consent=True)
+        other = Ava(owner_id="owner-2", brain=self.brain, memory=self.shared_store)
+        other.remember("other", consent=True)
+        with self.assertRaises(ConsentError):
+            self.ava.forget_all()
+        self.assertEqual(len(self.ava.list_memories()), 2)
+        self.assertEqual(self.ava.forget_all(consent=True), 2)
+        self.assertEqual(self.ava.forget_all(consent=True), 0)
+        self.assertEqual(len(other.list_memories()), 1)
+
+    def test_forget_all_fails_closed_when_store_refuses_delete(self):
+        class RefusingStore(AvaMemory):
+            def delete(self, owner_id, memory_id):
+                return False
+
+        store = RefusingStore()
+        ava = Ava(owner_id="owner-1", brain=self.brain, memory=store)
+        ava.remember("must remain", consent=True)
+        with self.assertRaises(RuntimeError):
+            ava.forget_all(consent=True)
+        self.assertEqual(len(ava.list_memories()), 1)
+
     def test_memory_context_is_bounded_and_owner_scoped(self):
         for i in range(25):
             self.ava.remember(f"memory-{i}", consent=True)
