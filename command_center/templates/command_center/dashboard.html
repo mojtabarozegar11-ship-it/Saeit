@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="{{ lang }}" dir="{% if lang == 'fa' %}rtl{% else %}ltr{% endif %}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% if lang == "fa" %}مرکز فرماندهی mojtaba.bot.ai{% else %}mojtaba.bot.ai Command Center{% endif %} | زمرد ملل</title>
+<title>{% if lang == "fa" %}مرکز فرماندهی {{ bot_identity }}{% else %}{{ bot_identity }} Command Center{% endif %} | زمرد ملل</title>
 <style>
 :root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;background:#0b1220;color:#e8eef8}
 *{box-sizing:border-box}body{margin:0;padding:24px;max-width:1320px;margin-inline:auto}
@@ -21,17 +21,17 @@ section{margin-top:24px;scroll-margin-top:92px}
 .track{height:12px;border-radius:9px;background:#263953;overflow:hidden;margin-top:8px}
 .fill{height:100%;background:#3f9ccf}small{color:#aabbd3}
 </style></head><body>
-<header><div><h1>{% if lang == "fa" %}مرکز فرماندهی mojtaba.bot.ai{% else %}mojtaba.bot.ai Command Center{% endif %}</h1><p>{% if lang == "fa" %}یک هویت واحد برای همهٔ قابلیت‌ها؛ اتصال اجرایی فقط با مدرک معتبر{% else %}One identity for all modules; runtime integration requires verified evidence{% endif %}</p></div>
+<header><div><h1>{% if lang == "fa" %}مرکز فرماندهی {{ bot_identity }}{% else %}{{ bot_identity }} Command Center{% endif %}</h1><p>{% if lang == "fa" %}یک هویت واحد برای همهٔ قابلیت‌ها؛ اتصال اجرایی فقط با مدرک معتبر{% else %}One identity for all modules; runtime integration requires verified evidence{% endif %}</p></div>
 <div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
-<nav class="staff-nav" aria-label="mojtaba.bot.ai navigation"><a href="/staff/command-center/accounting/">دفتر مالی و حسابداری</a><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ماژول‌های mojtaba.bot.ai / Modules</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
+<nav class="staff-nav" aria-label="{{ bot_identity }} navigation"><a href="/staff/command-center/accounting/">دفتر مالی و حسابداری</a><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ماژول‌های {{ bot_identity }} / Modules</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
 <section id="staff-controls" class="card"><h2>هشدار و ممیزی عملیات</h2><div id="controls-summary">در حال بررسی هشدارها…</div></section>
 <section id="staff-operations" class="card"><h2>گردش‌کار اجرایی</h2><p><a href="/admin/command_center/workitem/">کارتابل و ارجاع</a> · <a href="/admin/command_center/internalmessage/">پیام داخلی</a> · <a href="/admin/command_center/privateauction/">مزایده خصوصی</a></p><div id="operations-summary">در حال دریافت خلاصه عملیات…</div></section>
 <section id="staff-report" class="card"><h2>گزارش یکپارچه مدیریت</h2><div id="management-report">در حال دریافت گزارش…</div></section>
-<section id="staff-summary" class="grid" aria-label="mojtaba.bot.ai summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ثبت قدیمی ماژول{% else %}Legacy module records{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
+<section id="staff-summary" class="grid" aria-label="{{ bot_identity }} summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ثبت قدیمی ماژول{% else %}Legacy module records{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
 <section id="management-modules" class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card">{% if item.url %}<a class="module-link" href="{{ item.url }}">{{ item.label }} ↗</a>{% else %}<span class="label">{{ item.label }}</span>{% endif %}<p><small>{% if item.connected %}{% if lang == "fa" %}بخش اولیه موجود است{% else %}Initial section available{% endif %}{% else %}{% if lang == "fa" %}در انتظار تکمیل{% else %}Integration pending{% endif %}{% endif %}</small></p></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار وظایف ماژول‌ها{% else %}Module Task Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small>{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}<div id="zm-agent-task-chart" class="grid" aria-label="نمودار وظایف ثبت‌شده ایجنت‌ها"></div><small>نمودار از پایگاه داده Django است؛ اتصال زنده VPS و ایجنت‌های مستقل هنوز تأیید نشده است.</small>{% endif %}</section>
 {% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
 <section class="card" id="mpw-runtime-monitor">
-<h2>سوابق ماژول‌های MojPlayWin زیرمجموعهٔ mojtaba.bot.ai</h2>
+<h2>سوابق ماژول‌های MojPlayWin زیرمجموعهٔ {{ bot_identity }}</h2>
 <p>نمایش گزارش‌های تاریخی بخش‌های قدیمی؛ وجود گزارش به‌معنای یکپارچگی یا اجرای زنده نیست.</p>
 <a href="{% url 'mpw_agent_monitor' %}">مشاهده گزارش‌های تاریخی بخش‌ها (اتصال به هستهٔ واحد هنوز نیازمند اثبات است) ↗</a>
 <p><a href="{% url 'mpw_operations' %}">مدیریت یکپارچه صفحات، کارت‌ها، سفارش‌ها، فروشگاه، کنترل کیفیت و انتشار ↗</a></p>
@@ -41,20 +41,21 @@ section{margin-top:24px;scroll-margin-top:92px}
 <div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
 <div id="staff-content">{% include "command_center/content_studio.html" %}</div>
 <div id="staff-album">{% include "command_center/media_album.html" %}</div>
-<section class="card"><h2>{% if lang == "fa" %}تنظیمات ماژول‌های mojtaba.bot.ai{% else %}mojtaba.bot.ai Module Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section>{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
+<section class="card"><h2>{% if lang == "fa" %}تنظیمات ماژول‌های {{ bot_identity }}{% else %}{{ bot_identity }} Module Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section>{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
 <section id="zm-uptime" class="card"><h2>پایش واقعی Django و Passenger</h2><p>آخرین نمونه‌های پایش؛ سبز سالم، طلایی اختلال، قرمز خطا. بدون داده معتبر وضعیت نامشخص است.</p><div id="zm-uptime-chart" role="img" aria-label="نمودار تاریخچه وضعیت سرویس" style="display:flex;gap:3px;align-items:flex-end;min-height:54px;overflow-x:auto"></div><small id="zm-uptime-caption">هنوز داده دوره‌ای دریافت نشده است.</small></section>
 {% endif %}
 <section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
-{% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{% if component == "master_agent" %}mojtaba.bot.ai / {% if lang == "fa" %}فرماندهی{% else %}Command{% endif %}{% elif component == "agents" %}mojtaba.bot.ai / {% if lang == "fa" %}سوابق ماژول‌ها{% else %}Legacy module records{% endif %}{% elif component == "bots" %}mojtaba.bot.ai / {% if lang == "fa" %}خدمات ربات{% else %}Bot services{% endif %}{% else %}{{ component }}{% endif %}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
+{% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{% if component == "master_agent" %}{{ bot_identity }} / {% if lang == "fa" %}فرماندهی{% else %}Command{% endif %}{% elif component == "agents" %}{{ bot_identity }} / {% if lang == "fa" %}سوابق ماژول‌ها{% else %}Legacy module records{% endif %}{% elif component == "bots" %}{{ bot_identity }} / {% if lang == "fa" %}خدمات ربات{% else %}Bot services{% endif %}{% else %}{{ component }}{% endif %}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
-<section class="card"><h2>{% if lang == "fa" %}فرماندهی mojtaba.bot.ai{% else %}mojtaba.bot.ai Control{% endif %}</h2><p>مسیرهای فرمان قبلی برای سازگاری باقی مانده‌اند؛ اتصال عملیاتی همهٔ ماژول‌ها به هستهٔ واحد هنوز تأیید نشده است.</p></section>
+<section class="card"><h2>{% if lang == "fa" %}فرماندهی {{ bot_identity }}{% else %}{{ bot_identity }} Control{% endif %}</h2><p>مسیرهای فرمان قبلی برای سازگاری باقی مانده‌اند؛ اتصال عملیاتی همهٔ ماژول‌ها به هستهٔ واحد هنوز تأیید نشده است.</p></section>
 <script>
 const endpoint="{% url 'command_center_overview_api' %}";
 const managementReportEndpoint="{% url 'command_center_management_report_api' %}";
 const operationsEndpoint="{% url 'command_center_operations_summary_api' %}";
 const controlsEndpoint="{% url 'command_center_controls_summary_api' %}";
 const isEn="{{ lang }}"==="en";
+const publicBotId="{{ bot_identity|escapejs }}";
 const labels=isEn?{healthy:"Healthy",degraded:"Degraded",failed:"Failed",stale:"Stale",unknown:"Unknown",unauthorized:"Unauthorized"}:{healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
 async function refresh(){
  document.getElementById("updated").textContent="در حال دریافت...";
@@ -114,7 +115,7 @@ async function refreshAgentMetrics(){
    for(const item of (data.per_agent||[])){
     const card=document.createElement("article"),heading=document.createElement("strong"),meta=document.createElement("small");
     const track=document.createElement("div"),fill=document.createElement("div");
-    card.className="card";heading.textContent="mojtaba.bot.ai / "+item.code;
+    card.className="card";heading.textContent=publicBotId+" / "+item.code;
     const done=Number(item.tasks_completed||0),total=Number(item.tasks_total||0),failed=Number(item.tasks_failed||0);
     meta.textContent=(isEn?"Tasks ":"وظایف ")+total+" | "+(isEn?"Completed ":"تکمیل ")+done+" | "+(isEn?"Failed ":"خطا ")+failed+" | "+(isEn?"Unverified live":"زنده: تأیید نشده");
     track.className="track";fill.className="fill";
@@ -135,7 +136,7 @@ refreshAgentMetrics();
 document.getElementById("refresh").addEventListener("click",refreshAgentMetrics);
 
 function validateModulePage(data,offset,expectedTotal,seenIds,seenCodes){
- if(data?.bot?.identity!=="mojtaba.bot.ai"||data.bot.identity_count!==1)throw new Error("wrong identity");
+ if(data?.bot?.identity!==publicBotId||data.bot.identity_count!==1)throw new Error("wrong identity");
  if(!Array.isArray(data.modules)||!Number.isSafeInteger(data.source_module_total)||data.source_module_total<0)throw new Error("invalid module page");
  if(expectedTotal!==null&&data.source_module_total!==expectedTotal)throw new Error("module count changed during pagination");
  for(const module of data.modules){
@@ -156,7 +157,7 @@ async function refreshDirectory(){
  try{
   const content=document.createDocumentFragment();
   const root=document.createElement("article"),heading=document.createElement("h3"),description=document.createElement("small");
-  root.className="card";heading.textContent="mojtaba.bot.ai";
+  root.className="card";heading.textContent=publicBotId;
   description.textContent=isEn?"Sole bot identity; live integration not verified":"تنها هویت ربات؛ اتصال زنده هنوز تأیید نشده است";
   root.append(heading,description);content.append(root);
   let offset=0,seen=0,expectedTotal=null;
