@@ -89,14 +89,18 @@ class Ava:
         owner_id: str,
         brain: Brain,
         memory: MemoryStore | None = None,
+        style_guidance: Callable[[], str] | None = None,
     ) -> None:
         if not owner_id or not owner_id.strip():
             raise ValueError("owner_id is required")
         if not callable(brain):
             raise TypeError("brain must be callable")
+        if style_guidance is not None and not callable(style_guidance):
+            raise TypeError("style_guidance must be callable")
         self.owner_id = owner_id
         self._brain = brain
         self._memory = memory if memory is not None else AvaMemory()
+        self._style_guidance = style_guidance
 
     def remember(self, text: str, *, consent: bool = False) -> MemoryItem:
         if not consent:
@@ -139,6 +143,12 @@ class Ava:
         # disclosure and unbounded token usage. Newest memories take precedence.
         items = tuple(self.list_memories())[-20:] if use_memories else ()
         messages = [{"role": "system", "content": self.SYSTEM_GUIDANCE}]
+        if self._style_guidance is not None:
+            guidance = self._style_guidance()
+            if not isinstance(guidance, str):
+                raise TypeError("style_guidance must return a string")
+            if guidance.strip():
+                messages.append({"role": "system", "content": guidance.strip()})
         if items:
             context = "\n".join(f"- {item.text}" for item in items)
             messages.append(
