@@ -79,6 +79,27 @@ class ApprovedCodeBundle:
     evidence: CheckEvidence
 
 
+@dataclass(frozen=True)
+class RollbackFile:
+    """Restore a prior source file or remove a file added by this review."""
+
+    path: str
+    action: str  # 'restore' or 'remove'
+    expected_current_sha256: str
+    previous_sha256: str | None
+    previous_source: str | None
+
+
+@dataclass(frozen=True)
+class CodeRollbackPlan:
+    """Verified source-state handoff only; never modifies any filesystem."""
+
+    review_id: str
+    owner_id: str
+    files: tuple[RollbackFile, ...]
+    plan_sha256: str
+
+
 class CodeEvolutionDirector:
     """One owner-scoped control plane for model-generated code review.
 
@@ -203,6 +224,51 @@ class CodeEvolutionDirector:
 
     def review_count(self) -> int:
         return len(self._reviews)
+
+    def prepare_rollback(
+        self, review_id: str, *, trusted_before: Mapping[str, str],
+        trusted_current: Mapping[str, str],
+    ) -> CodeRollbackPlan:
+        """Prepare a no-write reversal only if current code matches this review.
+
+        The caller must independently authenticate both source snapshots. The
+        returned plan is not permission to delete, restore, merge or deploy.
+        """
+        review = self.get_review(review_id)
+        if review is None:
+            raise CodeProposalError("Unknown review_id")
+        self._validate_snapshot(trusted_before)
+        self._validate_snapshot(trusted_current)
+        rollback: list[RollbackFile] = []
+        for changed in review.files:
+            current = trusted_current.get(changed.path)
+            if current is None or self.digest(current) != changed.new_sha256:
+                raise CodeProposalError("Current source does not match this release candidate")
+            previous = trusted_before.get(changed.path)
+            if changed.old_sha256 is None:
+                if previous is not None:
+                    raise CodeProposalError("New file unexpectedly exists in baseline")
+                action = "remove"
+            else:
+                if previous is None or self.digest(previous) != changed.old_sha256:
+                    raise CodeProposalError("Original source version is unavailable")
+                action = "restore"
+            rollback.append(RollbackFile(
+                path=changed.path, action=action,
+                expected_current_sha256=changed.new_sha256,
+                previous_sha256=changed.old_sha256,
+                previous_source=previous,
+            ))
+        canonical = json.dumps({
+            "review_id": review.review_id, "owner_id": review.owner_id,
+            "files": [(f.path, f.action, f.expected_current_sha256, f.previous_sha256)
+                      for f in rollback],
+        }, sort_keys=True, separators=(",", ":"))
+        return CodeRollbackPlan(
+            review_id=review.review_id, owner_id=self.owner_id,
+            files=tuple(rollback),
+            plan_sha256=hashlib.sha256(canonical.encode()).hexdigest(),
+        )
 
     def approve_handoff(
         self, review_id: str, *, evidence: CheckEvidence,
