@@ -18,6 +18,7 @@ SPEC = importlib.util.spec_from_file_location(
 )
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
+ORIGINAL_GUEST_DIGEST = release.SOURCE_DIGESTS["guest"]
 
 
 class GuardedRecoveryReleaseTests(unittest.TestCase):
@@ -71,6 +72,13 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             patch.object(release, "APP", self.app),
             patch.object(release, "BACKUPS", self.backups),
             patch.object(release, "EXPECTED_GUEST_BASES", {release.digest(self.fake["guest"])}),
+            # This legacy email-recovery release is pinned to a prior source.
+            # Exercise its backup/migration invariants with the *fixture*
+            # source pinned locally, not by relaxing its real deployment pin.
+            patch.object(release, "SOURCE_DIGESTS", {
+                **release.SOURCE_DIGESTS,
+                "guest": release.digest((SOURCE / release.FILES["guest"]).read_bytes()),
+            }),
             patch.object(release, "guard_host"),
         ]
         for patcher in self.patches:
@@ -80,6 +88,12 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         for patcher in reversed(self.patches):
             patcher.stop()
         self.tmp.cleanup()
+
+    def test_legacy_release_pin_still_blocks_new_receipt_guest_source(self):
+        self.assertNotEqual(
+            ORIGINAL_GUEST_DIGEST,
+            release.digest((SOURCE / release.FILES["guest"]).read_bytes()),
+        )
 
     def test_recovery_parent_source_matches_before_any_write(self):
         self.assertTrue(release.verify_staged_recovery_migration_parent(self.stage))

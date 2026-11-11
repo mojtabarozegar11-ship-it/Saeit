@@ -1,4 +1,7 @@
-"""Regression checks for real guest email/TRX checkout, with no SMTP or chain IO."""
+"""Regression for the owner's newer email-free guest checkout policy.
+
+The historical filename is retained so existing CI discovery keeps this test.
+"""
 import os
 import secrets
 from pathlib import Path
@@ -15,7 +18,6 @@ from django.test import RequestFactory, TransactionTestCase, override_settings
 
 from core.models import GuestOrderEmail, Order, PaymentIntent
 from services import mpw_trx_guest_commerce as guest
-from services.mpw_trx_email_recovery import _digest
 
 
 @override_settings(
@@ -23,7 +25,7 @@ from services.mpw_trx_email_recovery import _digest
     MPW_GUEST_RECOVERY_ENABLED=False,
     MPW_GUEST_RECOVERY_EMAIL_APPROVED=False,
 )
-class GuestEmailOnlyCheckoutTests(TransactionTestCase):
+class GuestReceiptCheckoutTests(TransactionTestCase):
     def setUp(self):
         self.rf = RequestFactory()
         self.buyer = get_user_model().objects.create(username="mpwguest_" + secrets.token_hex(12))
@@ -56,80 +58,69 @@ class GuestEmailOnlyCheckoutTests(TransactionTestCase):
             with patch.object(guest, "_install_cookie", side_effect=lambda response, _cookie: response):
                 return guest._dispatch(self._request(form), self._start, (72,), {}, create=True)
 
-    def test_missing_email_is_rejected_even_when_recovery_mail_is_disabled(self):
+    def test_missing_email_issues_an_owned_invoice_without_email_claim(self):
         response = self._dispatch({})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(GuestOrderEmail.objects.count(), 0)
+        self.assertEqual(Order.objects.get().customer_id, self.buyer.pk)
 
-    def test_email_is_durably_bound_without_sending_recovery_mail(self):
+    def test_submitted_email_is_ignored_and_no_mail_is_sent(self):
         with patch("django.core.mail.EmailMessage.send") as send:
             response = self._dispatch({"email": "Buyer@Example.com"})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Order.objects.count(), 1)
-        claim = GuestOrderEmail.objects.get()
-        self.assertEqual(claim.email_address, "buyer@example.com")
-        self.assertEqual(claim.email_digest, _digest("buyer@example.com"))
-        self.assertEqual(claim.order.customer_id, self.buyer.pk)
+        self.assertEqual(GuestOrderEmail.objects.count(), 0)
+        self.buyer.refresh_from_db()
+        self.assertEqual(self.buyer.email, "")
         send.assert_not_called()
 
-    def test_conflicting_email_aliases_fail_without_unowned_invoice(self):
+    def test_conflicting_email_aliases_cannot_bind_buyer_identity(self):
         response = self._dispatch({
             "email": "a@example.com", "buyer_email": "b@example.com",
         })
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(Order.objects.exists())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(GuestOrderEmail.objects.count(), 0)
+        self.buyer.refresh_from_db()
+        self.assertEqual(self.buyer.email, "")
 
-
-    def test_guest_creation_accepts_recovery_compatible_purchase_email_alias(self):
-        request = self._request({"purchase_email": "Buyer@Example.com"})
+    def test_guest_creation_without_email_persists_owner_cookie(self):
+        request = self._request({})
         request.META["CSRF_COOKIE"] = "a" * 32
         with patch.object(guest, "_rate_limit", return_value=None):
             created, cookie = guest._new_user(request)
         self.assertNotEqual(created.pk, self.buyer.pk)
-        self.assertEqual(created.email, "buyer@example.com")
+        self.assertEqual(created.email, "")
         self.assertTrue(created.username.startswith("mpwguest_"))
         self.assertIsInstance(cookie, str)
 
-    def test_existing_guest_accepts_recovery_compatible_purchase_email_alias(self):
-        request = self._request({"purchase_email": "Buyer@Example.com"})
-        guest._bind_guest_email(request, self.buyer)
-        self.buyer.refresh_from_db()
-        self.assertEqual(self.buyer.email, "buyer@example.com")
-
-
-    def test_blank_primary_alias_does_not_override_valid_purchase_email(self):
-        request = self._request({"email": "", "purchase_email": "Buyer@Example.com"})
+    def test_guest_creation_does_not_store_posted_email(self):
+        request = self._request({"email": "Buyer@Example.com"})
         request.META["CSRF_COOKIE"] = "b" * 32
         with patch.object(guest, "_rate_limit", return_value=None):
             created, _cookie = guest._new_user(request)
-        self.assertEqual(created.email, "buyer@example.com")
-        guest._bind_guest_email(request, self.buyer)
-        self.buyer.refresh_from_db()
-        self.assertEqual(self.buyer.email, "buyer@example.com")
+        self.assertEqual(created.email, "")
 
-    def test_conflicting_aliases_cannot_create_or_rebind_guest(self):
-        request = self._request({
-            "email": "first@example.com", "purchase_email": "second@example.com",
-        })
-        request.META["CSRF_COOKIE"] = "c" * 32
+    def test_unexpected_checkout_response_rolls_back_order(self):
+        def invalid_checkout(request, product_id):
+            Order.objects.create(
+                customer=request.user, status="pending", total="5", currency="USD",
+            )
+            return HttpResponse("not an invoice", status=200)
         with self.assertRaises(Http404):
-            guest._new_user(request)
-        self.assertEqual(get_user_model().objects.count(), 1)
-        with self.assertRaises(Http404):
-            guest._bind_guest_email(request, self.buyer)
-        self.buyer.refresh_from_db()
-        self.assertEqual(self.buyer.email, "")
+            with patch.object(guest, "_identity", return_value=(self.buyer, None)):
+                guest._dispatch(self._request({}), invalid_checkout, (72,), {}, create=True)
+        self.assertFalse(Order.objects.exists())
 
 
-def test_checkout_template_is_guest_email_only_and_has_no_wallet_js():
+def test_checkout_template_is_email_free_and_has_no_wallet_js():
     root = Path(__file__).resolve().parents[1]
     markup = (
         root / "mpw_commerce/templates/mpw_commerce/product_checkout.html"
     ).read_text(encoding="utf-8")
     assert '{% csrf_token %}' in markup
-    assert 'name="email"' in markup and 'type="email"' in markup
-    assert 'maxlength="254"' in markup and " required" in markup
+    assert 'name="email"' not in markup and 'type="email"' not in markup
+    assert "private receipt key" in markup
     assert 'method="post"' in markup
     assert 'action="/commerce/trx-easy/start/{{ product.pk }}/"' in markup
     assert '<script' not in markup.lower()

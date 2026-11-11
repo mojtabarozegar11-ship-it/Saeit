@@ -37,17 +37,15 @@
       <li>Only the next invoice gives the exact native TRX amount, receiving address, and payment deadline.</li>
       <li>Send TRX on TRON mainnet only. Never send money to an expired invoice or pay twice.</li>
       <li>Your digital download is unlocked only after independent server-side blockchain confirmation.</li>
+      <li>Save the private receipt key shown on the next page. It restores your purchase if this browser loses its session.</li>
     </ul>
   </div>
   <form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="UTF-8">
     {% csrf_token %}
-    <label for="purchase-email">Email for purchase ownership and future recovery</label>
-    <input id="purchase-email" name="email" type="email" autocomplete="email"
-           inputmode="email" maxlength="254" placeholder="you@example.com" required>
-    <p class="hint">Use an address you control. Keep your invoice reference: automated email recovery may be unavailable until activated.</p>
+    <p class="hint">No email, account, or wallet connection is required. Your private receipt key is your recovery credential; keep it safe.</p>
     <button type="submit">Create my TRX invoice</button>
   </form>
-  <p><small>Already paid? Do not pay again. Use <a href="/commerce/trx-easy/purchases/">My TRX purchases</a>, or contact <a href="mailto:support@mojplaywin.com">purchase support</a> with your order reference and transaction hash. Never share seed phrases or private keys.</small></p>
+  <p><small>Already paid? Do not pay again. Use <a href="/commerce/trx-easy/purchases/">My TRX purchases</a> or <a href="/commerce/trx-easy/receipt/">your saved receipt key</a>. If you lost both, contact <a href="mailto:support@mojplaywin.com">purchase support</a> with your order reference and transaction hash. Never share seed phrases or private keys.</small></p>
   <p><a href="/store/">Back to products</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a></p>
 </main>
 </body>

@@ -56,7 +56,7 @@ class SourcePreflightSafetyTests(unittest.TestCase):
             settings.write_text('INSTALLED_APPS = ["core", "mpw_commerce"]\n',
                                 encoding="utf-8")
             report = inspect(root)
-            self.assertEqual(report["present_count"], 26)
+            self.assertEqual(report["present_count"], len(REQUIRED))
             self.assertTrue(report["source_floor_pass"])
             self.assertFalse(report["production_runtime_verified"])
             self.assertFalse(report["release_permitted"])

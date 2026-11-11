@@ -56,7 +56,7 @@ def public_shop(request):
         except (OSError,ValueError): continue
         if not private_artifact_sha_matches_approved(p,f): continue
         cards.append(f'<article><h2>{escape(p.title)}</h2><p>${escape(str(p.price))} USD · Pay the quoted equivalent in TRX</p><a class="button" href="/commerce/book/{p.pk}/">Buy with TRX</a></article>')
-    return _page('Buy digital products with TRX','<p>Choose a product and enter your purchase email to request an invoice. No account signup, wallet connection or wallet signature is needed. Pay the exact TRX amount on TRON mainnet; your private download becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
+    return _page('Buy digital products with TRX','<p>Choose a product to request an invoice. No email, account signup, wallet connection, or wallet signature is needed. Save your private receipt key from the invoice for purchase recovery. Pay the exact TRX amount on TRON mainnet; your private download becomes available only after independent blockchain confirmation.</p>'+''.join(cards))
 
 
 @login_required
@@ -93,6 +93,7 @@ def purchases(request):
     from django.utils import timezone
     _ensure_live(request,for_paid_read=True)
     cards=[]
+    from services.mpw_trx_receipt_recovery import receipt_markup
     for pi in PaymentIntent.objects.select_related('order').filter(provider=PROVIDER,order__customer_id=request.user.pk).order_by('-pk')[:100]:
         state=commercial_buyer_status(pi.pk,request.user.pk)
         if state.get('can_download'):
@@ -101,5 +102,6 @@ def purchases(request):
             detail=f'<a href="/commerce/trx-easy/invoice/{pi.pk}/">View payment invoice</a>'
         else:
             detail='Awaiting payment verification or invoice expired. If you have paid, do not pay again; contact support with this order number.'
-        cards.append(f'<article><h2>Order #{pi.order_id}</h2><p>${escape(str(pi.amount))} USD</p><p>{detail}</p></article>')
+        key = receipt_markup(pi.pk, request.user)
+        cards.append(f'<article><h2>Order #{pi.order_id}</h2><p>${escape(str(pi.amount))} USD</p><p>{detail}</p>{key}</article>')
     return _page('My TRX purchases',''.join(cards) or '<p>No TRX purchases yet. <a href="/commerce/trx-easy/">Browse products</a>.</p>')

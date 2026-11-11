@@ -173,6 +173,12 @@ def _show_invoice(request, invoice_id):
     if html.count(b"<main ")!=1:
         raise Http404("Unexpected invoice markup")
     html=html.replace(b"<main ",extra.encode("ascii"),1)
+    from services.mpw_trx_receipt_recovery import receipt_markup
+    receipt = receipt_markup(invoice_id, request.user)
+    if receipt:
+        if html.count(b"</main>")!=1:
+            raise Http404("Unexpected invoice close frame")
+        html=html.replace(b"</main>",receipt.encode("utf-8")+b"</main>",1)
     response=HttpResponse(html,content_type="text/html; charset=utf-8")
     response["Content-Security-Policy"]=csp
     return _nocache(response)

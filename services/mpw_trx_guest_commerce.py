@@ -92,15 +92,6 @@ def _new_user(request):
     from django.contrib.auth import get_user_model
     from django.db import IntegrityError, transaction
 
-    # The guest principal is the durable owner of the order.  Persist the
-    # address submitted by the checkout form before invoice binding; otherwise
-    # record_invoice() correctly refuses to create an unowned delivery record.
-    from services.mpw_trx_email_recovery import _posted_email
-    try:
-        submitted_email = _posted_email(request)
-    except ValueError as exc:
-        raise Http404("Valid email address required") from exc
-
     _rate_limit(request)
     Model = get_user_model()
     field = Model.USERNAME_FIELD
@@ -127,33 +118,10 @@ def _new_user(request):
                 raise
     if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
-    if hasattr(user, "email"):
-        existing_email = str(getattr(user, "email", "") or "").strip().lower()
-        if existing_email and existing_email != submitted_email:
-            raise Http404("Guest email identity mismatch")
-        if not existing_email:
-            user.email = submitted_email
-            user.save(update_fields=["email"])
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
         raise Http404("Guest receipt could not be issued")
     return user, token
-
-
-def _bind_guest_email(request, user):
-    """Bind a submitted address only to this existing guest principal."""
-    from services.mpw_trx_email_recovery import _posted_email
-    try:
-        submitted_email = _posted_email(request)
-    except ValueError as exc:
-        raise Http404("Valid email address required") from exc
-    existing_email = str(getattr(user, "email", "") or "").strip().lower()
-    if existing_email and existing_email != submitted_email:
-        raise Http404("Guest email identity mismatch")
-    if not existing_email and hasattr(user, "email"):
-        user.email = submitted_email
-        user.save(update_fields=["email"])
-    return user
 
 
 def _identity(request, *, create=False):
@@ -166,8 +134,6 @@ def _identity(request, *, create=False):
     token = None
     if user is None and create:
         user, token = _new_user(request)
-    elif user is not None and create and str(getattr(user, "username", "")).startswith("mpwguest_"):
-        user = _bind_guest_email(request, user)
     if user is None:
         raise Http404("Guest purchase session missing or expired")
     return user, token
@@ -189,11 +155,24 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
-        # Purchase email is a mandatory order-ownership claim regardless of
-        # whether outbound recovery mail is approved. Never create an
-        # anonymous, non-recoverable payable invoice while mail is disabled.
-        from services.mpw_trx_email_recovery import bound_checkout
-        return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+        # Never collect buyer email. The guest principal owns the order and a
+        # signed invoice-specific receipt key permits recovery after cookie loss.
+        from core.models import PaymentIntent
+        from django.db import transaction
+        from services.mpw_walletless_commercial_intent import PROVIDER
+        with transaction.atomic():
+            user, token = _identity(request, create=True)
+            request.user = user
+            response = view(request, *args, **kwargs)
+            match = (re.fullmatch(r"/commerce/trx-easy/invoice/([1-9][0-9]*)/",
+                                  response.get("Location", ""))
+                     if response.status_code in (302, 303) else None)
+            if match is None or not PaymentIntent.objects.filter(
+                pk=int(match.group(1)), order__customer_id=user.pk,
+                provider=PROVIDER,
+            ).exists():
+                raise Http404("Checkout did not create an owned invoice")
+        return _install_cookie(response, token)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -290,24 +269,18 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
-            from django.conf import settings
-            recovery_link = (
-                '<p><a href="/commerce/trx-easy/recover/">Recover using purchase email</a></p>'
-                if (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
-                    and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
-                else ""
-            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>Purchase recovery | MojPlayWin</title></head><body>'
                 '<main><h1>TRX purchase recovery</h1>'
                 '<p>No active purchase session was found in this browser. '
-                'Your orders are private and require the original browser session.</p>'
+                'Use the private receipt key saved from your invoice to recover '
+                'your verified download. No email is needed.</p>'
+                '<p><a href="/commerce/trx-easy/receipt/">Recover using receipt key</a></p>'
                 '<p>If you already paid, do not pay again. Contact purchase support '
-                'with your invoice reference and transaction hash. '
+                'if you lost your receipt key; provide an invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
-                + recovery_link +
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
@@ -330,7 +303,9 @@ def patch_public(namespace):
     from services.mpw_trx_email_recovery import (
         recovery_request, recovery_verify, recovery_orders, recovery_download,
     )
+    from services.mpw_trx_receipt_recovery import receipt_recovery
     recovery_extra = (
+        ("receipt/", receipt_recovery),
         ("recover/", recovery_request),
         ("recover/verify/", recovery_verify),
         ("recover/orders/", recovery_orders),
@@ -467,7 +442,9 @@ def patch_commercial(namespace):
         from services.mpw_trx_email_recovery import (
             recovery_request, recovery_verify, recovery_orders, recovery_download,
         )
+        from services.mpw_trx_receipt_recovery import receipt_recovery
         extra = (
+            ("commerce/trx-easy/receipt/", receipt_recovery),
             ("commerce/trx-easy/recover/", recovery_request),
             ("commerce/trx-easy/recover/verify/", recovery_verify),
             ("commerce/trx-easy/recover/orders/", recovery_orders),

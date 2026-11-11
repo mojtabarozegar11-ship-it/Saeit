@@ -18,6 +18,7 @@ from pathlib import Path
 # The list is a floor, not a proof that the entire dynamic import graph is closed.
 REQUIRED = (
     "services/mpw_trx_email_recovery.py",
+    "services/mpw_trx_receipt_recovery.py",
     "services/mpw_trx_guest_commerce.py",
     "services/mpw_trx_public_pages.py",
     "services/mpw_trx_commercial_web.py",
