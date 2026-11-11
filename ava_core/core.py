@@ -143,7 +143,19 @@ class Ava:
             raise ValueError("Message must not be blank")
         # Bound private context sent to a host-provided model to limit accidental
         # disclosure and unbounded token usage. Newest memories take precedence.
-        items = tuple(self.list_memories())[-20:] if use_memories else ()
+        # Bound both record count and total text size.
+        items = ()
+        if use_memories:
+            remaining_chars = 4000
+            selected = []
+            for item in reversed(tuple(self.list_memories())):
+                if len(selected) >= 20:
+                    break
+                if len(item.text) > remaining_chars:
+                    continue
+                selected.append(item)
+                remaining_chars -= len(item.text)
+            items = tuple(reversed(selected))
         messages = [{"role": "system", "content": self.SYSTEM_GUIDANCE}]
         if self._style_guidance is not None:
             guidance = self._style_guidance()
