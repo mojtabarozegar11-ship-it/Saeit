@@ -3,9 +3,10 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import unittest
 from datetime import timedelta
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 from unittest.mock import MagicMock
 
@@ -292,6 +293,76 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertIn("commerce/trx-easy/recover/download/<int:invoice_id>/", routes)
         self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
         self.assertIs(names["_start_order"], handler)
+
+    def _legacy_public_adapter(self):
+        """Build the old public route shape without a live web server."""
+        old_calls = []
+
+        def old(request, *args, **kwargs):
+            old_calls.append((request.path_info, args, kwargs))
+            return HttpResponse(b"original public route")
+
+        public_module = ModuleType("services.mpw_trx_public_pages")
+        public_module.public_shop = old
+        public_module.product_checkout = old
+        public_module.purchases = old
+        namespace = {
+            "product_checkout": old,
+            "purchases": old,
+            "PUBLIC_URLPATTERNS": (("product_checkout", old), ("purchases", old)),
+        }
+        return public_module, namespace, old_calls
+
+    def test_legacy_recovery_fallback_routes_each_action_to_correct_handler(self):
+        public_module, namespace, old_calls = self._legacy_public_adapter()
+        with patch.dict(sys.modules, {"services.mpw_trx_public_pages": public_module}), \
+             patch.object(module, "recovery_request", return_value=HttpResponse(b"request")) as ask, \
+             patch.object(module, "recovery_verify", return_value=HttpResponse(b"verify")) as verify, \
+             patch.object(module, "recovery_orders", return_value=HttpResponse(b"orders")) as orders, \
+             patch.object(module, "recovery_download", return_value=HttpResponse(b"file")) as download:
+            guest_adapter.patch_public(namespace)
+            expected = (
+                ("/commerce/trx-easy/recover/", b"request"),
+                ("/commerce/trx-easy/recover/verify/", b"verify"),
+                ("/commerce/trx-easy/recover/orders/", b"orders"),
+                ("/commerce/trx-easy/recover/download/125/", b"file"),
+            )
+            for url, body in expected:
+                with self.subTest(url=url):
+                    self.assertEqual(public_module.public_shop(self.rf.get(url)).content, body)
+            ask.assert_called_once()
+            verify.assert_called_once()
+            orders.assert_called_once()
+            download.assert_called_once()
+            self.assertEqual(download.call_args.kwargs, {"invoice_id": 125})
+        self.assertEqual(old_calls, [])
+
+    def test_legacy_recovery_fallback_rejects_malformed_download_and_unknown_routes(self):
+        public_module, namespace, old_calls = self._legacy_public_adapter()
+        with patch.dict(sys.modules, {"services.mpw_trx_public_pages": public_module}), \
+             patch.object(module, "recovery_download") as download:
+            guest_adapter.patch_public(namespace)
+            for url in (
+                "/commerce/trx-easy/recover/download/0/",
+                "/commerce/trx-easy/recover/download/-1/",
+                "/commerce/trx-easy/recover/download/abc/",
+                "/commerce/trx-easy/recover/download/" + "9" * 30 + "/",
+                "/commerce/trx-easy/recover/unknown/",
+            ):
+                with self.subTest(url=url), self.assertRaises(Http404):
+                    public_module.public_shop(self.rf.get(url))
+            download.assert_not_called()
+        self.assertEqual(old_calls, [])
+
+    def test_legacy_recovery_fallback_keeps_nonrecovery_public_routes(self):
+        public_module, namespace, old_calls = self._legacy_public_adapter()
+        with patch.dict(sys.modules, {"services.mpw_trx_public_pages": public_module}):
+            guest_adapter.patch_public(namespace)
+            response = public_module.public_shop(
+                self.rf.get("/commerce/trx-easy/purchases/"), original="argument"
+            )
+        self.assertEqual(response.content, b"original public route")
+        self.assertEqual(old_calls[0][2], {"original": "argument"})
 
     def test_positive_delegation_uses_existing_download_checks(self):
         module.bound_checkout(self._request(), self._start, self._identity,
