@@ -162,7 +162,7 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(assistant.list_memories(), ())
 
     def test_empty_model_reply_is_rejected_without_memory_writes(self):
-        for reply in ("", "  ", "\\n\\t"):
+        for reply in ("", "  ", "\n\t"):
             with self.subTest(reply=repr(reply)):
                 assistant = Ava(owner_id="owner-1", brain=lambda messages, value=reply: value)
                 with self.assertRaisesRegex(ValueError, "empty response"):
