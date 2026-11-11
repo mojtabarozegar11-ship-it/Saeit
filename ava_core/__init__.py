@@ -1,4 +1,6 @@
-"""AVA: a private, provider-neutral conversational assistant core."""
+"""Internal components of the single mojtaba.bot.ai runtime."""
+
+from .identity import BOT_ID
 
 from .core import Ava, AvaMemory, AvaReply, ConsentError, ConversationEngine, MemoryItem
 from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
@@ -19,6 +21,7 @@ from .audit import AuditEvent, AuditIntegrityError, AuditKeyError, AuditVerifica
 from .evolution import CodeRollbackPlan, RollbackFile
 
 __all__ = [
+    "BOT_ID",
     "Ava", "AvaMemory", "AvaReply", "ConsentError", "ConversationEngine", "MemoryItem",
     "MojtabaBot", "ActionReceipt", "ActionRequest", "AdapterResult",
     "CapabilityAdapter", "CapabilityHub", "CapabilitySpec", "OperationSpec",
