@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class MojPlayWinSourceClosureTests(unittest.TestCase):
     def test_all_known_recovery_sources_present_and_app_registered(self):
         report = inspect(ROOT)
-        self.assertEqual((report["present_count"], report["required_count"]), (26, 26))
+        self.assertEqual((report["present_count"], report["required_count"]), (27, 27))
         self.assertTrue(report["mpw_commerce_registered_in_settings_source"])
         self.assertTrue(report["source_floor_pass"])
         self.assertFalse(report["release_permitted"])
