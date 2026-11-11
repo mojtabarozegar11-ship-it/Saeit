@@ -34,6 +34,7 @@ ACCOUNT = "zomorod2"
 
 FILES = {
     "guest": "services/mpw_trx_guest_commerce.py",
+    "receipt": "services/mpw_trx_receipt_recovery.py",
     "models": "core/models.py",
     "settings": "config/settings.py",
     "recovery": "services/mpw_trx_email_recovery.py",
@@ -41,10 +42,11 @@ FILES = {
     "migration": "core/migrations/0049_mpw_guest_email_recovery.py",
     "cleanup": "core/management/commands/mpw_purge_recovery_ephemeral.py",
 }
-NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
+NEW_FILES = ("recovery", "receipt", "recovery_models", "migration", "cleanup")
 # C16: exact integrated guest/recovery source is cryptographically pinned; NEVER auto-enable email.
 SOURCE_DIGESTS = {
-    "guest": "51d6f74f51ca97cabb9ef8595be2b0be8724eb98becc1e0f7190b84ca15b7ac8",
+    "guest": "a963e83acb17d6a9a607a303a82d1101fd5ed3f674656c524ef9df19683fd521",
+    "receipt": "41f71c0dd9c4b8b318a89522f7cb2744b24623fe68522ca5d3a3bdff7e4af925",
     "recovery": "b359ff68da842a0dfc04f2a70f6e2b155a837bd34e68a336d98bcdc1b023661a",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "9913e106dee36cefab78137fb54936339c65bd68fefd6d72e616c36011866572",
@@ -549,7 +551,7 @@ def publish_additive(stage, run):
     baseline = require_before_schema()
     folder, manifest = private_backup(run, old, new)
     changed = []
-    order = ("recovery", "recovery_models", "migration", "cleanup",
+    order = ("recovery", "receipt", "recovery_models", "migration", "cleanup",
              "models", "guest", "settings")
     try:
         for key in order:
@@ -582,7 +584,7 @@ def publish(stage, run, backup_sha):
     require_db_snapshot_evidence(run, backup_sha)
     folder, manifest = private_backup(run, old, new)
     changed = []
-    order = ("recovery", "recovery_models", "migration", "cleanup",
+    order = ("recovery", "receipt", "recovery_models", "migration", "cleanup",
              "models", "guest", "settings")
     try:
         for key in order:
@@ -613,7 +615,7 @@ def rollback(run):
     meta = json.loads(_safe_file(folder / "manifest.json").read_text("utf-8"))
     if meta.get("run") != run or meta.get("schema") != "new_tables_only_keep_on_rollback":
         fail("BACKUP_MANIFEST_INVALID")
-    restore(folder, meta, changed=["recovery", "recovery_models", "migration",
+    restore(folder, meta, changed=["recovery", "receipt", "recovery_models", "migration",
                                    "cleanup", "models", "guest", "settings"])
     restart()
     print("MPW_RECOVERY01_CODE_ROLLED_BACK;SCHEMA_TABLES_RETAINED=TRUE")

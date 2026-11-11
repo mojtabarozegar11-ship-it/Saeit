@@ -1,4 +1,4 @@
-name: MPW guest purchase-email ownership contract
+name: MPW guest email-free receipt ownership contract
 
 on:
   pull_request:
@@ -6,7 +6,9 @@ on:
     paths:
       - .github/workflows/mpw-guest-email-alias-c23.yml
       - services/mpw_trx_guest_commerce.py
+      - services/mpw_trx_receipt_recovery.py
       - tests/test_mpw_guest_email_only_checkout_20261108.py
+      - tests/test_mpw_guest_receipt_recovery_20261111.py
       - scripts/mpw_dynamic_store_cutover_20261108.py
       - tests/test_mpw_dynamic_store_cutover_20261108.py
       - .github/workflows/mpw-dynamic-store-cutover-20261108.yml
@@ -55,11 +57,11 @@ jobs:
           verify_staging_recovery_migration_graph(MigrationLoader)
           print("MPW_REAL_MIGRATION_LOADER=PASS;DATABASE_CONNECTION=NONE")
           PY
-      - name: Verify guest-email source and exact regression tests with isolated settings
+      - name: Verify email-free checkout and private receipt-key ownership
         run: |
           set -euo pipefail
-          python -m py_compile services/mpw_trx_guest_commerce.py tests/test_mpw_guest_email_only_checkout_20261108.py
-          pytest -q --ds=tests.mpw_recovery_test_settings tests/test_mpw_guest_email_only_checkout_20261108.py
+          python -m py_compile services/mpw_trx_guest_commerce.py services/mpw_trx_receipt_recovery.py tests/test_mpw_guest_email_only_checkout_20261108.py tests/test_mpw_guest_receipt_recovery_20261111.py
+          pytest -q --ds=tests.mpw_recovery_test_settings tests/test_mpw_guest_email_only_checkout_20261108.py tests/test_mpw_guest_receipt_recovery_20261111.py
       - name: Verify integrated store cutover safeguards without server access
         run: |
           set -euo pipefail

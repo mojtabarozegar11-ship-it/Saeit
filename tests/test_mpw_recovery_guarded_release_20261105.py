@@ -18,7 +18,6 @@ SPEC = importlib.util.spec_from_file_location(
 )
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
-ORIGINAL_GUEST_DIGEST = release.SOURCE_DIGESTS["guest"]
 
 
 class GuardedRecoveryReleaseTests(unittest.TestCase):
@@ -72,13 +71,6 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             patch.object(release, "APP", self.app),
             patch.object(release, "BACKUPS", self.backups),
             patch.object(release, "EXPECTED_GUEST_BASES", {release.digest(self.fake["guest"])}),
-            # This legacy email-recovery release is pinned to a prior source.
-            # Exercise its backup/migration invariants with the *fixture*
-            # source pinned locally, not by relaxing its real deployment pin.
-            patch.object(release, "SOURCE_DIGESTS", {
-                **release.SOURCE_DIGESTS,
-                "guest": release.digest((SOURCE / release.FILES["guest"]).read_bytes()),
-            }),
             patch.object(release, "guard_host"),
         ]
         for patcher in self.patches:
@@ -89,11 +81,12 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             patcher.stop()
         self.tmp.cleanup()
 
-    def test_legacy_release_pin_still_blocks_new_receipt_guest_source(self):
-        self.assertNotEqual(
-            ORIGINAL_GUEST_DIGEST,
-            release.digest((SOURCE / release.FILES["guest"]).read_bytes()),
-        )
+    def test_reviewed_release_pins_guest_and_receipt_together(self):
+        for key in ("guest", "receipt"):
+            self.assertEqual(
+                release.SOURCE_DIGESTS[key],
+                release.digest((SOURCE / release.FILES[key]).read_bytes()),
+            )
 
     def test_recovery_parent_source_matches_before_any_write(self):
         self.assertTrue(release.verify_staged_recovery_migration_parent(self.stage))
@@ -173,9 +166,10 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
 
     def test_preflight_is_pure_and_builds_expected_changes(self):
         old, new = release.build_plan(self.stage)
-        self.assertEqual(len(old), 7)
-        self.assertEqual(len(new), 7)
+        self.assertEqual(len(old), len(release.FILES))
+        self.assertEqual(len(new), len(release.FILES))
         self.assertEqual(new["guest"], (SOURCE / release.FILES["guest"]).read_bytes())
+        self.assertEqual(new["receipt"], (SOURCE / release.FILES["receipt"]).read_bytes())
         self.assertIn(b"MPW_GUEST_RECOVERY_ENABLED = False", new["settings"])
         self.assertIn(b"MPW_RECOVERY01_MODELS_20261105", new["models"])
         self.assertFalse((self.app / release.FILES["migration"]).exists())
@@ -187,6 +181,19 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_SOURCE"):
             release.build_plan(self.stage)
         self.assertFalse((self.app / release.FILES["recovery"]).exists())
+
+    def test_missing_receipt_module_blocks_all_source_installation(self):
+        (self.stage / release.FILES["receipt"]).unlink()
+        with self.assertRaisesRegex(RuntimeError, "MISSING_FILE:mpw_trx_receipt_recovery.py"):
+            release.build_plan(self.stage)
+        self.assertFalse((self.app / release.FILES["receipt"]).exists())
+
+    def test_unreviewed_receipt_module_aborts_before_any_write(self):
+        path = self.stage / release.FILES["receipt"]
+        path.write_bytes(path.read_bytes() + b"\n# unexpected release drift\n")
+        with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_SOURCE:receipt"):
+            release.build_plan(self.stage)
+        self.assertFalse((self.app / release.FILES["receipt"]).exists())
 
     def test_concurrent_edit_cannot_be_overwritten(self):
         path = self.app / release.FILES["models"]

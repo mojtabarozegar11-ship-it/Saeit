@@ -9,6 +9,7 @@ on:
       - tests/test_mpw_recovery_guarded_release_20261105.py
       - services/mpw_trx_email_recovery.py
       - services/mpw_trx_guest_commerce.py
+      - services/mpw_trx_receipt_recovery.py
       - core/guest_recovery_models.py
       - core/migrations/0040_commercefunnelevent.py
       - core/migrations/0049_mpw_guest_email_recovery.py
@@ -43,7 +44,7 @@ jobs:
       - name: Validate exact integrated recovery source, no secrets or production access
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0040_commercefunnelevent.py core/migrations/0049_mpw_guest_email_recovery.py
+          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py services/mpw_trx_receipt_recovery.py core/guest_recovery_models.py core/migrations/0040_commercefunnelevent.py core/migrations/0049_mpw_guest_email_recovery.py
           python3 - <<'PY'
           import hashlib, importlib.util, pathlib
           release_path = pathlib.Path('scripts/mpw_recovery_guarded_release_20261105.py')
@@ -57,7 +58,7 @@ jobs:
           assert 'def _recovery_enabled():' in recovery_source
           assert 'MPW_GUEST_RECOVERY_EMAIL_APPROVED' in recovery_source
           assert 'MPW_GUEST_RECOVERY_ENABLED' in recovery_source
-          print('MPW_INTEGRATED_RECOVERY_PINS=5/5')
+          print('MPW_INTEGRATED_RECOVERY_PINS=6/6')
           PY
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_recovery_guarded_release_20261105.py' -v
           echo MPW_INTEGRATED_RECOVERY_CONTRACT=PASS
@@ -77,6 +78,7 @@ jobs:
             scripts/mpw_recovery_guarded_release_20261105.py \
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
+            services/mpw_trx_receipt_recovery.py \
             core/guest_recovery_models.py \
             core/migrations/0049_mpw_guest_email_recovery.py
           grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
@@ -141,6 +143,7 @@ jobs:
             scripts/mpw_recovery_guarded_release_20261105.py \
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
+            services/mpw_trx_receipt_recovery.py \
             core/guest_recovery_models.py \
             core/migrations/0040_commercefunnelevent.py \
             core/migrations/0049_mpw_guest_email_recovery.py \
