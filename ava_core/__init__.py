@@ -8,7 +8,7 @@ from .runtime import AvaRuntime, AvaRuntimeStatus, AvaTurn
 from .storage import EncryptedSQLiteMemory, MemoryIntegrityError, MemoryKeyError
 from .evolution import (
     ApprovedCodeBundle, CheckEvidence, CodeEdit, CodeEvolutionDirector,
-    CodeProposal, CodeProposalError, CodeReview, ReviewedFile,
+    CodeProposal, CodeProposalError, CodeReview, ReviewedFile, DevelopmentScope,
 )
 from .sandbox import IsolatedReviewRunner, IsolationUnavailable, SandboxResult
 from .audit import AuditEvent, AuditIntegrityError, AuditKeyError, AuditVerification, SQLiteCodeAuditTrail
@@ -23,7 +23,7 @@ __all__ = [
     "AvaRuntime", "AvaRuntimeStatus", "AvaTurn",
     "EncryptedSQLiteMemory", "MemoryIntegrityError", "MemoryKeyError",
     "ApprovedCodeBundle", "CheckEvidence", "CodeEdit", "CodeEvolutionDirector",
-    "CodeProposal", "CodeProposalError", "CodeReview", "ReviewedFile",
+    "CodeProposal", "CodeProposalError", "CodeReview", "ReviewedFile", "DevelopmentScope",
     "IsolatedReviewRunner", "IsolationUnavailable", "SandboxResult",
     "AuditEvent", "AuditIntegrityError", "AuditKeyError", "AuditVerification", "SQLiteCodeAuditTrail",
     "CodeRollbackPlan", "RollbackFile",
