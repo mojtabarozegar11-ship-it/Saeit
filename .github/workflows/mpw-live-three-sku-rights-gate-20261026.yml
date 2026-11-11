@@ -292,9 +292,12 @@ jobs:
           import django
           django.setup()
           from django.conf import settings
+          from django.db import connection
           from core.models import Product
           from mpw_commerce.buyer_orders import _eligible
           from mpw_commerce.downloads import _private_file
+          from services.mpw_walletless_commercial_intent import _commercial_db
+          from services.mpw_trx_commercial_web import _configured_receiver
           from types import SimpleNamespace
           try:
             from services.mpw_trx_commercial_context import rights_cleared_for_sale
@@ -305,10 +308,23 @@ jobs:
             release_authorized=public_release_authorized(settings) is True
           except (ImportError,AttributeError):
             release_authorized=False
+          try:
+            _commercial_db(settings,connection)
+            commercial_db_ready=True
+          except Exception:
+            commercial_db_ready=False
+          try:
+            from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+            tron_address_to_hex(_configured_receiver())
+            merchant_receiver_ready=True
+          except Exception:
+            merchant_receiver_ready=False
           print("MPW_PUBLIC_TRX_FLAGS="+json.dumps({
             "public_enabled":getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True,
             "release_authorized":release_authorized,
             "merchant_canary":getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is True,
+            "commercial_db_ready":commercial_db_ready,
+            "merchant_receiver_ready":merchant_receiver_ready,
             "rights_gate_installed":rights_cleared_for_sale is not None,
           },sort_keys=True))
           sale_ready=0
@@ -366,7 +382,8 @@ jobs:
               }
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
-                  and public_allowed and release_authorized)
+                  and public_allowed and release_authorized
+                  and commercial_db_ready and merchant_receiver_ready)
               record={"id":sku,"exists":True,"active":product.active is True,
                  "eligible":eligible,"public_product_allowed":public_allowed,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
                  "product_internal_gates":internal_gates,

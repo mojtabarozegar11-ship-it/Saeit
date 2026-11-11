@@ -49,6 +49,8 @@ def classify(log: str) -> dict:
         label for key, label in (
             ("rights_gate_installed", "RIGHTS_GATE_NOT_INSTALLED"),
             ("merchant_canary", "MERCHANT_CANARY_NOT_VERIFIED"),
+            ("commercial_db_ready", "COMMERCIAL_DB_NOT_READY"),
+            ("merchant_receiver_ready", "MERCHANT_TRX_RECEIVER_NOT_READY"),
             ("public_enabled", "PUBLIC_CHECKOUT_DISABLED"),
             ("release_authorized", "PUBLIC_RELEASE_NOT_AUTHORIZED"),
         ) if state.get(key) is not True

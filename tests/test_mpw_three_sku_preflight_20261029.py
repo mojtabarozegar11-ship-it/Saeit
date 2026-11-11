@@ -14,6 +14,7 @@ SPEC.loader.exec_module(POLICY)
 def fixture():
     flags = {
         "rights_gate_installed": True, "merchant_canary": True,
+        "commercial_db_ready": True, "merchant_receiver_ready": True,
         "public_enabled": True, "release_authorized": True,
     }
     products = {
@@ -49,11 +50,22 @@ class PreflightContract(unittest.TestCase):
 
     def test_each_global_blocker_is_fail_closed(self):
         for key in ("rights_gate_installed", "merchant_canary",
+                    "commercial_db_ready", "merchant_receiver_ready",
                     "public_enabled", "release_authorized"):
             with self.subTest(key=key):
                 f, p = fixture()
                 f[key] = False
                 self.assertEqual(POLICY.classify(render(f, p))["preflight"], "blocked")
+
+    def test_missing_payment_backend_or_receiver_evidence_cannot_pass(self):
+        for key, code in (("commercial_db_ready", "COMMERCIAL_DB_NOT_READY"),
+                          ("merchant_receiver_ready", "MERCHANT_TRX_RECEIVER_NOT_READY")):
+            with self.subTest(key=key):
+                flags, products = fixture()
+                flags.pop(key)
+                result = POLICY.classify(render(flags, products))
+                self.assertIn(code, result["global_blocks"])
+                self.assertEqual(result["preflight"], "blocked")
 
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
@@ -153,6 +165,9 @@ class PreflightContract(unittest.TestCase):
         self.assertIn('"public_product_allowed":public_allowed', body)
         self.assertIn('public_allowed = sku in configured_public_ids', body)
         self.assertIn('and public_allowed and release_authorized', body)
+        self.assertIn('and commercial_db_ready and merchant_receiver_ready', body)
+        self.assertIn('"commercial_db_ready":commercial_db_ready', body)
+        self.assertIn('"merchant_receiver_ready":merchant_receiver_ready', body)
 
 
 if __name__ == "__main__":
