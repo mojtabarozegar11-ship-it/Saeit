@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import textwrap
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/mpw_three_sku_preflight_20261029.py"
@@ -23,6 +24,7 @@ def fixture():
             "rights_hash_reference_matches_asset": True,
             "existing_catalog_hash_matches_asset": ["sha256"],
             "existing_approval_flags": {"publication_approved": True},
+            "product_internal_gates": {key: True for key, _ in POLICY.INTERNAL_GATES},
         } for sku in POLICY.SKU_IDS
     }
     return flags, products
@@ -74,6 +76,22 @@ class PreflightContract(unittest.TestCase):
         self.assertIn("PUBLICATION_APPROVAL_MISSING", r["products"]["72"]["blocks"])
         self.assertIn("CATALOG_FILE_HASH_MISMATCH", r["products"]["225"]["blocks"])
 
+    def test_each_product_internal_lock_has_a_specific_error_code(self):
+        for key, code in POLICY.INTERNAL_GATES:
+            with self.subTest(key=key):
+                flags, products = fixture()
+                products[879]["product_internal_gates"][key] = False
+                result = POLICY.classify(render(flags, products))
+                self.assertEqual(result["preflight"], "blocked")
+                self.assertIn(code, result["products"]["879"]["blocks"])
+                self.assertEqual(result["products"]["72"]["preflight"], "passed")
+
+    def test_missing_internal_gate_evidence_cannot_pass(self):
+        flags, products = fixture()
+        products[72].pop("product_internal_gates")
+        result = POLICY.classify(render(flags, products))
+        self.assertIn("PRODUCT_INTERNAL_GATE_EVIDENCE_MISSING", result["products"]["72"]["blocks"])
+
     def test_missing_duplicate_and_unexpected_products_fail_closed(self):
         f, p = fixture()
         p.pop(879)
@@ -106,6 +124,16 @@ class PreflightContract(unittest.TestCase):
         self.assertIn("MPW_LEGACY_PRECHECK_PASS=", workflow)
         self.assertNotIn("if blocked:sys.exit(3)", workflow)
         self.assertNotIn("workflow_dispatch(operation=apply)", workflow)
+
+    def test_read_only_workflow_internal_gate_collector_is_valid_python(self):
+        path = SCRIPT.parents[1] / ".github/workflows/mpw-live-three-sku-rights-gate-20261026.yml"
+        workflow = path.read_text("utf8")
+        step = workflow.split("- name: Check all three publicly listed products without changing checkout or customer data", 1)[1]
+        body = step.split("<<'PY'\n", 1)[1].split("\n          PY", 1)[0]
+        compile(textwrap.dedent(body), str(path), "exec")
+        for key, _ in POLICY.INTERNAL_GATES:
+            self.assertIn('"' + key + '":', body)
+        self.assertIn('"product_internal_gates":internal_gates', body)
 
 
 if __name__ == "__main__":

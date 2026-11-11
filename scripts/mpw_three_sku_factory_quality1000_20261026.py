@@ -137,6 +137,11 @@ def inspect_zip(path):
             mode = (item.external_attr >> 16) & 0o170000
             if name.startswith("/") or "\\" in name or ".." in parts.parts or name in names or mode == 0o120000:
                 raise RuntimeError("ZIP_UNSAFE_MEMBER")
+            # A valid ZIP signature is not proof that a buyer can open its files.
+            # Reject encrypted entries before testzip attempts to read them, so
+            # the product-level lock has an explicit, auditable error code.
+            if item.flag_bits & 0x1:
+                raise RuntimeError("ZIP_PASSWORD_PROTECTED_MEMBER")
             names.add(name)
             size += item.file_size
             if size > 512 * 1024 * 1024:
@@ -255,3 +260,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

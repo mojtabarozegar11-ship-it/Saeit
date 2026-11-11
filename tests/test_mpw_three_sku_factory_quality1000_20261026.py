@@ -110,6 +110,33 @@ class Qc1000Tests(unittest.TestCase):
                 qc.inspect_zip(source)
             self.assertFalse((Path(directory)/"escape.txt").exists())
 
+    def test_zip_password_lock_has_explicit_failure_code(self):
+        # Produce a ZIP with the encryption flag in both headers without
+        # needing any password, external tool, or access to private stock.
+        archive = bytearray(make_zip())
+        for signature, offset in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+            start = 0
+            while True:
+                position = archive.find(signature, start)
+                if position < 0:
+                    break
+                old = int.from_bytes(archive[position + offset:position + offset + 2], "little")
+                archive[position + offset:position + offset + 2] = (old | 1).to_bytes(2, "little")
+                start = position + 4
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "password-locked.zip"
+            path.write_bytes(archive)
+            with self.assertRaisesRegex(RuntimeError, "ZIP_PASSWORD_PROTECTED_MEMBER"):
+                qc.inspect_zip(path)
+
+    def test_unencrypted_zip_is_not_falsely_locked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "normal.zip"
+            path.write_bytes(make_zip())
+            result = qc.inspect_zip(path)
+            self.assertTrue(result["valid"])
+            self.assertEqual(result["member_count"], 2)
+
     def test_pdf_and_zip_checks_never_claim_human_certification(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
@@ -129,3 +156,4 @@ class Qc1000Tests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

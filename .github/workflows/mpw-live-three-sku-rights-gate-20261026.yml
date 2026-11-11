@@ -340,11 +340,32 @@ jobs:
               except Exception:
                 file_ready=False
               eligible=bool(_eligible(product))
+              commerce=fields.get("mpw_commerce") if type(fields.get("mpw_commerce")) is dict else {}
+              private_name=commerce.get("private_file")
+              private_is_relative=(type(private_name) is str and bool(private_name.strip())
+                  and not Path(private_name).is_absolute() and ".." not in Path(private_name).parts)
+              article=(getattr(product,"knowledge_article",None)
+                  if getattr(product,"knowledge_article_id",None) else None)
+              internal_gates={
+                  "product_type_accepted":getattr(product,"product_type",None) in ("digital","digital_book"),
+                  "owner_present":bool(getattr(product,"owner_id",None)),
+                  "article_published":getattr(article,"published",False) is True,
+                  "currency_usd":getattr(product,"currency",None)=="USD",
+                  "price_accepted":bool(product.price is not None and 0 < product.price <= 1000),
+                  "commerce_enabled":commerce.get("enabled") is True,
+                  "fulfillment_digital":commerce.get("fulfillment")=="digital",
+                  "private_path_relative":private_is_relative,
+                  "factory_permission":fields.get("factory_publication_permission") is True,
+                  "asset_verified":fields.get("asset_verified") is True,
+                  "quality_approved":fields.get("quality_approved") is True,
+                  "license_verified":fields.get("license_verified") is True,
+              }
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
                   and release_authorized)
               record={"id":sku,"exists":True,"active":product.active is True,
                  "eligible":eligible,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
+                 "product_internal_gates":internal_gates,
                  "is_sellable":is_sellable,
                  "rights_metadata_keys":rights_keys[:40],
                  "rights_reference_keys":rights_reference_keys[:40],

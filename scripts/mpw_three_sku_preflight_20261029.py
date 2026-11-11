@@ -9,6 +9,24 @@ SKU_IDS = (72, 225, 879)
 PREFIX_FLAGS = "MPW_PUBLIC_TRX_FLAGS="
 PREFIX_SKU = "MPW_PUBLIC_SKU_RIGHTS="
 
+# These are product-internal release conditions, distinct from the network,
+# wallet, invoice, and merchant-level gates. Boolean evidence only: no paths,
+# email addresses, prices, or private file contents enter the public log.
+INTERNAL_GATES = (
+    ("product_type_accepted", "PRODUCT_TYPE_INCOMPATIBLE"),
+    ("owner_present", "PRODUCT_OWNER_MISSING"),
+    ("article_published", "PRODUCT_ARTICLE_NOT_PUBLISHED"),
+    ("currency_usd", "PRODUCT_CURRENCY_INCOMPATIBLE"),
+    ("price_accepted", "PRODUCT_PRICE_INVALID"),
+    ("commerce_enabled", "PRODUCT_COMMERCE_DISABLED"),
+    ("fulfillment_digital", "PRODUCT_FULFILLMENT_INVALID"),
+    ("private_path_relative", "PRODUCT_PRIVATE_PATH_INVALID"),
+    ("factory_permission", "PRODUCT_FACTORY_PERMISSION_MISSING"),
+    ("asset_verified", "PRODUCT_ASSET_UNVERIFIED"),
+    ("quality_approved", "PRODUCT_QUALITY_UNAPPROVED"),
+    ("license_verified", "PRODUCT_LICENSE_UNVERIFIED"),
+)
+
 
 def classify(log: str) -> dict:
     flags = []
@@ -52,6 +70,13 @@ def classify(log: str) -> dict:
         ):
             if item.get(key) is not True:
                 blocks.append(label)
+        internal = item.get("product_internal_gates")
+        if type(internal) is not dict:
+            blocks.append("PRODUCT_INTERNAL_GATE_EVIDENCE_MISSING")
+        else:
+            for key, label in INTERNAL_GATES:
+                if internal.get(key) is not True:
+                    blocks.append(label)
         catalog = item.get("existing_catalog_hash_matches_asset")
         if type(catalog) is not list or not catalog or not all(type(x) is str for x in catalog):
             blocks.append("CATALOG_FILE_HASH_MISMATCH")
