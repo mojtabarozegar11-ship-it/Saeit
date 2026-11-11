@@ -61,6 +61,18 @@ class PublicAppRootTests(unittest.TestCase):
         with self.assertRaises(runtime.EvidenceUnavailable):
             runtime.declared_app_root("APP=(")
 
+    def test_nested_dead_branch_does_not_prove_active_app(self):
+        with self.assertRaisesRegex(runtime.EvidenceUnavailable, "AMBIGUOUS"):
+            runtime.declared_app_root("if False:\\n    APP='/good/root'".replace("\\n", "\n"))
+
+    def test_function_local_app_does_not_prove_active_app(self):
+        with self.assertRaisesRegex(runtime.EvidenceUnavailable, "AMBIGUOUS"):
+            runtime.declared_app_root("def make_app():\\n    APP='/good/root'".replace("\\n", "\n"))
+
+    def test_nested_second_assignment_does_not_prove_unique_app(self):
+        with self.assertRaisesRegex(runtime.EvidenceUnavailable, "AMBIGUOUS"):
+            runtime.declared_app_root("APP='/good/root'\\nif True:\\n    APP='/other'".replace("\\n", "\n"))
+
     def test_unrelated_passenger_root_rejected(self):
         with synthetic_public_runtime() as (public, _, __):
             (public / "passenger_wsgi.py").write_text("APP='/home/zomorod2/Saeit'\n", encoding="utf-8")
