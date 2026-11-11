@@ -296,8 +296,25 @@ def graphic_drawing_signals_present(page_count, embedded_images, pages_with_vect
 
 
 def audit_pdf(path, expected_page_count=None, require_illustrations=False):
-    from PyPDF2 import PdfReader
+    try:
+        from PyPDF2 import PdfReader
+        from PyPDF2.generic import ContentStream
+    except ImportError:
+        from pypdf import PdfReader
+        from pypdf.generic import ContentStream
     reader = PdfReader(str(path), strict=False)
+    # A password-protected PDF can be identified without decrypting its
+    # customer content. Its pages cannot safely be inspected in this mode;
+    # record the precise product lock instead of throwing a generic parser
+    # exception or suggesting that a quality review was completed.
+    if reader.is_encrypted:
+        return {
+            "format": "pdf", "sha256": digest_file(path), "bytes": path.stat().st_size,
+            "encrypted": True, "password_protected": True,
+            "page_count": None, "blocking_defects": ["PDF_ENCRYPTION_PRESENT"],
+            "checks": {"no_pdf_encryption": False},
+            "needs_specialist_review": ["source_reexport_or_owner_authorized_decryption", "commercial_rights_mapping"],
+        }
     page_chars = []
     page_hashes = []
     replacement_chars = 0
@@ -312,7 +329,6 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     references = 0
     toc_signals = 0
     headings = 0
-    from PyPDF2.generic import ContentStream
     drawing_ops = {b"m", b"l", b"c", b"v", b"y", b"re", b"h", b"S", b"s",
                    b"f", b"F", b"f*", b"B", b"B*", b"b", b"b*"}
     for page in reader.pages:
@@ -354,6 +370,7 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
     visual_render = render_pdf_pages(path, page_count)
     checks = {
         "reader_opened": page_count > 0 and not reader.is_encrypted,
+        "no_pdf_encryption": not reader.is_encrypted,
         "page_text_extraction_coverage_ge_95pct": page_count > 0 and nonblank / page_count >= .95,
         "no_page_extraction_errors": extraction_errors == 0,
         "duplicate_nonempty_pages_absent": duplicates == 0,
@@ -372,6 +389,7 @@ def audit_pdf(path, expected_page_count=None, require_illustrations=False):
             page_count, embedded_images, pages_with_vector_drawing, vector_drawing_operator_count)
     return {
         "format": "pdf", "sha256": digest_file(path), "bytes": path.stat().st_size,
+        "encrypted": False, "password_protected": False, "blocking_defects": [],
         "page_count": page_count, "extracted_word_count": words,
         "pages_with_text_ge_40_chars": nonblank, "text_coverage": round(nonblank / page_count, 4) if page_count else 0,
         "low_text_page_numbers": low_text[:100], "extraction_errors": extraction_errors,
@@ -414,6 +432,18 @@ def audit_zip(path):
             total += info.file_size
         if total > 512 * 1024 * 1024:
             raise RuntimeError("ZIP_EXPANSION_LIMIT")
+        locked_count = sum(bool(info.flag_bits & 0x1) for info in infos)
+        if locked_count:
+            return {
+                "format": "zip", "sha256": digest_file(path), "bytes": path.stat().st_size,
+                "member_count": len(infos), "uncompressed_bytes": total,
+                "password_protected_member_count": locked_count,
+                "unsafe_member_count": len(unsafe),
+                "blocking_defects": ["ZIP_PASSWORD_PROTECTED_MEMBER"],
+                "checks": {"no_password_protected_members": False,
+                           "unsafe_members_absent": not unsafe},
+                "needs_specialist_review": ["owner_authorized_unlocked_source", "commercial_rights_mapping"],
+            }
         bad_crc = z.testzip()
         html_files = [i for i in infos if i.filename.lower().endswith((".html", ".htm")) and i.file_size <= 2_000_000]
         pages = []
@@ -445,6 +475,7 @@ def audit_zip(path):
             })
         checks = {
             "crc_passed": bad_crc is None,
+            "no_password_protected_members": True,
             "unsafe_members_absent": not unsafe,
             "html_entrypoint_found": bool(html_files),
             "html_title_present": bool(pages) and all(p["has_title"] for p in pages),
@@ -453,6 +484,7 @@ def audit_zip(path):
         }
         return {
             "format": "zip", "sha256": digest_file(path), "bytes": path.stat().st_size,
+            "password_protected_member_count": 0, "blocking_defects": [],
             "member_count": len(infos), "uncompressed_bytes": total, "html_page_count": len(html_files),
             "unsafe_member_count": len(unsafe), "crc_failure": bad_crc,
             "missing_local_refs": missing_local[:100], "html_pages": pages,
