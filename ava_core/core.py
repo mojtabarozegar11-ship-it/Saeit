@@ -129,6 +129,23 @@ class Ava:
     def forget(self, memory_id: str) -> bool:
         return self._memory.delete(self.owner_id, memory_id)
 
+    def forget_all(self, *, consent: bool = False) -> int:
+        """Delete all currently visible memories owned by this identity.
+
+        The host must authenticate the caller and obtain explicit deletion
+        consent. No other owner's records may be deleted. If the backing
+        store refuses a deletion, fail closed instead of claiming success.
+        """
+        if not consent:
+            raise ConsentError("Explicit permission is required to delete all memories")
+        items = self.list_memories()
+        deleted = 0
+        for item in items:
+            if not self._memory.delete(self.owner_id, item.id):
+                raise RuntimeError("Memory deletion could not be verified")
+            deleted += 1
+        return deleted
+
     def export_memories(self, *, consent: bool = False) -> tuple[dict[str, str], ...]:
         """Export only this owner's records after explicit export consent.
 
