@@ -21,6 +21,19 @@ class GuestCheckoutSecurityTests(unittest.TestCase):
         self.assertTrue(report['strict_guest_csp'])
         self.assertTrue(report['rights_gate_checked'])
         self.assertEqual(report['orders_created'], 0)
+        self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
+        self.assertEqual(report['commercial_email_block'],
+                         'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE')
+        self.assertEqual(report['email_based_recovery_end_to_end'], 'not_examined')
+
+    def test_email_appearance_without_validation_does_not_clear_block(self):
+        source = self.source.replace('def _new_user(request):',
+            'def _new_user(request):\n    request.POST.get("buyer_email")\n    user.email = "unvalidated"')
+        report = MODULE.audit_source(source)
+        self.assertTrue(report['buyer_email_post_read_in_identity_source'])
+        self.assertTrue(report['buyer_email_stored_in_identity_source'])
+        self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
+        self.assertIsNotNone(report['commercial_email_block'])
 
     def test_missing_rights_gate_fails_closed(self):
         changed = self.source.replace('rights_cleared_for_sale(product)', 'True')
