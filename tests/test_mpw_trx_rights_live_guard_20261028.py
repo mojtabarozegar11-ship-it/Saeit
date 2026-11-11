@@ -32,6 +32,24 @@ def fixture():
     return {"context":context,"web":web,"pages":pages}
 
 class GuardTests(unittest.TestCase):
+    def test_verify_current_accepts_existing_gate_without_release_snapshot(self):
+        """Existing rights code must be verifiable without a nonexistent run backup."""
+        old={key:src.encode('utf8') for key,src in fixture().items()}
+        with patch.object(guard,'guard'), patch.object(guard,'inspect',return_value=(old,old,False)),\
+             patch.object(guard,'runtime_validate') as runtime,\
+             patch.object(guard,'private_root') as backup:
+            guard.operation('verify-current')
+            runtime.assert_called_once_with()
+            backup.assert_not_called()
+
+    def test_verify_current_fails_when_gate_not_installed(self):
+        old={key:src.encode('utf8') for key,src in fixture().items()}
+        with patch.object(guard,'guard'), patch.object(guard,'inspect',return_value=(old,old,True)),\
+             patch.object(guard,'runtime_validate') as runtime:
+            with self.assertRaisesRegex(RuntimeError,'RIGHTS_GATE_NOT_INSTALLED'):
+                guard.operation('verify-current')
+            runtime.assert_not_called()
+
     def test_exact_edits_are_idempotent_and_compilable(self):
         patched={}
         for key,src in fixture().items():
