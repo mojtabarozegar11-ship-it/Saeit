@@ -16,6 +16,33 @@ people, or change VPS settings.
 - A goal-selection director: an injected proposer can invent goals; AVA ranks
   independently proposed, reversible, zero-spend *internal* objectives, explains
   rejected goals, and stores evidence-backed outcomes in ephemeral history.
+- A manufacturer-independent, read-only body interface and a simulation-only
+  command gateway that enforces independent authorization, state checks,
+  bounded movement, emergency stop, and replay prevention.
+
+## Future physical embodiment: safe software boundary
+
+```python
+from ava_core import BodyCommand, EmbodimentGateway, SimulatedBody
+
+body = SimulatedBody(robot_id="ava-sim")
+gateway = EmbodimentGateway(
+    owner_id="authenticated-owner-id",
+    body=body,
+    # Illustrative authorization for a single local simulation only.
+    authorize=lambda owner, cmd: owner == "authenticated-owner-id" and cmd.request_id == "demo-1",
+)
+receipt = gateway.simulate(BodyCommand(
+    request_id="demo-1", robot_id="ava-sim", kind="say", text="درود فراوان"
+))
+assert receipt.simulated and body.last_speech == "درود فراوان"
+```
+
+`RobotAdapter.observe()` gives a future hardware driver read-only status
+access. This package **refuses to actuate any hardware**, including subclasses
+of its simulator. Real-world motion needs separate hardware safety controls,
+physical emergency stop, authenticated permissions, and verified vendor drivers.
+No camera, microphone, live model, or purchased device is connected here.
 
 ## Independent goal selection (not action execution)
 
@@ -68,6 +95,8 @@ messages through this conversational package.
 `python -m unittest discover -s tests -p 'test_ava_core.py' -v`
 
 `python -m unittest discover -s tests -p 'test_ava_goals.py' -v`
+
+`python -m unittest discover -s tests -p 'test_ava_embodiment.py' -v`
 
 This component can later become AVA's personal interface to the unified
 `Mojtaba.bot.ai` system without creating a duplicate task executor.
