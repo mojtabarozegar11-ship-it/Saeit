@@ -55,7 +55,11 @@ def passenger_interpreter(htaccess: str) -> Path:
     if len(entries) != 1:
         raise EvidenceUnavailable("PUBLIC_PASSENGER_PYTHON_UNVERIFIED")
     path = Path(entries[0].strip("'\""))
-    if not str(path).startswith(VENV_PREFIX) or path.name not in ("python", "python3", "python3.11"):
+    # A string prefix alone permits /virtualenv/../../ escape paths.
+    # Keep the venv's declared path intact: its Python binary may be a symlink.
+    if (not path.is_absolute() or ".." in path.parts or
+            not str(path).startswith(VENV_PREFIX) or
+            path.name not in ("python", "python3", "python3.11")):
         raise EvidenceUnavailable("PUBLIC_PASSENGER_PYTHON_OUT_OF_SCOPE")
     if not path.is_file() or not os.access(path, os.X_OK):
         raise EvidenceUnavailable("PUBLIC_PASSENGER_PYTHON_MISSING")
