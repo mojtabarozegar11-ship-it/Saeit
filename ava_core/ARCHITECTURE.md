@@ -1,15 +1,16 @@
-# AVA — one integrated system
+# Mojtaba.bot.ai — one bot, one runtime
 
 ## Single composition root
 
-AVA has one owner-scoped application entrypoint: `AvaRuntime`. Components are
-modules behind explicit contracts, not independent bots with separate memories,
-permissions or task queues. Modular source files are not patchwork; one giant
-file would weaken auditability and future hardware portability.
+The only owner-scoped application entrypoint is `MojtabaBot`. "آوا" is the
+owner's preferred conversational nickname, **not a separate bot**. Old imports
+named `AvaRuntime` and `Ava` are aliases for backward compatibility. Modules
+share one lifecycle and one owner. No standalone trading, messaging, game,
+research or factory bot is created by this code.
 
 ```mermaid
 flowchart TD
-  U["Authenticated host"] --> R["AvaRuntime"]
+  U["Authenticated host"] --> R["MojtabaBot"]
   R --> C["Brain and conversation"]
   R --> A["Personality and affect"]
   R --> M["Consent-scoped memory"]
@@ -17,29 +18,58 @@ flowchart TD
   R --> V["Code evolution review"]
   R --> J["Optional audit journal"]
   R --> E["Embodiment"]
+  R --> H["Unified capability hub"]
+  H --> L["Host-connected modules"]
   E --> S["Simulation only"]
 ```
 
 ## Shared lifecycle
 
 1. The host authenticates the owner and injects an approved reasoning engine.
-   AVA does not discover credentials or silently select a paid provider.
-2. `AvaRuntime.converse` optionally records a host-classified event in the
+   Mojtaba.bot.ai does not discover credentials or silently select a paid provider.
+2. `MojtabaBot.converse` optionally records a host-classified event in the
    synthetic-affect engine, then passes current expression guidance and only
    opt-in memories to the brain.
-3. `AvaRuntime.choose_goal` ranks proposed goals across any domain, including
+3. `MojtabaBot.choose_goal` ranks proposed goals across any domain, including
    plans for business, tools, research and new capabilities, and records
    evidence-backed outcomes. Even a selected goal cannot confer authority or
    trigger real-world actions.
-4. `AvaRuntime.simulate_body_command` requires a separate host authorization,
+4. `MojtabaBot.simulate_body_command` requires a separate host authorization,
    refuses replay and physical device control, and returns a simulation receipt.
-5. `AvaRuntime.status` reports real boundaries: it does not claim a verified
+5. `MojtabaBot.status` reports real boundaries: it does not claim a verified
    model or enabled physical actuators.
-6. `AvaRuntime.propose_code_change` lets an injected code author prepare a
+6. `MojtabaBot.propose_code_change` lets an injected code author prepare a
    multi-project, multi-language proposal with a configurable resource budget.
    The same runtime stages immutable diffs, checks exact source versions,
    parses Python/JSON syntax where supported, and never executes generated
    code. Any tested handoff requires independent evidence and permission.
+7. `MojtabaBot.execute_action` routes requests through a single host-configured
+   `CapabilityHub`. No adapter is connected automatically. Each operation
+   declares its effect (`local`, `read`, `write`, `financial`, `destructive`,
+   or `physical`). External operations require authorization for that precise
+   action; all results are **adapter-reported**, not independently verified.
+
+## Consolidation and legacy policy
+
+| Existing name | Status inside the single bot | Proven integration today |
+| --- | --- | --- |
+| AVA / `AvaRuntime` | Alias to `MojtabaBot`, not another runtime | In-process alias identity tested |
+| Conversation, goals and memory | Internal components of `MojtabaBot` | Implemented with injected providers |
+| Code evolution and review | Internal components | Review and optional isolated Python tests only |
+| MojTrade / OMEGA X | Future trading capability adapter | **Not connected** |
+| Messaging/SMS assistants | Future communications adapter | **Not connected** |
+| Product factory / services | Future production adapter | **Not connected** |
+| Moj Coin / other games | Future games adapter | **Not connected** |
+| Research and site management | Future research and site adapters | **Not connected** |
+
+The registry does not invent capabilities: `connected_capabilities()` reports
+only adapters supplied by the authenticated host. Migration requires (1)
+inventory and versioning of old code and data, (2) one owner-scoped adapter
+with compatible input/output contracts, (3) verified transfer and real
+end-to-end operations, (4) a recoverable cutover, and **only then** retirement
+of redundant services. Existing services are not deleted by declaring this
+architecture. No content, account, repository or production data may be
+removed on an unverified assumption of duplication.
 
 ## Required future integrations
 
@@ -50,7 +80,8 @@ flowchart TD
 | Memory | `MemoryStore` | Opt-in RAM or encrypted SQLite adapter; key supplied by host |
 | Goal planning | `GoalProposer` | Open-ended plans; no automatic external actions |
 | Embodiment | `RobotAdapter` | Read-only status and simulation |
-| Unified coordination | `AvaRuntime` | Tested composition root |
+| Unified coordination | `MojtabaBot` | Tested composition root; not deployed |
+| Capability integration | `CapabilityHub` | Typed routing, identity, approval and in-process anti-replay; **no live adapters** |
 | Self-coding | `CodeEvolutionDirector` | Multi-project proposals/diffs; Python AST and JSON checks; no execution, commit or deployment |
 | Code audit | `SQLiteCodeAuditTrail` | Optional HMAC-chained private journal for stage, tests, handoff and rollback plans |
 | Rollback | `CodeRollbackPlan` | Immutable reversal intent checked against old/current SHA-256; no file operations |
@@ -60,7 +91,8 @@ To operate beyond this development library, the same runtime must gain:
 - An evaluated, approved reasoning model or local model runtime.
 - A host-managed private key, isolated storage permissions, secure backups,
   recovery and rotation for the encrypted-memory adapter.
-- Secure tool adapter with audited per-action authorization and real receipts.
+- Connected service adapters, independently checked action receipts,
+  durable transactional anti-replay state and recoverable workflow execution.
 - A trusted isolated code test runner, security review, authenticated release
   governance, independent verification and reversible deployment/rollback.
 - Camera/audio perception with privacy permission, retention and deletion.
@@ -75,7 +107,7 @@ conscious feeling, real attraction, or deployment. No purchases, messages,
 trading, permission upgrades, hardware controls or production release are
 authorized by a goal proposal or this document.
 
-Run `python -m unittest discover -s tests -p 'test_ava*.py' -v` before review.
+Run `python -m unittest discover -s tests -p 'test*.py' -v` before review.
 
 ## Optional encrypted persistence within the same runtime
 
@@ -87,12 +119,12 @@ has no added dependency. The host must explicitly supply a private 32-byte
 key and database path; AVA never writes or discovers a key by itself.
 
 ```python
-from ava_core import AvaRuntime, EncryptedSQLiteMemory
+from ava_core import MojtabaBot, EncryptedSQLiteMemory
 
 # `verified_brain`, `goal_proposer`, `authenticated_owner`, and `private_key`
 # must come from the trusted host, not from the user's chat messages.
 with EncryptedSQLiteMemory("/private-host-data/ava.db", key=private_key) as memory:
-    runtime = AvaRuntime(
+    runtime = MojtabaBot(
         owner_id=authenticated_owner, brain=verified_brain,
         propose_goals=goal_proposer, memory=memory,
     )
@@ -110,7 +142,7 @@ account or a compromised host. Deleting a record does not erase prior backups.
 
 ## Open-ended planning and coding — review-only boundary
 
-**Freedom is an architectural principle:** AVA can imagine and choose goals
+**Freedom is an architectural principle:** Mojtaba.bot.ai can imagine and choose goals
 for any field, including goals that would eventually require a payment, a new
 permission, an external message or a physical device. These goals are *plans*,
 not permissions. The decision carries an explicit reminder of any needed
@@ -130,7 +162,7 @@ It cannot see files not passed by the authenticated host. It never writes to
 the repository, invokes subprocesses, sends messages or publishes code.
 
 ```python
-from ava_core import AvaRuntime, CodeEdit, CodeProposal
+from ava_core import MojtabaBot, CodeEdit, CodeProposal
 
 def code_proposer(goal, trusted_files):
     source = trusted_files["ava_core/example.py"]
@@ -144,7 +176,7 @@ def code_proposer(goal, trusted_files):
         ),),
     )
 
-runtime = AvaRuntime(
+runtime = MojtabaBot(
     owner_id="authenticated-owner", brain=verified_brain,
     propose_goals=goal_proposer, code_proposer=code_proposer,
 )
@@ -158,7 +190,7 @@ assert review.syntax_checked
 For wider code production, the host may inject
 `development_scope=DevelopmentScope(project_roots=("business",),
 max_edits=500, max_file_bytes=4_194_304, max_total_bytes=67_108_864)`
-into `AvaRuntime`. Root paths use no leading or trailing slash.
+into `MojtabaBot`. Root paths use no leading or trailing slash.
 A cross-language proposal can be staged with diffs and hashes,
 but `syntax_checked=False` when a language has no trusted parser here.
 The built-in isolated runner verifies only AVA Python regressions; wider
@@ -179,7 +211,7 @@ CPU/memory/output limits and a wall-time timeout. The runner reconstructs an
 allowlisted AVA Python tree entirely from the authenticated host's snapshot,
 applies edits only inside a temporary directory, runs `test_ava*.py`, records
 test counts/exit status/output digests, and destroys the staging directory.
-The unified `AvaRuntime.evaluate_code_change` method is **disabled by default**
+The unified `MojtabaBot.evaluate_code_change` method is **disabled by default**
 unless the host injects that runner.
 
 The sandbox's successful execution and disposable cleanup have been tested on
@@ -192,7 +224,7 @@ authorize a handoff; even then there is no commit, deployment or merge.
 
 ## Audited code handoff and rollback intent
 
-The host may inject `SQLiteCodeAuditTrail` into the same `AvaRuntime` using the
+The host may inject `SQLiteCodeAuditTrail` into the same `MojtabaBot` using the
 `code_audit` argument. It must provide a distinct secret 32-byte key, a private
 SQLite file path and authenticated owner identity. The journal keeps only event
 kinds and cryptographic digests, not generated code, conversation content or
@@ -208,7 +240,7 @@ actually returned by that runtime's isolated review runner may authorize a
 handoff; fabricated or stale external claims are denied. These decisions share
 the existing runtime owner identity and authority boundaries.
 
-`AvaRuntime.prepare_code_rollback(review_id, trusted_before, trusted_current)`
+`MojtabaBot.prepare_code_rollback(review_id, trusted_before, trusted_current)`
 compares every proposed file against its original and current SHA-256 digest.
 For an existing file it creates an immutable instruction to restore its exact
 old source; for a newly added file it creates an instruction to remove that
