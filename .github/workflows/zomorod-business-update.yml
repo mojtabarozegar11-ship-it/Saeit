@@ -1,11 +1,16 @@
-name: Update Zomorod business dashboard safely
+name: Manually publish verified Zomorod business private files
+# A PR merge must never trigger a live write; release requires explicit manual dispatch.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "content/zomorod-business/app.php"
-      - "content/zomorod-business/notification-sw.js"
-      - ".github/workflows/zomorod-business-update.yml"
+  workflow_dispatch:
+    inputs:
+      expected_current_app_sha256:
+        description: 'SHA256 of verified live private app.php from a recent read-only host audit'
+        required: true
+        type: string
+      expected_current_dossier_sha256:
+        description: 'SHA256 of live genetics-center.php, or ABSENT if independently verified missing'
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -17,11 +22,15 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Validate PHP source
+      - name: Validate both PHP files and guarded installer
         run: |
           set -euo pipefail
           php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/genetics-center.php
+          bash -n scripts/zomorod_business_genetics_guarded_install.sh
           test -s content/zomorod-business/app.php
+          test -s content/zomorod-business/genetics-center.php
+          test -s scripts/zomorod_business_genetics_guarded_install.sh
       - name: Prepare pinned relay
         shell: bash
         env:
@@ -69,56 +78,28 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           echo "PINNED_RELAY=verified"
           echo "RELAY_CONFIG=$d" >> "$GITHUB_ENV"
-      - name: Atomically update only the business app with rollback
+      - name: Stage and publish the verified private files only
         shell: bash
+        env:
+          EXPECTED_APP: ${{ inputs.expected_current_app_sha256 }}
+          EXPECTED_DOSSIER: ${{ inputs.expected_current_dossier_sha256 }}
         run: |
           set -euo pipefail
+          [[ "$EXPECTED_APP" =~ ^[0-9a-f]{64}$ ]] || exit 2
+          if [[ "$EXPECTED_DOSSIER" != ABSENT ]]; then
+            [[ "$EXPECTED_DOSSIER" =~ ^[0-9a-f]{64}$ ]] || exit 2
+          fi
+          source_dir=content/zomorod-business
+          app_hash="$(sha256sum "$source_dir/app.php" | awk '{print $1}')"
+          dossier_hash="$(sha256sum "$source_dir/genetics-center.php" | awk '{print $1}')"
           d="$RELAY_CONFIG"
-          ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/.private/zomorod-business/.incoming-app-$GITHUB_SHA.php" < content/zomorod-business/app.php
-          ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/public_html/business/.incoming-notification-sw-$GITHUB_SHA.js" < content/zomorod-business/notification-sw.js
-          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
-          set -euo pipefail
-          sha="$1"
-          private="$HOME/.private/zomorod-business"
-          web="$HOME/public_html/business"
-          live="$private/app.php"
-          incoming="$private/.incoming-app-$sha.php"
-          sw="$web/notification-sw.js"
-          incoming_sw="$web/.incoming-notification-sw-$sha.js"
-          backup="$HOME/.backups/zomorod-business-update/$sha"
-          test "$(id -un)" = zomorod2
-          test -d "$private" && test -f "$live" && test ! -L "$live"
-          test -d "$web" && test -f "$web/index.php" && test ! -L "$web/index.php"
-          test -f "$incoming" && test ! -L "$incoming"
-          test -f "$incoming_sw" && test ! -L "$incoming_sw"
-          phpbin="$(command -v php || true)"; test -n "$phpbin"
-          "$phpbin" -l "$incoming" >/dev/null
-          mkdir -p "$backup"; chmod 700 "$backup"
-          cp -p "$live" "$backup/app.php"
-          cp -p "$web/index.php" "$backup/index.php"
-          test ! -e "$sw" || cp -p "$sw" "$backup/notification-sw.js"
-          sha256sum "$live" "$web/index.php" "$sw" > "$backup/before.sha256"
-          install -m 600 "$incoming" "$live.new"
-          install -m 644 "$incoming_sw" "$web/notification-sw.js.new"
-          mv -f "$live.new" "$live"
-          mv -f "$web/notification-sw.js.new" "$sw"
-          rm -f "$incoming" "$incoming_sw"
-          rollback(){ set +e; cp -p "$backup/app.php" "$live"; if test -f "$backup/notification-sw.js"; then cp -p "$backup/notification-sw.js" "$sw"; else rm -f "$sw"; fi; echo BUSINESS_UPDATE_ROLLBACK=restored; }
-          trap 'rc=$?; if test "$rc" != 0; then rollback; fi; exit "$rc"' EXIT
-          code="$(curl -sS -L --max-time 30 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?release=$sha" || true)"
-          echo BUSINESS_HTTP="$code"
-          test "$code" = 200
-          grep -Eq 'ورود مدیر و حسابدار|میز مدیریت و حسابداری' "$backup/response.html"
-          sw_code="$(curl -sS -L --max-time 20 -o "$backup/notification-sw.js.response" -w '%{http_code}' "https://zomorodmelal.ir/business/notification-sw.js" || true)"
-          echo BUSINESS_SW_HTTP="$sw_code"
-          test "$sw_code" = 200
-          grep -q "notificationclick" "$backup/notification-sw.js.response"
-          test "$(stat -c %a "$live")" = 600
-          sha256sum "$live" "$web/index.php" "$sw" > "$backup/after.sha256"
-          trap - EXIT
-          echo BUSINESS_UPDATE=success
-          echo BUSINESS_DB_MUTATION=no
-          REMOTE
+          stage="/home/zomorod2/.private/zomorod-business/.stage-$GITHUB_SHA"
+          # Refuse to overwrite any earlier staging directory.
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/app.php'" < "$source_dir/app.php"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/genetics-center.php'" < "$source_dir/genetics-center.php"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/install.sh'" < scripts/zomorod_business_genetics_guarded_install.sh
+          ssh -T -F "$d/config" saeit-cpanel "bash '$stage/install.sh' '$EXPECTED_APP' '$EXPECTED_DOSSIER' '$app_hash' '$dossier_hash' '$GITHUB_SHA' '$stage'"
       - name: Remove temporary SSH keys
         if: always()
         run: rm -rf "${RUNNER_TEMP}/zomorod-business-update"
