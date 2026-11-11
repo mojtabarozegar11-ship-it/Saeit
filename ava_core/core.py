@@ -195,6 +195,8 @@ class ConversationEngine:
             guidance = self._style_guidance()
             if not isinstance(guidance, str):
                 raise TypeError("style_guidance must return a string")
+            if len(guidance) > 4000:
+                raise ValueError("Style guidance exceeds 4000 characters")
             if guidance.strip():
                 messages.append({"role": "system", "content": guidance.strip()})
         if items:
