@@ -10,7 +10,16 @@ class DirectoryTests(TestCase):
         self.client.force_login(staff)
         result = self.client.get(reverse("command_center_agent_directory_api"))
         self.assertEqual(result.status_code, 200)
-        self.assertIn("test-dir-agent", [agent["code"] for agent in result.json()["agents"]])
+        data = result.json()
+        self.assertEqual(data["bot"]["identity"], "mojtaba.bot.ai")
+        self.assertEqual(data["bot"]["identity_count"], 1)
+        self.assertIsNone(data["bot"]["runtime_verified"])
+        self.assertIn("test-dir-agent", [module["module_code"] for module in data["modules"]])
+        self.assertTrue(all(module["verification_state"] == "unknown" for module in data["modules"]))
+        self.assertNotIn("agents", data)
+        canonical = self.client.get(reverse("command_center_unified_bot_modules_api"))
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(canonical.json()["bot"]["identity"], "mojtaba.bot.ai")
 
     def test_non_staff_cannot_read_directory(self):
         viewer = get_user_model().objects.create_user(username="viewer_dir", password="test-password")
