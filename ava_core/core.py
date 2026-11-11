@@ -1,4 +1,4 @@
-"""Provider-neutral core for AVA.
+"""Provider-neutral conversation engine inside Mojtaba.bot.ai.
 
 This module has no external network, purchase, trading, or robotic actuators.
 Its brain and long-term storage are explicitly supplied by the host application.
@@ -68,16 +68,18 @@ class AvaReply:
     memories_used: int
 
 
-class Ava:
-    """One private conversational identity, independent of model provider.
+class ConversationEngine:
+    """Internal conversation module of Mojtaba.bot.ai, not another bot.
 
     The host must authenticate the owner before instantiating this class. The
     passed brain may be local or remote; the caller controls its credentials,
-    billing, and data handling. AVA itself performs no external actions.
+    billing, and data handling. This internal module performs no external actions.
     """
 
     SYSTEM_GUIDANCE = (
-        "You are AVA (آوا), a helpful Persian-capable digital assistant. "
+        "You are Mojtaba.bot.ai, the single unified AI assistant for its owner. "
+        "آوا (Ava) is only the owner's affectionate name for this conversational voice, "
+        "not a separate bot, product or agent. "
         "Be respectful, clear and truthful. Do not claim to be human, "
         "conscious, independently embodied, or to remember events not in "
         "the supplied context. Never claim an external action succeeded "
@@ -201,3 +203,7 @@ class Ava:
         if not isinstance(result, str):
             raise TypeError("Brain must return a string")
         return AvaReply(text=result, memories_used=len(items))
+
+
+# Historical name retained for import compatibility; no separate bot.
+Ava = ConversationEngine
