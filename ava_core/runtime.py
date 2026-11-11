@@ -15,7 +15,7 @@ from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .audit import SQLiteCodeAuditTrail
 from .core import Ava, AvaReply, Brain, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
-from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview, CodeRollbackPlan
+from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview, CodeRollbackPlan, DevelopmentScope
 from .goals import AutonomousGoalDirector, GoalDecision, GoalOutcome, GoalProposer
 from .sandbox import IsolatedReviewRunner, SandboxResult
 
@@ -64,6 +64,7 @@ class AvaRuntime:
         body: RobotAdapter | None = None,
         authorize_simulation: Callable[[str, BodyCommand], bool] | None = None,
         code_proposer: CodeProposer | None = None,
+        development_scope: DevelopmentScope | None = None,
         review_runner: IsolatedReviewRunner | None = None,
         code_audit: SQLiteCodeAuditTrail | None = None,
     ) -> None:
@@ -80,7 +81,9 @@ class AvaRuntime:
             owner_id=owner_id, body=body if body is not None else SimulatedBody(),
             authorize=authorize_simulation,
         )
-        self.evolution = CodeEvolutionDirector(owner_id=owner_id, proposer=code_proposer)
+        self.evolution = CodeEvolutionDirector(
+            owner_id=owner_id, proposer=code_proposer, scope=development_scope,
+        )
         if review_runner is not None and review_runner.owner_id != owner_id:
             raise PermissionError("Isolated review runner owner mismatch")
         self.review_runner = review_runner
