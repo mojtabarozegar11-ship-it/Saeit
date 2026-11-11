@@ -145,6 +145,22 @@ class AvaCoreTests(unittest.TestCase):
         self.assertNotIn("private-owner-two", str(self.calls[-1]))
         self.assertIn("private-owner-one", str(self.calls[-1]))
 
+    def test_brain_failure_does_not_create_memory_or_external_receipt(self):
+        def failing_brain(messages):
+            raise RuntimeError("provider unavailable")
+
+        assistant = Ava(owner_id="owner-1", brain=failing_brain, memory=self.shared_store)
+        with self.assertRaisesRegex(RuntimeError, "provider unavailable"):
+            assistant.converse("سلام", use_memories=True)
+        self.assertEqual(assistant.list_memories(), ())
+        self.assertEqual(self.shared_store.list_for_owner("owner-1"), ())
+
+    def test_non_string_brain_response_fails_closed(self):
+        assistant = Ava(owner_id="owner-1", brain=lambda messages: None)
+        with self.assertRaisesRegex(TypeError, "Brain must return a string"):
+            assistant.converse("سلام")
+        self.assertEqual(assistant.list_memories(), ())
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
