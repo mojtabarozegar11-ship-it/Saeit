@@ -32,6 +32,12 @@ class UnifiedIdentityTests(unittest.TestCase):
     def test_pagination_and_no_registered_modules(self):
         self.assertTrue(identity_snapshot([], 201)["truncated"])
         self.assertFalse(identity_snapshot([], 0)["truncated"])
+        rows = [{"id": 2, "code": "writer", "name": "Old writer",
+                 "mission": "Write", "risk_level": "low", "active": True}]
+        first = identity_snapshot(rows, 2)
+        self.assertEqual(first["next_offset"], 1)
+        last = identity_snapshot(rows, 2, offset=1)
+        self.assertIsNone(last["next_offset"])
 
 
 if __name__ == "__main__":
