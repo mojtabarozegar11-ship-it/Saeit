@@ -6,6 +6,10 @@ from .embodiment import BodyCommand, EmbodimentError, EmbodimentGateway, RobotAd
 from .goals import AutonomousGoalDirector, GoalAssessment, GoalDecision, GoalOutcome, GoalProposal
 from .runtime import AvaRuntime, AvaRuntimeStatus, AvaTurn
 from .storage import EncryptedSQLiteMemory, MemoryIntegrityError, MemoryKeyError
+from .evolution import (
+    ApprovedCodeBundle, CheckEvidence, CodeEdit, CodeEvolutionDirector,
+    CodeProposal, CodeProposalError, CodeReview, ReviewedFile,
+)
 
 __all__ = [
     "Ava", "AvaMemory", "AvaReply", "ConsentError", "MemoryItem",
@@ -15,4 +19,6 @@ __all__ = [
     "AffectSnapshot", "AffectiveCompanion", "PersonalityTraits",
     "AvaRuntime", "AvaRuntimeStatus", "AvaTurn",
     "EncryptedSQLiteMemory", "MemoryIntegrityError", "MemoryKeyError",
+    "ApprovedCodeBundle", "CheckEvidence", "CodeEdit", "CodeEvolutionDirector",
+    "CodeProposal", "CodeProposalError", "CodeReview", "ReviewedFile",
 ]
