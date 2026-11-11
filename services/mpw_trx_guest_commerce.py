@@ -8,14 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import re
 import secrets
 import time
 
 from django.core import signing
 from django.http import Http404
-from django.views.decorators.csrf import csrf_protect
-from django.views.decorators.http import require_POST
 
 COOKIE = "mpw_trx_guest_owner"
 SALT = "mpw.trx.guest.owner.v1"
@@ -246,169 +243,6 @@ def patch_public(namespace):
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
 
-    # The live root URLconf includes services.mpw_trx_public_pages for the
-    # commerce/trx-easy/ prefix. Register recovery routes in that public
-    # registry as relative paths; patch_commercial is a different include.
-    from services.mpw_trx_email_recovery import (
-        recovery_request, recovery_verify, recovery_orders, recovery_download,
-    )
-    recovery_extra = (
-        ("recover/", recovery_request),
-        ("recover/verify/", recovery_verify),
-        ("recover/orders/", recovery_orders),
-        ("recover/download/<int:invoice_id>/", recovery_download),
-    )
-    from collections.abc import Mapping
-
-    def _register_recovery_patterns(patterns):
-        """Place recovery routes before the public commerce catch-all."""
-        recovery_routes = {str(route) for route, _ in recovery_extra}
-        if isinstance(patterns, Mapping):
-            items = [(route, view) for route, view in patterns.items()
-                     if str(route) not in recovery_routes]
-            return dict(list(recovery_extra) + items)
-        if isinstance(patterns, (tuple, list)):
-            items = [(route, view) for route, view in patterns
-                     if str(route) not in recovery_routes]
-            return type(patterns)(list(recovery_extra) + items)
-        return None
-
-    registered = False
-    for key, patterns in list(namespace.items()):
-        if isinstance(patterns, Mapping):
-            items = list(patterns.items())
-        elif isinstance(patterns, (tuple, list)):
-            items = list(patterns)
-        else:
-            continue
-        route_text = " ".join(str(route) for route, _ in items)
-        view_text = " ".join(
-            str(getattr(view, "__name__", "")) for _, view in items
-        )
-        # The live module has used both a prefixed route registry and a
-        # compact product_checkout/purchases registry. Accept either shape.
-        looks_like_public_registry = (
-            "trx-easy" in route_text or "start/" in route_text or
-            "product_checkout" in view_text or "purchases" in view_text
-        )
-        if not looks_like_public_registry:
-            continue
-        updated = _register_recovery_patterns(patterns)
-        if updated is not None:
-            namespace[key] = updated
-            registered = True
-
-    # Older live revisions expose the registry under a neutral name and do
-    # not contain a recognizable route literal. Use the conventional names
-    # only as a bounded fallback; never invent a new global URLconf.
-    if not registered:
-        for key in ("urlpatterns", "URLPATTERNS", "URL_PATTERNS",
-                    "PUBLIC_URLPATTERNS"):
-            patterns = namespace.get(key)
-            if isinstance(patterns, (Mapping, tuple, list)):
-                updated = _register_recovery_patterns(patterns)
-                if updated is not None:
-                    namespace[key] = updated
-                    registered = True
-                    break
-    if not registered:
-        # Some live revisions expose only view functions and let Django consume
-        # the module-level urlpatterns directly. Build a standard Django URL
-        # pattern list as a bounded fallback instead of failing module import.
-        from django.urls import path
-        namespace["urlpatterns"] = [
-            path("recover/", recovery_request, name="mpw_recovery_request"),
-            path("recover/verify/", recovery_verify, name="mpw_recovery_verify"),
-            path("recover/orders/", recovery_orders, name="mpw_recovery_orders"),
-            path("recover/download/<int:invoice_id>/", recovery_download,
-                 name="mpw_recovery_download"),
-        ]
-        registered = True
-    if not registered:
-        raise RuntimeError("Recovery URL registry not found")
-
-    # Ensure Django's actual module URLconf receives the routes. Some live
-    # revisions keep a separate commerce registry that the root include does
-    # not consume; direct urlpatterns registration is therefore authoritative.
-    from django.urls import path
-    direct_recovery = [
-        path("recover/", recovery_request, name="mpw_recovery_request"),
-        path("recover/verify/", recovery_verify, name="mpw_recovery_verify"),
-        path("recover/orders/", recovery_orders, name="mpw_recovery_orders"),
-        path("recover/download/<int:invoice_id>/", recovery_download,
-             name="mpw_recovery_download"),
-    ]
-    existing_urlpatterns = namespace.get("urlpatterns")
-    if isinstance(existing_urlpatterns, (tuple, list)):
-        existing_urlpatterns = list(existing_urlpatterns)
-        existing_text = {str(getattr(item, "pattern", item))
-                         for item in existing_urlpatterns}
-        direct_recovery = [
-            item for item in direct_recovery
-            if str(item.pattern) not in existing_text
-        ]
-        namespace["urlpatterns"] = direct_recovery + existing_urlpatterns
-    else:
-        namespace["urlpatterns"] = direct_recovery
-
-    # The live root resolver consumes the public module through a legacy
-    # callable registry rather than module-level urlpatterns. Attach the
-    # recovery routes to the actual config URLconf as well, once it is present.
-    import sys
-    root_urls = sys.modules.get("config.urls")
-    if root_urls is not None:
-        root_patterns = getattr(root_urls, "urlpatterns", None)
-        if isinstance(root_patterns, list):
-            root_text = {str(getattr(item, "pattern", item)) for item in root_patterns}
-            from django.urls import path as _root_path
-            absolute_recovery = [
-                _root_path("commerce/trx-easy/recover/", recovery_request,
-                           name="mpw_root_recovery_request"),
-                _root_path("commerce/trx-easy/recover/verify/", recovery_verify,
-                           name="mpw_root_recovery_verify"),
-                _root_path("commerce/trx-easy/recover/orders/", recovery_orders,
-                           name="mpw_root_recovery_orders"),
-                _root_path("commerce/trx-easy/recover/download/<int:invoice_id>/",
-                           recovery_download, name="mpw_root_recovery_download"),
-            ]
-            root_urls.urlpatterns = (
-                [item for item in absolute_recovery
-                   if str(item.pattern) not in root_text]
-                + root_patterns
-            )
-
-    # Legacy public_pages registries may catch the whole commerce prefix before
-    # Django sees appended URL patterns. Wrap the public entry once so recovery
-    # is dispatched before that legacy catch-all, without changing other pages.
-    import sys as _sys
-    _public_module = _sys.modules.get("services.mpw_trx_public_pages")
-    if _public_module is not None and not getattr(_public_module, "_mpw_recovery_dispatch_installed", False):
-        for _name in ("public_shop", "product_checkout", "purchases"):
-            _old_public = getattr(_public_module, _name, None)
-            if not callable(_old_public):
-                continue
-            def _recovery_first(request, *args, _old=_old_public, **kwargs):
-                _path = str(getattr(request, "path_info", "")).rstrip("/")
-                _root = "/commerce/trx-easy/recover"
-                if _path == _root:
-                    return recovery_request(request)
-                if _path == _root + "/verify":
-                    return recovery_verify(request)
-                if _path == _root + "/orders":
-                    return recovery_orders(request)
-                match = re.fullmatch(
-                    re.escape(_root) + r"/download/([1-9][0-9]{0,18})", _path
-                )
-                if match:
-                    return recovery_download(request, invoice_id=int(match.group(1)))
-                # Never send malformed recovery URLs into a checkout or
-                # purchase handler through the legacy public catch-all.
-                if _path.startswith(_root + "/"):
-                    raise Http404("Unknown recovery route")
-                return _old(request, *args, **kwargs)
-            setattr(_public_module, _name, _recovery_first)
-        _public_module._mpw_recovery_dispatch_installed = True
-
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
@@ -456,23 +290,6 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        # Register recovery routes on every import.  The views remain gated by
-        # MPW_GUEST_RECOVERY_EMAIL_APPROVED, so disabled mode is safe; unconditional
-        # registration prevents a Passenger import race when the feature flag is
-        # enabled after the commerce module has already been loaded.
-        from services.mpw_trx_email_recovery import (
-            recovery_request, recovery_verify, recovery_orders, recovery_download,
-        )
-        extra = (
-            ("commerce/trx-easy/recover/", recovery_request),
-            ("commerce/trx-easy/recover/verify/", recovery_verify),
-            ("commerce/trx-easy/recover/orders/", recovery_orders),
-            ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
-        )
-        existing = {route for route, _ in rebuilt}
-        if any(route in existing for route, _ in extra):
-            raise RuntimeError("Recovery URL collision")
-        rebuilt.extend(extra)
         namespace["COMMERCIAL_URLPATTERNS"] = (
             {route: view for route, view in rebuilt} if pattern_type is dict
             else pattern_type(rebuilt)
