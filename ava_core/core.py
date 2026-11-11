@@ -1,4 +1,4 @@
-"""Provider-neutral conversation engine inside Mojtaba.bot.ai.
+"""Provider-neutral conversation engine inside mojtaba.bot.ai.
 
 This module has no external network, purchase, trading, or robotic actuators.
 Its brain and long-term storage are explicitly supplied by the host application.
@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Protocol, Sequence
 from uuid import uuid4
+from .identity import BOT_ID
 
 
 class ConsentError(PermissionError):
@@ -69,7 +70,7 @@ class AvaReply:
 
 
 class ConversationEngine:
-    """Internal conversation module of Mojtaba.bot.ai, not another bot.
+    """Internal conversation module of mojtaba.bot.ai, not another bot.
 
     The host must authenticate the owner before instantiating this class. The
     passed brain may be local or remote; the caller controls its credentials,
@@ -77,7 +78,7 @@ class ConversationEngine:
     """
 
     SYSTEM_GUIDANCE = (
-        "You are Mojtaba.bot.ai, the single unified AI assistant for its owner. "
+        f"You are {BOT_ID}, the single unified AI assistant for its owner. "
         "آوا (Ava) is only the owner's affectionate name for this conversational voice, "
         "not a separate bot, product or agent. "
         "Be respectful, clear and truthful. Do not claim to be human, "
