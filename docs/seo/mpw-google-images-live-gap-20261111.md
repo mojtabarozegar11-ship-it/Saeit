@@ -12,6 +12,26 @@
   - `https://mojplaywin.com/static/site/mojplaywin-products/chess-improvement.webp?v=20261026`
   - `https://mojplaywin.com/static/site/mojplaywin-products/taniya-baker-worms.webp?v=20261026`
 - The live editorial knowledge collection has ten distinct public image elements with descriptive `alt` attributes.
+- Live `https://mojplaywin.com/robots.txt` returns **HTTP 404** even though the Draft source (`core/seo_views.py` and `config/urls.py`) implements a host-aware robots response. A robots 404 does not itself ban crawling, but it prevents advertising the sitemap at that location. Do not overwrite the active host configuration based only on Draft source.
+
+## Completed full public sitemap crawl
+
+Read-only scan of **all 152 / 152** listed pages completed successfully (0 skipped pages):
+
+| Measure | Observed |
+| --- | ---: |
+| HTML `<img>` tags | 404 |
+| Image references, including metadata/srcset | 431 |
+| Distinct eligible same-origin image URLs (not yet HTTP-verified) | 282 |
+| Page-to-image associations eligible for a draft sitemap (not yet HTTP-verified) | 396 |
+| Pages containing public image URL candidates | 94 / 152 (61.8%) |
+| Pages without public image URL candidates | 58 / 152 (38.2%) |
+| Pages with no HTML `<img>` tags | 57 / 152 (37.5%) |
+| `<img>` tags with empty `alt` | 32 / 404 (7.9%; may include decorative images) |
+| `<img>` tags missing `alt` altogether | 0 |
+| Pages using embedded data image URLs | 1 (`/taniya/`) |
+
+The full machine-readable report is `docs/seo/evidence/mpw-image-coverage-20261111.json`. These are **crawl-discovery counts**, **not Google-indexed-image counts**; HTTP validation of all 282 image candidates and Search Console performance evidence are still outstanding.
 
 ## Required production fix, not yet authorized or deployed
 
