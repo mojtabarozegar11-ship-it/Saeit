@@ -115,6 +115,58 @@ class TestImageAudit(unittest.TestCase):
         report, entries = module.audit(sitemap(P), loader)
         self.assertEqual(entries[P], [I])
         self.assertEqual(len(report["excluded_images"]), 2)
+        self.assertEqual(report["embedded_data_image_tags"], 1)
+        self.assertEqual(report["pages_with_embedded_data_images"], [P])
+        self.assertEqual(report["pages_without_public_html_img_urls"], [])
+        self.assertEqual({entry["reason"] for entry in report["excluded_images"]},
+                         {"embedded_data_uri", "outside_public_origin"})
+        self.assertNotIn("abc", str(report["excluded_images"]))
+
+    def test_store_product_page_without_html_img_is_reported(self):
+        product = module.ORIGIN + "/store/product/225/"
+        html = b'<html><head><link rel="canonical" href="https://mojplaywin.com/store/product/225/"></head><body><h1>Taniya Baker</h1></body></html>'
+        def loader(url, method):
+            return 200, "text/html", html, product, ""
+        report, entries = module.audit(sitemap(product), loader)
+        self.assertEqual(report["pages_without_html_img_tags"], [product])
+        self.assertEqual(report["pages_without_public_html_img_urls"], [product])
+        self.assertEqual(report["html_img_tags"], 0)
+        self.assertEqual(report["pages_without_images"], [product])
+        self.assertFalse(entries)
+
+    def test_embedded_only_taniya_studio_page_is_identified(self):
+        studio = module.ORIGIN + "/taniya/"
+        html = b'<html><head><meta property="og:image" content="/static/taniya-cover.webp"></head><body><img src="data:image/jpeg;base64,REDACTED" alt="Taniya cover"></body></html>'
+        def loader(url, method):
+            return 200, "text/html", html, studio, ""
+        report, entries = module.audit(sitemap(studio), loader)
+        self.assertEqual(report["html_img_tags"], 1)
+        self.assertEqual(report["embedded_data_image_tags"], 1)
+        self.assertEqual(report["pages_without_html_img_tags"], [])
+        self.assertEqual(report["pages_without_public_html_img_urls"], [studio])
+        self.assertEqual(report["pages_with_embedded_data_images"], [studio])
+        self.assertEqual(report["pages_with_metadata_only_images"], [studio])
+        self.assertEqual(entries[studio], [module.ORIGIN + "/static/taniya-cover.webp"])
+        self.assertNotIn("REDACTED", str(report))
+
+    def test_deferred_image_without_src_is_audited_but_not_sitemapped(self):
+        html = b'<img data-src="/static/game-cover.webp" alt="Game cover">'
+        def loader(url, method):
+            return 200, "text/html", html, P, ""
+        report, entries = module.audit(sitemap(P), loader)
+        self.assertEqual(report["deferred_image_tags"], 1)
+        self.assertEqual(report["pages_with_deferred_images"], [P])
+        self.assertEqual(report["pages_without_public_html_img_urls"], [P])
+        self.assertFalse(entries)
+
+    def test_signed_reference_not_logged(self):
+        html = b'<img src="/static/secret.webp?token=never-log-me" alt="">'
+        def loader(url, method):
+            return 200, "text/html", html, P, ""
+        report, _ = module.audit(sitemap(P), loader)
+        self.assertEqual(report["excluded_images"],
+                         [{"page": P, "reason": "protected_or_signed_reference"}])
+        self.assertNotIn("never-log-me", str(report))
 
     def test_xml_uses_google_image_namespace(self):
         data = module.xml_image_sitemap({P: [I]})

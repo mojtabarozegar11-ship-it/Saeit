@@ -108,6 +108,9 @@ class PageImages(HTMLParser):
         super().__init__(convert_charrefs=True)
         # The bool is True only for <img>, which actually supports alt text.
         self.images: list[tuple[str, str | None, bool]] = []
+        self.html_img_tags = 0
+        self.embedded_data_image_tags = 0
+        self.deferred_image_tags = 0
         self.robots: list[str] = []
         self.canonical: str | None = None
         self._in_head = False
@@ -117,6 +120,11 @@ class PageImages(HTMLParser):
         if tag == "head":
             self._in_head = True
         if tag == "img":
+            self.html_img_tags += 1
+            if (d.get("src") or "").strip().lower().startswith("data:"):
+                self.embedded_data_image_tags += 1
+            if not d.get("src") and any(d.get(key) for key in ("data-src", "data-lazy-src", "data-original")):
+                self.deferred_image_tags += 1
             if d.get("src"):
                 self.images.append((d["src"], d.get("alt"), True))
             for candidate in split_srcset(d.get("srcset") or ""):
@@ -142,6 +150,21 @@ def blocked_by_robots(text: str) -> bool:
     return "noindex" in tokens or "noimageindex" in tokens or "none" in tokens
 
 
+def excluded_reference_reason(reference: str, page: str) -> str:
+    """Give a useful reason without recording signed URLs or data-URI payloads."""
+    lowered = reference.strip().lower()
+    if lowered.startswith("data:"):
+        return "embedded_data_uri"
+    if lowered.startswith(("blob:", "javascript:")):
+        return "non_http_image_reference"
+    candidate = urlsplit(urljoin(page, reference.strip()))
+    if candidate.netloc.lower() != "mojplaywin.com" or candidate.scheme != "https":
+        return "outside_public_origin"
+    if Path(candidate.path).suffix.lower() not in SUPPORTED_IMAGES:
+        return "unsupported_public_image_extension"
+    return "protected_or_signed_reference"
+
+
 def audit(
     sitemap_xml: bytes,
     loader: Callable[[str, str], tuple[int, str, bytes, str, str]] = fetch,
@@ -150,9 +173,14 @@ def audit(
     pages = sitemap_pages(sitemap_xml)
     report = {"origin": ORIGIN, "sitemap_pages": len(pages), "pages_checked": 0,
               "indexable_pages": 0, "image_references": 0, "unique_public_images": 0,
+              "html_img_tags": 0, "embedded_data_image_tags": 0,
+              "deferred_image_tags": 0,
               "missing_alt_occurrences": 0, "empty_alt_occurrences": 0,
               "verified_image_urls": 0, "skipped_pages": [], "excluded_images": [],
-              "unverified_images": [], "pages_without_images": []}
+              "unverified_images": [], "pages_without_images": [],
+              "pages_without_html_img_tags": [], "pages_without_public_html_img_urls": [],
+              "pages_with_embedded_data_images": [], "pages_with_deferred_images": [],
+              "pages_with_metadata_only_images": []}
     image_pages: dict[str, list[str]] = {}
     all_images: set[str] = set()
     image_verified: dict[str, bool] = {}
@@ -170,7 +198,17 @@ def audit(
                 report["skipped_pages"].append({"url": page, "reason": "noncanonical_or_noindex"})
                 continue
             report["indexable_pages"] += 1
+            report["html_img_tags"] += parsed.html_img_tags
+            report["embedded_data_image_tags"] += parsed.embedded_data_image_tags
+            report["deferred_image_tags"] += parsed.deferred_image_tags
+            if parsed.html_img_tags == 0:
+                report["pages_without_html_img_tags"].append(page)
+            if parsed.embedded_data_image_tags:
+                report["pages_with_embedded_data_images"].append(page)
+            if parsed.deferred_image_tags:
+                report["pages_with_deferred_images"].append(page)
             discovered = []
+            public_html_image_urls = set()
             for raw, alt, is_img in parsed.images:
                 report["image_references"] += 1
                 if is_img and alt is None:
@@ -179,8 +217,11 @@ def audit(
                     report["empty_alt_occurrences"] += 1
                 src = normalized_url(raw, page, image=True)
                 if not src:
-                    report["excluded_images"].append({"page": page, "reference": raw[:150]})
+                    report["excluded_images"].append({
+                        "page": page, "reason": excluded_reference_reason(raw, page)})
                     continue
+                if is_img:
+                    public_html_image_urls.add(src)
                 all_images.add(src)
                 if verify_images and src not in image_verified:
                     try:
@@ -196,6 +237,10 @@ def audit(
                     continue
                 if src not in discovered:
                     discovered.append(src)
+            if not public_html_image_urls:
+                report["pages_without_public_html_img_urls"].append(page)
+                if discovered:
+                    report["pages_with_metadata_only_images"].append(page)
             if not discovered:
                 report["pages_without_images"].append(page)
             else:
