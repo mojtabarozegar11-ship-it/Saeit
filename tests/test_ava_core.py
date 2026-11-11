@@ -182,6 +182,12 @@ class AvaCoreTests(unittest.TestCase):
             assistant.converse("سلام")
         self.assertEqual(self.calls, [])
 
+    def test_noncanonical_owner_identifiers_fail_closed(self):
+        for owner_id in (" owner-1", "owner-1 ", "owner-1\\nadmin", "owner-1\\radmin", "owner-1\\x00admin"):
+            with self.subTest(owner_id=repr(owner_id)):
+                with self.assertRaises(ValueError):
+                    Ava(owner_id=owner_id, brain=self.brain)
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
