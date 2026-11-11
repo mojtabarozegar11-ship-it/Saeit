@@ -135,7 +135,9 @@ class Ava:
     def converse(self, message: str, *, use_memories: bool = False) -> AvaReply:
         if not message or not message.strip():
             raise ValueError("Message must not be blank")
-        items = self.list_memories() if use_memories else ()
+        # Bound private context sent to a host-provided model to limit accidental
+        # disclosure and unbounded token usage. Newest memories take precedence.
+        items = tuple(self.list_memories())[-20:] if use_memories else ()
         messages = [{"role": "system", "content": self.SYSTEM_GUIDANCE}]
         if items:
             context = "\n".join(f"- {item.text}" for item in items)
