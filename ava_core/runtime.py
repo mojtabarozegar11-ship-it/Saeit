@@ -7,11 +7,12 @@ automatically invokes external tools, performs trades, or actuates real robots.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Mapping
 
 from .affect import AffectSnapshot, AffectiveCompanion, PersonalityTraits
 from .core import Ava, AvaReply, Brain, MemoryItem, MemoryStore
 from .embodiment import BodyCommand, EmbodimentGateway, RobotAdapter, RobotState, SimulatedBody, SimulationReceipt
+from .evolution import ApprovedCodeBundle, CheckEvidence, CodeEvolutionDirector, CodeProposal, CodeProposer, CodeReview
 from .goals import AutonomousGoalDirector, GoalDecision, GoalOutcome, GoalProposer
 
 
@@ -33,6 +34,7 @@ class AvaRuntimeStatus:
     body: RobotState
     brain_model_verified: bool = False
     physical_actuation_enabled: bool = False
+    code_reviews: int = 0
 
 
 class AvaRuntime:
@@ -54,6 +56,7 @@ class AvaRuntime:
         authorize_romantic_session: Callable[[str], bool] | None = None,
         body: RobotAdapter | None = None,
         authorize_simulation: Callable[[str, BodyCommand], bool] | None = None,
+        code_proposer: CodeProposer | None = None,
     ) -> None:
         self.affect = AffectiveCompanion(
             owner_id=owner_id, traits=traits,
@@ -68,6 +71,7 @@ class AvaRuntime:
             owner_id=owner_id, body=body if body is not None else SimulatedBody(),
             authorize=authorize_simulation,
         )
+        self.evolution = CodeEvolutionDirector(owner_id=owner_id, proposer=code_proposer)
         self.owner_id = owner_id
 
     def converse(self, message: str, *, affect_signal: str | None = None,
@@ -103,6 +107,19 @@ class AvaRuntime:
     def simulate_body_command(self, command: BodyCommand) -> SimulationReceipt:
         return self.body.simulate(command)
 
+    def propose_code_change(self, goal: str, *, trusted_files: Mapping[str, str]) -> CodeReview:
+        """Generate and syntax-review a change; never execute or install it."""
+        return self.evolution.propose(goal, trusted_files=trusted_files)
+
+    def review_code_change(self, proposal: CodeProposal, *, trusted_files: Mapping[str, str]) -> CodeReview:
+        return self.evolution.stage(proposal, trusted_files=trusted_files)
+
+    def approve_code_handoff(
+        self, review_id: str, *, evidence: CheckEvidence,
+        authorize: Callable[[str, CodeReview], bool] | None = None,
+    ) -> ApprovedCodeBundle:
+        return self.evolution.approve_handoff(review_id, evidence=evidence, authorize=authorize)
+
     def status(self) -> AvaRuntimeStatus:
         return AvaRuntimeStatus(
             owner_id=self.owner_id,
@@ -110,4 +127,5 @@ class AvaRuntime:
             goal_outcomes=len(self.goals.history()),
             romantic_mode=self.affect.snapshot().romantic_mode,
             body=self.body.observe(),
+            code_reviews=self.evolution.review_count(),
         )
