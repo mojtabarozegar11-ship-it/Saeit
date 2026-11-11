@@ -71,7 +71,7 @@ CONTEXT_V2=CONTEXT_NEW.replace('''    return (is_sha256(catalog_sha) and is_sha2
             for chunk in iter(lambda: stream.read(1024*1024), b""):
                 h.update(chunk)
         return h.hexdigest() == approved_sha.lower()
-    except (OSError, ValueError, TypeError, AttributeError, RuntimeError):
+    except (ImportError, OSError, ValueError, TypeError, AttributeError, RuntimeError):
         return False
 ''')
 WEB_IMPORT_OLD="from services.mpw_trx_walletless_core import PaymentHold\n"
@@ -283,7 +283,11 @@ def operation(mode,run_id=None):
     guard()
     if mode=="check":
         old,new,needed=inspect()
+        legacy_v1=(needed and old["context"].decode("utf8").count(CONTEXT_NEW)==1
+                   and old["web"]==new["web"] and old["pages"]==new["pages"])
         print("MPW_TRX_RIGHTS_PREFLIGHT="+json.dumps({"needs_install":needed,
+          "needs_v1_to_v2_upgrade":legacy_v1,
+          "needs_fresh_install":needed and not legacy_v1,
           "old":{k:digest(v) for k,v in old.items()},
           "candidate":{k:digest(v) for k,v in new.items()},
           "read_only":True,"new_orders":0},sort_keys=True))
