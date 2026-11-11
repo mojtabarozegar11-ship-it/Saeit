@@ -80,8 +80,11 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             release.verify_template(template())
 
     def test_source_digest_pinned_to_reviewed_implementation(self):
-        self.assertEqual(release.sha(GUEST_FILE.read_bytes()), release.APPROVED_GUEST_SHA256)
+        content = GUEST_FILE.read_bytes()
+        self.assertEqual(release.sha(content), release.APPROVED_GUEST_SHA256)
         self.assertTrue(GUEST_FILE.stat().st_size > 0)
+        self.assertNotIn(b"mpw_trx_email_recovery", content)
+        self.assertNotIn(b"bound_checkout", content)
 
     def test_plan_builds_two_exact_changes_without_touching_ledger(self):
         with tempfile.TemporaryDirectory() as folder:
