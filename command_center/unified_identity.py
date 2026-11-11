@@ -7,6 +7,12 @@ separately branded robots or evidence of integration with this runtime.
 from ava_core.identity import BOT_ID
 
 
+def public_bot_identity():
+    """One public identity; live module execution is not attested here."""
+    return {"identity": BOT_ID, "identity_count": 1,
+            "runtime_verified": None, "integration_state": "unverified"}
+
+
 def legacy_modules(rows):
     """Project source records as modules without inventing a live integration."""
     result = []
@@ -31,8 +37,7 @@ def identity_snapshot(rows, total, *, offset=0):
     modules = legacy_modules(rows)
     next_offset = offset + len(modules)
     return {
-        "bot": {"identity": BOT_ID, "identity_count": 1,
-                "runtime_verified": None, "integration_state": "unverified"},
+        "bot": public_bot_identity(),
         "modules": modules,
         "source_module_total": total,
         "truncated": total > next_offset,
