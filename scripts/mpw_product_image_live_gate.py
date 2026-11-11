@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
 
 from mpw_google_images_audit import (
     ORIGIN, PageImages, blocked_by_robots, fetch, normalized_url, public_url,
@@ -28,6 +31,53 @@ LANDINGS = ("/store/", "/store/product/72/", "/store/product/225/",
             "/store/product/879/", "/taniya/")
 
 
+def valid_public_image_bytes(url: str, mime: str, body: bytes) -> bool:
+    """Check bounded image-file framing, not just a 200/image MIME header.
+
+    This does not replace a browser decode/visual check. Unsupported or
+    inconsistent formats fail closed rather than being counted as verified.
+    """
+    if not body:
+        return False
+    suffix = Path(urlsplit(url).path).suffix.lower()
+    if suffix == ".webp" and mime == "image/webp":
+        if (len(body) < 20 or body[:4] != b"RIFF" or body[8:12] != b"WEBP"
+                or int.from_bytes(body[4:8], "little") + 8 != len(body)):
+            return False
+        offset = 12
+        has_image_chunk = False
+        while offset < len(body):
+            if offset + 8 > len(body):
+                return False
+            kind = body[offset:offset + 4]
+            size = int.from_bytes(body[offset + 4:offset + 8], "little")
+            if kind in (b"VP8 ", b"VP8L", b"VP8X") and size:
+                has_image_chunk = True
+            offset += 8 + size + (size % 2)
+            if offset > len(body):
+                return False
+        return has_image_chunk and offset == len(body)
+    if suffix in (".jpeg", ".jpg") and mime == "image/jpeg":
+        return len(body) > 4 and body.startswith(b"\xff\xd8\xff") and body.endswith(b"\xff\xd9")
+    if suffix == ".png" and mime == "image/png":
+        return (len(body) >= 45 and body.startswith(b"\x89PNG\r\n\x1a\n")
+                and body[12:16] == b"IHDR" and
+                int.from_bytes(body[16:20], "big") > 0 and
+                int.from_bytes(body[20:24], "big") > 0 and
+                body[-12:-8] == b"\x00\x00\x00\x00" and
+                body[-8:-4] == b"IEND")
+    if suffix == ".gif" and mime == "image/gif":
+        return (len(body) >= 14 and body.startswith((b"GIF87a", b"GIF89a"))
+                and body[6:8] != b"\x00\x00" and body[8:10] != b"\x00\x00"
+                and body.endswith(b";"))
+    if suffix == ".svg" and mime == "image/svg+xml":
+        try:
+            return ET.fromstring(body).tag == "{http://www.w3.org/2000/svg}svg"
+        except ET.ParseError:
+            return False
+    return False
+
+
 def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
     if atelier_cover is not None and not public_url(atelier_cover, image=True):
         raise ValueError("Atelier cover must be an unsigned public same-origin HTTPS image")
@@ -37,20 +87,26 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
 
     covers = {}
     for product_id, url in expected.items():
+        http_valid = False
+        structure_valid = False
         try:
-            # HEAD-only responses can be blocked while GET works. A bounded
-            # GET is used only on 405/501, as in the site-wide image audit.
+            # A HEAD 200 and image/* MIME alone do not prove a renderable file.
+            # Always fetch bounded image bytes; retain 405/501 HEAD fallback.
             try:
                 status, mime, _, final, robots = loader(url, "HEAD")
             except HTTPError as err:
                 if err.code not in (405, 501):
                     raise
-                status, mime, _, final, robots = loader(url, "GET")
-            valid = (status == 200 and mime.startswith("image/") and
-                     final == url and not blocked_by_robots(robots))
+                status, mime, _, final, robots = (200, "", b"", url, "")
+            if status == 200 and final == url and not blocked_by_robots(robots):
+                get_status, get_mime, body, get_final, get_robots = loader(url, "GET")
+                http_valid = bool(get_status == 200 and get_mime.startswith("image/")
+                                  and get_final == url and not blocked_by_robots(get_robots))
+                structure_valid = http_valid and valid_public_image_bytes(url, get_mime, body)
         except (HTTPError, URLError, ValueError, OSError):
-            valid = False
-        covers[product_id] = {"url": url, "verified_http_image": valid}
+            pass
+        covers[product_id] = {"url": url, "verified_http_image": http_valid,
+                              "verified_file_structure": structure_valid}
 
     pages = []
     for path in LANDINGS:
@@ -100,6 +156,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
                 for product_id, cover in expected.items():
                     if cover not in {u for u, _ in direct}:
                         result["issues"].append(f"cover_{product_id}_absent_from_html")
+                    if not covers[product_id]["verified_file_structure"]:
+                        result["issues"].append(f"cover_{product_id}_invalid_public_asset")
             elif path.startswith("/store/product/"):
                 product_id = int(path.strip("/").split("/")[-1])
                 cover = expected.get(product_id)
@@ -107,12 +165,14 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
                     result["issues"].append("product_cover_url_unknown")
                 elif cover not in {u for u, _ in direct}:
                     result["issues"].append(f"cover_{product_id}_absent_from_html")
+                if cover is not None and not covers[product_id]["verified_file_structure"]:
+                    result["issues"].append(f"cover_{product_id}_invalid_public_asset")
         except (HTTPError, URLError, ValueError, OSError) as exc:
             result["issues"].append("fetch_failed_" + type(exc).__name__)
         pages.append(result)
 
     failures = sum(bool(page["issues"]) for page in pages)
-    validated = sum(cover["verified_http_image"] for cover in covers.values())
+    validated = sum(cover["verified_file_structure"] for cover in covers.values())
     release_ready = (failures == 0 and len(expected) == 3 and validated == 3)
     return {"site": ORIGIN, "read_only": True, "release_gate":
             "PASS" if release_ready else "HOLD", "pages_checked": len(pages),
@@ -120,7 +180,8 @@ def inspect(loader=fetch, atelier_cover: str | None = None) -> dict:
             "pages_with_issues": failures, "known_cover_urls": len(expected),
             "verified_cover_urls": validated, "covers": covers, "pages": pages,
             "scope": "five commercial/editorial landing pages, not all site images",
-            "note": "This does not prove Google indexing or permission to deploy."}
+            "image_validation_mode": "HTTP_HEAD_plus_bounded_GET_file_structure",
+            "note": "File framing is not full visual decoding; browser validation, Google indexing and deployment permission remain separate."}
 
 
 def main() -> int:

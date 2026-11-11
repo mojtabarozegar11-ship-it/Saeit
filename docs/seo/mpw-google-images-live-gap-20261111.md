@@ -145,3 +145,34 @@ cPanel files and create a visual-preserving, owner-approved placement for
 the real image assets. A source-only Draft PR and green CI do not authorize
 deployment or establish Google indexing.
 
+## Later cycle: public cover file-integrity gate — 2026-11-11
+
+The previous five-page commerce gate accepted a known public cover if a HEAD
+response returned HTTP 200 with an `image/*` media type. That cannot detect
+truncated, malformed or mismatched image bytes. The Draft-only auditor now:
+
+1. Requests a bounded GET for **every known public cover**, even after a
+   successful HEAD (including the existing HEAD-405/501 fallback).
+2. Requires both an eligible unredirected HTTP image response without image
+   exclusion and format-consistent file framing. WebP checks RIFF declared
+   length and chunk bounds; JPEG, PNG, GIF and SVG have conservative structural
+   checks. Unsupported types fail closed.
+3. Records `verified_http_image` and `verified_file_structure` **separately**,
+   including explicit `cover_<id>_invalid_public_asset` landing-page failures.
+   The `verified_cover_urls` and `release_gate` fields now require the stricter
+   file-structure check, not just MIME or status.
+4. Keeps the independent browser render/decode check as a release prerequisite:
+   structurally framed bytes do **not** prove that the picture renders, matches
+   the claimed commercial item, or is eligible for Google indexing.
+
+Four additional offline regression cases cover corrupt HTTP-200 file bytes,
+invalid WebP RIFF size, MIME mismatch and mandatory GET after HEAD. **44 / 44
+offline tests pass.** This is an auditor/quality-gate improvement in the Draft
+branch, **not** an update to the live site, storefront, cover files or XML.
+
+Previously observed site coverage (94/152 image-bearing pages, 282 valid HTTP
+image URLs) remains *historical HTTP evidence*, not a new full-file integrity
+result for all 282 URLs. The 5-page public commerce image gate stays **HOLD**
+pending independently verifiable live `<img src>`, exact cover identity, and
+runtime provenance. No release percentage changed on the strength of this test.
+

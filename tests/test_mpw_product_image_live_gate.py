@@ -17,6 +17,12 @@ spec.loader.exec_module(gate)
 ATELIER = gate.ORIGIN + "/static/site/mojplaywin-products/atelier-original.webp"
 
 
+def framed_webp():
+    """Small structurally framed WebP fixture; browser decoding is separate."""
+    chunk = b"VP8L" + (5).to_bytes(4, "little") + b"\x2f\x00\x00\x00\x00\x00"
+    return b"RIFF" + (len(chunk) + 4).to_bytes(4, "little") + b"WEBP" + chunk
+
+
 def html(path, srcs=(), canonical=True):
     url = gate.ORIGIN + path
     head = f'<link rel="canonical" href="{url}">' if canonical else ""
@@ -25,7 +31,8 @@ def html(path, srcs=(), canonical=True):
     return f"<html><head>{head}</head><body>{imgs}</body></html>".encode()
 
 
-def loader_for(commercial_images=True, *, embedded=False, head_405=False):
+def loader_for(commercial_images=True, *, embedded=False, head_405=False,
+               corrupt_cover=None, bad_mime=False):
     covers = {**gate.COVERS, 879: ATELIER}
     pages = {}
     for path in gate.LANDINGS:
@@ -45,7 +52,9 @@ def loader_for(commercial_images=True, *, embedded=False, head_405=False):
         if url.startswith(gate.ORIGIN + "/static/"):
             if method == "HEAD" and head_405:
                 raise HTTPError(url, 405, "Method Not Allowed", {}, None)
-            return 200, "image/webp", b"" if method == "HEAD" else b"WEBP", url, ""
+            body = b"" if method == "HEAD" else (b"corrupt" if url == corrupt_cover else framed_webp())
+            mime = "image/png" if bad_mime else "image/webp"
+            return 200, mime, body, url, ""
         path = url.removeprefix(gate.ORIGIN)
         return 200, "text/html", pages[path], url, ""
 
@@ -90,6 +99,39 @@ class TestCommercialImageGate(unittest.TestCase):
     def test_head_405_get_fallback_for_cover_asset(self):
         report = gate.inspect(loader_for(head_405=True), atelier_cover=ATELIER)
         self.assertEqual(report["release_gate"], "PASS")
+
+    def test_http_200_image_mime_cannot_hide_corrupt_cover_bytes(self):
+        report = gate.inspect(loader_for(corrupt_cover=gate.COVERS[72]), atelier_cover=ATELIER)
+        self.assertEqual(report["release_gate"], "HOLD")
+        self.assertTrue(report["covers"][72]["verified_http_image"])
+        self.assertFalse(report["covers"][72]["verified_file_structure"])
+        self.assertEqual(report["verified_cover_urls"], 2)
+        self.assertIn("cover_72_invalid_public_asset", report["pages"][0]["issues"])
+        self.assertIn("cover_72_invalid_public_asset", report["pages"][1]["issues"])
+
+    def test_invalid_riff_size_rejected_when_mime_is_valid(self):
+        original = framed_webp()
+        self.assertTrue(gate.valid_public_image_bytes(ATELIER, "image/webp", original))
+        self.assertFalse(gate.valid_public_image_bytes(ATELIER, "image/webp", original[:-1]))
+        self.assertFalse(gate.valid_public_image_bytes(ATELIER, "image/webp", b"WEBP"))
+
+    def test_content_type_and_extension_mismatch_fails_closed(self):
+        report = gate.inspect(loader_for(bad_mime=True), atelier_cover=ATELIER)
+        self.assertEqual(report["release_gate"], "HOLD")
+        self.assertEqual(report["verified_cover_urls"], 0)
+        self.assertTrue(all(c["verified_http_image"] for c in report["covers"].values()))
+
+    def test_get_must_be_performed_even_when_head_is_200(self):
+        loader = loader_for()
+        requested = []
+        def traced(url, method):
+            requested.append((url, method))
+            return loader(url, method)
+        report = gate.inspect(traced, atelier_cover=ATELIER)
+        self.assertEqual(report["release_gate"], "PASS")
+        for url in (*gate.COVERS.values(), ATELIER):
+            self.assertIn((url, "HEAD"), requested)
+            self.assertIn((url, "GET"), requested)
 
     def test_static_fallback_marker_is_reported_even_when_django_template_has_images(self):
         delegate = loader_for(commercial_images=False)
