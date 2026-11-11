@@ -63,7 +63,7 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         self.patches = [
             patch.object(release, "APP", self.app),
             patch.object(release, "BACKUPS", self.backups),
-            patch.object(release, "EXPECTED_GUEST_BASE", release.digest(self.fake["guest"])),
+            patch.object(release, "EXPECTED_GUEST_BASES", {release.digest(self.fake["guest"])}),
             patch.object(release, "guard_host"),
         ]
         for patcher in self.patches:
@@ -83,6 +83,12 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         self.assertIn(b"MPW_RECOVERY01_MODELS_20261105", new["models"])
         self.assertFalse((self.app / release.FILES["migration"]).exists())
         self.assertEqual((self.app / release.FILES["models"]).read_bytes(), self.fake["models"])
+
+    def test_all_recovery_release_source_pins_match_reviewed_files(self):
+        for key, expected in release.SOURCE_DIGESTS.items():
+            with self.subTest(key=key):
+                self.assertEqual(release.digest((SOURCE / release.FILES[key]).read_bytes()),
+                                 expected)
 
     def test_unreviewed_payload_fails_closed_without_writing_app(self):
         path = self.stage / release.FILES["recovery"]
