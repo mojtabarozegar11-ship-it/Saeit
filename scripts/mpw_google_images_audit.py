@@ -7,8 +7,10 @@ NEW, separate image sitemap after verifying HTTP image responses.
 
 Usage:
   python scripts/mpw_google_images_audit.py --report /tmp/mpw-images.json
-  python scripts/mpw_google_images_audit.py --verify-images \
-      --image-sitemap /tmp/mpw-image-sitemap.xml --report /tmp/mpw-images.json
+  python scripts/mpw_google_images_audit.py --verify-images --workers 3 \
+      --image-sitemap /tmp/mpw-image-sitemap.xml \
+      --image-inventory /tmp/mpw-image-inventory.json \
+      --report /tmp/mpw-images.json
 
 It does not submit to Google, modify the website, or access private purchases.
 """
@@ -16,11 +18,12 @@ It does not submit to Google, modify the website, or access private purchases.
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -255,6 +258,86 @@ def audit(
     return report, image_pages
 
 
+def audit_parallel(
+    sitemap_xml: bytes,
+    loader: Callable[[str, str], tuple[int, str, bytes, str, str]] = fetch,
+    *,
+    workers: int = 3,
+    verify_images: bool = False,
+) -> tuple[dict, dict[str, list[str]], dict[str, list[str]]]:
+    """Bounded, deterministic public GET/HEAD verification; never writes to site.
+
+    Fetch responses concurrently only, then parse and report in sitemap order.
+    The third return value is the unverified candidate inventory for evidence.
+    """
+    if workers not in (1, 2, 3, 4):
+        raise ValueError("workers must be between 1 and 4")
+
+    def attempt(url: str, method: str):
+        try:
+            return loader(url, method)
+        except (HTTPError, URLError, ValueError, OSError) as error:
+            return error
+
+    pages = sitemap_pages(sitemap_xml)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        page_responses = dict(zip(pages, pool.map(lambda page: attempt(page, "GET"), pages)))
+
+    def cached_loader(url: str, method: str):
+        if method != "GET" or url not in page_responses:
+            raise ValueError("Only the previously requested public page can be read")
+        response = page_responses[url]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    report, candidates = audit(sitemap_xml, loader=cached_loader, verify_images=False)
+    report["public_page_fetch_workers"] = workers
+    if not verify_images:
+        return report, candidates, candidates
+
+    unique_images = list(dict.fromkeys(image for images in candidates.values() for image in images))
+    if len(unique_images) != report["unique_public_images"]:
+        raise ValueError("Image inventory consistency check failed")
+
+    def check_image(url: str) -> tuple[bool, str]:
+        response = attempt(url, "HEAD")
+        if isinstance(response, HTTPError) and response.code in (405, 501):
+            # A missing HEAD handler is not a broken image. GET is the actual
+            # retrieval method used by image crawlers; fetch retains a 4 MB cap.
+            response = attempt(url, "GET")
+        if isinstance(response, HTTPError):
+            return False, "HTTP_" + str(response.code)
+        if isinstance(response, Exception):
+            return False, type(response).__name__
+        status, mime, _, final, xrobots = response
+        if status != 200 or not mime.startswith("image/") or final != url or blocked_by_robots(xrobots):
+            return False, "status_mime_redirect_or_noimageindex"
+        return True, "verified"
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        checks = dict(zip(unique_images, pool.map(check_image, unique_images)))
+
+    verified = {
+        page: valid_urls
+        for page, urls in candidates.items()
+        if (valid_urls := [url for url in urls if checks[url][0]])
+    }
+    report["verified_image_urls"] = sum(ok for ok, _ in checks.values())
+    report["unverified_images"] = [
+        {"url": url, "reason": reason}
+        for url, (ok, reason) in checks.items() if not ok
+    ]
+    report["image_sitemap_page_entries"] = len(verified)
+    report["image_sitemap_image_entries"] = sum(map(len, verified.values()))
+    report["image_validation_mode"] = "verified_HEAD_with_GET_on_405_501"
+    report["pages_without_verified_images"] = [
+        page for page in pages if page not in verified and page not in
+        {item["url"] for item in report["skipped_pages"]}
+    ]
+    return report, verified, candidates
+
+
 def xml_image_sitemap(image_pages: dict[str, list[str]]) -> bytes:
     ET.register_namespace("", NS_SITEMAP)
     ET.register_namespace("image", NS_IMAGE)
@@ -278,14 +361,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", help="Write JSON report to a NEW local file")
     parser.add_argument("--image-sitemap", help="Write additive image sitemap to a NEW local file")
+    parser.add_argument("--image-inventory", help="Write public image-to-page candidates to a NEW local JSON file")
     parser.add_argument("--verify-images", action="store_true", help="Validate HTTP 200 image/* for every image")
+    parser.add_argument("--workers", type=int, choices=(1, 2, 3, 4), default=1,
+                        help="Bounded concurrent public reads (1-4; default 1)")
     args = parser.parse_args()
     if args.image_sitemap and not args.verify_images:
         parser.error("--image-sitemap requires --verify-images; never publish unverified URLs")
     status, mime, xml, final, _ = fetch(SITEMAP)
     if status != 200 or mime not in {"application/xml", "text/xml"} or final != SITEMAP:
         parser.error("Live sitemap is missing or was redirected; refusing to generate a replacement")
-    report, entries = audit(xml, verify_images=args.verify_images)
+    if args.workers > 1:
+        report, entries, inventory = audit_parallel(xml, workers=args.workers,
+                                                    verify_images=args.verify_images)
+    else:
+        report, entries = audit(xml, verify_images=args.verify_images)
+        inventory = entries if not args.verify_images else {}
+    if args.image_inventory:
+        if args.verify_images and args.workers == 1:
+            parser.error("Complete pre-verification inventory requires --workers 2, 3 or 4")
+        new_file_only(args.image_inventory, (json.dumps(inventory, ensure_ascii=False, indent=2)
+                                             + "\n").encode("utf-8"))
     if args.image_sitemap:
         if not entries:
             parser.error("Zero verified image entries; refusing to publish an empty image sitemap")

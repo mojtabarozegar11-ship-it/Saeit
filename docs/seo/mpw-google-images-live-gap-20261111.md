@@ -31,7 +31,42 @@ Read-only scan of **all 152 / 152** listed pages completed successfully (0 skipp
 | `<img>` tags missing `alt` altogether | 0 |
 | Pages using embedded data image URLs | 1 (`/taniya/`) |
 
-The full machine-readable report is `docs/seo/evidence/mpw-image-coverage-20261111.json`. These are **crawl-discovery counts**, **not Google-indexed-image counts**; HTTP validation of all 282 image candidates and Search Console performance evidence are still outstanding.
+The initial machine-readable report is `docs/seo/evidence/mpw-image-coverage-20261111.json`. Its counts represent **crawl discovery, not Google indexing**. The full HTTP validation was completed separately afterward, as recorded below; Google Search Console indexing evidence remains unavailable.
+
+## Subsequent full HTTP image verification — 2026-11-11
+
+A second bounded public crawl checked all 152 sitemap URLs with three concurrent
+read-only requests, then verified the HTTP response of every unique discovered
+image URL. Images were accepted only with status 200, a matching final URL,
+an `image/*` MIME type, and no `noimageindex` restriction. HTTP 405/501 on
+HEAD may be verified by an actual bounded GET request instead.
+
+| Verification measure | Verified outcome |
+| --- | ---: |
+| Public URLs checked | **282 / 282** |
+| Valid public image responses | **282 / 282 (100%)** |
+| Failed image checks | **0** |
+| Pages with at least one verified image | **94** |
+| Verified page-to-image sitemap associations | **396** |
+| Pages without any verified public image | **58** |
+
+Release candidates (all versioned source artifacts, **not published**):
+
+- `docs/seo/release-candidates/mpw-image-sitemap-20261111.xml` — separate XML
+  image sitemap. Parsed and checked: 94 unique page URLs, 396 image associations,
+  282 unique eligible same-origin images, no protected URLs, and at most 1,000
+  images per page.
+- `docs/seo/evidence/mpw-image-inventory-20261111.json` — page-to-image
+  inventory before HTTP filtering.
+- `docs/seo/evidence/mpw-image-verified-20261111.json` — detailed HTTP results,
+  zero rejected image URLs, and the list of 58 image-less pages.
+
+Important boundaries: this verifies **images referenced by the 152 public
+sitemap-listed pages**, not every orphaned file on cPanel storage. The XML is
+not yet hosted or submitted to Search Console. Neither inclusion in a sitemap
+nor an HTTP 200 response proves Google has indexed an image. Publishing the
+candidate requires an explicit owner-approved deployment and post-release
+live verification, while keeping the original `/sitemap.xml` unchanged.
 
 ## Required production fix, not yet authorized or deployed
 

@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.error import HTTPError
 import xml.etree.ElementTree as ET
 
 
@@ -167,6 +168,58 @@ class TestImageAudit(unittest.TestCase):
         self.assertEqual(report["excluded_images"],
                          [{"page": P, "reason": "protected_or_signed_reference"}])
         self.assertNotIn("never-log-me", str(report))
+
+    def test_parallel_verification_emits_only_reachable_public_images(self):
+        q = module.ORIGIN + "/research/"
+        broken = module.ORIGIN + "/static/absent.webp"
+        html = b'<img src="/static/game-cover.webp" alt="Game"><img src="/static/absent.webp" alt="Broken">'
+        def loader(url, method):
+            if method == "GET":
+                return 200, "text/html", html, url, ""
+            if url == I:
+                return 200, "image/webp", b"", url, ""
+            raise HTTPError(url, 404, "Not Found", {}, None)
+
+        report, entries, inventory = module.audit_parallel(sitemap(P, q), loader,
+                                                            workers=2, verify_images=True)
+        self.assertEqual(set(entries), {P, q})
+        self.assertEqual(entries[P], [I])
+        self.assertEqual(inventory[P], [I, broken])
+        self.assertEqual(report["verified_image_urls"], 1)
+        self.assertEqual(report["unique_public_images"], 2)
+        self.assertEqual(report["image_sitemap_image_entries"], 2)
+        self.assertEqual(report["unverified_images"], [{"url": broken, "reason": "HTTP_404"}])
+        self.assertEqual(report["pages_without_verified_images"], [])
+
+    def test_parallel_verification_get_fallback_for_head_405(self):
+        calls = []
+        def loader(url, method):
+            calls.append((url, method))
+            if url == P:
+                return 200, "text/html", b'<img src="/static/game-cover.webp">', P, ""
+            if method == "HEAD":
+                raise HTTPError(url, 405, "Method Not Allowed", {}, None)
+            return 200, "image/webp", b"image bytes", url, ""
+        report, entries, inventory = module.audit_parallel(sitemap(P), loader,
+                                                            workers=2, verify_images=True)
+        self.assertEqual(entries[P], [I])
+        self.assertEqual(inventory[P], [I])
+        self.assertIn((I, "HEAD"), calls)
+        self.assertIn((I, "GET"), calls)
+        self.assertEqual(report["image_validation_mode"], "verified_HEAD_with_GET_on_405_501")
+
+    def test_parallel_inventory_with_no_image_page(self):
+        def loader(url, method):
+            return 200, "text/html", b'<h1>Text-only product</h1>', P, ""
+        report, entries, inventory = module.audit_parallel(sitemap(P), loader,
+                                                            workers=2, verify_images=False)
+        self.assertEqual(entries, {})
+        self.assertEqual(inventory, {})
+        self.assertEqual(report["pages_without_public_html_img_urls"], [P])
+
+    def test_parallel_worker_limit(self):
+        with self.assertRaises(ValueError):
+            module.audit_parallel(sitemap(P), workers=5)
 
     def test_xml_uses_google_image_namespace(self):
         data = module.xml_image_sitemap({P: [I]})
