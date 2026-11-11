@@ -205,7 +205,7 @@
   function win() {
     won = true;
     score += 140 + 8 * level + 13 * hearts;
-    best = Math.max(best, level + 1);
+    best = Math.max(best, Math.min(1000000, level + 1));
     updateUI(); save();
     status('تمام پیکان‌های شش وجه آزاد شدند! مرحلهٔ بعد آماده است.', 'success');
     overlay('مکعب پاک شد! ✨', 'مرحلهٔ ' + FA(level) +
