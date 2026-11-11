@@ -2,7 +2,7 @@ import unittest
 
 from ava_core.identity import BOT_ID
 from command_center.catalog import MODULES, AGENT_SETTINGS, localized
-from command_center.unified_identity import identity_snapshot
+from command_center.unified_identity import identity_snapshot, public_bot_identity
 
 
 class UnifiedIdentityTests(unittest.TestCase):
@@ -16,6 +16,14 @@ class UnifiedIdentityTests(unittest.TestCase):
         self.assertNotIn("bots", ids)
         self.assertEqual(len(localized(MODULES, "fa")), 17)
         self.assertEqual(len(localized(AGENT_SETTINGS, "en")), 10)
+
+    def test_public_envelope_is_shared_with_module_directory(self):
+        header = public_bot_identity()
+        self.assertEqual(header["identity"], BOT_ID)
+        self.assertEqual(header["identity_count"], 1)
+        self.assertIsNone(header["runtime_verified"])
+        self.assertEqual(header["integration_state"], "unverified")
+        self.assertEqual(identity_snapshot([], 0)["bot"], header)
 
     def test_source_rows_are_not_claimed_as_new_bots(self):
         raw = [{"id": 9, "code": "trading-legacy", "name": "Old robot",
