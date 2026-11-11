@@ -13,19 +13,19 @@ def spec(name="management", effect="local"):
 
 
 def action(request_id="action-1", owner="owner", capability="management"):
-    return ActionRequest(request_id, owner, capability, "run", {"project": "Mojtaba.bot.ai"})
+    return ActionRequest(request_id, owner, capability, "run", {"project": "mojtaba.bot.ai"})
 
 
 class UnifiedBotTests(unittest.TestCase):
     def test_mojtaba_bot_is_the_one_runtime_class(self):
         self.assertIs(AvaRuntime, MojtabaBot)
         self.assertEqual(MojtabaBot(owner_id="owner", brain=lambda _: "ok",
-                                    propose_goals=lambda _: ()).bot_name, "Mojtaba.bot.ai")
+                                    propose_goals=lambda _: ()).bot_name, "mojtaba.bot.ai")
 
     def test_ava_is_not_a_second_conversational_class(self):
         from ava_core import Ava
         self.assertIs(Ava, ConversationEngine)
-        self.assertIn("Mojtaba.bot.ai", Ava.SYSTEM_GUIDANCE)
+        self.assertIn("mojtaba.bot.ai", Ava.SYSTEM_GUIDANCE)
         self.assertIn("not a separate bot", Ava.SYSTEM_GUIDANCE)
 
     def test_single_bot_hosts_multiple_domains(self):
