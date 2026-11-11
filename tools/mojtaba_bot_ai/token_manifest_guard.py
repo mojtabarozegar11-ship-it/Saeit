@@ -49,6 +49,8 @@ def validate(records):
         # A manifest is a proposal, never an owner authorization.
         if item.get("deployed") is True:
             errors.append(f"{name}: deployed=true cannot be established by a manifest")
+        if item.get("minted") is True:
+            errors.append(f"{name}: minted=true requires independent on-chain evidence")
         if item.get("owner_approved") is True:
             errors.append(f"{name}: approval requires separate verifiable owner evidence")
     missing = sorted(EXPECTED - seen, key=lambda x: (x != "Mojoner", int(x[3:]) if re.fullmatch(r"Moj[0-9]+", x) else 0))
