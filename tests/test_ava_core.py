@@ -3,6 +3,7 @@
 import unittest
 
 from ava_core import Ava, AvaMemory, ConsentError
+from ava_core.core import MemoryItem
 
 
 class AvaCoreTests(unittest.TestCase):
@@ -70,6 +71,17 @@ class AvaCoreTests(unittest.TestCase):
         self.assertNotIn("memory-0", context)
         self.assertIn("memory-24", context)
         self.assertNotIn("other-owner-secret", context)
+
+    def test_duplicate_memory_id_cannot_overwrite_another_owner(self):
+        original = self.ava.remember("owner-one-secret", consent=True)
+        other = Ava(owner_id="owner-2", brain=self.brain, memory=self.shared_store)
+        with self.assertRaises(ValueError):
+            self.shared_store.add(MemoryItem(
+                id=original.id, owner_id="owner-2",
+                text="replacement", created_at=original.created_at
+            ))
+        self.assertEqual(self.ava.list_memories(), (original,))
+        self.assertEqual(other.list_memories(), ())
 
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
