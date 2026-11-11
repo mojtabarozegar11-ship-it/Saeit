@@ -42,6 +42,12 @@ class AvaMemory:
         self._items: dict[str, MemoryItem] = {}
 
     def add(self, item: MemoryItem) -> None:
+        if not item.id or not item.id.strip():
+            raise ValueError("Memory identifier is required")
+        if not item.owner_id or not item.owner_id.strip():
+            raise ValueError("Memory owner is required")
+        if not item.text or not item.text.strip():
+            raise ValueError("Memory text is required")
         if item.id in self._items:
             raise ValueError("Memory identifier already exists")
         self._items[item.id] = item
