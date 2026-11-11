@@ -161,6 +161,14 @@ class AvaCoreTests(unittest.TestCase):
             assistant.converse("سلام")
         self.assertEqual(assistant.list_memories(), ())
 
+    def test_empty_model_reply_is_rejected_without_memory_writes(self):
+        for reply in ("", "  ", "\\n\\t"):
+            with self.subTest(reply=repr(reply)):
+                assistant = Ava(owner_id="owner-1", brain=lambda messages, value=reply: value)
+                with self.assertRaisesRegex(ValueError, "empty response"):
+                    assistant.converse("سلام")
+                self.assertEqual(assistant.list_memories(), ())
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
