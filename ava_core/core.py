@@ -41,6 +41,8 @@ class AvaMemory:
         self._items: dict[str, MemoryItem] = {}
 
     def add(self, item: MemoryItem) -> None:
+        if item.id in self._items:
+            raise ValueError("Memory identifier already exists")
         self._items[item.id] = item
 
     def list_for_owner(self, owner_id: str) -> Sequence[MemoryItem]:
