@@ -31,7 +31,7 @@ jobs:
       - name: Validate release scripts without production access
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py
+          python3 -m py_compile scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest -q tests.test_mpw_three_sku_guest_checkout_security_preflight_20261111 tests.test_mpw_trx_rights_live_guard_20261028
   live:
     needs: contract
@@ -90,7 +90,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-owner-release"
           remote="/home/zomorod2/.mpw-owner-release-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$remote' && install -d -m 700 '$remote'"
-          timeout 50s scp -q -F "$d/config" scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py "saeit-cpanel:$remote/"
+          timeout 50s scp -q -F "$d/config" scripts/mpw_owner_attested_sku_metadata_20261029.py scripts/mpw_trx_rights_live_guard_20261028.py scripts/mpw_three_sku_guest_checkout_security_preflight_20261111.py scripts/mpw_live_guest_email_linkage_readonly_20261105.py "saeit-cpanel:$remote/"
       - name: Run read-only rights, version and real guest-checkout security preflights
         run: |
           set -euo pipefail
@@ -100,6 +100,9 @@ jobs:
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' check"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py - check" < scripts/mpw_trx_rights_live_guard_20261028.py
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_three_sku_guest_checkout_security_preflight_20261111.py'"
+          # Independently count settled order/customer-email linkage; never
+          # disclose addresses or turn a metadata flag into a sale receipt.
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_live_guest_email_linkage_readonly_20261105.py'"
       - name: Apply verified owner declaration and rights gate with rollback
         if: inputs.operation == 'apply'
         shell: bash
