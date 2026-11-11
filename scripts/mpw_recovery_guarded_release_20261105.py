@@ -168,7 +168,10 @@ def build_plan(stage):
         else:
             old[key] = _safe_file(path).read_bytes()
 
-    if digest(old["guest"]) not in EXPECTED_GUEST_BASES:
+    # The same guarded release can be rechecked after its first successful
+    # code stage.  Accept only the exact pinned guest artifact in addition to
+    # reviewed historical bases; no arbitrary new source becomes eligible.
+    if digest(old["guest"]) not in EXPECTED_GUEST_BASES | {SOURCE_DIGESTS["guest"]}:
         fail("UNRECOGNIZED_GUEST_BASE:" + digest(old["guest"]))
     new["guest"] = _source(stage, "guest")
     models = old["models"].decode("utf-8")
