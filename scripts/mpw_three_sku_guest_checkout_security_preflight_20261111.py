@@ -89,23 +89,75 @@ def audit_source(source: str) -> dict:
     # database and mailbox delivery proof before declaring recovery operational.
     funcs = {node.name: node for node in tree.body
              if isinstance(node, ast.FunctionDef)}
-    identity_nodes = [funcs[name] for name in ('_identity', '_new_user', '_dispatch')
-                      if name in funcs]
+    # Follow only helpers that the guest identity path actually calls.  Email
+    # validation in an unrelated/dead helper must not clear this indicator.
+    roots = ('_identity', '_new_user', '_bind_guest_email', '_dispatch')
+    reached = set()
+    pending = list(roots)
+    while pending:
+        name = pending.pop()
+        if name not in funcs or name in reached:
+            continue
+        reached.add(name)
+        for node in ast.walk(funcs[name]):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in funcs and node.func.id not in reached):
+                pending.append(node.func.id)
+    identity_nodes = [funcs[name] for name in sorted(reached)]
     identity_calls = [node for fn in identity_nodes for node in ast.walk(fn)
                       if isinstance(node, ast.Call)]
     email_validator_seen = any(
         (isinstance(call.func, ast.Name) and call.func.id == 'validate_email')
         or (isinstance(call.func, ast.Attribute) and call.func.attr == 'validate_email')
         for call in identity_calls)
-    post_email_seen = any(
-        isinstance(call.func, ast.Attribute) and call.func.attr in ('get', '__getitem__')
-        and isinstance(call.func.value, ast.Attribute)
-        and call.func.value.attr == 'POST'
-        and isinstance(call.func.value.value, ast.Name)
-        and call.func.value.value.id == 'request'
-        and bool(call.args) and isinstance(call.args[0], ast.Constant)
-        and call.args[0].value in ('email', 'buyer_email', 'customer_email')
-        for call in identity_calls)
+    aliases = {'email', 'buyer_email', 'customer_email',
+               'purchase_email', 'purchaser_email'}
+
+    def reads_post_email(fn: ast.FunctionDef) -> bool:
+        # Recognize both POST.get("email") and the safer bounded loop over
+        # all supported field names using POST.getlist(key), including a local
+        # alias established by posted = getattr(request, "POST", None).
+        bounded_variables = set()
+        post_aliases = set()
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.For) and isinstance(node.target, ast.Name)
+                    and isinstance(node.iter, (ast.Tuple, ast.List))):
+                values = {item.value for item in node.iter.elts
+                          if isinstance(item, ast.Constant) and isinstance(item.value, str)}
+                if {'email', 'buyer_email'}.issubset(values) and values.issubset(aliases):
+                    bounded_variables.add(node.target.id)
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                    and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Call)
+                    and isinstance(node.value.func, ast.Name)
+                    and node.value.func.id == 'getattr'
+                    and len(node.value.args) >= 2
+                    and isinstance(node.value.args[0], ast.Name)
+                    and node.value.args[0].id == 'request'
+                    and isinstance(node.value.args[1], ast.Constant)
+                    and node.value.args[1].value == 'POST'):
+                post_aliases.add(node.targets[0].id)
+        for call in ast.walk(fn):
+            if (not isinstance(call, ast.Call)
+                    or not isinstance(call.func, ast.Attribute)
+                    or call.func.attr not in ('get', 'getlist', '__getitem__')
+                    or not call.args):
+                continue
+            direct_post = (isinstance(call.func.value, ast.Attribute)
+                           and call.func.value.attr == 'POST'
+                           and isinstance(call.func.value.value, ast.Name)
+                           and call.func.value.value.id == 'request')
+            aliased_post = (isinstance(call.func.value, ast.Name)
+                            and call.func.value.id in post_aliases)
+            if not (direct_post or aliased_post):
+                continue
+            key = call.args[0]
+            if ((isinstance(key, ast.Constant) and key.value in aliases)
+                    or (isinstance(key, ast.Name) and key.id in bounded_variables)):
+                return True
+        return False
+
+    post_email_seen = any(reads_post_email(fn) for fn in identity_nodes)
     email_stored_seen = any(
         isinstance(node, ast.Attribute) and node.attr == 'email'
         and isinstance(node.ctx, ast.Store)
@@ -120,6 +172,7 @@ def audit_source(source: str) -> dict:
             'buyer_email_stored_in_identity_source': email_stored_seen,
             'buyer_email_before_invoice_source_indicators': email_before_invoice_source_indicators,
             'email_based_recovery_end_to_end': 'not_examined',
+            'checkout_template_email_input': 'not_examined',
             'commercial_email_block': None if email_before_invoice_source_indicators
                 else 'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE',
             'read_only': True}
