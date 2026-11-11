@@ -1,29 +1,63 @@
-# AVA — private digital companion core
+# Mojtaba.bot.ai — one unified bot
 
-AVA is a provider-neutral Python foundation for a personal conversational
-assistant. It is **not** a conscious entity, a physical robot, a trading bot,
-or a deployed application. It does not call the internet, buy anything, message
-people, or change VPS settings.
+`MojtabaBot` is the **only canonical runtime**. Conversation (affectionately
+called "آوا" by the owner), goals, memory, code evolution, products, trading,
+games, messaging and future services must all use this one runtime and its
+`CapabilityHub`, not run as independently branded robots. `AvaRuntime` and
+`Ava` remain import aliases for old code, not additional bot processes.
 
-**Unified application entrypoint:** `AvaRuntime`. It composes conversation,
-private memory, dynamic personality guidance, internal goals and a simulation-
-only body interface for one authenticated owner. Submodules are implementation
-boundaries, not separate agents. See [unified architecture](ARCHITECTURE.md).
+This repository currently contains a **foundation**, not a deployed commercial
+agent. No trading, live messaging, purchasing, hosting administration, paid
+model, or external service adapter is connected by default.
 
 ## Included
 
-- A consistent Persian-capable identity and truthful behavior contract.
+- One verified software identity: `Mojtaba.bot.ai`, with "آوا" as a nickname.
+- A single capability bus for future host-connected work modules, with typed
+  actions, independent authorization for external effects, anti-replay within
+  the running process, and adapter-reported receipts.
 - An injectable `Brain` interface, avoiding mandatory paid providers.
 - Owner-scoped, opt-in memory: explicit permission to store, separate permission
   to include saved context in a model request, and owner-controlled deletion.
 - Ephemeral storage by default: no secrets or personal history on disk.
 - Standard-library regression checks, with no third-party dependency.
-- A goal-selection director: an injected proposer can invent goals; AVA ranks
-  independently proposed, reversible, zero-spend *internal* objectives, explains
-  rejected goals, and stores evidence-backed outcomes in ephemeral history.
+- A goal-selection director: an injected proposer can invent goals in any
+  domain. Choosing an objective does not execute it or grant external access.
 - A manufacturer-independent, read-only body interface and a simulation-only
   command gateway that enforces independent authorization, state checks,
   bounded movement, emergency stop, and replay prevention.
+
+## Unified public entrypoint
+
+```python
+from ava_core import (
+    ActionRequest, AdapterResult, CapabilitySpec, MojtabaBot, OperationSpec,
+)
+
+# This is a host-owned local calculation, NOT a live broker or service.
+bot = MojtabaBot(
+    owner_id="authenticated-owner-id",
+    brain=verified_brain,
+    propose_goals=verified_goal_proposer,
+    capabilities=((
+        CapabilitySpec("economics", (OperationSpec("calculate", "local"),)),
+        lambda request: AdapterResult(True, "Calculated using the supplied inputs"),
+    ),),
+)
+assert bot.bot_name == "Mojtaba.bot.ai"
+receipt = bot.execute_action(ActionRequest(
+    "unique-request-id", "authenticated-owner-id", "economics", "calculate", {},
+))
+assert receipt.result.success and not receipt.independently_verified
+```
+
+`verified_brain` and `verified_goal_proposer` are host-supplied integration
+points, not functions bundled with this package. A module is connected only
+when the authenticated host registers its adapter; registration is not proof
+that an external service is available. Every nonlocal operation, including
+reads of external systems, requires an independent authorization callback.
+The in-memory anti-replay state is not sufficient for reliable production
+payments or trades; these require a durable transactional idempotency store.
 
 ## Future physical embodiment: safe software boundary
 
@@ -73,67 +107,32 @@ gate must verify every eventual action; a goal proposal's self-declared flags
 are untrusted. It does not infer consciousness or independent subjective wishes.
 It neither removes human accountability nor grants itself access or money.
 
-## Personality and synthetic emotional expression (draft; not yet verified)
-
-`ava_core/affect.py` defines a trait profile (warmth, curiosity, humor, empathy,
-initiative), ephemeral mood-like responses to host-classified events, and a
-non-explicit romantic text-style option. These are **simulated affective states**,
-not genuine emotions, subjective understanding, sentience, or biological lust.
-The component stores no message text and invokes no hardware or outside service.
-
-The romantic mode defaults to off. A trusted host callback must verify adult
-status and informed, current consent before enabling each session. Revocation
-clears its simulated attraction value. An untrusted model assertion is never
-proof of age or consent. Physical intimacy is not supported.
-
-The synthetic-affect engine is integrated into `AvaRuntime.converse` as
-trusted expression context. Its standalone tests and unified integration tests
-passed locally on 11 November 2026. No live model or physical robot has been
-connected; test success is not evidence of consciousness or deployment.
-
-## Unified host integration
+## Conversation is one module, not a second bot
 
 ```python
-from ava_core import AvaRuntime
-
-def configured_brain(messages):
-    # Configure an authorized local or remote model before real use.
-    raise NotImplementedError("No reasoning model is connected")
-
-runtime = AvaRuntime(
-    owner_id="authenticated-owner-id",
-    brain=configured_brain,
-    propose_goals=lambda history: [],
-)
-# The host independently authorizes any capability that can affect the world.
-```
-
-## Low-level component integration
-
-```python
-from ava_core import Ava
+from ava_core import MojtabaBot
 
 def configured_brain(messages):
     # Connect a verified existing local model or approved provider here.
     # This function must return the model's text response.
     raise NotImplementedError("Configure a brain before use")
 
-ava = Ava(owner_id="authenticated-owner-id", brain=configured_brain)
-ava.remember("Owner-approved preference", consent=True)
-response = ava.converse("سلام آوا", use_memories=True)
+bot = MojtabaBot(
+    owner_id="authenticated-owner-id", brain=configured_brain,
+    propose_goals=verified_goal_proposer,
+)
+bot.remember("Owner-approved preference", consent=True)
+response = bot.converse("سلام آوا", use_memories=True)
 ```
 
 **Integration requirements:** Authenticate the owner before constructing an
 instance; authorize model-provider data sharing; protect persisted memories
-using encrypted storage and backups; use the existing `AgentRegistry` and
-`ToolGateway` for task approvals and audit; use separate verified adapters for
-voice and robotics. Do not route orders, trading, purchases, or outbound
-messages through this conversational package.
+using encrypted storage and backups; use the single `CapabilityHub` for
+host-configured operations and separate verified adapters for voice, services
+and robotics. Never interpret a selected goal as authorization to spend,
+trade, send messages or deploy.
 
 ## Verification
-
-`python -m unittest discover -s tests -p 'test_ava*.py' -v`
-
 
 `python -m unittest discover -s tests -p 'test_ava_core.py' -v`
 
@@ -141,9 +140,8 @@ messages through this conversational package.
 
 `python -m unittest discover -s tests -p 'test_ava_embodiment.py' -v`
 
-`python -m unittest discover -s tests -p 'test_ava_affect.py' -v`
+`python -m unittest discover -s tests -p 'test_mojtaba_bot.py' -v`
 
-`python -m unittest discover -s tests -p 'test_ava_runtime.py' -v`
-
-This component can later become AVA's personal interface to the unified
-`Mojtaba.bot.ai` system without creating a duplicate task executor.
+Existing modules are internal parts of Mojtaba.bot.ai. Legacy files are kept
+for compatibility until all consuming code and real integrations are mapped;
+deletion or deployment requires a verified migration and owner approval.
