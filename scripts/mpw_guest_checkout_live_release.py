@@ -17,6 +17,7 @@ MARKERS={
  'web':'# MPW_GUEST_CHECKOUT_LIVE_V1',
 }
 IMPORT='from services.mpw_trx_guest_commerce import patch_{kind} as _mpw_patch_{kind}\n_mpw_patch_{kind}(globals())\n'
+LEGACY_GUEST_SHA='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4'
 
 def digest(b): return hashlib.sha256(b).hexdigest()
 def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
@@ -51,6 +52,39 @@ def source_from(path):
  if b'def patch_public(namespace):' not in raw or b'def patch_commercial(namespace):' not in raw: fail('GUEST_SOURCE_CONTRACT')
  return raw
 
+def approved_guest_upgrade_base(installed, deployed):
+ """Recognize the first approved release or an exact prior guarded receipt.
+
+ No mutable 'latest' flag, unverified file, or arbitrary source is eligible.
+ The private receipt must identify this exact guest file and both unchanged
+ commercial/public hooks.  Future releases therefore need no new hash literal.
+ """
+ current=digest(installed)
+ if current==LEGACY_GUEST_SHA: return True
+ if BACKUPS.is_symlink() or not BACKUPS.is_dir(): return False
+ if stat.S_IMODE(BACKUPS.stat().st_mode)&0o077: return False
+ live_hashes={key:digest(deployed[key]) for key in ('pages','web')}
+ for folder in BACKUPS.iterdir():
+  if (not re.fullmatch(r'[0-9]{8,20}',folder.name)
+      or folder.is_symlink() or not folder.is_dir()
+      or stat.S_IMODE(folder.stat().st_mode)&0o077):
+   continue
+  receipt=folder/'manifest.json'
+  if (receipt.is_symlink() or not receipt.is_file()
+      or not 0<receipt.stat().st_size<=8192
+      or stat.S_IMODE(receipt.stat().st_mode)&0o077):
+   continue
+  try:
+   meta=json.loads(receipt.read_text('utf8'))
+  except (OSError,UnicodeError,ValueError):
+   continue
+  if (type(meta) is dict and meta.get('run')==folder.name
+      and meta.get('guest_after')==current
+      and type(meta.get('after')) is dict
+      and all(meta['after'].get(key)==live_hashes[key] for key in ('pages','web'))):
+   return True
+ return False
+
 def plan(src):
  old={k:p.read_bytes() for k,p in TARGETS.items() if k!='guest'}
  if any(MARKERS[k] in old[k].decode('utf8','replace') for k in MARKERS):
@@ -64,8 +98,8 @@ def plan(src):
   if live.is_symlink() or not live.is_file(): fail('GUEST_MODULE_MISSING')
   installed=source_from(live)
   if installed==src: return old,old,False
-  # Restrict this upgrade to the exact live version installed by successful run 41120996466.
-  if digest(installed)!='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4':
+  # An exact private receipt replaces a one-shot hardcoded upgrade hash.
+  if not approved_guest_upgrade_base(installed,old):
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE:'+digest(installed))
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
@@ -161,10 +195,10 @@ def publish(run,src_path):
 def publish_onefile(run,src_path):
  guard()
  live=TARGETS['guest']
- expected='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4'
- if live.is_symlink() or not live.is_file() or digest(live.read_bytes())!=expected:
-  fail('ONE_FILE_EXACT_OLD_SHA_REQUIRED')
+ if live.is_symlink() or not live.is_file(): fail('ONE_FILE_GUEST_SOURCE_REQUIRED')
  old,new,needed=plan(source_from(src_path))
+ if not approved_guest_upgrade_base(live.read_bytes(),old):
+  fail('ONE_FILE_APPROVED_SOURCE_RECEIPT_REQUIRED')
  if not needed or any(new[k]!=old[k] for k in ('pages','web')):
   fail('ONE_FILE_ONLY_PLAN_REQUIRED')
  publish(run,src_path)
