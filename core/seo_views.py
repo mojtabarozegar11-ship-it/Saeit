@@ -69,23 +69,24 @@ def site_search(request):
 def robots_txt(request):
     """Expose the canonical host's public sitemap without changing private-path rules."""
     host = request.get_host().split(":")[0].lower()
+    # Private exclusions come first for conservative first-match robots parsers.
     if host in {"mojplaywin.com", "www.mojplaywin.com"}:
         body = (
             "User-agent: *\n"
-            "Allow: /\n"
             "Disallow: /admin/\n"
             "Disallow: /api/\n"
+            "Allow: /\n"
             "Sitemap: https://mojplaywin.com/sitemap.xml\n"
         )
     else:
         body = (
             "User-agent: *\n"
-            "Allow: /\n"
             "Disallow: /admin/\n"
             "Disallow: /api/\n"
             "Disallow: /__zm_\n"
             "Disallow: /site-heritage/\n"
             "Disallow: /zm-agriculture-guides/\n"
+            "Allow: /\n"
             "Sitemap: https://zomorodmelal.ir/sitemap.xml\n"
             "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml\n"
             "Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
