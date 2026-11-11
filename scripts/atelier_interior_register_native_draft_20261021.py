@@ -75,7 +75,9 @@ def intended_metadata():
             "enabled": False,
             "fulfillment": "digital",
             "main_host_only": True,
-            "private_file": str(ARCHIVE),
+            # The paid delivery resolver accepts paths relative to its
+            # configured private root; an absolute path hard-locks delivery.
+            "private_file": ARCHIVE.name,
             "filename": ARCHIVE.name,
             "sha256": SHA256,
         },
@@ -114,7 +116,9 @@ def main():
             state = "already_registered_without_mutation"
         else:
             fields = {f.name for f in Product._meta.get_fields() if getattr(f, "concrete", False)}
-            kwargs = dict(title=TITLE, product_type="website_template", price=SALE,
+            # A website kit is a digital download in the commerce model.
+            # "website_template" is not an eligible paid Product type.
+            kwargs = dict(title=TITLE, product_type="digital", price=SALE,
                           currency="USD", active=False, owner_id=owner, metadata=wanted)
             if "factory_managed" in fields:
                 kwargs["factory_managed"] = False
@@ -141,6 +145,8 @@ def selftest():
     assert m["mpw_commerce"]["enabled"] is False
     assert m["checkout_enabled"] is False and m["payment_live"] is False
     assert m["license_verified"] is False
+    assert m["mpw_commerce"]["private_file"] == ARCHIVE.name
+    assert not Path(m["mpw_commerce"]["private_file"]).is_absolute()
     assert SHA256 == m["sha256"]
     print("ATELIER_INACTIVE_DRAFT_SELFTEST=PASS")
 
