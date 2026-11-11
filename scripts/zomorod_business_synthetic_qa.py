@@ -5,8 +5,9 @@ sha=sys.argv[1]
 assert re.fullmatch(r'[a-f0-9]{40}',sha)
 home=pathlib.Path.home()
 source=home/'.private/zomorod-business/app.php'
+dossier_source=home/'.private/zomorod-business/genetics-center.php'
 entry=home/'public_html/business/index.php'
-assert source.is_file() and entry.is_file()
+assert source.is_file() and entry.is_file() and dossier_source.is_file()
 base=home/'.backups/zomorod-business-smoke'/sha
 assert not base.exists()
 private=base/'synthetic/.private/zomorod-business'
@@ -16,8 +17,10 @@ web.mkdir(parents=True)
 sessions=base/'sessions'
 sessions.mkdir(mode=0o700)
 shutil.copy2(source,private/'app.php')
+shutil.copy2(dossier_source,private/'genetics-center.php')
 shutil.copy2(entry,web/'index.php')
 assert source.read_bytes()==(private/'app.php').read_bytes()
+assert dossier_source.read_bytes()==(private/'genetics-center.php').read_bytes()
 php=shutil.which('php') or '/opt/cpanel/ea-php82/root/usr/bin/php'
 assert pathlib.Path(php).is_file()
 assert subprocess.run([php,'-r','exit(extension_loaded("pdo_sqlite")?0:1);']).returncode==0
@@ -47,6 +50,31 @@ changed=request('POST','security',{'csrf':csrf,'action':'password_change','previ
 assert not 'درخواست انجام نشد' in changed
 dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
+assert '?page=genetics_center' in dashboard
+# Authenticated management and project navigation must expose the dossier without creating projects or journals.
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    counts_before=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('projects','journal_entries','invoices','audit_events')]
+genetics=request('GET','genetics_center')
+projects_page=request('GET','projects')
+assert 'ZM-AGRC-GEN-1405-001' in genetics
+assert 'مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل' in genetics
+assert '۹۵ هکتار' in genetics
+assert '۴٬۱۰۴' in genetics
+assert '۶۵٫۴ میلیون USD' in genetics
+assert '۰٪' in genetics
+assert 'ZM-AGRC-GEN-1405-001' in projects_page
+assert '?page=genetics_center' in projects_page
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    counts_after=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('projects','journal_entries','invoices','audit_events')]
+assert counts_after==counts_before,('Read-only dossier changed data',counts_before,counts_after)
+# A fresh, unauthenticated session may only see the login form.
+signed_in_sid=sid
+sid='anonymous'+sha[:12]
+anonymous=request('GET','genetics_center')
+assert 'ورود مدیر و حسابدار' in anonymous
+assert 'ZM-AGRC-GEN-1405-001' not in anonymous
+sid=signed_in_sid
+print('GENETICS_DOSSIER_AUTH_READONLY_SYNTHETIC=PASS')
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
 request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18'})
@@ -71,6 +99,8 @@ with sqlite3.connect(str(private/'management.sqlite3')) as rw:
 blocked=request('POST','projects',{'csrf':csrf,'action':'project','title':'Must not be created','owner':'Synthetic','state':'planned','budget':'0'})
 assert 'درخواست انجام نشد' in blocked
 assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+viewer_dossier=request('GET','genetics_center')
+assert 'ZM-AGRC-GEN-1405-001' in viewer_dossier
 assert 'درخواست انجام نشد' in request('GET','users')
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
