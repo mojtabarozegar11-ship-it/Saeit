@@ -67,9 +67,31 @@ def site_search(request):
 
 @require_GET
 def robots_txt(request):
-    body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /__zm_\nDisallow: /site-heritage/\nDisallow: /zm-agriculture-guides/\nSitemap: https://zomorodmelal.ir/sitemap.xml\nSitemap: https://zomorodmelal.ir/topics/sitemap.xml\nSitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
+    """Expose the canonical host's public sitemap without changing private-path rules."""
+    host = request.get_host().split(":")[0].lower()
+    # Private exclusions come first for conservative first-match robots parsers.
+    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+        body = (
+            "User-agent: *\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Allow: /\n"
+            "Sitemap: https://mojplaywin.com/sitemap.xml\n"
+        )
+    else:
+        body = (
+            "User-agent: *\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Disallow: /__zm_\n"
+            "Disallow: /site-heritage/\n"
+            "Disallow: /zm-agriculture-guides/\n"
+            "Allow: /\n"
+            "Sitemap: https://zomorodmelal.ir/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml\n"
+            "Sitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
+        )
     return HttpResponse(body, content_type="text/plain; charset=utf-8")
-
 
 @require_GET
 def indexnow_key(request, key):
@@ -82,7 +104,20 @@ def indexnow_key(request, key):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
+    # The two brands share a Django URLconf but must never share sitemap origins.
+    # Independent cPanel sitemap sources are outside this Django fallback.
+    host = request.get_host().split(":")[0].lower()
+    if host in {"mojplaywin.com", "www.mojplaywin.com"}:
+        # The native store route exists for this host; the shared Product detail
+        # view deliberately returns 404 on MojPlayWin, so exclude product URLs.
+        url = "https://mojplaywin.com/store/"
+        item = f"<url><loc>{xml_escape(url)}</loc></url>"
+        return HttpResponse(
+            f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{item}</urlset>',
+            content_type="application/xml",
+        )
+    # Sitemap entries must be canonical public destinations, not redirects or gated pages.
+    urls = ["/", "/company/", "/company/executive/", "/services/", "/amozeshgah/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/gold/", "/vehicles/", "/marketing/", "/chain-stores/", "/agents/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/faremah/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
@@ -91,7 +126,7 @@ def sitemap_xml(request):
     urls += [f"/newsletter/{slug}/" for slug in stories]
     articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
     urls += [f"/knowledge/article/{slug}/" for slug in articles]
-    books = KnowledgeBook.objects.values_list("code", flat=True)
+    books = KnowledgeBook.objects.filter(status="published").values_list("code", flat=True)
     urls += [f"/knowledge/book/{code}/" for code in books]
     domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
     urls += [f"/knowledge/domain/{code}/" for code in domains]

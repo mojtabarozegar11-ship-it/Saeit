@@ -1,0 +1,178 @@
+# MojPlayWin Google Images: live evidence and release boundary — 2026-11-11
+
+## Verified publicly (read-only)
+
+- The active `https://mojplaywin.com/sitemap.xml` has **152 page URLs** and **zero** `image:image` entries.
+- The sitemap lists `/store/`, all three public product pages (`/store/product/72/`, `/store/product/225/`, `/store/product/879/`), and `/taniya/`.
+- The live `/store/` and the three live public product pages have **zero HTML `<img>` elements**. They cannot directly introduce product cover images to Google Images through an ordinary `img src`.
+- The source `core/templates/mojplaywin/store.html` contains four `<img>` elements, but this is **not** the HTML served at `/store/`.
+- The repo's existing `scripts/mpw_dynamic_store_cutover_20261108.py` identifies an owned **`MPW_STATIC_STORE_FALLBACK_V1`** rewrite mapping live `/store/` to `store/index.html`. This explains the source/live discrepancy; it is not a license to run the cutover script.
+- The source `core/product_seo_views.py` restricts its `product_detail` route to **zomorodmelal.ir**; it is not a source of live MojPlayWin product images. Do not apply changes to that view under the assumption they will fix the three MojPlayWin pages. The read-only release gate now records the `MPW_STATIC_STORE_FALLBACK_V1` marker separately from the content and verifies the actual HTML image elements, not merely Django template contents.
+- The `catalog/mojplaywin/atelier-interior-kit-v1.json` entry for the third website kit explicitly says `status: preview_only`, `checkout_enabled: false`, and `sellable_asset_in_public_repository: false`; its external demo hero image is *not* a confirmed same-origin commercial cover asset. A product preview must not be promoted as a fully sellable product merely to pass the image gate.
+- The live `/taniya/` page uses an embedded `data:image/jpeg;base64,...` HTML image, not an independently fetchable public image URL.
+- **New blocking defect, verified in public HTML and repository `templates/taniya_studio/index.html`:** the inline JPEG source contains literal diagnostics beginning `Warning: truncated output (original token count: 30756)` and later `10756 tokens truncated`, inserted into the encoded data. Its HTML `src` attribute is approximately 80 KB and **not valid Base64**. This is a confirmed broken inline image reference, independent of search indexing; the complete original image cannot be reconstructed from the abbreviated payload. **Live Chrome rendered-image check confirmed failure:** the sole `<img>` is `complete=true` but `naturalWidth=0` and `naturalHeight=0`, with `srcLength=80125`. **Do not remove arbitrary text to reconstruct it**, and do not substitute the separately verified Taniya book cover without confirming the studio page's intended artwork.
+
+### Source-only fix for the identified Taniya book cover (not deployed)
+
+The malformed element's descriptive `alt` explicitly identifies the illustration as
+"Front cover of Taniya and the Little Baker Worms, by Mojtaba Roozegar".
+The verified first-party WebP cover already has exactly that product identity.
+Therefore the Draft source template `templates/taniya_studio/index.html` has
+been corrected to reference `/static/site/mojplaywin-products/taniya-baker-worms.webp?v=20261026`
+in the **same `img src` attribute**, preserving the element, `alt`, surrounding HTML,
+styles and page layout. No invented or external asset was introduced.
+`tests/test_taniya_studio_public_cover.py` prevents the inline truncation from
+regressing and checks the real cover URL and descriptive alt.
+
+**37 local source and image-audit tests pass.** This is a repair in the open
+Draft PR only: live `/taniya/` still requires an explicitly authorized,
+backup-aware deployment, followed by a fresh Chrome `naturalWidth > 0` check.
+It does not resolve the text-only store/product pages or unknown third cover.
+- Two existing cover assets open successfully and decode as **1122 x 1402 WebP** files:
+  - `https://mojplaywin.com/static/site/mojplaywin-products/chess-improvement.webp?v=20261026`
+  - `https://mojplaywin.com/static/site/mojplaywin-products/taniya-baker-worms.webp?v=20261026`
+- The live editorial knowledge collection has ten distinct public image elements with descriptive `alt` attributes.
+- Live `https://mojplaywin.com/robots.txt` returns **HTTP 404** even though the Draft source (`core/seo_views.py` and `config/urls.py`) implements a host-aware robots response. A robots 404 does not itself ban crawling, but it prevents advertising the sitemap at that location. Do not overwrite the active host configuration based only on Draft source.
+
+## Completed full public sitemap crawl
+
+Read-only scan of **all 152 / 152** listed pages completed successfully (0 skipped pages):
+
+| Measure | Observed |
+| --- | ---: |
+| HTML `<img>` tags | 404 |
+| Image references, including metadata/srcset | 431 |
+| Distinct eligible same-origin image URLs (not yet HTTP-verified) | 282 |
+| Page-to-image associations eligible for a draft sitemap (not yet HTTP-verified) | 396 |
+| Pages containing public image URL candidates | 94 / 152 (61.8%) |
+| Pages without public image URL candidates | 58 / 152 (38.2%) |
+| Pages with no HTML `<img>` tags | 57 / 152 (37.5%) |
+| `<img>` tags with empty `alt` | 32 / 404 (7.9%; may include decorative images) |
+| `<img>` tags missing `alt` altogether | 0 |
+| Pages using embedded data image URLs | 1 (`/taniya/`) |
+
+The initial machine-readable report is `docs/seo/evidence/mpw-image-coverage-20261111.json`. Its counts represent **crawl discovery, not Google indexing**. The full HTTP validation was completed separately afterward, as recorded below; Google Search Console indexing evidence remains unavailable.
+
+**Counting correction in later Draft code:** the 32 empty-alt value above is a
+historical *image-reference occurrence* count; a single `<img>` with both `src`
+and multiple `srcset` sources can inflate it. The new read-only auditor counts
+missing/empty `alt` **once per actual HTML `<img>` tag**, adds per-page aggregate
+counts, and labels its mode `per_html_img_tag`. Until a new full live crawl is
+successfully performed, **do not present 32 as the current distinct-tag count**.
+An empty `alt` can be correct for purely decorative artwork and requires
+human/contextual review before replacing it.
+
+## Subsequent full HTTP image verification — 2026-11-11
+
+A second bounded public crawl checked all 152 sitemap URLs with three concurrent
+read-only requests, then verified the HTTP response of every unique discovered
+image URL. Images were accepted only with status 200, a matching final URL,
+an `image/*` MIME type, and no `noimageindex` restriction. HTTP 405/501 on
+HEAD may be verified by an actual bounded GET request instead.
+
+| Verification measure | Verified outcome |
+| --- | ---: |
+| Public URLs checked | **282 / 282** |
+| Valid public image responses | **282 / 282 (100%)** |
+| Failed image checks | **0** |
+| Pages with at least one verified image | **94** |
+| Verified page-to-image sitemap associations | **396** |
+| Pages without any verified public image | **58** |
+
+Release candidates (all versioned source artifacts, **not published**):
+
+- `docs/seo/release-candidates/mpw-image-sitemap-20261111.xml` — separate XML
+  image sitemap. Parsed and checked: 94 unique page URLs, 396 image associations,
+  282 unique eligible same-origin images, no protected URLs, and at most 1,000
+  images per page.
+- `docs/seo/evidence/mpw-image-inventory-20261111.json` — page-to-image
+  inventory before HTTP filtering.
+- `docs/seo/evidence/mpw-image-verified-20261111.json` — detailed HTTP results,
+  zero rejected image URLs, and the list of 58 image-less pages.
+
+Important boundaries: this verifies **images referenced by the 152 public
+sitemap-listed pages**, not every orphaned file on cPanel storage. The XML is
+not yet hosted or submitted to Search Console. Neither inclusion in a sitemap
+nor an HTTP 200 response proves Google has indexed an image. Publishing the
+candidate requires an explicit owner-approved deployment and post-release
+live verification, while keeping the original `/sitemap.xml` unchanged.
+
+## Required production fix, not yet authorized or deployed
+
+1. Identify the **active** server-side renderer for every URL. For `/store/`, use the owned static fallback as the current source of truth until a separate, owner-approved cutover has successfully been verified.
+2. Publish accessible public cover URLs within the actual rendered `<img src>` for relevant product pages and `/store/`. The two named WebP assets already exist. The third product cover must be inventoried and validated; do not invent an asset URL. For `/taniya/`, migrate the data URI to a verified public image URL while preserving layout/visual content.
+3. Make every intentionally indexable image discoverable from a relevant indexable canonical page with meaningful text and `alt`. Keep payment receipts, private PDF/ZIP downloads, signed URLs, and account files outside the public image sitemap.
+4. After a full crawl and HTTP verification, publish a **separate additive image sitemap**. Leave the existing 152-page sitemap untouched. Only then consider Search Console submission/monitoring; sitemap membership does not prove Google indexing.
+
+## Draft-only tooling
+
+`scripts/mpw_google_images_audit.py` crawls sitemap-listed public pages in **read-only mode** and can write a **new** image sitemap when image URLs pass HTTP HEAD checks. Its report flags pages without `<img>` tags, pages without public `<img src>` URLs, embedded Base64 images, lazy image placeholders, and metadata-only image references. It does not touch live files or request Google indexing.
+
+**Release status:** Live image SEO repair **not deployed**. Google Images indexed count **unknown** without Search Console evidence. No emails, tickets, payments, production rewrites, or merges are part of this evidence report.
+
+## Commerce image release gate — subsequent cycle, 2026-11-11
+
+The read-only `scripts/mpw_product_image_live_gate.py` fetched the **actual live**
+store landing page, three product pages, and `/taniya/`, and verified both
+existing WebP covers by HTTP status, MIME type and image robots header.
+It is independent of the inactive Django store template and does not change
+site appearance.
+
+| Live URL | Ordinary public `<img src>` | Release issue |
+| --- | ---: | --- |
+| `/store/` | 0 | Two verified covers absent; **missing canonical** |
+| `/store/product/72/` | 0 | Chess cover absent |
+| `/store/product/225/` | 0 | Taniya storybook cover absent |
+| `/store/product/879/` | 0 | Atelier cover absent; actual public asset URL unknown |
+| `/taniya/` | 0 | One embedded Base64 image is not a public image URL |
+
+Outcome: **5/5 pages have a release issue; two of two known cover files
+remain fetchable; commercial image release gate = HOLD.** The `/taniya/`
+page has one `<img>` element, but its `src` is a data URI rather than a
+standalone public URL. The gate requires real ordinary HTML image references,
+meaningful alt text, self-canonical landing URLs, a verified public image file,
+and no `noimageindex` restriction. It never treats OG metadata or CSS
+background images as a substitute for `<img src>`.
+
+Offline validation: **30/30 image-audit and commercial-gate tests passed**.
+
+**Owner design freeze:** the existing visual layout, templates and source/live
+route ownership must remain unchanged until a separately approved release.
+In particular, do not execute the pre-existing static-store cutover script,
+replace `store/index.html`, or update the live product template from an older
+workflow to force green image checks. First read and reconcile the active
+cPanel files and create a visual-preserving, owner-approved placement for
+the real image assets. A source-only Draft PR and green CI do not authorize
+deployment or establish Google indexing.
+
+## Later cycle: public cover file-integrity gate — 2026-11-11
+
+The previous five-page commerce gate accepted a known public cover if a HEAD
+response returned HTTP 200 with an `image/*` media type. That cannot detect
+truncated, malformed or mismatched image bytes. The Draft-only auditor now:
+
+1. Requests a bounded GET for **every known public cover**, even after a
+   successful HEAD (including the existing HEAD-405/501 fallback).
+2. Requires both an eligible unredirected HTTP image response without image
+   exclusion and format-consistent file framing. WebP checks RIFF declared
+   length and chunk bounds; JPEG, PNG, GIF and SVG have conservative structural
+   checks. Unsupported types fail closed.
+3. Records `verified_http_image` and `verified_file_structure` **separately**,
+   including explicit `cover_<id>_invalid_public_asset` landing-page failures.
+   The `verified_cover_urls` and `release_gate` fields now require the stricter
+   file-structure check, not just MIME or status.
+4. Keeps the independent browser render/decode check as a release prerequisite:
+   structurally framed bytes do **not** prove that the picture renders, matches
+   the claimed commercial item, or is eligible for Google indexing.
+
+Four additional offline regression cases cover corrupt HTTP-200 file bytes,
+invalid WebP RIFF size, MIME mismatch and mandatory GET after HEAD. **44 / 44
+offline tests pass.** This is an auditor/quality-gate improvement in the Draft
+branch, **not** an update to the live site, storefront, cover files or XML.
+
+Previously observed site coverage (94/152 image-bearing pages, 282 valid HTTP
+image URLs) remains *historical HTTP evidence*, not a new full-file integrity
+result for all 282 URLs. The 5-page public commerce image gate stays **HOLD**
+pending independently verifiable live `<img src>`, exact cover identity, and
+runtime provenance. No release percentage changed on the strength of this test.
+

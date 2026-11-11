@@ -1,11 +1,12 @@
 name: MojPlayWin product SEO social metadata
+# OWNER FREEZE (2026-11-11): keep all live site templates and appearance unchanged.
+# This retired release is preserved for audit only and must never run.
 on:
-  push:
-    branches: [main]
-    paths: [".github/workflows/mpw-product-seo-social-metadata-20261107.yml"]
+  workflow_dispatch:
 permissions: {contents: read}
 jobs:
   deploy:
+    if: ${{ false }} # OWNER FREEZE: hard stop even if dispatched
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -20,7 +20,7 @@ class SitemapRegressionTests(TestCase):
     def test_sitemap_includes_public_platform_sections_without_duplicate_archive(self):
         locations = self.read_sitemap_locations()
         for path in (
-            "/education/",
+            "/amozeshgah/",
             "/weather/",
             "/economy/",
             "/studio/",
@@ -30,6 +30,7 @@ class SitemapRegressionTests(TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(f"https://zomorodmelal.ir{path}", locations)
+        self.assertNotIn("https://zomorodmelal.ir/education/", locations)
         self.assertNotIn("https://zomorodmelal.ir/newsletter/archive/", locations)
         self.assertEqual(len(locations), len(set(locations)))
 

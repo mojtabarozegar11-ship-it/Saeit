@@ -106,17 +106,18 @@ class PersianAuthorSeoTests(unittest.TestCase):
         )
 
     def test_current_persian_profile_preserves_historic_iran_experience(self):
-        self.assertEqual(self.data["dateModified"], "2026-10-30")
+        self.assertEqual(self.data["dateModified"], "2026-11-11")
         self.assertEqual(
             self.data["name"],
-            "مجتبی روزگار | زندگی‌نامه به‌روز، سوابق ایران و فعالیت در کانادا",
+            "دکتر مجتبی روزگار | پژوهشگر و مدیرعامل مج‌پلی‌وین و زمرد ملل",
         )
         self.assertIn('id="mojtaba-profile-current-20261030"', self.source)
-        self.assertIn('<time datetime="2026-10-30">', self.source)
+        self.assertIn('<time datetime="2026-11-11">', self.source)
         self.assertIn("سوابق مدیریتی در ایران و فعالیت کنونی در کانادا", self.source)
         self.assertIn("در دوران اقامت و فعالیت در ایران", self.source)
         self.assertIn("در حال حاضر ساکن ونکوور کانادا", self.source)
-        self.assertIn("مدیرعامل MojPlayWin", self.source)
+        self.assertIn("مدیرعامل MojPlayWin و شرکت کشت و صنعت زمرد ملل", self.source)
+        self.assertNotIn("با سوابق مدیریت زمرد ملل", self.source)
         self.assertEqual(self.source.count('id="profile-name"'), 1)
         self.assertIn(
             '<link rel="canonical" href="https://zomorodmelal.ir/authors/mojtaba-rozegar/">',
