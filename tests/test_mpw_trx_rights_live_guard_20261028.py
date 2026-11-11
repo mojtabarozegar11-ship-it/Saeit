@@ -1,7 +1,9 @@
 """No-payment, no-database regression for the guarded live TRX rights gate."""
 import importlib.util
+import hashlib
 import json
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -68,31 +70,68 @@ class GuardTests(unittest.TestCase):
         namespace={}
         exec(context,namespace)
         approved=namespace["rights_cleared_for_sale"]
-        sha="a"*64
-        metadata={"rights_cleared":True,"publication_approved":True,
-                  "sha256":sha,"rights_asset_sha256":sha,
-                  "rights_document_sha256":"b"*64}
-        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
-        self.assertFalse(approved(SimpleNamespace(metadata=None)))
-        self.assertFalse(approved(SimpleNamespace(metadata="approved")))
-        self.assertFalse(approved(None))
-        for field,value in (
-            ("rights_cleared","true"),("rights_cleared",False),
-            ("publication_approved","true"),("publication_approved",False),
-            ("sha256","not-a-sha"),("rights_asset_sha256","c"*64),
-            ("rights_asset_sha256","a"*63),("rights_document_sha256",""),
-            ("rights_document_sha256","not-independent-proof")):
-            with self.subTest(field=field,value=value):
-                changed=dict(metadata,**{field:value})
-                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
-        for field in metadata:
-            with self.subTest(missing=field):
-                changed=dict(metadata)
-                del changed[field]
-                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
-        # Case-only hex normalization is legitimate and does not change digest.
-        metadata["sha256"]="A"*64
-        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+        with tempfile.TemporaryDirectory() as d:
+            asset=Path(d)/"private.bin"
+            asset.write_bytes(b"version-1-authorized-by-owner")
+            sha=hashlib.sha256(asset.read_bytes()).hexdigest()
+            metadata={"rights_cleared":True,"publication_approved":True,
+                      "sha256":sha,"rights_asset_sha256":sha,
+                      "rights_document_sha256":"b"*64}
+            module=ModuleType("mpw_commerce.downloads")
+            module._private_file=lambda order: asset
+            package=ModuleType("mpw_commerce")
+            package.__path__=[]
+            with patch.dict(sys.modules,{"mpw_commerce":package,
+                                         "mpw_commerce.downloads":module}):
+                self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+                self.assertFalse(approved(SimpleNamespace(metadata=None)))
+                self.assertFalse(approved(SimpleNamespace(metadata="approved")))
+                self.assertFalse(approved(None))
+                for field,value in (
+                    ("rights_cleared","true"),("rights_cleared",False),
+                    ("publication_approved","true"),("publication_approved",False),
+                    ("sha256","not-a-sha"),("rights_asset_sha256","c"*64),
+                    ("rights_asset_sha256","a"*63),("rights_document_sha256",""),
+                    ("rights_document_sha256","not-independent-proof")):
+                    with self.subTest(field=field,value=value):
+                        changed=dict(metadata,**{field:value})
+                        self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+                for field in metadata:
+                    with self.subTest(missing=field):
+                        changed=dict(metadata)
+                        del changed[field]
+                        self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+                # A changed buyer file must not inherit old metadata approval.
+                asset.write_bytes(b"new-undocumented-version")
+                self.assertFalse(approved(SimpleNamespace(metadata=metadata)))
+                asset.write_bytes(b"version-1-authorized-by-owner")
+                # Case-only hex normalization does not change the actual digest.
+                metadata["sha256"]=sha.upper()
+                self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+                link=Path(d)/"symlink.bin"
+                link.symlink_to(asset)
+                module._private_file=lambda order: link
+                self.assertFalse(approved(SimpleNamespace(metadata=metadata)))
+
+    def test_installed_v1_upgrades_in_place_without_duplicate_helper(self):
+        old=fixture()
+        legacy={key:guard.transform(key,src)[0] for key,src in old.items()}
+        legacy["context"]=old["context"].replace(
+            guard.CONTEXT_OLD,guard.CONTEXT_NEW,1)
+        patched,changed=guard.transform("context",legacy["context"])
+        self.assertTrue(changed)
+        self.assertEqual(patched.count("def rights_cleared_for_sale("),1)
+        self.assertEqual(guard.transform("context",patched),(patched,False))
+        with tempfile.TemporaryDirectory() as d:
+            paths={key:Path(d)/(key+".py") for key in legacy}
+            for key,path in paths.items():
+                path.write_text(legacy[key],encoding="utf8")
+            with patch.object(guard,"TARGETS",paths):
+                before,after,needed=guard.inspect()
+                self.assertTrue(needed)
+                self.assertNotEqual(before["context"],after["context"])
+                for key in ("web","pages"):
+                    self.assertEqual(before[key],after[key])
 
     def test_weak_legacy_helper_is_rejected_by_structure_gate(self):
         context,_=guard.transform("context",fixture()["context"])
