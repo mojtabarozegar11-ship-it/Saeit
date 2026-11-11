@@ -217,8 +217,9 @@ def receipt(run_id):
     return folder,json.loads(manifest.read_text("utf8"))
 
 def operation(mode,run_id=None):
-    if mode not in ("check","apply","verify","rollback","recover"): raise RuntimeError("UNKNOWN_MODE")
-    if mode!="check" and (run_id is None or not re.fullmatch(r"[0-9]{6,20}",run_id)):
+    if mode not in ("check","verify-current","apply","verify","rollback","recover"):
+        raise RuntimeError("UNKNOWN_MODE")
+    if mode not in ("check","verify-current") and (run_id is None or not re.fullmatch(r"[0-9]{6,20}",run_id)):
         raise RuntimeError("INVALID_RUN_ID")
     guard()
     if mode=="check":
@@ -227,6 +228,13 @@ def operation(mode,run_id=None):
           "old":{k:digest(v) for k,v in old.items()},
           "candidate":{k:digest(v) for k,v in new.items()},
           "read_only":True,"new_orders":0},sort_keys=True))
+        return
+    if mode=="verify-current":
+        _,_,needed=inspect()
+        if needed:
+            raise RuntimeError("RIGHTS_GATE_NOT_INSTALLED")
+        runtime_validate()
+        print("MPW_TRX_RIGHTS_RELEASE=CURRENT_INSTALL_VERIFIED_READ_ONLY")
         return
     private_root()
     with (BACKUPS/"release.lock").open("a+b") as lock:
@@ -318,6 +326,7 @@ def operation(mode,run_id=None):
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_EXACT_RELEASE")
 
 if __name__=="__main__":
-    if len(sys.argv)==2 and sys.argv[1]=="check": operation("check")
+    if len(sys.argv)==2 and sys.argv[1] in ("check","verify-current"):
+        operation(sys.argv[1])
     elif len(sys.argv)==3: operation(sys.argv[1],sys.argv[2])
-    else: raise SystemExit("check | apply RUN_ID | verify RUN_ID | rollback RUN_ID | recover RUN_ID")
+    else: raise SystemExit("check | verify-current | apply RUN_ID | verify RUN_ID | rollback RUN_ID | recover RUN_ID")
