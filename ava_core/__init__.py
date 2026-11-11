@@ -11,6 +11,8 @@ from .evolution import (
     CodeProposal, CodeProposalError, CodeReview, ReviewedFile,
 )
 from .sandbox import IsolatedReviewRunner, IsolationUnavailable, SandboxResult
+from .audit import AuditEvent, AuditIntegrityError, AuditKeyError, AuditVerification, SQLiteCodeAuditTrail
+from .evolution import CodeRollbackPlan, RollbackFile
 
 __all__ = [
     "Ava", "AvaMemory", "AvaReply", "ConsentError", "MemoryItem",
@@ -23,4 +25,6 @@ __all__ = [
     "ApprovedCodeBundle", "CheckEvidence", "CodeEdit", "CodeEvolutionDirector",
     "CodeProposal", "CodeProposalError", "CodeReview", "ReviewedFile",
     "IsolatedReviewRunner", "IsolationUnavailable", "SandboxResult",
+    "AuditEvent", "AuditIntegrityError", "AuditKeyError", "AuditVerification", "SQLiteCodeAuditTrail",
+    "CodeRollbackPlan", "RollbackFile",
 ]
