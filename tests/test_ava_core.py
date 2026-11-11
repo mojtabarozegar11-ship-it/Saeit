@@ -72,6 +72,15 @@ class AvaCoreTests(unittest.TestCase):
         self.assertIn("memory-24", context)
         self.assertNotIn("other-owner-secret", context)
 
+    def test_memory_context_total_character_budget(self):
+        self.ava.remember("A" * 5000, consent=True)
+        self.ava.remember("recent-short", consent=True)
+        reply = self.ava.converse("سلام", use_memories=True)
+        self.assertEqual(reply.memories_used, 1)
+        context = str(self.calls[-1])
+        self.assertIn("recent-short", context)
+        self.assertNotIn("A" * 5000, context)
+
     def test_duplicate_memory_id_cannot_overwrite_another_owner(self):
         original = self.ava.remember("owner-one-secret", consent=True)
         other = Ava(owner_id="owner-2", brain=self.brain, memory=self.shared_store)
