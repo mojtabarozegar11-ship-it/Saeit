@@ -175,6 +175,13 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(self.ava.list_memories(), ())
 
+    def test_oversized_style_guidance_never_reaches_model(self):
+        assistant = Ava(owner_id="owner-1", brain=self.brain,
+                        style_guidance=lambda: "x" * 4001)
+        with self.assertRaisesRegex(ValueError, "Style guidance exceeds"):
+            assistant.converse("سلام")
+        self.assertEqual(self.calls, [])
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
