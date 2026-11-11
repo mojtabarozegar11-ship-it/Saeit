@@ -1,4 +1,4 @@
-"""One owner-scoped capability bus for Mojtaba.bot.ai.
+"""One owner-scoped capability bus for mojtaba.bot.ai.
 
 All external integrations are host-injected adapters inside the *same* bot.
 The language model cannot create credentials or authorize its own effects.
