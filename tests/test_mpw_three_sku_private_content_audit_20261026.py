@@ -160,6 +160,30 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertEqual(len(result["missing_local_refs"]),4)
             self.assertNotIn("html_content",result)
 
+    def test_nested_zip_html_parent_asset_reference_resolves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "nested-kit.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("pages/index.html",
+                    "<html><head><title>Interior Kit</title>"
+                    "<link rel='stylesheet' href='../assets/site.css'></head>"
+                    "<body><img src='../assets/hero.png' alt='Room'></body></html>")
+                archive.writestr("assets/site.css", "body {color:black}")
+                archive.writestr("assets/hero.png", b"image")
+            result = audit.audit_zip(path)
+            self.assertTrue(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(result["missing_local_refs"], [])
+
+    def test_zip_reference_escaping_archive_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "escaped-kit.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("pages/index.html",
+                    "<title>Kit</title><script src='../../secrets.js'></script>")
+            result = audit.audit_zip(path)
+            self.assertFalse(result["checks"]["local_asset_links_resolve"])
+            self.assertIn("../../secrets.js", result["missing_local_refs"])
+
     def test_srcset_mixed_data_and_local_candidates_are_checked_individually(self):
         self.assertEqual(audit.srcset_urls("data:image/png;base64,AAAA 1x, missing.png 2x"),
                          ["data:image/png;base64,AAAA", "missing.png"])
