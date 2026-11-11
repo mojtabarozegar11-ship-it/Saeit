@@ -286,8 +286,14 @@
     status('مکعب تازه شد؛ روی پیکان کنار لبه بزن یا راهنمایی بگیر.');
   }
   function nextLevel() {
+    // The final generated level must not be replayed for unlimited rewards.
+    if (level >= 1000000) {
+      closeOverlay();
+      status('تمام یک میلیون مرحله را به پایان رساندی! امتیاز نهایی ذخیره شد.', 'success');
+      return;
+    }
     animationVersion++;
-    level = Math.min(1000000, level + 1);
+    level += 1;
     puzzle = Cube.generate(level);
     removed.clear(); failed.clear(); combo = 0;
     hearts = MAX_LIVES; baseScore = score; won = false;
