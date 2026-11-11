@@ -4,7 +4,7 @@ import unittest
 
 from ava_core import (
     AvaRuntime, CheckEvidence, CodeEdit, CodeEvolutionDirector, CodeProposal,
-    CodeProposalError,
+    CodeProposalError, DevelopmentScope,
 )
 
 
@@ -75,7 +75,8 @@ class EvolutionTests(unittest.TestCase):
         paths = ("../ava_core/example.py", "/ava_core/example.py",
                  "ava_core/../../secrets.py", ".github/workflows/publish.yml",
                  "ava_core/../tests/test_ava.py", "ava_core\\example.py",
-                 "ava_core/.env", "tests/not_ava.py", "ava_core/example.py/evil")
+                 "ava_core/.env", "ava_core/example.py/evil", 
+                 "private/id_rsa", "app/.git/config", "src/secret.key")
         for path in paths:
             with self.subTest(path=path), self.assertRaises(CodeProposalError):
                 self.director.stage(self.proposal((CodeEdit(path, None, self.changed),)),
@@ -108,15 +109,73 @@ class EvolutionTests(unittest.TestCase):
         with self.assertRaises(CodeProposalError):
             self.director.stage(self.proposal((edit, edit)), trusted_files=self.snapshot)
 
-    def test_many_edits_rejected(self):
+    def test_many_edits_across_projects_permitted(self):
         edits = tuple(CodeEdit(f"ava_core/new_{i}.py", None, "pass\n") for i in range(6))
-        with self.assertRaises(CodeProposalError):
-            self.director.stage(self.proposal(edits), trusted_files=self.snapshot)
+        review = self.director.stage(self.proposal(edits), trusted_files=self.snapshot)
+        self.assertEqual(len(review.files), 6)
 
     def test_oversize_source_rejected(self):
-        edit = CodeEdit(self.path, self.director.digest(self.original), "x" * (64 * 1024 + 1))
+        edit = CodeEdit(self.path, self.director.digest(self.original), "x" * (2 * 1024 * 1024 + 1))
         with self.assertRaises(CodeProposalError):
             self.director.stage(self.proposal((edit,)), trusted_files=self.snapshot)
+
+    def test_arbitrary_source_project_supported_without_execution(self):
+        edits = (
+            CodeEdit("other_project/web/app.ts", None, "export const answer = 42;\n"),
+            CodeEdit("other_project/docs/README.md", None, "# Product plan\n"),
+            CodeEdit("other_project/service/main.go", None, "package main\n"),
+        )
+        review = self.director.stage(self.proposal(edits), trusted_files={})
+        self.assertEqual(len(review.files), 3)
+        self.assertFalse(review.syntax_checked)
+
+    def test_python_in_any_project_still_gets_ast_check(self):
+        edit = CodeEdit("client/project/logic.py", None, "def calculate():\n    return 42\n")
+        review = self.director.stage(self.proposal((edit,)), trusted_files={})
+        self.assertTrue(review.syntax_checked)
+
+    def test_non_python_invalid_json_is_rejected(self):
+        edit = CodeEdit("mobile/app/settings.json", None, "{invalid")
+        with self.assertRaises(CodeProposalError):
+            self.director.stage(self.proposal((edit,)), trusted_files={})
+
+    def test_scoped_workspace_can_be_restricted_by_authenticated_host(self):
+        scope = DevelopmentScope(project_roots=("projects/machine",), max_edits=2,
+                                 max_file_bytes=100, max_total_bytes=150)
+        director = CodeEvolutionDirector(owner_id="owner", scope=scope)
+        good = CodeProposal("Build machine", "Implement function", (
+            CodeEdit("projects/machine/engine.py", None, "pass\n"),
+        ))
+        self.assertEqual(len(director.stage(good, trusted_files={}).files), 1)
+        with self.assertRaises(CodeProposalError):
+            director.stage(self.proposal((CodeEdit("projects/shop/app.py", None, "pass\n"),)), trusted_files={})
+        with self.assertRaises(CodeProposalError):
+            director.stage(self.proposal(tuple(
+                CodeEdit(f"projects/machine/a{i}.py", None, "pass\n") for i in range(3)
+            )), trusted_files={})
+
+    def test_review_budget_is_configurable_beyond_legacy_five_files(self):
+        scope = DevelopmentScope(max_edits=200, max_file_bytes=1024, max_total_bytes=200_000)
+        director = CodeEvolutionDirector(owner_id="owner", scope=scope)
+        edits = tuple(CodeEdit(f"projects/robot/m{i}.py", None, "pass\n") for i in range(60))
+        review = director.stage(self.proposal(edits), trusted_files={})
+        self.assertEqual(len(review.files), 60)
+
+    def test_invalid_custom_roots_and_bounds_rejected(self):
+        for roots in (("../",), ("/root",), ("private/.hidden",), ()):
+            with self.subTest(roots=roots), self.assertRaises(ValueError):
+                DevelopmentScope(project_roots=roots)
+        for bound in (0, -1, True):
+            with self.subTest(bound=bound), self.assertRaises(ValueError):
+                DevelopmentScope(max_edits=bound)
+
+    def test_unsafe_path_validation_survives_broad_scope(self):
+        for path in ("../secrets.txt", "src//a.py", "src/./a.py", "src/../a.py",
+                     "src\\evil.py", "C:/secrets.py", "src/.env", "src/a.py\nevil",
+                     "src/id_ed25519", "src/key.pem"):
+            with self.subTest(path=path), self.assertRaises(CodeProposalError):
+                edit = CodeEdit(path, None, "pass\n")
+                self.director.stage(self.proposal((edit,)), trusted_files={})
 
     def test_missing_author_and_invalid_goals_refused(self):
         with self.assertRaises(PermissionError):
