@@ -1,0 +1,37 @@
+"""Single public robot identity and lossless read-only legacy module projection.
+
+Old Django Agent rows are historical/operational source records, not claims of
+separately branded robots or evidence of integration with this runtime.
+"""
+
+from ava_core.identity import BOT_ID
+
+
+def legacy_modules(rows):
+    """Project source records as modules without inventing a live integration."""
+    result = []
+    for row in rows:
+        result.append({
+            "id": row["id"],
+            "module_code": row["code"],
+            "source_name": row["name"],
+            "mission": row["mission"],
+            "risk_level": row["risk_level"],
+            "source_active": row["active"],
+            "integration_verified": None,
+            "verification_state": "unknown",
+        })
+    return result
+
+
+def identity_snapshot(rows, total):
+    """One identity, any number of source modules, no unverified 'connected' flag."""
+    modules = legacy_modules(rows)
+    return {
+        "bot": {"identity": BOT_ID, "identity_count": 1,
+                "runtime_verified": None, "integration_state": "unverified"},
+        "modules": modules,
+        "source_module_total": total,
+        "truncated": total > len(modules),
+        "changes_require_approval": True,
+    }
