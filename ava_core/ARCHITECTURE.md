@@ -13,7 +13,7 @@ flowchart TD
   R --> C["Brain and conversation"]
   R --> A["Personality and affect"]
   R --> M["Consent-scoped memory"]
-  R --> G["Internal goals"]
+  R --> G["Open-ended goal planning"]
   R --> V["Code evolution review"]
   R --> J["Optional audit journal"]
   R --> E["Embodiment"]
@@ -27,16 +27,19 @@ flowchart TD
 2. `AvaRuntime.converse` optionally records a host-classified event in the
    synthetic-affect engine, then passes current expression guidance and only
    opt-in memories to the brain.
-3. `AvaRuntime.choose_goal` ranks internal goals and records evidence-backed
-   outcomes. Goals cannot confer authority or trigger real-world actions.
+3. `AvaRuntime.choose_goal` ranks proposed goals across any domain, including
+   plans for business, tools, research and new capabilities, and records
+   evidence-backed outcomes. Even a selected goal cannot confer authority or
+   trigger real-world actions.
 4. `AvaRuntime.simulate_body_command` requires a separate host authorization,
    refuses replay and physical device control, and returns a simulation receipt.
 5. `AvaRuntime.status` reports real boundaries: it does not claim a verified
    model or enabled physical actuators.
 6. `AvaRuntime.propose_code_change` lets an injected code author prepare a
-   bounded code change. The same runtime stages it as an immutable diff,
-   verifies its source version and parses its Python syntax without executing
-   the code. Any tested handoff requires separate host evidence and permission.
+   multi-project, multi-language proposal with a configurable resource budget.
+   The same runtime stages immutable diffs, checks exact source versions,
+   parses Python/JSON syntax where supported, and never executes generated
+   code. Any tested handoff requires independent evidence and permission.
 
 ## Required future integrations
 
@@ -45,10 +48,10 @@ flowchart TD
 | Cognition | `Brain` | Injected callback; no model connected |
 | Personality | `AffectiveCompanion` | Synthetic expression; no sentience |
 | Memory | `MemoryStore` | Opt-in RAM or encrypted SQLite adapter; key supplied by host |
-| Goal planning | `GoalProposer` | Internal goal ranking only |
+| Goal planning | `GoalProposer` | Open-ended plans; no automatic external actions |
 | Embodiment | `RobotAdapter` | Read-only status and simulation |
 | Unified coordination | `AvaRuntime` | Tested composition root |
-| Self-coding | `CodeEvolutionDirector` | In-memory proposal/diff/AST review; no execution, commit or deployment |
+| Self-coding | `CodeEvolutionDirector` | Multi-project proposals/diffs; Python AST and JSON checks; no execution, commit or deployment |
 | Code audit | `SQLiteCodeAuditTrail` | Optional HMAC-chained private journal for stage, tests, handoff and rollback plans |
 | Rollback | `CodeRollbackPlan` | Immutable reversal intent checked against old/current SHA-256; no file operations |
 
@@ -105,12 +108,24 @@ multi-process stress tests and secure deletion of all backups. File permissions
 alone do not guarantee isolation against an attacker controlling the same user
 account or a compromised host. Deleting a record does not erase prior backups.
 
-## Self-coding in the same runtime — review-only boundary
+## Open-ended planning and coding — review-only boundary
+
+**Freedom is an architectural principle:** AVA can imagine and choose goals
+for any field, including goals that would eventually require a payment, a new
+permission, an external message or a physical device. These goals are *plans*,
+not permissions. The decision carries an explicit reminder of any needed
+authorization. Only an independent authenticated executor can take an
+externally consequential action, and the owner's case-specific restrictions
+remain effective.
 
 The provider-neutral `CodeProposer` may use a host-approved model to suggest
-`CodeProposal` objects. The director stages only up to five Python edits within
-`ava_core/` and `tests/test_ava*.py`, requires exact SHA-256 base matches,
-parses source without executing it, and returns immutable diffs and hashes.
+`CodeProposal` objects. The director accepts ordinary text/source files across
+any project in the host-provided snapshot and can stage 128 edits per review
+by default. `DevelopmentScope` makes project roots and review-size budgets
+configurable to match larger workloads. It refuses traversal, hidden paths,
+secret-like files and binary formats; these are trust boundaries, not topic
+filters. It requires exact SHA-256 base matches, parses Python syntax and JSON
+where supported, and returns immutable diffs and hashes.
 It cannot see files not passed by the authenticated host. It never writes to
 the repository, invokes subprocesses, sends messages or publishes code.
 
@@ -139,6 +154,16 @@ review = runtime.propose_code_change(
 )
 assert review.syntax_checked
 ```
+
+For wider code production, the host may inject
+`development_scope=DevelopmentScope(project_roots=("business",),
+max_edits=500, max_file_bytes=4_194_304, max_total_bytes=67_108_864)`
+into `AvaRuntime`. Root paths use no leading or trailing slash.
+A cross-language proposal can be staged with diffs and hashes,
+but `syntax_checked=False` when a language has no trusted parser here.
+The built-in isolated runner verifies only AVA Python regressions; wider
+projects need their own independently validated isolated evaluator before a
+handoff. No proposal automatically modifies the host's real source tree.
 
 The example callback is deterministic demonstration code, not an installed
 model. **Syntax checks are not security checks.** To obtain an
