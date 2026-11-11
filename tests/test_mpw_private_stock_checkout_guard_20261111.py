@@ -33,6 +33,10 @@ def isolate_function(relative_path, name, scope):
     return scope[name]
 
 
+public_product_ids = isolate_function(
+    'services/mpw_trx_commercial_context.py', 'public_product_ids', {})
+
+
 def put(modules, name, **attrs):
     module = ModuleType(name)
     module.__dict__.update(attrs)
@@ -47,7 +51,7 @@ def private_asset(*, present=True, size=1024, symlink=False):
 
 
 class GuestCheckoutPrivateStockTests(TestCase):
-    def checkout(self, asset):
+    def checkout(self, asset, *, public_ids=(72,225,879), setting_present=True):
         modules = {}
         render = Mock(return_value={})
         query = Mock()
@@ -57,7 +61,8 @@ class GuestCheckoutPrivateStockTests(TestCase):
         if not isinstance(asset, Exception):
             private.return_value = asset
         put(modules, 'django')
-        put(modules, 'django.conf', settings=SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72,225,879)))
+        values = ({'MPW_TRX_PUBLIC_PRODUCT_IDS': public_ids} if setting_present else {})
+        put(modules, 'django.conf', settings=SimpleNamespace(**values))
         put(modules, 'django.db', connection=object())
         put(modules, 'django.shortcuts', render=render)
         put(modules, 'core')
@@ -66,7 +71,8 @@ class GuestCheckoutPrivateStockTests(TestCase):
         put(modules, 'mpw_commerce.buyer_orders', _eligible=lambda p: True)
         put(modules, 'mpw_commerce.downloads', _private_file=private)
         put(modules, 'services')
-        put(modules, 'services.mpw_trx_commercial_context', rights_cleared_for_sale=lambda p: True)
+        put(modules, 'services.mpw_trx_commercial_context',
+            rights_cleared_for_sale=lambda p: True, public_product_ids=public_product_ids)
         put(modules, 'services.mpw_trx_commercial_web',
             _configured_receiver=lambda: True, _nocache=lambda response: response)
         put(modules, 'services.mpw_walletless_commercial_intent', _commercial_db=lambda s,c: True)
@@ -104,6 +110,14 @@ class GuestCheckoutPrivateStockTests(TestCase):
 
     def test_non_file_asset_never_renders_checkout(self):
         self.assertEqual(self.checkout(private_asset(present=False))[1], 0)
+
+    def test_bad_or_missing_allowlist_never_renders_checkout_or_reads_stock(self):
+        for public_ids in (None, '72', 72, {'72': True}, (72, '225')):
+            with self.subTest(public_ids=public_ids):
+                self.assertEqual(self.checkout(private_asset(), public_ids=public_ids),
+                                 (None, 0, 0))
+        self.assertEqual(self.checkout(private_asset(), setting_present=False),
+                         (None, 0, 0))
 
 
 class ExistingInvoicePrivateStockTests(TestCase):
@@ -204,6 +218,7 @@ class StartOrderAllowlistContractTests(TestCase):
             view = isolate_function('services/mpw_trx_commercial_web.py', '_start_order', {
                 '_ensure_live': lambda r: SimpleNamespace(alias='default'),
                 '_select_order': select,
+                'public_product_ids': public_product_ids,
                 '_nocache': lambda response: response,
                 'PaymentHold': PaymentHold,
             })

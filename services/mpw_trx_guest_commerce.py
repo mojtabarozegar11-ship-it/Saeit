@@ -222,7 +222,7 @@ def _checkout_page(request, product_id, pages_namespace):
     from mpw_commerce.buyer_orders import _eligible
     from mpw_commerce.downloads import _private_file
     from types import SimpleNamespace
-    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from services.mpw_trx_commercial_context import rights_cleared_for_sale, public_product_ids
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
 
@@ -236,7 +236,7 @@ def _checkout_page(request, product_id, pages_namespace):
         if isinstance(exc, PaymentHold):
             raise Http404("TRX checkout is temporarily unavailable") from exc
         raise
-    if product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ()):
+    if product_id not in public_product_ids(settings):
         raise Http404
     product = Product.objects.select_related("knowledge_article").filter(
         pk=product_id, active=True).first()

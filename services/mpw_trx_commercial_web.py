@@ -12,6 +12,7 @@ from html import escape
 from services.mpw_trx_walletless_core import PaymentHold
 from services.mpw_trx_commercial_context import (
     rights_cleared_for_sale, private_artifact_sha_matches_approved,
+    public_product_ids,
 )
 from services.mpw_trx_walletless_one_tap_ui import render_one_tap_invoice
 from services.mpw_walletless_commercial_intent import (
@@ -113,11 +114,7 @@ def _start_order(request, product_id):
     db=_ensure_live(request)
     if type(product_id) is not int or product_id<=0:
         raise Http404
-    # Match the public catalogue/GET gate: an absent or malformed allowlist
-    # never grants permission to issue a direct-POST payment invoice.
-    approved_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",())
-    if (type(approved_ids) not in (tuple,list,set,frozenset)
-            or product_id not in approved_ids):
+    if product_id not in public_product_ids(settings):
         raise Http404("Product is not available for public TRX purchase")
     try:
         invoice_id=_select_order(product_id,request.user.pk,db)

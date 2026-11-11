@@ -23,6 +23,20 @@ def _sha256_hex(value):
             and all(character in "0123456789abcdef" for character in value.lower()))
 
 
+def public_product_ids(settings):
+    """One fail-closed public SKU policy for catalogue, guest GET and invoice POST.
+
+    Malformed configuration must not create an HTTP 500 or widen the sale list.
+    This identifier filter is separate from product quality and rights checks.
+    """
+    listed=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",())
+    if type(listed) not in (tuple,list,set,frozenset):
+        return ()
+    if any(type(value) is not int or value<=0 for value in listed):
+        return ()
+    return tuple(sorted(set(listed)))
+
+
 def rights_cleared_for_sale(product):
     """Validate declared approval and exact artifact/document digest linkage.
 
