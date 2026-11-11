@@ -68,9 +68,9 @@ def _select_order(product_id: int, buyer_id: int, connection):
 
     with transaction.atomic(using=connection.alias):
         get_user_model().objects.select_for_update().get(pk=buyer_id)
-        product=Product.objects.select_for_update().get(
-            pk=product_id,active=True,currency="USD")
-        if (not _eligible(product) or not rights_cleared_for_sale(product)
+        product=Product.objects.select_for_update().filter(
+            pk=product_id,active=True,currency="USD").first()
+        if (product is None or not _eligible(product) or not rights_cleared_for_sale(product)
                 or not Decimal("0") < Decimal(product.price) <= Decimal("1000")):
             raise PaymentHold("Digital product not presently eligible")
         # Reject missing or empty private stock before reusing an existing
@@ -239,3 +239,4 @@ COMMERCIAL_URLPATTERNS=(
     ("commerce/trx-easy/reconcile/<int:invoice_id>/",reconcile_invoice),
     ("commerce/trx-easy/download/<int:invoice_id>/",download_paid),
 )
+

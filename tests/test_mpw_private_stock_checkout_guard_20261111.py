@@ -107,12 +107,13 @@ class GuestCheckoutPrivateStockTests(TestCase):
 
 
 class ExistingInvoicePrivateStockTests(TestCase):
-    def existing_invoice(self, asset):
+    def existing_invoice(self, asset, *, product_exists=True):
         now = datetime(2026, 11, 11, tzinfo=timezone.utc)
         modules = {}
         product = SimpleNamespace(pk=72, price=Decimal('7.50'))
         product_model = SimpleNamespace(objects=Mock())
-        product_model.objects.select_for_update.return_value.get.return_value = product
+        product_model.objects.select_for_update.return_value.filter.return_value.first.return_value = (
+            product if product_exists else None)
         old_order = SimpleNamespace(pk=20)
         order_model = SimpleNamespace(objects=Mock())
         order_model.objects.select_for_update.return_value.filter.return_value.order_by.return_value.__getitem__ = Mock(return_value=[old_order])
@@ -170,6 +171,13 @@ class ExistingInvoicePrivateStockTests(TestCase):
 
     def test_does_not_reuse_invoice_for_symlink_stock(self):
         self.assertIsNone(self.existing_invoice(private_asset(symlink=True))[0])
+
+    def test_deleted_product_fails_closed_without_invoice_or_asset_lookup(self):
+        result, private_calls, invoice_queries = self.existing_invoice(
+            private_asset(), product_exists=False)
+        self.assertIsNone(result)
+        self.assertEqual(private_calls, 0)
+        self.assertEqual(invoice_queries, 0)
 
 
 if __name__ == '__main__':
