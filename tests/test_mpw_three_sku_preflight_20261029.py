@@ -14,6 +14,7 @@ def fixture():
     flags = {
         "rights_gate_installed": True, "merchant_canary": True,
         "public_enabled": True, "release_authorized": True,
+        "buyer_email_before_invoice": True, "email_recovery_verified": True,
     }
     products = {
         sku: {
@@ -43,14 +44,25 @@ class PreflightContract(unittest.TestCase):
         self.assertEqual(result["authenticated_download_e2e"], "not_examined")
         self.assertEqual(result["independent_legal_clearance"],
                          "not_established_by_metadata")
+        self.assertFalse(result["commercial_sale_proven"])
 
     def test_each_global_blocker_is_fail_closed(self):
         for key in ("rights_gate_installed", "merchant_canary",
-                    "public_enabled", "release_authorized"):
+                    "public_enabled", "release_authorized",
+                    "buyer_email_before_invoice", "email_recovery_verified"):
             with self.subTest(key=key):
                 f, p = fixture()
                 f[key] = False
                 self.assertEqual(POLICY.classify(render(f, p))["preflight"], "blocked")
+
+    def test_email_claims_cannot_be_inferred_from_rights_or_merchant_flags(self):
+        f, p = fixture()
+        f.pop("buyer_email_before_invoice")
+        f.pop("email_recovery_verified")
+        result = POLICY.classify(render(f, p))
+        self.assertEqual(result["preflight"], "blocked")
+        self.assertIn("BUYER_EMAIL_BEFORE_INVOICE_NOT_VERIFIED", result["global_blocks"])
+        self.assertIn("BUYER_EMAIL_RECOVERY_NOT_VERIFIED", result["global_blocks"])
 
     def test_each_product_blocker_is_fail_closed(self):
         keys = (
