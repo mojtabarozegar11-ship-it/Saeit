@@ -10,6 +10,7 @@ from .evolution import (
     ApprovedCodeBundle, CheckEvidence, CodeEdit, CodeEvolutionDirector,
     CodeProposal, CodeProposalError, CodeReview, ReviewedFile,
 )
+from .sandbox import IsolatedReviewRunner, IsolationUnavailable, SandboxResult
 
 __all__ = [
     "Ava", "AvaMemory", "AvaReply", "ConsentError", "MemoryItem",
@@ -21,4 +22,5 @@ __all__ = [
     "EncryptedSQLiteMemory", "MemoryIntegrityError", "MemoryKeyError",
     "ApprovedCodeBundle", "CheckEvidence", "CodeEdit", "CodeEvolutionDirector",
     "CodeProposal", "CodeProposalError", "CodeReview", "ReviewedFile",
+    "IsolatedReviewRunner", "IsolationUnavailable", "SandboxResult",
 ]
