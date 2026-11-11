@@ -5,6 +5,11 @@ assistant. It is **not** a conscious entity, a physical robot, a trading bot,
 or a deployed application. It does not call the internet, buy anything, message
 people, or change VPS settings.
 
+**Unified application entrypoint:** `AvaRuntime`. It composes conversation,
+private memory, dynamic personality guidance, internal goals and a simulation-
+only body interface for one authenticated owner. Submodules are implementation
+boundaries, not separate agents. See [unified architecture](ARCHITECTURE.md).
+
 ## Included
 
 - A consistent Persian-capable identity and truthful behavior contract.
@@ -81,12 +86,29 @@ status and informed, current consent before enabling each session. Revocation
 clears its simulated attraction value. An untrusted model assertion is never
 proof of age or consent. Physical intimacy is not supported.
 
-This standalone module is **not connected to the conversational brain**. Its
-new regression tests have **not run** because the Python environment is
-unavailable. Run `python -m unittest discover -s tests -p 'test_ava_affect.py' -v`
-before integration, merge, or deployment.
+The synthetic-affect engine is integrated into `AvaRuntime.converse` as
+trusted expression context. Its standalone tests and unified integration tests
+passed locally on 11 November 2026. No live model or physical robot has been
+connected; test success is not evidence of consciousness or deployment.
 
-## Host integration
+## Unified host integration
+
+```python
+from ava_core import AvaRuntime
+
+def configured_brain(messages):
+    # Configure an authorized local or remote model before real use.
+    raise NotImplementedError("No reasoning model is connected")
+
+runtime = AvaRuntime(
+    owner_id="authenticated-owner-id",
+    brain=configured_brain,
+    propose_goals=lambda history: [],
+)
+# The host independently authorizes any capability that can affect the world.
+```
+
+## Low-level component integration
 
 ```python
 from ava_core import Ava
@@ -110,11 +132,18 @@ messages through this conversational package.
 
 ## Verification
 
+`python -m unittest discover -s tests -p 'test_ava*.py' -v`
+
+
 `python -m unittest discover -s tests -p 'test_ava_core.py' -v`
 
 `python -m unittest discover -s tests -p 'test_ava_goals.py' -v`
 
 `python -m unittest discover -s tests -p 'test_ava_embodiment.py' -v`
+
+`python -m unittest discover -s tests -p 'test_ava_affect.py' -v`
+
+`python -m unittest discover -s tests -p 'test_ava_runtime.py' -v`
 
 This component can later become AVA's personal interface to the unified
 `Mojtaba.bot.ai` system without creating a duplicate task executor.
