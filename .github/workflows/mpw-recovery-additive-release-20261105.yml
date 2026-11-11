@@ -16,6 +16,14 @@ on:
           - activate
           - rollback
           - disable_flags
+      release_run_id:
+        description: "Run ID of the backup to restore (rollback only)"
+        required: false
+        type: string
+      email_activation_confirmation:
+        description: "For activate only: type APPROVE_RECOVERY_EMAIL_SEND"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -97,6 +105,8 @@ jobs:
       - name: Transfer reviewed release bundle to private temporary staging
         env:
           OPERATION: ${{ inputs.operation }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          EMAIL_ACTIVATION_CONFIRMATION: ${{ inputs.email_activation_confirmation }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-recovery-release-ssh"
@@ -127,10 +137,12 @@ jobs:
               timeout 85s ssh -T -F "$d/config" saeit-cpanel "MPW_READONLY_CHAIN_ACK=mpw-existing-paid-trx-readonly-20261105 PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_paid_chain_recheck_readonly_20261105.py'"
               ;;
             activate)
+              test "$EMAIL_ACTIVATION_CONFIRMATION" = 'APPROVE_RECOVERY_EMAIL_SEND' || { echo 'Explicit email activation confirmation required'; exit 1; }
               timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' activate '$GITHUB_RUN_ID'"
               ;;
             rollback)
-              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' rollback '42346897461'"
+              [[ "$RELEASE_RUN_ID" =~ ^[0-9]{8,20}$ ]] || { echo 'Valid backup run ID required'; exit 1; }
+              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' rollback '$RELEASE_RUN_ID'"
               ;;
             disable_flags)
               timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' disable_flags '$GITHUB_RUN_ID'"
@@ -145,5 +157,3 @@ jobs:
           stage="/home/zomorod2/.local/share/mpw-recovery-01-stage-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
           rm -rf -- "$d"
-
-# one-shot rollback retry
