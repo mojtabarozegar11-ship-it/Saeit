@@ -16,6 +16,7 @@ Publication requires separate owner approval. No command executes on import.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -84,6 +85,62 @@ def guard():
         abort("RESTART_TARGET_DRIFT")
     for target in (GUEST, TEMPLATE):
         _file(target)
+
+
+def audit_invoice_email_dependencies() -> dict:
+    """Read-only fail-closed check of live invoice and delivery source files.
+
+    This is not a payment test. A remaining email dependency in the existing
+    invoice handler must be resolved *before* removing the buyer email field.
+    No customer rows, transactions or remote API calls are accessed.
+    """
+    required = (
+        "services/mpw_trx_commercial_web.py",
+        "services/mpw_trx_commercial_context.py",
+        "mpw_commerce/buyer_orders.py",
+    )
+    inspected = []
+    invoice_handlers = 0
+    for rel in required:
+        path = APP / rel
+        raw = _file(path)
+        try:
+            tree = ast.parse(raw.decode("utf-8"))
+        except (SyntaxError, UnicodeError) as exc:
+            abort("INVOICE_SOURCE_UNREADABLE:" + path.name)
+        found = [
+            fn for fn in ast.walk(tree)
+            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and fn.name in ("_start_order", "record_invoice")
+        ]
+        if rel.endswith("mpw_trx_commercial_web.py"):
+            invoice_handlers = sum(fn.name == "_start_order" for fn in found)
+        for fn in found:
+            # Only the concrete invoice/recording functions count. Legacy
+            # recovery helpers elsewhere must not rewrite old order claims.
+            email_tokens = [
+                node.id for node in ast.walk(fn) if isinstance(node, ast.Name)
+                and "email" in node.id.lower()
+            ] + [
+                node.attr for node in ast.walk(fn) if isinstance(node, ast.Attribute)
+                and "email" in node.attr.lower()
+            ] + [
+                node.value for node in ast.walk(fn)
+                if isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and "email" in node.value.lower()
+            ] + [
+                arg.arg for arg in fn.args.args if "email" in arg.arg.lower()
+            ]
+            if email_tokens:
+                abort("INVOICE_EMAIL_DEPENDENCY:" + path.name + ":" + fn.name)
+        inspected.append(rel)
+    if invoice_handlers != 1:
+        abort("INVOICE_HANDLER_MISSING_OR_DUPLICATED")
+    return {"invoice_sources_examined": len(inspected),
+            "invoice_handler_found": True,
+            "email_dependency_in_examined_handlers": False,
+            "scope": "source_indicators_only_not_live_transaction"}
 
 
 def patch_template(original: bytes) -> bytes:
@@ -194,6 +251,7 @@ def _restart():
 
 def publish(run: str, source: Path):
     guard()
+    audit_invoice_email_dependencies()
     old, new = plan(source)
     if new is None:
         print("MPW_EMAIL_FREE=ALREADY_INSTALLED")
@@ -248,8 +306,9 @@ def rollback(run: str):
 def main(argv):
     if len(argv) == 3 and argv[1] == "preflight":
         guard()
+        invoice_audit = audit_invoice_email_dependencies()
         old, new = plan(Path(argv[2]))
-        print(json.dumps({"publish_needed": new is not None,
+        print(json.dumps({"invoice_source_audit": invoice_audit, "publish_needed": new is not None,
                           "before": {k: sha(v) for k, v in old.items()},
                           "after": {k: sha(v) for k, v in (new or old).items()},
                           "invoices_created": 0, "emails_sent": 0}, sort_keys=True))
@@ -257,6 +316,7 @@ def main(argv):
         publish(argv[2], Path(argv[3]))
     elif len(argv) == 2 and argv[1] == "verify":
         guard()
+        audit_invoice_email_dependencies()
         if sha(_file(GUEST)) != APPROVED_GUEST_SHA256:
             abort("GUEST_NOT_INSTALLED")
         verify_template(_file(TEMPLATE))
