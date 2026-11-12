@@ -57,17 +57,33 @@ def backup_copy(source: Path, destination: Path, expected_hash: str) -> None:
     if digest_file(source) != expected_hash:
         raise RestoreError("BACKUP_DIGEST_MISMATCH")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(destination, flags, 0o600)
-    try:
-        with os.fdopen(fd, "wb") as out, source.open("rb") as inp:
-            shutil.copyfileobj(inp, out, length=131072)
-            out.flush()
-            os.fsync(out.fileno())
-        if digest_file(destination) != expected_hash:
-            raise RestoreError("RECOVERY_COPY_CORRUPT")
-    except BaseException:
-        destination.unlink(missing_ok=True)
-        raise
+    # Keep an O_NOFOLLOW source descriptor open while copying. Do not reopen
+    # source by filename after checking its hash (symlink replacement race).
+    reader_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(source, reader_flags), "rb") as inp:
+        src_before = os.fstat(inp.fileno())
+        if not stat.S_ISREG(src_before.st_mode):
+            raise RestoreError("RECOVERY_SOURCE_UNSAFE")
+        fd = os.open(destination, flags, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as out:
+                shutil.copyfileobj(inp, out, length=131072)
+                out.flush()
+                os.fsync(out.fileno())
+            src_after = os.fstat(inp.fileno())
+            if (src_before.st_ino != src_after.st_ino
+                    or src_before.st_dev != src_after.st_dev
+                    or src_before.st_size != src_after.st_size
+                    or src_before.st_mtime_ns != src_after.st_mtime_ns
+                    or src_before.st_ctime_ns != src_after.st_ctime_ns
+                    or source.is_symlink()
+                    or source.stat().st_ino != src_after.st_ino):
+                raise RestoreError("RECOVERY_SOURCE_CHANGED_DURING_COPY")
+            if digest_file(destination) != expected_hash:
+                raise RestoreError("RECOVERY_COPY_CORRUPT")
+        except BaseException:
+            destination.unlink(missing_ok=True)
+            raise
 
 
 def restore(
