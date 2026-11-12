@@ -264,8 +264,10 @@ try {
             $geneticsTitle='ZM-AGRC-GEN-1405-001 | مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل';
             $db->exec('BEGIN IMMEDIATE TRANSACTION');
             try {
-                $existing=one($db,'SELECT id FROM projects WHERE title=? LIMIT 1',[$geneticsTitle]);
-                if($existing===false){
+                // Reconcile legacy records by reserved ID, not only exact mutable display title.
+                $matching=q($db,'SELECT id,title FROM projects WHERE trim(title) LIKE ? ORDER BY id LIMIT 2',['ZM-AGRC-GEN-1405-001%']);
+                if(count($matching)>1)bail('چند پرونده با شناسه یکسان وجود دارد؛ بررسی و اصلاح داده لازم است.',409);
+                if(count($matching)===0){
                     $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,0)')
                        ->execute([$geneticsTitle,'شرکت کشت و صنعت زمرد ملل','planned']);
                     audit($db,'register','genetics-project',(int)$db->lastInsertId());
