@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from scripts.mpw_dynamic_store_cutover_20261108 import (
     FALLBACK_BLOCK, MARKER, inspect_owned_fallback, perform_cutover,
-    verify_dynamic_public,
+    verify_dynamic_public, validate_store_source,
 )
 
 
@@ -70,6 +70,46 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "INVALID_RUN_ID"):
             perform_cutover(self.public, self.backups, "../../escape", lambda: True)
         self.assertFalse(self.backups.exists())
+
+    def test_actual_repo_store_view_passes_without_exact_byte_count(self):
+        """The current storefront is longer than the old 16,371-byte lock."""
+        source = (Path(__file__).resolve().parents[1] /
+                  "core/mojplaywin_views.py").read_bytes()
+        self.assertNotEqual(len(source), 16371)
+        validate_store_source(source)
+
+    def test_safe_comment_or_format_change_is_not_an_availability_lock(self):
+        original = (Path(__file__).resolve().parents[1] /
+                    "core/mojplaywin_views.py").read_bytes()
+        validate_store_source(original + b"\n# Non-functional content review\n")
+
+    def test_unguarded_analytics_or_missing_store_renderer_still_block(self):
+        original = (Path(__file__).resolve().parents[1] /
+                    "core/mojplaywin_views.py").read_bytes()
+        broken = original.replace(
+            b"except Exception as exc:", b"except KeyError as exc:", 1
+        )
+        with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_ANALYTICS_GUARD_ABSENT"):
+            validate_store_source(broken)
+        broken = original.replace(
+            b'return render(request,"mojplaywin/store.html",{"products":PRODUCTS})',
+            b'return None', 1
+        )
+        self.assertNotEqual(broken, original)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_RENDER_CONTRACT_DRIFT"):
+            validate_store_source(broken)
+
+    def test_duplicate_store_definition_is_not_approved(self):
+        original = (Path(__file__).resolve().parents[1] /
+                    "core/mojplaywin_views.py").read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_VIEW_AMBIGUOUS"):
+            validate_store_source(original + b"\ndef store(request):\n return None\n")
+
+    def test_unbounded_or_invalid_source_is_rejected(self):
+        for source in (b"", b"x" * 200001, b"\xff" * 100, b"def store("):
+            with self.subTest(size=len(source)):
+                with self.assertRaises(RuntimeError):
+                    validate_store_source(source)
 
     def test_owner_only_workflow_is_fail_closed(self):
         workflow = (Path(__file__).resolve().parents[1] /
