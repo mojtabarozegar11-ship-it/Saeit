@@ -44,6 +44,7 @@ def test_manual_audit_needs_no_recovery_consent_and_uses_proven_runner():
     audit = _job("audit-readonly")
     assert "github.event_name == 'workflow_dispatch'" in audit
     assert "inputs.operation == 'audit'" in audit
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in audit
     assert "github.ref == 'refs/heads/main'" in audit
     assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in audit
     assert "runs-on: [self-hosted, factory-vps]" in audit
@@ -99,3 +100,29 @@ def test_other_existing_health_workflow_keeps_hourly_read_only_route():
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "FACTORY_AUTOSTART_BLOCKED_CAPACITY" in workflow
     assert "FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE" in workflow
+
+
+def test_nonowner_audit_is_blocked_before_any_private_runner_starts():
+    """Read-only inventory still exposes private VPS, DB and cron metadata."""
+    blocked = _job("blocked-unapproved-recovery")
+    audit = _job("audit-readonly")
+    condition = blocked.split('    if: "', 1)[1].split('"\n', 1)[0]
+    assert "github.actor != 'mojtabarozegar11-ship-it'" in condition
+    assert "|| github.actor != 'mojtabarozegar11-ship-it' ||" in condition
+    assert "inputs.operation != 'audit' && (" in condition
+    assert "inputs.recovery_authorized != true" in condition
+    assert "inputs.offhost_backup_verified != true" in condition
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in audit
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in _job("ensure")
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in _job("pause-loop-low-disk")
+    assert "VPS_SSH_PRIVATE_KEY" not in blocked
+    assert "VPS_SSH_PRIVATE_KEY" in audit
+
+
+def test_manual_audit_does_not_require_mutating_backup_approvals():
+    audit = _job("audit-readonly")
+    assert "inputs.recovery_authorized == true" not in audit
+    assert "inputs.offhost_backup_verified == true" not in audit
+    assert "inputs.operation == 'audit'" in audit
+    assert "  schedule:" not in _on()
+    assert "  push:" not in _on()
