@@ -10,12 +10,15 @@ if (!defined('APP_TITLE') || !function_exists('esc')) {
 }
 // Viewing this dossier is read-only. Only the separate, CSRF-protected admin POST writes a project metadata row.
 $geneticsTitle='ZM-AGRC-GEN-1405-001 | مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل';
-$geneticsRows=q($db,'SELECT id,state,budget FROM projects WHERE title=? LIMIT 1',[$geneticsTitle]);
-if($geneticsRows){
+$geneticsRows=q($db,'SELECT id,title,state,budget FROM projects WHERE trim(title) LIKE ? ORDER BY id LIMIT 2',['ZM-AGRC-GEN-1405-001%']);
+if(count($geneticsRows)>1){
+    echo '<section class="notice danger"><strong>تداخل شناسه:</strong> چند پروژه با شناسه ZM-AGRC-GEN-1405-001 در دفتر وجود دارد؛ ثبت یا اصلاح خودکار ممنوع است. بررسی مدیریتی و تطبیق سوابق لازم است.</section>';
+}elseif($geneticsRows){
     $registered=$geneticsRows[0];
     $budgetValue=(int)$registered['budget'];
     $budgetText=$budgetValue===0?'بودجه ثبت‌شده صفر (غیرمصوب)':'بودجه درج‌شده در دیتابیس: '.money($budgetValue).' IRR (نیازمند تطبیق مصوبه)';
-    echo '<section class="notice"><strong>ثبت دفتر پروژه‌ها:</strong> ثبت‌شده با شناسه داخلی '.(int)$registered['id'].'؛ وضعیت واقعی رکورد: '.esc((string)$registered['state']).'؛ '.esc($budgetText).'؛ این پرونده هیچ سند حسابداری جدیدی صادر نمی‌کند.</section>';
+    $legacyNote=trim((string)$registered['title'])===$geneticsTitle?'':'؛ عنوان ذخیره‌شده با نسخه جدید متفاوت است و باید بررسی شود';
+    echo '<section class="notice"><strong>ثبت دفتر پروژه‌ها:</strong> ثبت‌شده با شناسه داخلی '.(int)$registered['id'].'؛ وضعیت واقعی رکورد: '.esc((string)$registered['state']).'؛ '.esc($budgetText).esc($legacyNote).'؛ این پرونده هیچ سند حسابداری جدیدی صادر نمی‌کند.</section>';
 }elseif(role()==='admin'){
     echo '<section><h2>ثبت رسمی در فهرست پروژه‌های شرکت</h2><p>این عملیات فقط یک ردیف برنامه‌ریزی با بودجه صفر ایجاد می‌کند؛ هزینه، فاکتور، پرداخت، قرارداد یا سند مالی ایجاد نمی‌کند. ثبت تکراری مجاز نیست.</p>';
     formBegin('genetics_project_register');
