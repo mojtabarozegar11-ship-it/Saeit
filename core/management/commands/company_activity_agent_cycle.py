@@ -1,5 +1,5 @@
 from datetime import timedelta
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from core.company_activity_agent import REPORT_TYPES, REPORT_TITLES, build_report_inputs, build_report_content, ensure_agent, source_activities
 from core.company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
@@ -9,6 +9,12 @@ class Command(BaseCommand):
     help = "Queue a daily Company Activity Intelligence Agent report set."
 
     def handle(self, *args, **options):
+        # Fail before creating the internal plan if the canonical owner is not
+        # provisioned or an old independently-scheduled Agent still owns work.
+        try:
+            ensure_agent()
+        except RuntimeError as exc:
+            raise CommandError(str(exc)) from exc
         now = timezone.now()
         plan, _ = CompanyActivityAgentPlan.objects.get_or_create(
             code="company-activity-intelligence",
@@ -22,7 +28,6 @@ class Command(BaseCommand):
                 "next_run_at": now,
             },
         )
-        ensure_agent()
         if not plan.active or (plan.next_run_at and plan.next_run_at > now):
             self.stdout.write("COMPANY_ACTIVITY_AGENT=WAIT")
             return
