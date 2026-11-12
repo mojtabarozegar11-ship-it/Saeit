@@ -74,6 +74,39 @@ class FormAuditTests(unittest.TestCase):
         self.assertEqual(result["named_email_inputs"], 1)
         self.assertFalse(result["checkout_post_csrf_cta_valid"])
 
+    def test_unclosed_invoice_form_is_not_accepted(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                + csrf + '<button type="submit">Create my TRX payment invoice</button>')
+        self.assertFalse(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
+    def test_button_with_override_or_disabled_is_not_accepted(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        for override in ('formaction="/other/"', 'formmethod="get"',
+                         'form="another"', 'disabled'):
+            with self.subTest(override=override):
+                html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                        + csrf + '<button type="submit" ' + override
+                        + '>Create my TRX payment invoice</button></form>')
+                self.assertFalse(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
+    def test_csrf_attached_to_other_form_or_disabled_is_not_accepted(self):
+        for override in ('form="another"', 'disabled'):
+            with self.subTest(override=override):
+                html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                        '<input name="csrfmiddlewaretoken" type="hidden" value="'
+                        + 'a' * 64 + '" ' + override + '>'
+                        '<button type="submit">Create my TRX payment invoice</button>'
+                        '</form>')
+                self.assertFalse(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
+    def test_valid_submit_input_is_accepted(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="csrfmiddlewaretoken" type="hidden" value="'
+                + 'a' * 64 + '">'
+                '<input type="submit" value="Create my TRX payment invoice"></form>')
+        self.assertTrue(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
     def test_no_form_cannot_pass_by_copy(self):
         result = AUDIT.parse_checkout('<h1>Create my TRX payment invoice</h1>')
         self.assertEqual(result["form_count"], 0)
