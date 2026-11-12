@@ -33,7 +33,8 @@ HOME = SITE / 'index.html'
 CSS = SITE / 'assets/zm-nexus-v1.css'
 ARCHIVE = SITE / 'site-heritage/home-before-nexus-20261112/index.html'
 LOCK = BACKUPS.parent / '.zomorod-homepage-deploy.lock'
-ROOT_MARKERS = ('ZOMOROD_ORBIT_DATA', 'id="main-view"', 'id="orbital-cards"', 'id="site-footer"')
+ROOT_MARKERS = ('id="main-view"', 'id="orbital-cards"', 'id="orbit-shelves"', 'id="site-footer"', 'id="zm-orbit-anchor-stability-20261105"', 'href="/static/site/zomorod-v7/inner-v7.css?v=20261018"')
+EXPECTED_LIVE_SHA256 = '99e9c38cd20aaf400a3c68c2064211dc48d4ff0e518ee4815061ea0ca2626edc'  # Public byte fingerprint captured on 12 Nov 2026
 PROTECTED = (
     'agriculture/index.html', 'research/index.html', 'industry/index.html',
     'company/index.html', 'services/index.html', 'contact/index.html',
@@ -88,6 +89,8 @@ def preflight():
     original = HOME.read_bytes()
     if len(original) < 40_000 or not all(x.encode() in original for x in ROOT_MARKERS):
         raise RuntimeError('Unknown or changed live homepage; fail closed')
+    if sha(original) != EXPECTED_LIVE_SHA256:
+        raise RuntimeError('Live root hash differs from verified baseline; fail closed')
     if b'nexus-home' in original:
         raise RuntimeError('NEXUS already installed; avoid duplicate')
     if ARCHIVE.exists() or ARCHIVE.is_symlink():
