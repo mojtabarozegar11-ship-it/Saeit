@@ -40,7 +40,7 @@
       "source_defined_seed_count": 11,
       "known_live_count": null,
       "proposed_route": "merge_all_as_canonical_internal_site_observability_adapters",
-      "execution_status": "not_yet_attested",
+      "execution_status": "read_only_php_registry_collector_committed_tested_not_run_on_live_cpanel",
       "prerequisites": [
         "read_only_private_sqlite_inventory",
         "cron_and_entrypoint_inventory",
@@ -48,7 +48,24 @@
         "replacement_adapter_tests",
         "single_scheduler_cutover"
       ],
-      "caution": "Seed codes are not proof of live, independently running agents. Keep site evidence/history."
+      "caution": "Seed codes are not proof of live, independently running agents. Keep site evidence/history.",
+      "repository_only_private_db_collector": "deploy/mojtaba_live_topology_readonly.py::cpanel_php_registry_snapshot",
+      "collector_sqlite_open_mode": "mode=ro&immutable=1_and_query_only",
+      "collector_wal_policy": "fail_closed_unknown_when_wal_sidecar_exists",
+      "collector_aggregates": [
+        "agent_code_for_11_known_roles",
+        "enabled_count",
+        "unknown_code_count",
+        "run_status_counts",
+        "site_work_output_status_counts"
+      ],
+      "collector_excludes": [
+        "private_titles",
+        "details",
+        "findings_json",
+        "secret_process_args",
+        "raw_cron_commands"
+      ]
     },
     {
       "id": "factory_site_federation",
@@ -233,7 +250,7 @@
       "source_side_effects": [
         "31_external_forecast_requests_or_cached_responses",
         "create_or_update_daily_weather_story_with_existing_publication_semantics",
-        "optional_paid_generation_behind_environment_date_gate"
+        "paid_generation_only_with_one_time_scoped_owner_approval_grant"
       ],
       "migration_safeguards": [
         "canonical_owner_resolved_before_forecast_network",
@@ -289,9 +306,11 @@
       ],
       "observation_fields": [
         "sanitized_user_cron_entries",
-        "process_match_counts",
-        "candidate_user_service_units",
-        "installed_source_sha256"
+        "process_route_match_counts_not_unique_workers",
+        "candidate_user_systemd_service_units",
+        "candidate_system_systemd_service_units",
+        "installed_source_sha256",
+        "cpanel_private_php_sqlite_known_roles_and_aggregate_run_counts"
       ],
       "credentialed_workflow_trigger": "workflow_dispatch_only_after_review",
       "source_revision_state": "PR_draft_not_merged_or_deployed",
@@ -303,7 +322,7 @@
       "cpanel_known_app_process_inventory_attested": false,
       "actual_schedulers_inactive_verified": false,
       "agent_deactivation_authorized": false,
-      "code_tests_status": "117_offline_Django_and_observer_tests_passed_on_sha_204e0f9",
+      "code_tests_status": "123_focus_tests_passed_GitHub_Actions_43221247127",
       "completion_state": "host_probes_not_executed_no_live_disposition_claim",
       "blockers": [
         "workflow_only_manual_and_currently_in_draft_branch",
@@ -311,7 +330,9 @@
         "source_only_process_markers_do_not_prove_worker_effects",
         "cpanel_PHP_and_Django_database_rows_still_need_read_only_inventory",
         "live_handoff_receipts_and_rollback_not_attested"
-      ]
+      ],
+      "host_probe_execution": "not_dispatched",
+      "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts"
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -344,7 +365,7 @@
     "weather_ai_publication_default_draft_committed": true,
     "one_bot_review_ci_workflow_committed": true,
     "one_bot_review_ci_passed": true,
-    "one_bot_review_ci_last_verified_sha": "204e0f9f837cb531615af59bac62d56aed88619b",
+    "one_bot_review_ci_last_verified_sha": "73af538acd2776baa10e97488df5acc41f6ab876",
     "weather_one_grant_per_approval_source_guard_committed": true,
     "all_integrated_runtime_tests_passed": false,
     "legacy_retirement_canonical_successor_mapping_committed": true,
@@ -356,6 +377,11 @@
     "two_host_probe_nonleaking_tests_passed": true,
     "two_host_live_inventory_attested": false,
     "cross_host_full_agent_inventory_attested": false,
-    "actual_agent_retirements_this_cycle": 0
+    "actual_agent_retirements_this_cycle": 0,
+    "cpanel_php_sqlite_read_only_collector_committed": true,
+    "cpanel_php_sqlite_read_only_collector_tested": true,
+    "cpanel_php_sqlite_live_inventory_attested": false,
+    "system_and_user_service_candidate_scan_committed": true,
+    "system_service_live_inventory_attested": false
   }
 }
