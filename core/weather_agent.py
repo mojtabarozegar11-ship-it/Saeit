@@ -79,24 +79,55 @@ def build_public_report(data):
     return '\n'.join(lines)
 
 
-def generate_research_contents(weather_summary):
-    # An installed API key is not approval for a recurring paid agent call.
-    # The owner must explicitly enable paid content for the current date.
-    paid_approved_today = (
-        os.getenv('MOJ_PAID_LLM_ENABLED') == '1'
-        and os.getenv('MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE') == timezone.localdate().isoformat()
-    )
-    key = os.getenv('OPENAI_API_KEY') if paid_approved_today else None
-    if not key:
-        # Reposting the same two generic articles every day was duplicate SEO
-        # content, not new research. No paid generation and no fake output.
+def generate_research_contents(weather_summary, *, approval_grant_id=None):
+    """One owner-authorized model invocation; NEVER pay based on environment flags.
+
+    A grant must be explicitly issued to the exact weather date, model and
+    canonical robot identity. The grant is consumed before calling the model,
+    so errors or retries cannot trigger a second charge using the same grant.
+    """
+    if approval_grant_id is None:
         return []
+    if type(approval_grant_id) is not int or approval_grant_id <= 0:
+        raise ValueError("WEATHER_INVALID_ONE_TIME_GRANT")
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("WEATHER_PAID_MODEL_KEY_UNAVAILABLE")
+
+    from .models import ApprovalGrant
+    from .approval import ApprovalService
+
+    today = timezone.localdate().isoformat()
+    model_id = os.getenv("OPENAI_WEATHER_CONTENT_MODEL", os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6"))
+    grant = ApprovalGrant.objects.select_related("approval").filter(pk=approval_grant_id).first()
+    if (
+        grant is None
+        or grant.approval.status != "approved"
+        or grant.approval.action_type != "weather_research_generation"
+        or grant.approval.target_type != "MojtabaWeatherCycle"
+        or grant.approval.target_id != today
+    ):
+        raise RuntimeError("WEATHER_PAID_GRANT_TARGET_NOT_APPROVED")
+    required_scope = {
+        "action": "weather_research_generation",
+        "owner_bot_id": "mojtaba.bot.ai",
+        "date": today,
+        "model": model_id,
+        "max_model_calls": 1,
+        "max_articles": 2,
+    }
+    try:
+        ApprovalService().authorize_grant(approval_grant_id, required_scope)
+    except ValueError as exc:
+        raise RuntimeError("WEATHER_PAID_GRANT_INVALID_OR_CONSUMED") from exc
+
     from openai import OpenAI
 
     client = OpenAI(api_key=key)
     prompt = f'''دو محتوای فارسی مستقل و حرفه‌ای برای وب‌سایت Zomorodmelal تولید کن؛ نویسنده هر دو «مجتبی روزگار، محقق و پژوهشگر» باشد. یکی درباره «تحقیقات، فناوری و نوآوری کاربردی» و دیگری درباره «آموزش و تحلیل کاربردی برای تصمیم‌گیری». محتواها علمی، قابل بررسی، غیرتبلیغاتی، کاربردی و مناسب SEO باشند. برای هر محتوا JSON با title, summary, body, meta_description, keywords, sources بده. از ادعا یا منبع ساختگی خودداری کن. اگر داده‌ای نیازمند منبع است، فقط از منابع رسمی و معتبر استفاده کن. زمینه امروز: {weather_summary[:4000]}'''
     response = client.chat.completions.create(
-        model=os.getenv('OPENAI_WEATHER_CONTENT_MODEL', os.getenv('OPENAI_CHAT_MODEL','gpt-5.6')),
+        model=model_id,
+        max_completion_tokens=5000,
         response_format={'type':'json_object'},
         messages=[
             {'role':'system','content':'تو سردبیر علمی و SEO هستی. جعل منبع و ادعای تأییدنشده ممنوع است.'},
@@ -107,7 +138,7 @@ def generate_research_contents(weather_summary):
     return obj.get('contents', obj if isinstance(obj, list) else [])
 
 
-def run_daily_cycle():
+def run_daily_cycle(*, approval_grant_id=None):
     from .models import NewsletterSource, NewsletterStory
     # Guard before fetching 31 external forecasts or generating any content.
     # Retained historical legacy records/receipts must be reconciled first.
@@ -143,7 +174,10 @@ def run_daily_cycle():
             f'weather-daily-content-{day.isoformat()}-2',
         ]
     ).count()
-    generated = generate_research_contents(report) if existing_daily_contents < 2 else []
+    generated = (
+        generate_research_contents(report, approval_grant_id=approval_grant_id)
+        if approval_grant_id is not None and existing_daily_contents < 2 else []
+    )
     content_created = 0
     for idx, item in enumerate(generated[:2],1):
         if not isinstance(item, dict) or not item.get('title'): continue
