@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "status": "retired",
+  "name": "PICM",
+  "policy": "excluded_from_active_queue",
+  "effective_cycle": "E7",
+  "execution_policy": {
+    "reactivate": false,
+    "deploy": false,
+    "rebuild": false,
+    "delete_source_without_explicit_scope": false
+  },
+  "reason": "مالک اعلام کرده است PICM حذف شده؛ اقدامات مرتبط از صف فعال و شمارش چرخه خارج می‌شوند.",
+  "historical_actions": [
+    "E6-C26-PICM-DEPLOY",
+    "E6-C30-PRIVATE-MEDIA",
+    "E6-C32-PICM-RELEASE"
+  ],
+  "legacy_source_patterns": [
+    "core/picm_",
+    "scripts/picm_",
+    "scripts/deploy_picm_",
+    "templates/picm/",
+    "ops/picm-"
+  ],
+  "notes": [
+    "وجود بقایای منبع در مخزن به معنی فعال بودن PICM نیست.",
+    "حذف فیزیکی فایل‌ها تا تعیین دامنه دقیق حذف انجام نمی‌شود.",
+    "هر صف جدید باید قبل از اجرا با این manifest تطبیق داده شود."
+  ]
+}
