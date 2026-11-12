@@ -87,6 +87,36 @@ class ProductSeoTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "https://mojplaywin.com/store/product/991/")
+        # Owning the product and enabling the switch do NOT prove the
+        # verified guest payment handler has been installed on cPanel.
+        self.assertNotContains(response, '"@type": "Offer"')
+        self.assertContains(response, "verified checkout is not yet available")
+
+    @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,), MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True)
+    def test_reviewed_checkout_route_allows_owner_approved_offer(self):
+        from unittest.mock import patch
+        sha = "a" * 64
+        product = Product.objects.create(
+            pk=991, title="Approved Original Digital Tool",
+            product_type="Digital_Tool", price="12.00", currency="USD",
+            active=True, metadata={
+                "summary": "Documented original digital tool",
+                "rights_cleared": True, "publication_approved": True,
+                "sha256": sha, "rights_asset_sha256": sha,
+                "rights_document_sha256": "b" * 64,
+            },
+        )
+        # This stub checks only the positive SEO rendering contract, NOT
+        # live checkout readiness, ledger settlement, or paid file access.
+        with patch(
+            "core.product_seo_views.approved_guest_checkout_route",
+            return_value="/store/product/991/checkout/",
+        ) as route:
+            response = self.client.get(
+                "/store/product/991/", HTTP_HOST="mojplaywin.com"
+            )
+        self.assertEqual(response.status_code, 200)
+        route.assert_called_once_with(product.pk)
         self.assertContains(response, '"@type": "Offer"')
         self.assertContains(response, '"priceCurrency": "USD"')
 
