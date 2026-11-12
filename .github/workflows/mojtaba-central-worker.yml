@@ -35,6 +35,9 @@ jobs:
         run: |
           set -euo pipefail
           test -f "$QUEUE_PATH"
+          export FACTORY_VPS_RUNNER=1
+          export HOST_KEY="${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}"
+          test -n "$HOST_KEY"
           state="$HOME/.local/state/mojtaba.bot.ai/central_cycle_state.json"
           mkdir -p "$(dirname "$state")"
           python3 deploy/mojtaba_bot_cycle_worker.py --cycle "$CYCLE" --queue "$QUEUE_PATH" --state "$state"
