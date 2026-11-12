@@ -23,6 +23,53 @@ normalize_key() {
   chmod 600 "$destination"
   ssh-keygen -y -P "" -f "$destination" >/dev/null
 }
+if [[ "${FACTORY_VPS_RUNNER:-0}" == "1" ]]; then
+  normalize_key "$HOST_KEY" "$work/host.key"
+  ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+  test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+  cat > "$work/config" <<EOF
+Host saeit-cpanel
+  HostName 178.239.147.125
+  User zomorod2
+  Port 1396
+  IdentityFile $work/host.key
+  UserKnownHostsFile $work/host.known
+  StrictHostKeyChecking yes
+  IdentitiesOnly yes
+  BatchMode yes
+  ConnectTimeout 15
+  ServerAliveInterval 20
+  ServerAliveCountMax 3
+  ForwardAgent no
+  RequestTTY no
+EOF
+  chmod 600 "$work/config"
+  case "$operation" in
+    relay_preflight)
+      printf 'VPS_RELAY=LOCAL_FACTORY_VPS
+'
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'printf "CPANEL_SSH=READY
+"; id -un; hostname'
+      ;;
+    cpanel_version)
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+      ;;
+    passenger_inventory)
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+      ;;
+    cpanel_preflight)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
+      ;;
+    django_check)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; test -x "$python"; cd "$root"; "$python" manage.py check'
+      ;;
+    django_migrations)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+      ;;
+  esac
+  exit 0
+fi
+
 normalize_key "$VPS_KEY" "$work/vps.key"
 normalize_key "$HOST_KEY" "$work/host.key"
 
