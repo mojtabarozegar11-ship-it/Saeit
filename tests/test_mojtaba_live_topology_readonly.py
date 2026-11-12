@@ -415,3 +415,36 @@ def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive
     assert 'git push' not in workflow
     assert 'MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof' in workflow
 
+
+def test_local_vps_preflight_classifies_runner_user_without_disclosing_identity():
+    """Do not silently treat a non-githubops self-hosted runner as the VPS app user."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert 'if [[ "$(id -un)" != "githubops" ]]; then' in workflow
+    assert "MOJTABA_VPS_OBSERVATION=wrong_host_user" in workflow
+    assert 'grep -Fqx "MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user"' in workflow
+    assert workflow.index('if [[ "$(id -un)" != "githubops" ]]') < workflow.index(
+        'elif python3 deploy/mojtaba_live_topology_readonly.py --role vps'
+    )
+    assert 'cat "$d/vps.err"' not in workflow
+    assert 'echo "$runner_user"' not in workflow
+    assert "sudo " not in workflow
+
+
+def test_incomplete_two_host_inventory_fails_closed_not_green():
+    """A green Actions job must not attest a partial cPanel-only observation."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert "MOJTABA_READONLY_CPANEL=" in workflow
+    assert "MOJTABA_READONLY_VPS=" in workflow
+    assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" in workflow
+    assert (
+        'echo "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof"\n'
+        '            echo "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE"\n'
+        '            exit 1'
+    ) in workflow
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "secrets.VPS_SSH_PRIVATE_KEY" not in workflow
+    assert "StrictHostKeyChecking=yes" in workflow
