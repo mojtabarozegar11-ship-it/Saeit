@@ -196,8 +196,7 @@ def live() -> int:
     report["all_email_free_forms"] = all(
         record.get("email_free_form_evidence") is True
         for record in report["products"].values()
-    ) and len(report["products"]) == len(SKUS)
-    ) and store_status == "OTHER" and report["store_http_200"]
+    ) and len(report["products"]) == len(SKUS) and store_status == "OTHER" and report["store_http_200"]
     # Even email-free pages do not establish payment finality and paid delivery.
     report["sale_proven"] = False
     print("MPW_3SKU_LIVE_FORM_READONLY=" + json.dumps(report, sort_keys=True))
