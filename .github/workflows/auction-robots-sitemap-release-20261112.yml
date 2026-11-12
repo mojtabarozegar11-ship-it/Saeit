@@ -1,0 +1,158 @@
+name: Safely register auction sitemap in robots discovery
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auction-robots-sitemap-release-20261112.yml]
+permissions: {contents: read}
+concurrency: {group: auction-robots-sitemap-20261112, cancel-in-progress: false}
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Confirm original robots directives and only one added sitemap
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          x=Path('public/auctions/robots.txt').read_text(encoding='utf-8')
+          expected=['User-agent: *','Disallow: /admin/','Disallow: /site-heritage/','Disallow: /__zm_','Disallow: /zm-agriculture-guides/','Sitemap: https://zomorodmelal.ir/sitemap.xml','Sitemap: https://zomorodmelal.ir/topics/sitemap.xml','Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml']
+          assert x.splitlines()==expected, x
+          print('ROBOTS_SOURCE_POLICY=EXACT_PRESERVED_AND_EXTENDED')
+          PY
+      - name: Deploy site-owned sitemap discovery via pinned direct cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/auction-robots-release"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          for path in "robots.txt" "auctions/" "sitemap-auctions.xml" "sitemap.xml" "auctions/346/" "auctions/347/" "auctions/348/" "auctions/349/"; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            status="$(curl -sSL --max-time 18 -o "$d/old-$name" -w '%{http_code}' "https://zomorodmelal.ir/$path" || true)"
+            test "$status" = 200
+            echo "BASELINE_HTTP_$name=200"
+          done
+          original_sha="$(sha256sum "$d/old-robots.txt" | cut -c1-64)"
+          test "$original_sha" = "8162a9285a7905e75bd234d1824db2573684c56df1cb6802844d384a41c460bd"
+          python3 - "$d/old-robots.txt" public/auctions/robots.txt <<'PY'
+          import sys
+          original=open(sys.argv[1],'rb').read()
+          updated=open(sys.argv[2],'rb').read()
+          assert updated==original+b'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml\n'
+          print('ROBOTS_LIVE_ORIGINAL_PREFIX=IDENTICAL')
+          PY
+          test "$(sha256sum "$d/old-auctions_" | cut -c1-64)" = '65db4dbb09197ee81c17c6596d6e8ccb7b399464b7589d487dcce4c1f2fe49a1'
+          test "$(sha256sum "$d/old-sitemap-auctions.xml" | cut -c1-64)" = 'ecf440d829a2680dbe62aa20516ed00686edbfcfd300c98fd074f1dadf6517d7'
+          new_sha="$(sha256sum public/auctions/robots.txt | cut -c1-64)"
+          stage="/home/zomorod2/.auction-robots-$GITHUB_RUN_ID.txt"
+          timeout 50s scp -q -F "$d/config" public/auctions/robots.txt "saeit-cpanel:$stage"
+          transfer_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$stage' | cut -c1-64")"
+          test "$new_sha" = "$transfer_sha"
+          echo 'ROBOTS_TRANSFER_SHA256=VERIFIED'
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$stage' '$GITHUB_RUN_ID' '$new_sha'" <<'PY'
+          import hashlib,os,pathlib,stat,sys
+          stage,run,source_sha=sys.argv[1:]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess'
+          directory=root/'zm-auctions-index';robot=directory/'robots.txt'
+          assert os.getuid()==home.stat().st_uid
+          assert directory.is_dir() and not directory.is_symlink() and not robot.exists() and not robot.is_symlink()
+          assert ht.is_file() and not ht.is_symlink()
+          assert hashlib.sha256((directory/'index.html').read_bytes()).hexdigest()=='65db4dbb09197ee81c17c6596d6e8ccb7b399464b7589d487dcce4c1f2fe49a1'
+          assert hashlib.sha256((directory/'sitemap.xml').read_bytes()).hexdigest()=='ecf440d829a2680dbe62aa20516ed00686edbfcfd300c98fd074f1dadf6517d7'
+          raw=pathlib.Path(stage).read_bytes()
+          assert hashlib.sha256(raw).hexdigest()==source_sha
+          previous=home/'.backups'/'auction-index-scoped'/'43239723354'/'htaccess.original'
+          assert previous.is_file() and not previous.is_symlink()
+          old_bytes=previous.read_bytes()
+          assert hashlib.sha256(old_bytes).hexdigest()=='3006d8a696efc9b1acfc3118c834c02f7235b790e7f4828f9572675496c3ad6b'
+          main_anchor=b'RewriteRule ^auctions/349/?$ /zm-auction349/index.html [END,NC]'
+          prefix=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]\nRewriteRule ^sitemap-auctions[.]xml$ /zm-auctions-index/sitemap.xml [END,NC]\n'
+          current_expected=old_bytes.replace(main_anchor,prefix+main_anchor)
+          current=ht.read_bytes()
+          assert current==current_expected,'UNRECOGNIZED_HTACCESS_DRIFT'
+          anchor=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]'
+          addition=b'RewriteRule ^robots[.]txt$ /zm-auctions-index/robots.txt [END,NC]\n'
+          updated=current.replace(anchor,addition+anchor)
+          backup=home/'.backups'/'auction-robots-scoped'/run
+          backup.mkdir(mode=0o700,parents=True,exist_ok=False)
+          (backup/'htaccess.original').write_bytes(current)
+          (backup/'robots.sha256').write_text(source_sha+'\n')
+          ht_tmp=root/('.htaccess.auction-robots.'+run)
+          try:
+              with open(robot,'xb') as f:
+                  f.write(raw);f.flush();os.fsync(f.fileno())
+              robot.chmod(0o644)
+              with open(ht_tmp,'xb') as f:
+                  f.write(updated);f.flush();os.fsync(f.fileno())
+              ht_tmp.chmod(stat.S_IMODE(ht.stat().st_mode))
+              os.replace(ht_tmp,ht)
+          except Exception:
+              if ht_tmp.exists():ht_tmp.unlink()
+              if robot.is_file() and hashlib.sha256(robot.read_bytes()).hexdigest()==source_sha:robot.unlink()
+              raise
+          pathlib.Path(stage).unlink()
+          print('AUCTION_ROBOTS_INSTALL=COMPLETE')
+          PY
+          verified=yes
+          code="$(curl -sSL --max-time 20 -o "$d/new-robots.txt" -w '%{http_code}' "https://zomorodmelal.ir/robots.txt?v=$GITHUB_RUN_ID" || true)"
+          test "$code" = 200 || verified=no
+          test "$(sha256sum "$d/new-robots.txt" | cut -c1-64)" = "$new_sha" || verified=no
+          grep -Fq 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' "$d/new-robots.txt" || verified=no
+          for path in "auctions/" "sitemap-auctions.xml" "sitemap.xml" "auctions/346/" "auctions/347/" "auctions/348/" "auctions/349/"; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            code="$(curl -sSL --max-time 18 -o "$d/new-$name" -w '%{http_code}' "https://zomorodmelal.ir/$path" || true)"
+            test "$code" = 200 || verified=no
+            test "$(sha256sum "$d/old-$name" | cut -c1-64)" = "$(sha256sum "$d/new-$name" | cut -c1-64)" || verified=no
+          done
+          root_status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          test "$root_status" = 200 || verified=no
+          if test "$verified" != yes; then
+            echo 'ROBOTS_PUBLIC_VERIFICATION=FAILED_ROLLBACK'
+            timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID' '$new_sha'" <<'ROLLBACK'
+          import hashlib,os,pathlib,stat,sys
+          run,expected=sys.argv[1:];home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess'
+          previous=(home/'.backups'/'auction-robots-scoped'/run/'htaccess.original').read_bytes()
+          anchor=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]'
+          add=b'RewriteRule ^robots[.]txt$ /zm-auctions-index/robots.txt [END,NC]\n'
+          assert ht.read_bytes()==previous.replace(anchor,add+anchor),'UNEXPECTED_HTACCESS_EDIT'
+          tmp=root/('.htaccess.rollback-robots.'+run)
+          with open(tmp,'xb') as f:f.write(previous);f.flush();os.fsync(f.fileno())
+          tmp.chmod(stat.S_IMODE(ht.stat().st_mode));os.replace(tmp,ht)
+          path=root/'zm-auctions-index'/'robots.txt'
+          assert path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest()==expected
+          path.unlink()
+          print('ROBOTS_SCOPE_ROLLBACK=COMPLETE')
+          ROLLBACK
+            exit 1
+          fi
+          echo 'ROBOTS_AUCTIONS_SITEMAP=DISCOVERABLE'
+          echo 'ROBOTS_ORIGINAL_RULES=BYTE_PRESERVED'
+          echo 'EXISTING_NOTICE_AND_SITEMAP_FILES=UNCHANGED'
