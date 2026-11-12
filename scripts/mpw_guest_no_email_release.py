@@ -162,11 +162,13 @@ def audit_invoice_email_dependencies() -> dict:
         for stmt in tree.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 functions.setdefault(stmt.name, []).append(stmt)
-            elif isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Constant):
-                if isinstance(stmt.value.value, str):
-                    for target in stmt.targets:
-                        if isinstance(target, ast.Name):
-                            constant_aliases[target.id] = stmt.value.value
+            elif isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+                value = folded_string(stmt.value) if stmt.value is not None else None
+                if value is not None:
+                    targets = stmt.targets if isinstance(stmt, ast.Assign) else (stmt.target,)
+                    for symbol in targets:
+                        if isinstance(symbol, ast.Name):
+                            constant_aliases[symbol.id] = value
             elif isinstance(stmt, ast.ImportFrom):
                 for alias in stmt.names:
                     if alias.name == "record_invoice":
@@ -253,7 +255,7 @@ def verify_template(raw: bytes):
     # This is a fail-closed source gate, not a replacement for runtime POST QA.
     for tag in re.finditer(rb"<(?:input|textarea|select)\b[^>]*>", raw, re.I | re.S):
         opening = tag.group(0)
-        for attribute in (b"name", b"type"):
+        for attribute in (b"name", b"id", b"type", b"autocomplete"):
             match = re.search(
                 rb"(?<![\w:-])" + attribute +
                 rb"""\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+))""",
@@ -262,8 +264,8 @@ def verify_template(raw: bytes):
             if match is None:
                 continue
             value = next(group for group in match.groups() if group is not None)
-            if ((attribute == b"name" and b"email" in value.lower()) or
-                    (attribute == b"type" and value.lower() == b"email")):
+            if ((attribute in (b"name", b"id") and b"email" in value.lower()) or
+                    (attribute in (b"type", b"autocomplete") and value.lower() == b"email")):
                 abort("EMAIL_FIELD_REMAINS")
     if raw.count(CTA) != 1 or (b"csrf_token" not in raw and b"csrfmiddlewaretoken" not in raw):
         abort("FORM_CONTRACT_LOST")
