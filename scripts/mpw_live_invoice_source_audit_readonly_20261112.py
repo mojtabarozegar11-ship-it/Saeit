@@ -76,7 +76,7 @@ def has_email_reference(node: ast.AST, constants: dict[str, str] | None = None) 
 
 def template_email_controls(raw: bytes) -> bool:
     """Detect aliases and hidden email inputs, not just name='email'."""
-    for tag in re.finditer(rb"<(?:input|textarea|select)\b[^>]{0,4096}>", raw, re.I | re.S):
+    for tag in re.finditer(rb"<(?:input|textarea|select|button)\b[^>]{0,4096}>", raw, re.I | re.S):
         opening = tag.group(0)
         for name in (b"name", b"id", b"type", b"autocomplete"):
             pattern = (rb"(?<![\w:-])" + name
