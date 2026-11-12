@@ -241,3 +241,66 @@ def test_malformed_snapshot_structures_fail_before_disposition(tmp_path, field):
     path = save_snapshot(tmp_path, "vps", data)
     with pytest.raises(ValueError, match="TOPOLOGY_SHAPE_INVALID"):
         module.parse_snapshot(path, "vps", now=datetime.now(timezone.utc))
+
+
+def test_every_source_defined_identity_has_explicit_status_without_live_claim():
+    report = module.preview(snap("vps"), snap("cpanel"),
+                            MANIFEST, repository_root=ROOT)
+    identities = report["identity_dispositions"]
+    assert report["source_defined_identity_count_not_live_bots"] == 21
+    assert len(identities) == 21
+    assert len({(x["source"], x["code"]) for x in identities}) == 21
+    assert all(x["retirement_authorized"] is False for x in identities)
+    assert all(x["live_execution_verified"] is False for x in identities)
+    assert all(x["registration_state"].startswith("unknown_") for x in identities)
+
+
+def test_cpanel_private_registry_yields_per_role_records_not_false_active_bots():
+    php = {
+        "state": "source_registry_snapshot_only",
+        "agent_roles": [
+            {"code": "master", "enabled": True},
+            {"code": "weather", "enabled": False},
+            {"code": "PRIVATE_EXTERNAL_SECRET", "enabled": True},
+        ],
+        "known_roles_found": 2, "enabled_count": 2,
+    }
+    report = module.preview(
+        snap("vps"), snap("cpanel", private_php_site_registry=php),
+        MANIFEST, repository_root=ROOT,
+    )
+    roles = {r["code"]: r for r in report["identity_dispositions"]}
+    assert roles["master"]["registration_state"] == "enabled_database_record_not_live_worker"
+    assert roles["weather"]["registration_state"] == "disabled_database_record_not_retirement_proof"
+    assert roles["seo"]["registration_state"] == "not_in_observed_private_registry"
+    assert roles["mojtaba-bot-ai"]["registration_state"] == "unknown_django_database_not_observed"
+    assert "PRIVATE_EXTERNAL_SECRET" not in json.dumps(report)
+    assert roles["weather"]["retirement_authorized"] is False
+
+
+def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
+    php = {
+        "state": "source_registry_snapshot_only",
+        "agent_roles": [{"code": "research", "enabled": False}],
+        "known_roles_found": 1, "enabled_count": 0,
+    }
+    cpanel = snap("cpanel", private_php_site_registry=php)
+    cpanel["processes"]["route_match_counts"] = {"site_agent_workforce.php": 1}
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    identity = next(i for i in report["identity_dispositions"]
+                    if i["source"] == "cpanel_php_sqlite" and i["code"] == "research")
+    assert identity["registration_state"] == "disabled_database_record_not_retirement_proof"
+    assert identity["retirement_authorized"] is False
+    assert report["verified_live_agents"] is None
+
+
+def test_non_boolean_site_enabled_value_is_not_accepted_as_valid_record():
+    php = {
+        "state": "source_registry_snapshot_only",
+        "agent_roles": [{"code": "master", "enabled": 1}],
+        "known_roles_found": 1, "enabled_count": 1,
+    }
+    identities = module.identity_dispositions(
+        snap("cpanel", private_php_site_registry=php)
+    )
+    assert identities[0]["registration_state"] == "not_in_observed_private_registry"
