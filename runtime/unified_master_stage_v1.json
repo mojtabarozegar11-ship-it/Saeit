@@ -262,5 +262,44 @@
       "Ninety-six pending queue items are not delivery receipts"
     ],
     "prohibitions_respected": "No production deploy, user email, financial charge, new trading or destructive action"
+  },
+  "c05_first_all_lanes_verified": {
+    "status": "first_reproducibly_verified_source_deliverable_in_each_A_B_C_D_lane",
+    "date": "2026-11-12",
+    "single_commit_with_four_manifests": "baecca7a7c495dbc8f152ab4aa9bf06806613870",
+    "verified_CI": {
+      "run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43225895004",
+      "ledger_pytest_passed": 34,
+      "water_budget_pytest_passed": 18,
+      "arrow_escape_levels_solved_in_node": 204,
+      "arrow_escape_invalid_level_regression_cases": 9,
+      "invalid_manifests": 0,
+      "verified_manifest_count": 5
+    },
+    "latest_audit_accepted_actions": {
+      "A": 1,
+      "B": 1,
+      "C": 1,
+      "D": 1,
+      "E": 3,
+      "total": 7,
+      "target": 250,
+      "percent": 2.8
+    },
+    "added_genuine_receipts": [
+      "runtime/cycle_receipts/A/A-20261112-C05-original-wheat-chapter-02.json",
+      "runtime/cycle_receipts/B/B-20261112-C05-contract-market-protocol.json",
+      "runtime/cycle_receipts/C/C-20261112-C05-arrow-escape-level-validation.json",
+      "runtime/cycle_receipts/D/D-20261112-C05-water-margin-negative.json"
+    ],
+    "explanation": "Evidence proves committed source changes and an isolated quality run; it does not prove five automated hourly task executions, live website publication, signed customer delivery, payment collection or production deployment.",
+    "remaining_technical_gap": [
+      "Each automation must itself submit a fresh receipt manifest at its actual hourly execution",
+      "Independent real task execution on a persistent authorized factory runner not demonstrated",
+      "Private Bazei cross-repository source receipts need a separate protected validator",
+      "All queued items not actually delivered remain pending; current staged counts A50 B6 C10 D20 E10",
+      "Longer-term records and recent 75-minute window must remain separately reported; no success inflation"
+    ],
+    "approvals": "no email, ticket, real payment, live trading, private-data publication or production deployment"
   }
 }
