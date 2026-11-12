@@ -9,8 +9,10 @@ case "$operation" in
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
-: "${VPS_KEY:?VPS_KEY is required}"
 : "${HOST_KEY:?HOST_KEY is required}"
+if [[ "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
+  : "${VPS_KEY:?VPS_KEY is required}"
+fi
 
 work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
@@ -23,6 +25,49 @@ normalize_key() {
   chmod 600 "$destination"
   ssh-keygen -y -P "" -f "$destination" >/dev/null
 }
+if [[ "${FACTORY_VPS_RUNNER:-0}" == "1" ]]; then
+  normalize_key "$HOST_KEY" "$work/host.key"
+  ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+  test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+  cat > "$work/config" <<EOF
+Host saeit-cpanel
+  HostName 178.239.147.125
+  User zomorod2
+  Port 1396
+  IdentityFile $work/host.key
+  UserKnownHostsFile $work/host.known
+  StrictHostKeyChecking yes
+  IdentitiesOnly yes
+  BatchMode yes
+  ConnectTimeout 15
+  ServerAliveInterval 20
+  ServerAliveCountMax 3
+  ForwardAgent no
+  RequestTTY no
+EOF
+  chmod 600 "$work/config"
+  case "$operation" in
+    relay_preflight)
+      printf 'VPS_RELAY=LOCAL_FACTORY_VPS
+'
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'printf "CPANEL_SSH=READY
+"; id -un; hostname'
+      ;;
+    cpanel_version)
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+      ;;
+    passenger_inventory)
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+      ;;
+    cpanel_preflight)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
+      ;;
+    django_check)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python="$(find /home/zomorod2 -type f -path "*/bin/python*" -perm -u+x -print 2>/dev/null | head -1)"; if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; find /home/zomorod2 -type f -path "*/bin/python*" -print 2>/dev/null | head -50; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
+      ;;  esac
+  exit 0
+fi
+
 normalize_key "$VPS_KEY" "$work/vps.key"
 normalize_key "$HOST_KEY" "$work/host.key"
 
