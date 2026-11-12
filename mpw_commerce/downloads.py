@@ -67,13 +67,29 @@ def download_paid_item(request,item_id):
     item=OrderItem.objects.select_related("product").filter(pk=item_id).first()
     if item is None:
         raise Http404
+    from services.mpw_trx_commercial_context import private_paid_stream_matches_approved
+    descriptor=None
+    stream=None
     try:
         path=_private_file(item)
-        fd=os.open(str(path),os.O_RDONLY|os.O_NOFOLLOW)
-        file_handle=os.fdopen(fd,"rb")
+        flags=os.O_RDONLY | getattr(os,"O_NOFOLLOW",0) | getattr(os,"O_CLOEXEC",0)
+        descriptor=os.open(str(path),flags)
+        stream=os.fdopen(descriptor,"rb")
+        descriptor=None
+        # Grant ownership is necessary but insufficient: only stream the
+        # approved private artifact from the exact file descriptor opened.
+        if not private_paid_stream_matches_approved(item.product,stream):
+            raise Http404("Approved private asset is not available")
+        response=FileResponse(stream,as_attachment=True,filename=path.name)
+        stream=None  # FileResponse now owns and closes the open descriptor.
     except (OSError,ValueError) as exc:
-        raise Http404 from exc
-    result=FileResponse(file_handle,as_attachment=True,filename=path.name)
-    result["Cache-Control"]="no-store, private"
-    result["X-Content-Type-Options"]="nosniff"
-    return result
+        raise Http404("Private asset unavailable") from exc
+    finally:
+        if stream is not None:
+            stream.close()
+        if descriptor is not None:
+            os.close(descriptor)
+    response["Cache-Control"]="no-store, private"
+    response["X-Content-Type-Options"]="nosniff"
+    response["X-Robots-Tag"]="noindex, nofollow"
+    return response
