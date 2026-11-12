@@ -8,31 +8,51 @@ Python 3.8+ standard library only. No network or market-data claims.
 """
 import argparse
 import csv
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
+from functools import wraps
 import json
 from pathlib import Path
 import sys
 
 
 ZERO = Decimal(0)
+SIX_PLACES = Decimal("0.000001")
+MAX_INPUT = Decimal("1e20")
+
+
+def safe_model_precision(function):
+    @wraps(function)
+    def call(*args, **kwargs):
+        with localcontext() as context:
+            context.prec = 80
+            return function(*args, **kwargs)
+    return call
 
 
 def number(value, field, *, strictly_positive=False):
     if isinstance(value, bool) or value is None:
         raise ValueError(field + ": number required")
+    raw = str(value)
+    if len(raw) > 64:
+        raise ValueError(field + ": numeric input too long")
     try:
-        n = Decimal(str(value))
+        n = Decimal(raw)
     except (InvalidOperation, ValueError, TypeError):
         raise ValueError(field + ": invalid number")
     if not n.is_finite() or n < ZERO or (strictly_positive and n == ZERO):
         raise ValueError(field + ": must be finite and " + ("positive" if strictly_positive else "nonnegative"))
+    if n > MAX_INPUT:
+        raise ValueError(field + ": above supported magnitude (1e20)")
+    if n != n.quantize(SIX_PLACES):
+        raise ValueError(field + ": maximum six decimal places")
     return n
 
 
 def string(value):
-    return format(value.quantize(Decimal("0.000001")), "f")
+    return format(value.quantize(SIX_PLACES), "f")
 
 
+@safe_model_precision
 def evaluate(data):
     if not isinstance(data, dict):
         raise ValueError("root object required")
@@ -51,6 +71,10 @@ def evaluate(data):
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 100:
             raise ValueError("crop name required")
         name = name.strip()
+        # Crop labels appear in CSV. Reject spreadsheet formula prefixes and
+        # embedded control characters before exporting any user-supplied text.
+        if not name[0].isalnum() or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+            raise ValueError("crop name must start with a letter or digit and have no controls")
         if name.casefold() in names:
             raise ValueError("duplicate crop name")
         names.add(name.casefold())
@@ -63,11 +87,13 @@ def evaluate(data):
     remaining = budget
     rows = []
     unfilled_profitable = []
+    total_margin_exact = ZERO
     for c in ordered:
         feasible = min(c["max_area"], remaining / c["water"])
         # Do not allocate scarce water to zero-margin crops.
         allocated = feasible if c["margin"] > 0 else ZERO
         consumed = allocated * c["water"]
+        total_margin_exact += allocated * c["margin"]
         remaining -= consumed
         if c["margin"] > 0 and allocated < c["max_area"]:
             unfilled_profitable.append(c)
@@ -85,7 +111,7 @@ def evaluate(data):
     # linear scenario; no real water-access or land-use entitlement is implied.
     next_crop = unfilled_profitable[0] if unfilled_profitable else None
     water_used = budget - remaining
-    total_margin = sum((Decimal(row["estimated_gross_margin"]) for row in rows), ZERO)
+    total_margin = total_margin_exact
     return {
         "method": "fractional_greedy_gross_margin_per_water",
         "optimization_scope": "continuous_single_resource_linear_model",
