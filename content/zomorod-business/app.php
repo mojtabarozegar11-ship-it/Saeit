@@ -258,6 +258,20 @@ try {
         } elseif($action==='document'){
             $title=req('title');$body=req('body');if($title===''||$body==='')bail('عنوان و متن سند الزامی است.');
             $db->prepare('INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)')->execute([$title,req('category','اداری'),$body,actor()]);audit($db,'create','document',(int)$db->lastInsertId());
+        } elseif($action==='genetics_project_register'){
+            // Project registration is an explicit admin-only metadata action; never an accounting journal.
+            if(role()!=='admin')bail('ثبت پرونده راهبردی فقط برای مدیر اصلی مجاز است.',403);
+            $geneticsTitle='ZM-AGRC-GEN-1405-001 | مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل';
+            $db->exec('BEGIN IMMEDIATE TRANSACTION');
+            try {
+                $existing=one($db,'SELECT id FROM projects WHERE title=? LIMIT 1',[$geneticsTitle]);
+                if($existing===false){
+                    $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,0)')
+                       ->execute([$geneticsTitle,'شرکت کشت و صنعت زمرد ملل','planned']);
+                    audit($db,'register','genetics-project',(int)$db->lastInsertId());
+                }
+                $db->commit();
+            }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
         } elseif($action==='project'){
             $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
             $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
@@ -376,7 +390,7 @@ try {
         if(is_file($dossier)){require $dossier;}else{echo '<section class="notice danger">پرونده مرکز ژنتیک در این نسخه نصب نشده است.</section>';}
     } elseif($page==='projects'){
         echo '<section><h2>پروژه‌های شرکت</h2><div class="scroll"><table><tr><th>نام</th><th>مسئول</th><th>وضعیت</th><th>بودجه IRR</th></tr>';foreach(q($db,'SELECT * FROM projects ORDER BY id DESC') as $r)echo '<tr><td>'.esc($r['title']).'</td><td>'.esc($r['owner']).'</td><td>'.esc($r['state']).'</td><td>'.money((int)$r['budget']).'</td></tr>';echo '</table></div></section>';
-        echo '<section><h2>پرونده تخصصی مرکز ژنتیک جانوران</h2><p>شناسه ZM-AGRC-GEN-1405-001 · وضعیت: طرح مفهومی · پیشرفت اجرایی مستند: ۰٪ · برآورد سرمایه میانی: ۶۵٫۴ میلیون دلار (غیرقطعی و خارج از دفتر کل).</p><p class="muted">این پرونده هنوز ردیف پایگاه‌داده پروژه‌ها یا سند حسابداری ایجاد نمی‌کند و در شمارش پروژه‌های ثبت‌شده منظور نشده است.</p><a href="?page=genetics_center">جزئیات طرح، ظرفیت‌ها، زمین و بودجه</a></section>';
+        echo '<section><h2>پرونده تخصصی مرکز ژنتیک جانوران</h2><p>شناسه ZM-AGRC-GEN-1405-001 · وضعیت: طرح مفهومی · پیشرفت اجرایی مستند: ۰٪ · برآورد سرمایه میانی: ۶۵٫۴ میلیون دلار (غیرقطعی و خارج از دفتر کل).</p><p class="muted">این صفحه به‌تنهایی پروژه یا سند حسابداری ثبت نمی‌کند. ثبت یک‌بارهٔ ردیف برنامه‌ریزی در دفتر پروژه‌ها فقط با عملیات مجاز مدیر انجام می‌شود و بودجه آن صفر (غیرمصوب) خواهد بود.</p><a href="?page=genetics_center">جزئیات طرح، ظرفیت‌ها، زمین و بودجه</a></section>';
         if(role()!=='viewer'){echo '<section><h2>افزودن پروژه</h2>';formBegin('project');echo '<div class="form"><div><label>عنوان پروژه</label><input name="title" required></div><div><label>مسئول</label><input name="owner" required></div><div><label>وضعیت</label><select name="state"><option value="planned">برنامه‌ریزی</option><option value="active">فعال</option><option value="paused">متوقف</option><option value="done">خاتمه‌یافته</option></select></div><div><label>بودجه IRR</label><input name="budget" value="0"></div></div><button>ثبت پروژه</button></form></section>';}
     } elseif($page==='approval_register'){
         authorize('view');
