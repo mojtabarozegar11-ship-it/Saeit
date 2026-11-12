@@ -3,6 +3,7 @@ import json
 from django.conf import settings
 from django.http import Http404
 from django.shortcuts import render
+from django.urls import Resolver404, resolve
 from django.utils.html import strip_tags
 from .models import Product
 from .mojplaywin_catalog import FEATURED_IDS, catalog_card
@@ -24,6 +25,27 @@ def storefront_for_host(host, currency):
             and currency == "USD"):
         return "mojplaywin"
     return None
+
+
+def approved_guest_checkout_route(product_id):
+    """Link only to an existing route backed by the reviewed guest adapter.
+
+    Resolving a URL never creates an invoice or touches the payment provider.
+    An absent/unreviewed route is not represented as a working checkout.
+    """
+    if type(product_id) is not int or product_id <= 0:
+        return None
+    target = "/store/product/{}/checkout/".format(product_id)
+    try:
+        match = resolve(target)
+    except Resolver404:
+        return None
+    view = match.func
+    if (match.kwargs.get("product_id") != product_id
+            or getattr(view, "__name__", None) != "product_checkout"
+            or getattr(view, "__module__", None) != "services.mpw_trx_guest_commerce"):
+        return None
+    return target
 
 
 def product_detail(request, product_id):
@@ -80,12 +102,20 @@ def product_detail(request, product_id):
         and valid_sha(rights_doc)
         and catalog_sha.lower() == rights_sha.lower()
     )
+    allowed_ids = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+    if not isinstance(allowed_ids, (tuple, list, set, frozenset)):
+        allowed_ids = ()
+    allowed_ids = frozenset(x for x in allowed_ids if type(x) is int and x > 0)
     can_list_offer = (
         metadata.get("sales_enabled") is True
         and product.currency in ("USD", "EUR", "IRR", "CAD")
         and product.price >= 0
-        and (site != "mojplaywin" or approved_paid)
+        and (site != "mojplaywin" or (
+            approved_paid and product.pk in allowed_ids
+        ))
     )
+    checkout_url = (approved_guest_checkout_route(product.pk)
+                    if site == "mojplaywin" and can_list_offer else None)
     if can_list_offer:
         schema["offers"] = {
             "@type": "Offer", "url": url, "price": str(product.price),
@@ -102,5 +132,5 @@ def product_detail(request, product_id):
             schema, ensure_ascii=False
         ).replace("<", "\\u003c"),
         "canonical": url, "mojplaywin_store": site == "mojplaywin",
-        "can_list_offer": can_list_offer,
+        "can_list_offer": can_list_offer, "checkout_url": checkout_url,
     })
