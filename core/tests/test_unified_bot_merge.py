@@ -56,11 +56,16 @@ def test_legacy_executors_merge_but_preserve_tasks_ids_and_audit_once():
     economic_task.refresh_from_db()
     factory_task.refresh_from_db()
     assert not economic.active and not factory.active
-    assert economic_task.agent_id == factory_task.agent_id == owner.pk
+    assert economic_task.agent_id == economic.pk  # completed work keeps its historical owner
+    assert factory_task.agent_id == owner.pk  # only unstarted work is reassigned
     assert economic_task.status == "completed"
     assert factory_task.status == "queued"
     assert Agent.objects.filter(code__in=("economic-master-agent", "moj_1ro_1")).count() == 2
     assert AuditLog.objects.filter(action="internal_executor_merged").count() == 2
+    history_receipt = AuditLog.objects.get(action="internal_executor_merged", target_id=str(economic.pk))
+    assert history_receipt.after_state["terminal_tasks_retained"] == 1
+    assert history_receipt.after_state["queued_tasks_reassigned"] == 0
+    assert history_receipt.after_state["historical_task_ownership_preserved"] is True
 
     seed()
     assert AuditLog.objects.filter(action="internal_executor_merged").count() == 2
@@ -99,13 +104,13 @@ def test_unmapped_pending_legacy_job_blocks_atomic_migration():
     old = Agent.objects.create(code="economic-master-agent", name="old", mission="old", active=True)
     task = AgentTask.objects.create(
         agent=old, action_type="unknown_live_integration",
-        capability_code="unknown_live_integration", status="blocked",
+        capability_code="unknown_live_integration", status="queued",
     )
     with pytest.raises(CommandError, match="UNMAPPED_LEGACY_TASK"):
         seed(merge=True)
     assert not Agent.objects.filter(code=BOT_CODE).exists()
     task.refresh_from_db()
-    assert task.agent_id == old.pk and task.status == "blocked"
+    assert task.agent_id == old.pk and task.status == "queued"
 
 
 @pytest.mark.django_db
@@ -225,3 +230,55 @@ def test_known_knowledge_queue_does_not_appear_as_economic_brain_continue():
     assert f"BRAIN_CONTINUE task={job.pk}" not in output.getvalue()
     job.refresh_from_db()
     assert job.status == "queued"
+
+@pytest.mark.django_db
+def test_blocked_legacy_approval_task_blocks_merge_without_any_registry_changes():
+    old = Agent.objects.create(code="economic-master-agent", name="old", mission="old", active=True)
+    blocked = AgentTask.objects.create(
+        agent=old, action_type="income_market_research",
+        capability_code="income_market_research", status="blocked",
+    )
+    with pytest.raises(CommandError, match="UNRECONCILED_TASK"):
+        seed(merge=True)
+    blocked.refresh_from_db()
+    old.refresh_from_db()
+    assert blocked.agent_id == old.pk and blocked.status == "blocked"
+    assert old.active
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+    assert not AuditLog.objects.filter(action="internal_executor_merged").exists()
+
+
+@pytest.mark.django_db
+def test_mismatched_queued_action_is_never_relabelled_as_supported_capability():
+    old = Agent.objects.create(code="moj_1ro_1", name="old", mission="old", active=True)
+    queued = AgentTask.objects.create(
+        agent=old, action_type="unreviewed_external_write",
+        capability_code="income_market_research", status="queued",
+    )
+    with pytest.raises(CommandError, match="MISMATCHED_LEGACY_TASK"):
+        seed(merge=True)
+    queued.refresh_from_db()
+    assert queued.agent_id == old.pk and queued.status == "queued"
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+
+
+@pytest.mark.django_db
+def test_failed_and_cancelled_legacy_receipts_remain_with_original_owner():
+    old = Agent.objects.create(code="economic-master-agent", name="old", mission="old", active=True)
+    terminal = [
+        AgentTask.objects.create(
+            agent=old, action_type="income_market_research",
+            capability_code="income_market_research", status=status,
+        ) for status in ("failed", "cancelled")
+    ]
+    seed(merge=True)
+    canonical = Agent.objects.get(code=BOT_CODE)
+    old.refresh_from_db()
+    assert canonical.active and not old.active
+    for task in terminal:
+        task.refresh_from_db()
+        assert task.agent_id == old.pk
+    receipt = AuditLog.objects.get(action="internal_executor_merged", target_id=str(old.pk))
+    assert receipt.after_state["terminal_tasks_retained"] == 2
+    assert receipt.after_state["queued_tasks_reassigned"] == 0
+    seed()  # historical terminal rows alone never force another migration
