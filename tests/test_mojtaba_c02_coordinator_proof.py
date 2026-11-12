@@ -1,0 +1,102 @@
+"""C02 coordinator evidence and retry contract (local Git-only tests)."""
+import hashlib
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+COORD = ROOT / "deploy" / "mojtaba_bot_cycle_coordinator.py"
+
+
+def git(repo, *parts):
+    return subprocess.check_output(["git", *parts], cwd=repo, text=True).strip()
+
+
+def workspace(tmp_path):
+    repo = tmp_path / "gitrepo"
+    repo.mkdir()
+    git(repo, "init")
+    git(repo, "config", "user.name", "C02 QA")
+    git(repo, "config", "user.email", "qa@example.invalid")
+    file = repo / "deliverables" / "item.txt"
+    file.parent.mkdir()
+    file.write_text("meaningful offline delivery content\n", encoding="utf-8")
+    git(repo, "add", "deliverables/item.txt")
+    git(repo, "commit", "-m", "create deliverable")
+    commit = git(repo, "rev-parse", "HEAD")
+    digest = hashlib.sha256(file.read_bytes()).hexdigest()
+    return repo, commit, digest
+
+
+def record(repo, *, run_id, action_id, status, kind="source_change",
+           evidence=()):
+    cmd = [
+        sys.executable, str(COORD), "--state", str(repo / "state.json"),
+        "record", "--cycle", "E", "--run-id", run_id,
+        "--action-id", action_id, "--item", "item",
+        "--kind", kind, "--before", "pending",
+        "--change", "changed", "--after", "saved",
+        "--status", status,
+    ]
+    for item in evidence:
+        cmd.extend(["--evidence", item])
+    return subprocess.run(cmd, cwd=repo, text=True, capture_output=True)
+
+
+def test_committed_exact_file_proof_is_accepted_once(tmp_path):
+    repo, commit, digest = workspace(tmp_path)
+    evidence = ("commit:" + commit, "path:deliverables/item.txt", "sha256:" + digest)
+    first = record(repo, run_id="E-R1", action_id="E-C02-REAL",
+                   status="success", evidence=evidence)
+    assert first.returncode == 0, first.stderr
+    repeated = record(repo, run_id="E-R2", action_id="E-C02-REAL",
+                      status="success", evidence=evidence)
+    assert repeated.returncode != 0
+    assert "previously completed" in repeated.stderr
+
+
+def test_blocked_can_be_retried_in_new_run_without_false_success(tmp_path):
+    repo, _, _ = workspace(tmp_path)
+    first = record(repo, run_id="E-R1", action_id="E-C02-PENDING",
+                   status="blocked", kind="delivery_pending")
+    second = record(repo, run_id="E-R2", action_id="E-C02-PENDING",
+                    status="blocked", kind="delivery_pending")
+    same_run = record(repo, run_id="E-R2", action_id="E-C02-PENDING",
+                      status="blocked", kind="delivery_pending")
+    assert first.returncode == second.returncode == 0
+    assert same_run.returncode != 0
+    assert "duplicate action_id in same run" in same_run.stderr
+
+
+@pytest.mark.parametrize("bad_proof", [
+    ("commit:" + "0" * 40, "path:deliverables/item.txt", "sha256:fake"),
+    ("commit:" + "0" * 40, "path:../../etc/passwd", "sha256:" + "0" * 64),
+])
+def test_fake_or_outside_repo_proof_is_rejected(tmp_path, bad_proof):
+    repo, _, _ = workspace(tmp_path)
+    failure = record(repo, run_id="E-R1", action_id="E-C02-FAKE",
+                     status="success", evidence=bad_proof)
+    assert failure.returncode != 0
+    assert "verified Git commit" in failure.stderr
+
+
+def test_received_payment_cannot_be_invented_with_text_evidence(tmp_path):
+    repo, _, _ = workspace(tmp_path)
+    failure = record(repo, run_id="E-R1", action_id="E-C02-SALE",
+                     status="success", kind="verified_order",
+                     evidence=("receipt:looks-paid",))
+    assert failure.returncode != 0
+    assert "verified Git commit" in failure.stderr
+
+
+def test_sha_mismatch_rejected_even_with_real_commit(tmp_path):
+    repo, commit, _ = workspace(tmp_path)
+    failure = record(repo, run_id="E-R1", action_id="E-C02-WRONG-HASH",
+                     status="success", evidence=(
+                         "commit:" + commit, "path:deliverables/item.txt",
+                         "sha256:" + "f" * 64,
+                     ))
+    assert failure.returncode != 0
+    assert "verified Git commit" in failure.stderr
