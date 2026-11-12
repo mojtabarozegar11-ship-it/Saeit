@@ -124,6 +124,29 @@ for duplicate_title in (
 with sqlite3.connect(str(private/'management.sqlite3')) as check:
     assert check.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
 print('GENETICS_GENERIC_FORM_DUPLICATE_GUARD=PASS')
+# Legacy titles bearing the same stable ID must never trigger a second project.
+with sqlite3.connect(str(private/'management.sqlite3')) as simulated_legacy:
+    simulated_legacy.execute("INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)",
+       ('ZM-AGRC-GEN-1405-001 | old display name','Legacy', 'planned', 2500))
+legacy_dossier=request('GET','genetics_center')
+assert 'عنوان ذخیره‌شده با نسخه جدید متفاوت است' in legacy_dossier
+assert 'ثبت یک‌باره طرح در دفتر پروژه‌ها' not in legacy_dossier
+request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
+with sqlite3.connect(str(private/'management.sqlite3')) as simulated_legacy:
+    assert simulated_legacy.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
+    assert simulated_legacy.execute("SELECT COUNT(*) FROM audit_events WHERE subject='genetics-project'").fetchone()[0]==0
+    simulated_legacy.execute("INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)",
+       ('ZM-AGRC-GEN-1405-001 | second legacy title','Legacy2','planned',0))
+collision_dossier=request('GET','genetics_center')
+assert 'تداخل شناسه' in collision_dossier
+assert 'ثبت یک‌باره طرح در دفتر پروژه‌ها' not in collision_dossier
+collision_action=request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
+assert 'درخواست انجام نشد' in collision_action
+with sqlite3.connect(str(private/'management.sqlite3')) as cleanup:
+    assert cleanup.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==2
+    cleanup.execute("DELETE FROM projects WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'")
+    assert cleanup.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+print('GENETICS_LEGACY_ID_COLLISION_GUARD=PASS')
 # An explicit admin action registers a planned project with zero budget exactly once.
 with sqlite3.connect(str(private/'management.sqlite3')) as check:
     financial_before=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('journal_entries','journal_lines','invoices','invoice_payments')]
