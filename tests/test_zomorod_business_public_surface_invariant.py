@@ -60,6 +60,25 @@ class PublicSurfaceFingerprintContract(unittest.TestCase):
         original.chmod(0o600 if perms != 0o600 else 0o644)
         self.assertNotEqual(guard.compute_fingerprint(self.root)[0], self.baseline)
 
+    def test_root_level_favicon_logo_and_css_are_protected(self):
+        for filename in ("favicon.ico", "logo.svg", "style.css", "runtime.js"):
+            with self.subTest(asset=filename):
+                p = self.root / filename
+                p.write_bytes(b"baseline")
+                first = guard.compute_fingerprint(self.root)[0]
+                p.write_bytes(b"modified")
+                self.assertNotEqual(first, guard.compute_fingerprint(self.root)[0])
+                p.unlink()
+        self.assertEqual(guard.compute_fingerprint(self.root)[0], self.baseline)
+
+    def test_same_length_css_mutation_is_detected(self):
+        css = self.root / "static" / "css" / "main.css"
+        old = css.read_bytes()
+        changed = old.replace(b"black", b"white")
+        self.assertEqual(len(old), len(changed))
+        css.write_bytes(changed)
+        self.assertNotEqual(guard.compute_fingerprint(self.root)[0], self.baseline)
+
     def test_missing_homepage_entry_and_symlink_are_rejected(self):
         (self.root / "index.html").unlink()
         with self.assertRaises(guard.ScopeError):
