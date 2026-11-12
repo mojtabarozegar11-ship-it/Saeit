@@ -25,7 +25,20 @@
     "after": "Pending execution; no outcome claimed",
     "evidence": [],
     "acceptance_criteria": "Approved scoped customer offer with delivery and pricing, intake route, lawful payments, tested receipt; no assumed sale",
-    "requires_approval_for_publication": true
+    "requires_approval_for_publication": true,
+    "technical_progress": {
+      "status": "intake_contract_created_commercial_hold",
+      "artifact": "deliverables/services/water-production/client_intake.schema.json",
+      "business_scope": "safe offline economic water allocation service",
+      "awaiting": [
+        "pricing approval",
+        "licensed service provider review",
+        "customer intake route approval",
+        "lawful payment channel",
+        "client acceptance"
+      ],
+      "fully_sellable": false
+    }
   },
   {
     "action_id": "E-C02-E-SVC-03",
