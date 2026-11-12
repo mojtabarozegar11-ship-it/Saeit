@@ -229,3 +229,15 @@ def test_unavailable_surfaces_cannot_supply_fake_route_activity():
     assert knowledge["status"] == "runtime_unverified_no_known_route_indicators"
     assert "partial_host_topology_observation" in knowledge["blocking_evidence"]
     assert knowledge["retirement_authorized"] is False
+
+
+@pytest.mark.parametrize("field", [
+    "cron", "processes", "user_services", "system_services",
+    "installed_source_digests", "private_php_site_registry", "attestation",
+])
+def test_malformed_snapshot_structures_fail_before_disposition(tmp_path, field):
+    data = snap("vps")
+    data[field] = ["not-a-mapping"]
+    path = save_snapshot(tmp_path, "vps", data)
+    with pytest.raises(ValueError, match="TOPOLOGY_SHAPE_INVALID"):
+        module.parse_snapshot(path, "vps", now=datetime.now(timezone.utc))
