@@ -1,6 +1,39 @@
 # MojPlayWin — current release contract: guest TRX checkout without email
 **Supersedes the archived email-recovery design below. Status: draft, not deployed. Updated 2026-11-12.**
 
+## Historical cPanel source-versus-running-process discrepancy — evidence dated 2026-11-02
+
+The customer's already-sent hosting-support correspondence records the
+following *dated* source/Passenger observations. **These are not live
+observations from 2026-11-12 and must not be promoted to current facts.**
+
+- The file `/home/zomorod2/Saeit-staging/config/urls.py` reportedly
+  contained the route `/commerce/trx-easy/purchases/`, and
+  `services/mpw_trx_public_pages.py` invoked `patch_public(globals())`.
+  The public endpoint nevertheless returned an HTTP 404 in an earlier check.
+- The public `.htaccess` used a `PassengerAppRoot` under
+  `/home/zomorod2/mojplaywin.com`; its `passenger_wsgi.py` reportedly
+  loaded Django source from `/home/zomorod2/Saeit-staging`. This can be an
+  intentional architecture, **not by itself proof of misconfiguration**.
+  Actual running process, URLconf and worker version remain unverified.
+- The guest adapter SHA-256 previously observed on cPanel was
+  `79815303f4852d62f4d13b428805edc35b0d47f1135cab73094946c0f2326dc9`.
+  This differs from the reviewed current candidate
+  `11b0aa037c31fbcd1198331444d88426d9b4722d13606a7fda846c8f7601d949`.
+  This **does not prove** that the old file still runs today.
+- The historical public stderr log included `Reached max children process
+  limit: 6 ... current: 8` and `io.UnsupportedOperation: fileno`.
+  There is no timestamp-correlated proof these messages caused the checkout
+  404 or sale failure; investigation must not silently conflate LSAPI
+  process limits with Passenger/Django request routing.
+
+**Next authorized read-only evidence required:** verify process-to-source
+mapping, current file hashes, resolved URLconf and invoice recorder source
+against actual serving worker identity, and timestamp-correlated error logs.
+The existing audit script records **source-on-disk only** and cannot make
+claims about in-memory Passenger worker versions. No reload, publish, source
+copy, payment, ticket, or firewall modification is authorized here.
+
 ## Hosting-provider evidence and network root cause — 2026-11-12
 
 The hosting provider's **existing** support replies were inspected read-only;
