@@ -107,7 +107,7 @@ class PublicSurfaceFingerprintContract(unittest.TestCase):
         self.assertLess(before, first_change)
         self.assertLess(first_change, after)
         self.assertLess(after, clear)
-        self.assertIn("BUSINESS_GENETICS_ROLLBACK=restored", installer)
+        self.assertIn("BUSINESS_GENETICS_ROLLBACK=verified", installer)
         self.assertIn("cat > '$stage/public-surface.py'", release)
         self.assertNotIn("cat > /home/zomorod2/public_html", release)
         self.assertNotIn("  push:\n", release)
