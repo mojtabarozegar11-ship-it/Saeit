@@ -31,6 +31,8 @@ if [[ "$expected_dossier" != 'ABSENT' ]]; then valid_sha "$expected_dossier" || 
 [[ -f "$stage/app.php" && ! -L "$stage/app.php" ]] || exit 2
 [[ -f "$stage/genetics-center.php" && ! -L "$stage/genetics-center.php" ]] || exit 2
 [[ -f "$stage/install.sh" && ! -L "$stage/install.sh" ]] || exit 2
+[[ -f "$stage/homepage-guard.sh" && ! -L "$stage/homepage-guard.sh" ]] || exit 2
+[[ -d "/home/zomorod2/public_html" && ! -L "/home/zomorod2/public_html" ]] || exit 2
 [[ -f "/home/zomorod2/public_html/business/index.php" ]] || exit 2
 command -v flock >/dev/null
 command -v python3 >/dev/null
@@ -62,6 +64,7 @@ fi
 "$phpbin" -l "$stage/genetics-center.php" >/dev/null
 grep -Fq "genetics-center.php" "$stage/app.php" || exit 3
 grep -Fq "ZM-AGRC-GEN-1405-001" "$stage/genetics-center.php" || exit 3
+bash -n "$stage/homepage-guard.sh" || exit 3
 [[ ! -e "$backup" ]] || { echo 'GUARD=release_already_attempted' >&2; exit 3; }
 
 # Reserve room for the SQLite online backup and both source copies.
@@ -134,6 +137,11 @@ os.chmod(dst, 0o600)
 PY
 test -s "$backup/management.sqlite3"
 
+# Capture two stable HTTPS fingerprints of the *public homepage* before switching
+# the private business app. If homepage is dynamic or unavailable, fail closed.
+homepage_baseline="$(bash "$stage/homepage-guard.sh" capture)"
+[[ "$homepage_baseline" =~ ^[0-9a-f]{64}$ ]] || { echo 'PUBLIC_HOMEPAGE_BASELINE=INVALID' >&2; exit 5; }
+echo 'PUBLIC_HOMEPAGE_BASELINE=VERIFIED_STABLE'
 # Create both staged files before switching; the app is installed last.
 install -m 600 "$stage/genetics-center.php" "$private/.genetics-center.new-$release_sha"
 install -m 600 "$stage/app.php" "$private/.app.new-$release_sha"
@@ -164,6 +172,8 @@ mv -f "$private/.app.new-$release_sha" "$live_app"
 [[ "$(sha256sum "$live_dossier" | awk '{print $1}')" == "$candidate_dossier_hash" ]] || exit 4
 [[ "$(stat -c %a "$live_app")" == 600 ]] || exit 4
 [[ "$(stat -c %a "$live_dossier")" == 600 ]] || exit 4
+# A failed comparison triggers the existing private-file rollback trap.
+bash "$stage/homepage-guard.sh" verify "$homepage_baseline" || exit 5
 
 trap - EXIT
 echo 'BUSINESS_GENETICS_RELEASE=verified_private_files'
