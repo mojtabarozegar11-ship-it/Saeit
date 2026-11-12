@@ -32,6 +32,7 @@ if [[ "$expected_dossier" != 'ABSENT' ]]; then valid_sha "$expected_dossier" || 
 [[ -f "$stage/genetics-center.php" && ! -L "$stage/genetics-center.php" ]] || exit 2
 [[ -f "$stage/install.sh" && ! -L "$stage/install.sh" ]] || exit 2
 [[ -f "$stage/homepage-guard.sh" && ! -L "$stage/homepage-guard.sh" ]] || exit 2
+[[ -f "$stage/public-surface.py" && ! -L "$stage/public-surface.py" ]] || exit 2
 [[ -d "/home/zomorod2/public_html" && ! -L "/home/zomorod2/public_html" ]] || exit 2
 [[ -f "/home/zomorod2/public_html/business/index.php" ]] || exit 2
 command -v flock >/dev/null
@@ -65,6 +66,7 @@ fi
 grep -Fq "genetics-center.php" "$stage/app.php" || exit 3
 grep -Fq "ZM-AGRC-GEN-1405-001" "$stage/genetics-center.php" || exit 3
 bash -n "$stage/homepage-guard.sh" || exit 3
+python3 -B -m py_compile "$stage/public-surface.py" || exit 3
 [[ ! -e "$backup" ]] || { echo 'GUARD=release_already_attempted' >&2; exit 3; }
 
 # Reserve room for the SQLite online backup and both source copies.
@@ -142,6 +144,16 @@ test -s "$backup/management.sqlite3"
 homepage_baseline="$(bash "$stage/homepage-guard.sh" capture)"
 [[ "$homepage_baseline" =~ ^[0-9a-f]{64}$ ]] || { echo 'PUBLIC_HOMEPAGE_BASELINE=INVALID' >&2; exit 5; }
 echo 'PUBLIC_HOMEPAGE_BASELINE=VERIFIED_STABLE'
+# Also protect the actual homepage files, local CSS/JS, images and .htaccess.
+# Two identical read-only snapshots are required before any live file switch.
+surface_baseline="$(python3 -B "$stage/public-surface.py" capture)"
+surface_second="$(python3 -B "$stage/public-surface.py" capture)"
+[[ "$surface_baseline" =~ ^[0-9a-f]{64}$ && "$surface_second" == "$surface_baseline" ]] || {
+  echo 'PUBLIC_SURFACE_BASELINE=UNSTABLE_OR_INVALID' >&2
+  exit 5
+}
+echo 'PUBLIC_SURFACE_BASELINE=VERIFIED_STABLE'
+
 # Create both staged files before switching; the app is installed last.
 install -m 600 "$stage/genetics-center.php" "$private/.genetics-center.new-$release_sha"
 install -m 600 "$stage/app.php" "$private/.app.new-$release_sha"
@@ -174,6 +186,8 @@ mv -f "$private/.app.new-$release_sha" "$live_app"
 [[ "$(stat -c %a "$live_dossier")" == 600 ]] || exit 4
 # A failed comparison triggers the existing private-file rollback trap.
 bash "$stage/homepage-guard.sh" verify "$homepage_baseline" || exit 5
+python3 -B "$stage/public-surface.py" verify "$surface_baseline" || exit 5
+python3 -B "$stage/public-surface.py" verify "$surface_baseline" || exit 5
 
 trap - EXIT
 echo 'BUSINESS_GENETICS_RELEASE=verified_private_files'
