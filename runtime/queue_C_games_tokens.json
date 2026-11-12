@@ -21,12 +21,17 @@
         "tests/test_moj_coin_payment_consistency_c02.py",
         "tests/test_mojcoin_tron_finality_c02.py"
       ],
-      "tests_status": "written_not_executed",
-      "reviewer_doc": "https://developers.tron.network/docs/confirmation-semantics"
+      "tests_status": "14/14 isolated mocked solidity verifier tests passed; exact blob SHA match; Django tests unexecuted",
+      "reviewer_doc": "https://developers.tron.network/docs/confirmation-semantics",
+      "solidity_finality_source_commit": "0c89ee696783bafc0d13a39a36c426ebda465e30",
+      "qa_receipt_commit": "6687cd8f1c1145e960a48cf18228a1bb9f2e64c2",
+      "qa_receipt_path": "quality/c02_tron_finality_receipt_20261112.json",
+      "qa_source_blob": "33bc8730d951fa9928ae59c72ed0c7b6664b5341",
+      "qa_test_blob": "a2eb24232ba62d85ef7ae4472f3575ce7ae05871"
     },
     "release_gate": {
       "django_integration": false,
-      "isolated_tron_tests": false,
+      "isolated_tron_tests": true,
       "database_concurrency": false,
       "hosting_e2e": false,
       "owner_approval": false
