@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Zomorod Melal Irrigation Economic Service — non-sensitive client intake",
+  "description": "Schema is a preliminary data contract only. Engine additionally enforces 1e20 maximum, six decimal places, and safe labels. Do not collect bank IDs, personal IDs or medical information.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "currency",
+    "period",
+    "water_available_m3",
+    "crops",
+    "user_confirms_input_responsibility"
+  ],
+  "properties": {
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Currency code, no live FX conversion"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "season",
+        "year",
+        "production_cycle"
+      ],
+      "description": "All gross margins and inputs must refer to same period"
+    },
+    "water_available_m3": {
+      "type": "string",
+      "pattern": "^[0-9]{1,21}(\\.[0-9]{1,6})?$",
+      "maxLength": 30,
+      "description": "Quantity in cubic metres, subject to <=1e20 checked by calculator"
+    },
+    "crops": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "max_area_ha",
+          "water_m3_per_ha",
+          "gross_margin_per_ha"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "First character letter or digit; no controls or spreadsheet formulas"
+          },
+          "max_area_ha": {
+            "type": "string",
+            "pattern": "^[0-9]{1,21}(\\.[0-9]{1,6})?$"
+          },
+          "water_m3_per_ha": {
+            "type": "string",
+            "pattern": "^(?=.*[1-9])[0-9]{1,21}(\\.[0-9]{1,6})?$",
+            "description": "Must be positive"
+          },
+          "gross_margin_per_ha": {
+            "type": "string",
+            "pattern": "^[0-9]{1,21}(\\.[0-9]{1,6})?$"
+          }
+        }
+      }
+    },
+    "user_confirms_input_responsibility": {
+      "const": true,
+      "description": "Client confirms data ownership/authority and independent water-rights review; not independent verification"
+    }
+  }
+}
