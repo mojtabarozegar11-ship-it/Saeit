@@ -30,6 +30,7 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check beautifulsoup4 tinycss2
           python3 content/zomorod-nexus-20261112/validate.py
           python3 -m py_compile content/zomorod-nexus-20261112/deploy_guarded.py
+          python3 content/zomorod-nexus-20261112/test_release_safety.py
   publish:
     needs: validate
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
