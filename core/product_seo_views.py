@@ -119,7 +119,8 @@ def product_detail(request, product_id):
         product.currency in ("USD", "EUR", "IRR", "CAD")
         and product.price >= 0
         and (
-            (site == "mojplaywin" and approved_paid and product.pk in allowed_ids)
+            (site == "mojplaywin" and approved_paid and product.pk in allowed_ids
+             and getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False) is True)
             or (site != "mojplaywin" and metadata.get("sales_enabled") is True)
         )
     )
