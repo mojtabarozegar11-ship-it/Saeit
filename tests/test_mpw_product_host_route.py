@@ -107,6 +107,15 @@ class ProductDetailHostTests(unittest.TestCase):
                 with self.assertRaises(NotFound):
                     load_functions(product)(request(host), 72)
 
+    def test_description_without_product_summary_uses_correct_brand(self):
+        product = item(metadata={})
+        fn = load_functions(product)
+        moj = fn(request("mojplaywin.com"), 72)
+        zom = fn(request("zomorodmelal.ir"), 72)
+        self.assertIn("MojPlayWin", moj["context"]["description"])
+        self.assertNotIn("Zomorod Melal", moj["context"]["description"])
+        self.assertIn("Zomorod Melal", zom["context"]["description"])
+
     def test_nonexistent_product_is_never_exposed(self):
         with self.assertRaises(NotFound):
             load_functions(None)(request("mojplaywin.com"), 72)
