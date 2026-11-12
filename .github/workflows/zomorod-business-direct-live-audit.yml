@@ -1,0 +1,97 @@
+name: Zomorod business cPanel direct evidence (read-only)
+on:
+  push:
+    branches:
+      - feat/zomorod-animal-genetics-business-20261111
+    paths:
+      - .github/workflows/zomorod-business-direct-live-audit.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-direct-live-evidence
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout authorized development branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Direct cPanel private source and SQLite metadata inventory
+        shell: bash
+        env:
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$CPANEL_KEY" ]] || { echo 'DIRECT_AUDIT_KEY=UNAVAILABLE'; exit 2; }
+          d="$RUNNER_TEMP/zm-business-audit-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/host.known" 2>/dev/null
+          [[ -s "$d/host.known" ]] || { echo 'DIRECT_AUDIT_HOSTKEY=UNAVAILABLE'; exit 3; }
+          expected='SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$actual" == "$expected" ]] || { echo 'DIRECT_AUDIT_HOSTKEY=MISMATCH'; exit 3; }
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          expected_app="$(sha256sum content/zomorod-business/app.php | awk '{print $1}')"
+          expected_dossier="$(sha256sum content/zomorod-business/genetics-center.php | awk '{print $1}')"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel bash -s -- "$expected_app" "$expected_dossier" <<'REMOTE'
+          set -euo pipefail
+          [[ "$(id -un)" == zomorod2 ]] || exit 4
+          base=/home/zomorod2/.private/zomorod-business
+          app="$base/app.php"
+          dossier="$base/genetics-center.php"
+          db="$base/management.sqlite3"
+          [[ -d "$base" && ! -L "$base" ]] || { echo 'LIVE_PRIVATE_DIRECTORY=NOT_VERIFIED'; exit 5; }
+          echo 'DIRECT_CPANEL_SSH=VERIFIED'
+          echo 'LIVE_APP_SOURCE=READ_ONLY'
+          if [[ -s "$app" && ! -L "$app" ]]; then
+            h="$(sha256sum "$app" | awk '{print $1}')"
+            echo 'LIVE_APP_PRESENT=true'
+            echo "LIVE_APP_SHA256=$h"
+            if [[ "$h" == "$1" ]]; then echo 'LIVE_APP_MATCHES_PROPOSED=true'; else echo 'LIVE_APP_MATCHES_PROPOSED=false'; fi
+            if command -v php >/dev/null && php -l "$app" >/dev/null 2>&1; then echo 'LIVE_APP_PHP_SYNTAX=PASS'; else echo 'LIVE_APP_PHP_SYNTAX=UNKNOWN_OR_FAIL'; fi
+          else
+            echo 'LIVE_APP_PRESENT=false'
+          fi
+          if [[ -s "$dossier" && ! -L "$dossier" ]]; then
+            h="$(sha256sum "$dossier" | awk '{print $1}')"
+            echo 'LIVE_DOSSIER_PRESENT=true'
+            echo "LIVE_DOSSIER_SHA256=$h"
+            if [[ "$h" == "$2" ]]; then echo 'LIVE_DOSSIER_MATCHES_PROPOSED=true'; else echo 'LIVE_DOSSIER_MATCHES_PROPOSED=false'; fi
+          else
+            echo 'LIVE_DOSSIER_PRESENT=false'
+          fi
+          if [[ -f "$db" && ! -L "$db" ]]; then
+            echo 'LIVE_MANAGEMENT_SQLITE_PRESENT=true'
+            stat -c 'LIVE_MANAGEMENT_SQLITE_BYTES=%s' "$db"
+          else
+            echo 'LIVE_MANAGEMENT_SQLITE_PRESENT=false'
+          fi
+          df -Pk "$base" | awk 'NR==2{print "LIVE_PRIVATE_DISK_AVAILABLE_KIB="$4}'
+          echo 'LIVE_FINANCIAL_ROWS_QUERIED=no'
+          echo 'LIVE_FILES_MODIFIED=no'
+          echo 'LIVE_DEPLOYMENT_ATTEMPTED=no'
+          REMOTE
