@@ -271,12 +271,25 @@ def _write_atomic(target: Path, raw: bytes, expected_hash: str):
             os.unlink(tmp)
 
 
+def _safe_backup_location():
+    # A symlink in ~/.local/share would redirect backups outside the private
+    # account, even when BACKUPS itself is not a symlink.
+    for ancestor in (BACKUPS, *BACKUPS.parents):
+        if ancestor.is_symlink():
+            abort("BACKUP_ANCESTOR_SYMLINK:" + ancestor.name)
+    if BACKUPS.exists():
+        st = BACKUPS.stat()
+        if (not BACKUPS.is_dir() or st.st_uid != os.geteuid()
+                or stat.S_IMODE(st.st_mode) & 0o077):
+            abort("BACKUP_ROOT_UNSAFE")
+
+
 def _backup_dir(run: str) -> Path:
     if not re.fullmatch(r"[0-9]{8,20}", run):
         abort("INVALID_RUN_ID")
+    _safe_backup_location()
     BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if BACKUPS.is_symlink() or stat.S_IMODE(BACKUPS.stat().st_mode) & 0o077:
-        abort("BACKUP_ROOT_UNSAFE")
+    _safe_backup_location()
     folder = BACKUPS / run
     if folder.exists() or folder.is_symlink():
         abort("RUN_ALREADY_EXISTS")
@@ -334,6 +347,7 @@ def rollback(run: str):
     guard()
     if not re.fullmatch(r"[0-9]{8,20}", run):
         abort("INVALID_RUN_ID")
+    _safe_backup_location()
     folder = BACKUPS / run
     if folder.is_symlink() or not folder.is_dir() or stat.S_IMODE(folder.stat().st_mode) & 0o077:
         abort("INVALID_BACKUP")
