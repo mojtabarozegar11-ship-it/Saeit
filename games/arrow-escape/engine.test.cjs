@@ -39,7 +39,8 @@ for (const level of [...Array(200)].map((_, index) => index + 1).concat([500, 99
 
 for (const [bad, expected] of [
   [NaN, 1], [Infinity, 1], [-Infinity, 1], ['Infinity', 1],
-  [0, 1], [-500, 1], ['0.5', 1], [2.9, 2], [1e100, 1000000]
+  [0, 1], [-500, 1], ['0.5', 1], [2.9, 2], [1e100, 1000000],
+  [{valueOf() { throw new Error('hostile level input'); }}, 1]
 ]) {
   const board = game.generate(bad);
   assert.equal(board.level, expected, 'invalid or extreme level: ' + bad);
