@@ -1,6 +1,10 @@
 """Owned, email-free TRX invoice receipt recovery; no chain or SMTP calls."""
 import os
+import re
 import secrets
+from datetime import timedelta
+from html import unescape
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.mpw_recovery_test_settings")
@@ -13,6 +17,7 @@ from django.core import signing
 from django.http import Http404, HttpResponse
 from django.middleware.csrf import get_token
 from django.test import RequestFactory, TransactionTestCase, override_settings
+from django.utils import timezone
 
 from core.models import Order, PaymentIntent
 from services.mpw_trx_receipt_recovery import (
@@ -82,6 +87,41 @@ class GuestReceiptRecoveryTests(TransactionTestCase):
         deliver.assert_called_once_with(request, self.invoice.pk)
         self.assertEqual(request.user.pk, self.buyer.pk)
         self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
+
+    def test_expired_owned_invoice_keeps_receipt_without_stale_payment_details(self):
+        """A guest must still be able to save the private key after quote expiry."""
+        from services import mpw_trx_commercial_web as merchant
+
+        request = self.factory.get(
+            f"/commerce/trx-easy/invoice/{self.invoice.pk}/",
+            secure=True, HTTP_HOST="mojplaywin.com",
+        )
+        request.user = self.buyer
+        expired = SimpleNamespace(expires_at=timezone.now() - timedelta(minutes=40))
+        with patch.object(merchant, "_ensure_live"), \
+             patch.object(merchant, "_get_owner_invoice", return_value=self.invoice), \
+             patch.object(merchant, "_decode", return_value=expired):
+            response = merchant._show_invoice(request, self.invoice.pk)
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("Invoice no longer payable", html)
+        self.assertIn("Do not send TRX to an expired quote.", html)
+        self.assertIn("Private purchase receipt key", html)
+        self.assertIn("No email", html)
+        self.assertNotIn("Send exact", html)
+        self.assertNotIn('data-reconcile-url=', html)
+        match = re.search(
+            r'<textarea id="mpw-receipt-key" rows="4" readonly>([^<]+)</textarea>',
+            html,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(
+            _read_receipt(unescape(match.group(1))),
+            (self.invoice.pk, self.buyer.pk),
+        )
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertIn("no-store", response["Cache-Control"])
 
     def test_tampered_receipt_never_reaches_paid_handler(self):
         code = issue_receipt(self.invoice.pk, self.buyer)
