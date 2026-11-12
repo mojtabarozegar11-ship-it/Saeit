@@ -79,3 +79,26 @@ def test_cross_lane_copy_of_same_artifact_does_not_double_count(tmp_path, monkey
     assert audit["latest_round_verified_actions"] == 1
     assert audit["lanes"]["B"]["latest_run_success"] == 0
     assert audit["lanes"]["B"]["latest_run_rejected"] == 1
+
+
+def test_old_success_is_historical_not_this_hour(tmp_path, monkeypatch):
+    from datetime import datetime as RealDatetime, timedelta
+    repo, _, _, _ = setup_manifest(tmp_path, cycle="A", number=50)
+    prepare(monkeypatch, repo)
+    current = auditor.audit()
+    assert current["lanes"]["A"]["latest_run_success"] == 50
+    assert current["lanes"]["A"]["complete"] is True
+
+    class FutureClock:
+        @staticmethod
+        def now(tz):
+            return RealDatetime.now(tz) + timedelta(hours=3)
+
+    monkeypatch.setattr(auditor, "datetime", FutureClock)
+    future = auditor.audit()
+    assert future["lanes"]["A"]["historical_verified_actions"] == 50
+    assert future["lanes"]["A"]["last_seen_run_success"] == 50
+    assert future["lanes"]["A"]["latest_run_is_current"] is False
+    assert future["lanes"]["A"]["latest_run_success"] == 0
+    assert future["lanes"]["A"]["complete"] is False
+    assert future["latest_round_verified_actions"] == 0
