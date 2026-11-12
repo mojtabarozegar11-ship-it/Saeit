@@ -45,8 +45,18 @@ jobs:
           vps_ok=0
           if python3 deploy/mojtaba_live_topology_readonly.py --role vps > "$d/vps.jsonline" 2>"$d/vps.err"; then
             vps_ok=1
+            echo "MOJTABA_VPS_OBSERVATION=local_snapshot_collected"
           else
-            echo "MOJTABA_VPS_OBSERVATION=failed_local_user_or_host_inventory"
+            # Emit only fixed categories; never echo the runner username,
+            # raw process/cron arguments, stderr, tokens or local host paths.
+            # A wrong OS identity must remain blocked, not bypassed with sudo.
+            if grep -Fqx 'MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user' "$d/vps.err"; then
+              echo "MOJTABA_VPS_OBSERVATION=blocked_runner_identity_mismatch"
+            elif [[ -s "$d/vps.jsonline" ]]; then
+              echo "MOJTABA_VPS_OBSERVATION=invalid_or_partial_local_snapshot"
+            else
+              echo "MOJTABA_VPS_OBSERVATION=failed_local_host_inventory_unknown"
+            fi
           fi
 
           cpanel_ok=0
