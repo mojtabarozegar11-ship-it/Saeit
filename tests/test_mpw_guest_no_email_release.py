@@ -236,6 +236,29 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
             release.verify_template(template())
 
+    def test_verifier_rejects_hidden_email_aliases_and_alternate_quotes(self):
+        clean = release.patch_template(template())
+        variants = (
+            b'<input type="hidden" name="purchase_email" value="">',
+            b"<input name='buyer_email' type='hidden' value=''>",
+            b'<textarea name="customer_email"></textarea>',
+            b'<select name="invoice_email"><option>none</option></select>',
+            b'<input name="contact" type="email">',
+            b"<input type='email' name='contact'>",
+            b'<input type=email name=contact>',
+        )
+        for extra in variants:
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
+                    release.verify_template(clean + extra)
+
+    def test_verifier_allows_non_email_controls(self):
+        clean = release.patch_template(template())
+        release.verify_template(clean + (
+            b'<input type="hidden" name="csrfmiddlewaretoken" value="example">'
+            b'<input name="invoice_reference" type="text">'
+        ))
+
     def test_source_digest_pinned_to_reviewed_implementation(self):
         content = GUEST_FILE.read_bytes()
         self.assertEqual(release.sha(content), release.APPROVED_GUEST_SHA256)

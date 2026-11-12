@@ -218,6 +218,23 @@ def verify_template(raw: bytes):
     disallowed = (b'mpw-buy-email', b'name="email"', b"Email address for your order", EMAIL_COPY)
     if any(term in raw for term in disallowed):
         abort("EMAIL_FIELD_REMAINS")
+    # Named controls and type=email must be absent even when legacy aliases,
+    # single quotes or optional/hidden fields bypass the original exact bytes.
+    # This is a fail-closed source gate, not a replacement for runtime POST QA.
+    for tag in re.finditer(rb"<(?:input|textarea|select)\\b[^>]*>", raw, re.I | re.S):
+        opening = tag.group(0)
+        for attribute in (b"name", b"type"):
+            match = re.search(
+                rb"(?<![\\w:-])" + attribute +
+                rb"\\s*=\\s*(?:\\\"([^\\\"]*)\\\"|'([^']*)'|([^\\s/>]+))",
+                opening, re.I | re.S,
+            )
+            if match is None:
+                continue
+            value = next(group for group in match.groups() if group is not None)
+            if ((attribute == b"name" and b"email" in value.lower()) or
+                    (attribute == b"type" and value.lower() == b"email")):
+                abort("EMAIL_FIELD_REMAINS")
     if raw.count(CTA) != 1 or (b"csrf_token" not in raw and b"csrfmiddlewaretoken" not in raw):
         abort("FORM_CONTRACT_LOST")
 
