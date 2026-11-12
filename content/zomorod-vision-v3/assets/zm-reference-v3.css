@@ -45,3 +45,27 @@
 .robot-figure{width:105px;height:120px;background:url('/assets/zm-vision-v3/art/robot.webp') center/contain no-repeat;filter:drop-shadow(0 0 8px #14ffca)}
 .robot-figure>*{display:none}
 @media(max-width:640px){.hero-photo{object-position:center top}.hero-paint>svg{opacity:.07}.robot-figure{height:105px}}
+
+/* Reference fidelity: cinematic luminous edge work and photographic service ribbons. */
+.zm-vision-v3 .neon-panel{border-color:rgba(27,255,194,.8);box-shadow:inset 0 0 19px #00d49c35,0 0 4px #34ffc87a,0 0 15px #00eea72a,0 10px 26px #0008}
+.zm-vision-v3 .neon-panel:after{content:"";position:absolute;z-index:0;left:6%;right:6%;bottom:-1px;height:3px;background:linear-gradient(90deg,transparent,#40fcd6 22%,#f5d66c 51%,#32ffd3 75%,transparent);filter:blur(1.3px);pointer-events:none;opacity:.75}
+.hero-message{filter:drop-shadow(0 0 14px rgba(0,20,16,.85))}
+.hero-name{text-shadow:0 0 12px #d2a33e9e,0 0 24px #edb54d58,0 3px #0d2510}
+.hero h1{text-shadow:0 0 10px #10f2a1,0 0 26px #0fffc176}
+.field-card:before{content:"";position:absolute;z-index:1;inset:0;border-radius:inherit;box-shadow:inset 0 0 13px #4bfed556,inset 0 -7px 18px #00ffa52a;pointer-events:none}
+.field-card .field-overlay{filter:drop-shadow(0 0 5px #030c0a)}
+.service-ribbon svg{filter:drop-shadow(0 0 7px #f6d66d9e)}
+.books-banner{background:radial-gradient(ellipse at 42% 104%,#096f5294,transparent 52%),radial-gradient(ellipse at 95% 2%,#035a4769,transparent 66%),linear-gradient(150deg,#002e27,#00150f)}
+.feature-banner{background:radial-gradient(ellipse at 30% 130%,#087c5c55,transparent 67%),linear-gradient(125deg,#00271f,#00150e)}
+.games-panel:before,.tokens-panel:before,.trade-banner:before{box-shadow:inset 0 0 18px #15ffc235,inset 0 1px 2px #f1ffeb55}
+.trade-banner{background:radial-gradient(ellipse at 50% 112%,#0a856ba1,transparent 52%),linear-gradient(140deg,#00221c,#002d22 40%,#00140d)}
+.triple-banners .small-banner{background:radial-gradient(ellipse at 40% 120%,#116c547a,transparent 64%),linear-gradient(155deg,#002a20,#001713)}
+.triple-banners .small-banner:first-child>svg,.triple-banners .small-banner:last-child>svg{visibility:hidden}
+.triple-banners .small-banner:first-child:after,.triple-banners .small-banner:last-child:after{position:absolute;top:7px;left:6px;width:92px;height:78px;content:"";pointer-events:none;filter:drop-shadow(0 0 10px #e7c65866);background-position:center;background-repeat:no-repeat;background-size:contain}
+.triple-banners .small-banner:first-child:after{background-image:url('/assets/zm-vision-v3/art/letter.webp')}
+.triple-banners .small-banner:last-child:after{background-image:url('/assets/zm-vision-v3/art/tools.webp')}
+.horizon{background:linear-gradient(0deg,#002e24d9,#002e24aa),url('/assets/zm-vision-v3/art/hero.webp') center 83%/cover}
+.horizon:before{background:linear-gradient(3deg,#003a28a1,#0a835339,#00c48520);filter:drop-shadow(0 -2px 6px #00e4a87a)}
+.robot-figure{width:137px;height:134px;flex-shrink:0}
+.footer-assistant{gap:12px}
+@media(max-width:640px){.triple-banners .small-banner:first-child:after,.triple-banners .small-banner:last-child:after{width:78px;height:66px}.robot-figure{width:117px;height:117px}}
