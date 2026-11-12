@@ -37,6 +37,8 @@ class MojPlayWinStoreRealTemplateTests(SimpleTestCase):
                 ("/store/product/%d/checkout/" % sku).encode(), response.content
             )
         self.assertIn(b"Checkout unavailable", response.content)
+        self.assertIn(b"TRX checkout is temporarily unavailable", response.content)
+        self.assertNotIn(b"No account is required. Checkout accepts native TRX", response.content)
 
     def test_checkout_cta_requires_per_product_readiness(self):
         response = self._render_store(ready_ids=(72, 879))
@@ -45,6 +47,8 @@ class MojPlayWinStoreRealTemplateTests(SimpleTestCase):
         self.assertNotIn(b"/store/product/225/checkout/", response.content)
         self.assertIn(b"/store/product/879/checkout/", response.content)
         self.assertEqual(response.content.count(b"Buy securely with TRX"), 2)
+        self.assertIn(b"How checkout and delivery work", response.content)
+        self.assertNotIn(b"TRX checkout is temporarily unavailable", response.content)
 
     @override_settings(
         STORAGES={
