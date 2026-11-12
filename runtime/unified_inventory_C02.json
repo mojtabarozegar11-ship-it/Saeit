@@ -1,7 +1,7 @@
 {
   "schema_version": "2026-11-12.C02.v1",
   "stage_id": "UNIFIED-MASTER-STAGE-01",
-  "scope": "GitHub Saeit main source snapshot; other repos, Drive, Gmail and live-site inventory not yet reconciled",
+  "scope": "GitHub Saeit main source snapshot plus private Bazei Moj Coin source identity; Google Drive/Gmail and live-site inventory not yet fully reconciled",
   "source_commit": "4ddb68e75933f0110b5565a558bb232b78846659",
   "verified_receipts": [],
   "earnings_received_verified": 0,
@@ -16,7 +16,8 @@
     "research_protocols": 1,
     "game_top_level_directories": 8,
     "product_recipes": 3,
-    "strategic_services": 5
+    "strategic_services": 5,
+    "game_other_repository_titles_identified": 1
   },
   "books": {
     "source": "content/zomorod-encyclopedia-master-37-series-plus-456-books-20261019.json",
@@ -6367,7 +6368,13 @@
       }
     ],
     "moj_coin": {
-      "status": "requires_discovery_in_other_repositories_or_branches"
+      "source_repository": "mojtabarozegar11-ship-it/Bazei",
+      "visibility": "private",
+      "source": "apps/games/mojcoin_completion.py",
+      "status": "source_hardening_private_branch_release_hold",
+      "evidence_commit": "7d6cd5e020aecf45188086d41395d126e233fbf0",
+      "test_scope": "5 isolated tests pass; integration unverified",
+      "commercial_ready": false
     }
   },
   "services": [
