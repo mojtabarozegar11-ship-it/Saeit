@@ -8,6 +8,7 @@ from django.core.management.base import CommandError
 from django.utils import timezone
 
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
+from core.unified_bot_identity import BOT_CODE
 
 
 @pytest.mark.django_db
@@ -112,3 +113,38 @@ def test_all_disposition_classes_are_fail_closed(code, active, pending, legacy_d
         assert "external_scheduler_and_process_topology_not_attested" in decision["blockers"]
     if pending:
         assert "pending_queued_running_or_blocked_tasks_need_reconciliation" in decision["blockers"]
+
+
+@pytest.mark.django_db
+def test_canonical_specialist_knowledge_queue_is_not_mislabelled_economic_unknown():
+    owner = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", mission="Single owner", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="research-write-review", name="Knowledge generation", active=True,
+    )
+    cap.agents.add(owner)
+    knowledge = AgentTask.objects.create(
+        agent=owner, action_type="knowledge_content_generation",
+        capability_code="research-write-review", risk_snapshot="high", status="queued",
+    )
+    unknown = AgentTask.objects.create(
+        agent=owner, action_type="external_unknown_action",
+        capability_code="research-write-review", status="queued",
+    )
+    before = (AgentTask.objects.count(), AuditLog.objects.count())
+    output = StringIO()
+    call_command("audit_agent_fleet", stdout=output)
+    report = json.loads(output.getvalue())
+    row = next(x for x in report["agents"] if x["code"] == BOT_CODE)
+    assert row["capability_modules"]["research-write-review"] == "knowledge_library"
+    assert row["tasks"]["queued_under_known_specialist_contract"] == 1
+    assert row["tasks"]["queued_without_known_handler"] == 1
+    assert report["summary"]["known_specialist_queued_not_live_attested"] == 1
+    assert report["summary"]["unsupported_known_queue_tasks"] == 1
+    assert report["external_delivery_attested"] is False
+    assert report["full_consolidation_attested"] is False
+    assert (AgentTask.objects.count(), AuditLog.objects.count()) == before
+    knowledge.refresh_from_db()
+    unknown.refresh_from_db()
+    assert knowledge.status == unknown.status == "queued"
