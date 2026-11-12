@@ -71,11 +71,11 @@
 </style>
 <div class="mpw-shop"><div class="mpw-shop-inner">
   <section class="mpw-shop-hero" aria-labelledby="mpw-shop-title">
-    <div><span class="mpw-shop-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1 id="mpw-shop-title">Chess books, illustrated stories &amp; website kits</h1><p>Explore three original digital products: a 415-page chess-training guide, an illustrated 40-page story for young readers, and a responsive website kit for interior-design studios. Review each product’s format and included features before visiting its details page.</p><a class="mpw-shop-primary" href="#mpw-products">Browse the three products <span aria-hidden="true">&nbsp;↓</span></a></div>
+    <div><span class="mpw-shop-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1 id="mpw-shop-title">Chess books, illustrated stories &amp; website kits</h1><p>Explore three original digital products: a 415-page chess-training guide, an illustrated 40-page story for young readers, and a responsive website kit for interior-design studios. Review each product’s format and included features before visiting its details page.</p><a class="mpw-shop-primary" href="#mpw-products">Browse featured and verified releases <span aria-hidden="true">&nbsp;↓</span></a></div>
     <div class="mpw-shop-art" aria-label="Featured MojPlayWin product artwork"><img class="mpw-shop-art-image" src="/static/site/mojplaywin-products/chess-improvement.webp?v=20261026" width="1122" height="1402" alt="Chess promotional artwork with a golden king and black knight" decoding="async"><img class="mpw-shop-art-image" src="/static/site/mojplaywin-products/taniya-baker-worms.webp?v=20261026" width="1122" height="1402" alt="Taniya and the Little Baker Worms in a colorful bakery" decoding="async"><p class="mpw-shop-art-note">FEATURED PRODUCT ARTWORK · MOJPLAYWIN</p></div>
   </section>
   <section class="mpw-shop-catalog" id="mpw-products" aria-labelledby="mpw-products-title">
-    <div class="mpw-shop-catalog-head"><div><span class="mpw-shop-kicker">CURRENT LISTINGS</span><h2 id="mpw-products-title">Choose what you need</h2></div><span class="mpw-shop-count">3 digital products</span></div>
+    <div class="mpw-shop-catalog-head"><div><span class="mpw-shop-kicker">CURRENT LISTINGS</span><h2 id="mpw-products-title">Choose what you need</h2></div><span class="mpw-shop-count">3 featured products{% if verified_catalog %} · {{ verified_catalog|length }} additional verified releases{% endif %}</span></div>
     <div class="mpw-shop-grid">
       <article class="mpw-product mpw-product--chess" aria-labelledby="mpw-product-72-title">
         <div class="mpw-product-visual"><img class="mpw-product-image" src="/static/site/mojplaywin-products/chess-improvement.webp?v=20261026" alt="Chess: golden king, black knight and pawn on a chessboard — promotional artwork" width="1122" height="1402" loading="lazy" decoding="async"></div>
@@ -89,6 +89,20 @@
         <div class="mpw-product-visual" aria-hidden="true"><div class="mpw-site-preview"><div class="mpw-site-preview-bar"></div><div class="mpw-site-preview-content"><span></span><span></span></div></div></div>
         <div class="mpw-product-body"><span class="mpw-product-type">Website kit · Interior design</span><h3 id="mpw-product-879-title">Atelier Interior — Client-Ready Website Kit</h3><p class="mpw-product-summary">A responsive website starter for an interior-design studio, with an editable portfolio structure and clear paths for prospective clients to make contact.</p><ul class="mpw-product-facts"><li><strong>Includes:</strong> HTML, CSS, JavaScript, setup instructions, and five original SVG illustrations</li><li><strong>Features:</strong> Project gallery, editable studio details, quote inquiry, and WhatsApp handoff</li><li><strong>Format:</strong> Downloadable ZIP · one-site/client license; demo photography is not included</li></ul><div class="mpw-product-bottom"><span class="mpw-product-price">US $6.80<small>listed price</small></span><a class="mpw-shop-secondary" href="/store/product/879/" aria-label="View Atelier Interior website kit details and purchase">View details &amp; purchase <span aria-hidden="true">&nbsp;↗</span></a></div><a class="mpw-product-demo" href="https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/" target="_blank" rel="noopener noreferrer">Open the live demo <span aria-hidden="true">↗</span></a></div>
       </article>
+      {% for item in verified_catalog %}
+      <article class="mpw-product mpw-product--verified" aria-labelledby="mpw-verified-{{ item.id }}-title">
+        <div class="mpw-product-visual" aria-hidden="true"><div class="mpw-product-cover"><small>MOJPLAYWIN · VERIFIED</small><strong>Digital release</strong><span>PUBLICATION VERIFIED</span></div></div>
+        <div class="mpw-product-body">
+          <span class="mpw-product-type">{{ item.type }}</span>
+          <h3 id="mpw-verified-{{ item.id }}-title">{{ item.title }}</h3>
+          <p class="mpw-product-summary">{{ item.description|default:"Read the verified product details and applicable terms." }}</p>
+          <div class="mpw-product-bottom">
+            <span class="mpw-product-price">{{ item.price }}</span>
+            <a class="mpw-shop-secondary" href="{{ item.url }}">{{ item.label }}</a>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
     </div>
     <aside class="mpw-shop-payment" aria-label="Payment and digital delivery information"><div class="mpw-shop-payment-mark" aria-hidden="true">i</div><div><h3>How checkout and delivery work</h3><p>No account is required. Checkout accepts native TRX on the TRON network only; bank cards, USDT and other networks are not accepted. Your order invoice shows the exact TRX amount and receiving address; network fees may apply. The private digital file unlocks after on-chain confirmation. Send funds only to the address shown in your live order invoice. Never send funds to an address found outside your verified order invoice. <a href="/commerce/trx-easy/purchases/">View your purchases and invoices</a>.</p></div></aside>
     <p class="mpw-shop-footer">Product specifications and listed prices are shown for clarity; review the individual product page for the current offer and terms before placing an order.</p>
