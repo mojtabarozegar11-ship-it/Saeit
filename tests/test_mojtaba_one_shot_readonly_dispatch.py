@@ -38,7 +38,7 @@ def test_only_expected_commit_on_main_can_call_existing_readonly_workflow():
     text = ONESHOT.read_text(encoding="utf-8")
     assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in text
     assert "github.ref == 'refs/heads/main'" in text
-    assert f"github.event.head_commit.message == '{EXPECTED_COMMIT}'" in text
+    assert f"startsWith(github.event.head_commit.message, '{EXPECTED_COMMIT}')" in text
     assert "    uses: ./.github/workflows/mojtaba-live-topology-readonly.yml" in text
     assert "    secrets: inherit" in text
     assert "  contents: read" in text
