@@ -46,6 +46,9 @@ class AvaMemory:
             raise ValueError("Memory identifier is required")
         if not item.owner_id or not item.owner_id.strip():
             raise ValueError("Memory owner is required")
+        if (item.owner_id != item.owner_id.strip() or
+                any(ord(ch) < 32 or ord(ch) == 127 or ch in "\u2028\u2029\u0085" for ch in item.owner_id)):
+            raise ValueError("Memory owner must be a canonical single-line identifier")
         if not item.text or not item.text.strip():
             raise ValueError("Memory text is required")
         if any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in item.text):
