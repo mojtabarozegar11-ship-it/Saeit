@@ -36,6 +36,29 @@ class RevenueEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(RevenueEvidenceError, "independent_reconciliation_required"):
             verify_customer_revenue(self.evidence(independently_reconciled=False))
 
+    def test_reconciliation_requires_the_exact_boolean_true(self):
+        for impostor in ("yes", "verified", "False", 1, 2, ["yes"], {"confirmed": True}, None):
+            with self.subTest(impostor=repr(impostor)):
+                with self.assertRaisesRegex(
+                        RevenueEvidenceError, "independent_reconciliation_required"):
+                    verify_customer_revenue(
+                        self.evidence(independently_reconciled=impostor))
+
+    def test_datetime_with_invalid_tz_offset_is_not_settled_evidence(self):
+        from datetime import tzinfo
+
+        class UnknownOffset(tzinfo):
+            def utcoffset(self, dt):
+                return None
+
+            def dst(self, dt):
+                return None
+
+        bad = datetime(2026, 11, 6, 14, 0, tzinfo=UnknownOffset())
+        with self.assertRaisesRegex(
+                RevenueEvidenceError, "settled_at_must_be_timezone_aware"):
+            verify_customer_revenue(self.evidence(settled_at=bad))
+
     def test_rejects_missing_or_invalid_settlement_evidence(self):
         for changes, reasons in (
             ({"settlement_reference": ""}, ("required_settlement_evidence_missing",)),
