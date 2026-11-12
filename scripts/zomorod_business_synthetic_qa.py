@@ -108,6 +108,19 @@ for clause in ('GUARD=app_drift','GUARD=dossier_drift','source.backup(target','B
     assert clause in guard_source
 print('GENETICS_DEPLOY_GUARD_SYNTHETIC=PASS')
 print('GENETICS_DOSSIER_AUTH_READONLY_SYNTHETIC=PASS')
+# Reject the reserved genetics dossier ID through the generic project form before or after registration.
+for duplicate_title in (
+    'ZM-AGRC-GEN-1405-001 | duplicate title',
+    ' ZM-AGRC-GEN-1405-001 forged through general form',
+):
+    rejected=request('POST','projects',{
+        'csrf':csrf,'action':'project','title':duplicate_title,
+        'owner':'Unauthorized generic path','state':'active','budget':'99999'
+    })
+    assert 'درخواست انجام نشد' in rejected
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    assert check.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+print('GENETICS_GENERIC_FORM_DUPLICATE_GUARD=PASS')
 # An explicit admin action registers a planned project with zero budget exactly once.
 with sqlite3.connect(str(private/'management.sqlite3')) as check:
     financial_before=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('journal_entries','journal_lines','invoices','invoice_payments')]
@@ -125,6 +138,11 @@ with sqlite3.connect(str(private/'management.sqlite3')) as check:
     assert check.execute("SELECT COUNT(*) FROM audit_events WHERE subject='genetics-project'").fetchone()[0]==1
     financial_after=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('journal_entries','journal_lines','invoices','invoice_payments')]
 assert financial_before==financial_after,('Registration wrote accounting data',financial_before,financial_after)
+rejected_after=request('POST','projects',{'csrf':csrf,'action':'project',
+    'title':'ZM-AGRC-GEN-1405-001 | repeated','owner':'Generic','state':'planned','budget':'1'})
+assert 'درخواست انجام نشد' in rejected_after
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    assert check.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
 print('GENETICS_PROJECT_ADMIN_IDEMPOTENT_ZERO_BUDGET=PASS')
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
