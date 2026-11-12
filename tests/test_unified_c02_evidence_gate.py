@@ -103,7 +103,7 @@ def test_legacy_string_only_successes_are_excluded_from_cycle():
                            cwd=ROOT, capture_output=True, text=True)
         assert p.returncode == 2, p.stderr
         report = json.loads(p.stdout)
-        assert report["stage_target_met"] is True
-        assert report["cumulative_qualified_deliveries"] == 55
+        assert report["stage_target_met"] is False
+        assert report["cumulative_qualified_deliveries"] == 0
         assert report["successful"] == 0
         assert report["complete"] is False
