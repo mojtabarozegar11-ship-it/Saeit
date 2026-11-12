@@ -1,0 +1,37 @@
+name: Direct specialist domain regression C08
+
+on:
+  push:
+    branches:
+      - work/direct-specialist-c08-20261112
+    paths:
+      - 'financial_core/revenue_evidence.py'
+      - 'financial_core/tests/test_revenue_evidence.py'
+      - 'games/moj-coin/resource_transaction_kernel.js'
+      - 'games/moj-coin/resource_transaction_kernel.test.cjs'
+      - 'product_recipes/farm_enterprise_economics/calculator.py'
+      - 'product_recipes/farm_enterprise_economics/test_calculator.py'
+      - '.github/workflows/direct-specialist-c08-domain-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  domain-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline revenue-evidence and agricultural-product tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest financial_core.tests.test_revenue_evidence -v
+          python3 -m unittest discover -s product_recipes/farm_enterprise_economics -p 'test_calculator.py' -v
+      - name: Offline Moj Coin actual multi-stage gameplay tests
+        run: |
+          set -euo pipefail
+          node --check games/moj-coin/resource_transaction_kernel.js
+          node games/moj-coin/resource_transaction_kernel.test.cjs
