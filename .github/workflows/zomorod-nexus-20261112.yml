@@ -53,7 +53,11 @@ jobs:
               if path=='/':
                   print('NEXUS_CURRENT_HOMEPAGE_BYTES='+str(len(data)),flush=True)
                   assert len(data)>40000, 'Homepage unexpectedly small; publication refused'
-                  for marker in (b'ZOMOROD_ORBIT_DATA',b'id="main-view"',b'id="orbital-cards"',b'id="site-footer"'):
+                  import hashlib
+                  current_sha=hashlib.sha256(data).hexdigest()
+                  print('NEXUS_CURRENT_HOMEPAGE_SHA256='+current_sha,flush=True)
+                  assert current_sha == '99e9c38cd20aaf400a3c68c2064211dc48d4ff0e518ee4815061ea0ca2626edc', 'Unexpected live homepage revision; refuse deployment'
+                  for marker in (b'id="main-view"',b'id="orbital-cards"',b'id="orbit-shelves"',b'id="site-footer"',b'id="zm-orbit-anchor-stability-20261105"'):
                       assert marker in data,marker
               print('PREFLIGHT_OK='+path)
           PY
