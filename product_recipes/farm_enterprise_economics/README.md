@@ -154,6 +154,31 @@ Nine stress tests per enterprise vary realized volume by -20%, 0%, +20%
 and unit selling price by -10%, 0%, +10%. Selling-fee percentage, variable
 cost per sold unit, and fixed cost remain unchanged.
 
+### Profitability ratios and consistent break-even outputs
+
+For each enterprise, contribution margin percent = contribution margin / revenue × 100
+and operating profit margin percent = operating profit / revenue × 100.
+The portfolio ratios use **total portfolio contribution and profit divided by
+total portfolio revenue**—not the arithmetic mean of enterprise percentages.
+This matters when a small low-revenue enterprise has a large percentage margin.
+
+If recorded sales revenue is zero, both percentages are `null`, not zero or
+infinity. They are planning ratios and should not be interpreted as collected
+cash, profit after taxes, or full return on invested capital.
+
+**Operational margin of safety** is modeled sold quantity minus the *whole-unit,
+rounded-up* break-even sales count. Both Python and browser engines follow this
+rule to avoid reporting contradictory safety quantities. The continuous
+(non-rounded) theoretical threshold is still used to derive the required
+break-even *unit price*, not the inventory/sales count. For the supplied sample
+of 1,000 sold units, unit contribution 5.50 and allocated fixed cost 3,000,
+the break-even unit count is 546 and the safety is 454 units / 45.40%.
+
+The offline product accepts ordinary Persian names including the zero-width
+non-joiner. Unicode bidirectional override, embedding/isolating characters
+and line separators are rejected in names to prevent CSV/spreadsheet display
+spoofing; do not remove those checks.
+
 ## How to interpret a scenario
 
 - The best-case sensitivity row is **not** a projected outcome.
