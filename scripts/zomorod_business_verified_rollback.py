@@ -151,10 +151,17 @@ def restore(
         os.replace(staged, live_app)
         if old_dossier == "ABSENT":
             if os.path.lexists(live_dossier):
-                # Only a known candidate can be removed; other versions were
-                # preserved above in the restricted backup folder.
-                if digest_file(live_dossier) != candidate_dossier:
+                # A concurrent dossier can be removed ONLY after its exact
+                # current bytes were preserved and verified in a private
+                # archive. Refuse any change after the archive was created.
+                actual_dossier = digest_file(live_dossier)
+                if actual_dossier != observed[live_dossier]:
                     raise RestoreError("DOSSIER_CHANGED_DURING_RESTORE")
+                if actual_dossier != candidate_dossier:
+                    archive = backup / ("concurrent-dossier-" + release_sha + ".php")
+                    if ("dossier" not in quarantined
+                            or digest_file(archive) != actual_dossier):
+                        raise RestoreError("DOSSIER_CONFLICT_NOT_VERIFIED")
                 live_dossier.unlink()
         else:
             os.replace(staged_dossier, live_dossier)
