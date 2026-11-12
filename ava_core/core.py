@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Protocol, Sequence
 from uuid import uuid4
-from .identity import BOT_ID
+from .identity import BOT_ID, validate_owner_id
 
 
 class ConsentError(PermissionError):
@@ -101,12 +101,7 @@ class ConversationEngine:
         memory: MemoryStore | None = None,
         style_guidance: Callable[[], str] | None = None,
     ) -> None:
-        if not owner_id or not owner_id.strip():
-            raise ValueError("owner_id is required")
-        if (owner_id != owner_id.strip()
-                or "\\" in owner_id
-                or any(ord(ch) < 32 or ord(ch) == 127 for ch in owner_id)):
-            raise ValueError("owner_id must be a canonical single-line identifier")
+        validate_owner_id(owner_id)
         if not callable(brain):
             raise TypeError("brain must be callable")
         if style_guidance is not None and not callable(style_guidance):

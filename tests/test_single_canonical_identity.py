@@ -4,6 +4,10 @@ from mojtaba_identity import BOT_ID, BOT_NAME
 from ava_core.identity import BOT_ID as CORE_ID
 from core.bot_identity import BOT_ID as SECURITY_ID, BOT_NAME as SECURITY_NAME
 from core.unified_bot_identity import BOT_CODE, BOT_NAME as ECONOMIC_NAME
+from ava_core.identity import validate_owner_id
+from ava_core.core import ConversationEngine, AvaMemory, MemoryItem
+from ava_core.goals import AutonomousGoalDirector
+from ava_core.capabilities import CapabilityHub, ActionRequest
 
 class CanonicalIdentityTests(unittest.TestCase):
     def test_shared_identity(self):

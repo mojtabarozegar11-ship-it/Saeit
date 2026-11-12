@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Protocol, Sequence
 
+from .identity import validate_owner_id
+
 
 @dataclass(frozen=True)
 class GoalProposal:

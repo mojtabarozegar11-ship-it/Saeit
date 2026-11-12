@@ -13,6 +13,8 @@ import math
 from types import MappingProxyType
 from typing import Callable, Mapping, Protocol
 
+from .identity import validate_owner_id
+
 
 _EFFECTS = frozenset({"local", "read", "write", "financial", "destructive", "physical"})
 
@@ -73,6 +75,7 @@ class ActionRequest:
         for value in (self.request_id, self.owner_id, self.capability, self.operation):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError("Action identity fields must be nonempty strings")
+        validate_owner_id(self.owner_id)
         if not isinstance(self.arguments, Mapping):
             raise TypeError("Action arguments must be a mapping")
         object.__setattr__(self, "arguments", _freeze_arguments(self.arguments))
