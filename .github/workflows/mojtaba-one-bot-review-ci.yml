@@ -1,0 +1,57 @@
+name: Mojtaba.bot.ai one-bot review CI
+
+on:
+  push:
+    branches:
+      - audit/mojtaba-fleet-disposition-20261112-c03
+    paths:
+      - "core/**"
+      - "tests/test_company_activity_workflow_handoff.py"
+      - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - ".github/workflows/mojtaba-one-bot-review-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-one-bot-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  single-bot-regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "mojtaba-ci-only-not-for-production"
+      DEBUG: "true"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - name: Check out exact proposed commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Validate Django configuration and migrations
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Validate all known agent migration regression cases
+        run: |
+          python -m pytest -q \
+            core/tests/test_audit_agent_fleet.py \
+            core/tests/test_company_activity_agent.py \
+            core/tests/test_knowledge_agent_scheduler.py \
+            core/tests/test_newsletter_queue_worker.py \
+            core/tests/test_weather_agent_assignment.py \
+            core/tests/test_unified_bot_merge.py \
+            core/tests/test_knowledge_agent_generate.py \
+            core/tests/test_consolidate_legacy_agents.py \
+            core/tests.py \
+            tests/test_company_activity_workflow_handoff.py
