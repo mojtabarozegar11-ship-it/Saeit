@@ -347,5 +347,54 @@
       "No verified commercial publication, customer sale, received payment or customer delivery"
     ],
     "owner_constraints": "No payment, email, public-site deploy, irreversible delete or actual trading without separate approval; no RDP or PICM"
+  },
+  "c07_seven_independent_lane_receipts": {
+    "status": "verified_by_git_branch_ci_and_readonly_auditor",
+    "date": "2026-11-12",
+    "receipts_commit": "948eff357d3f0a1ee06e6c294aa999d9e3d35036",
+    "ci_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43242149178",
+    "latest_window_verified": {
+      "A": 1,
+      "B": 1,
+      "C": 2,
+      "D": 2,
+      "E": 1,
+      "total": 7,
+      "target": 250,
+      "percent": 2.8
+    },
+    "lane_manifests": [
+      "runtime/cycle_receipts/A/A-20261112-C07-wheat-ch03.json",
+      "runtime/cycle_receipts/B/B-20261112-C07-climate-data.json",
+      "runtime/cycle_receipts/C/C-20261112-C07-arrow2d-3d.json",
+      "runtime/cycle_receipts/D/D-20261112-C07-farm-water.json",
+      "runtime/cycle_receipts/E/E-20261112-C07-batch-preflight.json"
+    ],
+    "tests_confirmed": {
+      "central_engine_pytest": 47,
+      "water_budget_pytest": 19,
+      "farm_economics_pytest": 25,
+      "arrow_2d_levels": 204,
+      "cube_3d_levels": 250,
+      "invalid_3d_inputs": 10,
+      "manifest_total": 11,
+      "manifest_invalid": 0
+    },
+    "core_changes": [
+      "Fail-closed whole-run validation before any ten-action Git batch",
+      "2D and 3D Arrow Escape hostile saved-level resilience",
+      "Unicode-safe crop labels for CSV without breaking Persian ZWNJ",
+      "Farm enterprise contribution and operating-profit percentages",
+      "Original wheat economics PhD chapter 3",
+      "Climate-risk farm-panel methods/data dictionary"
+    ],
+    "scope": "Independent committed source or original scholarly draft work only; publication, paid delivery, production deployment and revenue not verified",
+    "bottlenecks": [
+      "Only 7/250 evidence-accepted actions in this audited run; 50/50 per lane not achieved",
+      "Five ChatGPT automations enabled; their run-now requests routed inline, not five independent VPS executions",
+      "Actual domain authoring job supplies do not contain 50 valid independent artifacts per lane hourly",
+      "Persistent VPS runtime and private repository cross-repo evidence adapter not independently proven"
+    ],
+    "protected_actions": "No live deploy, unapproved publication, email, tickets, payment, real trading, destructive operation or private-data exposure"
   }
 }
