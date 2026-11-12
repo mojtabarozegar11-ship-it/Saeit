@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+from unittest.mock import patch
 
 
 BASE = Path(__file__).resolve().parents[1]
@@ -85,6 +87,33 @@ def _unrelated_email_helper(request):
         self.assertTrue(report['guest_email_recovery_wiring_in_adapter'])
         self.assertEqual(report['commercial_email_block'],
                          'GUEST_EMAIL_COLLECTION_OR_RECOVERY_WIRING')
+
+    def test_email_recovery_module_alias_import_is_rejected(self):
+        altered = self.source.replace(
+            'def patch_commercial(namespace):',
+            'def patch_commercial(namespace):\n'
+            '    import services.mpw_trx_email_recovery as recovery')
+        report = MODULE.audit_source(altered)
+        self.assertTrue(report['guest_email_recovery_wiring_in_adapter'])
+        self.assertIsNotNone(report['commercial_email_block'])
+
+    def test_live_preflight_returns_nonzero_for_email_policy_violation(self):
+        changed = self.source.replace(
+            'def _new_user(request):',
+            'def _new_user(request):\n    request.POST.get("buyer_email")')
+        with tempfile.TemporaryDirectory() as folder:
+            source_file = Path(folder) / 'guest.py'
+            source_file.write_text(changed, encoding='utf-8')
+            with patch.object(MODULE, 'TARGET', source_file), self.assertRaisesRegex(
+                    RuntimeError, 'GUEST_EMAIL_COLLECTION_OR_RECOVERY_WIRING'):
+                MODULE.main()
+
+    def test_live_preflight_returns_success_for_email_free_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source_file = Path(folder) / 'guest.py'
+            source_file.write_text(self.source, encoding='utf-8')
+            with patch.object(MODULE, 'TARGET', source_file):
+                self.assertEqual(MODULE.main(), 0)
 
     def test_missing_rights_gate_fails_closed(self):
         changed = self.source.replace('rights_cleared_for_sale(product)', 'True')
