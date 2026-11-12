@@ -132,7 +132,8 @@
     const threshold = reachable ? ceilNonnegative(div(fixed, contributionUnit)) : null;
     const priceThreshold = quantity.n > 0n && cmp(fee, ONE) < 0
       ? format(div(add(variable, div(fixed, quantity)), sub(ONE, fee)), 2, true) : null;
-    const safety = threshold === null ? null : sub(quantity, fraction(threshold));
+    // Margin of safety uses exact break-even volume, not rounded-up units.
+    const safety = reachable ? sub(quantity, div(fixed, contributionUnit)) : null;
     const land = optional(entry, 'land_area_hectares', true);
     const water = optional(entry, 'irrigation_water_m3');
     const result = {
