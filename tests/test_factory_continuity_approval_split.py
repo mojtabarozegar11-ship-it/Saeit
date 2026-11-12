@@ -1,13 +1,13 @@
-"""Offline invariants for scheduled VPS inventory vs authorized manual recovery.
+"""Offline invariants for manual VPS audit, owner-approved recovery and pause.
 
-No remote execution, GitHub dispatch, production files, or secrets.
+No remote execution, GitHub dispatch, production changes, or secret accesses.
 """
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/vps-factory-production-continuity.yml"
-OBSERVER = ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+HOURLY_HEALTH = ROOT / ".github/workflows/vps-direct-ssh-system-health-readonly-20261031.yml"
 
 
 def _job(name: str) -> str:
@@ -18,40 +18,67 @@ def _job(name: str) -> str:
     return re.split(r"(?m)^  [a-z][a-z0-9-]*:$", rest, maxsplit=1)[0]
 
 
-def test_schedule_is_delegated_to_existing_main_only_readonly_inventory():
-    scheduled = _job("scheduled-readonly-observation")
-    assert "github.event_name == 'schedule'" in scheduled
-    assert "github.ref == 'refs/heads/main'" in scheduled
-    assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in scheduled
-    assert "uses: ./.github/workflows/mojtaba-live-topology-readonly.yml" in scheduled
-    assert "secrets: inherit" in scheduled
-    observer = OBSERVER.read_text(encoding="utf-8")
-    assert "  workflow_call:" in observer
-    assert "github.ref == 'refs/heads/main'" in observer
-    assert "runs-on: [self-hosted, factory-vps]" in observer
-    assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in observer
-    assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" in observer
-    assert "StrictHostKeyChecking=yes" in observer
+def _on() -> str:
+    return WORKFLOW.read_text(encoding="utf-8").split("\non:\n", 1)[1].split(
+        "\npermissions:\n", 1
+    )[0]
 
 
-def test_factory_mutating_recovery_runs_only_with_two_owner_assertions():
-    ensure = _job("ensure")
-    assert "github.event_name == 'workflow_dispatch'" in ensure
-    assert "github.ref == 'refs/heads/main'" in ensure
-    assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in ensure
-    assert "inputs.recovery_authorized == true" in ensure
-    assert "inputs.offhost_backup_verified == true" in ensure
-    assert "runs-on: [self-hosted, factory-vps]" in ensure
-    assert "github.event_name != 'push'" not in ensure
-    assert "runs-on: ubuntu-latest" not in ensure
-    assert "os.replace(temp, path)" in ensure
-    assert 'nohup "$script"' in ensure
-    assert "StrictHostKeyChecking=yes" in ensure
+def test_legacy_continuity_is_manual_only_no_secret_bearing_schedules_or_pushes():
+    on_block = _on()
+    assert "  workflow_dispatch:" in on_block
+    assert "  schedule:" not in on_block
+    assert "  push:" not in on_block
+    assert "  pull_request:" not in on_block
+    assert "  workflow_call:" not in on_block
+    assert "      operation:" in on_block
+    for value in ("audit", "recover", "pause"):
+        assert f"          - {value}" in on_block
+    assert "        default: audit" in on_block
+    assert "        default: false" in on_block
+    assert "scheduled-readonly-observation:" not in WORKFLOW.read_text(encoding="utf-8")
+    assert "secrets: inherit" not in WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_unapproved_manual_event_fails_loudly_without_remote_execution():
+def test_manual_audit_needs_no_recovery_consent_and_uses_proven_runner():
+    audit = _job("audit-readonly")
+    assert "github.event_name == 'workflow_dispatch'" in audit
+    assert "inputs.operation == 'audit'" in audit
+    assert "github.ref == 'refs/heads/main'" in audit
+    assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in audit
+    assert "runs-on: [self-hosted, factory-vps]" in audit
+    assert "actions/checkout@v4" in audit
+    assert "persist-credentials: false" in audit
+    assert "StrictHostKeyChecking=yes" in audit
+    assert "FACTORY_AUDIT_READ_ONLY=true" in audit
+    assert 'kill -TERM' not in audit
+    assert 'nohup ' not in audit
+    assert "os.replace(temp, path)" not in audit
+
+
+def test_both_mutating_operations_require_owner_actor_and_two_assertions():
+    for operation, name in (("recover", "ensure"), ("pause", "pause-loop-low-disk")):
+        job = _job(name)
+        assert "github.event_name == 'workflow_dispatch'" in job
+        assert "github.ref == 'refs/heads/main'" in job
+        assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in job
+        assert "github.actor == 'mojtabarozegar11-ship-it'" in job
+        assert f"inputs.operation == '{operation}'" in job
+        assert "inputs.recovery_authorized == true" in job
+        assert "inputs.offhost_backup_verified == true" in job
+        assert "runs-on: [self-hosted, factory-vps]" in job
+    assert "os.replace(temp, path)" in _job("ensure")
+    assert 'nohup "$script"' in _job("ensure")
+    assert 'kill -TERM "$pid"' in _job("pause-loop-low-disk")
+
+
+def test_invalid_or_unapproved_mutating_manual_requests_fail_closed():
     blocked = _job("blocked-unapproved-recovery")
     assert "github.event_name == 'workflow_dispatch'" in blocked
+    assert "inputs.operation != 'audit'" in blocked
+    assert "inputs.operation != 'recover'" in blocked
+    assert "inputs.operation != 'pause'" in blocked
+    assert "github.actor != 'mojtabarozegar11-ship-it'" in blocked
     assert "inputs.recovery_authorized != true" in blocked
     assert "inputs.offhost_backup_verified != true" in blocked
     assert "FACTORY_RECOVERY_GATE=BLOCKED_MISSING_OWNER_APPROVAL_OR_VERIFIED_BACKUP" in blocked
@@ -61,16 +88,14 @@ def test_unapproved_manual_event_fails_loudly_without_remote_execution():
     assert "sudo " not in blocked
 
 
-def test_no_schedule_may_enter_mutating_job_and_legacy_safety_guards_remain():
-    scheduled = _job("scheduled-readonly-observation")
-    ensure = _job("ensure")
-    assert "github.event_name == 'schedule'" in scheduled
-    assert "github.event_name == 'schedule'" not in ensure
-    assert "inputs.recovery_authorized == true" in ensure
-    assert "inputs.offhost_backup_verified == true" in ensure
+def test_other_existing_health_workflow_keeps_hourly_read_only_route():
+    """Retiring a dangerous schedule must not remove the separate health probe."""
+    source = HOURLY_HEALTH.read_text(encoding="utf-8")
+    assert "  schedule:" in source
+    assert "cron: '17 * * * *'" in source
+    assert "runs-on: [self-hosted, factory-vps]" in source
+    assert "StrictHostKeyChecking=yes" in source
+    assert "github.ref == 'refs/heads/main'" in source
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert 'default: false' in workflow
-    assert "pause-loop-low-disk:" in workflow
-    assert "audit-readonly:" in workflow
     assert "FACTORY_AUTOSTART_BLOCKED_CAPACITY" in workflow
     assert "FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE" in workflow
