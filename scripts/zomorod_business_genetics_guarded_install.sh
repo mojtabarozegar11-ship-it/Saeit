@@ -33,6 +33,7 @@ if [[ "$expected_dossier" != 'ABSENT' ]]; then valid_sha "$expected_dossier" || 
 [[ -f "$stage/install.sh" && ! -L "$stage/install.sh" ]] || exit 2
 [[ -f "$stage/homepage-guard.sh" && ! -L "$stage/homepage-guard.sh" ]] || exit 2
 [[ -f "$stage/public-surface.py" && ! -L "$stage/public-surface.py" ]] || exit 2
+[[ -f "$stage/public-references.py" && ! -L "$stage/public-references.py" ]] || exit 2
 [[ -d "/home/zomorod2/public_html" && ! -L "/home/zomorod2/public_html" ]] || exit 2
 [[ -f "/home/zomorod2/public_html/business/index.php" ]] || exit 2
 command -v flock >/dev/null
@@ -153,6 +154,10 @@ surface_second="$(python3 -B "$stage/public-surface.py" capture)"
   exit 5
 }
 echo 'PUBLIC_SURFACE_BASELINE=VERIFIED_STABLE'
+# Cross-check that HTML/CSS local visual dependencies are included in the
+# protected public file fingerprint. A missing or untracked file is NO-GO.
+python3 -B "$stage/public-references.py" enforce
+echo 'PUBLIC_REFERENCES_PROTECTED=VERIFIED'
 
 # Create both staged files before switching; the app is installed last.
 install -m 600 "$stage/genetics-center.php" "$private/.genetics-center.new-$release_sha"
