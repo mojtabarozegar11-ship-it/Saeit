@@ -81,10 +81,16 @@ def parse_snapshot(path: Path, expected_role: str, *, now: datetime) -> dict:
     item = json.loads(lines[0].split("=", 1)[1])
     if not isinstance(item, dict) or item.get("schema") != TOPOLOGY_SCHEMA:
         raise ValueError("TOPOLOGY_SCHEMA_INVALID")
+    required_maps = (
+        "cron", "processes", "user_services", "system_services",
+        "installed_source_digests", "private_php_site_registry", "attestation",
+    )
+    if any(not isinstance(item.get(name), dict) for name in required_maps):
+        raise ValueError("TOPOLOGY_SHAPE_INVALID")
     if (item.get("host_role") != expected_role or
             item.get("read_only") is not True or
             item.get("expected_user_verified") is not True or
-            item.get("attestation", {}).get("automatic_deactivation_authorized") is not False):
+            item["attestation"].get("automatic_deactivation_authorized") is not False):
         raise ValueError("TOPOLOGY_IDENTITY_OR_READONLY_INVALID")
     when = datetime.fromisoformat(item["captured_at_utc"].replace("Z", "+00:00"))
     if when.tzinfo is None or not now - timedelta(hours=1) <= when <= now + timedelta(minutes=2):
