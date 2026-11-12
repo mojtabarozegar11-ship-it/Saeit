@@ -84,8 +84,7 @@ class AutonomousGoalDirector:
     """
 
     def __init__(self, *, owner_id: str, proposer: GoalProposer) -> None:
-        if not isinstance(owner_id, str) or not owner_id.strip():
-            raise ValueError("owner_id is required")
+        validate_owner_id(owner_id)
         if not callable(proposer):
             raise TypeError("proposer must be callable")
         self.owner_id = owner_id

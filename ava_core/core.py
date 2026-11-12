@@ -44,8 +44,7 @@ class AvaMemory:
     def add(self, item: MemoryItem) -> None:
         if not item.id or not item.id.strip():
             raise ValueError("Memory identifier is required")
-        if not item.owner_id or not item.owner_id.strip():
-            raise ValueError("Memory owner is required")
+        validate_owner_id(item.owner_id)
         if not item.text or not item.text.strip():
             raise ValueError("Memory text is required")
         if item.id in self._items:

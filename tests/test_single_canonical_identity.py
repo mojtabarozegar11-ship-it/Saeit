@@ -15,5 +15,26 @@ class CanonicalIdentityTests(unittest.TestCase):
         self.assertEqual(BOT_CODE, "mojtaba-bot-ai")
         self.assertNotEqual(BOT_CODE, BOT_ID)
 
+    def test_owner_identity_rejected_consistently_in_all_subsystems(self):
+        for invalid in (None, 4, "", " owner", "owner ", "owner\\\\nadmin",
+                        "owner\\\\radmin", "owner\\\\x00admin", "owner\\nadmin",
+                        "owner\\x00admin", "owner\\x7fadmin"):
+            with self.subTest(identity=repr(invalid)):
+                with self.assertRaises(ValueError):
+                    validate_owner_id(invalid)
+                with self.assertRaises(ValueError):
+                    ConversationEngine(owner_id=invalid, brain=lambda _: "ok")
+                with self.assertRaises(ValueError):
+                    AutonomousGoalDirector(owner_id=invalid, proposer=lambda _: ())
+                with self.assertRaises(ValueError):
+                    CapabilityHub(owner_id=invalid)
+                with self.assertRaises(ValueError):
+                    ActionRequest("r", invalid, "module", "run", {})
+                with self.assertRaises(ValueError):
+                    AvaMemory().add(MemoryItem("id", invalid, "text", "now"))
+
+    def test_accepted_owner_id_is_not_coerced(self):
+        self.assertEqual(validate_owner_id("owner:external-42"), "owner:external-42")
+
 if __name__ == "__main__":
     unittest.main()

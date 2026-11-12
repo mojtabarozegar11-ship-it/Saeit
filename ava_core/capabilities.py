@@ -122,8 +122,7 @@ class CapabilityHub:
 
     def __init__(self, *, owner_id: str,
                  authorize: Callable[[str, ActionRequest, OperationSpec], bool] | None = None) -> None:
-        if not isinstance(owner_id, str) or not owner_id.strip():
-            raise ValueError("Authenticated owner_id required")
+        validate_owner_id(owner_id)
         if authorize is not None and not callable(authorize):
             raise TypeError("authorize must be callable")
         self.owner_id = owner_id
