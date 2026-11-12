@@ -87,7 +87,8 @@ def load_closure_claims(path: Path, timeframe_minutes: int) -> tuple[list[dict],
         reason = record["reason"]
         reference = record["evidence_ref"]
         if (
-            reason not in REASONS
+            not isinstance(reason, str)
+            or reason not in REASONS
             or not isinstance(reference, str)
             or not 8 <= len(reference.strip()) <= 180
             or any(ord(c) < 32 for c in reference)
