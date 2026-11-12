@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='zm-nexus-test-') as td:
     (site/'site-heritage').mkdir()
     private=base/'.backups';private.mkdir()
     source=P
-    legacy=('<!doctype html><html lang="fa" dir="rtl"><head></head><body><div id="main-view"></div><div id="orbital-cards"></div><footer id="site-footer"></footer><script>window.ZOMOROD_ORBIT_DATA={};</script></body></html>'+'z'*90000).encode()
+    legacy=('<!doctype html><html lang="fa" dir="rtl"><head><link rel="stylesheet" href="/static/site/zomorod-v7/inner-v7.css?v=20261018"></head><body><div id="main-view"></div><div id="orbital-cards"></div><div id="orbit-shelves"></div><span id="zm-orbit-anchor-stability-20261105"></span><footer id="site-footer"></footer></body></html>'+'z'*90000).encode()
     (site/'index.html').write_bytes(legacy)
     protected=[]
     for p in mod.PROTECTED[:7]:
@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='zm-nexus-test-') as td:
         'agriculture/assets/zomorod-olive-v1/laboratory.webp'
     ):
         f=site/p;f.parent.mkdir(parents=True,exist_ok=True);f.write_bytes(b'RIFF0000WEBP\x00')
-    with patch.multiple(mod,SITE=site,BACKUPS=private/'nexus',SRC=source,HOME=site/'index.html',CSS=site/'assets/zm-nexus-v1.css',ARCHIVE=site/'site-heritage/home-before-nexus-20261112/index.html',LOCK=private/'.test-lock'),patch.object(mod,'ensure_identity',lambda:None):
+    with patch.multiple(mod,SITE=site,BACKUPS=private/'nexus',SRC=source,HOME=site/'index.html',CSS=site/'assets/zm-nexus-v1.css',ARCHIVE=site/'site-heritage/home-before-nexus-20261112/index.html',LOCK=private/'.test-lock'),patch.object(mod,'ensure_identity',lambda:None),patch.object(mod,'EXPECTED_LIVE_SHA256',sha256(legacy).hexdigest()):
         b=mod.preflight();assert b['original']==sha256(legacy).hexdigest()
         mod.apply('nexus-local-test')
         mod.verify('nexus-local-test')
