@@ -151,18 +151,71 @@ The tool refuses insufficient history, an invalid fingerprint,
 unsupported fold counts, and too-short test ranges rather than
 filling missing evidence with profits. The minimum for the default
 three-fold design and the current research parameters is 720
-**consecutive** source bars. This is a research minimum, not enough to
-claim statistically reliable profitability.
+**observed** source bars, with every intervening closure covered by an
+exact broker-specific closure record. This is a research minimum, not enough
+to claim statistically reliable profitability.
 
-**Real-market-data blocker:** The current `parse_bars` implementation
-demands exact timestamp continuity. Real XAUUSD trading commonly has
-broker-specific daily session breaks, weekends and holidays. Therefore
-a representative multiweek broker export will be rejected until
-broker-attested trading-session closure gaps can be distinguished
-from genuine missing quotes. Do **not** fabricate intervening candles
-or delete losing market intervals to bypass this blocker. Verified
-LiteFinance session/calendar metadata is needed to implement that
-rule correctly.
+**Market-session evidence path implemented:** `parse_bars` now accepts
+market closure ranges only when supplied in a separate explicit
+LiteFinance XAUUSD session manifest; each closure must match exactly
+one gap between adjacent real source bars, without creating prices.
+Missing bars during claimed open sessions are rejected. No supplied
+claim, even an exactly matched one, proves the broker actually closed:
+**independent broker/calendar provenance remains an external blocker**.
+
+A session manifest has this strict schema (illustrative placeholder,
+not evidence of any real broker closure):
+
+```json
+{
+  "schema_version": 1,
+  "broker": "LiteFinance",
+  "symbol": "XAUUSD",
+  "timeframe_minutes": 1,
+  "closures": [
+    {
+      "start_utc": "2026-11-07T00:00:00+00:00",
+      "end_utc": "2026-11-08T23:00:00+00:00",
+      "reason": "scheduled_weekend",
+      "evidence_ref": "REPLACE_WITH_ACTUAL_BROKER_SESSION_RECEIPT"
+    }
+  ]
+}
+```
+
+The above timestamps are **illustrative only** and MUST NOT be taken as
+LiteFinance market hours. The actual gap must match these times
+exactly or the parser will reject them. The only accepted reasons are
+`scheduled_weekend` (up to 72 hours), `session_break` (up to 6 hours)
+and `broker_holiday` (up to 120 hours). Each interval must be aligned
+to the selected M1/M5/M10 timeframe, unique, time-ordered, with a
+nonblank evidence reference. An unused or fabricated closure is rejected.
+
+Supply the file in either read-only command above with:
+
+```bash
+--session-closures-json /private/litefinance-xauusd-closure-claims.json
+```
+
+The resulting JSON includes a SHA-256 of the closure manifest, number
+of exactly reconciled gaps, and explicitly
+`market_closure_broker_origin_verified=false`.
+
+Per official cTrader documentation, `Symbol.MarketHours` exposes
+`Sessions` and the current open/close status:
+https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/MarketHours/
+Historical bars can be requested using `ProtoOAGetTrendbarsReq`:
+https://help.ctrader.com/open-api/symbol-data/
+
+**Remaining blocker:** Obtain and reconcile actual LiteFinance
+XAUUSD symbol-specific schedule, holidays, timestamps and bid/ask
+quotes from the authorized account before accepting any claimed
+calendar as real evidence. Do not fabricate closed-market prices
+or discard losing intervals to make a strategy profitable. A signal
+issued just before an accepted market closure is also discarded at
+the next reopening rather than optimistically filled as an immediate
+next-bar order. Open positions remain exposed to potential gap
+loss; overnight financing is still not modeled or verified.
 
 The output keeps each fold's all-candidate training scores, selected
 strategy (or none), embargo and untouched future-test results, plus
