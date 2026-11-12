@@ -381,6 +381,9 @@ def test_one_executor_approval_cannot_retire_the_other():
     first = Agent.objects.create(code="economic-master-agent", name="economic", mission="old", active=True)
     second = Agent.objects.create(code="moj_1ro_1", name="factory", mission="old", active=True)
     _, first_grant = approved_executor_handoff(first)
+    # Prove that the second agent's handoff receipt alone cannot make the
+    # first agent's scoped grant authorize deactivation of the second.
+    approved_executor_handoff(second)
     with pytest.raises(CommandError, match="EXACT_OWNER_APPROVAL_REQUIRED"):
         call_command(
             "seed_online_income_agents", apply_legacy_merge=True,
