@@ -29,7 +29,7 @@ def safe_model_precision(function):
     return call
 
 
-def number(value, field, *, strictly_positive=False):
+def number(value, field, *, strictly_positive=False, allow_negative=False):
     if isinstance(value, bool) or value is None:
         raise ValueError(field + ": number required")
     raw = str(value)
@@ -39,9 +39,9 @@ def number(value, field, *, strictly_positive=False):
         n = Decimal(raw)
     except (InvalidOperation, ValueError, TypeError):
         raise ValueError(field + ": invalid number")
-    if not n.is_finite() or n < ZERO or (strictly_positive and n == ZERO):
-        raise ValueError(field + ": must be finite and " + ("positive" if strictly_positive else "nonnegative"))
-    if n > MAX_INPUT:
+    if not n.is_finite() or (not allow_negative and n < ZERO) or (strictly_positive and n == ZERO):
+        raise ValueError(field + ": must be finite and " + ("positive" if strictly_positive else ("numeric" if allow_negative else "nonnegative")))
+    if abs(n) > MAX_INPUT:
         raise ValueError(field + ": above supported magnitude (1e20)")
     if n != n.quantize(SIX_PLACES):
         raise ValueError(field + ": maximum six decimal places")
@@ -80,7 +80,11 @@ def evaluate(data):
         names.add(name.casefold())
         area = number(c.get("max_area_ha"), name + ".max_area_ha")
         water = number(c.get("water_m3_per_ha"), name + ".water_m3_per_ha", strictly_positive=True)
-        margin = number(c.get("gross_margin_per_ha"), name + ".gross_margin_per_ha")
+        # An enterprise may have a negative gross margin; it must remain
+        # visible in the scenario, but an unconstrained revenue-maximising
+        # allocation must never force planting of a loss-making crop.
+        margin = number(c.get("gross_margin_per_ha"), name + ".gross_margin_per_ha",
+                        allow_negative=True)
         checked.append({"name": name, "max_area": area, "water": water,
                         "margin": margin, "rank": margin / water})
     ordered = sorted(checked, key=lambda c: (-c["rank"], c["name"]))
