@@ -90,7 +90,32 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         report = AUDIT.inspect(self.root)
         self.assertTrue(report["template"]["legacy_email_input_marker"])
         self.assertTrue(report["template"]["email_name_marker"])
+        self.assertEqual(report["status"], "LEGACY_EMAIL_CHECKOUT_PRESENT")
+        self.assertTrue(report["checkout_source_requires_email"])
         self.assertFalse(report["safe_to_deploy"])
+
+    def test_missing_invoice_recorder_blocks(self):
+        p = self.root / AUDIT.SOURCE_PATHS[2]
+        p.write_text("def create_order(request):\n    return None\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "INVOICE_RECORDER_NOT_FOUND")
+        self.assertFalse(report["invoice_recorder_found"])
+        self.assertFalse(report["safe_to_deploy"])
+
+    def test_missing_csrf_template_marker_blocks(self):
+        p = self.root / AUDIT.TEMPLATE
+        p.write_text('<form method="post"><input name="anonymous"></form>')
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "CHECKOUT_CSRF_MARKER_MISSING")
+        self.assertFalse(report["csrf_template_marker_found"])
+        self.assertFalse(report["safe_to_deploy"])
+
+    def test_email_only_marker_blocks(self):
+        p = self.root / AUDIT.TEMPLATE
+        p.write_text('<form><input name="email">{% csrf_token %}</form>')
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "LEGACY_EMAIL_CHECKOUT_PRESENT")
+        self.assertTrue(report["checkout_source_requires_email"])
 
     def test_symlinked_source_is_rejected(self):
         p = self.root / AUDIT.SOURCE_PATHS[2]
