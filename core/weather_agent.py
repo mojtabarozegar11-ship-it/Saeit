@@ -112,6 +112,12 @@ def _validate_paid_weather_grant(approval_grant_id):
         or any(grant.scope.get(k) != v for k, v in required_scope.items())
         or grant.used_at is not None
         or grant.expires_at <= timezone.now()
+        # A single approved request must not mint multiple usable paid grants.
+        # Only its first grant can be consumed; a fresh model call needs a
+        # separate case-by-case owner approval request.
+        or ApprovalGrant.objects.filter(
+            approval_id=grant.approval_id, pk__lt=grant.pk
+        ).exists()
     ):
         raise RuntimeError("WEATHER_PAID_GRANT_INVALID_OR_CONSUMED")
     return model_id, required_scope
