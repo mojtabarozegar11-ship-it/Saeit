@@ -93,7 +93,7 @@ def evidence_ok(evidence: list[str]) -> bool:
     return bool(evidence) and all(x.strip() for x in evidence)
 
 
-def verified_git_artifact(kind: str, evidence: list[str]) -> bool:
+def verified_git_artifact(kind: str, evidence: list[str], *, max_age_seconds: int | None = None) -> bool:
     """A delivered source/file must exist in this checked-out Git commit.
 
     This is not a journal-publication or payment adapter. Those require their
@@ -129,6 +129,19 @@ def verified_git_artifact(kind: str, evidence: list[str]) -> bool:
         )
         if ancestor.returncode != 0:
             return False
+        if max_age_seconds is not None:
+            # Creation of old commits cannot be retroactively advertised as
+            # fifty NEW actions in this hourly execution. Revalidation of
+            # previously accepted receipts uses no age limit.
+            authored = subprocess.run(
+                ["git", "show", "-s", "--format=%ct", commit],
+                cwd=checkout, capture_output=True, text=True, timeout=15,
+            )
+            if authored.returncode != 0:
+                return False
+            age = datetime.now(timezone.utc).timestamp() - int(authored.stdout.strip())
+            if age < -300 or age > max_age_seconds:
+                return False
         changed = subprocess.run(
             ["git", "show", "--format=", "--name-only", "--no-renames",
              commit, "--", relative.as_posix()],
@@ -171,7 +184,7 @@ def cmd_record(args: argparse.Namespace) -> None:
             raise SystemExit("inspection/unsupported kind cannot be successful delivery")
         if not evidence_ok(evidence):
             raise SystemExit("success requires at least one non-empty evidence reference")
-        if not verified_git_artifact(args.kind, evidence):
+        if not verified_git_artifact(args.kind, evidence, max_age_seconds=75 * 60):
             raise SystemExit("success requires verified Git commit + path + sha256 proof")
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
