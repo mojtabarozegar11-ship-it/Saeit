@@ -1,13 +1,19 @@
 name: VPS Factory Production Continuity
 on:
-  schedule:
-    # Every hour: verify or recover the existing isolated VPS factory loop.
-    - cron: "13 * * * *"
-  push:
-    branches: [main]
-    paths: [.github/workflows/vps-factory-production-continuity.yml]
+  # Legacy factory continuity never runs source-patching or stop commands
+  # from schedule, push, PR, or commit-message tags. Separate existing
+  # system-health workflow retains its reviewed hourly read-only schedule.
   workflow_dispatch:
     inputs:
+      operation:
+        description: Read-only audit, authorized recovery, or authorized pause
+        required: true
+        type: choice
+        options:
+          - audit
+          - recover
+          - pause
+        default: audit
       recovery_authorized:
         description: Owner has authorized a one-time factory loop recovery
         required: true
@@ -24,18 +30,10 @@ concurrency:
   group: saeit-vps-factory-continuity
   cancel-in-progress: false
 jobs:
-  # The scheduled route is observation-only. It delegates to the already
-  # reviewed two-host inventory on the trusted factory runner; never execute
-  # the legacy source-patching/recovery job on an hourly GitHub-hosted runner.
-  scheduled-readonly-observation:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}"
-    uses: ./.github/workflows/mojtaba-live-topology-readonly.yml
-    secrets: inherit
-
   # A manual dispatch lacking both owner assertions must FAIL, not silently
   # turn green because the mutating recovery job was skipped.
   blocked-unapproved-recovery:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && (inputs.recovery_authorized != true || inputs.offhost_backup_verified != true) }}"
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ((inputs.operation != 'audit' && inputs.operation != 'recover' && inputs.operation != 'pause') || (inputs.operation != 'audit' && (github.actor != 'mojtabarozegar11-ship-it' || inputs.recovery_authorized != true || inputs.offhost_backup_verified != true))) }}"
     runs-on: ubuntu-24.04
     steps:
       - name: Refuse unapproved factory recovery
@@ -45,8 +43,8 @@ jobs:
           exit 1
 
   pause-loop-low-disk:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]')
-    runs-on: ubuntu-24.04
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && inputs.operation == 'pause' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 3
     steps:
       - name: Gracefully pause only the verified loop when free disk is below reserve
@@ -106,8 +104,8 @@ jobs:
           REMOTE
 
   audit-readonly:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
-    runs-on: ubuntu-24.04
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.operation == 'audit' }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -232,7 +230,7 @@ jobs:
   ensure:
     # This job patches deployed Python and may start the factory. Only an
     # owner-authorized manual event with a verified backup may run it.
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && inputs.operation == 'recover' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
