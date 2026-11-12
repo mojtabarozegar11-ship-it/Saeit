@@ -91,3 +91,41 @@ def private_artifact_sha_matches_approved(product, path):
             return hmac.compare_digest(digest.hexdigest(),expected)
     except (OSError,TypeError,ValueError):
         return False
+
+
+def private_paid_stream_matches_approved(product, stream):
+    """Verify the exact opened file descriptor before any paid download.
+
+    The path may be replaced between catalogue inspection and opening the
+    download. Checking this descriptor prevents serving different bytes even
+    when a valid on-chain receipt and earlier checkout hash both exist.
+    This does not replace immutable storage or independent rights evidence.
+    """
+    import hashlib
+    import hmac
+    import os
+    import stat
+
+    if not rights_cleared_for_sale(product):
+        return False
+    expected=product.metadata["sha256"].lower()
+    try:
+        before=os.fstat(stream.fileno())
+        if (not stat.S_ISREG(before.st_mode)
+                or before.st_nlink!=1 or before.st_size<=0):
+            return False
+        stream.seek(0)
+        digest=hashlib.sha256()
+        for chunk in iter(lambda:stream.read(1024*1024),b""):
+            digest.update(chunk)
+        after=os.fstat(stream.fileno())
+        snapshot=lambda st:(st.st_dev,st.st_ino,st.st_mode,st.st_nlink,
+                            st.st_size,st.st_mtime_ns,st.st_ctime_ns)
+        if snapshot(before)!=snapshot(after):
+            return False
+        if not hmac.compare_digest(digest.hexdigest(),expected):
+            return False
+        stream.seek(0)
+        return True
+    except (OSError,TypeError,ValueError,AttributeError):
+        return False
