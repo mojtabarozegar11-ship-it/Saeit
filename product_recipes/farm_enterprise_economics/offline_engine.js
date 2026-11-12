@@ -145,6 +145,10 @@
       contribution_per_unit: format(contributionUnit), operating_profit: format(profit),
       break_even_units: threshold === null ? null : safeInt(threshold),
       break_even_reachable: reachable,
+      // Additional units needed to reach the operational whole-unit threshold.
+      // Preserve fractional sold units (e.g. tonnes) rather than truncating them.
+      break_even_gap_units: threshold === null ? null :
+        exact(cmp(quantity, fraction(threshold)) >= 0 ? ZERO : sub(fraction(threshold), quantity)),
       break_even_unit_price_at_planned_volume: priceThreshold,
       margin_of_safety_units: safety === null ? null : exact(safety),
       margin_of_safety_percent: safety === null || quantity.n === 0n
