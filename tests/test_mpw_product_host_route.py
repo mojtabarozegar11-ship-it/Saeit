@@ -11,6 +11,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from core.mojplaywin_catalog import FEATURED_IDS, catalog_card
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "core/product_seo_views.py"
@@ -49,6 +50,9 @@ def load_functions(product):
     assert {node.name for node in functions} == names
     namespace = {
         "Http404": NotFound,
+        "settings": SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879, 991)),
+        "FEATURED_IDS": FEATURED_IDS,
+        "catalog_card": catalog_card,
         "Product": SimpleNamespace(objects=FakeProducts(product)),
         "json": json,
         "strip_tags": lambda x: x.replace("<", "").replace(">", ""),
@@ -115,6 +119,30 @@ class ProductDetailHostTests(unittest.TestCase):
         self.assertIn("MojPlayWin", moj["context"]["description"])
         self.assertNotIn("Zomorod Melal", moj["context"]["description"])
         self.assertIn("Zomorod Melal", zom["context"]["description"])
+
+    def test_arbitrary_active_usd_zomorod_product_is_not_leaked(self):
+        product = item(pk=101, metadata={"description": "Zomorod only"})
+        with self.assertRaises(NotFound):
+            load_functions(product)(request("mojplaywin.com"), 101)
+        result = load_functions(product)(request("zomorodmelal.ir"), 101)
+        self.assertFalse(result["context"]["mojplaywin_store"])
+
+    def test_allowlisted_unfeatured_paid_item_is_visible_only_when_approved(self):
+        valid = "a" * 64
+        approved = {
+            "summary": "Rights-verified digital item",
+            "sales_enabled": True, "rights_cleared": True,
+            "publication_approved": True,
+            "sha256": valid, "rights_asset_sha256": valid,
+            "rights_document_sha256": "b" * 64,
+        }
+        product = item(pk=991, metadata=approved)
+        page = load_functions(product)(request("mojplaywin.com"), 991)
+        self.assertTrue(page["context"]["mojplaywin_store"])
+        self.assertTrue(page["context"]["can_list_offer"])
+        denied = item(pk=991, metadata={**approved, "rights_asset_sha256": "c" * 64})
+        with self.assertRaises(NotFound):
+            load_functions(denied)(request("mojplaywin.com"), 991)
 
     def test_nonexistent_product_is_never_exposed(self):
         with self.assertRaises(NotFound):
