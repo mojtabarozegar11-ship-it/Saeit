@@ -219,6 +219,14 @@ class AvaCoreTests(unittest.TestCase):
                     assistant.converse("سلام")
                 self.assertEqual(assistant.list_memories(), ())
 
+    def test_provider_control_bytes_are_rejected_before_ui_delivery(self):
+        for unsafe in ("reply\x00tail", "reply\x1btail", "reply\x7ftail"):
+            with self.subTest(unsafe=repr(unsafe)):
+                assistant = Ava(owner_id="owner-1", brain=lambda messages, value=unsafe: value)
+                with self.assertRaisesRegex(ValueError, "Brain response contains forbidden control characters"):
+                    assistant.converse("سلام")
+                self.assertEqual(assistant.list_memories(), ())
+
     def test_oversized_model_reply_is_rejected_without_memory_writes(self):
         assistant = Ava(owner_id="owner-1", brain=lambda messages: "x" * 10001)
         with self.assertRaisesRegex(ValueError, "Brain response exceeds 10000 characters"):
