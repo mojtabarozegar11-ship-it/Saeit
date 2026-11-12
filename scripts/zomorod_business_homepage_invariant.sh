@@ -6,12 +6,15 @@ umask 077
 
 homepage_digest() {
   # Strict TLS, no insecure redirects or missing responses. Never log page HTML.
-  local result
-  result="$(curl --fail --silent --show-error --location \
+  local result payload
+  # An unsuccessful curl must NEVER be converted into the hash of empty input.
+  payload="$(curl --fail --silent --show-error --location \
       --proto '=https' --proto-redir '=https' \
       --connect-timeout 10 --max-time 25 --max-redirs 3 \
       --max-filesize 2000000 \
-      'https://zomorodmelal.ir/' | sha256sum | awk '{print $1}')"
+      'https://zomorodmelal.ir/')" || return 2
+  [[ -n "$payload" ]] || return 2
+  result="$(printf '%s' "$payload" | sha256sum | awk '{print $1}')" || return 2
   [[ "$result" =~ ^[0-9a-f]{64}$ ]] || return 2
   printf '%s\n' "$result"
 }
@@ -19,8 +22,8 @@ homepage_digest() {
 case "${1:-}" in
   capture)
     [[ "$#" -eq 1 ]] || exit 2
-    first="$(homepage_digest)"
-    second="$(homepage_digest)"
+    first="$(homepage_digest)" || { echo 'PUBLIC_HOMEPAGE_GUARD=UNREACHABLE_ABORT' >&2; exit 4; }
+    second="$(homepage_digest)" || { echo 'PUBLIC_HOMEPAGE_GUARD=UNREACHABLE_ABORT' >&2; exit 4; }
     [[ "$first" == "$second" ]] || {
       echo 'PUBLIC_HOMEPAGE_GUARD=UNSTABLE_BASELINE_ABORT' >&2
       exit 4
