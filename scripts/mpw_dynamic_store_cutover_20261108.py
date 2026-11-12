@@ -478,9 +478,9 @@ class _InvoiceFormScanner(HTMLParser):
 
     @staticmethod
     def _is_email_control(attrs):
-        return (attrs.get("name", "").lower() == "email"
-                or attrs.get("type", "").lower() == "email"
-                or attrs.get("id", "").lower() == "mpw-buy-email")
+        return ((attrs.get("name") or "").lower() == "email"
+                or (attrs.get("type") or "").lower() == "email"
+                or (attrs.get("id") or "").lower() == "mpw-buy-email")
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
