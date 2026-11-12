@@ -60,7 +60,7 @@ def test_secondary_sitemap_contains_only_real_auction_urls():
     doc = ET.parse(ROOT / "sitemap.xml")
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     urls = [n.text for n in doc.findall(".//sm:loc", ns)]
-    expected = {f"{ORIGIN}/auctions/{n}/" for n in NOTICES} | {f"{ORIGIN}/auctions/"}
+    expected = {f"{ORIGIN}/auctions/{n}/" for n in NOTICES} | {f"{ORIGIN}/auctions/", f"{ORIGIN}/auctions/supplier-kit/"}
     assert set(urls) == expected
     assert len(urls) == len(expected)
 
@@ -77,3 +77,25 @@ def test_robot_policy_is_identical_except_for_one_sitemap_addition():
         f"Sitemap: {ORIGIN}/topics/sitemap.xml",
         f"Sitemap: {ORIGIN}/sitemap-auctions.xml",
     ]
+
+
+def test_supplier_kit_links_legal_quotations_and_downloads():
+    page = (ROOT / "supplier-kit" / "index.html").read_text(encoding="utf-8")
+    assert '<html lang="fa" dir="rtl">' in page
+    assert '<link rel="canonical" href="https://zomorodmelal.ir/auctions/supplier-kit/">' in page
+    assert "غیرالزام‌آور" in page
+    assert "zomorodmelal@gmail.com" in page
+    index = (ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'href="/auctions/supplier-kit/"' in index
+    for number in NOTICES:
+        assert f'/auctions/{number}/' in page
+        assert f'/auctions/supplier-kit/templates/rfq-{number}.csv' in page
+        raw = (ROOT / "templates" / f"rfq-{number}.csv").read_bytes()
+        assert raw[:3] == b"\xef\xbb\xbf"  # UTF-8 BOM for Excel Persian compatibility
+        decoded = raw[3:].decode("utf-8-sig")
+        assert "پاسخ تأمین‌کننده" in decoded
+        assert "شماره فراخوان" in decoded
+        assert "تعهد" in decoded
+        assert decoded.count("\r\n") >= 30
+    assert "حداقل حجم عمده" in (ROOT / "templates" / "rfq-349.csv").read_text(encoding="utf-8-sig")
+    assert "رفاه جانوری" in (ROOT / "templates" / "rfq-346.csv").read_text(encoding="utf-8-sig")
