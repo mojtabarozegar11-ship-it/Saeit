@@ -51,8 +51,14 @@ class ProductSeoTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "https://mojplaywin.com/store/product/72/")
-        self.assertContains(response, "MojPlayWin Digital Store")
+        self.assertContains(response, "<title>Original English Chess Guide | MojPlayWin Digital Store</title>", html=True)
+        self.assertContains(response, 'name="description" content="Original verified course material"')
         self.assertNotContains(response, '"@type": "Offer"')
+
+    def test_other_mojplaywin_pages_retain_default_seo_title(self):
+        response = self.client.get("/store/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<title>MojPlayWin | Research, Games &amp; Learning</title>", html=True)
 
     @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,))
     def test_approved_new_mojplaywin_sku_has_separate_public_detail(self):
