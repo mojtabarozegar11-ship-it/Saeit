@@ -158,6 +158,60 @@ def source_revision(snapshot: dict, names: tuple[str, ...], repository_root: Pat
     return result
 
 
+# These names are source-defined registry identifiers, not observed running bots.
+PHP_ROLE_CODES = (
+    "master", "content", "seo", "commerce", "agriculture", "research",
+    "economic", "weather", "quality", "media", "security",
+)
+DJANGO_ROLE_CODES = (
+    "core_research", "newsletter-specialist", "newsletter-company-news",
+    "newsletter-world-watch", "newsletter-unit-reports",
+    "company-activity-intelligence", "content-director",
+    "knowledge-content-director", "content-research", "mojtaba-bot-ai",
+)
+
+
+def identity_dispositions(cpanel: dict) -> list[dict]:
+    """List each source-defined identity separately without declaring it live."""
+    php = cpanel.get("private_php_site_registry", {})
+    observed_php = php.get("state") == "source_registry_snapshot_only"
+    seen_php = {}
+    if observed_php:
+        for row in php.get("agent_roles", []):
+            if (isinstance(row, dict)
+                    and row.get("code") in PHP_ROLE_CODES
+                    and type(row.get("enabled")) is bool):
+                seen_php[row["code"]] = row["enabled"]
+    identities = []
+    for code in PHP_ROLE_CODES:
+        if not observed_php:
+            registered = "unknown_registry_unobserved"
+        elif code not in seen_php:
+            registered = "not_in_observed_private_registry"
+        elif seen_php[code]:
+            registered = "enabled_database_record_not_live_worker"
+        else:
+            registered = "disabled_database_record_not_retirement_proof"
+        identities.append({
+            "source": "cpanel_php_sqlite", "code": code,
+            "registration_state": registered,
+            "live_execution_verified": False,
+            "next_step": "map_site_adapter_receipts_to_canonical_bot",
+            "retirement_authorized": False,
+        })
+    for code in DJANGO_ROLE_CODES:
+        identities.append({
+            "source": "django_agent_registry", "code": code,
+            "registration_state": "unknown_django_database_not_observed",
+            "live_execution_verified": False,
+            "next_step": ("verify_canonical_bot_runtime_and_task_delivery"
+                          if code == "mojtaba-bot-ai"
+                          else "reconcile_legacy_tasks_receipts_and_schedulers"),
+            "retirement_authorized": False,
+        })
+    return identities
+
+
 def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -> dict:
     if manifest.get("schema") != MANIFEST_SCHEMA or manifest.get("canonical_bot_id") != "mojtaba.bot.ai":
         raise ValueError("DISPOSITION_MANIFEST_INVALID")
@@ -213,6 +267,8 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
         "schema": SCHEMA, "canonical_bot": "mojtaba.bot.ai",
         "sources_in_manifest": len(declared),
         "sources_evaluated": len(groups), "groups": groups,
+        "source_defined_identity_count_not_live_bots": len(PHP_ROLE_CODES) + len(DJANGO_ROLE_CODES),
+        "identity_dispositions": identity_dispositions(cpanel),
         "verified_live_agents": None,
         "percent_fully_consolidated": None,
         "all_legacy_agents_retired": False,
