@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using cAlgo.API;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
@@ -117,8 +116,19 @@ namespace MojTrade.OmegaX
             if (previousFast >= previousSlow && fast < slow && rsi > 25)
                 sellVotes++;
 
-            var rangeHigh = Bars.HighPrices.Skip(Math.Max(0, index - 20)).Take(20).Max();
-            var rangeLow = Bars.LowPrices.Skip(Math.Max(0, index - 20)).Take(20).Min();
+            // cTrader DataSeries is indexed but does not implement
+            // IEnumerable<double>: LINQ Skip/Take/Max/Min cannot compile here.
+            // Examine only bars strictly BEFORE the closed signal bar.
+            var rangeHigh = double.NegativeInfinity;
+            var rangeLow = double.PositiveInfinity;
+            for (var candle = index - 20; candle < index; candle++)
+            {
+                rangeHigh = Math.Max(rangeHigh, Bars.HighPrices[candle]);
+                rangeLow = Math.Min(rangeLow, Bars.LowPrices[candle]);
+            }
+            if (double.IsNaN(rangeHigh) || double.IsNaN(rangeLow) ||
+                double.IsInfinity(rangeHigh) || double.IsInfinity(rangeLow))
+                return;
             var close = Bars.ClosePrices[index];
             if (close > rangeHigh && fast > slow)
                 buyVotes++;
