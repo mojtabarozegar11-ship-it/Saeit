@@ -154,7 +154,9 @@ jobs:
             grep -Fq "href=\"/auctions/$n/\"" "$d/result-_auctions_" || verified=no
             status="$(curl -sSL --max-time 18 -o "$d/after-$n" -w '%{http_code}' "https://zomorodmelal.ir/auctions/$n/" || true)"
             test "$status" = 200 || verified=no
-            original="$(sha256sum "$d/before-_auctions_$n"'/')"; : "$original"
+            original_sha="$(sha256sum "$d/before-_auctions_"$n"_" | cut -c1-64)"
+            current_sha="$(sha256sum "$d/after-$n" | cut -c1-64)"
+            test "$original_sha" = "$current_sha" || verified=no
           done
           root_status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
           sitemap_status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/sitemap.xml || true)"
