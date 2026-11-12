@@ -60,9 +60,13 @@ def verify_customer_revenue(evidence: CustomerRevenueEvidence) -> VerifiedRevenu
         raise RevenueEvidenceError("settled_amount_must_be_finite_positive")
     if not isinstance(evidence.currency, str) or evidence.currency.strip().upper() != evidence.currency.strip():
         raise RevenueEvidenceError("currency_must_be_canonical_uppercase")
-    if not isinstance(evidence.settled_at, datetime) or evidence.settled_at.tzinfo is None:
+    if (not isinstance(evidence.settled_at, datetime)
+            or evidence.settled_at.tzinfo is None
+            or evidence.settled_at.utcoffset() is None):
         raise RevenueEvidenceError("settled_at_must_be_timezone_aware")
-    if not evidence.independently_reconciled:
+    # A string such as "yes" or a truthy numeric flag is NOT evidence of
+    # independent reconciliation. Require an explicit audited boolean.
+    if evidence.independently_reconciled is not True:
         raise RevenueEvidenceError("independent_reconciliation_required")
     return VerifiedRevenueFact(
         order_id=evidence.order_id.strip(),
