@@ -29,7 +29,7 @@ jobs:
       - name: Run isolated ledger regressions (NO factory or live system access)
         run: |
           python3 -m pip install --disable-pip-version-check --quiet pytest
-          python3 -m pytest -q             tests/test_unified_c02_evidence_gate.py             tests/test_mojtaba_c02_coordinator_proof.py             tests/test_c02_worker_50_receipts.py
+          python3 -m pytest --noconftest -q             tests/test_unified_c02_evidence_gate.py             tests/test_mojtaba_c02_coordinator_proof.py             tests/test_c02_worker_50_receipts.py
 
       - name: Assert no production secrets or external transfers
         run: |
