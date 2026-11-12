@@ -69,7 +69,13 @@
     return pieces;
   }
   function generate(level) {
-    const n = Math.max(1, Math.min(1000000, Math.floor(Number(level) || 1)));
+    // Progress saved in browser storage or imported from URLs is untrusted.
+    // Treat NaN/Infinity and objects with throwing conversion as level one,
+    // matching the 2D engine rather than silently jumping to level 1,000,000.
+    let requested;
+    try { requested = Number(level); } catch (_) { requested = NaN; }
+    const n = Number.isFinite(requested)
+      ? Math.max(1, Math.min(1000000, Math.floor(requested))) : 1;
     const size = n < 8 ? 15 : n < 35 ? 18 : 21;
     const faces = FACE_NAMES.map((name, faceIndex) => {
       const rng = random((Math.imul(n, 0x9e3779b1) ^
