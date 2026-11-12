@@ -60,13 +60,24 @@ def reference_to_path(value: str, base: str) -> tuple[str, str | None]:
     path = unquote(parsed.path)
     if not path or "\x00" in path or "\\" in path:
         return "ignored" if not path else "unsafe", None
-    if not path.startswith("/"):
-        path = posixpath.join(posixpath.dirname("/" + base), path)
-    components = path.split("/")
-    if ".." in components:
-        return "unsafe", None
-    normalized = posixpath.normpath(path).lstrip("/")
-    if not normalized or normalized.startswith("../"):
+    if path.startswith("/"):
+        components = path.split("/")
+    else:
+        components = posixpath.dirname("/" + base).split("/") + path.split("/")
+    # Allow ordinary CSS ../relative imports only while they remain inside
+    # public_html; reject path traversal that escapes its root.
+    safe_components: list[str] = []
+    for part in components:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not safe_components:
+                return "unsafe", None
+            safe_components.pop()
+        else:
+            safe_components.append(part)
+    normalized = "/".join(safe_components)
+    if not normalized:
         return "ignored", None
     if Path(normalized).suffix.lower() not in VISUAL_EXTS:
         return "ignored", None
