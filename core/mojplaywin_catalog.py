@@ -9,7 +9,7 @@ import re
 from decimal import Decimal
 
 FEATURED_IDS = frozenset((72, 225, 879))
-MAX_VISIBLE = 48
+PAGE_SIZE = 24  # Per page, not a cap on the number of published products.
 
 
 def _sha(value):
@@ -78,8 +78,21 @@ def catalog_card(product, paid_ids):
     }
 
 
-def verified_catalog_cards():
-    """Bounded database-only discovery; no payment, filesystem or customer data."""
+def _page_cards(products, paid_ids):
+    """Pure keyset page builder: never hide all older approved products."""
+    visible = []
+    for product in products:
+        card = catalog_card(product, paid_ids)
+        if card is None:
+            continue
+        if len(visible) == PAGE_SIZE:
+            return visible, visible[-1]["id"]
+        visible.append(card)
+    return visible, None
+
+
+def verified_catalog_cards(before_id=None):
+    """Read-only keyset pagination avoids a hard limit on the product catalog."""
     from django.conf import settings
     from .models import Product
 
@@ -92,13 +105,9 @@ def verified_catalog_cards():
         Product.objects.filter(active=True, currency="USD")
         .exclude(pk__in=FEATURED_IDS)
         .select_related("knowledge_article")
-        .order_by("-id")[:250]
     )
-    visible = []
-    for product in products:
-        card = catalog_card(product, paid_ids)
-        if card is not None:
-            visible.append(card)
-        if len(visible) >= MAX_VISIBLE:
-            break
-    return visible
+    if before_id is not None:
+        if type(before_id) is not int or before_id <= 0:
+            return [], None
+        products = products.filter(pk__lt=before_id)
+    return _page_cards(products.order_by("-pk").iterator(chunk_size=128), paid_ids)
