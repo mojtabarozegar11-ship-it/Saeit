@@ -220,7 +220,7 @@ def test_malformed_missing_crontab_response_is_blocked_not_silently_accepted():
     ):
         shell = (
             "set -euo pipefail\n"
-            "crontab() { printf '%s' " + repr(message) + " >&2; return "
+            "crontab() { printf '%b' " + repr(message) + " >&2; return "
             + str(code) + "; }\n"
             + cron_block + "\n"
             + "gate_fail=0\n"
