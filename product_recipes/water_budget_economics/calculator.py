@@ -73,7 +73,16 @@ def evaluate(data):
         name = name.strip()
         # Crop labels appear in CSV. Reject spreadsheet formula prefixes and
         # embedded control characters before exporting any user-supplied text.
-        if not name[0].isalnum() or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        # The CSV export must not accept invisible bidirectional overrides
+        # or Unicode line separators; keep ordinary Persian ZWNJ intact.
+        bidi_controls = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
+        bidi_controls |= {0x200E, 0x200F, 0x061C}
+        unsafe = any(
+            ord(ch) < 32 or ord(ch) == 127 or
+            ord(ch) in bidi_controls or ord(ch) in {0x2028, 0x2029}
+            for ch in name
+        )
+        if not name[0].isalnum() or unsafe:
             raise ValueError("crop name must start with a letter or digit and have no controls")
         if name.casefold() in names:
             raise ValueError("duplicate crop name")
