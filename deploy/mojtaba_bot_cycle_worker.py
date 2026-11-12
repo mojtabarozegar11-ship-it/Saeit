@@ -132,13 +132,15 @@ def main():
             cumulative_success=len(accepted_ids)
         except (OSError, ValueError, TypeError, AttributeError):
             cumulative_success=0
+    # Historical qualified deliveries and this execution's new work are separate.
     report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"started_at":now(),
             "queued":len(queue),"processed":len(results),"successful":successful,
             "observed":observed,"cumulative_qualified_deliveries":cumulative_success,
             "cumulative_successful":cumulative_success,"target":50,
-            "complete":cumulative_success>=50,"results":results}
+            "stage_target_met":cumulative_success>=50,
+            "complete":successful>=50,"results":results}
     print(json.dumps(report,ensure_ascii=False,indent=2))
-    if cumulative_success < 50:
+    if successful < 50:
         return 2
     return 0
 
