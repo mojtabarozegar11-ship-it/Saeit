@@ -20,7 +20,8 @@ from core.models import Agent, AgentTask
 from core.bot_identity import BOT_ID, summarize_internal_agent_registry
 from core.unified_bot_identity import (
     BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES,
-    is_economic_capability, FACTORY_CAPABILITIES, KNOWLEDGE_TASK, module_for_capability,
+    is_economic_capability, FACTORY_CAPABILITIES, module_for_capability,
+    specialist_task_scope,
 )
 
 
@@ -127,18 +128,18 @@ class Command(BaseCommand):
                     capability_code__in=known_handlers,
                     action_type=F("capability_code"),
                 )
-                # The separate knowledge generator is the only documented
-                # specialist handler here. Its presence does NOT attest a
-                # paid grant, live executor, or successful generation.
-                known_knowledge = Q(
-                    action_type=KNOWLEDGE_TASK[0],
-                    capability_code=KNOWLEDGE_TASK[1],
-                ) if agent.code == BOT_CODE else Q(pk__in=[])
+                # Only the canonical owner may use reviewed specialist pairs.
+                # This is source routing knowledge, not live execution,
+                # profitability, broker authorization, or paid-model approval.
+                specialist = (
+                    specialist_task_scope()
+                    if agent.code == BOT_CODE else Q(pk__in=[])
+                )
                 known_specialist_queued = tasks.filter(
                     status="queued",
-                ).filter(known_knowledge).count()
+                ).filter(specialist).count()
                 unsupported = tasks.filter(status="queued").exclude(
-                    supported_economic | known_knowledge
+                    supported_economic | specialist
                 ).count()
             findings = []
             if not agent.active and pending:
