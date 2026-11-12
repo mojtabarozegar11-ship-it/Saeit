@@ -57,6 +57,7 @@ jobs:
           python3 -B -m unittest -v \
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_onefile_release_gate
+          python3 -B scripts/test_mpw_guest_first_order_identity.py
       - name: Confirm no production actions run
         run: |
           echo 'MPW_NO_EMAIL_QA=PASS;LIVE_DEPLOY=NO;EMAIL_SENT=NO;INVOICE_CREATED=NO'

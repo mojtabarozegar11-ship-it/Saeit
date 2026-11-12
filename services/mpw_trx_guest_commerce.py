@@ -37,7 +37,9 @@ def _read_user(request):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if user is None or user.has_usable_password():
+        if (user is None or user.has_usable_password()
+                or getattr(user, "is_staff", False)
+                or getattr(user, "is_superuser", False)):
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -108,12 +110,19 @@ def _new_user(request):
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
+                # Never inherit privilege-raising defaults from a custom user model.
+                if hasattr(user, "is_staff"):
+                    user.is_staff = False
+                if hasattr(user, "is_superuser"):
+                    user.is_superuser = False
                 user.save(force_insert=True)
         except IntegrityError:
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if not getattr(user, "is_active", True) or user.has_usable_password():
+    if (not getattr(user, "is_active", True) or user.has_usable_password()
+            or getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)):
         raise Http404("Guest identity conflict")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:

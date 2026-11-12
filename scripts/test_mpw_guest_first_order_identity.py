@@ -51,11 +51,15 @@ class Query:
         if STALE_LOOKUP:
             STALE_LOOKUP = False
             return None
+        if isinstance(self.key, tuple) and self.key[0] == "pk":
+            return next((u for u in USERS.values() if u.pk == self.key[1] and u.is_active), None)
         return USERS.get(self.key)
 
 
 class Manager:
     def filter(self, **kwargs):
+        if "pk" in kwargs:
+            return Query(("pk", kwargs["pk"]))
         return Query(next(iter(kwargs.values())))
 
 
@@ -70,6 +74,9 @@ class User:
         self.pk = None
         self.unusable = False
         self.email = ""
+        # Deliberately unsafe model defaults test explicit guest downgrade.
+        self.is_staff = True
+        self.is_superuser = True
 
     def set_unusable_password(self):
         self.unusable = True
@@ -107,15 +114,18 @@ def load_real_functions():
     functions = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name in ("_guest_username", "_new_user")
+        and node.name in ("_guest_username", "_new_user", "_read_user")
     ]
-    assert len(functions) == 2
+    assert len(functions) == 3
     namespace = {
         "hashlib": hashlib, "hmac": hmac, "re": re, "secrets": secrets,
         "Http404": Http404, "SALT": "isolated-test", "MAX_COOKIE": 512,
+        "COOKIE": "mpw_trx_guest_owner", "COOKIE_AGE": 30 * 86400,
         "_rate_limit": lambda request: None,
         "signing": types.SimpleNamespace(
-            dumps=lambda claim, salt: "signed-test:" + str(claim)
+            dumps=lambda claim, salt: "signed-test:" + str(claim),
+            loads=lambda raw, salt, max_age: {"u": 1},
+            BadSignature=ValueError, SignatureExpired=ValueError,
         ),
     }
     exec(compile(ast.Module(body=functions, type_ignores=[]),
@@ -140,6 +150,29 @@ def run():
     assert len(USERS) == 2
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
+    assert all(not v.is_staff and not v.is_superuser for v in USERS.values())
+    # Neither a retained guest cookie nor concurrent re-use may claim staff privileges.
+    cookie_req = types.SimpleNamespace(COOKIES={"mpw_trx_guest_owner": "a" * 32})
+    assert functions["_read_user"](cookie_req) is one
+    one.is_staff = True
+    assert functions["_read_user"](cookie_req) is None
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("privileged staff collision accepted")
+    one.is_staff = False
+    one.is_superuser = True
+    assert functions["_read_user"](cookie_req) is None
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("privileged superuser collision accepted")
+    one.is_superuser = False
+    assert functions["_read_user"](cookie_req) is one
     try:
         functions["_new_user"](request(""))
     except Http404:
