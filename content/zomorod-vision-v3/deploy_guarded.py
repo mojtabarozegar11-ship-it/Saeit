@@ -29,7 +29,10 @@ LOCK = BACKUPS.parent/'.zomorod-homepage-deploy.lock'
 HOME = SITE/'index.html'
 CSS = SITE/'assets/zm-reference-v3.css'
 JS = SITE/'assets/zm-reference-v3.js'
-ART = SITE/'assets/zm-vision-v3/art'
+ART_PREFIX='zm-v3-'
+
+def art_paths()->dict:
+ return {name:SITE/'assets'/(ART_PREFIX+name) for name in EXPECTED_ART}
 OLD_ARCHIVE = SITE/'site-heritage/home-before-nexus-20261112/index.html'
 EXPECTED_CURRENT_SHA = '0eca61aa473b46dc5556298b96b0b2d6fb47e29aa111b93f83f2405747491af9'
 EXPECTED_ARCHIVE_SHA = '99e9c38cd20aaf400a3c68c2064211dc48d4ff0e518ee4815061ea0ca2626edc'
@@ -60,8 +63,8 @@ def identity():
  for p in (SITE,SRC,BACKUPS.parent,SITE/'assets'):
   if not p.is_dir() or p.is_symlink():
    raise RuntimeError('Refusing unexpected directory: '+str(p))
- if BACKUPS.is_symlink() or ART.parent.is_symlink():
-  raise RuntimeError('Symlink in destination')
+ if BACKUPS.is_symlink():
+  raise RuntimeError('Symlink in backup destination')
 
 
 def candidate()->dict:
@@ -110,7 +113,7 @@ def preflight()->dict:
   raise RuntimeError('Live homepage changed: fail closed')
  if sha(safe_file(OLD_ARCHIVE))!=EXPECTED_ARCHIVE_SHA:
   raise RuntimeError('Preserved historical page changed: fail closed')
- for p in (CSS,JS,ART,ART.parent):
+ for p in (CSS,JS,*art_paths().values()):
   if p.exists() or p.is_symlink():
    raise RuntimeError('New version path already occupied: '+str(p))
  for img in ('static/site/zomorod-v7/company-logo.webp','static/site/heroes/ai.webp'):
@@ -153,16 +156,18 @@ def apply(run:str):
   manifest=dict(b,home_mode=mode)
   (folder/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,sort_keys=True),encoding='utf-8')
   tmpart=SITE/'assets'/('.zm-vision-staging-'+run)
-  artdir_created=False;css_created=False;js_created=False;home_changed=False
+  art_created=[];css_created=False;js_created=False;home_changed=False
   try:
-   if tmpart.exists():raise RuntimeError('Art staging occupied')
+   if tmpart.exists() or tmpart.is_symlink():raise RuntimeError('Art staging occupied')
    tmpart.mkdir(mode=0o700)
-   for name,blob in d['art'].items():atomic(tmpart/name,blob,0o644)
-   if {p.name:sha(p.read_bytes()) for p in tmpart.iterdir()}!=b['art']:
-    raise RuntimeError('Artwork stage checksum mismatch')
-   ART.parent.mkdir(mode=0o755)
-   os.rename(tmpart,ART)
-   artdir_created=True
+   for name,blob in d['art'].items():atomic(tmpart/(ART_PREFIX+name),blob,0o644)
+   staged={p.name.removeprefix(ART_PREFIX):sha(p.read_bytes()) for p in tmpart.iterdir()}
+   if staged!=b['art']:raise RuntimeError('Artwork stage checksum mismatch')
+   for name,final in art_paths().items():
+    if final.exists() or final.is_symlink():raise RuntimeError('Art filename occupied: '+name)
+    os.rename(tmpart/(ART_PREFIX+name),final)
+    art_created.append(name)
+   tmpart.rmdir()
    atomic(CSS,d['css']);css_created=True
    atomic(JS,d['js']);js_created=True
    if sha(HOME.read_bytes())!=b['original']:
@@ -176,10 +181,10 @@ def apply(run:str):
     CSS.unlink()
    if js_created and JS.is_file() and sha(JS.read_bytes())==b['js']:
     JS.unlink()
-   if artdir_created and ART.is_dir() and {p.name:sha(p.read_bytes()) for p in ART.iterdir()}==b['art']:
-    shutil.rmtree(ART)
-   if ART.parent.is_dir() and not any(ART.parent.iterdir()):ART.parent.rmdir()
-   if tmpart.is_dir():shutil.rmtree(tmpart)
+   for name in art_created:
+    dest=art_paths()[name]
+    if dest.is_file() and sha(dest.read_bytes())==b['art'][name]:dest.unlink()
+   if tmpart.is_dir() and not tmpart.is_symlink():shutil.rmtree(tmpart)
    raise
   print('VISION_V3_HOME_APPLIED=YES')
   print('VISION_V3_ART_FILES='+str(len(b['art'])))
@@ -193,8 +198,7 @@ def verify(run:str):
  for path,digest in ((HOME,b['candidate']),(CSS,b['css']),(JS,b['js']),(OLD_ARCHIVE,EXPECTED_ARCHIVE_SHA)):
   if sha(safe_file(path))!=digest:
    raise RuntimeError('Installed file hash mismatch: '+str(path))
- if not ART.is_dir() or ART.is_symlink():raise RuntimeError('Artwork folder missing')
- current={p.name:sha(safe_file(p)) for p in ART.iterdir()}
+ current={name:sha(safe_file(dest)) for name,dest in art_paths().items()}
  if current!=b['art']:raise RuntimeError('Artwork hash mismatch')
  for rel,digest in b['protected'].items():
   if sha(safe_file(SITE/rel))!=digest:
@@ -218,11 +222,10 @@ def rollback(run:str):
    if path.is_file():
     if sha(path.read_bytes())!=digest:raise RuntimeError('Asset changed; refuse cleanup')
     path.unlink()
-  if ART.is_dir():
-   actual={p.name:sha(safe_file(p)) for p in ART.iterdir()}
-   if actual!=b['art']:raise RuntimeError('Art updated; refuse cleanup')
-   shutil.rmtree(ART)
-  if ART.parent.is_dir() and not any(ART.parent.iterdir()):ART.parent.rmdir()
+  for name,dest in art_paths().items():
+   if dest.is_file():
+    if sha(dest.read_bytes())!=b['art'][name]:raise RuntimeError('Art updated; refuse cleanup: '+name)
+    dest.unlink()
   for rel,digest in b['protected'].items():
    if sha(safe_file(SITE/rel))!=digest:raise RuntimeError('Protected page mismatch after rollback')
   assert sha(HOME.read_bytes())==b['original']
