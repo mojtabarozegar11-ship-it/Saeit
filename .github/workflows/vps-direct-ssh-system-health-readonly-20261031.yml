@@ -41,10 +41,10 @@ jobs:
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 22 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           echo "HEALTH_UTC=$(date -u +%FT%TZ)"
