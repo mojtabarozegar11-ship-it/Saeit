@@ -43,7 +43,7 @@ for (const [bad, expected] of [
   [{valueOf() { throw new Error('hostile level input'); }}, 1]
 ]) {
   const board = game.generate(bad);
-  assert.equal(board.level, expected, 'invalid or extreme level: ' + bad);
+  assert.equal(board.level, expected, 'invalid or extreme level input (coercion-safe)');
   assert.ok(board.pieces.length >= 4);
   assert.equal(game.solve(board.pieces, board.size).length, board.pieces.length);
 }
