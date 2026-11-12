@@ -105,6 +105,15 @@ class VerifiedCatalogTests(unittest.TestCase):
             item(price="12.00", metadata=altered), frozenset((991,))
         ))
 
+    def test_rights_attested_public_paid_sku_is_not_hidden_by_legacy_flag(self):
+        metadata = dict(paid_metadata())
+        metadata.pop("sales_enabled")
+        product = item(pk=991, price="12.00", metadata=metadata)
+        card = catalog.catalog_card(product, frozenset((991,)))
+        self.assertIsNotNone(card)
+        self.assertEqual(card["price"], "12.00 USD")
+        self.assertIsNone(catalog.catalog_card(product, frozenset()))
+
     def test_featured_product_is_not_duplicated_in_dynamic_catalog(self):
         for pk in (72, 225, 879):
             with self.subTest(id=pk):
