@@ -116,3 +116,33 @@ jobs:
           # Public homepage GETs only; fail if its HTML is unstable or unavailable.
           bash scripts/zomorod_business_homepage_invariant.sh capture >/dev/null
           echo 'LIVE_PUBLIC_HOMEPAGE_BASELINE=STABLE_READ_ONLY'
+          # Bounded metadata inventory of possible public homepage filesystem surfaces.
+          # Do not print document bodies, filenames outside fixed allowlist, or secrets.
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel 'python3 -B -' <<'PUBLIC_ROOT_AUDIT'
+          from pathlib import Path
+          import os
+          import stat
+          root = Path('/home/zomorod2/public_html')
+          if not root.is_dir() or root.is_symlink() or root.stat().st_uid != os.geteuid():
+              print('PUBLIC_ROOT_INVENTORY=UNVERIFIED')
+              raise SystemExit(6)
+          print('PUBLIC_ROOT_INVENTORY=VERIFIED_READ_ONLY')
+          for name in ('.htaccess','index.php','index.html','index.htm','passenger_wsgi.py'):
+              entry = root / name
+              present = entry.is_file() and not entry.is_symlink() and entry.stat().st_uid == os.geteuid()
+              print('PUBLIC_ENTRY_' + name.replace('.','_').strip('_').upper() + '=' + str(present).lower())
+          for dirname in ('assets','static','css','js','images','img','media'):
+              entry = root / dirname
+              present = entry.is_dir() and not entry.is_symlink()
+              print('PUBLIC_DIR_' + dirname.upper() + '=' + str(present).lower())
+              if present:
+                  n = 0
+                  try:
+                      for _,dirs,files in os.walk(entry,followlinks=False):
+                          n += len(files)
+                          if n > 4000: break
+                  except OSError:
+                      n = 4001
+                  print('PUBLIC_DIR_' + dirname.upper() + '_FILES_CAP=' + str(min(n,4001)))
+          print('PUBLIC_INVENTORY_FILES_MODIFIED=no')
+          PUBLIC_ROOT_AUDIT
