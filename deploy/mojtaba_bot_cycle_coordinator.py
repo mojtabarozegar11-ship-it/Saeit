@@ -84,6 +84,8 @@ def ensure_run(state: dict, cycle: str, requested: str | None) -> tuple[str, dic
             "closed_at": None,
             "actions": {},
         }
+    elif runs[rid]["cycle"] != cycle:
+        raise SystemExit("run_id is already owned by a different cycle")
     return rid, runs[rid]
 
 
@@ -170,6 +172,19 @@ def cmd_record(args: argparse.Namespace) -> None:
             for past in state["runs"].values()
         ):
             raise SystemExit(f"previously completed action_id refused: {args.action_id}")
+        if args.status == SUCCESS:
+            def artifact_identity(proof):
+                return tuple(sorted(proof))
+            current_proof = artifact_identity(evidence)
+            if any(
+                artifact_identity(past_action.get("evidence", [])) == current_proof
+                for prior_run in state["runs"].values()
+                for past_action in prior_run.get("actions", {}).values()
+                if past_action.get("status") == SUCCESS
+            ):
+                raise SystemExit("duplicate successful artifact proof refused globally")
+            if args.before.strip() == args.after.strip():
+                raise SystemExit("success requires independently changed before/after")
         actions[args.action_id] = {
             "item": args.item,
             "kind": args.kind,
