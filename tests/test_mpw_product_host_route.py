@@ -64,7 +64,7 @@ def load_functions(product, *, checkout_ready=False):
         "Resolver404": NotFound,
         "resolve": fake_resolve,
         "bridge_backend_ready": lambda: checkout_ready,
-        "settings": SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879, 991)),
+        "settings": SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879, 991), MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True),
         "FEATURED_IDS": FEATURED_IDS,
         "catalog_card": catalog_card,
         "Product": SimpleNamespace(objects=FakeProducts(product)),
@@ -125,6 +125,21 @@ class ProductDetailHostTests(unittest.TestCase):
             with self.subTest(host=host, currency=product.currency, active=product.active):
                 with self.assertRaises(NotFound):
                     load_functions(product)(request(host), 72)
+
+    def test_disabled_payment_switch_hides_offer_claims_without_hiding_product(self):
+        sha = "a" * 64
+        metadata = {
+            "rights_cleared": True, "publication_approved": True,
+            "sha256": sha, "rights_asset_sha256": sha,
+            "rights_document_sha256": "b" * 64,
+        }
+        product = item(pk=991, metadata=metadata)
+        fn = load_functions(product)
+        fn.__globals__["settings"].MPW_WALLETLESS_TRX_PUBLIC_ENABLED = False
+        response = fn(request("mojplaywin.com"), 991)
+        self.assertFalse(response["context"]["can_list_offer"])
+        self.assertIsNone(response["context"]["checkout_url"])
+        self.assertNotIn("offers", json.loads(response["context"]["schema_json"]))
 
     def test_approved_guest_checkout_link_requires_real_resolved_handler(self):
         sha = "a" * 64
