@@ -39,7 +39,20 @@
     "after": "Pending execution; no outcome claimed",
     "evidence": [],
     "acceptance_criteria": "Source-level claims checked, methods and bibliography verified, journal target and submission permissions verified",
-    "requires_approval_for_publication": true
+    "requires_approval_for_publication": true,
+    "technical_progress": {
+      "status": "reproducible_methods_appendix_drafted",
+      "artifact": "deliverables/research/editorial-3/reproducible_methods_appendix.md",
+      "source_commit": "5a04e2ce68505055ef12f1b11067aa4997891444",
+      "pending": [
+        "research data source and permission",
+        "actual model estimation",
+        "reference verification",
+        "author approval",
+        "publication approval"
+      ],
+      "scientific_submission_ready": false
+    }
   },
   {
     "action_id": "B-C02-EDITORIAL-4",
