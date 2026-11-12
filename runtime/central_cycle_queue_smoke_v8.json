@@ -1,0 +1,106 @@
+[
+  {
+    "action_id": "E8-C41-COORDINATOR",
+    "item": "ممیزی نسخهٔ هماهنگ‌کننده",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/mojtaba_bot_cycle_coordinator.py",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_coordinator.py"
+    ]
+  },
+  {
+    "action_id": "E8-C42-WORKER",
+    "item": "ممیزی نسخهٔ worker",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/mojtaba_bot_cycle_worker.py",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_worker.py"
+    ]
+  },
+  {
+    "action_id": "E8-C43-WORKFLOW",
+    "item": "ممیزی workflow مرکزی",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": ".github/workflows/mojtaba-central-worker.yml",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:.github/workflows/mojtaba-central-worker.yml"
+    ]
+  },
+  {
+    "action_id": "E8-C44-RETIREMENT-MANIFEST",
+    "item": "تطبیق سند بازنشستگی PICM",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "runtime/retired_picm_manifest.json",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:runtime/retired_picm_manifest.json"
+    ]
+  },
+  {
+    "action_id": "E8-C45-QUEUE-MANIFEST",
+    "item": "تطبیق صف قبلی چرخه",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "runtime/central_cycle_queue_smoke_v7.json",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:runtime/central_cycle_queue_smoke_v7.json"
+    ]
+  },
+  {
+    "action_id": "E8-C46-CPANEL-BRIDGE",
+    "item": "ممیزی پل مستقیم cPanel",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/cpanel_direct_command.sh",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/cpanel_direct_command.sh"
+    ]
+  },
+  {
+    "action_id": "E8-C47-COMMERCE-FUNNEL",
+    "item": "ممیزی funnel فروش",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "core/commerce_funnel.py",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:core/commerce_funnel.py"
+    ]
+  },
+  {
+    "action_id": "E8-C48-MOJPLAYWIN-VIEWS",
+    "item": "ممیزی viewهای MojPlayWin",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "core/mojplaywin_views.py",
+    "before": "نسخهٔ موجود باید با شاهد مخزن تطبیق شود",
+    "change": "محاسبهٔ SHA-256 بدون تغییر یا استقرار",
+    "after": "اثر انگشت و شاهد در ledger چرخه ثبت می‌شود",
+    "evidence": [
+      "repo:core/mojplaywin_views.py"
+    ]
+  }
+]
