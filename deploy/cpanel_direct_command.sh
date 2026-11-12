@@ -9,8 +9,10 @@ case "$operation" in
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
-: "${VPS_KEY:?VPS_KEY is required}"
 : "${HOST_KEY:?HOST_KEY is required}"
+if [[ "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
+  : "${VPS_KEY:?VPS_KEY is required}"
+fi
 
 work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
