@@ -90,7 +90,12 @@
       "evidence_command": "core/management/commands/company_activity_agent_cycle.py",
       "scheduled_workflow": ".github/workflows/zomorod-site-agent-cycle.yml",
       "repository_handoff_guard": "draft_branch_only__prevents_legacy_self_reactivation_and_blocks_on_pending_tasks",
-      "legacy_plan_code_preserved_for_existing_report_foreign_keys": true
+      "legacy_plan_code_preserved_for_existing_report_foreign_keys": true,
+      "knowledge_cycle_isolation": "draft_workflow_handles_only_known_canonical_handoff_errors_and_keeps_knowledge_cycle_running",
+      "repository_regression_tests": [
+        "core/tests/test_company_activity_agent.py",
+        "tests/test_company_activity_workflow_handoff.py"
+      ]
     },
     {
       "id": "newsletter_legacy_roles",
@@ -130,6 +135,7 @@
     "irreversible_deletion_authorized": false,
     "live_consolidation_percentage": null,
     "company_activity_legacy_guard_committed": true,
-    "company_activity_live_handoff_verified": false
+    "company_activity_live_handoff_verified": false,
+    "company_activity_known_blocker_isolation_committed": true
   }
 }
