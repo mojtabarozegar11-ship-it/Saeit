@@ -12,6 +12,9 @@ class ResearchAuction346Tests(SimpleTestCase):
         self.assertContains(response, "۵ تا ۱۰ هر ماه")
         self.assertContains(response, "با اعلام قبلی")
         self.assertContains(response, 'application/ld+json')
+        self.assertContains(response, "چاپ پوستر رسمی / ذخیره PDF")
+        self.assertContains(response, "site/company/company-logo.png")
+        self.assertContains(response, "@page{size:A4 portrait")
         self.assertContains(response, 'rel="canonical"')
 
     def test_index_links_to_notice(self):
