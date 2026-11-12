@@ -1,0 +1,56 @@
+name: Mojtaba.bot.ai isolated read-only audit PR checks
+
+on:
+  push:
+    branches:
+      - audit/mojtaba-two-host-readonly-main-20261112
+    paths:
+      - "deploy/mojtaba_live_topology_readonly.py"
+      - "deploy/mojtaba_live_disposition_readonly.py"
+      - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - "tests/test_mojtaba_live_topology_readonly.py"
+      - "tests/test_mojtaba_live_disposition_readonly.py"
+      - ".github/workflows/mojtaba-live-topology-readonly.yml"
+      - ".github/workflows/mojtaba-audit-only-ci.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "deploy/mojtaba_live_topology_readonly.py"
+      - "deploy/mojtaba_live_disposition_readonly.py"
+      - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - "tests/test_mojtaba_live_topology_readonly.py"
+      - "tests/test_mojtaba_live_disposition_readonly.py"
+      - ".github/workflows/mojtaba-live-topology-readonly.yml"
+      - ".github/workflows/mojtaba-audit-only-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-audit-only-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-observer-and-disposition:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install repository test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Validate source and manifest structure
+        run: |
+          python -m py_compile deploy/mojtaba_live_topology_readonly.py deploy/mojtaba_live_disposition_readonly.py
+          python -m json.tool runtime/mojtaba_bot_disposition_sources_v1.json >/dev/null
+      - name: Prove audit remains non-mutating, fail-closed and secrets-free
+        run: |
+          python -m pytest -q \
+            tests/test_mojtaba_live_topology_readonly.py \
+            tests/test_mojtaba_live_disposition_readonly.py
