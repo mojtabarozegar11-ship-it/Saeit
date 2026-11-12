@@ -27,6 +27,7 @@ def simulate(mode, operation, expected=None):
             '  stable) printf HOME_FIXED ;;\n'
             '  varying) if test "$n" = 1; then printf HOME_FIXED; else printf HOME_DIFFERENT; fi ;;\n'
             '  inaccessible) exit 22 ;;\n'
+            '  empty) : ;;\n'
             '  *) exit 2 ;;\n'
             'esac\n', encoding="utf-8",
         )
@@ -63,6 +64,7 @@ class HomepageInvariant(unittest.TestCase):
 
     def test_fails_closed_on_unavailable_homepage_and_bad_hash(self):
         self.assertNotEqual(simulate("inaccessible", "capture").returncode, 0)
+        self.assertNotEqual(simulate("empty", "capture").returncode, 0)
         self.assertNotEqual(simulate("stable", "verify", "NOT_A_SHA256").returncode, 0)
 
     def test_guard_uses_only_pinned_public_https_root(self):
