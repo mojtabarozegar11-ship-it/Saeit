@@ -40,6 +40,42 @@ class ProductSeoTests(TestCase):
         response=self.client.get("/store/product/{}/".format(p.pk),HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,404)
 
+    def test_mojplaywin_featured_product_has_its_own_canonical_detail(self):
+        product = Product.objects.create(
+            pk=72, title="Original English Chess Guide",
+            product_type="Digital_Book", price="7.50", currency="USD",
+            active=True, metadata={"summary": "Original verified course material"},
+        )
+        response = self.client.get(
+            "/store/product/{}/".format(product.pk), HTTP_HOST="mojplaywin.com"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "https://mojplaywin.com/store/product/72/")
+        self.assertContains(response, "MojPlayWin Digital Store")
+        self.assertNotContains(response, '"@type": "Offer"')
+
+    @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,))
+    def test_approved_new_mojplaywin_sku_has_separate_public_detail(self):
+        sha = "a" * 64
+        product = Product.objects.create(
+            pk=991, title="Approved Original Digital Tool",
+            product_type="Digital_Tool", price="12.00", currency="USD",
+            active=True, metadata={
+                "summary": "Documented original digital tool",
+                "sales_enabled": True, "rights_cleared": True,
+                "publication_approved": True,
+                "sha256": sha, "rights_asset_sha256": sha,
+                "rights_document_sha256": "b" * 64,
+            },
+        )
+        response = self.client.get(
+            "/store/product/{}/".format(product.pk), HTTP_HOST="mojplaywin.com"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "https://mojplaywin.com/store/product/991/")
+        self.assertContains(response, '"@type": "Offer"')
+        self.assertContains(response, '"priceCurrency": "USD"')
+
     def test_explicit_sale_status_allows_offer_schema(self):
         p=self.create_product(metadata={"sales_enabled":True,"in_stock":True,"seo_description":"کتاب آموزشی"})
         response=self.client.get("/store/product/{}/".format(p.pk),HTTP_HOST="zomorodmelal.ir")
