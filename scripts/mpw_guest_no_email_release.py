@@ -104,6 +104,14 @@ def audit_invoice_email_dependencies() -> dict:
     invoice_handlers = 0
     invoice_recorders = 0
     inspected_functions = 0
+    # Every permitted imported recorder must match exactly one scanned definition.
+    permitted_recorders = {
+        "services.mpw_trx_commercial_web": "services/mpw_trx_commercial_web.py",
+        "services.mpw_trx_commercial_context": "services/mpw_trx_commercial_context.py",
+        "mpw_commerce.buyer_orders": "mpw_commerce/buyer_orders.py",
+    }
+    recorder_definitions = {}
+    invoked_recorders = set()
 
     def folded_string(node):
         """Resolve only bounded, literal concatenations; never execute source."""
@@ -159,7 +167,7 @@ def audit_invoice_email_dependencies() -> dict:
 
         functions = {}
         constant_aliases = {}
-        recorder_imports = set()
+        recorder_imports = {}
         for stmt in tree.body:
             if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 functions.setdefault(stmt.name, []).append(stmt)
@@ -173,11 +181,15 @@ def audit_invoice_email_dependencies() -> dict:
             elif isinstance(stmt, ast.ImportFrom):
                 for alias in stmt.names:
                     if alias.name == "record_invoice":
-                        recorder_imports.add(alias.asname or alias.name)
+                        recorder_imports[alias.asname or alias.name] = (
+                            stmt.module if stmt.level == 0 else ""
+                        )
 
         if rel.endswith("mpw_trx_commercial_web.py"):
             invoice_handlers = len(functions.get("_start_order", []))
         invoice_recorders += len(functions.get("record_invoice", []))
+        module_name = rel.removesuffix(".py").replace("/", ".")
+        recorder_definitions[module_name] = len(functions.get("record_invoice", []))
 
         roots = {"_start_order", "record_invoice"}
         queue = list(roots.intersection(functions))
@@ -195,12 +207,18 @@ def audit_invoice_email_dependencies() -> dict:
             if email_tokens(fn, constant_aliases):
                 abort("INVOICE_EMAIL_DEPENDENCY:" + path.name + ":" + name)
 
+            # A handler-local recorder import is permitted only when it comes
+            # from the identical, separately scanned module path.
+            local_recorders = dict(recorder_imports)
             for child in ast.walk(fn):
-                # A recorder imported inside a handler bypasses the module-level
-                # import index; its implementation has not been inspected.
                 if isinstance(child, ast.ImportFrom):
-                    if any(alias.name == "record_invoice" for alias in child.names):
-                        abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
+                    for alias in child.names:
+                        if alias.name == "record_invoice":
+                            name = alias.asname or alias.name
+                            origin = child.module if child.level == 0 else ""
+                            if name in local_recorders and local_recorders[name] != origin:
+                                abort("INVOICE_RECORDER_AMBIGUOUS_IMPORT:" + path.name)
+                            local_recorders[name] = origin
             for call in ast.walk(fn):
                 if not isinstance(call, ast.Call):
                     continue
@@ -211,8 +229,11 @@ def audit_invoice_email_dependencies() -> dict:
                     abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
                 if isinstance(call.func, ast.Name):
                     callee = call.func.id
-                    if callee in recorder_imports:
-                        abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
+                    if callee in local_recorders:
+                        origin = local_recorders[callee]
+                        if origin not in permitted_recorders:
+                            abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
+                        invoked_recorders.add(origin)
                     if callee in functions and callee not in reached:
                         queue.append(callee)
         inspected.append(rel)
@@ -223,8 +244,12 @@ def audit_invoice_email_dependencies() -> dict:
     # Every recorder definition is analyzed above; zero or multiple are unknown.
     if invoice_recorders != 1:
         abort("INVOICE_RECORDER_MISSING_OR_DUPLICATED")
+    if any(recorder_definitions.get(module, 0) != 1
+           for module in invoked_recorders):
+        abort("INVOICE_RECORDER_IMPLEMENTATION_MISSING")
     return {"invoice_sources_examined": len(inspected),
             "invoice_recorder_found": True,
+            "audited_imported_recorders": len(invoked_recorders),
             "invoice_functions_examined": inspected_functions,
             "invoice_handler_found": True,
             "email_dependency_in_examined_handlers": False,
