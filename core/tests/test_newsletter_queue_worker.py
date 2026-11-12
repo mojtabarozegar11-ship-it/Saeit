@@ -10,7 +10,8 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Agent
+from core.models import Agent, AgentTask
+from core.unified_bot_identity import BOT_CODE
 from core.newsletter_engine import process_submission
 from core.newsletter_models import NewsletterSchedule, NewsletterStory, NewsletterSubmission
 
@@ -18,6 +19,10 @@ from core.newsletter_models import NewsletterSchedule, NewsletterStory, Newslett
 class NewsletterQueueWorkerTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_user(username="newsletter_queue_owner")
+        self.bot = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai", mission="Canonical owner",
+            active=True,
+        )
 
     def submission(self, suffix):
         return NewsletterSubmission.objects.create(
@@ -46,7 +51,8 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual({a.status, b.status}, {"drafted"})
         self.assertEqual(NewsletterStory.objects.filter(status="draft").count(), 2)
         self.assertEqual(NewsletterStory.objects.filter(status="published").count(), 0)
-        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        self.assertEqual(set(NewsletterStory.objects.values_list("agent_id", flat=True)), {self.bot.pk})
 
     def test_batch_limit_never_claims_unselected_submissions(self):
         first = self.submission("first")
@@ -78,6 +84,7 @@ class NewsletterQueueWorkerTests(TestCase):
         agent = Agent.objects.create(
             code="content-director", name="Content Director", mission="Review", active=False
         )
+        AgentTask.objects.create(agent=agent, action_type="legacy_draft", status="queued")
         item = self.submission("disabled")
         receipt = self.run_queue()
         agent.refresh_from_db()
@@ -95,6 +102,44 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual(item.status, "queued")
         self.assertEqual(receipt["result"]["errors"], 1)
         self.assertEqual(receipt["error_types"], {"RuntimeError": 1})
+        self.assertFalse(NewsletterStory.objects.exists())
+
+    def test_inactive_legacy_without_pending_work_is_not_resurrected(self):
+        old = Agent.objects.create(
+            code="content-director", name="Old Content Director",
+            mission="Historical story evidence", active=False,
+        )
+        item = self.submission("historical")
+        receipt = self.run_queue("--limit", "1")
+        old.refresh_from_db()
+        item.refresh_from_db()
+        self.assertFalse(old.active)
+        self.assertEqual(item.status, "drafted")
+        self.assertEqual(receipt["result"]["drafted"], 1)
+        self.assertEqual(item.generated_story.agent_id, self.bot.pk)
+
+    def test_active_legacy_holds_submission_for_verified_handoff(self):
+        old = Agent.objects.create(
+            code="content-director", name="Legacy worker",
+            mission="Still active", active=True,
+        )
+        item = self.submission("active-legacy")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        old.refresh_from_db()
+        self.assertTrue(old.active)
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
+        self.assertEqual(NewsletterStory.objects.count(), 0)
+
+    def test_missing_canonical_holds_owner_submission(self):
+        self.bot.active = False
+        self.bot.save(update_fields=["active"])
+        item = self.submission("missing-owner")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
         self.assertFalse(NewsletterStory.objects.exists())
 
 
