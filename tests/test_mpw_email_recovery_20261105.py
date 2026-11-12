@@ -16,10 +16,9 @@ import django
 django.setup()
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
-from django.test import RequestFactory, override_settings
+from django.test import RequestFactory, override_settings, TransactionTestCase
 from django.utils import timezone
 from core.models import (GuestOrderEmail, GuestRecoveryRate, GuestRecoveryToken,
                          LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent)
@@ -27,11 +26,13 @@ from services import mpw_trx_email_recovery as module
 from services import mpw_trx_guest_commerce as guest_adapter
 
 
-class RecoveryIsolationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        call_command("migrate", run_syncdb=True, verbosity=0, interactive=False)
+class RecoveryIsolationTests(TransactionTestCase):
+    """Use Django's isolated test DB lifecycle; never migrate the default DB.
+
+    pytest-django recognizes TransactionTestCase and provisions/tears down its
+    test database through the Django runner integration, avoiding prohibited
+    ORM access in raw unittest.TestCase.setUpClass.
+    """
 
     def setUp(self):
         GuestRecoveryToken.objects.all().delete()
