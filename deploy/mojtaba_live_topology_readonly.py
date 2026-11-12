@@ -11,7 +11,8 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
-import getpass
+import os
+import pwd
 import hashlib
 import json
 from pathlib import Path
@@ -147,7 +148,11 @@ def safe_source_digests(home: Path, role: str) -> dict:
     for name in cfg["source_files"]:
         path = root / name
         try:
-            if (path.is_symlink() or not path.is_file()
+            # Refuse symlinked parents too: do not follow an app-directory
+            # redirect to a private file outside the known runtime root.
+            parents = (root, root / cfg["relative_core"])
+            if (any(folder.is_symlink() for folder in parents)
+                    or path.is_symlink() or not path.is_file()
                     or not 0 < path.stat().st_size <= 512000):
                 result[name] = {"state": "unavailable_or_unsafe"}
             else:
@@ -163,10 +168,10 @@ def safe_source_digests(home: Path, role: str) -> dict:
 def collect(role: str, *, home: Path | None = None, username: str | None = None) -> dict:
     if role not in TARGETS:
         raise ValueError("unknown host role")
-    user = username if username is not None else getpass.getuser()
+    user = username if username is not None else pwd.getpwuid(os.geteuid()).pw_name
     if user != TARGETS[role]["expected_user"]:
         raise PermissionError("MOJTABA_LIVE_TOPOLOGY_WRONG_HOST_USER")
-    root = home or Path.home()
+    root = home if home is not None else Path(pwd.getpwuid(os.geteuid()).pw_dir)
 
     cron_state, cron_raw = call_readonly(["crontab", "-l"])
     process_state, ps_raw = call_readonly(["ps", "-eo", "args="])
