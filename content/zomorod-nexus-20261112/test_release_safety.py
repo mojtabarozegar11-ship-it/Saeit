@@ -47,5 +47,18 @@ with tempfile.TemporaryDirectory(prefix='zm-nexus-test-') as td:
         mod.rollback('nexus-local-test')
         assert (site/'index.html').read_bytes()==legacy
         assert not (site/'assets/zm-nexus-v1.css').exists()
+        assert mod.ARCHIVE.read_bytes()==legacy
+        assert mod.preflight()['original']==sha256(legacy).hexdigest()
+        mod.apply('nexus-local-retry')
+        mod.verify('nexus-local-retry')
+        mod.rollback('nexus-local-retry')
+        assert (site/'index.html').read_bytes()==legacy
+        assert mod.ARCHIVE.read_bytes()==legacy
+        assert not (site/'assets/zm-nexus-v1.css').exists()
+        mod.ARCHIVE.write_bytes(b'invalid')
+        try:mod.preflight()
+        except RuntimeError:pass
+        else:raise AssertionError('Conflicting archive not rejected')
         for f,dig in protected:assert sha256(f.read_bytes()).hexdigest()==dig
         print('NEXUS_ATOMIC_APPLY_ROLLBACK_PROTECTED_FILES=PASS')
+        print('NEXUS_SAFE_REDEPLOY_VERIFIED_ARCHIVE=PASS')
