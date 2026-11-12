@@ -180,6 +180,92 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"):
                     release.audit_invoice_email_dependencies()
 
+    def test_imported_allowlisted_recorder_is_audited_not_auto_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from mpw_commerce.buyer_orders import record_invoice as write_invoice\n"
+                "def _start_order(request, product_id):\n"
+                "    return write_invoice(product_id)\n",
+                "",
+            )
+            (root / "mpw_commerce/buyer_orders.py").write_text(
+                "def record_invoice(order):\n    return order\n"
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertEqual(report["audited_imported_recorders"], 1)
+            self.assertEqual(report["invoice_sources_examined"], 3)
+            self.assertTrue(report["invoice_recorder_found"])
+
+    def test_handler_local_allowlisted_recorder_is_audited(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    from mpw_commerce.buyer_orders import record_invoice as save\n"
+                "    return save(product_id)\n",
+                "",
+            )
+            (root / "mpw_commerce/buyer_orders.py").write_text(
+                "def record_invoice(order):\n    return order\n"
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertEqual(report["audited_imported_recorders"], 1)
+
+    def test_imported_allowlisted_recorder_missing_from_expected_module_blocks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from services.mpw_trx_commercial_context import record_invoice as save\n"
+                "def _start_order(request, product_id):\n"
+                "    return save(product_id)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(
+                    RuntimeError, "INVOICE_RECORDER_IMPLEMENTATION_MISSING"
+                ):
+                    release.audit_invoice_email_dependencies()
+
+    def test_allowed_recorder_with_required_email_is_still_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from mpw_commerce.buyer_orders import record_invoice as save\n"
+                "def _start_order(request, product_id):\n"
+                "    return save(product_id)\n",
+                "",
+            )
+            (root / "mpw_commerce/buyer_orders.py").write_text(
+                "def record_invoice(order, buyer_email):\n"
+                "    return buyer_email\n"
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_relative_recorder_import_cannot_bypass_allowlist(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from .mpw_trx_commercial_context import record_invoice as save\n"
+                "def _start_order(request, product_id):\n"
+                "    return save(product_id)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(
+                    RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"
+                ):
+                    release.audit_invoice_email_dependencies()
+
     def test_inline_imported_invoice_recorder_blocks_publication(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
