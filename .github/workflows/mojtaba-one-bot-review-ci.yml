@@ -11,6 +11,7 @@ on:
       - "deploy/mojtaba_live_topology_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
       - ".github/workflows/mojtaba-one-bot-review-ci.yml"
+      - ".github/workflows/mojtaba-live-topology-readonly.yml"
   workflow_dispatch:
 
 permissions:
