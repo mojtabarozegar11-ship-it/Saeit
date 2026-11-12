@@ -1,0 +1,97 @@
+name: Audit live auction SEO and notify IndexNow once
+on:
+  push:
+    branches: [ops/auction-seo-indexnow-346-349-20261112]
+    paths: [.github/workflows/auction-seo-indexnow-batch-20261112.yml]
+permissions: {contents: read}
+concurrency: {group: auction-indexnow-346-349-20261112, cancel-in-progress: false}
+jobs:
+  audit-and-notify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Verify five live pages, sitemap, robots and existing ownership key
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/indexnow-346-349-$GITHUB_RUN_ID"
+          mkdir -p "$d"
+          echo "DATA_DIR=$d" >> "$GITHUB_ENV"
+          key="f5e9e3dccc5c2511c452f26b011ec43e"
+          for suffix in "" 346 347 348 349; do
+            if [ -z "$suffix" ]; then path='auctions/';name=index
+            else path="auctions/$suffix/";name="$suffix";fi
+            code="$(curl -sSL --max-time 18 -D "$d/headers-$name" -o "$d/body-$name" -w '%{http_code}' "https://zomorodmelal.ir/$path" || true)"
+            echo "PUBLIC_AUCTION_$name=$code"
+            test "$code" = 200
+          done
+          robots_code="$(curl -sSL --max-time 18 -o "$d/robots" -w '%{http_code}' 'https://zomorodmelal.ir/robots.txt' || true)"
+          sitemap_code="$(curl -sSL --max-time 18 -o "$d/sitemap" -w '%{http_code}' 'https://zomorodmelal.ir/sitemap-auctions.xml' || true)"
+          key_code="$(curl -sSL --max-time 18 -o "$d/key" -w '%{http_code}' "https://zomorodmelal.ir/$key.txt" || true)"
+          test "$robots_code" = 200 && test "$sitemap_code" = 200 && test "$key_code" = 200
+          python3 - "$d" "$key" <<'PY'
+          import pathlib,re,sys,xml.etree.ElementTree as ET
+          from html.parser import HTMLParser
+          d=pathlib.Path(sys.argv[1]);key=sys.argv[2]
+          origin='https://zomorodmelal.ir'
+          required={origin+'/auctions/'}|{origin+f'/auctions/{n}/' for n in (346,347,348,349)}
+          tree=ET.parse(d/'sitemap')
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          found={el.text for el in tree.findall('.//s:loc',ns)}
+          assert found==required, 'SECONDARY_SITEMAP_NOT_EXACT_FIVE'
+          robots=(d/'robots').read_text(encoding='utf-8')
+          assert 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' in robots,'ROBOTS_MISSING_SITEMAP_REFERENCE'
+          assert (d/'key').read_text(encoding='utf-8').strip()==key, 'OWNERSHIP_KEY_MISMATCH'
+          class Links(HTMLParser):
+              def __init__(self):super().__init__();self.hrefs=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':self.hrefs.append(dict(attrs).get('href',''))
+          for id in ('index','346','347','348','349'):
+              suffix='' if id=='index' else id+'/'
+              u=origin+'/auctions/'+suffix
+              page=(d/('body-'+id)).read_text(encoding='utf-8',errors='replace')
+              head=page.split('</head>',1)[0].lower()
+              hdr=(d/('headers-'+id)).read_text(encoding='utf-8',errors='replace').lower()
+              assert 'rel="canonical"' in head and u in head,'CANONICAL_INVALID_'+id
+              assert 'noindex' not in head,'META_NOINDEX_'+id
+              assert not re.search(r'^x-robots-tag:\s*noindex',hdr,re.M),'HEADER_NOINDEX_'+id
+              assert '<html lang="fa" dir="rtl">' in page, 'LANG_DIR_'+id
+              assert '/static/site/company/company-logo.png' in page, 'BRAND_LOGO_'+id
+              assert 'zomorodmelal@gmail.com' in page, 'CONTACT_'+id
+              if id=='index':
+                  links=Links();links.feed(page)
+                  for n in (346,347,348,349):
+                      assert f'/auctions/{n}/' in links.hrefs,'MISSING_INDEX_LINK_'+str(n)
+                  assert 'بدون تعهد خرید یا پیش‌پرداخت' in page,'FINANCIAL_SAFETY_MISSING'
+              else:
+                  assert 'application/ld+json' in page, 'SCHEMA_MISSING_'+id
+              print('SEO_PAGE_'+id+'=HTTP200_CANONICAL_ROBOTS_BRANDING_PASS')
+          print('SITEMAP_5_URLS=VERIFIED')
+          print('ROBOTS_AUCTION_SITEMAP=ADVERTISED')
+          print('INDEXNOW_KEY_PUBLIC=VERIFIED')
+          PY
+          python3 - "$d/payload.json" "$key" <<'PY'
+          import json,sys
+          dst,key=sys.argv[1:]
+          base='https://zomorodmelal.ir'
+          urls=[base+'/auctions/']+[base+f'/auctions/{i}/' for i in (346,347,348,349)]
+          payload={'host':'zomorodmelal.ir','key':key,'keyLocation':base+'/'+key+'.txt','urlList':urls}
+          with open(dst,'w',encoding='utf-8') as f:json.dump(payload,f,ensure_ascii=False)
+          print('INDEXNOW_BATCH_URLS='+str(len(urls)))
+          PY
+      - name: Submit single official IndexNow batch and report exact response
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$DATA_DIR"
+          code="$(curl -sS --max-time 35 -H 'Content-Type: application/json; charset=utf-8' -X POST --data-binary "@$d/payload.json" -o "$d/indexnow-response" -w '%{http_code}' https://api.indexnow.org/indexnow || true)"
+          echo "INDEXNOW_BATCH_HTTP=$code"
+          case "$code" in
+            200) echo 'INDEXNOW_BATCH_STATUS=RECEIVED';;
+            202) echo 'INDEXNOW_BATCH_STATUS=RECEIVED_PENDING_KEY_VALIDATION';;
+            *) echo 'INDEXNOW_BATCH_STATUS=UNCONFIRMED'; exit 1;;
+          esac
+          echo 'GOOGLE_INDEX_STATUS=NOT_VERIFIED_BY_INDEXNOW'
+          echo 'PAYMENTS=NONE; EMAILS=NONE; HOST_FILE_WRITES=NONE'
+          rm -rf -- "$d"
