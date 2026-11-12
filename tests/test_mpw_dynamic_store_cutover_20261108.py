@@ -639,17 +639,42 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         self.assertIn('"checked": 3', sink.getvalue())
         self.assertIn('"category": "checkout_form_invalid"', sink.getvalue())
 
-    def test_failed_buyer_baseline_cannot_start_cutover(self):
+    def test_legacy_buyer_404_no_longer_deadlocks_a_verified_staging_cutover(self):
+        # A static fallback can 404 every new route before the switch; the
+        # reviewed staged Django route and post-switch verification remain
+        # the authorities. This code does NOT publish in the unit test.
         from scripts.mpw_dynamic_store_cutover_20261108 import main
+        output = io.StringIO()
+        with patch("scripts.mpw_dynamic_store_cutover_20261108.pwd.getpwuid",
+                   return_value=SimpleNamespace(pw_name="zomorod2")):
+            with patch("scripts.mpw_dynamic_store_cutover_20261108.check_actual_staging_store") as staging:
+                with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
+                           return_value=MARKER + b"x" * 2400):
+                    with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes",
+                               return_value=False) as baseline:
+                        with patch("scripts.mpw_dynamic_store_cutover_20261108.perform_cutover") as cutover:
+                            with contextlib.redirect_stdout(output):
+                                main("42425162111")
+        staging.assert_called_once_with()
+        baseline.assert_called_once_with("42425162111-before")
+        cutover.assert_called_once()
+        self.assertIn('"legacy_routes_not_commercial_proof": true', output.getvalue())
+        self.assertIn('"after_cutover_nine_routes_mandatory": true', output.getvalue())
+
+    def test_preflight_still_blocks_when_static_fallback_marker_is_missing(self):
+        from scripts.mpw_dynamic_store_cutover_20261108 import main
+        output = b"x" * 2400
         with patch("scripts.mpw_dynamic_store_cutover_20261108.pwd.getpwuid",
                    return_value=SimpleNamespace(pw_name="zomorod2")):
             with patch("scripts.mpw_dynamic_store_cutover_20261108.check_actual_staging_store"):
                 with patch("scripts.mpw_dynamic_store_cutover_20261108.public_response",
-                           return_value=MARKER + b"x" * 2400):
-                    with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes", return_value=False):
+                           return_value=output):
+                    with patch("scripts.mpw_dynamic_store_cutover_20261108.verify_public_buyer_routes") as buyer:
                         with patch("scripts.mpw_dynamic_store_cutover_20261108.perform_cutover") as cutover:
-                            with self.assertRaisesRegex(RuntimeError, "PUBLIC_BUYER_ROUTE_BASELINE_FAILED"):
+                            with self.assertRaisesRegex(
+                                    RuntimeError, "PUBLIC_FALLBACK_BASELINE_NOT_PROVEN"):
                                 main("42425162111")
+        buyer.assert_not_called()
         cutover.assert_not_called()
 
     def test_buyer_probe_deadline_aborts_remaining_gets(self):
