@@ -151,11 +151,61 @@ def _install_cookie(response, token):
     return response
 
 
-def _dispatch(request, view, args, kwargs, *, create=False):
+def _dispatch(request, view, args, kwargs, *, create=False, require_new_sale=False):
+    if require_new_sale:
+        # No guest principal or invoice is created for a rights-held offer.
+        # Existing POST CSRF and identity-rate checks still run for eligible offers.
+        if not _host_ok(request):
+            raise Http404
+        product_id = kwargs.get("product_id") if "product_id" in kwargs else (
+            args[0] if len(args) == 1 else None
+        )
+        _require_new_sale_rights(product_id)
+        _require_buyer_email(request)
+    if create and require_new_sale:
+        # The host's recovery service atomically claims the exact new order
+        # with GuestOrderEmail. Validation alone is insufficient for recovery.
+        # If absent, fail closed before the invoice creator runs.
+        try:
+            from services.mpw_trx_email_recovery import bound_checkout
+        except ImportError as exc:
+            raise Http404("Email-bound checkout is unavailable") from exc
+        return bound_checkout(
+            request, view, _identity, _install_cookie, args, kwargs,
+        )
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
+
+
+def _require_buyer_email(request):
+    """Validate the submitted email before any new buyer account or invoice.
+
+    The new-sale dispatch must subsequently use bound_checkout to persist
+    an immutable per-order email claim, independent of outbound mail.
+    """
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    # Other email field names are rejected so downstream legacy handlers
+    # cannot bind a different recipient to the same new invoice.
+    for alias in ("buyer_email", "customer_email", "purchaser_email", "purchase_email"):
+        if request.POST.getlist(alias):
+            raise Http404("Conflicting checkout email fields are not accepted")
+
+    submitted = request.POST.getlist("email")
+    if len(submitted) != 1:
+        raise Http404("Exactly one valid email address is required")
+    value = submitted[0]
+    if (type(value) is not str or not 3 <= len(value) <= 254 or
+            value != value.strip()):
+        raise Http404("A valid email address is required before purchasing")
+    try:
+        validate_email(value)
+    except ValidationError as exc:
+        raise Http404("A valid email address is required before purchasing") from exc
+    return value
 
 
 def _record_funnel_event_best_effort(request, event, product):
@@ -172,13 +222,31 @@ def _record_funnel_event_best_effort(request, event, product):
     return True
 
 
+def _require_new_sale_rights(product_id):
+    """Fail closed before a NEW invoice; do not touch paid entitlement paths."""
+    from django.conf import settings
+    from core.models import Product
+    from mpw_commerce.buyer_orders import _eligible
+    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from services.mpw_trx_new_sale_policy import reviewed_for_new_sale
+
+    if (type(product_id) is not int or
+            product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())):
+        raise Http404("Product not available for a new order")
+    product = Product.objects.select_related("knowledge_article").filter(
+        pk=product_id, active=True,
+    ).first()
+    if (product is None or not _eligible(product) or
+            not rights_cleared_for_sale(product) or
+            not reviewed_for_new_sale(product)):
+        raise Http404("Independent product rights review is incomplete")
+    return product
+
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
     from django.shortcuts import render
-    from core.models import Product
-    from mpw_commerce.buyer_orders import _eligible
-    from services.mpw_trx_commercial_context import rights_cleared_for_sale
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
 
@@ -192,12 +260,7 @@ def _checkout_page(request, product_id, pages_namespace):
         if isinstance(exc, PaymentHold):
             raise Http404("TRX checkout is temporarily unavailable") from exc
         raise
-    if product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ()):
-        raise Http404
-    product = Product.objects.select_related("knowledge_article").filter(
-        pk=product_id, active=True).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
-        raise Http404
+    product = _require_new_sale_rights(product_id)
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
@@ -263,6 +326,18 @@ def patch_public(namespace):
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
+    # The real release hook is appended after COMMERCIAL_URLPATTERNS exists.
+    # Check every route and handler before replacing any namespace callback.
+    patterns = namespace.get("COMMERCIAL_URLPATTERNS")
+    if not isinstance(patterns, (tuple, list)):
+        raise RuntimeError("Unsupported commercial route table")
+    if not all(
+            isinstance(item, (tuple, list)) and len(item) == 2 and
+            isinstance(item[0], str) and callable(item[1])
+            for item in patterns):
+        raise RuntimeError("Malformed commercial route table")
+    if sum("/start/" in route for route, _ in patterns) != 1:
+        raise RuntimeError("Expected exactly one TRX start route")
     from django.views.decorators.cache import never_cache
     from django.views.decorators.csrf import csrf_protect
     from django.views.decorators.http import require_GET, require_POST
@@ -273,14 +348,18 @@ def patch_commercial(namespace):
         "reconcile_invoice": ("_reconcile_invoice", False, require_POST, True),
         "download_paid": ("_download_paid", False, require_GET, False),
     }
-    for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
-        inner = namespace.get(inner_name)
-        if inner is None:
+    for inner_name, _, _, _ in targets.values():
+        if not callable(namespace.get(inner_name)):
             raise RuntimeError("Expected TRX handler missing: " + inner_name)
+    for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
+        inner = namespace[inner_name]
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
-                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(
+                    request, view, args, kwargs, create=make_claim,
+                    require_new_sale=(view_name == "start_order"),
+                )
                 if view_name == "start_order":
                     # Order creation and its response are authoritative. The
                     # separate analytics lookup may be absent or unavailable.
@@ -300,17 +379,15 @@ def patch_commercial(namespace):
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
-    patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
-        rebuilt = []
-        route_names = (
-            ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-            ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-            ("/download/", "download_paid"),
-        )
-        for route, view in patterns:
-            route_name = next((name for token, name in route_names if token in route), None)
-            replacement = namespace.get(route_name, view)
-            rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+    rebuilt = []
+    route_names = (
+        ("/start/", "start_order"), ("/invoice/", "show_invoice"),
+        ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
+        ("/download/", "download_paid"),
+    )
+    for route, view in patterns:
+        route_name = next((name for token, name in route_names if token in route), None)
+        replacement = namespace.get(route_name, view)
+        rebuilt.append((route, replacement))
+    namespace["COMMERCIAL_URLPATTERNS"] = type(patterns)(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True

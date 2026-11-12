@@ -1,0 +1,32 @@
+{
+  "schema": "mojplaywin.atelier-demo-identity-snapshot.v1",
+  "observed_date": "2026-11-10",
+  "evidence_source": "Sites list_sites, get_site, list_site_versions (read-only metadata)",
+  "product_id": 879,
+  "commercial_product_title": "Atelier Interior — Client-Ready Website Kit",
+  "commercial_private_zip_historical_sha256": "98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa",
+  "preview_site": {
+    "project_id": "appgprj_6ad8bc1db4748191af8fb37df7c793aa",
+    "slug": "atelier-interior-kit-demo",
+    "url": "https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site",
+    "current_metadata_title": "PLT WorldForge — Project Decision Workspace",
+    "current_metadata_description": "Professional responsive interior-design website kit with in-browser editor, gallery and project inquiry.",
+    "latest_version_number": 14,
+    "latest_saved_source_commit": "831f38b000d60e19c3306b3f85ac362bdc45017b",
+    "latest_saved_archive_sha256": "4e569a1916689a091c2b19cab4f6711acfe04bd8f1988309dfc7c8f3cd1b00d6",
+    "latest_archive_files_count": 29,
+    "oldest_listed_version_number": 1,
+    "oldest_saved_source_commit": "ba7d193572a8ebfbc98472286156d3fd6eab6129",
+    "oldest_saved_archive_sha256": "1d1ec8ecdcf471c4c2241d03b20389adb0bbf2b7c2e791c1bf0e85bc0a04c9a2",
+    "oldest_archive_files_count": 12
+  },
+  "assessment": {
+    "metadata_title_equals_commercial_product_title": false,
+    "sites_archive_proven_equivalent_to_paid_zip": false,
+    "original_svg_authorship_independently_verified": false,
+    "commercial_redistribution_rights_independently_verified": false,
+    "site_metadata_not_proof_of_copyright": true,
+    "current_live_page_contents_inspected_by_sites_connector": false,
+    "status": "requires_manual_source_and_rights_reconciliation"
+  }
+}

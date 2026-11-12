@@ -1,0 +1,60 @@
+{
+  "schema": "mojplaywin.three-offer-rights-register.v1",
+  "review_date": "2026-11-10",
+  "purpose": "Read-only evidence inventory, not a copyright certificate or a commercial-sale authorization",
+  "products": [
+    {
+      "sku": 72,
+      "title": "The Science and Practice of Chess Improvement",
+      "format": "PDF",
+      "historical_private_filename": "MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+      "historical_expected_sha256": "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a",
+      "historical_reference": ".github/workflows/mpw-two-books-payment-depth-20261018.yml",
+      "claimed_author_display_name": "Mojtaba Roozegar",
+      "evidence": {
+        "original_editable_work_and_creation_history": null,
+        "author_identity_and_alias_document": null,
+        "cover_and_third_party_assets_commercial_licenses": null,
+        "author_to_seller_distribution_authority": null,
+        "independent_signed_rights_review": null
+      },
+      "status": "evidence_incomplete"
+    },
+    {
+      "sku": 225,
+      "title": "Taniya and the Little Baker Worms",
+      "format": "PDF",
+      "historical_private_filename": "Taniya_and_the_Little_Baker_Worms.pdf",
+      "historical_expected_sha256": "2f6dace4e5bc09ffe5f8d7a677ddff4980fe00de94b7c2ea5b286d1303901d48",
+      "historical_reference": ".github/workflows/mpw-two-books-payment-depth-20261018.yml",
+      "claimed_author_display_name": "Mojtaba Roozegar",
+      "evidence": {
+        "original_editable_work_and_creation_history": null,
+        "author_identity_and_alias_document": null,
+        "illustrations_and_third_party_assets_commercial_licenses": null,
+        "author_to_seller_distribution_authority": null,
+        "independent_signed_rights_review": null
+      },
+      "status": "evidence_incomplete"
+    },
+    {
+      "sku": 879,
+      "title": "Atelier Interior — Client-Ready Website Kit",
+      "format": "ZIP",
+      "historical_private_filename": "atelier-interior-kit-v1-repacked.zip",
+      "historical_expected_sha256": "98bffad4ccf36f84c7924ca77e4a8b473b42f33a8fce4d85cefe2367afc097aa",
+      "historical_reference": "catalog/mojplaywin/atelier-interior-kit-v1.json",
+      "claimed_author_display_name": "Mojtaba Roozegar",
+      "historical_conflict": "Existing catalog says preview_only / checkout_enabled=false / paid_delivery_enabled=false; public storefront advertises a paid offer. Current deployment records require separate verification.",
+      "evidence": {
+        "original_source_and_creation_history": null,
+        "author_identity_and_alias_document": null,
+        "all_svg_fonts_images_scripts_dependency_rights": null,
+        "one_site_client_resale_license_authority": null,
+        "author_to_seller_distribution_authority": null,
+        "independent_signed_rights_review": null
+      },
+      "status": "evidence_incomplete"
+    }
+  ]
+}
