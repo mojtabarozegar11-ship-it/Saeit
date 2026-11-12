@@ -148,6 +148,20 @@ class WaterBudgetTests(unittest.TestCase):
         self.assertFalse(result["input_values_independently_validated"])
 
 
+    def test_unicode_bidi_csv_spoofing_is_rejected_but_persian_names_remain_valid(self):
+        # Attackers must not visually reverse the formula/text seen in CSV.
+        for bad in ("Wheat\\u202e123", "Rice\\u2028=HYPERLINK(1,2)",
+                    "Maize\\u2066hidden\\u2069", "Pea\\u200fBaz",
+                    "Soy\\u061cLabel"):
+            data = sample()
+            data["crops"][0]["name"] = bad
+            with self.subTest(name=repr(bad)), self.assertRaises(ValueError):
+                evaluate(data)
+        data = sample()
+        data["crops"][0]["name"] = "گندم\\u200cدیم"
+        result = evaluate(data)
+        self.assertIn("گندم\\u200cدیم", [row["crop"] for row in result["allocations"]])
+
     def test_rejects_csv_formula_crop_names(self):
         for bad in ("=HYPERLINK(1,2)", "+SUM(A1:A2)", "@SUM",
                     "-1+2", "Crop A" + chr(10) + "=HYPERLINK(1,2)"):
