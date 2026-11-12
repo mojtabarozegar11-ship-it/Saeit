@@ -34,6 +34,7 @@ if [[ "$expected_dossier" != 'ABSENT' ]]; then valid_sha "$expected_dossier" || 
 [[ -f "$stage/homepage-guard.sh" && ! -L "$stage/homepage-guard.sh" ]] || exit 2
 [[ -f "$stage/public-surface.py" && ! -L "$stage/public-surface.py" ]] || exit 2
 [[ -f "$stage/public-references.py" && ! -L "$stage/public-references.py" ]] || exit 2
+[[ -f "$stage/pre-switch.py" && ! -L "$stage/pre-switch.py" ]] || exit 2
 [[ -d "/home/zomorod2/public_html" && ! -L "/home/zomorod2/public_html" ]] || exit 2
 [[ -f "/home/zomorod2/public_html/business/index.php" ]] || exit 2
 command -v flock >/dev/null
@@ -162,6 +163,13 @@ echo 'PUBLIC_REFERENCES_PROTECTED=VERIFIED'
 # Create both staged files before switching; the app is installed last.
 install -m 600 "$stage/genetics-center.php" "$private/.genetics-center.new-$release_sha"
 install -m 600 "$stage/app.php" "$private/.app.new-$release_sha"
+# Recheck concurrently mutable live PHP, exact backups and the actual .new
+# files before any live rename. A conflict stops without touching live files.
+python3 -B "$stage/pre-switch.py" \
+  "$live_app" "$live_dossier" \
+  "$backup/app.php" "$backup/genetics-center.php" \
+  "$private/.app.new-$release_sha" "$private/.genetics-center.new-$release_sha" \
+  "$expected_app" "$expected_dossier" "$candidate_app_hash" "$candidate_dossier_hash"
 changed=0
 rollback() {
   rc="$1"
