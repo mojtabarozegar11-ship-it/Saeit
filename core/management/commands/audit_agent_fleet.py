@@ -31,6 +31,58 @@ EXECUTOR_SCOPES = {
 }
 
 
+
+def plan_agent_disposition(row):
+    """Classify each Django Agent record without authorizing retirement.
+
+    All noncanonical components require live scheduler / adapter inventory
+    before a destructive or operational migration. An inactive database row
+    never proves the external scheduler has stopped.
+    """
+    code = row["code"]
+    active = row["active"]
+    tasks = row["tasks"]
+    if code == BOT_CODE:
+        state = "canonical_owner_active" if active else "canonical_owner_inactive"
+        route = "retain_canonical"
+    elif not active and tasks["pending"]:
+        state, route = "inactive_with_pending_work", "reconcile_and_migrate_tasks"
+    elif not active:
+        state, route = "inactive_record_external_runtime_unknown", "preserve_history"
+    elif code in LEGACY_EXECUTOR_CODES:
+        state, route = "legacy_executor_migration_required", "merge_into_canonical"
+    elif row["legacy_consolidation_decision"] == "retire_safe":
+        state, route = "legacy_retirement_candidate_unverified", "retire_after_verified_handoff"
+    else:
+        state, route = "component_dependency_inventory_required", "merge_or_retire_after_verification"
+
+    blockers = []
+    if code != BOT_CODE:
+        blockers.append("external_scheduler_and_process_topology_not_attested")
+    if tasks["pending"]:
+        blockers.append("pending_queued_running_or_blocked_tasks_need_reconciliation")
+    if tasks["stale_running"]:
+        blockers.append("stale_task_effect_needs_reconciliation")
+    if active and any(
+        module == "unmapped_requires_adapter_review"
+        for module in row["capability_modules"].values()
+    ):
+        blockers.append("capability_adapter_coverage_unverified")
+    if code == BOT_CODE and not active:
+        blockers.append("canonical_owner_not_active")
+
+    return {
+        "target_bot_id": BOT_ID,
+        "state": state,
+        "proposed_route": route,
+        "blockers": blockers,
+        "external_runtime_attested": False,
+        "handoff_verified": False,
+        "deactivation_or_deletion_authorized": False,
+        "historical_records_must_be_preserved": True,
+    }
+
+
 class Command(BaseCommand):
     help = "Read-only agent inventory: task receipts, stalled work, known adapters and retirement evidence."
 
@@ -142,6 +194,9 @@ class Command(BaseCommand):
                 )
                 row["findings"].append("exact_mission_and_capabilities_overlap_review_only")
 
+        for row in agents:
+            row["disposition"] = plan_agent_disposition(row)
+
         result = {
             "mode": "read_only",
             "single_bot_contract": summarize_internal_agent_registry(agents),
@@ -154,6 +209,21 @@ class Command(BaseCommand):
             "note": "Django task receipts and handler registration do not prove execution on VPS or income.",
             "summary": {
                 "agents_total": len(agents),
+                "django_records_classified": sum(
+                    bool(row.get("disposition")) for row in agents
+                ),
+                "active_noncanonical_pending_resolution": sum(
+                    row["active"] and row["code"] != BOT_CODE for row in agents
+                ),
+                "inactive_records_external_runtime_unverified": sum(
+                    not row["active"] and row["code"] != BOT_CODE for row in agents
+                ),
+                "retirement_candidates_needing_live_proof": sum(
+                    row["disposition"]["state"] == "legacy_retirement_candidate_unverified"
+                    for row in agents
+                ),
+                "live_runtime_coverage_percent": None,  # No VPS/process evidence read here.
+                "all_agents_live_disposition_verified": False,
                 "agents_active": sum(row["active"] for row in agents),
                 "noncanonical_active_agent_rows": sum(
                     row["active"] and row["code"] != BOT_CODE for row in agents
