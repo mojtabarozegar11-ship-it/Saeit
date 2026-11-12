@@ -200,3 +200,32 @@ def test_cli_fails_closed_on_missing_snapshot(tmp_path):
     assert proc.returncode == 2
     assert "MOJTABA_DISPOSITION_PREVIEW=invalid_or_incomplete_evidence" in proc.stderr
     assert "missing.jsonline" not in proc.stderr
+
+
+def test_unavailable_surfaces_cannot_supply_fake_route_activity():
+    cpanel = snap("cpanel")
+    cpanel["cron"] = {
+        "state": "unavailable", "entries": [{
+            "known_route_flags": ["knowledge_agent_cycle"],
+        }]
+    }
+    cpanel["processes"] = {
+        "state": "unavailable",
+        "route_match_counts": {"knowledge_agent_cycle": 999},
+    }
+    cpanel["user_services"] = {
+        "state": "unavailable",
+        "candidate_units": [{"known_route_flags": ["knowledge_agent_cycle"]}],
+    }
+    cpanel["system_services"] = {
+        "state": "unavailable",
+        "candidate_units": [{"known_route_flags": ["knowledge_agent_cycle"]}],
+    }
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    knowledge = next(g for g in report["groups"]
+                     if g["source_group"] == "knowledge_content_director")
+    obs = knowledge["host_observations"][0]
+    assert obs["route_indicators_total_not_unique_workers"] == 0
+    assert knowledge["status"] == "runtime_unverified_no_known_route_indicators"
+    assert "partial_host_topology_observation" in knowledge["blocking_evidence"]
+    assert knowledge["retirement_authorized"] is False
