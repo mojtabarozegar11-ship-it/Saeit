@@ -94,7 +94,34 @@
     "after": "Pending execution; no outcome claimed",
     "evidence": [],
     "acceptance_criteria": "Readback changed source plus executed test results on explicit checkout; no claim until results",
-    "requires_approval_for_publication": true
+    "requires_approval_for_publication": true,
+    "technical_progress": {
+      "status": "source_hardening_committed_runtime_validation_pending",
+      "changes": [
+        "allow retry of blocked/failed action ID in later runs",
+        "require Git-ancestry, changed path and sha256 for accepted source deliveries",
+        "exclude unverified and duplicate historical proofs",
+        "exclude read-only inspection from commercial success"
+      ],
+      "evidence_paths": [
+        "deploy/mojtaba_bot_cycle_coordinator.py",
+        "deploy/mojtaba_bot_cycle_worker.py",
+        "tests/test_mojtaba_c02_coordinator_proof.py",
+        "tests/test_unified_c02_evidence_gate.py"
+      ],
+      "source_commits": [
+        "b21d3a09ae6cfd0cc487d1dac64314bb240fa78e",
+        "0d8f350803f5ff2243220c3edbdfabb9122a1e8c",
+        "8dc238f66961a0e084724bfcee6b26249d1458b2"
+      ],
+      "pending": [
+        "execute coordinator regression suite in real checkout",
+        "execute worker regression suite",
+        "connect controlled delivery adapters",
+        "verify self-hosted runner journal replay"
+      ],
+      "verified_new_successful_actions": 0
+    }
   },
   {
     "action_id": "E-C02-ACCOUNTING",
