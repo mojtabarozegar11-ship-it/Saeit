@@ -1,0 +1,106 @@
+[
+  {
+    "action_id": "E4-C09-DIRECT-BRIDGE",
+    "item": "اسکریپت پل مستقیم cPanel",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/cpanel_direct_command.sh",
+    "before": "نسخهٔ پل باید قابل تطبیق باشد",
+    "change": "محاسبهٔ SHA-256 اسکریپت پل",
+    "after": "hash نسخه ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/cpanel_direct_command.sh"
+    ]
+  },
+  {
+    "action_id": "E4-C10-COORDINATOR-HASH",
+    "item": "اسکریپت coordinator مرکزی",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/mojtaba_bot_cycle_coordinator.py",
+    "before": "نسخهٔ coordinator باید کنترل شود",
+    "change": "محاسبهٔ SHA-256 coordinator",
+    "after": "hash نسخه ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_coordinator.py"
+    ]
+  },
+  {
+    "action_id": "E4-C11-WORKER-EXISTS",
+    "item": "اسکریپت worker مرکزی",
+    "kind": "repo_readonly",
+    "operation": "file_exists",
+    "path": "deploy/mojtaba_bot_cycle_worker.py",
+    "before": "worker باید در checkout حاضر باشد",
+    "change": "بررسی وجود worker",
+    "after": "worker موجود ثبت می‌شود",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_worker.py"
+    ]
+  },
+  {
+    "action_id": "E4-C12-WORKFLOW-HASH",
+    "item": "workflow اجرای مرکزی",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": ".github/workflows/mojtaba-central-worker.yml",
+    "before": "workflow باید قابل تطبیق باشد",
+    "change": "محاسبهٔ SHA-256 workflow",
+    "after": "hash workflow ثبت می‌شود",
+    "evidence": [
+      "repo:.github/workflows/mojtaba-central-worker.yml"
+    ]
+  },
+  {
+    "action_id": "E4-C13-QUEUE-V3-JSON",
+    "item": "صف هشت‌اقدامی نسخه سوم",
+    "kind": "repo_readonly",
+    "operation": "json_validate",
+    "path": "runtime/central_cycle_queue_smoke_v3.json",
+    "before": "صف نسخه سوم باید معتبر باشد",
+    "change": "اعتبارسنجی JSON صف",
+    "after": "صف معتبر ثبت می‌شود",
+    "evidence": [
+      "repo:runtime/central_cycle_queue_smoke_v3.json"
+    ]
+  },
+  {
+    "action_id": "E4-C14-QUEUE-V2-HASH",
+    "item": "صف چهاراقدامی نسخه دوم",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "runtime/central_cycle_queue_smoke_v2.json",
+    "before": "صف نسخه دوم باید قابل تطبیق باشد",
+    "change": "محاسبهٔ SHA-256 صف نسخه دوم",
+    "after": "hash صف ثبت می‌شود",
+    "evidence": [
+      "repo:runtime/central_cycle_queue_smoke_v2.json"
+    ]
+  },
+  {
+    "action_id": "E4-C15-CPANEL-DOC",
+    "item": "سند استقرار cPanel",
+    "kind": "repo_readonly",
+    "operation": "file_exists",
+    "path": "docs/CPANEL_DEPLOYMENT.md",
+    "before": "سند استقرار باید قابل دسترسی باشد",
+    "change": "بررسی وجود سند استقرار",
+    "after": "سند موجود ثبت می‌شود",
+    "evidence": [
+      "repo:docs/CPANEL_DEPLOYMENT.md"
+    ]
+  },
+  {
+    "action_id": "E4-C16-PREFLIGHT-SOURCE",
+    "item": "اسکریپت preflight منبع",
+    "kind": "repo_readonly",
+    "operation": "file_exists",
+    "path": "scripts/cpanel_preflight.sh",
+    "before": "منبع preflight باید بررسی شود",
+    "change": "بررسی وجود اسکریپت منبع",
+    "after": "وضعیت منبع ثبت می‌شود",
+    "evidence": [
+      "repo:scripts/cpanel_preflight.sh"
+    ]
+  }
+]

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   inspect:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 5
     steps:
       - name: Regression - apt candidate parser must not SIGPIPE under pipefail

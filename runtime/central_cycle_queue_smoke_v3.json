@@ -1,0 +1,102 @@
+[
+  {
+    "action_id": "E3-C01-CPANEL-RELAY",
+    "item": "مسیر relay کارخانه تا cPanel",
+    "kind": "cpanel_readonly",
+    "operation": "relay_preflight",
+    "before": "اتصال در smoke قبلی ثبت شد",
+    "change": "تکرار با شناسهٔ جدید برای صف E3",
+    "after": "اتصال باید پایدار بماند",
+    "evidence": [
+      "operation:relay_preflight"
+    ]
+  },
+  {
+    "action_id": "E3-C02-CPANEL-PREFLIGHT",
+    "item": "پیش‌پرواز ساختار Saeit",
+    "kind": "cpanel_readonly",
+    "operation": "cpanel_preflight",
+    "before": "preflight داخلی اصلاح شد",
+    "change": "اجرای preflight مستقل",
+    "after": "فایل‌های اصلی باید حاضر باشند",
+    "evidence": [
+      "operation:cpanel_preflight"
+    ]
+  },
+  {
+    "action_id": "E3-C03-DJANGO-CHECK",
+    "item": "سلامت Django",
+    "kind": "cpanel_readonly",
+    "operation": "django_check",
+    "before": "system check قبلاً بدون خطا بود",
+    "change": "اجرای دوبارهٔ check با مسیر واقعی Python",
+    "after": "نباید خطای Django وجود داشته باشد",
+    "evidence": [
+      "operation:django_check"
+    ]
+  },
+  {
+    "action_id": "E3-C04-DJANGO-MIGRATIONS",
+    "item": "migrationهای Django",
+    "kind": "cpanel_readonly",
+    "operation": "django_migrations",
+    "before": "migrationها خوانده شده بودند",
+    "change": "خواندن وضعیت migrationها",
+    "after": "نتیجه باید در ledger ثبت شود",
+    "evidence": [
+      "operation:django_migrations"
+    ]
+  },
+  {
+    "action_id": "E3-C05-REPO-COORDINATOR",
+    "item": "فایل هماهنگ‌کنندهٔ مرکزی",
+    "kind": "repo_readonly",
+    "operation": "file_exists",
+    "path": "deploy/mojtaba_bot_cycle_coordinator.py",
+    "before": "وجود فایل در commit باید کنترل شود",
+    "change": "بررسی مستقیم فایل در checkout worker",
+    "after": "فایل باید موجود باشد",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_coordinator.py"
+    ]
+  },
+  {
+    "action_id": "E3-C06-REPO-WORKER",
+    "item": "فایل worker مرکزی",
+    "kind": "repo_readonly",
+    "operation": "sha256",
+    "path": "deploy/mojtaba_bot_cycle_worker.py",
+    "before": "نسخهٔ worker باید قابل تطبیق باشد",
+    "change": "محاسبهٔ SHA256 فایل worker",
+    "after": "hash باید ثبت شود",
+    "evidence": [
+      "repo:deploy/mojtaba_bot_cycle_worker.py"
+    ]
+  },
+  {
+    "action_id": "E3-C07-REPO-QUEUE",
+    "item": "صف smoke نسخهٔ دوم",
+    "kind": "repo_readonly",
+    "operation": "json_validate",
+    "path": "runtime/central_cycle_queue_smoke_v2.json",
+    "before": "صف باید JSON معتبر باشد",
+    "change": "parse کامل JSON صف",
+    "after": "ساختار صف باید معتبر باشد",
+    "evidence": [
+      "repo:runtime/central_cycle_queue_smoke_v2.json"
+    ]
+  },
+  {
+    "action_id": "E3-C08-REPO-WORKFLOW",
+    "item": "workflow اجرای مرکزی",
+    "kind": "repo_readonly",
+    "operation": "file_exists",
+    "path": ".github/workflows/mojtaba-central-worker.yml",
+    "before": "workflow باید در checkout حاضر باشد",
+    "change": "بررسی فایل workflow",
+    "after": "workflow باید موجود باشد",
+    "evidence": [
+      "repo:.github/workflows/mojtaba-central-worker.yml"
+    ]
+  }
+]
