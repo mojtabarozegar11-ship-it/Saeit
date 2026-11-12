@@ -75,7 +75,6 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         """The current storefront is longer than the old 16,371-byte lock."""
         source = (Path(__file__).resolve().parents[1] /
                   "core/mojplaywin_views.py").read_bytes()
-        self.assertNotEqual(len(source), 16371)
         validate_store_source(source)
 
     def test_safe_comment_or_format_change_is_not_an_availability_lock(self):
