@@ -20,6 +20,7 @@ EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
 ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
+    "bitstamp-public-ohlc",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
 })
@@ -58,6 +59,15 @@ def read_observation(path: Path, now: datetime | None = None) -> dict:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ObservationError("observation_json_unreadable") from exc
+    return validate_observation_payload(payload, now=now)
+
+
+def validate_observation_payload(payload: object, now: datetime | None = None) -> dict:
+    """Validate a previously parsed snapshot without opening it again.
+
+    Called by the canonical task bridge after a single bounded private-file read.
+    It never contacts a broker, generates an order or publishes signals.
+    """
     if not isinstance(payload, dict):
         raise ObservationError("observation_payload_not_object")
     if payload.get("schema_version") != 1 or payload.get("source") != "mojtrade-vps":
@@ -69,6 +79,8 @@ def read_observation(path: Path, now: datetime | None = None) -> dict:
         raise ObservationError("observation_expired_or_future")
     if expires_at <= generated_at:
         raise ObservationError("observation_expiry_window_invalid")
+    if (expires_at - generated_at).total_seconds() > 90 * 60:
+        raise ObservationError("observation_expiry_exceeds_max_window")
     signals = payload.get("signals")
     if not isinstance(signals, list) or len(signals) != len(EXPECTED_SYMBOLS):
         raise ObservationError("observation_signal_count_invalid")
