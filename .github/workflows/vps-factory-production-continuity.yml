@@ -24,6 +24,26 @@ concurrency:
   group: saeit-vps-factory-continuity
   cancel-in-progress: false
 jobs:
+  # The scheduled route is observation-only. It delegates to the already
+  # reviewed two-host inventory on the trusted factory runner; never execute
+  # the legacy source-patching/recovery job on an hourly GitHub-hosted runner.
+  scheduled-readonly-observation:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}"
+    uses: ./.github/workflows/mojtaba-live-topology-readonly.yml
+    secrets: inherit
+
+  # A manual dispatch lacking both owner assertions must FAIL, not silently
+  # turn green because the mutating recovery job was skipped.
+  blocked-unapproved-recovery:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && (inputs.recovery_authorized != true || inputs.offhost_backup_verified != true) }}"
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse unapproved factory recovery
+        shell: bash
+        run: |
+          echo "FACTORY_RECOVERY_GATE=BLOCKED_MISSING_OWNER_APPROVAL_OR_VERIFIED_BACKUP"
+          exit 1
+
   pause-loop-low-disk:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]')
     runs-on: ubuntu-24.04
@@ -210,8 +230,10 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
-    runs-on: ubuntu-latest
+    # This job patches deployed Python and may start the factory. Only an
+    # owner-authorized manual event with a verified backup may run it.
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
       - name: Ensure one running factory loop and report actual production progress
