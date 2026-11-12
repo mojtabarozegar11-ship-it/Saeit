@@ -216,7 +216,7 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_style_guidance_binary_controls_never_reach_model(self):
-        for bad in ("friendly\\x00override", "friendly\\x1boverride", "friendly\\x7foverride"):
+        for bad in ("friendly\x00override", "friendly\x1boverride", "friendly\x7foverride"):
             with self.subTest(bad=repr(bad)):
                 assistant = Ava(owner_id="owner-1", brain=self.brain,
                                 style_guidance=lambda value=bad: value)
