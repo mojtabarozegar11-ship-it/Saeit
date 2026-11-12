@@ -34,7 +34,7 @@ jobs:
   publish:
     needs: validate
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 28
     steps:
       - uses: actions/checkout@v4
@@ -61,53 +61,56 @@ jobs:
                       assert marker in data,marker
               print('PREFLIGHT_OK='+path)
           PY
-      - name: Prepare pinned GitHub to VPS to cPanel SSH relay
+      - name: Prepare pinned direct cPanel SSH from factory-vps runner
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test -n "$HOST_KEY"
           d="$RUNNER_TEMP/zm-nexus-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/"*.key
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          chmod 600 "$d/host.key"
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # The factory-vps runner already authenticated against this cPanel host.
+          # Fail closed on changed identity; no port change, DNS guess, or insecure bypass.
+          success=0
+          for attempt in 1 2 3; do
+            if timeout 13s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              observed="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+                echo 'NEXUS_CPANEL_FINGERPRINT_MISMATCH_STOP' >&2; exit 1
+              fi
+              mv "$d/host.candidate" "$d/host.known"
+              success=1; break
+            fi
+            echo "NEXUS_CPANEL_HOST_KEY_SCAN_RETRY=$attempt" >&2
+            sleep "$attempt"
+          done
+          test "$success" = 1 || { echo 'NEXUS_CPANEL_PORT1396_UNREACHABLE_STOP' >&2; exit 1; }
           cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
+            ConnectTimeout 12
             ConnectionAttempts 1
+            ServerAliveInterval 8
+            ServerAliveCountMax 2
             ForwardAgent no
             RequestTTY no
           EOF
-          chmod 600 "$d/config"
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$d/host.known"
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          echo NEXUS_PINNED_RELAY_VERIFIED=yes
+          chmod 600 "$d/config" "$d/host.known"
+          timeout 32s ssh -T -F "$d/config" saeit-cpanel 'id -un' | grep -Fxq 'zomorod2'
+          echo NEXUS_DIRECT_CPANEL_PINNED_AUTH=VERIFIED
       - name: Upload NEXUS package to private cPanel staging only
         shell: bash
         run: |
@@ -161,6 +164,19 @@ jobs:
               print('PROTECTED_ROUTE_LIVE_OK='+path)
           print('NEXUS_PUBLIC_RELEASE_VERIFIED=yes')
           PY
+      - name: Roll back only the new homepage if any post-install check fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' rollback 'nexus-$GITHUB_RUN_ID'"
+  verify-browser:
+    needs: publish
+    if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
       - name: Live responsive browser smoke test
         shell: bash
         run: |
@@ -186,10 +202,28 @@ jobs:
             await b.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
-      - name: Roll back only the new homepage if any post-install check fails
-        if: failure() && steps.install.outcome == 'success'
+  rollback-after-browser-failure:
+    needs: [publish, verify-browser]
+    if: ${{ always() && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' && needs.verify-browser.result != 'success' }}
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Restore original homepage using the pinned existing cPanel host
         shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
-          d="$RUNNER_TEMP/zm-nexus-ssh"
-          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
-          timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' rollback 'nexus-$GITHUB_RUN_ID'"
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-nexus-rollback-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 16s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 45s ssh -T -i "$d/key" -p 1396 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 zomorod2@178.239.147.125 "python3 '/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID/deploy_guarded.py' rollback 'nexus-$GITHUB_RUN_ID'"
+          echo NEXUS_FAILED_BROWSER_ROLLBACK=REQUESTED
