@@ -177,20 +177,29 @@ def test_symlinked_intermediate_runtime_folder_not_trusted(tmp_path):
     assert result["unified_bot_identity.py"]["state"] == "unavailable_or_unsafe"
 
 
-def test_manual_live_workflow_never_runs_on_pull_request_or_push():
+def test_manual_live_workflow_uses_existing_factory_runner_and_unique_push_gate():
     workflow = (
         ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
     ).read_text(encoding="utf-8")
     event_block = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
-    assert "workflow_dispatch:" in event_block
-    assert "pull_request:" not in event_block
-    assert "push:" not in event_block
-    assert "ProxyJump saeit-vps" in workflow
-    assert "StrictHostKeyChecking yes" in workflow
-    assert "MOJTABA_TWO_HOST_OBSERVATION=" in workflow
+    assert "  workflow_dispatch:" in event_block
+    assert "  workflow_call:" in event_block
+    assert "  pull_request:" not in event_block
+    assert "  schedule:" not in event_block
+    # One exact reviewed main-branch self-trigger is intentionally temporary.
+    assert "  push:" in event_block
+    assert "    branches: [main]" in event_block
+    assert '      - ".github/workflows/mojtaba-live-topology-readonly.yml"' in event_block
+    assert "audit: run one-time selfhosted read-only cPanel and VPS inventory" in workflow
+    assert "runs-on: [self-hosted, factory-vps]" in workflow
+    assert "ProxyJump" not in workflow
+    assert "ssh -T -i" in workflow
+    assert "-p 1396 zomorod2@178.239.147.125" in workflow
+    assert "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" in workflow
+    assert "StrictHostKeyChecking=yes" in workflow
+    assert "MOJTABA_DISPOSITION_PREVIEW=" in workflow
     assert "automatic_deactivation_authorized" in workflow
-    assert "ssh -F" in workflow
-    assert "rm -rf --" in workflow  # Only ephemeral CI-runner SSH key material.
+    assert "rm -rf --" in workflow  # Ephemeral runner key material only.
 
 
 def test_private_php_registry_inventory_is_immutable_and_redacted(tmp_path):
@@ -328,58 +337,52 @@ def test_sqlite_status_aggregation_refuses_unapproved_table_names():
             observer.safe_sqlite_status_counts(connection, "sqlite_master")
 
 
-def test_manual_two_host_summary_compares_only_allowlisted_source_digests(tmp_path):
+def test_selfhost_summary_runs_with_independent_observed_snapshots(tmp_path):
     workflow = (
         ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
     ).read_text(encoding="utf-8")
-    verifier = workflow.split("<<'VERIFY'\n", 1)[1].split(
-        "\n          VERIFY", 1
+    verifier = workflow.split("<<'SUMMARY'\n", 1)[1].split(
+        "\n          SUMMARY", 1
     )[0]
     code = textwrap.dedent(verifier)
-    compile(code, "mojtaba_two_host_verifier", "exec")
-
+    compile(code, "mojtaba_factory_selfhost_summary", "exec")
     with patch.object(observer, "call_readonly", return_value=("unavailable", "")):
         vps = observer.collect("vps", username="githubops", home=tmp_path)
         cpanel = observer.collect("cpanel", username="zomorod2", home=tmp_path)
-    same_source = (
-        ROOT / "core/management/commands/audit_agent_fleet.py"
-    ).read_bytes()
-    vps["installed_source_digests"] = {
-        "management/commands/audit_agent_fleet.py": {
-            "state": "file_observed_not_runtime_executed",
-            "sha256": hashlib.sha256(same_source).hexdigest(),
-        },
-        "../../.env": {
-            "state": "file_observed_not_runtime_executed",
-            "sha256": "0" * 64,
-        },
-    }
-    cpanel["installed_source_digests"] = {
-        "weather_agent.py": {
-            "state": "file_observed_not_runtime_executed",
-            "sha256": "f" * 64,
-        },
-    }
-    paths = []
     for role, record in (("vps", vps), ("cpanel", cpanel)):
-        target = tmp_path / (role + ".jsonline")
-        target.write_text("MOJTABA_LIVE_TOPOLOGY=" + json.dumps(record) + "\n",
-                          encoding="utf-8")
-        paths.append(str(target))
+        p = tmp_path / (role + ".jsonline")
+        p.write_text("MOJTABA_LIVE_TOPOLOGY=" + json.dumps(record) + "\n",
+                     encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-", *paths], input=code, cwd=ROOT,
-        capture_output=True, text=True, check=True, timeout=10,
+        [sys.executable, "-", str(tmp_path), "1", "1"], input=code,
+        cwd=ROOT, capture_output=True, text=True, check=True, timeout=10,
     )
-    assert result.stdout.startswith("MOJTABA_TWO_HOST_OBSERVATION=")
-    sanitized = json.loads(result.stdout.strip().split("=", 1)[1])
-    assert sanitized["vps"]["source_revision_comparison"][
-        "management/commands/audit_agent_fleet.py"
-    ] == "matches_reviewed_pr_source"
-    assert sanitized["cpanel"]["source_revision_comparison"][
-        "weather_agent.py"
-    ] == "differs_from_reviewed_pr_source"
-    assert "../../.env" not in result.stdout
-    assert sanitized["vps"][
-        "source_revision_comparison_proves_active_runtime"
-    ] is False
-    assert sanitized["cpanel"]["live_handoff_attested"] is False
+    records = {}
+    for line in result.stdout.splitlines():
+        key, payload = line.split("=", 1)
+        records[key] = json.loads(payload)
+    assert records["MOJTABA_READONLY_VPS"]["agent_live_count"] is None
+    assert records["MOJTABA_READONLY_CPANEL"]["agent_live_count"] is None
+    assert records["MOJTABA_READONLY_CPANEL"]["retirement_authorized"] is False
+    assert records["MOJTABA_READONLY_VPS"]["retirement_authorized"] is False
+    assert "vps_key" not in result.stdout
+
+def test_selfhost_summary_keeps_valid_host_when_other_is_unavailable(tmp_path):
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    code = textwrap.dedent(workflow.split("<<'SUMMARY'\n", 1)[1].split(
+        "\n          SUMMARY", 1
+    )[0])
+    with patch.object(observer, "call_readonly", return_value=("unavailable", "")):
+        cpanel = observer.collect("cpanel", username="zomorod2", home=tmp_path)
+    (tmp_path / "cpanel.jsonline").write_text(
+        "MOJTABA_LIVE_TOPOLOGY=" + json.dumps(cpanel) + "\n", encoding="utf-8"
+    )
+    result = subprocess.run(
+        [sys.executable, "-", str(tmp_path), "0", "1"], input=code,
+        cwd=ROOT, capture_output=True, text=True, check=True, timeout=10,
+    )
+    assert "MOJTABA_READONLY_VPS=unknown_no_snapshot" in result.stdout
+    assert "MOJTABA_READONLY_CPANEL={" in result.stdout
+    assert '"retirement_authorized": false' in result.stdout.lower()
