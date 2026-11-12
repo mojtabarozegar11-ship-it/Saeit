@@ -101,6 +101,8 @@ class VerifiedRollbackContract(unittest.TestCase):
             self.run_restore()
         self.assertEqual((self.private / "app.php").read_bytes(), b"<?php echo 'OTHER WRITER';")
         self.assertFalse((self.backup / ("concurrent-app-" + self.release + ".php")).exists())
+        self.assertFalse((self.private / (".rollback-app-ready-" + self.release)).exists())
+        self.assertFalse((self.private / (".rollback-dossier-ready-" + self.release)).exists())
 
     def test_existing_recovery_stage_refuses_reuse(self):
         (self.private / (".rollback-app-ready-" + self.release)).write_bytes(b"DO_NOT_REPLACE")
