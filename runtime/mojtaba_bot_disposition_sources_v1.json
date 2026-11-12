@@ -276,6 +276,42 @@
       "review_ci_last_proven_run_id": 43214757203,
       "review_ci_last_proven_result": "95_passing_after_test_baseline_fix",
       "ci_latest_head_result": "pending_further_approval_multiplicity_regression"
+    },
+    {
+      "id": "two_host_live_topology_observation",
+      "kind": "vps_and_cpanel_read_only_runtime_probe",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "workflow_file": ".github/workflows/mojtaba-live-topology-readonly.yml",
+      "offline_regression_tests": "tests/test_mojtaba_live_topology_readonly.py",
+      "host_roles": [
+        "vps:githubops",
+        "cpanel:zomorod2"
+      ],
+      "observation_fields": [
+        "sanitized_user_cron_entries",
+        "process_match_counts",
+        "candidate_user_service_units",
+        "installed_source_sha256"
+      ],
+      "credentialed_workflow_trigger": "workflow_dispatch_only_after_review",
+      "source_revision_state": "PR_draft_not_merged_or_deployed",
+      "live_vps_observation_received": false,
+      "live_cpanel_observation_received": false,
+      "full_system_service_inventory_attested": false,
+      "php_sqlite_agent_inventory_attested": false,
+      "django_agent_task_inventory_attested": false,
+      "cpanel_known_app_process_inventory_attested": false,
+      "actual_schedulers_inactive_verified": false,
+      "agent_deactivation_authorized": false,
+      "code_tests_status": "117_offline_Django_and_observer_tests_passed_on_sha_204e0f9",
+      "completion_state": "host_probes_not_executed_no_live_disposition_claim",
+      "blockers": [
+        "workflow_only_manual_and_currently_in_draft_branch",
+        "authenticated_pinned_SSH_sessions_not_executed_in_current_turn",
+        "source_only_process_markers_do_not_prove_worker_effects",
+        "cpanel_PHP_and_Django_database_rows_still_need_read_only_inventory",
+        "live_handoff_receipts_and_rollback_not_attested"
+      ]
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -308,13 +344,18 @@
     "weather_ai_publication_default_draft_committed": true,
     "one_bot_review_ci_workflow_committed": true,
     "one_bot_review_ci_passed": true,
-    "one_bot_review_ci_last_verified_sha": "16d85abcef4c26e848dd8c1e6374e336467832e7",
+    "one_bot_review_ci_last_verified_sha": "204e0f9f837cb531615af59bac62d56aed88619b",
     "weather_one_grant_per_approval_source_guard_committed": true,
     "all_integrated_runtime_tests_passed": false,
     "legacy_retirement_canonical_successor_mapping_committed": true,
     "legacy_single_agent_owner_grant_gate_committed": true,
     "legacy_live_handoff_receipts_attested": false,
     "legacy_retirement_performed": false,
-    "legacy_deletion_performed": false
+    "legacy_deletion_performed": false,
+    "two_host_topology_probe_code_committed": true,
+    "two_host_probe_nonleaking_tests_passed": true,
+    "two_host_live_inventory_attested": false,
+    "cross_host_full_agent_inventory_attested": false,
+    "actual_agent_retirements_this_cycle": 0
   }
 }
