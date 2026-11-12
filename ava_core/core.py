@@ -181,6 +181,8 @@ class ConversationEngine:
         # Bound untrusted input before forwarding it to a potentially billed model.
         if len(message) > 10000:
             raise ValueError("Message exceeds 10000 characters")
+        if any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in message):
+            raise ValueError("Message contains forbidden control characters")
         # Bound private context sent to a host-provided model to limit accidental
         # disclosure and unbounded token usage. Newest memories take precedence.
         # Bound both record count and total text size.
