@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import stat
+import sys
 from pathlib import Path
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
@@ -238,11 +239,49 @@ def inspect(root: Path = ROOT) -> dict:
     }
 
 
+REPORT_PREFIX = "MPW_LIVE_INVOICE_SOURCE_AUDIT="
+
+
+def validate_remote_report(output: str) -> int:
+    """Fail closed on a cPanel diagnostic: source-only evidence cannot clear sales."""
+    matches = [
+        line[len(REPORT_PREFIX):] for line in output.splitlines()
+        if line.startswith(REPORT_PREFIX)
+    ]
+    if len(matches) != 1 or len(matches[0]) > 160_000:
+        print("MPW_SOURCE_GATE=BLOCKED_MISSING_OR_DUPLICATE_REPORT")
+        return 20
+    try:
+        report = json.loads(matches[0])
+    except (ValueError, TypeError):
+        print("MPW_SOURCE_GATE=BLOCKED_INVALID_JSON")
+        return 20
+    if not isinstance(report, dict) or report.get("mode") != "readonly_ast_no_import_no_db_no_payment":
+        print("MPW_SOURCE_GATE=BLOCKED_UNTRUSTED_REPORT_MODE")
+        return 20
+    status = report.get("status")
+    if not isinstance(status, str) or re.fullmatch(r"[A-Z_]{3,80}", status) is None:
+        print("MPW_SOURCE_GATE=BLOCKED_INVALID_SOURCE_STATUS")
+        return 20
+    if status != "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED":
+        print("MPW_SOURCE_GATE=BLOCKED_" + status)
+        return 21
+    # This diagnostic never authenticates a buyer or verifies settlement:
+    # a clean static snapshot is not a commercial release decision.
+    print("MPW_SOURCE_GATE=UNVERIFIED_EXTERNAL_HELPERS_AND_PAID_RECEIPT")
+    return 22
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--validate-report"]:
+        return validate_remote_report(sys.stdin.read())
+    if sys.argv[1:] and sys.argv[1:] != ["-"]:
+        print("MPW_SOURCE_GATE=BLOCKED_INVALID_INVOCATION")
+        return 20
     report = inspect()
-    print("MPW_LIVE_INVOICE_SOURCE_AUDIT=" + json.dumps(report, sort_keys=True))
-    # Read-only report runs successfully even when release gate is blocked.
-    # Callers must inspect status; exit 0 is NOT a production-readiness signal.
+    print(REPORT_PREFIX + json.dumps(report, sort_keys=True))
+    # Remote source inspection is not a sale test. The *local* validator
+    # must consume this report and fail until external obligations are proven.
     return 0
 
 
