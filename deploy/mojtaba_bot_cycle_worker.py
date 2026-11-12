@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse, hashlib, json, subprocess, sys
 from pathlib import Path
 from datetime import datetime, timezone
+from mojtaba_bot_cycle_coordinator import verified_git_artifact
 
 ALLOWED_CPANEL = {"relay_preflight","cpanel_preflight","django_check","django_migrations"}
 DELIVERABLE_KINDS = {"deliverable_created", "source_change", "verified_order", "verified_publication"}
@@ -120,15 +121,33 @@ def main():
     if state_path.is_file():
         try:
             state=json.loads(state_path.read_text(encoding="utf-8"))
-            accepted_ids={
-                action_id
-                for run in state.get("runs", {}).values()
-                if run.get("cycle")==args.cycle
-                for action_id, action in run.get("actions", {}).items()
-                if action.get("status")=="success"
-                and action.get("kind") in DELIVERABLE_KINDS
-                and bool(action.get("evidence"))
-            }
+            # Recheck each historical proof against the actual current
+            # checkout. String-only claims, replayed receipts, and multiple
+            # action IDs pointing to one unchanged artifact never count.
+            accepted_ids=set()
+            accepted_artifact_proofs=set()
+            proof_cache={}
+            for run in state.get("runs", {}).values():
+                if run.get("cycle")!=args.cycle:
+                    continue
+                for action_id, action in run.get("actions", {}).items():
+                    if (action.get("status")!="success"
+                            or action.get("kind") not in DELIVERABLE_KINDS
+                            or action_id in accepted_ids):
+                        continue
+                    evidence=action.get("evidence") or []
+                    if not isinstance(evidence,list):
+                        continue
+                    proof=tuple(sorted(evidence))
+                    if proof in accepted_artifact_proofs:
+                        continue
+                    if proof not in proof_cache:
+                        proof_cache[proof]=verified_git_artifact(
+                            action.get("kind"), evidence
+                        )
+                    if proof_cache[proof]:
+                        accepted_ids.add(action_id)
+                        accepted_artifact_proofs.add(proof)
             cumulative_success=len(accepted_ids)
         except (OSError, ValueError, TypeError, AttributeError):
             cumulative_success=0
