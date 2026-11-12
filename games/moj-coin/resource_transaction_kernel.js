@@ -43,5 +43,56 @@ function purchaseOnce(state, purchaseId, costs, rewards) {
   if (!result.ok) return result;
   return {ok:true, state:{resources:result.resources, applied:[...state.applied, purchaseId]}};
 }
-const api = {integer, normalizedResources, transact, purchaseOnce};
+/*
+ * Atomically execute an upgrade/crafting chain against a detached copy.
+ * The caller must persist only when ok=true and must obtain a server-side
+ * row lock before reading state; no client balances or operations are trusted.
+ * A failed later step never consumes any of the earlier step's resources.
+ */
+function transactBatch(resources, steps) {
+  if (!Array.isArray(steps) || steps.length < 1 || steps.length > 32) {
+    throw new RangeError('1 to 32 resource operations required');
+  }
+  let current = normalizedResources(resources);
+  for (let index = 0; index < steps.length; index++) {
+    const step = steps[index];
+    if (!step || typeof step !== 'object' || Array.isArray(step) ||
+        !Object.hasOwn(step, 'costs') || !Object.hasOwn(step, 'rewards')) {
+      throw new TypeError('invalid resource operation at step ' + index);
+    }
+    const result = transact(current, step.costs, step.rewards);
+    if (!result.ok) {
+      return {ok:false, reason:result.reason, resource:result.resource, step:index};
+    }
+    current = result.resources;
+  }
+  return {ok:true, resources:current};
+}
+function purchaseSequenceOnce(state, purchaseId, steps) {
+  if (!state || typeof state !== 'object' || Array.isArray(state) ||
+      !Array.isArray(state.applied) ||
+      typeof purchaseId !== 'string' ||
+      !/^[A-Za-z0-9_-]{8,128}$/.test(purchaseId)) {
+    throw new TypeError('invalid purchase state/id');
+  }
+  if (!state.applied.every(id =>
+      typeof id === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(id)) ||
+      new Set(state.applied).size !== state.applied.length) {
+    throw new TypeError('invalid purchase ledger');
+  }
+  if (state.applied.includes(purchaseId)) {
+    return {ok:false, reason:'DUPLICATE_PURCHASE'};
+  }
+  const result = transactBatch(state.resources, steps);
+  if (!result.ok) return result;
+  return {
+    ok:true,
+    state:{
+      resources:result.resources,
+      applied:[...state.applied, purchaseId]
+    }
+  };
+}
+
+const api = {integer, normalizedResources, transact, purchaseOnce, transactBatch, purchaseSequenceOnce};
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
