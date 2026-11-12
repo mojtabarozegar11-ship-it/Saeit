@@ -153,6 +153,7 @@ class ProductDetailHostTests(unittest.TestCase):
         no_route = load_functions(product)(request("mojplaywin.com"), 991)
         self.assertTrue(no_route["context"]["can_list_offer"])
         self.assertIsNone(no_route["context"]["checkout_url"])
+        self.assertNotIn("offers", json.loads(no_route["context"]["schema_json"]))
 
         ready = load_functions(product, checkout_ready=True)(
             request("mojplaywin.com"), 991
@@ -160,6 +161,7 @@ class ProductDetailHostTests(unittest.TestCase):
         self.assertEqual(
             ready["context"]["checkout_url"], "/store/product/991/checkout/"
         )
+        self.assertIn("offers", json.loads(ready["context"]["schema_json"]))
 
     def test_unreleased_product_never_gets_checkout_link_even_if_url_exists(self):
         product = item(pk=991, metadata={"sales_enabled": True})

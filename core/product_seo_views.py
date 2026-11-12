@@ -126,7 +126,9 @@ def product_detail(request, product_id):
     )
     checkout_url = (approved_guest_checkout_route(product.pk)
                     if site == "mojplaywin" and can_list_offer else None)
-    if can_list_offer:
+    # A rights-approved listing is not yet an actual purchasable offer if
+    # its reviewed checkout route is unavailable. Keep search metadata honest.
+    if can_list_offer and (site != "mojplaywin" or checkout_url is not None):
         schema["offers"] = {
             "@type": "Offer", "url": url, "price": str(product.price),
             "priceCurrency": product.currency,
