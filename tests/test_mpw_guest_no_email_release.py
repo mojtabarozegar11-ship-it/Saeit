@@ -306,6 +306,46 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
                     release.verify_template(clean + extra)
 
+    def test_verifier_blocks_email_id_and_autocomplete_alias(self):
+        clean = release.patch_template(template())
+        for extra in (
+            b'<input name="contact" type="hidden" id="owner_email">',
+            b'<input name="contact" type="text" autocomplete="email">',
+            b'<textarea id="buyer_email" name="contact"></textarea>',
+            b'<select id=notify_email name=contact></select>',
+        ):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
+                    release.verify_template(clean + extra)
+
+    def test_release_preflight_blocks_composed_email_module_constant(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "BUYER_FIELD = 'buyer_' + 'e' + 'mail'\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(BUYER_FIELD)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_release_preflight_blocks_annotated_email_constant(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "FIELD: str = 'contact_' + 'email'\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(FIELD)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
     def test_verifier_allows_non_email_controls(self):
         clean = release.patch_template(template())
         release.verify_template(clean + (
