@@ -238,16 +238,52 @@ def cmd_summary(args: argparse.Namespace) -> None:
         rid, run = sorted(candidates, key=lambda pair: pair[1]["started_at"])[-1]
         actions = list(run["actions"].values())
         counts = {status: sum(a["status"] == status for a in actions) for status in VALID}
+        # Reconcile ALL lanes in chronological order: legacy observation-only
+        # success, duplicate IDs, fake receipts and duplicate artifact proofs
+        # never make the cycle complete. Immutable Git evidence survives later
+        # edits, but cannot be double-counted globally.
+        accepted_by_run = {}
+        seen_ids = set()
+        seen_proofs = set()
+        proof_cache = {}
+        for prior_id, prior in sorted(
+                state["runs"].items(),
+                key=lambda row: (row[1].get("started_at", ""), row[0])):
+            qualified = 0
+            for action_id, action in prior.get("actions", {}).items():
+                if (action.get("status") != SUCCESS
+                        or action.get("kind") not in {
+                            "source_change", "deliverable_created"
+                        }):
+                    continue
+                evidence = action.get("evidence")
+                if not isinstance(evidence, list):
+                    continue
+                key = tuple(sorted(evidence))
+                if action_id in seen_ids or key in seen_proofs:
+                    continue
+                if key not in proof_cache:
+                    proof_cache[key] = verified_git_artifact(
+                        action.get("kind"), evidence
+                    )
+                if proof_cache[key]:
+                    qualified += 1
+                    seen_ids.add(action_id)
+                    seen_proofs.add(key)
+            accepted_by_run[prior_id] = qualified
+        verified_success = accepted_by_run.get(rid, 0)
         result = {
             "run_id": rid,
             "cycle": run["cycle"],
             "target": TARGET,
             "recorded": len(actions),
-            "success": counts[SUCCESS],
+            "success": verified_success,
+            "unverified_legacy_success": counts[SUCCESS] - verified_success,
             "blocked": counts[BLOCKED],
+            "observed": counts[OBSERVED],
             "failed": counts[FAILED],
-            "remaining": max(TARGET - counts[SUCCESS], 0),
-            "complete": counts[SUCCESS] >= TARGET,
+            "remaining": max(TARGET - verified_success, 0),
+            "complete": verified_success >= TARGET,
             "closed_at": run["closed_at"],
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
