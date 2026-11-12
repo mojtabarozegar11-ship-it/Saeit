@@ -220,3 +220,60 @@ verified.
 Official references:
 - https://help.ctrader.com/ctrader/trading/history/
 - https://help.ctrader.com/ctrader-algo/references/Trading/History/HistoricalTrade/
+
+
+## Real native C# compilation gate (2026-11-12)
+
+Source-only text matching and Python fixture tests were **not** sufficient
+to prove the cTrader automation code would compile. The same one-bot PR
+now has a separate .NET build job:
+
+`ctrader-csharp-compile`
+
+It compiles **both** the demo execution robot
+`trading/MojTradeOmegaXDemoBot.cs` and the read-only History auditor
+`trading/MojTradeDemoHistoryAuditBot.cs` against official
+`cTrader.Automate` NuGet **1.0.21** using .NET **8**. Package versions are
+pinned and the sources compile as separate class libraries. Both
+`AlgoBuild` and `AlgoPublish` are explicitly false; the CI job
+**does not generate, install, upload or run a broker-executable .algo
+package**. It uses no trading credentials and cannot submit orders.
+
+Build commands for a reviewer with the .NET 8 SDK:
+
+```bash
+dotnet build trading/ctrader-build/MojTradeOmegaXDemoBot/MojTradeOmegaXDemoBot.csproj \
+  -c Release -p:AlgoBuild=false -p:AlgoPublish=false
+dotnet build trading/ctrader-build/MojTradeDemoHistoryAuditBot/MojTradeDemoHistoryAuditBot.csproj \
+  -c Release -p:AlgoBuild=false -p:AlgoPublish=false
+```
+
+The .NET projects set `TreatWarningsAsErrors=true`, so API deprecations
+and C# compiler warnings block acceptance instead of being silently
+ignored. The verified GitHub Actions run
+`43299215658` compiled **both** projects with **zero errors and zero
+warnings**, and separately passed **359 Python regression cases**:
+
+https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43299215658
+
+One material defect fixed during this work: cTrader's `DataSeries`
+provides indexed values but is not a LINQ enumerable. The earlier
+`Skip(...).Take(...).Max()` and `Min()` breakout logic was changed to
+a bounded, backward-only indexed loop. The cBot also now uses
+`ModifyPosition(..., ProtectionType.Absolute)` for absolute stop
+prices, rejects nonfinite ATR/volume/spread, and does **not**
+modify existing demo positions while observation mode is selected.
+
+**What compilation does not prove:** algorithm profitability,
+availability of compatible installed cTrader, the broker's particular
+gold symbol and margin rules, the exact state of the owner's demo
+account, correct broker order fills, round-the-clock cloud hosting,
+real deposit/withdrawal ability, or real revenue. A native
+`.algo` packaging process, platform-side build/run, and broker demo
+reconciliation are still required before operational acceptance.
+
+Official package and API docs:
+- https://www.nuget.org/packages/cTrader.Automate/1.0.21
+- https://help.ctrader.com/ctrader-algo/documentation/all-algos/compiling/
+- https://help.ctrader.com/ctrader-algo/references/Collections/DataSeries/DataSeries/
+- https://help.ctrader.com/ctrader-algo/references/Trading/ProtectionType/
