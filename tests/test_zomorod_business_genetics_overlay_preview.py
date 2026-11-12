@@ -21,16 +21,16 @@ declare(strict_types=1);
 const HOST_ONLY_EXTENSION = 'preserve-me-unchanged';
 $nav=['projects'=>'پروژه‌ها','mojplaywin'=>'پایش MojPlayWin'];
 if($action==='none'){
-} elseif($action==='project'){
+        } elseif($action==='project'){
     $title=req('title');
-    $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)');
-} elseif($action==='mpw_check'){
+            $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)');
+        } elseif($action==='mpw_check'){
 }
 if($page==='dashboard'){
     echo 'HOST_SITE_CUSTOM_DASHBOARD_FEATURE';
-} elseif($page==='mojplaywin'){
-} elseif($page==='projects'){
-    if(role()!=='viewer'){echo '<section><h2>افزودن پروژه</h2>';formBegin('project');}
+    } elseif($page==='mojplaywin'){
+    } elseif($page==='projects'){
+        if(role()!=='viewer'){echo '<section><h2>افزودن پروژه</h2>';formBegin('project');}
 }
 """
 
