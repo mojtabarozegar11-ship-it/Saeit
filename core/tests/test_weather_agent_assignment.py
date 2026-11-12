@@ -114,6 +114,7 @@ def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
     weather_agent.run_daily_cycle(approval_grant_id=123)
     assert len(calls) == 1
     assert NewsletterStory.objects.filter(agent__code=BOT_CODE).count() == 3
+    assert NewsletterStory.objects.filter(status="draft", fingerprint__startswith="weather-daily-content-").count() == 2
 
 
 def test_weather_does_not_publish_an_incomplete_31_province_report(monkeypatch):
