@@ -1,0 +1,148 @@
+name: Zomorod NEXUS archived homepage footer link repair
+on:
+  pull_request:
+    paths:
+      - scripts/zomorod_nexus_archive_footer_patch_20261112.py
+      - .github/workflows/zomorod-nexus-archive-footer-fix-20261112.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/zomorod_nexus_archive_footer_patch_20261112.py
+      - .github/workflows/zomorod-nexus-archive-footer-fix-20261112.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-nexus-footer-archive-20261112
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove single href replacement is reversible
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_nexus_archive_footer_patch_20261112.py
+          python3 scripts/zomorod_nexus_archive_footer_patch_20261112.py selftest
+  publish:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm exact old NEXUS revision and original archive by public GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          with urlopen(Request(base+'/?nexus_archive_preflight=20261112',headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+              body=r.read(100000)
+              assert r.status==200
+          assert hashlib.sha256(body).hexdigest()=='f2fadc049f8315927e7d98f0849149b7f88249773b9ca549ed6799f2e3c86f60'
+          with urlopen(base+'/site-heritage/home-before-nexus-20261112/index.html',timeout=20) as r:
+              old=r.read(130000)
+              assert r.status==200
+          assert hashlib.sha256(old).hexdigest()=='99e9c38cd20aaf400a3c68c2064211dc48d4ff0e518ee4815061ea0ca2626edc'
+          print('NEXUS_ARCHIVE_PUBLIC_BASELINE_VERIFIED=YES')
+          PY
+      - name: Prepare authenticated exact-fingerprint cPanel connection
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-nexus-footer-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          success=0
+          for attempt in 1 2 3; do
+            if timeout 14s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              pin="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              test "$pin" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'CPANEL_FINGERPRINT_MISMATCH_STOP' >&2; exit 1; }
+              mv "$d/host.candidate" "$d/host.known"; success=1; break
+            fi
+            sleep "$attempt"
+          done
+          test "$success" = 1 || { echo 'CPANEL_UNREACHABLE_STOP' >&2; exit 1; }
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ServerAliveInterval 8
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config" "$d/host.known"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel 'id -un' | grep -Fxq 'zomorod2'
+          echo NEXUS_FOOTER_CPANEL_PINNED_AUTH=VERIFIED
+      - name: Change only the broken footer href with atomic backup and protected-file hashes
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-footer-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel "python3 - apply 'footer-$GITHUB_RUN_ID'" < scripts/zomorod_nexus_archive_footer_patch_20261112.py
+      - name: Verify corrected public link and original file and unchanged internal routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-footer-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 - verify 'footer-$GITHUB_RUN_ID'" < scripts/zomorod_nexus_archive_footer_patch_20261112.py
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          expected=b'href="/site-heritage/home-before-nexus-20261112/index.html"'
+          passed=False
+          for n in range(5):
+              try:
+                  with urlopen(Request(base+'/?nexus_footer_check='+str(n),headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+                      content=r.read(100000)
+                      assert r.status==200
+                  if content.count(expected)==1:
+                      passed=True;break
+              except Exception as e:
+                  print('FOOTER_RETRY',str(e)[:100],flush=True)
+              time.sleep(2)
+          assert passed,'The corrected public footer link is not visible'
+          for path in ('/site-heritage/home-before-nexus-20261112/index.html','/agriculture/','/research/','/industry/','/store/','/contact/','/topics/'):
+              with urlopen(base+path,timeout=20) as r:
+                  assert r.status==200 and len(r.read(2000))>200,path
+              print('NEXUS_FOOTER_DESTINATION_OK='+path)
+          print('NEXUS_FOOTER_RELEASE_VERIFIED=YES')
+          PY
+      - name: Roll back only the one-field patch after failed public verification
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-footer-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback 'footer-$GITHUB_RUN_ID'" < scripts/zomorod_nexus_archive_footer_patch_20261112.py
+      - name: Remove temporary private SSH files on runner
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zm-nexus-footer-ssh"
+          if test -d "$d"; then rm -rf -- "$d"; fi
