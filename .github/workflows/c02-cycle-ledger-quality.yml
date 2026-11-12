@@ -11,6 +11,8 @@ on:
       - tests/test_c02_worker_50_receipts.py
       - tests/test_c03_cycle_receipt_bridge.py
       - deploy/mojtaba_bot_cycle_receipt_bridge.py
+      - deploy/mojtaba_bot_cycle_auditor.py
+      - tests/test_c03_cycle_auditor.py
       - .github/workflows/c02-cycle-ledger-quality.yml
   workflow_dispatch:
 
@@ -31,7 +33,7 @@ jobs:
       - name: Run isolated ledger regressions (NO factory or live system access)
         run: |
           python3 -m pip install --disable-pip-version-check --quiet pytest
-          python3 -m pytest --noconftest -q             tests/test_unified_c02_evidence_gate.py             tests/test_mojtaba_c02_coordinator_proof.py             tests/test_c02_worker_50_receipts.py tests/test_c03_cycle_receipt_bridge.py
+          python3 -m pytest --noconftest -q             tests/test_unified_c02_evidence_gate.py             tests/test_mojtaba_c02_coordinator_proof.py             tests/test_c02_worker_50_receipts.py tests/test_c03_cycle_receipt_bridge.py tests/test_c03_cycle_auditor.py
 
       - name: Assert no production secrets or external transfers
         run: |
