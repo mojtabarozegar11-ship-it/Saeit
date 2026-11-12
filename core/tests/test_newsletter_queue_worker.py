@@ -132,6 +132,26 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual(receipt["result"]["held"], 1)
         self.assertEqual(NewsletterStory.objects.count(), 0)
 
+    def test_inactive_legacy_with_unpublished_draft_requires_handoff(self):
+        old = Agent.objects.create(
+            code="content-director", name="Old Content Director",
+            mission="Review owned draft", active=False,
+        )
+        historical_story = NewsletterStory.objects.create(
+            agent=old, story_type="company", title="Unfinished draft",
+            slug="historical-unfinished-draft", summary="Previously drafted",
+            body="Preserve historical text", fingerprint="historical-undelivered",
+            status="draft",
+        )
+        item = self.submission("unpublished-legacy")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        historical_story.refresh_from_db()
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
+        self.assertEqual(historical_story.agent_id, old.pk)
+        self.assertEqual(NewsletterStory.objects.count(), 1)
+
     def test_missing_canonical_holds_owner_submission(self):
         self.bot.active = False
         self.bot.save(update_fields=["active"])
