@@ -402,6 +402,40 @@
     "system_service_live_inventory_attested": false,
     "two_host_source_revision_comparison_code_committed": true,
     "two_host_source_revision_comparison_live_proven": false,
-    "cpanel_php_sqlite_status_redaction_tests_passed": true
+    "cpanel_php_sqlite_status_redaction_tests_passed": true,
+    "per_source_disposition_preview_implemented": true,
+    "per_identity_disposition_preview_implemented": true,
+    "disposition_preview_all_outputs_non_destructive": true,
+    "live_host_disposition_decisions_verified": false
+  },
+  "readonly_disposition_contract": {
+    "schema": "mojtaba.bot.ai.live-disposition-preview.v1",
+    "evaluator": "deploy/mojtaba_live_disposition_readonly.py",
+    "linked_manual_workflow": ".github/workflows/mojtaba-live-topology-readonly.yml",
+    "generated_from": "two_fresh_pinned_read_only_host_snapshots_and_checked_in_source_ledger",
+    "logical_source_groups": 9,
+    "source_defined_identity_roster": {
+      "php_private_site_codes": 11,
+      "django_known_codes": 10,
+      "total_not_live_bot_count": 21
+    },
+    "outputs": [
+      "individual_identity_registration_state_not_live_status",
+      "route_indicator_counts_not_unique_processes",
+      "installed_code_revision_status",
+      "nine_group_dependency_blockers",
+      "explicit_no_retirement_permission"
+    ],
+    "no_host_evidence_state": "no_live_agents_claimed_no_retirement_permitted",
+    "evidence_state": "implemented_tested_on_review_branch_not_executed_on_production_hosts",
+    "latest_proven_focused_ci": {
+      "run_id": 43226389997,
+      "reviewed_commit": "35f4173fa548d7dc770d81c97478c709a0caac0c",
+      "tests_passed": 153,
+      "tests_failed": 0
+    },
+    "deployment_proven": false,
+    "live_host_evidence_attested": false,
+    "actual_legacy_deactivations": 0
   }
 }
