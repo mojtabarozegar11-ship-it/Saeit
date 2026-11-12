@@ -67,6 +67,13 @@ def test_costed_oos_result_is_reproducible_and_not_real_income(sample_quotes, mo
     assert a["realized_profit_verified"] is False
     assert a["market_order_placement_enabled"] is False
     assert a["source_is_cryptographically_authenticated_to_broker"] is False
+    assert a["broker_quote_provenance_unverified"] is True
+    assert a["bid_ask_ohlc_required_by_input_contract"] is True
+    assert all(
+        result["max_intrabar_stress_drawdown_fraction"]
+        >= result["max_closed_equity_drawdown_fraction"]
+        for result in a["all_training_results"].values()
+    )
     assert a["statistical_significance_verified"] is False
     assert a["train_selected_strategy"] in (*lab.STRATEGIES, None)
     assert all(x["result_type"] == "unverified_historical_simulation_not_realized_profit"
