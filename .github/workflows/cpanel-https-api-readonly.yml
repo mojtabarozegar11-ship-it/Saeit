@@ -1,0 +1,48 @@
+name: cPanel HTTPS UAPI (manual, read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Direct HTTPS cPanel inventory, no SSH or provider portal
+        required: true
+        type: choice
+        options: [preflight, domains, passenger]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-cpanel-https-api-readonly
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.actor == 'mojtabarozegar11-ship-it' ||
+       github.actor == 'chatgpt-codex-connector[bot]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Checkout only selected revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check HTTPS and UAPI reachability without a token
+        if: inputs.operation == 'preflight'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deploy/cpanel_https_api_readonly.py preflight
+
+      - name: Make one authenticated read-only HTTPS request
+        if: inputs.operation != 'preflight'
+        env:
+          SAEIT_CPANEL_HTTPS_API_TOKEN: ${{ secrets.SAEIT_CPANEL_HTTPS_API_TOKEN }}
+          CPANEL_OPERATION: ${{ inputs.operation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deploy/cpanel_https_api_readonly.py "$CPANEL_OPERATION"
