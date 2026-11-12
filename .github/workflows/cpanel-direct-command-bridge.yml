@@ -25,7 +25,7 @@ concurrency:
 jobs:
   cpanel:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
       - name: Checkout pinned verifier
@@ -36,10 +36,9 @@ jobs:
 
       - name: Execute selected read-only cPanel operation
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          FACTORY_VPS_RUNNER: "1"
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VPS_KEY"
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
