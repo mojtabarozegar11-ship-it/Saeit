@@ -11,6 +11,8 @@ on:
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
+      - 'scripts/mpw_three_sku_preflight_20261029.py'
+      - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_onefile_release_gate.py'
       - 'scripts/mpw_recovery_guarded_release_20261105.py'
       - 'tests/test_mpw_recovery_guarded_release_20261105.py'
@@ -26,6 +28,8 @@ on:
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
+      - 'scripts/mpw_three_sku_preflight_20261029.py'
+      - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_onefile_release_gate.py'
       - 'scripts/mpw_recovery_guarded_release_20261105.py'
       - 'tests/test_mpw_recovery_guarded_release_20261105.py'
@@ -62,7 +66,9 @@ jobs:
             tests/test_mpw_onefile_release_gate.py \
             tests/test_mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
-            tests/test_mpw_email_recovery_20261105.py
+            tests/test_mpw_email_recovery_20261105.py \
+            scripts/mpw_three_sku_preflight_20261029.py \
+            tests/test_mpw_three_sku_preflight_20261029.py
       - name: Run read-only offline guest and rollback unit tests
         env:
           PYTHONDONTWRITEBYTECODE: '1'
@@ -72,7 +78,8 @@ jobs:
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_onefile_release_gate \
             tests.test_mpw_guest_telemetry_isolation_20261108 \
-            tests.test_mpw_recovery_guarded_release_20261105
+            tests.test_mpw_recovery_guarded_release_20261105 \
+            tests.test_mpw_three_sku_preflight_20261029
           python3 -B scripts/test_mpw_guest_first_order_identity.py
           python3 -B scripts/test_mpw_guest_route_patching.py
       - name: Confirm no production actions run
