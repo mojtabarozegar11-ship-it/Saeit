@@ -113,7 +113,14 @@ jobs:
                   "cron_entries_observed": value["cron"]["enumerated_entries"],
                   "process_state": value["processes"]["state"],
                   "process_flags": value["processes"]["route_match_counts"],
-                  "service_state": value["user_services"]["state"],
+                  "user_service_state": value["user_services"]["state"],
+                  "user_service_candidates": len(
+                      value["user_services"]["candidate_units"]
+                  ),
+                  "system_service_state": value["system_services"]["state"],
+                  "system_service_candidates": len(
+                      value["system_services"]["candidate_units"]
+                  ),
                   "source_files_observed": sum(
                       row["state"] == "file_observed_not_runtime_executed"
                       for row in value["installed_source_digests"].values()
