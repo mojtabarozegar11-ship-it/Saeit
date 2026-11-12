@@ -1,0 +1,66 @@
+name: Verify supplier quote kit live and unchanged legacy auction pages
+on:
+  push:
+    branches: [feature/zomorod-auctions-supplier-forms-20261112]
+    paths: [.github/workflows/auction-supplier-kit-public-verification-20261112.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Verify seven exact production artifacts and original notices without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/auction-supplier-kit-readonly-$GITHUB_RUN_ID"
+          mkdir -p "$d"
+          trap 'rm -rf "$d"' EXIT
+          for suffix in auctions/ sitemap-auctions.xml auctions/supplier-kit/ robots.txt sitemap.xml; do
+            key="$(printf '%s' "$suffix" | tr '/' '_')"
+            status="$(curl -sSL --max-time 20 -o "$d/$key" -w '%{http_code}' "https://zomorodmelal.ir/$suffix" || true)"
+            echo "STATUS_$key=$status"
+            test "$status" = 200
+          done
+          root="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          test "$root" = 200
+          python3 - "$d" <<'PY'
+          import hashlib,pathlib,sys,xml.etree.ElementTree as ET,csv
+          root=pathlib.Path(sys.argv[1])
+          pairs={'auctions_':'public/auctions/index.html','sitemap-auctions.xml':'public/auctions/sitemap.xml','auctions_supplier-kit_':'public/auctions/supplier-kit/index.html'}
+          for live,source in pairs.items():
+              digest=lambda p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+              assert digest(root/live)==digest(source),('HASH_MISMATCH',live)
+              print('BYTE_IDENTICAL_'+live+'=YES')
+          text=(root/'auctions_').read_text('utf-8')
+          assert 'href="/auctions/supplier-kit/"' in text
+          assert 'بدون تعهد خرید' in text
+          kit=(root/'auctions_supplier-kit_').read_text('utf-8')
+          assert 'غیرالزام‌آور' in kit and 'zomorodmelal@gmail.com' in kit
+          robots=(root/'robots.txt').read_text('utf-8')
+          assert 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' in robots
+          locs={x.text for x in ET.parse(root/'sitemap-auctions.xml').findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
+          assert locs=={'https://zomorodmelal.ir/auctions/','https://zomorodmelal.ir/auctions/supplier-kit/'}|{'https://zomorodmelal.ir/auctions/'+str(n)+'/' for n in range(346,350)}
+          print('SECONDARY_SITEMAP=6_URLS_VALID')
+          PY
+          for n in 346 347 348 349; do
+            code="$(curl -sSL --max-time 18 -o "$d/rfq-$n.csv" -w '%{http_code}' "https://zomorodmelal.ir/auctions/supplier-kit/templates/rfq-$n.csv" || true)"
+            echo "CSV_$n=$code"
+            test "$code" = 200
+            test "$(sha256sum "$d/rfq-$n.csv" | cut -c1-64)" = "$(sha256sum "public/auctions/templates/rfq-$n.csv" | cut -c1-64)"
+            code="$(curl -sSL --max-time 18 -o "$d/notice-$n" -w '%{http_code}' "https://zomorodmelal.ir/auctions/$n/" || true)"
+            test "$code" = 200
+            case "$n" in
+              346) digest=fe90e4da928518e159434e5081fc697113a45db64d71f4e8a862624125e561e5;;
+              347) digest=8a9ee8c30f0322643d1347569e713b917a80b721c1f15e6b5da09bdfb83c2dda;;
+              348) digest=9ad9d6e5838a3b642326207ee9854d90b24138bde19f6a46109169221b36a9b0;;
+              349) digest=93eb4af51f9e41c830224215e3fa29e54520fb11cc1185560af232f1cca4af99;;
+            esac
+            test "$(sha256sum "$d/notice-$n" | cut -c1-64)" = "$digest"
+            echo "LEGACY_NOTICE_$n=BYTE_IDENTICAL"
+          done
+          echo 'SUPPLIER_KIT_PRODUCTION=COMPLETE_VERIFIED'
+          echo 'LIVE_CHECK_HOST_WRITES=NONE'
