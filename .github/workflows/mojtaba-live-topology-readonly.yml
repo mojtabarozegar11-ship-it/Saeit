@@ -1,15 +1,10 @@
 name: Mojtaba.bot.ai read-only factory-runner dual-host inventory
 
-# Reusable and manually dispatchable. The main-only, exact-subject push
-# trigger below is for a single reviewed observation; remove it immediately
-# after that execution attempt. No PR secrets or periodic schedule.
+# Read-only, manual/reusable only. No automatic push, PR, or schedule
+# trigger can execute production-connected code or obtain SSH credentials.
 on:
   workflow_dispatch:
   workflow_call:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/mojtaba-live-topology-readonly.yml"
 
 permissions:
   contents: read
@@ -20,7 +15,7 @@ concurrency:
 
 jobs:
   observe:
-    if: "${{ github.event_name != 'push' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'audit: run one-time selfhosted read-only cPanel and VPS inventory')) }}"
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
