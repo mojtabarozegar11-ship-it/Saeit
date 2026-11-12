@@ -425,6 +425,23 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
                     release.verify_template(clean + extra)
 
+    def test_quoted_greater_than_cannot_hide_email_field(self):
+        clean = release.patch_template(template())
+        for extra in (
+            b'<input title="a > b" type="hidden" name="buyer_email">',
+            b'<button data-note="x > y" name="email" type="submit">Continue</button>',
+            b"<textarea data-example='a > b' id='customer-email'></textarea>",
+        ):
+            with self.subTest(extra=extra):
+                with self.assertRaisesRegex(RuntimeError, "EMAIL_FIELD_REMAINS"):
+                    release.verify_template(clean + extra)
+
+    def test_quoted_greater_than_without_email_still_passes(self):
+        clean = release.patch_template(template())
+        release.verify_template(
+            clean + b'<input title="a > b" type="hidden" name="order_ref">'
+        )
+
     def test_verifier_blocks_email_id_and_autocomplete_alias(self):
         clean = release.patch_template(template())
         for extra in (
