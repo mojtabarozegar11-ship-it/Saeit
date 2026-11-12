@@ -137,15 +137,17 @@ class Settings:
             raise ResearchError("unsupported_timeframe")
         if not 1 <= value["max_hold_bars"] <= 200:
             raise ResearchError("max_hold_bars_out_of_bounds")
+        cleaned = dict(value)
         for key in keys:
             if key in ("timeframe_minutes", "max_hold_bars"):
                 continue
-            number(value[key], key, minimum=0, allow_zero=("commission" in key or "slippage" in key))
-        if not 0 < float(value["risk_fraction"]) <= 0.02:
+            cleaned[key] = number(value[key], key, minimum=0,
+                                  allow_zero=("commission" in key or "slippage" in key))
+        if not 0 < cleaned["risk_fraction"] <= 0.02:
             raise ResearchError("risk_fraction_out_of_bounds")
-        if not 0 < float(value["max_notional_to_equity"]) <= 50:
+        if not 0 < cleaned["max_notional_to_equity"] <= 50:
             raise ResearchError("notional_leverage_requires_verified_limit")
-        return cls(**{k: value[k] for k in keys})
+        return cls(**cleaned)
 
 
 def ema(series, period):
