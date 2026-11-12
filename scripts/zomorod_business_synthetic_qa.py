@@ -84,6 +84,12 @@ assert re.search(r'(?m)^  workflow_dispatch:$',deploy_workflow)
 assert not re.search(r'(?m)^  push:$',deploy_workflow)
 assert 'expected_current_app_sha256:' in deploy_workflow
 assert 'expected_current_dossier_sha256:' in deploy_workflow
+assert 'verified_cpanel_ssh_port:' in deploy_workflow
+assert 'DIRECT_CPANEL=verified' in deploy_workflow
+assert 'DIRECT_CONFIG' in deploy_workflow
+assert 'ProxyJump' not in deploy_workflow
+assert 'saeit-vps' not in deploy_workflow
+assert 'workflow_dispatch:' in deploy_workflow
 assert 'genetics-center.php' in deploy_workflow
 assert 'zomorod_business_genetics_guarded_install.sh' in deploy_workflow
 assert 'zomorod_business_genetics_readonly_preflight.sh' in deploy_workflow
