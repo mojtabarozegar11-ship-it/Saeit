@@ -290,6 +290,11 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertIn("mpw_live_invoice_source_audit_readonly_20261112.py --validate-report", yml)
         self.assertIn("workflow_dispatch:", yml)
         self.assertNotIn("MPW_LIVE_SOURCE_AUDIT=TRANSPORT_VERIFIED", yml)
+        self.assertNotIn('if [ -z "$VPS_KEY" ] || [ -z "$HOST_KEY" ]', yml)
+        self.assertLess(yml.index("mode=relay"),
+                        yml.index('if [ -z "$VPS_KEY" ]'))
+        self.assertLess(yml.index('if [ -z "$HOST_KEY" ]'),
+                        yml.index("mode=direct"))
 
     def test_source_content_not_printed_or_returned(self):
         p = self.root / AUDIT.SOURCE_PATHS[0]
