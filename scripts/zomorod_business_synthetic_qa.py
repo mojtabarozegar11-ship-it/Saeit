@@ -128,7 +128,7 @@ assert "'PUBLIC_REFERENCES_PROTECTED=VERIFIED'" in guard_source
 assert "cat > '$stage/public-references.py'" in deploy_workflow
 assert 'zomorod_business_public_reference_audit.py' in deploy_workflow
 assert 'zomorod_business_public_surface_invariant.py' in deploy_workflow
-for clause in ('GUARD=app_drift','GUARD=dossier_drift','source.backup(target','BUSINESS_GENETICS_ROLLBACK=restored'):
+for clause in ('GUARD=app_drift','GUARD=dossier_drift','source.backup(target','BUSINESS_GENETICS_ROLLBACK=verified'):
     assert clause in guard_source
 print('GENETICS_DEPLOY_GUARD_SYNTHETIC=PASS')
 print('GENETICS_DOSSIER_AUTH_READONLY_SYNTHETIC=PASS')
