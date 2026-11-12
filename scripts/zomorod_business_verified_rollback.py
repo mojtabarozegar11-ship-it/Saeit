@@ -101,6 +101,15 @@ def restore(
         if os.path.lexists(conflict):
             raise RestoreError("CONFLICT_ARCHIVE_ALREADY_EXISTS")
 
+    live_app = private / "app.php"
+    live_dossier = private / "genetics-center.php"
+    known_dossier = {candidate_dossier} if old_dossier == "ABSENT" else {old_dossier, candidate_dossier}
+    # Validate BOTH live paths before producing any conflict archive or
+    # replacing any live file. A broken symlink must not strand app.php.
+    observed: dict[Path, str | None] = {}
+    for live in (live_app, live_dossier):
+        observed[live] = digest_file(live) if os.path.lexists(live) else None
+
     # Prepare all needed recovery files first. A preflight failure leaves the
     # original live files unchanged and keeps the original backup intact.
     staged = private / (".rollback-app-ready-" + release_sha)
@@ -115,15 +124,6 @@ def restore(
         staged.unlink(missing_ok=True)
         staged_dossier.unlink(missing_ok=True)
         raise
-
-    live_app = private / "app.php"
-    live_dossier = private / "genetics-center.php"
-    known_dossier = {candidate_dossier} if old_dossier == "ABSENT" else {old_dossier, candidate_dossier}
-    # Validate BOTH live paths before producing any conflict archive or
-    # replacing any live file. A broken symlink must not strand app.php.
-    observed: dict[Path, str | None] = {}
-    for live in (live_app, live_dossier):
-        observed[live] = digest_file(live) if os.path.lexists(live) else None
 
     quarantined = []
     def preserve_unexpected(live: Path, known: set[str], label: str) -> None:
