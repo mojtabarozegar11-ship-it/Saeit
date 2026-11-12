@@ -5,6 +5,7 @@ on:
       - feat/zomorod-animal-genetics-business-20261111
     paths:
       - .github/workflows/zomorod-business-direct-live-audit.yml
+      - scripts/zomorod_business_live_semantic_readonly.py
 permissions:
   contents: read
 concurrency:
@@ -95,3 +96,7 @@ jobs:
           echo 'LIVE_FILES_MODIFIED=no'
           echo 'LIVE_DEPLOYMENT_ATTEMPTED=no'
           REMOTE
+          # Inspect semantic compatibility and project schema without exporting live source.
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel \
+            'test -x /home/zomorod2/Saeit/.venv/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python - bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63' \
+            < scripts/zomorod_business_live_semantic_readonly.py
