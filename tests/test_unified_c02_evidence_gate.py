@@ -82,7 +82,7 @@ def test_repository_path_cannot_escape_checkout():
         assert result["status"] == "failed"
         assert "path_outside_repo" in str(result["evidence"])
 
-def test_old_qualifications_cannot_complete_new_cycle():
+def test_legacy_string_only_successes_are_excluded_from_cycle():
     with TemporaryDirectory() as d:
         q = Path(d) / "q.json"
         state = Path(d) / "state.json"
