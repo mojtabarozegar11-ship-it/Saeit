@@ -117,5 +117,45 @@ class WaterBudgetTests(unittest.TestCase):
         self.assertFalse(result["input_values_independently_validated"])
 
 
+    def test_rejects_csv_formula_crop_names(self):
+        for bad in ("=HYPERLINK(1,2)", "+SUM(A1:A2)", "@SUM",
+                    "-1+2", "Crop A\\n=HYPERLINK(1,2)"):
+            data = sample()
+            data["crops"][0]["name"] = bad
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                evaluate(data)
+
+    def test_rejects_excess_magnitude_precision_and_length(self):
+        for bad in ("1e50", "0.0000001", "1" + "0" * 90):
+            data = sample()
+            data["water_available_m3"] = bad
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                evaluate(data)
+        data = sample()
+        data["crops"][0]["water_m3_per_ha"] = "1e-7"
+        with self.assertRaises(ValueError):
+            evaluate(data)
+
+    def test_high_magnitude_is_bounded_and_does_not_overflow(self):
+        data = {"currency": "IRR", "water_available_m3": "1e20",
+                "crops": [{"name": "Crop A", "max_area_ha": "1",
+                           "water_m3_per_ha": "0.000001",
+                           "gross_margin_per_ha": "1e20"}]}
+        output = evaluate(data)
+        self.assertEqual(output["estimated_total_gross_margin"],
+                         "100000000000000000000.000000")
+        self.assertEqual(output["water_used_m3"], "0.000001")
+        self.assertFalse(output["water_budget_binding"])
+
+    def test_aggregate_uses_unrounded_internal_allocation(self):
+        data = {"currency": "USD", "water_available_m3": "1",
+                "crops": [{"name": "Crop A", "max_area_ha": "1",
+                           "water_m3_per_ha": "3",
+                           "gross_margin_per_ha": "3"}]}
+        output = evaluate(data)
+        self.assertEqual(output["estimated_total_gross_margin"], "1.000000")
+        self.assertEqual(output["allocations"][0]["area_allocated_ha"], "0.333333")
+
+
 if __name__ == "__main__":
     unittest.main()
