@@ -1,204 +1,140 @@
-name: Mojtaba.bot.ai two-host read-only topology evidence
+name: Mojtaba.bot.ai read-only factory-runner dual-host inventory
 
-# Manual-only because this workflow uses SSH credentials. Never execute
-# unreviewed pull-request code with production secrets.
+# Reusable and manually dispatchable. The main-only, exact-subject push
+# trigger below is for a single reviewed observation; remove it immediately
+# after that execution attempt. No PR secrets or periodic schedule.
 on:
   workflow_dispatch:
-  # May be called only by a separately reviewed, constrained main-branch
-  # workflow. A reusable entrypoint is not an automatic production trigger.
   workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojtaba-live-topology-readonly.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: mojtaba-live-topology-observation
+  group: mojtaba-factory-runner-readonly-inventory
   cancel-in-progress: false
 
 jobs:
   observe:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 12
+    if: "${{ github.event_name != 'push' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'audit: run one-time selfhosted read-only cPanel and VPS inventory')) }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
     steps:
-      - name: Checkout exact reviewed source
+      - name: Checkout reviewed code without persisted credentials
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Parse and validate the observer without touching hosts
-        run: python3 -m py_compile deploy/mojtaba_live_topology_readonly.py
-      - name: Build pinned SSH relay from existing trusted host keys
+      - name: Validate observer and source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile deploy/mojtaba_live_topology_readonly.py deploy/mojtaba_live_disposition_readonly.py
+          python3 -m json.tool runtime/mojtaba_bot_disposition_sources_v1.json >/dev/null
+      - name: Observe local VPS without SSH and cPanel via pinned direct SSH
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          if [[ -z "${VPS_KEY:-}" || -z "${HOST_KEY:-}" ]]; then
-            echo "MOJTABA_LIVE_OBSERVATION=unknown_missing_ssh_credentials"
-            exit 2
-          fi
-          d="$RUNNER_TEMP/mojtaba-live-observation"
+          d="$RUNNER_TEMP/mojtaba-factory-selfhost-readonly-$GITHUB_RUN_ID"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/vps.key" "$d/host.key"
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
-          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          cat > "$d/vps.known" <<'PINNED_RSA'
-          178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=
-          PINNED_RSA
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
-          Host saeit-cpanel
-            HostName zohal.pws-dns.net
-            User zomorod2
-            Port 1396
-            IdentityFile $d/host.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ConnectTimeout 12
-            ConnectionAttempts 1
-            ForwardAgent no
-            RequestTTY no
-          EOF
-          chmod 600 "$d/config"
-          echo "MOJTABA_TOPOLOGY_VPS_HOST_KEY=existing_pin_verified"
-          # cPanel host-key fingerprint must be verified, not learned by trust-on-first-use.
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$d/host.known"
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          echo "MOJTABA_TOPOLOGY_CPANEL_HOST_KEY=existing_pin_verified"
-      - name: Execute read-only host probes and sanitize output
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mojtaba-live-observation"
-          test -f "$d/config"
-          # Host receives the observer over stdin; no file written to either
-          # VPS or cPanel and no server cron/process/service is modified.
-          ssh -F "$d/config" saeit-vps 'python3 - --role vps' \
-            < deploy/mojtaba_live_topology_readonly.py > "$d/vps.jsonline"
-          ssh -F "$d/config" saeit-cpanel '/home/zomorod2/Saeit/.venv/bin/python - --role cpanel' \
-            < deploy/mojtaba_live_topology_readonly.py > "$d/cpanel.jsonline"
-          python3 - "$d/vps.jsonline" "$d/cpanel.jsonline" <<'VERIFY'
-          import hashlib
+          trap 'rm -rf -- "$d"' EXIT
+
+          # Each host is independent: an unreachable cPanel does not erase a
+          # successfully collected local VPS snapshot, or vice versa.
+          vps_ok=0
+          if python3 deploy/mojtaba_live_topology_readonly.py --role vps > "$d/vps.jsonline" 2>"$d/vps.err"; then
+            vps_ok=1
+          else
+            echo "MOJTABA_VPS_OBSERVATION=failed_local_user_or_host_inventory"
+          fi
+
+          cpanel_ok=0
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo "MOJTABA_CPANEL_OBSERVATION=blocked_missing_existing_key"
+          else
+            printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+            chmod 600 "$d/cpanel.key"
+            if ssh-keygen -y -P "" -f "$d/cpanel.key" >/dev/null 2>&1; then
+              if timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/cpanel.known" 2>"$d/keyscan.err"; then
+                if [[ "$(ssh-keygen -lf "$d/cpanel.known" -E sha256 | awk '{print $2}' | sort -u)" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]]; then
+                  echo "MOJTABA_CPANEL_HOST_KEY=existing_pin_verified"
+                  if timeout 55s ssh -T -i "$d/cpanel.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/cpanel.known" -o ConnectTimeout=12 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'exec "$HOME/Saeit/.venv/bin/python" - --role cpanel' < deploy/mojtaba_live_topology_readonly.py > "$d/cpanel.jsonline" 2>"$d/cpanel.err"; then
+                    cpanel_ok=1
+                  else
+                    echo "MOJTABA_CPANEL_OBSERVATION=ssh_or_interpreter_failed"
+                  fi
+                else
+                  echo "MOJTABA_CPANEL_OBSERVATION=host_fingerprint_mismatch_stop"
+                fi
+              else
+                echo "MOJTABA_CPANEL_OBSERVATION=host_key_unreachable"
+              fi
+            else
+              echo "MOJTABA_CPANEL_OBSERVATION=invalid_existing_key"
+            fi
+          fi
+
+          # Per-host output is safely checked before printing. Never emit
+          # process args, cron command text, private DB contents or stderr.
+          python3 - "$d" "$vps_ok" "$cpanel_ok" <<'SUMMARY'
           import json
-          import sys
           from pathlib import Path
+          import sys
+          base = Path(sys.argv[1])
+          expected = {"vps": sys.argv[2] == "1", "cpanel": sys.argv[3] == "1"}
+          for role, possible in expected.items():
+              if not possible:
+                  print("MOJTABA_READONLY_" + role.upper() + "=unknown_no_snapshot")
+                  continue
+              try:
+                  lines = (base / (role + ".jsonline")).read_text(encoding="utf-8").splitlines()
+                  if len(lines) != 1 or not lines[0].startswith("MOJTABA_LIVE_TOPOLOGY="):
+                      raise ValueError("incorrect output format")
+                  row = json.loads(lines[0].split("=", 1)[1])
+                  if (
+                      row.get("schema") != "mojtaba.bot.ai.live-topology-observation.v1"
+                      or row.get("host_role") != role
+                      or row.get("read_only") is not True
+                      or row.get("expected_user_verified") is not True
+                      or row.get("attestation", {}).get("automatic_deactivation_authorized") is not False
+                  ):
+                      raise ValueError("incorrect audit contract")
+                  php = row.get("private_php_site_registry", {})
+                  result = {
+                      "host": role,
+                      "cron_state": row["cron"]["state"],
+                      "cron_entries": row["cron"]["enumerated_entries"],
+                      "process_state": row["processes"]["state"],
+                      "known_route_indicators_not_live_bots": row["processes"]["route_match_counts"],
+                      "user_services_state": row["user_services"]["state"],
+                      "system_services_state": row["system_services"]["state"],
+                      "php_registry_state": php.get("state", "not_applicable"),
+                      "php_known_role_records": php.get("known_roles_found"),
+                      "php_enabled_records_not_running_bots": php.get("enabled_count"),
+                      "installed_source_file_count_not_execution": sum(
+                          x.get("state") == "file_observed_not_runtime_executed"
+                          for x in row["installed_source_digests"].values()
+                      ),
+                      "agent_live_count": None,
+                      "retirement_authorized": False,
+                  }
+                  print("MOJTABA_READONLY_" + role.upper() + "="
+                        + json.dumps(result, ensure_ascii=False, sort_keys=True))
+              except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+                  print("MOJTABA_READONLY_" + role.upper() + "=invalid_snapshot")
+          SUMMARY
 
-          # The remote source hash can be compared only to a fixed allowlist
-          # from the reviewed checkout. Remote JSON may not select files.
-          known_source_names = {
-              "vps": (
-                  "unified_bot_identity.py",
-                  "management/commands/audit_agent_fleet.py",
-                  "management/commands/online_income_cycle.py",
-                  "management/commands/consolidate_legacy_agents.py",
-              ),
-              "cpanel": (
-                  "unified_bot_identity.py",
-                  "canonical_agent_handoff.py",
-                  "newsletter_engine.py",
-                  "weather_agent.py",
-                  "management/commands/knowledge_agent_cycle.py",
-                  "management/commands/newsletter_process_queue.py",
-                  "management/commands/company_activity_agent_cycle.py",
-              ),
-          }
-
-          seen = {}
-          for role, path in zip(("vps", "cpanel"), sys.argv[1:]):
-              lines = open(path, encoding="utf-8").read().splitlines()
-              if len(lines) != 1 or not lines[0].startswith("MOJTABA_LIVE_TOPOLOGY="):
-                  raise SystemExit("MOJTABA_TOPOLOGY_UNTRUSTED_OUTPUT")
-              value = json.loads(lines[0].split("=", 1)[1])
-              assert value["schema"] == "mojtaba.bot.ai.live-topology-observation.v1"
-              assert value["host_role"] == role
-              assert value["read_only"] is True
-              assert value["attestation"]["automatic_deactivation_authorized"] is False
-              assert value["attestation"]["handoff_verified"] is False
-              # Render only a controlled summary, not raw host data.
-              php = value.get("private_php_site_registry", {})
-              if not isinstance(php, dict):
-                  raise SystemExit("MOJTABA_TOPOLOGY_PHP_REGISTRY_INVALID")
-              source_status = {}
-              live_source = value.get("installed_source_digests", {})
-              if not isinstance(live_source, dict):
-                  raise SystemExit("MOJTABA_TOPOLOGY_SOURCE_DIGESTS_INVALID")
-              for relative in known_source_names[role]:
-                  local = Path("core") / relative
-                  remote = live_source.get(relative, {})
-                  if (not isinstance(remote, dict)
-                          or remote.get("state") != "file_observed_not_runtime_executed"
-                          or not isinstance(remote.get("sha256"), str)
-                          or len(remote["sha256"]) != 64
-                          or not local.is_file()
-                          or local.is_symlink()
-                          or not 0 < local.stat().st_size <= 512000):
-                      source_status[relative] = "unknown_source_revision"
-                      continue
-                  expected_sha = hashlib.sha256(local.read_bytes()).hexdigest()
-                  source_status[relative] = (
-                      "matches_reviewed_pr_source"
-                      if expected_sha == remote["sha256"]
-                      else "differs_from_reviewed_pr_source"
-                  )
-              seen[role] = {
-                  "cron_state": value["cron"]["state"],
-                  "cron_entries_observed": value["cron"]["enumerated_entries"],
-                  "process_state": value["processes"]["state"],
-                  "process_flags": value["processes"]["route_match_counts"],
-                  "user_service_state": value["user_services"]["state"],
-                  "user_service_candidates": len(
-                      value["user_services"]["candidate_units"]
-                  ),
-                  "system_service_state": value["system_services"]["state"],
-                  "system_service_candidates": len(
-                      value["system_services"]["candidate_units"]
-                  ),
-                  "source_files_observed": sum(
-                      row["state"] == "file_observed_not_runtime_executed"
-                      for row in value["installed_source_digests"].values()
-                  ),
-                  "source_revision_comparison": source_status,
-                  "source_revision_comparison_proves_active_runtime": False,
-                  "live_handoff_attested": False,
-                  "php_registry_state": php.get("state", "unknown_not_observed"),
-                  "php_registry_rows": php.get("records"),
-                  "php_known_roles_found": php.get("known_roles_found"),
-                  "php_enabled_rows": php.get("enabled_count"),
-                  "php_run_status_counts": php.get("run_status_counts", {}),
-                  "php_worker_output_status_counts": php.get(
-                      "recent_worker_output_status_counts", {}
-                  ),
-                  "php_registry_proves_live_process": False,
-              }
-          print("MOJTABA_TWO_HOST_OBSERVATION=" + json.dumps(
-              seen, sort_keys=True, separators=(",", ":"),
-          ))
-          VERIFY
-      - name: Reconcile both observations into nine fail-closed source decisions
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mojtaba-live-observation"
-          python3 deploy/mojtaba_live_disposition_readonly.py \
-            --vps "$d/vps.jsonline" \
-            --cpanel "$d/cpanel.jsonline" \
-            --manifest runtime/mojtaba_bot_disposition_sources_v1.json
-      - name: Remove ephemeral CI SSH files
-        if: always()
-        shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/mojtaba-live-observation"
+          if [[ "$vps_ok" == "1" && "$cpanel_ok" == "1" ]]; then
+            python3 deploy/mojtaba_live_disposition_readonly.py \
+              --vps "$d/vps.jsonline" \
+              --cpanel "$d/cpanel.jsonline" \
+              --manifest runtime/mojtaba_bot_disposition_sources_v1.json
+          else
+            echo "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof"
+          fi
