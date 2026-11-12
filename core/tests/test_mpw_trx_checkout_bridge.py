@@ -87,6 +87,18 @@ class MPWGuestCheckoutBridgeTests(SimpleTestCase):
         ):
             self.assertEqual(approved_guest_checkout_route(72), self.PATH)
 
+    def test_private_backend_import_crash_is_an_explicit_503_not_public_500(self):
+        from core import mpw_trx_checkout_bridge as bridge
+
+        with mock.patch.object(
+            bridge, "import_module", side_effect=RuntimeError("PRIVATE_DETAILS")
+        ):
+            response = self.client.get(
+                self.PATH, secure=True, HTTP_HOST="mojplaywin.com"
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn(b"PRIVATE_DETAILS", response.content)
+
     def test_unreviewed_payment_form_never_counts_as_ready(self):
         from core import mpw_trx_checkout_bridge as bridge
 
