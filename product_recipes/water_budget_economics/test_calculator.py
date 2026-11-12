@@ -119,7 +119,7 @@ class WaterBudgetTests(unittest.TestCase):
 
     def test_rejects_csv_formula_crop_names(self):
         for bad in ("=HYPERLINK(1,2)", "+SUM(A1:A2)", "@SUM",
-                    "-1+2", "Crop A\\n=HYPERLINK(1,2)"):
+                    "-1+2", "Crop A" + chr(10) + "=HYPERLINK(1,2)"):
             data = sample()
             data["crops"][0]["name"] = bad
             with self.subTest(bad=bad), self.assertRaises(ValueError):
