@@ -1,9 +1,9 @@
 name: Mojtaba.bot.ai one-bot review CI
 
 on:
-  push:
+  pull_request:
     branches:
-      - audit/mojtaba-fleet-disposition-20261112-c03
+      - integration/mojtaba-bot-ai-20261112
     paths:
       - "core/**"
       - "tests/test_company_activity_workflow_handoff.py"
