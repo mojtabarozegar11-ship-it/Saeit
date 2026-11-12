@@ -12,6 +12,7 @@ on:
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
       - 'tests/test_mpw_product_host_route.py'
+      - 'tests/test_mpw_store_invoice_navigation_20261027.py'
       - 'core/product_seo_views.py'
       - 'core/templates/core/product_detail.html'
       - 'core/mojplaywin_catalog.py'
@@ -57,6 +58,7 @@ on:
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
       - 'tests/test_mpw_product_host_route.py'
+      - 'tests/test_mpw_store_invoice_navigation_20261027.py'
       - 'core/product_seo_views.py'
       - 'core/templates/core/product_detail.html'
       - 'core/mojplaywin_catalog.py'
@@ -120,6 +122,7 @@ jobs:
             scripts/mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_no_email_release.py \
             tests/test_mpw_product_host_route.py \
+            tests/test_mpw_store_invoice_navigation_20261027.py \
             core/product_seo_views.py \
             core/mojplaywin_catalog.py \
             core/mojplaywin_views.py \
@@ -158,6 +161,7 @@ jobs:
           python3 -B -m unittest -v \
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_product_host_route \
+            tests.test_mpw_store_invoice_navigation_20261027 \
             tests.test_mpw_verified_catalog \
             tests.test_mpw_owner_catalog_hash_reconciliation \
             tests.test_mpw_trx_settings_contract \
