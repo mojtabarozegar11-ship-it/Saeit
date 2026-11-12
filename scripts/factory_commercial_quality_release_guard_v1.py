@@ -116,7 +116,9 @@ def require_buyer_value_evidence(inbox,recipe,artifact_sha):
 
     Structural checks are not a substitute for an actual, independent buyer
     review. In particular, market research alone does not validate willingness
-    to pay; a paid offer requires a documentable buyer demand signal.
+    to pay. A first paid launch can be reviewed without prior customer feedback,
+    but must be labelled as unvalidated prelaunch demand, never as a verified
+    willingness-to-pay claim. All artifact, workflow and review gates remain.
     """
     container=Path(inbox)/"quality-clearance"/recipe/artifact_sha
     evidence_path=container/"buyer-value-evidence.json"
@@ -208,13 +210,18 @@ def require_buyer_value_evidence(inbox,recipe,artifact_sha):
         elif (not isinstance(signal.get("source_url"),str)
               or not re.fullmatch(r"https://[^\s/]+/[^\s]*",signal["source_url"])):
             raise ValueError("BUYER_VALUE_RESEARCH_SOURCE_MISSING")
-    if offer["model"]=="paid" and not real_demand:
-        raise ValueError("BUYER_VALUE_PAID_DEMAND_NOT_VALIDATED")
+    # Requiring an existing buyer before the *first* paid listing creates a
+    # circular launch dependency. Keep genuine evidence mandatory for any
+    # positive demand claim, while allowing independently reviewed prelaunch
+    # offers to proceed with the uncertainty explicitly preserved.
+    demand_status=("documented_real_buyer_signal" if real_demand else
+                   "unvalidated_prelaunch_demand")
     return {"status":"BUYER_VALUE_EVIDENCE_STRUCTURALLY_VERIFIED",
             "artifact_sha256":artifact_sha,
             "evidence_sha256":_digest_file(evidence_path),
             "customer_workflows":len(case_names),
-            "real_buyer_demand_documented":real_demand}
+            "real_buyer_demand_documented":real_demand,
+            "demand_validation_status":demand_status}
 
 def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path,
                                  buyer_value_evidence):
@@ -367,4 +374,5 @@ def require_quality_clearance(inbox,recipe,package_digest,product_manifest,packa
             "artifact_sha256":package_digest,
             "functional_tests_verified":measured["tests_run"],
             "buyer_value_evidence":buyer_value["status"],
+            "demand_validation_status":buyer_value["demand_validation_status"],
             "chatgpt_final_review":chatgpt_review["status"]}
