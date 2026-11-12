@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/mpw-no-email-guest-checkout-qa-20261112.yml'
       - 'services/mpw_trx_guest_commerce.py'
+      - 'scripts/test_mpw_guest_route_patching.py'
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
@@ -17,6 +18,7 @@ on:
     paths:
       - '.github/workflows/mpw-no-email-guest-checkout-qa-20261112.yml'
       - 'services/mpw_trx_guest_commerce.py'
+      - 'scripts/test_mpw_guest_route_patching.py'
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
@@ -58,6 +60,7 @@ jobs:
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_onefile_release_gate
           python3 -B scripts/test_mpw_guest_first_order_identity.py
+          python3 -B scripts/test_mpw_guest_route_patching.py
       - name: Confirm no production actions run
         run: |
           echo 'MPW_NO_EMAIL_QA=PASS;LIVE_DEPLOY=NO;EMAIL_SENT=NO;INVOICE_CREATED=NO'

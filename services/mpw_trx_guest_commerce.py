@@ -282,6 +282,8 @@ def patch_commercial(namespace):
         "reconcile_invoice": ("_reconcile_invoice", False, require_POST, True),
         "download_paid": ("_download_paid", False, require_GET, False),
     }
+    # Stage handlers locally to avoid partially mutating a drifted route table.
+    pending = {}
     for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
         inner = namespace.get(inner_name)
         if inner is None:
@@ -308,18 +310,38 @@ def patch_commercial(namespace):
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
-        namespace[public_name] = make_view(inner, create, public_name)
+        pending[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
-        rebuilt = []
-        route_names = (
-            ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-            ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-            ("/download/", "download_paid"),
-        )
-        for route, view in patterns:
-            route_name = next((name for token, name in route_names if token in route), None)
-            replacement = namespace.get(route_name, view)
-            rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+    if not isinstance(patterns, tuple):
+        raise RuntimeError("Guest commercial routes must be an audited tuple")
+    rebuilt = []
+    # /invoice/<id>/status/ and /invoice/<id>/reconcile/ must not
+    # accidentally match the less specific invoice-detail endpoint.
+    route_names = (
+        ("/reconcile/", "reconcile_invoice"),
+        ("/status/", "invoice_status"),
+        ("/download/", "download_paid"),
+        ("/start/", "start_order"),
+        ("/invoice/", "show_invoice"),
+    )
+    seen = {name: 0 for name in targets}
+    for entry in patterns:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise RuntimeError("Malformed guest commercial route table")
+        route, view = entry
+        if not isinstance(route, str) or not callable(view):
+            raise RuntimeError("Unsupported guest commercial route entry")
+        route_name = next((name for token, name in route_names if token in route), None)
+        if route_name is None:
+            rebuilt.append(entry)
+            continue
+        seen[route_name] += 1
+        if seen[route_name] != 1:
+            raise RuntimeError("Duplicate guest commercial route: " + route_name)
+        rebuilt.append((route, pending[route_name]))
+    missing = [name for name in targets if seen[name] != 1]
+    if missing:
+        raise RuntimeError("Missing guest commercial routes: " + ",".join(missing))
+    namespace.update(pending)
+    namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
