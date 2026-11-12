@@ -8,6 +8,15 @@ on:
       - '.github/workflows/mpw-live-invoice-source-audit-readonly-20261112.yml'
       - 'scripts/mpw_live_invoice_source_audit_readonly_20261112.py'
       - 'tests/test_mpw_live_invoice_source_audit_readonly_20261112.py'
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+    paths:
+      - '.github/workflows/mpw-live-invoice-source-audit-readonly-20261112.yml'
+      - 'scripts/mpw_live_invoice_source_audit_readonly_20261112.py'
+      - 'tests/test_mpw_live_invoice_source_audit_readonly_20261112.py'
 
 permissions:
   contents: read
@@ -18,7 +27,16 @@ concurrency:
 
 jobs:
   audit-only:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105'
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (
+        (github.event_name == 'push' &&
+          github.ref == 'refs/heads/feature/mpw-recovery-01-20261105') ||
+        (github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1890 &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'feature/mpw-recovery-01-20261105')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
