@@ -2,7 +2,9 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import F
 
-from core.models import Agent, AgentCapability, AgentTask, AuditLog
+from core.models import Agent, AgentCapability, AgentTask, AuditLog, ApprovalGrant
+from core.approval import ApprovalService
+from core.management.commands.consolidate_legacy_agents import require_verified_handoff
 from core.unified_bot_identity import BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES
 
 
@@ -36,26 +38,38 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--apply-legacy-merge", action="store_true",
-            help="Explicitly reassign idle legacy economic/factory tasks and retire old identities",
+            help="One approved, live-handoff-attested legacy executor per invocation",
         )
+        parser.add_argument("--legacy-agent-code", type=str, default=None)
+        parser.add_argument("--approval-grant-id", type=int, default=None)
 
     @transaction.atomic
     def handle(self, *args, **options):
         # Do not change the identity of an in-flight job: its original worker
         # might already have executed an irreversible effect. The entire seed
         # must fail atomically, without partially modifying ownership.
+        applying = bool(options["apply_legacy_merge"])
+        target_code = options.get("legacy_agent_code")
+        grant_id = options.get("approval_grant_id")
+        if applying:
+            if target_code not in LEGACY_EXECUTOR_CODES or type(grant_id) is not int or grant_id <= 0:
+                raise CommandError("UNIFIED_BOT_EXACT_LEGACY_AGENT_AND_APPROVAL_REQUIRED")
+        elif target_code is not None or grant_id is not None:
+            raise CommandError("UNIFIED_BOT_APPROVAL_ARGUMENTS_REQUIRE_APPLY")
+
         predecessors = list(Agent.objects.select_for_update().filter(
             code__in=LEGACY_EXECUTOR_CODES
         ).order_by("pk"))
-        if not options["apply_legacy_merge"] and any(
+        target = next((old for old in predecessors if old.code == target_code), None)
+        if applying and target is None:
+            raise CommandError("UNIFIED_BOT_EXACT_LEGACY_AGENT_NOT_FOUND")
+        if not applying and any(
             old.active or AgentTask.objects.filter(agent=old).exclude(
                 status__in=("completed", "failed", "cancelled")
             ).exists()
             for old in predecessors
         ):
-            raise CommandError(
-                "UNIFIED_BOT_LEGACY_MERGE_REQUIRES_EXPLICIT_APPLY"
-            )
+            raise CommandError("UNIFIED_BOT_LEGACY_MERGE_REQUIRES_EXPLICIT_APPLY")
         running = AgentTask.objects.filter(
             agent__code__in=LEGACY_EXECUTOR_CODES, status="running"
         ).order_by("pk").first()
@@ -63,6 +77,30 @@ class Command(BaseCommand):
             raise CommandError(
                 f"UNIFIED_BOT_MIGRATION_BLOCKED_RUNNING_TASK={running.pk}"
             )
+        # An --apply flag never permits retiring a previous executor alone.
+        # The receipt remains an internal gate; independently verified live
+        # scheduler and delivery evidence must precede its issuance.
+        if applying:
+            receipt = require_verified_handoff(target)
+            grant = ApprovalGrant.objects.select_for_update().select_related(
+                "approval"
+            ).filter(pk=grant_id).first()
+            if (
+                grant is None
+                or grant.actor_id != grant.approval.requested_by_id
+                or grant.approval.status != "approved"
+                or grant.approval.action_type != "merge_legacy_executor"
+                or grant.approval.target_type != "Agent"
+                or grant.approval.target_id != str(target.pk)
+            ):
+                raise CommandError("UNIFIED_BOT_EXACT_OWNER_APPROVAL_REQUIRED")
+            grant_scope = {
+                "action": "merge_legacy_executor",
+                "agent_code": target.code,
+                "canonical_bot_code": BOT_CODE,
+                "live_handoff_receipt": receipt.trace_id,
+            }
+
         capabilities = {}
         for code, name, description, risk in CAPABILITIES:
             obj, _ = AgentCapability.objects.update_or_create(
@@ -80,7 +118,7 @@ class Command(BaseCommand):
         # one bot. Its gateway still enforces each capability's risk snapshot.
         agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
 
-        for old in predecessors:
+        for old in ([target] if applying else []):
             old_code = old.code
             # A pending job may be moved only if its action is implemented in
             # the new bot. Unknown work must be reviewed, not lost/relabelled.
@@ -111,6 +149,12 @@ class Command(BaseCommand):
             historical_retained = AgentTask.objects.filter(
                 agent=old, status__in=("completed", "failed", "cancelled")
             ).count()
+            # Consume this exact one-time authorization in the same DB
+            # transaction; downstream errors roll back authorization and work.
+            try:
+                ApprovalService().authorize_grant(grant_id, grant_scope)
+            except ValueError as exc:
+                raise CommandError("UNIFIED_BOT_APPROVAL_GRANT_REJECTED") from exc
             queued_reassigned = queued.update(agent=agent)
             if old.active:
                 old.active = False
@@ -128,12 +172,18 @@ class Command(BaseCommand):
                                     "legacy_record_preserved": True,
                                     "historical_task_ownership_preserved": True,
                                     "terminal_tasks_retained": historical_retained,
-                                    "queued_tasks_reassigned": queued_reassigned},
+                                    "queued_tasks_reassigned": queued_reassigned,
+                                    "live_handoff_trace_id": receipt.trace_id,
+                                    "owner_approval_grant_id": grant_id},
                     "trace_id": f"mojtaba-merge-{old.pk}",
                 },
             )
 
+        remaining = Agent.objects.filter(
+            code__in=LEGACY_EXECUTOR_CODES, active=True
+        ).count()
         self.stdout.write(self.style.SUCCESS(
-            "Mojtaba.bot.ai is the sole economic/factory executor; "
-            "legacy worker rows retained inactive for audit."
+            f"CANONICAL_REGISTERED legacy_merged={int(applying)} "
+            f"legacy_active_rows_remaining={remaining} "
+            "source_changes_not_live_runtime_proof=true"
         ))
