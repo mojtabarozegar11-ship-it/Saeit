@@ -44,6 +44,10 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: python manage.py collectstatic --noinput
+      - name: Install mandatory Linux sandbox tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
       - name: Verify Linux namespace isolation prerequisites
         run: |
           set -eu

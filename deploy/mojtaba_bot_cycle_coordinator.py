@@ -18,11 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CYCLES = ("A", "B", "C", "D", "E")
-TARGET = 50
+TARGET_BY_CYCLE = {"A": 20, "B": 20, "C": 20, "D": 20, "E": 50}
 SUCCESS = "success"
+OBSERVED = "observed"
 BLOCKED = "blocked"
 FAILED = "failed"
-VALID = {SUCCESS, BLOCKED, FAILED}
+VALID = {SUCCESS, OBSERVED, BLOCKED, FAILED}
 
 
 def now() -> str:
@@ -73,12 +74,17 @@ def ensure_run(state: dict, cycle: str, requested: str | None) -> tuple[str, dic
     if rid not in runs:
         runs[rid] = {
             "cycle": cycle,
-            "target": TARGET,
+            "target": TARGET_BY_CYCLE[cycle],
             "started_at": now(),
             "closed_at": None,
             "actions": {},
         }
-    return rid, runs[rid]
+    run = runs[rid]
+    if run["cycle"] != cycle:
+        raise SystemExit("run_id belongs to another cycle")
+    # Preserve historical actions while correcting a legacy 50-for-all target.
+    run["target"] = TARGET_BY_CYCLE[cycle]
+    return rid, run
 
 
 def evidence_ok(evidence: list[str]) -> bool:
@@ -88,7 +94,7 @@ def evidence_ok(evidence: list[str]) -> bool:
 def cmd_start(args: argparse.Namespace) -> None:
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
-        print(json.dumps({"run_id": rid, "cycle": run["cycle"], "target": TARGET}, ensure_ascii=False))
+        print(json.dumps({"run_id": rid, "cycle": run["cycle"], "target": run["target"]}, ensure_ascii=False))
 
 
 def cmd_record(args: argparse.Namespace) -> None:
@@ -97,6 +103,8 @@ def cmd_record(args: argparse.Namespace) -> None:
         raise SystemExit(f"invalid status: {args.status}")
     if args.status == SUCCESS and not evidence_ok(evidence):
         raise SystemExit("success requires at least one non-empty evidence reference")
+    if args.status == SUCCESS and args.kind in {"repo_readonly", "cpanel_readonly"}:
+        raise SystemExit("read-only observations cannot count as successful actions")
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
         actions = run["actions"]
@@ -132,13 +140,14 @@ def cmd_summary(args: argparse.Namespace) -> None:
         result = {
             "run_id": rid,
             "cycle": run["cycle"],
-            "target": TARGET,
+            "target": TARGET_BY_CYCLE[run["cycle"]],
             "recorded": len(actions),
             "success": counts[SUCCESS],
+            "observed": counts[OBSERVED],
             "blocked": counts[BLOCKED],
             "failed": counts[FAILED],
-            "remaining": max(TARGET - counts[SUCCESS], 0),
-            "complete": counts[SUCCESS] == TARGET,
+            "remaining": max(TARGET_BY_CYCLE[run["cycle"]] - counts[SUCCESS], 0),
+            "complete": counts[SUCCESS] >= TARGET_BY_CYCLE[run["cycle"]],
             "closed_at": run["closed_at"],
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))

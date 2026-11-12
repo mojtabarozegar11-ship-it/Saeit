@@ -80,14 +80,14 @@ def main():
                                 text=True,capture_output=True,timeout=120)
             evidence=item.get("evidence",[])
             evidence=evidence+[f"exit_code:{proc.returncode}"]
-            status = "success" if proc.returncode == 0 else "failed"
+            status = "observed" if proc.returncode == 0 else "failed"
             record_action(args, item, status, evidence)
             results.append({"action_id":aid,"status":status,
                             "operation":operation,"evidence":evidence,
                             "output_tail":(proc.stdout+proc.stderr)[-1200:]})
         elif kind == "repo_readonly":
             ok, evidence, message = run_repo_readonly(item)
-            status = "success" if ok else "failed"
+            status = "observed" if ok else "failed"
             record_action(args, item, status, evidence)
             results.append({"action_id":aid,"status":status,"operation":item.get("operation"),
                             "evidence":evidence,"message":message})
@@ -97,11 +97,13 @@ def main():
             results.append({"action_id":aid,"status":"blocked",
                             "reason":"no approved adapter for action kind","kind":kind})
     successful=sum(x["status"]=="success" for x in results)
+    observed=sum(x["status"]=="observed" for x in results)
+    target=50 if args.cycle=="E" else 20
     report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"started_at":now(),
             "queued":len(queue),"processed":len(results),"successful":successful,
-            "target":50,"complete":successful==50,"results":results}
+            "observed":observed,"target":target,"complete":successful>=target,"results":results}
     print(json.dumps(report,ensure_ascii=False,indent=2))
-    if successful != 50:
+    if successful < target:
         return 2
     return 0
 
