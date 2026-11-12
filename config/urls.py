@@ -13,6 +13,12 @@ from core.product_seo_views import product_detail
 from core.mpw_trx_checkout_bridge import product_checkout as mpw_guest_checkout_bridge
 from core.mpw_trx_invoice_bridge import start_order as mpw_trx_invoice_start_bridge
 from core.mpw_trx_purchases_bridge import purchases as mpw_guest_purchases_bridge
+from core.mpw_trx_invoice_routes import (
+    show_invoice as mpw_show_invoice,
+    invoice_status as mpw_invoice_status,
+    reconcile_invoice as mpw_reconcile_invoice,
+    download_paid as mpw_download_paid,
+)
 from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
 from core.academy_views import (
@@ -72,6 +78,14 @@ urlpatterns = [
          name="mpw_trx_invoice_start"),
     path("commerce/trx-easy/purchases/", mpw_guest_purchases_bridge,
          name="mpw_guest_purchases"),
+    path("commerce/trx-easy/invoice/<str:invoice_id>/status/", mpw_invoice_status,
+         name="mpw_trx_invoice_status"),
+    path("commerce/trx-easy/invoice/<str:invoice_id>/reconcile/", mpw_reconcile_invoice,
+         name="mpw_trx_invoice_reconcile"),
+    path("commerce/trx-easy/invoice/<str:invoice_id>/", mpw_show_invoice,
+         name="mpw_trx_invoice_detail"),
+    path("commerce/trx-easy/download/<str:receipt_id>/", mpw_download_paid,
+         name="mpw_trx_paid_download"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
