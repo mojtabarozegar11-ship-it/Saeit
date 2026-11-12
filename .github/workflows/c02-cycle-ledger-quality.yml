@@ -13,6 +13,7 @@ on:
       - deploy/mojtaba_bot_cycle_receipt_bridge.py
       - deploy/mojtaba_bot_cycle_auditor.py
       - tests/test_c03_cycle_auditor.py
+      - 'runtime/cycle_receipts/**'
       - .github/workflows/c02-cycle-ledger-quality.yml
   workflow_dispatch:
 
@@ -34,6 +35,11 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check --quiet pytest
           python3 -m pytest --noconftest -q             tests/test_unified_c02_evidence_gate.py             tests/test_mojtaba_c02_coordinator_proof.py             tests/test_c02_worker_50_receipts.py tests/test_c03_cycle_receipt_bridge.py tests/test_c03_cycle_auditor.py
+
+      - name: Read-only reconciliation of all A-E committed receipts
+        run: |
+          python3 deploy/mojtaba_bot_cycle_auditor.py --out "$RUNNER_TEMP/mojtaba-five-cycle-audit.json"
+          python3 -c 'import json,os; r=json.load(open(os.environ["RUNNER_TEMP"]+"/mojtaba-five-cycle-audit.json")); print("VERIFIED ACTIONS IN LATEST A-E RUNS:",r["latest_round_verified_actions"],"/250"); [print(k,v["latest_run_success"],"/50",v["latest_run_id"]) for k,v in r["lanes"].items()]; assert not r["manifest_errors"], r["manifest_errors"]'
 
       - name: Assert no production secrets or external transfers
         run: |
