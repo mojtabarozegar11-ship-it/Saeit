@@ -141,7 +141,8 @@ jobs:
             fi
             exit 15
           fi
-          echo "MPW_CPANEL_AUDIT_TRANSPORT=$mode"
-          printf '%s\n' "$result"
-          grep -q '^MPW_LIVE_INVOICE_SOURCE_AUDIT=' <<< "$result"
-          echo 'MPW_LIVE_SOURCE_AUDIT=TRANSPORT_VERIFIED;READ_ONLY=TRUE;DEPLOYED=NO;PAYMENTS=0'
+          echo "MPW_CPANEL_AUDIT_TRANSPORT=$mode;READ_ONLY=TRUE;DEPLOYED=NO;PAYMENTS=0"
+          # SSH success is transport evidence, NOT invoice or commercial readiness.
+          # Never print unverified remote output; classify its bounded JSON instead.
+          printf '%s\n' "$result" | python3 -B \
+            scripts/mpw_live_invoice_source_audit_readonly_20261112.py --validate-report
