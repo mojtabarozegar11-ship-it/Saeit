@@ -10,6 +10,7 @@ on:
       - scripts/zomorod_business_genetics_readonly_preflight.sh
       - scripts/zomorod_business_homepage_invariant.sh
       - scripts/zomorod_business_public_surface_invariant.py
+      - scripts/zomorod_business_public_reference_audit.py
 permissions:
   contents: read
 concurrency:
@@ -158,4 +159,8 @@ jobs:
             exit 9
           }
           echo 'LIVE_PUBLIC_SURFACE=STABLE_READ_ONLY'
+          # Inspect homepage HTML/CSS visual references, without printing any paths.
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+            'python3 -B - report' < scripts/zomorod_business_public_reference_audit.py
+          echo 'LIVE_PUBLIC_REFERENCES=READ_ONLY_COMPLETE'
 
