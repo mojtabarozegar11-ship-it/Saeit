@@ -3,7 +3,7 @@
 No blockchain transaction, contract deployment or wallet operation is performed.
 An unspecified network/supply is deliberately rejected, never silently chosen.
 """
-from decimal import Decimal, InvalidOperation
+import re
 
 MOJONER_SUPPLY = 24_567_856
 MIN_OTHER_SUPPLY = 100_000_000_000
@@ -18,13 +18,11 @@ def validate_token(name, network, supply):
         raise ValueError("Network requires a documented, explicit selection")
     if isinstance(supply, bool) or not isinstance(supply, (int, str)):
         raise ValueError("Supply must be an exact whole-number integer")
-    try:
-        amount = Decimal(str(supply))
-    except InvalidOperation as exc:
-        raise ValueError("Invalid supply") from exc
-    if not amount.is_finite() or amount != amount.to_integral_value():
-        raise ValueError("Supply must be finite and integral")
-    amount = int(amount)
+    # No exponent, sign, separator or oversized decimal input: exact canonical units only.
+    raw = str(supply)
+    if len(raw) > 14 or re.fullmatch(r"(?:0|[1-9][0-9]*)", raw) is None:
+        raise ValueError("Supply must be a canonical decimal whole number")
+    amount = int(raw)
     if name == "Mojoner":
         if network.strip().lower() != "bitcoin" or amount != MOJONER_SUPPLY:
             raise ValueError("Mojoner requires Bitcoin and exactly 24567856 units")
