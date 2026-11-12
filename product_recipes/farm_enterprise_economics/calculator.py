@@ -127,8 +127,18 @@ def enterprise(entry):
     # user-supplied labels beginning with =, +, -, @ or Unicode variants as
     # formulas; nested line controls can also conceal a new spreadsheet row.
     # Require a Unicode letter/digit at the beginning and no C0 control codes.
-    if not name[0].isalnum() or any(ord(char) < 32 or ord(char) == 127 for char in name):
-        raise ValueError("enterprise name must start with a letter or digit and contain no control characters")
+    # Spreadsheet display attacks can use invisible bidirectional controls
+    # or Unicode line separators even when ordinary C0 controls are denied.
+    # Keep legitimate Persian zero-width non-joiner (U+200C) available.
+    bidi_controls = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
+    bidi_controls |= {0x200E, 0x200F, 0x061C}
+    unsafe = any(
+        ord(char) < 32 or ord(char) == 127 or ord(char) in bidi_controls
+        or ord(char) in {0x2028, 0x2029}
+        for char in name
+    )
+    if not name[0].isalnum() or unsafe:
+        raise ValueError("enterprise name must start with a letter or digit and contain no controls")
     quantity = decimal_number(entry.get("units_sold"), name + ".units_sold", min_value=0)
     unit_price = decimal_number(entry.get("unit_price"), name + ".unit_price", min_value=0)
     variable = decimal_number(entry.get("variable_cost_per_unit"), name + ".variable_cost_per_unit", min_value=0)
