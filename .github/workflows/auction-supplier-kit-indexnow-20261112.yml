@@ -1,0 +1,56 @@
+name: Notify IndexNow of published supplier kit and updated auction index
+on:
+  push:
+    branches: [ops/auction-seo-indexnow-346-349-20261112]
+    paths: [.github/workflows/auction-supplier-kit-indexnow-20261112.yml]
+permissions: {contents: read}
+jobs:
+  audit-submit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Validate live canonical pages and send one IndexNow batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/auction-supplier-indexnow-$GITHUB_RUN_ID"
+          mkdir -p "$d"
+          trap 'rm -rf "$d"' EXIT
+          key='f5e9e3dccc5c2511c452f26b011ec43e'
+          for path in auctions/ auctions/supplier-kit/ sitemap-auctions.xml robots.txt; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            status="$(curl -sSL --max-time 18 -o "$d/$name" -w '%{http_code}' "https://zomorodmelal.ir/$path" || true)"
+            test "$status" = 200
+          done
+          status="$(curl -sSL --max-time 18 -o "$d/key.txt" -w '%{http_code}' "https://zomorodmelal.ir/$key.txt" || true)"
+          test "$status" = 200 && test "$(tr -d '\r\n ' < "$d/key.txt")" = "$key"
+          python3 - "$d" "$key" <<'PY'
+          import pathlib,sys,json,xml.etree.ElementTree as ET
+          d=pathlib.Path(sys.argv[1]);key=sys.argv[2]
+          urls=['https://zomorodmelal.ir/auctions/','https://zomorodmelal.ir/auctions/supplier-kit/']
+          for code,url in (('auctions_',urls[0]),('auctions_supplier-kit_',urls[1])):
+              html=(d/code).read_text('utf-8','replace')
+              assert '<link rel="canonical" href="'+url+'">' in html
+              assert 'noindex' not in html.lower()
+              assert 'zomorodmelal@gmail.com' in html
+          robots=(d/'robots.txt').read_text('utf-8')
+          assert 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' in robots
+          root=ET.parse(d/'sitemap-auctions.xml')
+          found={v.text for v in root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
+          assert set(urls).issubset(found) and len(found)==6
+          payload={'host':'zomorodmelal.ir','key':key,'keyLocation':'https://zomorodmelal.ir/'+key+'.txt','urlList':urls}
+          (d/'payload.json').write_text(json.dumps(payload),encoding='utf-8')
+          print('LIVE_KIT_AND_INDEX=VERIFIED')
+          print('SITEMAP_SIX_URLS=VERIFIED')
+          print('OWNERSHIP_KEY=VERIFIED')
+          PY
+          code="$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json; charset=utf-8' --data-binary "@$d/payload.json" -o "$d/response" -w '%{http_code}' https://api.indexnow.org/indexnow || true)"
+          echo "INDEXNOW_NEW_KIT_BATCH_HTTP=$code"
+          case "$code" in
+            200) echo 'INDEXNOW_KIT_SUBMISSION=ACCEPTED';;
+            202) echo 'INDEXNOW_KIT_SUBMISSION=PENDING_VALIDATION';;
+            *) echo 'INDEXNOW_KIT_SUBMISSION=UNCONFIRMED';exit 1;;
+          esac
+          echo 'GOOGLE_INDEXING=NOT_CONFIRMED_BY_INDEXNOW'
+          echo 'PUBLIC_SITE_WRITES=NONE; EMAILS=NONE; PAYMENTS=NONE'
