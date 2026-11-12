@@ -39,7 +39,25 @@
     "after": "Pending execution; no outcome claimed",
     "evidence": [],
     "acceptance_criteria": "Runnable tested bundle, buyer value, license, buyer handoff, payments approved",
-    "requires_approval_for_publication": true
+    "requires_approval_for_publication": true,
+    "technical_progress": {
+      "status": "technical_unit_tests_passed_commercial_hold",
+      "assessed_at": "2026-11-12",
+      "source_file": "product_recipes/water_budget_economics/calculator.py",
+      "source_git_blob_sha": "f5b2a2eb3e63fd948c0f0de5e1bbcecd1ebaca8b",
+      "test_file": "product_recipes/water_budget_economics/test_calculator.py",
+      "test_git_blob_sha": "368fbe70e5e039f26c2a8770f8d4ede5f1e2ed8c",
+      "test_result": "15/15 offline unit tests passed on exact GitHub blob matched files",
+      "independent_receipt": "local execution receipt available in C02 conversation",
+      "buyer_acceptance_dossier": "deliverables/products/water_budget_economics/commercial_package.md",
+      "not_yet_verified": [
+        "license",
+        "payment",
+        "customer acceptance",
+        "public release"
+      ],
+      "counts_as_completed_sellable_product": false
+    }
   },
   {
     "action_id": "D-C02-AGRI-001",
