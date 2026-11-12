@@ -86,6 +86,7 @@ def compute_fingerprint(root: Path = PUBLIC_ROOT) -> tuple[str, int, int]:
             ):
                 raise ScopeError("ASSET_CHANGED_DURING_SCAN")
             digest.update(rel.encode("utf-8", errors="strict") + b"\0")
+            digest.update(stat.S_IMODE(actual.st_mode).to_bytes(2, "big"))
             while True:
                 part = source.read(BLOCK_SIZE)
                 if not part:
@@ -96,6 +97,13 @@ def compute_fingerprint(root: Path = PUBLIC_ROOT) -> tuple[str, int, int]:
                     or after.st_size != actual.st_size
                     or after.st_ctime_ns != actual.st_ctime_ns):
                 raise ScopeError("ASSET_CHANGED_DURING_READ")
+            if p.is_symlink():
+                raise ScopeError("ASSET_LINK_CHANGED_DURING_SCAN")
+            final = p.stat()
+            if (final.st_ino != after.st_ino or final.st_dev != after.st_dev
+                    or final.st_size != after.st_size
+                    or final.st_mtime_ns != after.st_mtime_ns):
+                raise ScopeError("ASSET_PATH_CHANGED_DURING_SCAN")
             digest.update(b"\0")
     return digest.hexdigest(), len(paths), cumulative
 
