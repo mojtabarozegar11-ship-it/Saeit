@@ -36,5 +36,16 @@ for (const level of [...Array(200)].map((_, index) => index + 1).concat([500, 99
   assert.equal(remaining.length, 0);
   tested++;
 }
+
+for (const [bad, expected] of [
+  [NaN, 1], [Infinity, 1], [-Infinity, 1], ['Infinity', 1],
+  [0, 1], [-500, 1], ['0.5', 1], [2.9, 2], [1e100, 1000000]
+]) {
+  const board = game.generate(bad);
+  assert.equal(board.level, expected, 'invalid or extreme level: ' + bad);
+  assert.ok(board.pieces.length >= 4);
+  assert.equal(game.solve(board.pieces, board.size).length, board.pieces.length);
+}
+
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });
