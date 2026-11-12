@@ -40,7 +40,7 @@
       "source_defined_seed_count": 11,
       "known_live_count": null,
       "proposed_route": "merge_all_as_canonical_internal_site_observability_adapters",
-      "execution_status": "read_only_php_registry_collector_committed_tested_not_run_on_live_cpanel",
+      "execution_status": "source_php_sqlite_immutable_and_status_redaction_tests_passed_no_live_cpanel_read",
       "prerequisites": [
         "read_only_private_sqlite_inventory",
         "cron_and_entrypoint_inventory",
@@ -65,7 +65,21 @@
         "findings_json",
         "secret_process_args",
         "raw_cron_commands"
-      ]
+      ],
+      "collector_status_whitelist": {
+        "runs": [
+          "ok",
+          "warning",
+          "error"
+        ],
+        "site_work_outputs": [
+          "review",
+          "blocked",
+          "failed"
+        ]
+      },
+      "collector_status_unexpected_values": "redacted_as_unexpected_status_preserving_aggregate_count",
+      "collector_connection_lifetime": "closed_after_read"
     },
     {
       "id": "factory_site_federation",
@@ -310,7 +324,8 @@
         "candidate_user_systemd_service_units",
         "candidate_system_systemd_service_units",
         "installed_source_sha256",
-        "cpanel_private_php_sqlite_known_roles_and_aggregate_run_counts"
+        "cpanel_private_php_sqlite_known_roles_and_aggregate_run_counts",
+        "fixed_allowlist_source_revision_comparison"
       ],
       "credentialed_workflow_trigger": "workflow_dispatch_only_after_review",
       "source_revision_state": "PR_draft_not_merged_or_deployed",
@@ -322,7 +337,7 @@
       "cpanel_known_app_process_inventory_attested": false,
       "actual_schedulers_inactive_verified": false,
       "agent_deactivation_authorized": false,
-      "code_tests_status": "123_focus_tests_passed_GitHub_Actions_43221247127",
+      "code_tests_status": "126_review_tests_passed_GitHub_Actions_43222214585",
       "completion_state": "host_probes_not_executed_no_live_disposition_claim",
       "blockers": [
         "workflow_only_manual_and_currently_in_draft_branch",
@@ -332,7 +347,9 @@
         "live_handoff_receipts_and_rollback_not_attested"
       ],
       "host_probe_execution": "not_dispatched",
-      "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts"
+      "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts",
+      "source_revision_comparison": "fixed_allowlist_file_sha256_vs_reviewed_PR_checkout_match_different_or_unknown_not_execution_proof",
+      "source_revision_comparison_test": "tests/test_mojtaba_live_topology_readonly.py::test_manual_two_host_summary_compares_only_allowlisted_source_digests"
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -365,7 +382,7 @@
     "weather_ai_publication_default_draft_committed": true,
     "one_bot_review_ci_workflow_committed": true,
     "one_bot_review_ci_passed": true,
-    "one_bot_review_ci_last_verified_sha": "73af538acd2776baa10e97488df5acc41f6ab876",
+    "one_bot_review_ci_last_verified_sha": "8b0349ef9a34c7c9112624a03048c6078d2b16f0",
     "weather_one_grant_per_approval_source_guard_committed": true,
     "all_integrated_runtime_tests_passed": false,
     "legacy_retirement_canonical_successor_mapping_committed": true,
@@ -382,6 +399,9 @@
     "cpanel_php_sqlite_read_only_collector_tested": true,
     "cpanel_php_sqlite_live_inventory_attested": false,
     "system_and_user_service_candidate_scan_committed": true,
-    "system_service_live_inventory_attested": false
+    "system_service_live_inventory_attested": false,
+    "two_host_source_revision_comparison_code_committed": true,
+    "two_host_source_revision_comparison_live_proven": false,
+    "cpanel_php_sqlite_status_redaction_tests_passed": true
   }
 }
