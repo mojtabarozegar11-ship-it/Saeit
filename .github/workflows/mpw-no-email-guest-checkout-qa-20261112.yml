@@ -11,6 +11,9 @@ on:
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_product_host_route.py'
+      - 'core/product_seo_views.py'
+      - 'core/templates/core/product_detail.html'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -34,6 +37,9 @@ on:
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/mpw_guest_checkout_live_release.py'
       - 'tests/test_mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_product_host_route.py'
+      - 'core/product_seo_views.py'
+      - 'core/templates/core/product_detail.html'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -75,6 +81,8 @@ jobs:
             services/mpw_trx_guest_commerce.py \
             scripts/mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_no_email_release.py \
+            tests/test_mpw_product_host_route.py \
+            core/product_seo_views.py \
             tests/test_mpw_onefile_release_gate.py \
             tests/test_mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
@@ -94,6 +102,7 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest -v \
             tests.test_mpw_guest_no_email_release \
+            tests.test_mpw_product_host_route \
             tests.test_mpw_onefile_release_gate \
             tests.test_mpw_guest_telemetry_isolation_20261108 \
             tests.test_mpw_recovery_guarded_release_20261105 \
