@@ -183,6 +183,23 @@ PHP_SITE_TABLES = frozenset({
 })
 
 
+def safe_sqlite_status_counts(connection: sqlite3.Connection, table: str) -> dict:
+    """Whitelist table/status names and aggregate all unexpected values."""
+    allowed = {
+        "runs": {"ok", "warning", "error"},
+        "site_work_outputs": {"review", "blocked", "failed"},
+    }
+    if table not in allowed:
+        raise ValueError("unknown aggregate status table")
+    aggregate = Counter()
+    for status, count in connection.execute(
+        "SELECT status, COUNT(*) FROM " + table + " GROUP BY status"
+    ):
+        key = status if status in allowed[table] else "unexpected_status"
+        aggregate[key] += int(count)
+    return dict(sorted(aggregate.items()))
+
+
 def cpanel_php_registry_snapshot(home: Path) -> dict:
     """Read the site's known private SQLite without making or mutating files.
 
@@ -253,21 +270,13 @@ def cpanel_php_registry_snapshot(home: Path) -> dict:
                 "agent_roles": known,
             }
             if "runs" in tables:
-                result["run_status_counts"] = {
-                    str(status) if status in {"ok", "warning", "error"}
-                    else "unexpected_status": int(count)
-                    for status, count in
-                    conn.execute("SELECT status, COUNT(*) FROM runs GROUP BY status")
-                }
+                result["run_status_counts"] = safe_sqlite_status_counts(
+                    conn, "runs"
+                )
             if "site_work_outputs" in tables:
-                result["recent_worker_output_status_counts"] = {
-                    str(status) if status in {"review", "blocked", "failed"}
-                    else "unexpected_status": int(count)
-                    for status, count in
-                    conn.execute(
-                        "SELECT status, COUNT(*) FROM site_work_outputs GROUP BY status"
-                    )
-                }
+                result["recent_worker_output_status_counts"] = (
+                    safe_sqlite_status_counts(conn, "site_work_outputs")
+                )
             result["missing_expected_tables"] = sorted(PHP_SITE_TABLES - tables)
             return result
     except (sqlite3.DatabaseError, OSError, ValueError, TypeError):
