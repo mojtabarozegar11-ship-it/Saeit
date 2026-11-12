@@ -1,0 +1,67 @@
+name: Verify published auctions directory and sitemap read-only
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auction-index-verification-20261112.yml]
+permissions: {contents: read}
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Verify current production bytes and preserved public pages (no write)
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/verify-auctions-index-$GITHUB_RUN_ID"
+          mkdir -p "$d"
+          trap 'rm -rf "$d"' EXIT
+          for path in auctions/ sitemap-auctions.xml auctions/346/ auctions/347/ auctions/348/ auctions/349/ sitemap.xml; do
+            name="$(echo "$path" | tr '/' '_')"
+            status="$(curl -sSL --max-time 18 -o "$d/$name" -w '%{http_code}' "https://zomorodmelal.ir/$path" || true)"
+            echo "PUBLIC_HTTP_$name=$status"
+            test "$status" = 200
+          done
+          site_root="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          test "$site_root" = 200
+          for name in index.html sitemap.xml; do
+            case "$name" in
+              index.html) source=public/auctions/index.html;live="$d/auctions_";;
+              sitemap.xml) source=public/auctions/sitemap.xml;live="$d/sitemap-auctions.xml";;
+            esac
+            want="$(sha256sum "$source" | cut -c1-64)"
+            actual="$(sha256sum "$live" | cut -c1-64)"
+            echo "SOURCE_$name=$want"
+            echo "LIVE_$name=$actual"
+            test "$want" = "$actual"
+          done
+          grep -Fq 'چهار فراخوان' "$d/auctions_" || grep -Fq '۴ فراخوان منتشرشده' "$d/auctions_"
+          grep -Fq 'بدون تعهد خرید یا پیش‌پرداخت' "$d/auctions_"
+          grep -Fq 'sitemap-auctions.xml' "$d/auctions_"
+          for n in 346 347 348 349; do
+            grep -Fq "href=\"/auctions/$n/\"" "$d/auctions_"
+            case "$n" in
+              346) expected=fe90e4da928518e159434e5081fc697113a45db64d71f4e8a862624125e561e5;;
+              347) expected=8a9ee8c30f0322643d1347569e713b917a80b721c1f15e6b5da09bdfb83c2dda;;
+              348) expected=9ad9d6e5838a3b642326207ee9854d90b24138bde19f6a46109169221b36a9b0;;
+              349) expected=93eb4af51f9e41c830224215e3fa29e54520fb11cc1185560af232f1cca4af99;;
+            esac
+            actual="$(sha256sum "$d/auctions_$n_" | cut -c1-64)"
+            test "$actual" = "$expected"
+            echo "NOTICE_$n=PRESERVED_BYTE_IDENTICAL"
+          done
+          python3 - "$d/sitemap-auctions.xml" <<'PY'
+          import sys,xml.etree.ElementTree as E
+          root=E.parse(sys.argv[1])
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          observed={v.text for v in root.findall('.//s:loc',ns)}
+          expected={'https://zomorodmelal.ir/auctions/'}|{f'https://zomorodmelal.ir/auctions/{n}/' for n in (346,347,348,349)}
+          assert observed==expected
+          print('SITEMAP_XML=FIVE_CORRECT_URLS')
+          PY
+          echo 'LIVE_AUCTIONS_INDEX=VERIFIED'
+          echo 'LIVE_AUCTIONS_SITEMAP=VERIFIED'
+          echo 'HOMEPAGE_AND_ORIGINAL_SITEMAP=200_PRESERVED'
+          echo 'PRODUCTION_WRITES=NONE'
