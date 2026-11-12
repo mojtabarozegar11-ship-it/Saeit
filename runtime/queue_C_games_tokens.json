@@ -1,5 +1,40 @@
 [
   {
+    "action_id": "C-C02-MOJCOIN-TRX-CONSISTENCY-FINALITY",
+    "item": "Moj Coin native TRX verification and purchase entitlement consistency",
+    "kind": "delivery_pending",
+    "status": "queued_not_executed",
+    "source_repository": "mojtabarozegar11-ship-it/Bazei",
+    "source_paths": [
+      "apps/games/mojcoin_api.py",
+      "apps/games/mojcoin_engine.py",
+      "apps/games/mojcoin_tron_verifier.py"
+    ],
+    "change": "Global on-chain tx reference uniqueness; atomic payment/entitlement persistence on failed actions; exact SUN amounts and irreversible TRON confirmation",
+    "before": "FullNode latest-head receipts and float conversion; action failure could discard session entitlement after CAPTURED",
+    "after": "Source patches and 2 regression suites committed to isolated branch; integrated execution pending",
+    "evidence": {
+      "api_source_commit": "efea5c881769fa2251ecedac75c9a7ee4258a786",
+      "engine_source_commit": "e7b9ed0972e5beb5da6187a1c5a86ad8e74a951a",
+      "solidity_verifier_commit": "0c89ee696783bafc0d13a39a36c426ebda465e30",
+      "test_files": [
+        "tests/test_moj_coin_payment_consistency_c02.py",
+        "tests/test_mojcoin_tron_finality_c02.py"
+      ],
+      "tests_status": "written_not_executed",
+      "reviewer_doc": "https://developers.tron.network/docs/confirmation-semantics"
+    },
+    "release_gate": {
+      "django_integration": false,
+      "isolated_tron_tests": false,
+      "database_concurrency": false,
+      "hosting_e2e": false,
+      "owner_approval": false
+    },
+    "revenue_received_verified": false,
+    "requires_approval_for_publication": true
+  },
+  {
     "action_id": "C-C02-MOJCOIN-ATOMIC-WORLD-REWARD-LEDGER",
     "item": "Moj Coin creator world and bank MOJ reward integrity",
     "kind": "delivery_pending",
