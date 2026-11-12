@@ -9,7 +9,10 @@ worker and owner approval gates.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
+import subprocess
 import os
 import sys
 import tempfile
@@ -88,6 +91,56 @@ def evidence_ok(evidence: list[str]) -> bool:
     return bool(evidence) and all(x.strip() for x in evidence)
 
 
+def verified_git_artifact(kind: str, evidence: list[str]) -> bool:
+    """A delivered source/file must exist in this checked-out Git commit.
+
+    This is not a journal-publication or payment adapter. Those require their
+    own independently validated proofs, not arbitrary evidence strings.
+    """
+    if kind not in {"source_change", "deliverable_created"}:
+        return False
+    try:
+        fields = {}
+        for item in evidence:
+            name, value = item.split(":", 1)
+            if name in fields:
+                return False
+            fields[name] = value
+        commit = fields.get("commit", "")
+        rel = fields.get("path", "")
+        digest = fields.get("sha256", "")
+        if (set(fields) != {"commit", "path", "sha256"}
+                or not re.fullmatch(r"[0-9a-fA-F]{40}", commit)
+                or not re.fullmatch(r"[0-9a-fA-F]{64}", digest)
+                or not rel):
+            return False
+        relative = Path(rel)
+        if relative.is_absolute():
+            return False
+        checkout = Path.cwd().resolve()
+        destination = (checkout / relative).resolve()
+        if not destination.is_relative_to(checkout) or not destination.is_file():
+            return False
+        if hashlib.sha256(destination.read_bytes()).hexdigest() != digest.lower():
+            return False
+        # The named commit must belong to the current checked-out history.
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+            cwd=checkout, capture_output=True, timeout=15,
+        )
+        if ancestor.returncode != 0:
+            return False
+        changed = subprocess.run(
+            ["git", "show", "--format=", "--name-only", "--no-renames",
+             commit, "--", relative.as_posix()],
+            cwd=checkout, capture_output=True, text=True, timeout=15,
+        )
+        paths = set(changed.stdout.splitlines())
+        return changed.returncode == 0 and relative.as_posix() in paths
+    except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
+        return False
+
+
 def cmd_start(args: argparse.Namespace) -> None:
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
@@ -103,11 +156,20 @@ def cmd_record(args: argparse.Namespace) -> None:
             raise SystemExit("inspection/unsupported kind cannot be successful delivery")
         if not evidence_ok(evidence):
             raise SystemExit("success requires at least one non-empty evidence reference")
+        if not verified_git_artifact(args.kind, evidence):
+            raise SystemExit("success requires verified Git commit + path + sha256 proof")
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
         actions = run["actions"]
-        if any(args.action_id in past.get("actions", {}) for past in state["runs"].values()):
-            raise SystemExit(f"duplicate action_id refused globally: {args.action_id}")
+        # A blocked/failed/observed action may be retried next cycle. Only a
+        # previously qualified SUCCESS permanently consumes that identity.
+        if args.action_id in actions:
+            raise SystemExit(f"duplicate action_id in same run: {args.action_id}")
+        if any(
+            past.get("actions", {}).get(args.action_id, {}).get("status") == SUCCESS
+            for past in state["runs"].values()
+        ):
+            raise SystemExit(f"previously completed action_id refused: {args.action_id}")
         actions[args.action_id] = {
             "item": args.item,
             "kind": args.kind,
