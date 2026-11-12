@@ -43,8 +43,15 @@ jobs:
           # Each host is independent: an unreachable cPanel does not erase a
           # successfully collected local VPS snapshot, or vice versa.
           vps_ok=0
-          if python3 deploy/mojtaba_live_topology_readonly.py --role vps > "$d/vps.jsonline" 2>"$d/vps.err"; then
+          # The observer intentionally requires githubops. The service account
+          # running the self-hosted runner is not implicitly that same user.
+          # Classify a mismatch before host reads; never print usernames or stderr.
+          if [[ "$(id -un)" != "githubops" ]]; then
+            echo "MOJTABA_VPS_OBSERVATION=wrong_host_user"
+          elif python3 deploy/mojtaba_live_topology_readonly.py --role vps > "$d/vps.jsonline" 2>"$d/vps.err"; then
             vps_ok=1
+          elif grep -Fqx "MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user" "$d/vps.err"; then
+            echo "MOJTABA_VPS_OBSERVATION=wrong_host_user"
           else
             echo "MOJTABA_VPS_OBSERVATION=failed_local_user_or_host_inventory"
           fi
@@ -130,6 +137,9 @@ jobs:
               --vps "$d/vps.jsonline" \
               --cpanel "$d/cpanel.jsonline" \
               --manifest runtime/mojtaba_bot_disposition_sources_v1.json
+            echo "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY"
           else
             echo "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof"
+            echo "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE"
+            exit 1
           fi
