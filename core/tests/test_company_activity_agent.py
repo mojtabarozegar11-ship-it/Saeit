@@ -87,7 +87,12 @@ class CompanyActivityAgentTests(TestCase):
         self.assertEqual(CompanyActivityAgentPlan.objects.count(), 0)
 
     def test_missing_canonical_never_provisions_second_bot_or_plan(self):
+        # Old migrations seed historical Agent rows in the CI database.
+        # Only assert that this command creates/reactivates none of them.
+        before = dict(Agent.objects.values_list("code", "active"))
+        self.assertNotIn(BOT_CODE, before)
         with self.assertRaisesRegex(CommandError, "MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED"):
             call_command("company_activity_agent_cycle")
-        self.assertEqual(Agent.objects.count(), 0)
+        self.assertEqual(dict(Agent.objects.values_list("code", "active")), before)
+        self.assertFalse(Agent.objects.filter(code=BOT_CODE).exists())
         self.assertEqual(CompanyActivityAgentPlan.objects.count(), 0)
