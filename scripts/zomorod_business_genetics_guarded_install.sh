@@ -70,6 +70,52 @@ free_bytes="$(df --output=avail -B1 "$private" | tail -n 1 | tr -d ' ')"
 [[ "$db_bytes" =~ ^[0-9]+$ && "$free_bytes" =~ ^[0-9]+$ ]] || exit 3
 (( free_bytes > db_bytes * 2 + 104857600 )) || { echo 'GUARD=insufficient_disk_for_backup' >&2; exit 3; }
 
+# Fail closed when free filesystem space is misleading: cPanel account quota is binding.
+python3 - "$db_bytes" <<'PY_QUOTA'
+import json
+import shutil
+import subprocess
+import sys
+
+required = int(sys.argv[1]) * 2 + 104857600
+cmd = shutil.which("uapi")
+if not cmd:
+    print("GUARD_CPANEL_QUOTA=UAPI_MISSING")
+    raise SystemExit(7)
+try:
+    process = subprocess.run(
+        [cmd, "--output=json", "Quota", "get_local_quota_info"],
+        capture_output=True, timeout=15, check=False,
+    )
+    if process.returncode or len(process.stdout) > 1000000:
+        raise ValueError("UAPI not verifiable")
+    document = json.loads(process.stdout)
+    result = document.get("result") if isinstance(document, dict) else None
+    if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+        raise ValueError("quota status unavailable")
+    data = result.get("data")
+    if not isinstance(data, dict):
+        raise ValueError("quota payload unavailable")
+    def numeric(value):
+        if type(value) is int:
+            return value if 0 <= value <= 10**15 else None
+        if isinstance(value, str) and value.isascii() and value.isdigit():
+            number = int(value)
+            return number if 0 <= number <= 10**15 else None
+        return None
+    limit = numeric(data.get("byte_limit"))
+    used = numeric(data.get("bytes_used"))
+    if limit is None or limit <= 0 or used is None or used > limit:
+        raise ValueError("quota numbers invalid")
+    if limit - used <= required:
+        print("GUARD_CPANEL_QUOTA=INSUFFICIENT")
+        raise SystemExit(7)
+    print("GUARD_CPANEL_QUOTA=VERIFIED_ENOUGH")
+except (OSError, ValueError, subprocess.TimeoutExpired):
+    print("GUARD_CPANEL_QUOTA=UNVERIFIED")
+    raise SystemExit(7)
+PY_QUOTA
+
 mkdir -p "$backup"
 chmod 700 "$backup"
 cp -p "$live_app" "$backup/app.php"
