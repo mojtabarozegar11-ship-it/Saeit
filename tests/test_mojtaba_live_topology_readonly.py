@@ -186,11 +186,12 @@ def test_manual_live_workflow_uses_existing_factory_runner_and_unique_push_gate(
     assert "  workflow_call:" in event_block
     assert "  pull_request:" not in event_block
     assert "  schedule:" not in event_block
-    # One exact reviewed main-branch self-trigger is intentionally temporary.
-    assert "  push:" in event_block
-    assert "    branches: [main]" in event_block
-    assert '      - ".github/workflows/mojtaba-live-topology-readonly.yml"' in event_block
-    assert "audit: run one-time selfhosted read-only cPanel and VPS inventory" in workflow
+    # The reviewed one-shot completed. No push-based access to SSH secrets remains.
+    assert "  push:" not in event_block
+    assert "  pull_request:" not in event_block
+    assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in workflow
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "audit: run one-time selfhosted read-only cPanel and VPS inventory" not in workflow
     assert "runs-on: [self-hosted, factory-vps]" in workflow
     assert "ProxyJump" not in workflow
     assert "ssh -T -i" in workflow

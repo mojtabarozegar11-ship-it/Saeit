@@ -1,0 +1,49 @@
+{
+  "schema": "mojtaba.bot.ai.host-observation-review.v1",
+  "observed_at_utc": "2026-11-12T15:43:50Z",
+  "source_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43250906722",
+  "source_job_id": 131296104933,
+  "environment": "factory-vps self-hosted GitHub Actions runner",
+  "observation_type": "read_only_aggregated_from_action_log_not_certified_live_bot_inventory",
+  "host_observations": {
+    "cpanel": {
+      "host_key": "previously_pinned_fingerprint_verified",
+      "ssh_execution": "succeeded",
+      "cron_state": "observed",
+      "cron_entries_observed": 31,
+      "process_state": "observed",
+      "known_route_process_indicators": 0,
+      "php_private_registry_state": "source_registry_snapshot_only",
+      "php_known_role_records": 11,
+      "php_enabled_records_not_live_bots": 11,
+      "installed_source_files_observed_not_execution_proof": 4,
+      "user_services_state": "unavailable",
+      "system_services_state": "unavailable",
+      "verified_live_agent_count": null
+    },
+    "vps": {
+      "selfhosted_local_probe_state": "unknown_no_snapshot",
+      "command_result_category": "failed_local_user_or_host_inventory",
+      "exact_failure_cause": "unverified",
+      "host_role_user_constraint_may_be_involved": true,
+      "verified_live_agent_count": null
+    }
+  },
+  "cross_host_disposition": "partial_host_observation_not_retirement_proof",
+  "source_defined_roles_not_actual_live_count": 21,
+  "source_groups": 9,
+  "enabled_php_records_are_not_unique_workers": true,
+  "no_known_process_indicators_does_not_prove_no_workers": true,
+  "whole_company_consolidation_pct": null,
+  "production_deployment_attested": false,
+  "historical_task_and_publication_receipts_reconciled": false,
+  "agent_retirements_authorized": false,
+  "actions_taken_on_production_services": "none",
+  "next_unverified_gate": [
+    "check_local_factory_runner_os_user_without_privilege_escalation",
+    "confirm_exact_vps_app_root_and_runner_access_read_only",
+    "reconcile Django Agent/AgentTask/NewsletterPublication from read_only_db",
+    "reconcile 31 cron entries and PHP 11 registered role outputs",
+    "prove execution receipts and legacy scheduler transition before case-specific owner approval"
+  ]
+}

@@ -8,6 +8,7 @@ on:
       - "deploy/mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_disposition_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "tests/test_mojtaba_live_disposition_readonly.py"
       - ".github/workflows/mojtaba-live-topology-readonly.yml"
@@ -19,6 +20,7 @@ on:
       - "deploy/mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_disposition_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "tests/test_mojtaba_live_disposition_readonly.py"
       - ".github/workflows/mojtaba-live-topology-readonly.yml"
@@ -53,6 +55,7 @@ jobs:
         run: |
           python -m py_compile deploy/mojtaba_live_topology_readonly.py deploy/mojtaba_live_disposition_readonly.py
           python -m json.tool runtime/mojtaba_bot_disposition_sources_v1.json >/dev/null
+          python -m json.tool runtime/mojtaba_readonly_evidence_20261112_154350Z.json >/dev/null
       - name: Prove audit remains non-mutating, fail-closed and secrets-free
         run: |
           python -m pytest -q \
