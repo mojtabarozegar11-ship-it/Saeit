@@ -4,6 +4,7 @@ from django.db.models import F
 from core.economic_tool_pack import build_economic_gateway
 from core.models import AgentTask
 from core.worker_runner import WorkerRunner
+from core.unified_bot_identity import BOT_CODE, non_factory_task_scope
 
 
 class Command(BaseCommand):
@@ -37,11 +38,20 @@ class Command(BaseCommand):
         )
         runner = None
         for _ in range(limit):
+            in_flight = AgentTask.objects.filter(
+                agent__code=BOT_CODE, agent__active=True, status="running"
+            ).order_by("updated_at", "pk").first()
+            if in_flight:
+                self.stdout.write(
+                    f"WAIT_RUNNING task={in_flight.pk} "
+                    "prevents_parallel_execution=true revenue_not_assessed=true"
+                )
+                break
             # Never retry the same queued identity within this invocation.
             # A failed or re-queued task is left for the normal retry policy.
             task_query = (
                 AgentTask.objects.filter(
-                    agent__code="economic-master-agent",
+                    agent__code=BOT_CODE,
                     agent__active=True,
                     status="queued",
                     capability_code__in=supported,
@@ -57,8 +67,8 @@ class Command(BaseCommand):
                     raise CommandError("Explicit task is not queued with a matching registered economic tool")
                 if executed == 0:
                     unknown = AgentTask.objects.filter(
-                        agent__code="economic-master-agent", agent__active=True, status="queued",
-                    ).exclude(
+                        agent__code=BOT_CODE, agent__active=True, status="queued",
+                    ).filter(non_factory_task_scope()).exclude(
                         capability_code__in=supported, action_type=F("capability_code"),
                     ).order_by("created_at", "pk").first()
                     if unknown:

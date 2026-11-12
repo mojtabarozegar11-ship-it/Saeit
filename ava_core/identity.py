@@ -1,4 +1,3 @@
-"""The sole public identity used by the unified system."""
+"""Compatibility export from the one canonical identity."""
 
-BOT_ID = "mojtaba.bot.ai"
-
+from mojtaba_identity import BOT_ID

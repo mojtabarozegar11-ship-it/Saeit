@@ -9,12 +9,11 @@ from core.factory_f41_gateway import ACTION, ORDER, inspect_order, roots, build_
 from core.models import Agent, AgentTask
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
-
-PERMITTED = {"factory_native_review", ACTION}
-
+from core.unified_bot_identity import BOT_CODE
+from core.management.commands.seed_online_income_agents import ASSIGNMENTS
 
 class Command(BaseCommand):
-    help = "Build bounded private F41 orders through genuine moj_1ro_1 AgentTasks."
+    help = "Build bounded private F41 orders through Mojtaba.bot.ai AgentTasks."
 
     def add_arguments(self, parser):
         parser.add_argument("--execute", action="store_true")
@@ -51,10 +50,10 @@ class Command(BaseCommand):
             self.stdout.write("F41_MASTER_DRY_RUN=PASS")
             return
         with transaction.atomic():
-            agent = Agent.objects.select_for_update().filter(code="moj_1ro_1", active=True).first()
+            agent = Agent.objects.select_for_update().filter(code=BOT_CODE, active=True).first()
             if agent is None:
                 raise CommandError("F41_MASTER_AGENT_NOT_ACTIVE")
-            if set(agent.capabilities.filter(active=True).values_list("code", flat=True)) != PERMITTED:
+            if set(agent.capabilities.filter(active=True).values_list("code", flat=True)) != set(ASSIGNMENTS):
                 raise CommandError("F41_MASTER_AGENT_CAPABILITY_MISMATCH")
             cap = agent.capabilities.filter(code=ACTION, active=True, risk_level="low").first()
             if cap is None:

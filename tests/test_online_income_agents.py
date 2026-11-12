@@ -10,7 +10,7 @@ from django.core.management import call_command
 def test_seed_online_income_agents_is_idempotent_and_single_agent():
     call_command("seed_online_income_agents")
     call_command("seed_online_income_agents")
-    master = Agent.objects.get(code="economic-master-agent")
+    master = Agent.objects.get(code="mojtaba-bot-ai")
     assert master.active is True
     assert Agent.objects.filter(code__startswith="income-", active=True).count() == 0
     assert AgentCapability.objects.filter(code__startswith="income_").count() == 7
@@ -38,7 +38,7 @@ def test_registry_resolves_income_capability_to_master():
     call_command("seed_online_income_agents")
     agent = AgentRegistry().resolve("income_market_research")
     assert agent is not None
-    assert agent.code == "economic-master-agent"
+    assert agent.code == "mojtaba-bot-ai"
 
 
 @pytest.mark.django_db
@@ -56,7 +56,7 @@ def test_income_cycle_queues_exactly_one_concrete_task():
     tasks = AgentTask.objects.filter(capability_code="master_self_improvement")
     assert tasks.count() == 1
     task = tasks.get()
-    assert task.agent.code == "economic-master-agent"
+    assert task.agent.code == "mojtaba-bot-ai"
     assert task.input_data["execution_contract"]["must_execute_not_just_report"] is True
 
 

@@ -17,11 +17,17 @@ from core.management.commands.consolidate_legacy_agents import (
     LEGACY_AGENT_CODES, assess_agent,
 )
 from core.models import Agent, AgentTask
+from core.bot_identity import BOT_ID, summarize_internal_agent_registry
+from core.unified_bot_identity import (
+    BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES,
+    is_economic_capability, FACTORY_CAPABILITIES, module_for_capability,
+)
 
 
 EXECUTOR_SCOPES = {
-    "economic-master-agent": lambda code: code.startswith("income_") or code == "master_self_improvement",
-    "moj_1ro_1": lambda code: code in {"factory_native_review", "factory_f41_private_build"},
+    BOT_CODE: lambda code: is_economic_capability(code) or code in FACTORY_CAPABILITIES,
+    "economic-master-agent": is_economic_capability,
+    "moj_1ro_1": lambda code: code in FACTORY_CAPABILITIES,
 }
 
 
@@ -87,7 +93,19 @@ class Command(BaseCommand):
 
             agents.append({
                 "code": agent.code,
+                "public_bot_id": BOT_ID,
+                "identity_scope": "internal_component_record_only",
                 "active": agent.active,
+                "bot_owner": BOT_NAME,
+                "consolidation_state": (
+                    "single_bot_owner" if agent.code == BOT_CODE else
+                    "legacy_executor_inactive" if agent.code in LEGACY_EXECUTOR_CODES and not agent.active else
+                    "legacy_executor_migration_required" if agent.code in LEGACY_EXECUTOR_CODES else
+                    "internal_role_dependency_review_required"
+                ),
+                "capability_modules": {
+                    cap: module_for_capability(cap) for cap in active_caps
+                },
                 "capabilities": active_caps,
                 "known_registered_handlers": known_handlers,
                 "handler_coverage": "partial_known_scope" if known_scope else "not_assessed_other_runtime",
@@ -126,14 +144,25 @@ class Command(BaseCommand):
 
         result = {
             "mode": "read_only",
+            "single_bot_contract": summarize_internal_agent_registry(agents),
+            "canonical_bot": {"code": BOT_CODE, "name": BOT_NAME},
             "days": days,
             "live_scheduler_attested": False,
+            "full_consolidation_attested": False,
             "external_delivery_attested": False,
             "verified_revenue_attested": False,
             "note": "Django task receipts and handler registration do not prove execution on VPS or income.",
             "summary": {
                 "agents_total": len(agents),
                 "agents_active": sum(row["active"] for row in agents),
+                "noncanonical_active_agent_rows": sum(
+                    row["active"] and row["code"] != BOT_CODE for row in agents
+                ),
+                "unmapped_active_capabilities": sum(
+                    module == "unmapped_requires_adapter_review"
+                    for row in agents if row["active"]
+                    for module in row["capability_modules"].values()
+                ),
                 "agents_with_findings": sum(bool(row["findings"]) for row in agents),
                 "stale_running_tasks": sum(row["tasks"]["stale_running"] for row in agents),
                 "unsupported_known_queue_tasks": sum(
