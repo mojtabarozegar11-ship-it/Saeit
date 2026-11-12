@@ -448,3 +448,33 @@ def test_incomplete_two_host_inventory_fails_closed_not_green():
     assert "github.ref == 'refs/heads/main'" in workflow
     assert "secrets.VPS_SSH_PRIVATE_KEY" not in workflow
     assert "StrictHostKeyChecking=yes" in workflow
+
+
+
+def test_partial_dual_host_failure_exit_code_is_nonzero_offline():
+    """Exercise the actual fail-closed bash branch; never connect to either host."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    marker = '          if [[ "$vps_ok" == "1" && "$cpanel_ok" == "1" ]]; then'
+    assert workflow.count(marker) == 1
+    fragment = workflow.split(marker, 1)[1]
+    shell = (
+        "set -euo pipefail\n"
+        "vps_ok=0\n"
+        "cpanel_ok=1\n"
+        'if [[ "$vps_ok" == "1" && "$cpanel_ok" == "1" ]]; then\n'
+        + textwrap.dedent(fragment)
+    )
+    completed = subprocess.run(
+        ["bash", "-c", shell],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in completed.stdout
+    assert "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof" in completed.stdout
+    assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" not in completed.stdout
