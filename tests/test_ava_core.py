@@ -24,6 +24,13 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.ava.list_memories(), ())
         self.assertEqual(self.calls, [])
 
+    def test_binary_control_characters_cannot_enter_memory(self):
+        for bad in ("secret\\x00tail", "secret\\x1btail", "secret\\x7ftail"):
+            with self.subTest(bad=repr(bad)):
+                with self.assertRaisesRegex(ValueError, "forbidden control"):
+                    self.ava.remember(bad, consent=True)
+        self.assertEqual(self.ava.list_memories(), ())
+
     def test_no_implicit_memory_writes(self):
         self.ava.converse("سلام")
         self.assertEqual(len(self.ava.list_memories()), 0)
