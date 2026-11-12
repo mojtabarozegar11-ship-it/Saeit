@@ -9,7 +9,7 @@ import json
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from core.economic_tool_pack import build_economic_gateway
@@ -20,7 +20,7 @@ from core.models import Agent, AgentTask
 from core.bot_identity import BOT_ID, summarize_internal_agent_registry
 from core.unified_bot_identity import (
     BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES,
-    is_economic_capability, FACTORY_CAPABILITIES, module_for_capability,
+    is_economic_capability, FACTORY_CAPABILITIES, KNOWLEDGE_TASK, module_for_capability,
 )
 
 
@@ -121,10 +121,24 @@ class Command(BaseCommand):
                 if known_scope and cap in registered and known_scope(cap)
             )
             unsupported = None
+            known_specialist_queued = 0
             if known_scope:
-                unsupported = tasks.filter(status="queued").exclude(
+                supported_economic = Q(
                     capability_code__in=known_handlers,
                     action_type=F("capability_code"),
+                )
+                # The separate knowledge generator is the only documented
+                # specialist handler here. Its presence does NOT attest a
+                # paid grant, live executor, or successful generation.
+                known_knowledge = Q(
+                    action_type=KNOWLEDGE_TASK[0],
+                    capability_code=KNOWLEDGE_TASK[1],
+                ) if agent.code == BOT_CODE else Q(pk__in=[])
+                known_specialist_queued = tasks.filter(
+                    status="queued",
+                ).filter(known_knowledge).count()
+                unsupported = tasks.filter(status="queued").exclude(
+                    supported_economic | known_knowledge
                 ).count()
             findings = []
             if not agent.active and pending:
@@ -171,6 +185,7 @@ class Command(BaseCommand):
                     "published_newsletters_recent": recent_newsletters,
                     "stale_running": stale,
                     "queued_without_known_handler": unsupported,
+                    "queued_under_known_specialist_contract": known_specialist_queued,
                 },
                 "legacy_consolidation_decision": legacy,
                 "exact_role_duplicates": [],
@@ -237,6 +252,9 @@ class Command(BaseCommand):
                 "stale_running_tasks": sum(row["tasks"]["stale_running"] for row in agents),
                 "unsupported_known_queue_tasks": sum(
                     row["tasks"]["queued_without_known_handler"] or 0 for row in agents
+                ),
+                "known_specialist_queued_not_live_attested": sum(
+                    row["tasks"]["queued_under_known_specialist_contract"] for row in agents
                 ),
                 "retirement_candidates": sum(
                     row["legacy_consolidation_decision"] == "retire_safe" for row in agents
