@@ -20,6 +20,8 @@ on:
       - 'scripts/mpw_dynamic_store_cutover_20261108.py'
       - 'tests/test_mpw_dynamic_store_cutover_20261108.py'
       - 'tests/test_mpw_verified_catalog.py'
+      - 'scripts/mpw_owner_attested_sku_metadata_20261029.py'
+      - 'tests/test_mpw_owner_catalog_hash_reconciliation.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -52,6 +54,8 @@ on:
       - 'scripts/mpw_dynamic_store_cutover_20261108.py'
       - 'tests/test_mpw_dynamic_store_cutover_20261108.py'
       - 'tests/test_mpw_verified_catalog.py'
+      - 'scripts/mpw_owner_attested_sku_metadata_20261029.py'
+      - 'tests/test_mpw_owner_catalog_hash_reconciliation.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -100,6 +104,8 @@ jobs:
             scripts/mpw_dynamic_store_cutover_20261108.py \
             tests/test_mpw_dynamic_store_cutover_20261108.py \
             tests/test_mpw_verified_catalog.py \
+            scripts/mpw_owner_attested_sku_metadata_20261029.py \
+            tests/test_mpw_owner_catalog_hash_reconciliation.py \
             tests/test_mpw_onefile_release_gate.py \
             tests/test_mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
@@ -121,6 +127,7 @@ jobs:
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_product_host_route \
             tests.test_mpw_verified_catalog \
+            tests.test_mpw_owner_catalog_hash_reconciliation \
             tests.test_mpw_dynamic_store_cutover_20261108 \
             tests.test_mpw_onefile_release_gate \
             tests.test_mpw_guest_telemetry_isolation_20261108 \
