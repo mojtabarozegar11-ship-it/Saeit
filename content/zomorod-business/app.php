@@ -270,8 +270,12 @@ try {
                        ->execute([$geneticsTitle,'شرکت کشت و صنعت زمرد ملل','planned']);
                     audit($db,'register','genetics-project',(int)$db->lastInsertId());
                 }
-                $db->commit();
-            }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+                // BEGIN IMMEDIATE is an SQL-level transaction; use SQL commit for PDO-SQLite compatibility.
+                $db->exec('COMMIT');
+            }catch(Throwable $e){
+                try {$db->exec('ROLLBACK');}catch(Throwable $rollbackError){}
+                throw $e;
+            }
         } elseif($action==='project'){
             $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
             $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
