@@ -71,9 +71,46 @@ jobs:
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
           ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
-          timeout 18s ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2> /dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          cat > "$d/config" <<EOF
+          # Verify cPanel directly first. Never relax the pinned host identity.
+          mode=direct
+          if timeout 18s ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net \
+            > "$d/host.known" 2> /dev/null && test -s "$d/host.known"; then
+            actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+            if [ "$actual" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]; then
+              echo 'MPW_CPANEL_SSH=HOST_ID_MISMATCH_STOP'
+              exit 10
+            fi
+            cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+            echo 'MPW_CPANEL_DIRECT=HOST_ID_VERIFIED'
+          else
+            echo 'MPW_CPANEL_DIRECT=HOST_KEY_UNREACHABLE'
+            mode=relay
+            if ! timeout 18s ssh-keyscan -T 10 -t rsa 178.239.147.150 \
+              > "$d/vps.known" 2> /dev/null || ! test -s "$d/vps.known"; then
+              echo 'MPW_VPS_RELAY=PORT22_HOST_KEY_UNREACHABLE'
+              exit 11
+            fi
+            actual="$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+            if [ "$actual" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]; then
+              echo 'MPW_VPS_RELAY=HOST_ID_MISMATCH_STOP'
+              exit 12
+            fi
+            cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
             User githubops
@@ -96,14 +133,33 @@ jobs:
             ForwardAgent no
             RequestTTY no
           EOF
+            if ! timeout 38s ssh -T -F "$d/config" saeit-vps \
+                'timeout 15s ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' \
+                > "$d/host.known" 2> /dev/null; then
+              echo 'MPW_CPANEL_VIA_RELAY=HOST_KEY_UNREACHABLE'
+              exit 13
+            fi
+            actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+            if [ "$actual" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]; then
+              echo 'MPW_CPANEL_VIA_RELAY=HOST_ID_MISMATCH_STOP'
+              exit 14
+            fi
+            echo 'MPW_CPANEL_VIA_RELAY=HOST_ID_VERIFIED'
+          fi
           chmod 600 "$d/config"
-          timeout 38s ssh -T -F "$d/config" saeit-vps \
-            'timeout 15s ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' \
-            > "$d/host.known" 2> /dev/null
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
-          result="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+          if ! result="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
             'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
-            < scripts/mpw_live_invoice_source_audit_readonly_20261112.py)"
+            < scripts/mpw_live_invoice_source_audit_readonly_20261112.py 2> "$d/ssh-error")"; then
+            if grep -qi 'Permission denied' "$d/ssh-error"; then
+              echo 'MPW_REMOTE_AUDIT=SSH_AUTH_DENIED'
+            elif grep -Eqi 'timed out|Connection refused|No route to host|Network is unreachable' "$d/ssh-error"; then
+              echo 'MPW_REMOTE_AUDIT=NETWORK_UNREACHABLE'
+            else
+              echo 'MPW_REMOTE_AUDIT=UNVERIFIED_REMOTE_ERROR'
+            fi
+            exit 15
+          fi
+          echo "MPW_CPANEL_AUDIT_TRANSPORT=$mode"
           printf '%s\n' "$result"
           grep -q '^MPW_LIVE_INVOICE_SOURCE_AUDIT=' <<< "$result"
           echo 'MPW_LIVE_SOURCE_AUDIT=TRANSPORT_VERIFIED;READ_ONLY=TRUE;DEPLOYED=NO;PAYMENTS=0'
