@@ -58,8 +58,6 @@ ROUTES = (
     "mojtaba_bot",
     "mojtrade_observer",
     "mojcoin",
-    "mojtaba_bot_cycle_worker.py",
-    "mojtaba_bot_cycle_coordinator.py",
     "online_income_cycle",
     "run_economic_worker",
     "run_factory_worker",
