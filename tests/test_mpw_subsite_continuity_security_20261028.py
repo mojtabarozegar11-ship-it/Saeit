@@ -53,10 +53,8 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                         self.request, None, 302, "redirect", {}, url
                     )
 
-    def test_login_redirect_and_known_child_are_allowed(self):
+    def test_known_live_child_redirects_are_allowed(self):
         for url in (
-            guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
@@ -66,9 +64,17 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                 )
                 self.assertEqual(result.full_url, url)
 
-    def test_redirect_query_cannot_change_login_return_or_child_route(self):
+    def test_retired_picm_login_redirect_is_denied(self):
+        with self.assertRaises(guard.UnsafeRedirect):
+            guard.ScopedRedirect().redirect_request(
+                self.request, None, 302, "redirect", {},
+                guard.ORIGIN + "/picm/login/"
+            )
+
+    def test_login_redirect_and_untrusted_query_are_denied(self):
         rejected = (
             guard.ORIGIN + "/accounts/login/",
+            guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
             guard.ORIGIN + "/accounts/login/?next=https%3A%2F%2Fevil.example%2F",
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F999%2Fcheckout%2F",
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F&next=%2Fadmin%2F",
@@ -94,21 +100,43 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                         guard.get(url, attempts=1)
                     opener.assert_not_called()
 
-    def test_checkout_login_return_path_is_exact_and_product_specific(self):
+    def test_guest_checkout_requires_exact_page_and_working_email_invoice_form(self):
         for pk in guard.PROTECTED_PRODUCT_IDS:
-            expected = f"/store/product/{pk}/checkout/"
-            correct = guard.Check(guard.ORIGIN + expected,
-                guard.ORIGIN + "/accounts/login/?next=" +
-                guard.urllib.parse.quote(expected, safe=""), 200, 0.01)
-            with patch.object(guard, "get", return_value=(correct, b"")):
-                self.assertEqual(guard.check_authentication_gate(pk), correct)
-            for wrong_query in ("", "?next=%2Fstore%2Fproduct%2F999%2Fcheckout%2F",
-                                "?next=https%3A%2F%2Fevil.example%2F"):
-                wrong = guard.Check(guard.ORIGIN + expected,
-                    guard.ORIGIN + "/accounts/login/" + wrong_query, 200, 0.01)
-                with patch.object(guard, "get", return_value=(wrong, b"")):
-                    with self.assertRaisesRegex(RuntimeError, "return path"):
-                        guard.check_authentication_gate(pk)
+            path = f"/store/product/{pk}/checkout/"
+            url = guard.ORIGIN + path
+            html = (
+                '<html><head><title>Secure checkout</title></head><body>'
+                f'<form method="post" action="/commerce/trx-easy/start/{pk}/">'
+                '<input type="hidden" name="csrfmiddlewaretoken" value="test-token">'
+                '<input type="email" name="email" required>'
+                '<button type="submit">Create my TRX payment invoice</button>'
+                '</form></body></html>'
+            ).encode("utf-8")
+            check = guard.Check(url, url, 200, 0.01)
+            with self.subTest(pk=pk, state="valid"):
+                with patch.object(guard, "get", return_value=(check, html)):
+                    self.assertEqual(guard.check_guest_checkout(pk), check)
+            broken_pages = (
+                html.replace(b'required', b'optional'),
+                html.replace(b'type="email"', b'type="text"'),
+                html.replace(b'name="csrfmiddlewaretoken"', b'name="unused"'),
+                html.replace(b'type="submit"', b'type="button"'),
+                html.replace(b'method="post"', b'method="get"'),
+                html.replace(f'/start/{pk}/'.encode(), b'/start/999/'),
+                b'<html><body>Checkout is available</body></html>',
+            )
+            for invalid in broken_pages:
+                with self.subTest(pk=pk, state="broken-form", html=invalid[:70]):
+                    with patch.object(guard, "get", return_value=(check, invalid)):
+                        with self.assertRaisesRegex(RuntimeError, "no valid email-only"):
+                            guard.check_guest_checkout(pk)
+            for effective, status in ((guard.ORIGIN + "/accounts/login/?next=" + path, 200),
+                                      (guard.ORIGIN + "/store/", 200), (url, 404)):
+                redirected = guard.Check(url, effective, status, 0.01)
+                with self.subTest(pk=pk, state="wrong-location", effective=effective):
+                    with patch.object(guard, "get", return_value=(redirected, html)):
+                        with self.assertRaisesRegex(RuntimeError, "public URL"):
+                            guard.check_guest_checkout(pk)
 
     def test_redirect_hops_are_bounded(self):
         handler = guard.ScopedRedirect()
