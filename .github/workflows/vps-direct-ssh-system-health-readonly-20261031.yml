@@ -62,7 +62,15 @@ jobs:
             state="$(systemctl is-active "$unit" 2>/dev/null || true)"
             echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
           done
-          cron="$(crontab -l 2>/dev/null || true)"
+          # An unreadable crontab must not masquerade as an empty schedule.
+          cron_observed=0
+          if cron="$(crontab -l 2>/dev/null)"; then
+            cron_observed=1
+            echo "HEALTH_FACTORY_CRON_READ=observed"
+          else
+            cron=""
+            echo "HEALTH_FACTORY_CRON_READ=unavailable_fail_closed"
+          fi
           count="$(printf '%s\n' "$cron" | awk '!/^[[:space:]]*(#|$)/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
           # Presence of an active tagged Cron row is not itself evidence of a
           # paused scheduler. Retain the existing fail-closed count and label
@@ -173,6 +181,7 @@ jobs:
           if (( root_free_kib < 2097152 )); then echo "HEALTH_CRITICAL=root_disk_free_below_2GiB"; gate_fail=1; fi
           if (( root_inode_used_pct >= 95 )); then echo "HEALTH_CRITICAL=root_inodes_95pct_or_more"; gate_fail=1; fi
           if (( ram_available_mb < 512 )); then echo "HEALTH_CRITICAL=ram_available_below_512MiB"; gate_fail=1; fi
+          if (( cron_observed != 1 )); then echo "HEALTH_CRITICAL=factory_crontab_unavailable"; gate_fail=1; fi
           if (( count > 0 )); then echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi
           ssh_active="$(systemctl is-active ssh 2>/dev/null || true)"
           sshd_active="$(systemctl is-active sshd 2>/dev/null || true)"
