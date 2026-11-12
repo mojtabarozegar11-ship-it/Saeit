@@ -1,0 +1,84 @@
+name: Auction 346 isolated cPanel publication preflight
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-346-20261112
+    paths:
+      - .github/workflows/auction-346-isolated-preflight.yml
+permissions:
+  contents: read
+concurrency:
+  group: auction-346-isolated-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Create direct pinned cPanel transport
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/auction-346-pinned"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$fingerprint" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "bash -se" <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          echo "LIVE_USER=verified"
+          app="$HOME/Saeit"
+          root="$HOME/public_html"
+          for f in "$app/manage.py" "$app/config/urls.py" "$app/core/commerce_views.py" "$app/core/templates/core/auctions.html" "$root/.htaccess" "$root/auctions/index.html" "$root/auctions/346/index.html" "$root/static/site/company/company-logo.png"; do
+            if test -f "$f" && test ! -L "$f"; then
+              echo "EXISTS=$f"
+              sha256sum "$f" | cut -c1-90
+            else echo "MISSING=$f"; fi
+          done
+          if test -f "$app/config/urls.py"; then
+            if grep -Fq 'path("auctions/346/"' "$app/config/urls.py"; then echo "DJANGO_ROUTE_346=present"; else echo "DJANGO_ROUTE_346=missing"; fi
+          fi
+          if test -f "$app/core/commerce_views.py"; then
+            if grep -Fq 'def auction_346(' "$app/core/commerce_views.py"; then echo "DJANGO_VIEW_346=present"; else echo "DJANGO_VIEW_346=missing"; fi
+          fi
+          if test -f "$root/.htaccess"; then
+            grep -E '^(Passenger|Rewrite(Engine|Cond|Rule)|Options)' "$root/.htaccess" | head -25 | sed 's/^/HOST_RULE=/'
+          fi
+          echo "LIVE_STORAGE_FREE_BYTES=$(df -PB1 "$HOME" | awk 'NR == 2 {print $4}')"
+          REMOTE
+          for path in /auctions/ /auctions/346/ /static/site/company/company-logo.png; do
+            http="$(curl -sSL --max-time 15 --output "$RUNNER_TEMP/auction-346-http.body" --write-out '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PUBLIC_STATUS=$path $http"
+            if test "$http" = 200 && [[ "$path" == "/auctions/346/" ]]; then
+              grep -Fq 'مزایده شماره ۳۴۶' "$RUNNER_TEMP/auction-346-http.body" && echo "PUBLIC_NOTICE_BODY=verified" || echo "PUBLIC_NOTICE_BODY=not_seen"
+            fi
+          done
+          echo "CPANEL_PREFLIGHT_WRITES=NONE"
