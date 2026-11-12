@@ -15,6 +15,10 @@ import json
 import math
 from pathlib import Path
 
+from trading.mojtrade_market_sessions import (
+    SessionGapError, load_closure_claims, reconcile_gaps,
+)
+
 FIELDS = ("timestamp_utc", "bid_open", "bid_high", "bid_low", "bid_close",
           "ask_open", "ask_high", "ask_low", "ask_close")
 STRATEGIES = ("ema_8_21", "ema_13_34", "breakout_20", "mean_revert_20")
@@ -57,7 +61,7 @@ class Bar:
         return (getattr(self, "b" + component) + getattr(self, "a" + component)) / 2
 
 
-def parse_bars(path: Path, timeframe: int):
+def parse_bars(path: Path, timeframe: int, closure_claims=None):
     if path.is_symlink() or not path.is_file():
         raise ResearchError("source_not_regular_or_symlink")
     sha = hashlib.sha256()
@@ -91,15 +95,21 @@ def parse_bars(path: Path, timeframe: int):
                     or not al <= min(ao, ac) <= max(ao, ac) <= ah
                     or any(x > y for x, y in ((bo, ao), (bh, ah), (bl, al), (bc, ac)))):
                 raise ResearchError("crossed_or_impossible_bid_ask")
+            if int(at.timestamp()) % (timeframe * 60):
+                raise ResearchError("quote_timestamp_timeframe_misaligned")
             if bars:
                 delta = (at - bars[-1].time).total_seconds()
-                if delta != timeframe * 60:
+                if delta <= 0 or delta % (timeframe * 60):
                     raise ResearchError("missing_duplicate_or_out_of_order_bar")
             bars.append(Bar(at, *values))
     except UnicodeDecodeError as exc:
         raise ResearchError("source_not_utf8") from exc
     if len(bars) < MIN_BARS:
         raise ResearchError("insufficient_chronological_bars")
+    try:
+        reconcile_gaps(bars, timeframe, closure_claims or [])
+    except SessionGapError as exc:
+        raise ResearchError(str(exc)) from exc
     return bars, sha.hexdigest()
 
 
@@ -250,6 +260,7 @@ def simulate(bars, data, cfg, strategy, start, end):
     day_start_equity = equity
     current_day = None
     skipped_minimum_size = 0
+    stale_signals_discarded_at_market_reopen = 0
     for i in range(start, end):
         bar = bars[i]
         day = bar.time.date()
@@ -257,6 +268,14 @@ def simulate(bars, data, cfg, strategy, start, end):
             current_day = day
             realized_today = 0
             day_start_equity = equity
+        # A Friday close or pre-holiday closed-bar signal cannot be filled at
+        # Monday's first quote as if the intervening market were liquid.
+        if (
+            i > start and pending is not None
+            and (bar.time - bars[i-1].time).total_seconds() != cfg.timeframe_minutes * 60
+        ):
+            pending = None
+            stale_signals_discarded_at_market_reopen += 1
         if position is None and pending is not None and equity > 0:
             side, stop_distance = pending
             pending = None
@@ -330,6 +349,7 @@ def simulate(bars, data, cfg, strategy, start, end):
         "stops": sum(t["reason"] in ("stop", "gap_stop") for t in trades),
         "gap_stops": sum(t["reason"] == "gap_stop" for t in trades),
         "skipped_minimum_size": skipped_minimum_size,
+        "stale_signals_discarded_at_market_reopen": stale_signals_discarded_at_market_reopen,
         "entry_is_next_bar": True,
         "intrabar_stop_first_if_both_touched": True,
         "result_type": "unverified_historical_simulation_not_realized_profit",
@@ -393,12 +413,21 @@ def main():
     parser = argparse.ArgumentParser(description="MojTrade real-quote research — no broker operations")
     parser.add_argument("--bid-ask-csv", required=True, type=Path)
     parser.add_argument("--settings-json", required=True, type=Path)
+    parser.add_argument("--session-closures-json", type=Path,
+                        help="Optional broker-specific claimed closures; not independently authenticated")
     parser.add_argument("--report-json", type=Path)
     args = parser.parse_args()
     try:
         cfg = Settings.load(args.settings_json)
-        bars, digest = parse_bars(args.bid_ask_csv, cfg.timeframe_minutes)
+        claims, calendar_sha = (
+            load_closure_claims(args.session_closures_json, cfg.timeframe_minutes)
+            if args.session_closures_json else ([], None)
+        )
+        bars, digest = parse_bars(args.bid_ask_csv, cfg.timeframe_minutes, claims)
         report = evaluate(bars, digest, cfg)
+        report["market_closure_claims_used"] = len(claims)
+        report["market_closure_manifest_sha256"] = calendar_sha
+        report["market_closure_broker_origin_verified"] = False
         rendered = json.dumps(report, sort_keys=True, indent=2, allow_nan=False)
         if args.report_json is not None:
             # Avoid publishing account data or research in a public site directory.
@@ -409,7 +438,7 @@ def main():
             destination.write_text(rendered + "\n", encoding="utf-8")
         else:
             print(rendered)
-    except (ResearchError, OSError) as exc:
+    except (ResearchError, SessionGapError, OSError) as exc:
         parser.exit(2, f"MOJTRADE_OOS_REJECTED: {exc}\n")
 
 
