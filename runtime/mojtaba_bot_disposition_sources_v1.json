@@ -251,7 +251,12 @@
       "paid_model_default": "no grant means no paid weather model invocation",
       "paid_generated_articles_publication_policy": "draft_only_pending_owner_review",
       "review_ci_workflow": ".github/workflows/mojtaba-one-bot-review-ci.yml",
-      "review_ci_test_file": "core/tests/test_weather_paid_grants.py"
+      "review_ci_test_file": "core/tests/test_weather_paid_grants.py",
+      "paid_approval_multiplicity_policy": "first_grant_per_approved_request_only; a new payable model call needs a new owner approval request",
+      "research_publication_mode": "draft_not_published_until_separate_review",
+      "review_ci_last_proven_run_id": 43214757203,
+      "review_ci_last_proven_result": "95_passing_after_test_baseline_fix",
+      "ci_latest_head_result": "pending_further_approval_multiplicity_regression"
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -283,6 +288,9 @@
     "weather_paid_grant_source_guard_committed": true,
     "weather_ai_publication_default_draft_committed": true,
     "one_bot_review_ci_workflow_committed": true,
-    "one_bot_review_ci_passed": null
+    "one_bot_review_ci_passed": true,
+    "one_bot_review_ci_last_verified_sha": "16d85abcef4c26e848dd8c1e6374e336467832e7",
+    "weather_one_grant_per_approval_source_guard_committed": true,
+    "all_integrated_runtime_tests_passed": false
   }
 }
