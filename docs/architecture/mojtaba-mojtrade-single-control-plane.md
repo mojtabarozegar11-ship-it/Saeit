@@ -31,6 +31,18 @@ Each has separate evidence and a separate release gate.
 6. Execution is **always disabled**; reported orders and realized revenue
    are zero/unverified. There are no external broker calls, fees,
    network market fetches, token spends, or public signal writes in this adapter.
+7. `mojtrade_strategy_risk.py` now generates a versioned, deterministic
+   research-only strategy classification and SHA-256 decision digest for
+   two verified USD-quoted instruments. `watch_buy` and `watch_sell`
+   mean **monitor only**; they never become executable trade intent.
+   Its report is stored on the same canonical `AgentTask` receipt.
+8. The pure `assess_account_risk_budget` calculates advisory loss
+   capacity with 0.25% equity per task, 2% maximum daily loss, and 1%
+   aggregate open-stop risk **only after receiving reconciled account
+   currency inputs**. It rejects NaN, unbounded, missing, float or
+   out-of-range values, and always returns `execution_authorized=false`
+   and `order_quantity=null`. It does not claim account connection,
+   stop distance, spread, margin, volume sizing, OOS success, or P&L.
 
 The existing public-market observer still owns upstream data fetching.
 Its cron/systemd status and actual VPS runtime are **not proven** by draft
