@@ -8,6 +8,18 @@ if (!defined('APP_TITLE') || !function_exists('esc')) {
     http_response_code(403);
     exit;
 }
+// Viewing this dossier is read-only. Only the separate, CSRF-protected admin POST writes a project metadata row.
+$geneticsTitle='ZM-AGRC-GEN-1405-001 | مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل';
+$geneticsProjectId=one($db,'SELECT id FROM projects WHERE title=? LIMIT 1',[$geneticsTitle]);
+if($geneticsProjectId!==false){
+    echo '<section class="notice"><strong>ثبت دفتر پروژه‌ها:</strong> ثبت‌شده با شناسه داخلی '.(int)$geneticsProjectId.'؛ وضعیت برنامه‌ریزی، بودجه مصوب صفر. سند حسابداری صادر نشده است.</section>';
+}elseif(role()==='admin'){
+    echo '<section><h2>ثبت رسمی در فهرست پروژه‌های شرکت</h2><p>این عملیات فقط یک ردیف برنامه‌ریزی با بودجه صفر ایجاد می‌کند؛ هزینه، فاکتور، پرداخت، قرارداد یا سند مالی ایجاد نمی‌کند. ثبت تکراری مجاز نیست.</p>';
+    formBegin('genetics_project_register');
+    echo '<button type="submit">ثبت یک‌باره طرح در دفتر پروژه‌ها</button></form></section>';
+}else{
+    echo '<section class="notice">این پرونده هنوز در جدول پروژه‌ها ثبت نشده است. فقط مدیر اصلی مجاز به ثبت آن است.</section>';
+}
 echo <<<'HTML'
 <section aria-labelledby="animal-genetics-title">
   <p class="muted">پرونده مدیریتی · ZM-AGRC-GEN-1405-001 · تهیه شده ۲۰ آبان ۱۴۰۵</p>
