@@ -1,0 +1,102 @@
+name: Audit live auctions index and sitemap before scoped update
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auction-index-live-audit-20261112.yml]
+permissions: {contents: read}
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Inspect current served auctions and sitemap without writes
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/auction-index-audit"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          home=Path('/home/zomorod2');root=home/'public_html';app=home/'Saeit'
+          checks=[root/'auctions/index.html',root/'auctions/.htaccess',root/'auctions/index.php',root/'zm-auctions/index.html',root/'index.html',root/'.htaccess',app/'core/templates/core/auctions.html',app/'core/commerce_views.py',app/'config/urls.py',app/'core/seo_views.py',app/'public/auctions/index.html']
+          for p in checks:
+              if p.is_file() and not p.is_symlink():
+                  raw=p.read_bytes()
+                  print('FILE='+str(p)+' SHA256='+hashlib.sha256(raw).hexdigest()+' SIZE='+str(len(raw)))
+                  if p.name=='.htaccess':
+                      for l in raw.decode('utf-8','replace').splitlines():
+                          if 'auction' in l.lower() or 'passenger' in l.lower() or l.startswith('RewriteRule ^'):
+                              print('RULE='+l[:250])
+                  if p.name=='auctions.html':
+                      print('TEMPLATE_AUCTIONS_PREVIEW='+raw[:1000].decode('utf-8','replace').replace('\n',' '))
+              else: print('FILE_MISSING='+str(p))
+          PY
+          python3 - "$d" <<'PY'
+          import sys
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          from urllib.error import HTTPError
+          from pathlib import Path
+          dest=Path(sys.argv[1])
+          class Parser(HTMLParser):
+              def __init__(self):super().__init__();self.links=[];self.title='';self.in_title=False;self.headings=[];self.in_h1=False;self.parts=[]
+              def handle_starttag(self,t,a):
+                  d=dict(a)
+                  if t=='a':self.links.append((d.get('href',''),d.get('class','')))
+                  if t=='title':self.in_title=True
+                  if t=='h1':self.in_h1=True
+              def handle_endtag(self,t):
+                  if t=='title':self.in_title=False
+                  if t=='h1':self.in_h1=False
+              def handle_data(self,d):
+                  if self.in_title:self.title+=d
+                  if self.in_h1:self.headings.append(d)
+                  if d.strip():self.parts.append(d.strip())
+          for path in ('/auctions/','/sitemap.xml','/auctions/346/','/auctions/347/','/auctions/348/','/auctions/349/'):
+              try:
+                  u='https://zomorodmelal.ir'+path
+                  with urlopen(Request(u,headers={'User-Agent':'ZomorodAuctionIndexReadOnlyAudit/1.0'}),timeout=18) as response:
+                      raw=response.read(300000);status=response.status
+                  print('HTTP='+path+' '+str(status)+' LEN='+str(len(raw)))
+                  print('PUBLIC_SHA256='+path+' '+__import__('hashlib').sha256(raw).hexdigest())
+                  if path=='/auctions/':
+                      a=Parser();a.feed(raw.decode('utf-8','replace'))
+                      print('AUCTIONS_TITLE='+a.title[:160])
+                      print('AUCTIONS_H1='+' '.join(a.headings)[:160])
+                      print('AUCTIONS_LINKS='+str(a.links[:100]))
+                      print('AUCTIONS_BODY_HEAD='+' '.join(a.parts)[:1200])
+                  if path=='/sitemap.xml':
+                      content=raw.decode('utf-8','replace')
+                      for n in ('346','347','348','349'):
+                          print('SITEMAP_AUCTION_'+n+'='+str('/auctions/'+n+'/' in content))
+                      print('SITEMAP_HEAD='+content[:300])
+              except Exception as exc:print('PUBLIC_AUDIT_ERROR='+path+' '+repr(exc)[:250])
+          PY
+          echo 'PRODUCTION_WRITES=NONE'
