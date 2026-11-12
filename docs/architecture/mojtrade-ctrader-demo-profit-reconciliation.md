@@ -118,3 +118,105 @@ Official cTrader references:
 - https://help.ctrader.com/ctrader-algo/references/Trading/History/History/FindAll/
 - https://help.ctrader.com/ctrader-algo/references/Trading/History/HistoricalTrade/
 - https://help.ctrader.com/ctrader/trading/history/
+
+## Exact second-source matching — added in this cycle
+
+A new guarded command compares the complete cTrader demo audit log with
+a **separately obtained and explicitly normalized cTrader account
+statement extract**. A cTrader native statement may be saved through
+the platform's History → Statement workflow. **The field names in the
+raw exported file vary by platform/version; it cannot be passed directly
+unless independently normalized and audited.** Never invent missing
+columns or economic values.
+
+The normalized UTF-8 CSV has **exactly** these columns in order:
+
+```csv
+deal_id,position_id,closed_utc,symbol,label,side,lots,gross,commission,swap,net,balance_after,currency
+```
+
+All amounts are in the account currency, not assumed to be USD. The
+closing timestamp must be UTC ISO-8601, including timezone, and each
+deal must correspond to a **closing** deal, not a pending order or an
+opening fill. Use the original `ClosingDealId`; never substitute
+`PositionId` or `OrderId` for it.
+
+The importer requires a third private metadata file
+`ctrader-statement-manifest.json` with this exact schema:
+
+```json
+{
+  "schema_version": 1,
+  "broker": "LiteFinance",
+  "account_mode": "demo",
+  "account_alias": "LITE_DEMO_1",
+  "account_currency": "USD",
+  "symbol": "XAUUSD",
+  "source": "ctrader_history_statement_export",
+  "full_label_history": true,
+  "statement_sha256": "REPLACE_WITH_SHA256_OF_EXACT_NORMALIZED_CSV_BYTES",
+  "exported_at_utc": "REPLACE_WITH_REAL_UTC_EXPORT_TIMESTAMP"
+}
+```
+
+Those values are an **illustrative template only**, not evidence of an
+actual connected account. `full_label_history` asserts that the
+export includes **every** deal for the selected label/symbol and
+relevant history period. If this cannot be verified, the scope
+claim is not supportable. A file hash detects edits and wrong-file
+mixups but **does not authenticate** a statement to a broker.
+
+Place these three files in the configured private directory:
+
+```text
+MOJTRADE_PRIVATE_DIR/
+  demo-audit.log
+  ctrader-statement-normalized.csv
+  ctrader-statement-manifest.json
+```
+
+Use `0700` on the containing directory and `0600` on every file.
+Never place account secrets or passwords in these files.
+
+**Offline cross-check, no Django changes or broker requests:**
+
+```bash
+python -m trading.mojtrade_broker_statement_check \
+  --demo-log /private/mojtrade/demo-audit.log \
+  --normalized-statement /private/mojtrade/ctrader-statement-normalized.csv \
+  --statement-manifest /private/mojtrade/ctrader-statement-manifest.json
+```
+
+**Record a canonical private receipt, only after the new code is
+independently deployed and the validated files actually exist:**
+
+```bash
+python manage.py mojtrade_statement_crosscheck_cycle
+```
+
+The canonical task `mojtrade_demo_audit_ingest` is idempotent on a
+composite SHA-256 of all three source files, and it records whether
+all closing deal IDs and each position, time, direction, quantity,
+gross, fees, swap, broker-native net and closing balance match.
+It explicitly **rejects** missing or extra closing deals, missing
+manifest evidence, a live account, wrong currency, mismatched label
+or malformed numeric values. The account must be verified to be a
+demo account using an additional direct broker/account check.
+
+The 0.01 account-currency per-deal tolerance exists solely for
+statement *rounding*; the all-deals net total must also match
+within 0.01. Do not add multiple overlapping full-history snapshots:
+they refer to the same historical deal set.
+
+**Limits of the verified work:** This cross-check operates on two
+copies of data potentially originating from the **same cTrader
+environment**. It proves internal agreement between extracts, not
+independent broker statement authenticity, source completeness,
+account-level deposit/withdrawal reconciliation or withdrawable
+profit. These remain *false* in the output until a separately
+authenticated source and official funding/transaction ledger are
+verified.
+
+Official references:
+- https://help.ctrader.com/ctrader/trading/history/
+- https://help.ctrader.com/ctrader-algo/references/Trading/History/HistoricalTrade/
