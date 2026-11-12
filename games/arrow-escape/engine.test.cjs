@@ -48,5 +48,12 @@ for (const [bad, expected] of [
   assert.equal(game.solve(board.pieces, board.size).length, board.pieces.length);
 }
 
+
+// Distinct pieces sharing an ID must never bypass collision checks or be solved.
+const duplicateA = {id: 7, dir: 0, path: [{x:0,y:0},{x:1,y:0}]};
+const duplicateB = {id: 7, dir: 0, path: [{x:2,y:0},{x:3,y:0}]};
+assert.equal(game.canExit(duplicateA, [duplicateA, duplicateB], 7), false);
+assert.equal(game.solve([duplicateA, duplicateB], 7), null);
+
 assert.ok(withBlockers > 10, 'levels contain no challenging dependencies');
 console.log('ARROW_SOLVABLE_LEVELS=PASS', { tested, withBlockers, min, max });
