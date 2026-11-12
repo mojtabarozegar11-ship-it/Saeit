@@ -79,23 +79,13 @@ def build_public_report(data):
     return '\n'.join(lines)
 
 
-def generate_research_contents(weather_summary, *, approval_grant_id=None):
-    """One owner-authorized model invocation; NEVER pay based on environment flags.
-
-    A grant must be explicitly issued to the exact weather date, model and
-    canonical robot identity. The grant is consumed before calling the model,
-    so errors or retries cannot trigger a second charge using the same grant.
-    """
-    if approval_grant_id is None:
-        return []
+def _validate_paid_weather_grant(approval_grant_id):
+    """Read-only preflight before forecast I/O; atomic consumption happens later."""
     if type(approval_grant_id) is not int or approval_grant_id <= 0:
         raise ValueError("WEATHER_INVALID_ONE_TIME_GRANT")
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
+    if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("WEATHER_PAID_MODEL_KEY_UNAVAILABLE")
-
     from .models import ApprovalGrant
-    from .approval import ApprovalService
 
     today = timezone.localdate().isoformat()
     model_id = os.getenv("OPENAI_WEATHER_CONTENT_MODEL", os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6"))
@@ -106,6 +96,7 @@ def generate_research_contents(weather_summary, *, approval_grant_id=None):
         or grant.approval.action_type != "weather_research_generation"
         or grant.approval.target_type != "MojtabaWeatherCycle"
         or grant.approval.target_id != today
+        or grant.actor_id != grant.approval.requested_by_id
     ):
         raise RuntimeError("WEATHER_PAID_GRANT_TARGET_NOT_APPROVED")
     required_scope = {
@@ -116,6 +107,27 @@ def generate_research_contents(weather_summary, *, approval_grant_id=None):
         "max_model_calls": 1,
         "max_articles": 2,
     }
+    if (
+        not isinstance(grant.scope, dict)
+        or any(grant.scope.get(k) != v for k, v in required_scope.items())
+        or grant.used_at is not None
+        or grant.expires_at <= timezone.now()
+    ):
+        raise RuntimeError("WEATHER_PAID_GRANT_INVALID_OR_CONSUMED")
+    return model_id, required_scope
+
+
+def generate_research_contents(weather_summary, *, approval_grant_id=None):
+    """Make at most one explicit, owner-approved and once-only paid model call.
+
+    No environment toggle, API key, or previous-day approval enables a charge.
+    The scope is rechecked then atomically consumed before the model request.
+    """
+    if approval_grant_id is None:
+        return []
+    model_id, required_scope = _validate_paid_weather_grant(approval_grant_id)
+    from .approval import ApprovalService
+    key = os.getenv("OPENAI_API_KEY")
     try:
         ApprovalService().authorize_grant(approval_grant_id, required_scope)
     except ValueError as exc:
@@ -140,6 +152,10 @@ def generate_research_contents(weather_summary, *, approval_grant_id=None):
 
 def run_daily_cycle(*, approval_grant_id=None):
     from .models import NewsletterSource, NewsletterStory
+    if approval_grant_id is not None:
+        # A missing, wrong-date, wrong-model or previously used paid grant must
+        # fail BEFORE network I/O, posting new weather stories or any other write.
+        _validate_paid_weather_grant(approval_grant_id)
     # Guard before fetching 31 external forecasts or generating any content.
     # Retained historical legacy records/receipts must be reconciled first.
     agent = canonical_owner_for("content-director")
