@@ -68,8 +68,7 @@ class ProductSeoTests(TestCase):
             product_type="Digital_Tool", price="12.00", currency="USD",
             active=True, metadata={
                 "summary": "Documented original digital tool",
-                "sales_enabled": True, "rights_cleared": True,
-                "publication_approved": True,
+                "rights_cleared": True, "publication_approved": True,
                 "sha256": sha, "rights_asset_sha256": sha,
                 "rights_document_sha256": "b" * 64,
             },
