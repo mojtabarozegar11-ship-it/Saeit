@@ -27,3 +27,29 @@ Date: 2026-11-12. **Draft artifacts, not deployed or submitted.**
 `tests/test_mpw_sitemap_release_candidates.py` verifies baseline derivation, 152-to-1 rejection, exact preservation of original image mapping, both added cover associations, origin/private-path safety, and exclusion of the unverified third cover.
 
 **No production deployments, template/CSS changes, tickets, emails, paid services, or Search Console requests were performed.**
+
+## 2026-11-12 follow-up: remove the dangerous single-page Django fallback contract
+
+Commits on this **Draft, unmerged** PR update `core/seo_views.py` and
+`core/tests/test_sitemap_host_policy.py`. The MojPlayWin Django fallback no
+longer emits a plausible HTTP-200 sitemap containing only `/store/`.
+Instead it reads the versioned, **historically reconstructed** 152-page XML
+snapshot from `docs/seo/evidence/mpw-public-152-page-reconstructed-baseline-20261112.xml`.
+The Django response validates standard XML, same-domain HTTPS loc values,
+unique URLs, a minimum of 152 pages, and inclusion of all three protected
+product pages (plus `/store/`).
+
+If the snapshot is missing, symlinked, oversized, incomplete, malformed,
+or from another hostname, the fallback returns **HTTP 503 with Retry-After**
+instead of quietly reducing discovery coverage to one page. The tests assert
+that the fallback contains 152 pages and fails closed on missing, one-page
+and cross-host snapshots. This is a **defensive last resort**, not a
+recommendation to substitute a static 2026-11-11 snapshot for the native
+dynamic cPanel/PHP sitemap. A 503 in production is itself a severe availability
+defect: **do not merge or deploy** until actual route ownership, artifact
+availability, and before/after live sitemap parity are proven.
+
+No changes were made to Zomorod's sitemap logic, public templates, CSS,
+commerce/payment flows, live sitemap, Google Search Console, or hosting.
+CI for the newly committed changes must be evaluated separately; do not
+inherit green checks from an earlier SHA.
