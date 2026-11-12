@@ -309,8 +309,8 @@ class RightsMetadataContract(unittest.TestCase):
             item.product.metadata=evidence()
             item.product.metadata.update(sha256=digest,rights_asset_sha256=digest)
             namespace['_private_file']=lambda row:source
-            with patch.dict(sys.modules,{'services.mpw_trx_commercial_context':rights}), \\
-                 patch.object(os,'fdopen',side_effect=record_fdopen):
+            with (patch.dict(sys.modules,{'services.mpw_trx_commercial_context':rights}),
+                  patch.object(os,'fdopen',side_effect=record_fdopen)):
                 response=handler(request,41)
                 self.assertEqual(response.stream.read(),approved)
                 self.assertEqual(response['Cache-Control'],'no-store, private')
