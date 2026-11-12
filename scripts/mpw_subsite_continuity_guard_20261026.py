@@ -2,8 +2,8 @@
 """Read-only HTTP continuity check for MojPlayWin and its protected child sites.
 
 The real sub-sites are URL prefixes beneath mojplaywin.com, not unverified
-hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ and
-/picm/ intentionally do not support HEAD.
+hostnames such as taniya.mojplaywin.com. Only public GET is used.
+The retired PICM path is never a required route.
 """
 
 from __future__ import annotations
@@ -53,9 +53,8 @@ REQUIRED_PATHS = (
     "/taniya/",
     "/studio.Roham/",
     "/zahra$$/",
-    "/picm/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -69,7 +68,7 @@ CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
 REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
-    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+    "/sitemap.xml", "/accounts/login/",
     *CHECKOUT_PATHS,
 })
 
@@ -136,6 +135,48 @@ class BasicHtml(HTMLParser):
             self.title += data.strip()
 
 
+class GuestCheckoutHtml(HTMLParser):
+    """Collect only bounded Boolean form indicators; never print buyer fields."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.forms = 0
+        self.email_controls = 0
+        self.csrf_found = False
+        self._in_button = False
+        self._button_text: list[str] = []
+        self.cta_found = False
+        self.email_copy_found = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        fields = {str(k).lower(): (v or "") for k, v in attrs}
+        if tag == "form":
+            self.forms += 1
+        if tag in ("input", "textarea", "select"):
+            name = fields.get("name", "").lower()
+            kind = fields.get("type", "").lower()
+            if "email" in name or kind == "email":
+                self.email_controls += 1
+            if tag == "input" and name == "csrfmiddlewaretoken":
+                self.csrf_found = True
+        if tag == "button" and fields.get("type", "submit").lower() == "submit":
+            self._in_button = True
+            self._button_text = []
+
+    def handle_data(self, data: str) -> None:
+        if "email address for your order" in data.lower():
+            self.email_copy_found = True
+        if self._in_button:
+            self._button_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "button" and self._in_button:
+            self._in_button = False
+            button_text = " ".join(" ".join(self._button_text).split()).lower()
+            if "create my trx payment invoice" in button_text:
+                self.cta_found = True
+
+
 @dataclass
 class Check:
     target: str
@@ -200,7 +241,7 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
 
 def check_site_page(path: str) -> Check:
     check, data = get(ORIGIN + path)
-    expected_final = ORIGIN + ("/picm/login/" if path == "/picm/" else path)
+    expected_final = ORIGIN + path
     parsed_final = urllib.parse.urlsplit(check.effective)
     # Optional query params added by the application are allowed. A route that
     # silently resolves to / or to an unrelated app is not considered healthy.
@@ -264,17 +305,22 @@ def check_sitemap() -> tuple[Check, int]:
     return check, len(urls)
 
 
-def check_authentication_gate(product_id: int) -> Check:
+def check_guest_checkout(product_id: int) -> Check:
+    """Fail closed until live checkout has a CSRF-protected email-free TRX form."""
+    if product_id not in PROTECTED_PRODUCT_IDS:
+        raise RuntimeError("Checkout product outside approved scope")
     path = f"/store/product/{product_id}/checkout/"
-    check, _ = get(ORIGIN + path)
-    landing = urllib.parse.urlsplit(check.effective)
-    if check.status != 200 or landing.scheme != "https" or landing.netloc != "mojplaywin.com":
-        raise RuntimeError(f"Checkout {product_id} resolved outside store: {check.effective}")
-    if landing.path != "/accounts/login/":
-        raise RuntimeError(f"Checkout {product_id} bypassed login: {check.effective}")
-    params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
-    if params != {"next": [path]}:
-        raise RuntimeError(f"Checkout {product_id} lost its exact post-login return path")
+    check, data = get(ORIGIN + path)
+    if check.status != 200 or check.effective != ORIGIN + path:
+        raise RuntimeError(f"Guest checkout {product_id} did not resolve to exact route")
+    if len(data) > 950000:
+        raise RuntimeError("Guest checkout response exceeds approved size")
+    parser = GuestCheckoutHtml()
+    parser.feed(data.decode("utf-8", "replace"))
+    if (parser.forms != 1 or parser.email_controls != 0
+            or parser.email_copy_found or not parser.csrf_found
+            or not parser.cta_found):
+        raise RuntimeError(f"Guest checkout {product_id} lacks email-free CSRF invoice form")
     return check
 
 
@@ -283,12 +329,12 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 6
+        assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
         assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
-        assert "/picm/" in REQUIRED_PATHS
+        assert "/picm/" not in REQUIRED_PATHS
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
@@ -296,11 +342,11 @@ def main() -> int:
 
     checks = [check_site_page(path) for path in REQUIRED_PATHS]
     sitemap, sitemap_count = check_sitemap()
-    auth_checks = [check_authentication_gate(pk) for pk in PROTECTED_PRODUCT_IDS]
+    checkout_checks = [check_guest_checkout(pk) for pk in PROTECTED_PRODUCT_IDS]
     results = {
         "main_and_child_pages": [asdict(check) for check in checks],
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
-        "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
+        "anonymous_guest_checkout_forms": [asdict(check) for check in checkout_checks],
         "protected_children": list(PROTECTED_CHILDREN),
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
@@ -314,7 +360,7 @@ def main() -> int:
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
-            summary.write("- Anonymous product checkout guards: 3 passed\n")
+            summary.write("- Anonymous CSRF-protected email-free TRX checkout forms: 3 passed\n")
             summary.write("- Server mutations: none\n")
     print("MPW_MAIN_AND_PROTECTED_CHILDREN_ALL_HEALTHY")
     return 0

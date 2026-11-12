@@ -18,6 +18,8 @@ on:
       - 'tests/test_mpw_recovery_guarded_release_20261105.py'
       - 'tests/test_mpw_guest_telemetry_isolation_20261108.py'
       - 'tests/test_mpw_email_recovery_20261105.py'
+      - 'scripts/mpw_subsite_continuity_guard_20261026.py'
+      - 'tests/test_mpw_subsite_continuity_security_20261028.py'
   pull_request:
     branches:
       - main
@@ -35,6 +37,8 @@ on:
       - 'tests/test_mpw_recovery_guarded_release_20261105.py'
       - 'tests/test_mpw_guest_telemetry_isolation_20261108.py'
       - 'tests/test_mpw_email_recovery_20261105.py'
+      - 'scripts/mpw_subsite_continuity_guard_20261026.py'
+      - 'tests/test_mpw_subsite_continuity_security_20261028.py'
 
 permissions:
   contents: read
@@ -68,7 +72,9 @@ jobs:
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
             tests/test_mpw_email_recovery_20261105.py \
             scripts/mpw_three_sku_preflight_20261029.py \
-            tests/test_mpw_three_sku_preflight_20261029.py
+            tests/test_mpw_three_sku_preflight_20261029.py \
+            scripts/mpw_subsite_continuity_guard_20261026.py \
+            tests/test_mpw_subsite_continuity_security_20261028.py
       - name: Run read-only offline guest and rollback unit tests
         env:
           PYTHONDONTWRITEBYTECODE: '1'
@@ -79,7 +85,8 @@ jobs:
             tests.test_mpw_onefile_release_gate \
             tests.test_mpw_guest_telemetry_isolation_20261108 \
             tests.test_mpw_recovery_guarded_release_20261105 \
-            tests.test_mpw_three_sku_preflight_20261029
+            tests.test_mpw_three_sku_preflight_20261029 \
+            tests.test_mpw_subsite_continuity_security_20261028
           python3 -B scripts/test_mpw_guest_first_order_identity.py
           python3 -B scripts/test_mpw_guest_route_patching.py
       - name: Confirm no production actions run
