@@ -88,11 +88,12 @@ def guard():
 
 
 def audit_invoice_email_dependencies() -> dict:
-    """Read-only fail-closed check of live invoice and delivery source files.
+    """Read-only indicator check for invoice code and reachable local helpers.
 
-    This is not a payment test. A remaining email dependency in the existing
-    invoice handler must be resolved *before* removing the buyer email field.
-    No customer rows, transactions or remote API calls are accessed.
+    Checks source only: it cannot prove that a live invoice or paid download
+    succeeds. Rejects hidden email references in helper functions called by
+    the invoice handlers, including email aliases in module-level constants.
+    External recorder implementations remain unverified, never assumed safe.
     """
     required = (
         "services/mpw_trx_commercial_web.py",
@@ -101,46 +102,94 @@ def audit_invoice_email_dependencies() -> dict:
     )
     inspected = []
     invoice_handlers = 0
+    inspected_functions = 0
+
+    def email_tokens(node, constant_aliases):
+        matches = []
+        for child in ast.walk(node):
+            if isinstance(child, ast.Name):
+                if "email" in child.id.lower():
+                    matches.append(child.id)
+                if "email" in constant_aliases.get(child.id, "").lower():
+                    matches.append(child.id)
+            elif isinstance(child, ast.Attribute) and "email" in child.attr.lower():
+                matches.append(child.attr)
+            elif isinstance(child, ast.Constant) and isinstance(child.value, str):
+                if "email" in child.value.lower():
+                    matches.append("string")
+            elif isinstance(child, ast.arg) and "email" in child.arg.lower():
+                matches.append(child.arg)
+            elif isinstance(child, ast.ImportFrom):
+                if "email" in (child.module or "").lower():
+                    matches.append("import")
+                if any("email" in alias.name.lower() for alias in child.names):
+                    matches.append("import")
+            elif isinstance(child, ast.Import):
+                if any("email" in alias.name.lower() for alias in child.names):
+                    matches.append("import")
+        return matches
+
     for rel in required:
         path = APP / rel
         raw = _file(path)
         try:
             tree = ast.parse(raw.decode("utf-8"))
-        except (SyntaxError, UnicodeError) as exc:
+        except (SyntaxError, UnicodeError):
             abort("INVOICE_SOURCE_UNREADABLE:" + path.name)
-        found = [
-            fn for fn in ast.walk(tree)
-            if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and fn.name in ("_start_order", "record_invoice")
-        ]
+
+        functions = {}
+        constant_aliases = {}
+        recorder_imports = set()
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                functions.setdefault(stmt.name, []).append(stmt)
+            elif isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Constant):
+                if isinstance(stmt.value.value, str):
+                    for target in stmt.targets:
+                        if isinstance(target, ast.Name):
+                            constant_aliases[target.id] = stmt.value.value
+            elif isinstance(stmt, ast.ImportFrom):
+                for alias in stmt.names:
+                    if alias.name == "record_invoice":
+                        recorder_imports.add(alias.asname or alias.name)
+
         if rel.endswith("mpw_trx_commercial_web.py"):
-            invoice_handlers = sum(fn.name == "_start_order" for fn in found)
-        for fn in found:
-            # Only the concrete invoice/recording functions count. Legacy
-            # recovery helpers elsewhere must not rewrite old order claims.
-            email_tokens = [
-                node.id for node in ast.walk(fn) if isinstance(node, ast.Name)
-                and "email" in node.id.lower()
-            ] + [
-                node.attr for node in ast.walk(fn) if isinstance(node, ast.Attribute)
-                and "email" in node.attr.lower()
-            ] + [
-                node.value for node in ast.walk(fn)
-                if isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and "email" in node.value.lower()
-            ] + [
-                arg.arg for arg in fn.args.args if "email" in arg.arg.lower()
-            ]
-            if email_tokens:
-                abort("INVOICE_EMAIL_DEPENDENCY:" + path.name + ":" + fn.name)
+            invoice_handlers = len(functions.get("_start_order", []))
+
+        roots = {"_start_order", "record_invoice"}
+        queue = list(roots.intersection(functions))
+        reached = set()
+        while queue:
+            name = queue.pop()
+            if name in reached:
+                continue
+            reached.add(name)
+            candidates = functions.get(name, [])
+            if len(candidates) != 1:
+                abort("DUPLICATE_INVOICE_HELPER:" + path.name + ":" + name)
+            fn = candidates[0]
+            inspected_functions += 1
+            if email_tokens(fn, constant_aliases):
+                abort("INVOICE_EMAIL_DEPENDENCY:" + path.name + ":" + name)
+
+            for call in ast.walk(fn):
+                if not isinstance(call, ast.Call):
+                    continue
+                if isinstance(call.func, ast.Name):
+                    callee = call.func.id
+                    if callee in recorder_imports:
+                        abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
+                    if callee in functions and callee not in reached:
+                        queue.append(callee)
         inspected.append(rel)
+
     if invoice_handlers != 1:
         abort("INVOICE_HANDLER_MISSING_OR_DUPLICATED")
     return {"invoice_sources_examined": len(inspected),
+            "invoice_functions_examined": inspected_functions,
             "invoice_handler_found": True,
             "email_dependency_in_examined_handlers": False,
-            "scope": "source_indicators_only_not_live_transaction"}
+            "scope": "reachable_source_indicators_only_not_live_transaction"}
 
 
 def patch_template(original: bytes) -> bytes:
