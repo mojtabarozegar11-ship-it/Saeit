@@ -206,10 +206,15 @@ def live() -> int:
         record.get("email_free_form_evidence") is True
         for record in report["products"].values()
     ) and len(report["products"]) == len(SKUS) and store_status == "OTHER" and report["store_http_200"]
-    # Even email-free pages do not establish payment finality and paid delivery.
+    # Form evidence is a necessary, never sufficient, prerequisite to sales.
+    report["form_gate"] = "PASS" if report["all_email_free_forms"] else "BLOCKED"
+    report["status"] = ("FORM_ONLY_VERIFIED_SALE_UNPROVEN"
+                        if report["all_email_free_forms"] else "BLOCKED_OR_UNVERIFIED")
     report["sale_proven"] = False
     print("MPW_3SKU_LIVE_FORM_READONLY=" + json.dumps(report, sort_keys=True))
-    return 0  # Diagnostic success does NOT mean the store is commercially ready.
+    # Fail closed: CI's green job must not conceal a blocked live form.
+    # Never equate a zero form-gate exit with a commercial paid-sale pass.
+    return 0 if report["all_email_free_forms"] else 3
 
 
 if __name__ == "__main__":
