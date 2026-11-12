@@ -8,6 +8,7 @@ on:
       - "content/zomorod-business/approvals.php"
       - "content/zomorod-business/genetics-center.php"
       - "scripts/zomorod_business_genetics_guarded_install.sh"
+      - "scripts/zomorod_business_genetics_readonly_preflight.sh"
       - ".github/workflows/zomorod-business-update.yml"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
@@ -19,6 +20,7 @@ on:
       - "content/zomorod-business/approvals.php"
       - "content/zomorod-business/genetics-center.php"
       - "scripts/zomorod_business_genetics_guarded_install.sh"
+      - "scripts/zomorod_business_genetics_readonly_preflight.sh"
       - ".github/workflows/zomorod-business-update.yml"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
@@ -43,6 +45,7 @@ jobs:
           php -l content/zomorod-business/approvals.php
           php -l content/zomorod-business/genetics-center.php
           bash -n scripts/zomorod_business_genetics_guarded_install.sh
+          bash -n scripts/zomorod_business_genetics_readonly_preflight.sh
           php -l content/zomorod-business/index.php
           python3 -m py_compile scripts/zomorod_business_synthetic_qa.py
           python3 -m py_compile scripts/zomorod_project_approval_snapshot.py tests/test_zomorod_approval_snapshot.py
