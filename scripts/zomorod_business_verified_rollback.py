@@ -110,6 +110,13 @@ def restore(
 
     live_app = private / "app.php"
     live_dossier = private / "genetics-center.php"
+    # Refuse an existing collision archive before moving any live file.
+    # This preflight avoids a partial quarantine if the second archive path
+    # was already occupied by another release/recovery attempt.
+    for label in ("app", "dossier"):
+        conflict = backup / ("concurrent-" + label + "-" + release_sha + ".php")
+        if os.path.lexists(conflict):
+            raise RestoreError("CONFLICT_ARCHIVE_ALREADY_EXISTS")
     quarantined = []
     def preserve_unexpected(live: Path, expected: set[str], label: str) -> None:
         if not os.path.lexists(live):
