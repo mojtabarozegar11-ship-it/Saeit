@@ -22,6 +22,7 @@ CAPABILITIES = [
     ("research-write-review", "Knowledge library draft generation", "Queue evidence-bound research drafts only. Paid model generation requires an explicit one-time owner grant; no automatic paid API call or publication.", "high"),
     ("content-editorial-draft", "Owner newsletter draft processing", "Transform a real queued owner submission into an internal review draft with provenance. No public publish, external messages or autonomous spending.", "low"),
     ("mojtrade_observation_ingest", "MojTrade private market research ingestion", "Read one existing private USD-market observation into the canonical bot task ledger, with idempotency and evidence. No broker, credential, order, signal publication or cash action.", "low"),
+    ("mojtrade_demo_audit_ingest", "MojTrade demo closed-deal evidence ingestion", "Validate and store a private cTrader demo History export under Mojtaba.bot.ai with native gross, commission, swap and net figures. No live account, funding, broker API or revenue claim.", "low"),
 ]
 
 MASTER_AGENT = (
