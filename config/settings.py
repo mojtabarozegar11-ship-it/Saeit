@@ -127,6 +127,7 @@ _mpw_sku_tokens = env.list(
 if (_mpw_sku_tokens and all(
         type(value) is str and value.isascii() and value.isdecimal()
         and 0 < int(value) <= 2_147_483_647
+        and value == str(int(value))  # Reject alias IDs such as 072.
         for value in _mpw_sku_tokens
     ) and len(set(_mpw_sku_tokens)) == len(_mpw_sku_tokens)):
     MPW_TRX_PUBLIC_PRODUCT_IDS = tuple(int(value) for value in _mpw_sku_tokens)
