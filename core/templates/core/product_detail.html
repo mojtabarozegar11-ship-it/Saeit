@@ -13,7 +13,12 @@
 <p>Category: {{ product.product_type }}</p>
 {% if can_list_offer %}
 <p>Listed price: {{ product.price }} {{ product.currency }}</p>
-<p>Availability and payment instructions are confirmed in the secure checkout. Never pay outside a verified invoice.</p>
+{% if checkout_url %}
+<p><a href="{{ checkout_url }}">Continue to secure TRX checkout</a></p>
+<p>Only pay the amount and address shown on your verified invoice. No email or account signup is required.</p>
+{% else %}
+<p>The secure TRX checkout is not yet verified for this product. Please do not send any funds.</p>
+{% endif %}
 {% else %}
 <p>Product information only. A verified checkout is not yet available for this listing.</p>
 {% endif %}
