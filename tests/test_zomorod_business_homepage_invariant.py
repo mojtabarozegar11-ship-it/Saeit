@@ -85,7 +85,7 @@ class HomepageInvariant(unittest.TestCase):
         self.assertLess(before, first_change)
         self.assertLess(first_change, after)
         self.assertLess(after, rollback_disable)
-        self.assertIn("BUSINESS_GENETICS_ROLLBACK=restored", install)
+        self.assertIn("BUSINESS_GENETICS_ROLLBACK=verified", install)
         self.assertIn("cat > '$stage/homepage-guard.sh'", workflow)
         self.assertNotIn("cat > /home/zomorod2/public_html", workflow)
         self.assertNotIn('mv -f "$private/.app.new-', workflow)
