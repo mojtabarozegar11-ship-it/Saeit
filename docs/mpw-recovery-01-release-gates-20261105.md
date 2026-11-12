@@ -1,3 +1,67 @@
+# MojPlayWin — current release contract: guest TRX checkout without email
+**Supersedes the archived email-recovery design below. Status: draft, not deployed. Updated 2026-11-12.**
+
+> CAUTION: The old `MPW-RECOVERY-01` email capture, SMTP authorization,
+> email claim migration, and email recovery activation sequence below is historical.
+> **Do not execute it** for the current no-email guest checkout release.
+> Keep it only as an audit trail. This section is the operative release policy.
+
+## Required customer experience
+
+- Buyers of products **72, 225, 879** can start a TRX invoice as guests with **no email field** (neither required nor optional) and without account signup or login.
+- CSRF protection and the existing secure invoice, TRON chain-finality, ledger,
+  fulfillment, product-rights and private-download authorizations remain in force.
+- A unique unprivileged password-disabled guest identity and signed HttpOnly/Secure
+  owner cookie are the candidate mechanism. Cookie presence **does not** prove a
+  settled payment; an invoice/receipt/download must remain independently authorized.
+- The owner cookie has a finite expiry and is browser-specific. If lost or expired,
+  private orders must **not** be revealed using only a public transaction hash,
+  order number, or claimed wallet address. Independent ownership verification and
+  a safe recovery procedure are still required before commercial readiness.
+- **PICM has been retired** and must not be in a required availability gate.
+
+## Evidence versus release status
+
+1. **GitHub tests** establish only candidate-code behavior. Green CI is neither
+   deployment evidence nor proof of sale.
+2. **GET-only live evidence** must establish a same-form POST action for each SKU,
+   a valid CSRF token, the invoice CTA and no email input. It must independently
+   flag the static storefront fallback. Public GET success is not payment proof.
+3. **Read-only cPanel contract inspection** must establish the *actual* deployed
+   Passenger app root, checkout template, guest adapter, invoice recorder
+   (`record_invoice` and all invoked external helpers), database schema,
+   and private rights/assets. Unknown code or any email-required invoice path
+   is a **hard stop**, not an invitation to bypass or relax a guard.
+4. **Backups and restore evidence** are required before mutation: private source
+   snapshots, consistent MariaDB backup, verified restore capacity, rollback
+   manifest and exact file hashes. Preserve existing orders and customers.
+5. **Preflight and staging** must use reviewed, hash-bound source and the intended
+   cPanel virtualenv, with zero live writes in preview. The separate
+   `scripts/mpw_guest_checkout_live_release.py` and
+   `scripts/mpw_guest_no_email_release.py` controllers have independent
+   contract checks; do not assume either is safe or applicable until the live
+   source baseline and operation order are verified.
+6. **Separate owner approval** is required for production deployment. After a
+   gated release, check the three public pages, CSRF-protected invoice POST in
+   an authorized controlled context, Passenger reload, no-email order creation,
+   TRX settlement finality, receipt ownership and private-download access.
+7. A genuine paid end-to-end test is a **separate, explicitly approved** action:
+   no fabricated payment, reused TX hash, wallet movement, email dispatch,
+   or assertion of revenue based on test-only invoices.
+8. Any failure triggers fail-closed diagnostics and, where applicable, only
+   hash-checked rollback from the exact private backup. Never erase order,
+   payment or fulfillment history.
+
+**Current outstanding gates:** cPanel invoice recorder and schema unverified;
+legacy email field reported on live product pages; live guest POST and paid
+receipt recovery unverified. PR #1890 remains a draft until these are resolved.
+No production deployment, database mutation, email or payment is authorized
+by these instructions.
+
+---
+
+## Archived specification — do not execute for current no-email policy
+
 # MPW-RECOVERY-01 — production release and rollback contract
 
 This change is **source-staged only**. The branch does not migrate, deploy,
