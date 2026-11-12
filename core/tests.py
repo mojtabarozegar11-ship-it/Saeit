@@ -179,6 +179,10 @@ class ContentDirectorSubmissionTests(TestCase):
 
     def setUp(self):
         self.publisher = User.objects.create_user(username="editor", password="safe-pass-123")
+        self.bot = Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Single bot",
+            active=True,
+        )
 
     def _submission(self):
         from .newsletter_models import NewsletterSubmission
@@ -190,7 +194,7 @@ class ContentDirectorSubmissionTests(TestCase):
             requested_publish_at=timezone.now() + timedelta(days=1),
         )
 
-    def test_first_real_submission_bootstraps_successor_and_stays_draft(self):
+    def test_first_real_submission_uses_canonical_bot_and_stays_draft(self):
         from .newsletter_engine import process_submission
         from .newsletter_models import NewsletterSchedule, NewsletterStory
 
@@ -199,7 +203,8 @@ class ContentDirectorSubmissionTests(TestCase):
         self.assertFalse(Agent.objects.filter(code="content-director").exists())
         story = process_submission(submission)
         self.assertIsNotNone(story)
-        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        self.assertEqual(story.agent_id, self.bot.pk)
         submission.refresh_from_db()
         self.assertEqual(submission.status, "drafted")
         self.assertEqual(submission.generated_story_id, story.pk)
@@ -215,6 +220,9 @@ class ContentDirectorSubmissionTests(TestCase):
         agent = Agent.objects.create(
             code="content-director", name="Content Director",
             mission="Owner content drafts", active=False,
+        )
+        AgentTask.objects.create(
+            agent=agent, action_type="legacy_submission", status="queued",
         )
         submission = self._submission()
         self.assertIsNone(process_submission(submission))
