@@ -22,12 +22,13 @@ class GuestCheckoutSecurityTests(unittest.TestCase):
         self.assertTrue(report['rights_gate_checked'])
         self.assertEqual(report['orders_created'], 0)
         self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
-        self.assertEqual(report['commercial_email_block'],
-                         'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE')
-        self.assertEqual(report['email_based_recovery_end_to_end'], 'not_examined')
+        self.assertIsNone(report['commercial_email_block'])
+        self.assertEqual(report['guest_email_policy'], 'no_buyer_email')
+        self.assertFalse(report['guest_email_recovery_wiring_in_adapter'])
+        self.assertEqual(report['email_based_recovery_end_to_end'], 'disabled_for_new_guest_orders')
         self.assertEqual(report['checkout_template_email_input'], 'not_examined')
 
-    def test_email_appearance_without_validation_does_not_clear_block(self):
+    def test_unvalidated_email_capture_also_violates_no_email_policy(self):
         source = self.source.replace('def _new_user(request):',
             'def _new_user(request):\n    request.POST.get("buyer_email")\n    user.email = "unvalidated"')
         report = MODULE.audit_source(source)
@@ -36,7 +37,7 @@ class GuestCheckoutSecurityTests(unittest.TestCase):
         self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
         self.assertIsNotNone(report['commercial_email_block'])
 
-    def test_reachable_shared_guest_email_validator_clears_source_indicator(self):
+    def test_validated_email_capture_still_violates_no_email_policy(self):
         helper = '''
 def _submitted_purchase_email(request):
     from django.core.validators import validate_email
@@ -61,7 +62,8 @@ def _submitted_purchase_email(request):
         self.assertTrue(report['buyer_email_post_read_in_identity_source'])
         self.assertTrue(report['buyer_email_stored_in_identity_source'])
         self.assertTrue(report['buyer_email_before_invoice_source_indicators'])
-        self.assertIsNone(report['commercial_email_block'])
+        self.assertEqual(report['commercial_email_block'],
+                         'GUEST_EMAIL_COLLECTION_OR_RECOVERY_WIRING')
 
     def test_unreachable_email_helper_never_clears_identity_gate(self):
         source = self.source + '''
@@ -72,7 +74,17 @@ def _unrelated_email_helper(request):
 '''
         report = MODULE.audit_source(source)
         self.assertFalse(report['buyer_email_before_invoice_source_indicators'])
-        self.assertIsNotNone(report['commercial_email_block'])
+        self.assertIsNone(report['commercial_email_block'])
+
+    def test_guest_recovery_import_in_adapter_is_rejected(self):
+        altered = self.source.replace(
+            'def patch_commercial(namespace):',
+            'def patch_commercial(namespace):\n'
+            '    from services.mpw_trx_email_recovery import bound_checkout')
+        report = MODULE.audit_source(altered)
+        self.assertTrue(report['guest_email_recovery_wiring_in_adapter'])
+        self.assertEqual(report['commercial_email_block'],
+                         'GUEST_EMAIL_COLLECTION_OR_RECOVERY_WIRING')
 
     def test_missing_rights_gate_fails_closed(self):
         changed = self.source.replace('rights_cleared_for_sale(product)', 'True')
