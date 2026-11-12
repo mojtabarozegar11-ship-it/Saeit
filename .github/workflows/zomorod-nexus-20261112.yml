@@ -193,7 +193,7 @@ jobs:
               const page=await b.newPage({viewport:{width,height:850}}), errors=[], assetResponses=[], requestsFailed=[];
               page.on('pageerror',e=>errors.push(e.message));
               page.on('requestfailed',r=>requestsFailed.push({url:r.url(),error:r.failure()?.errorText}));
-              page.on('response',r=>{if(/zm-nexus-v1\\.css|smart-agriculture\\.webp/.test(r.url()))assetResponses.push({status:r.status(),url:r.url(),mime:r.headers()['content-type']||''})});
+              page.on('response',r=>{if(/zm-nexus-v1\.css|smart-agriculture\.webp/.test(r.url()))assetResponses.push({status:r.status(),url:r.url(),mime:r.headers()['content-type']||''})});
               await page.goto('https://zomorodmelal.ir/?nexus_live_'+width+'=1',{waitUntil:'load',timeout:60000});
               await page.locator('.hero-cta a').first().waitFor({timeout:12000});
               await page.waitForFunction(()=>{const imgs=[...document.querySelectorAll('.hero-image')];return imgs.length>0&&imgs.every(i=>i.complete)},null,{timeout:20000});
