@@ -82,6 +82,9 @@ class MPWGuestCheckoutBridgeTests(SimpleTestCase):
         with mock.patch(
             "core.mpw_trx_checkout_bridge._reviewed_checkout",
             return_value=reviewed_view,
+        ), mock.patch(
+            "core.mpw_trx_checkout_bridge.invoice_start_ready",
+            return_value=True,
         ):
             response = self.client.get(
                 self.PATH, secure=True, HTTP_HOST="mojplaywin.com"
@@ -89,6 +92,22 @@ class MPWGuestCheckoutBridgeTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(calls, [("mojplaywin.com", 72)])
         self.assertIn(b"GUEST_HANDLER_AUTHORITATIVE", response.content)
+
+    def test_checkout_never_opens_without_protected_invoice_post_handler(self):
+        from core.mpw_trx_checkout_bridge import backend_ready
+        with mock.patch(
+            "core.mpw_trx_checkout_bridge._reviewed_checkout",
+            return_value=lambda request, product_id: HttpResponse("CHECKOUT"),
+        ), mock.patch(
+            "core.mpw_trx_checkout_bridge.invoice_start_ready",
+            return_value=False,
+        ):
+            self.assertFalse(backend_ready())
+            response = self.client.get(
+                self.PATH, secure=True, HTTP_HOST="mojplaywin.com"
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertIn(b"No invoice was created", response.content)
 
     def test_product_cta_requires_verified_guest_backend(self):
         with mock.patch(
