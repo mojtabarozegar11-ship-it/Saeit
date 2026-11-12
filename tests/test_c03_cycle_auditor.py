@@ -1,6 +1,9 @@
 """Real Git receipts count, synthetic fixtures never count as production."""
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from deploy import mojtaba_bot_cycle_auditor as auditor
 from deploy import mojtaba_bot_cycle_receipt_bridge as bridge
