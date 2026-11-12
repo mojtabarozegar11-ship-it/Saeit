@@ -107,7 +107,7 @@ class GuestReceiptRecoveryTests(TransactionTestCase):
         html = response.content.decode("utf-8")
         self.assertIn("Invoice no longer payable", html)
         self.assertIn("Do not send TRX to an expired quote.", html)
-        self.assertIn("Private purchase receipt key", html)
+        self.assertIn("Your private purchase receipt key", html)
         self.assertIn("No email", html)
         self.assertNotIn("Send exact", html)
         self.assertNotIn('data-reconcile-url=', html)
