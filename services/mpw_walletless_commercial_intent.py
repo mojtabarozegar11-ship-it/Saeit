@@ -415,12 +415,20 @@ def open_commercial_paid_file(intent_id: int, buyer_id: int, *, db=None,
     source=_private_file(item)
     if source.is_symlink() or not source.is_file():
         raise PaymentHold("Private product unavailable")
+    from services.mpw_trx_commercial_context import private_paid_stream_matches_approved
     flags=os.O_RDONLY | getattr(os,"O_CLOEXEC",0) | getattr(os,"O_NOFOLLOW",0)
     fd=os.open(str(source),flags)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise PaymentHold("Not a regular downloadable file")
-        return os.fdopen(fd,"rb")
+        stream=os.fdopen(fd,"rb")
     except BaseException:
         os.close(fd)
+        raise
+    try:
+        # The checkout-approved path is insufficient: hash the *opened*
+        # descriptor so a replaced/revised file cannot reach a paid buyer.
+        if not private_paid_stream_matches_approved(item.product,stream):
+            raise PaymentHold("Purchased private file differs from approved version")
+        return stream
+    except BaseException:
+        stream.close()
         raise
