@@ -16,7 +16,11 @@ permissions:
 jobs:
   offline-observer-regression:
     runs-on: ubuntu-22.04
-    timeout-minutes: 8
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: "mojtaba-preflight-ci-ephemeral-not-production"
+      DEBUG: "true"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
     steps:
       - name: Checkout reviewed candidate without persisted credentials
         uses: actions/checkout@v4
@@ -26,8 +30,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install offline test framework only
-        run: python -m pip install pytest
+      - name: Install repository test dependencies
+        run: python -m pip install -r requirements.txt
       - name: Validate the observer and bash diagnostics without host access
         run: |
           python -m py_compile deploy/mojtaba_live_topology_readonly.py
