@@ -1,0 +1,49 @@
+name: Zomorod public homepage fingerprint read only
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-live-public-audit-20261112.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read only public homepage fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,re
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          url='https://zomorodmelal.ir/?nexus_public_fingerprint=20261112'
+          with urlopen(Request(url,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZMHomePublicAudit/1'}),timeout=25) as response:
+              data=response.read(8000000)
+              print('PUBLIC_HTTP_STATUS',response.status)
+              print('PUBLIC_FINAL_URL',response.url)
+          s=data.decode('utf-8','replace')
+          print('PUBLIC_BYTES',len(data))
+          print('PUBLIC_SHA256',hashlib.sha256(data).hexdigest())
+          print('PUBLIC_TITLE',re.findall(r'<title[^>]*>(.*?)</title>',s,re.I|re.S)[:1])
+          print('PUBLIC_HTML_TAG',re.findall(r'<html[^>]*>',s,re.I)[:1])
+          print('PUBLIC_BODY_TAG',re.findall(r'<body[^>]*>',s,re.I)[:1])
+          print('PUBLIC_MAIN_TAGS',re.findall(r'<main[^>]*>',s,re.I)[:4])
+          print('PUBLIC_HEADER_TAGS',re.findall(r'<header[^>]*>',s,re.I)[:5])
+          print('PUBLIC_CSS_LINKS',re.findall(r'<link[^>]*stylesheet[^>]*>',s,re.I)[:12])
+          print('PUBLIC_IDS',re.findall(r'id=[\x22\x27]([^\x22\x27]+)',s,re.I)[:55])
+          print('PUBLIC_MARKER_COUNTS',{m:s.count(m) for m in ['ZOMOROD_ORBIT_DATA','main-view','orbital-cards','site-footer','nexus-home','zm-home-media-20261027','zm-nova-home','<section','<nav','<script']})
+          print('PUBLIC_FIRST_BYTES',repr(s[:650]))
+          Path('public-home-readonly-20261112.html').write_bytes(data)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-public-home-fingerprint
+          path: public-home-readonly-20261112.html
+          retention-days: 1
