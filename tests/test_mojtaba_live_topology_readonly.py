@@ -415,3 +415,38 @@ def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive
     assert 'git push' not in workflow
     assert 'MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof' in workflow
 
+@pytest.mark.parametrize(
+    ("stderr", "stdout", "expected"),
+    [
+        ("MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user\nSECRET=redacted-value\n",
+         "", "blocked_runner_identity_mismatch"),
+        ("arbitrary secret-bearing error\n", "partial-output",
+         "invalid_or_partial_local_snapshot"),
+        ("arbitrary sensitive error\n", "", "failed_local_host_inventory_unknown"),
+    ],
+)
+def test_vps_failure_diagnostics_are_fixed_redacted_categories(tmp_path, stderr, stdout, expected):
+    """Execute the actual workflow classification fragment, not a test-only copy."""
+    import re
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r"(?ms)^            if grep -Fqx 'MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user' "
+        r'"\$d/vps\.err"; then\n.*?^            fi\n',
+        workflow,
+    )
+    assert match is not None
+    assert "sudo " not in workflow
+    assert 'cat "$d/vps.err"' not in workflow
+    (tmp_path / "vps.err").write_text(stderr, encoding="utf-8")
+    (tmp_path / "vps.jsonline").write_text(stdout, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", "-euc", textwrap.dedent(match.group(0))],
+        env={"d": str(tmp_path), "PATH": "/usr/bin:/bin"},
+        text=True, capture_output=True, timeout=5, check=True,
+    )
+    assert result.stdout.strip() == f"MOJTABA_VPS_OBSERVATION={expected}"
+    assert "redacted-value" not in result.stdout
+    assert "sensitive" not in result.stdout
+    assert result.stderr == ""
