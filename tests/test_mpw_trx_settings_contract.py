@@ -57,7 +57,7 @@ class MPWTrxSettingsContractTests(unittest.TestCase):
     def test_invalid_configuration_fails_closed_without_crashing_site(self):
         for tokens in (
             ["72", "0"], ["72", "-1"], ["72", "abc"],
-            ["72", "225;879"], ["72", "72"],
+            ["72", "225;879"], ["72", "72"], ["72", "072"],
             ["72", "2147483648"],
         ):
             with self.subTest(tokens=tokens):
