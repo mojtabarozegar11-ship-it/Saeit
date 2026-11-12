@@ -153,6 +153,12 @@ class Settings:
                 continue
             cleaned[key] = number(value[key], key, minimum=0,
                                   allow_zero=("commission" in key or "slippage" in key))
+        # LiteFinance's published XAUUSD contract size is 100 oz/lot
+        # with a listed 0.01-lot step, i.e. 1 oz. Micro-ounce fills would
+        # fabricate otherwise unavailable trading capacity. Account-level
+        # contract specifications must still be independently reconciled.
+        if cleaned["quantity_step_ounces"] != 1.0:
+            raise ResearchError("litefinance_xauusd_requires_one_ounce_lot_step")
         if not 0 < cleaned["risk_fraction"] <= 0.02:
             raise ResearchError("risk_fraction_out_of_bounds")
         if not 0 < cleaned["max_notional_to_equity"] <= 50:
