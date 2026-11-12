@@ -178,3 +178,54 @@ def test_old_unrecorded_commits_cannot_claim_new_hourly_action(tmp_path):
                       status="success", evidence=proof)
     assert rejected.returncode != 0
     assert "verified Git commit" in rejected.stderr
+
+
+def test_coordinator_summary_rejects_fifty_fake_legacy_successes(tmp_path):
+    import json
+    repo, _, _ = workspace(tmp_path)
+    state = {"schema": 1, "runs": {
+        "E-LEGACY-FAKE": {
+            "cycle": "E", "target": 50, "started_at": "2024-01-01T00:00:00Z",
+            "closed_at": None,
+            "actions": {
+                f"E-LEGACY-{i}": {
+                    "status": "success", "kind": "repo_readonly",
+                    "evidence": ["sha256:fake"]
+                } for i in range(55)
+            },
+        }
+    }}
+    (repo / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    p = execute_summary = subprocess.run(
+        [sys.executable, str(COORD), "--state", str(repo / "state.json"),
+         "summary", "--cycle", "E", "--run-id", "E-LEGACY-FAKE"],
+        cwd=repo, text=True, capture_output=True,
+    )
+    assert execute_summary.returncode == 0, p.stderr
+    report = json.loads(p.stdout)
+    assert report["recorded"] == 55
+    assert report["success"] == 0
+    assert report["unverified_legacy_success"] == 55
+    assert report["complete"] is False
+
+
+def test_coordinator_summary_counts_one_verified_change(tmp_path):
+    import json
+    repo, commit, digest = workspace(tmp_path)
+    outcome = record(repo, run_id="E-NEW", action_id="E-SINGLE-REAL",
+                     status="success", evidence=(
+                         "commit:" + commit,
+                         "path:deliverables/item.txt",
+                         "sha256:" + digest,
+                     ))
+    assert outcome.returncode == 0, outcome.stderr
+    summary = subprocess.run(
+        [sys.executable, str(COORD), "--state", str(repo / "state.json"),
+         "summary", "--cycle", "E", "--run-id", "E-NEW"],
+        cwd=repo, capture_output=True, text=True,
+    )
+    assert summary.returncode == 0, summary.stderr
+    actual = json.loads(summary.stdout)
+    assert actual["success"] == 1
+    assert actual["remaining"] == 49
+    assert actual["complete"] is False
