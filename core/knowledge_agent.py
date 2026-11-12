@@ -1,5 +1,6 @@
 from django.utils import timezone
-from .models import Agent, AgentTask
+from .models import AgentTask
+from .canonical_agent_handoff import canonical_owner_for
 from .knowledge_agent_models import KnowledgeAgentPlan, KnowledgeDomain, KnowledgeBook, KnowledgeAgentRun
 from .knowledge_quality import quality_contract
 
@@ -47,6 +48,10 @@ def seed_library():
     return plan
 
 def queue_cycle():
+    # Refuse to create a plan, book, run or paid-generation task if a legacy
+    # independent owner still exists or the sole canonical owner is missing.
+    # Existing plan/book slugs are retained to preserve historical foreign keys.
+    agent = canonical_owner_for("knowledge-content-director")
     plan = seed_library()
     now = timezone.now()
     if not plan.active:
@@ -68,7 +73,6 @@ def queue_cycle():
         objective=f"تولید بخش بعدی برای {book.title}؛ مبنا از {START.isoformat()}؛ با منابع قابل ردیابی.",
         approval_required=True,  # paid model calls always require explicit authorization
     )
-    agent, _ = Agent.objects.get_or_create(code="knowledge-content-director", defaults={"name":"Knowledge Content Director","mission":plan.mission,"risk_level":"low","active":True})
     # An unattended, API-backed generation can incur a charge even when its
     # draft is private. Route it through the high-risk owner approval path.
     AgentTask.objects.create(
