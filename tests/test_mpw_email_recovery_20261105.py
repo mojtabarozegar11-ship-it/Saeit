@@ -26,6 +26,7 @@ from services import mpw_trx_email_recovery as module
 from services import mpw_trx_guest_commerce as guest_adapter
 
 
+@override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "testserver"])
 class RecoveryIsolationTests(TransactionTestCase):
     """Use Django's isolated test DB lifecycle; never migrate the default DB.
 
