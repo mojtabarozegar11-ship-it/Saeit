@@ -135,6 +135,25 @@ class AvaCoreTests(unittest.TestCase):
         self.assertEqual(self.ava.list_memories(), (original,))
         self.assertEqual(other.list_memories(), ())
 
+    def test_memory_validation_precedes_untrusted_store_write(self):
+        class PermissiveStore(AvaMemory):
+            def __init__(self):
+                super().__init__()
+                self.write_attempts = 0
+
+            def add(self, item):
+                self.write_attempts += 1
+                self._items[item.id] = item
+
+        store = PermissiveStore()
+        assistant = Ava(owner_id="owner-1", brain=self.brain, memory=store)
+        for unsafe in ("secret\\x00suffix", "secret\\x1bsuffix", "secret\\x7fsuffix"):
+            with self.subTest(unsafe=repr(unsafe)):
+                with self.assertRaisesRegex(ValueError, "forbidden control characters"):
+                    assistant.remember(unsafe, consent=True)
+        self.assertEqual(store.write_attempts, 0)
+        self.assertEqual(assistant.list_memories(), ())
+
     def test_memory_store_rejects_invalid_records(self):
         original = self.ava.remember("valid", consent=True)
         for invalid in (
