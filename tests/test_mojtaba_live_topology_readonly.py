@@ -83,7 +83,8 @@ def test_wrong_user_fails_before_any_host_inventory(tmp_path, role, user):
 
 def test_missing_cron_and_systemd_are_unknown_not_attested_absence(tmp_path):
     with patch.object(observer, "call_readonly", side_effect=[
-        ("unavailable_or_empty", ""), ("observed", ""), ("unavailable", "")
+        ("unavailable_or_empty", ""), ("observed", ""), ("unavailable", ""),
+        ("unavailable", ""),
     ]):
         result = observer.collect("vps", username="githubops", home=tmp_path)
     assert result["cron"]["state"] == "unavailable_or_empty"
@@ -99,11 +100,15 @@ def test_both_known_roles_are_observed_without_database_or_network(tmp_path):
         ("observed", "0 0 * * * python manage.py knowledge_agent_cycle\n"),
         ("observed", "python manage.py knowledge_agent_cycle\n"),
         ("observed", ""),
+        ("observed", "mojtaba-bot-ai.service loaded active running Canonical worker\n"),
     ]):
         out = observer.collect("cpanel", username="zomorod2", home=tmp_path)
     assert out["host_role"] == "cpanel"
     assert out["cron"]["enumerated_entries"] == 1
     assert out["processes"]["route_match_counts"]["knowledge_agent_cycle"] == 1
+    assert len(out["system_services"]["candidate_units"]) == 1
+    assert out["system_services"]["candidate_units"][0]["active"] == "active"
+    assert out["system_services"]["service_name_indicators_only"] is True
     assert out["attestation"]["canonical_worker_executed"] is False
     assert out["attestation"]["handoff_verified"] is False
 
@@ -141,6 +146,8 @@ def test_host_reads_are_fixed_commands_no_shell_or_remote_execution(tmp_path):
     assert seen == [
         ["crontab", "-l"], ["ps", "-eo", "args="],
         ["systemctl", "--user", "list-units", "--type=service",
+         "--all", "--plain", "--no-legend", "--no-pager"],
+        ["systemctl", "list-units", "--type=service",
          "--all", "--plain", "--no-legend", "--no-pager"],
     ]
     assert result["external_network_used"] is False
@@ -261,4 +268,19 @@ def test_cpanel_inventory_reports_php_sqlite_as_separate_unverified_source(tmp_p
         result = observer.collect("cpanel", home=tmp_path, username="zomorod2")
     assert result["private_php_site_registry"]["state"] == "private_database_not_observed"
     assert result["private_php_site_registry"]["database_state_proves_live_workers"] is False
+    assert result["attestation"]["external_schedulers_fully_enumerated"] is False
+
+
+def test_system_service_matches_are_not_live_execution_attestation(tmp_path):
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("unavailable", ""),
+        ("observed", ""),
+        ("unavailable", ""),
+        ("observed", "mojtaba-bot-ai.service loaded active running Single bot\n"),
+    ]):
+        result = observer.collect("vps", username="githubops", home=tmp_path)
+    assert result["system_services"]["state"] == "observed"
+    assert len(result["system_services"]["candidate_units"]) == 1
+    assert result["attestation"]["canonical_worker_executed"] is False
+    assert result["attestation"]["handoff_verified"] is False
     assert result["attestation"]["external_schedulers_fully_enumerated"] is False
