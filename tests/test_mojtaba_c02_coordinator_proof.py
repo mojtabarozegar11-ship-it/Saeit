@@ -100,3 +100,53 @@ def test_sha_mismatch_rejected_even_with_real_commit(tmp_path):
                      ))
     assert failure.returncode != 0
     assert "verified Git commit" in failure.stderr
+
+
+def test_older_valid_action_remains_verifiable_after_later_file_revision(tmp_path):
+    repo, first_commit, first_digest = workspace(tmp_path)
+    first = record(repo, run_id="E-IMMUTABLE-ONE", action_id="E-ITEM-ORIGINAL",
+                   status="success", evidence=(
+                       "commit:" + first_commit, "path:deliverables/item.txt",
+                       "sha256:" + first_digest,
+                   ))
+    assert first.returncode == 0, first.stderr
+    file = repo / "deliverables" / "item.txt"
+    file.write_text("A new independently changed content revision\n",
+                    encoding="utf-8")
+    git(repo, "add", "deliverables/item.txt")
+    git(repo, "commit", "-m", "second actual revision")
+    second_commit = git(repo, "rev-parse", "HEAD")
+    second_digest = hashlib.sha256(file.read_bytes()).hexdigest()
+    from deploy.mojtaba_bot_cycle_coordinator import verified_git_artifact
+    current = Path.cwd()
+    import os
+    try:
+        os.chdir(repo)
+        assert verified_git_artifact("source_change", [
+            "commit:" + first_commit,
+            "path:deliverables/item.txt",
+            "sha256:" + first_digest,
+        ])
+    finally:
+        os.chdir(current)
+    second = record(repo, run_id="E-IMMUTABLE-TWO", action_id="E-ITEM-REVISED",
+                    status="success", evidence=(
+                        "commit:" + second_commit, "path:deliverables/item.txt",
+                        "sha256:" + second_digest,
+                    ))
+    assert second.returncode == 0, second.stderr
+
+
+def test_uncommitted_working_tree_change_does_not_forge_original_proof(tmp_path):
+    repo, original_commit, _ = workspace(tmp_path)
+    file = repo / "deliverables" / "item.txt"
+    file.write_text("uncommitted replacement\n", encoding="utf-8")
+    fraudulent_digest = hashlib.sha256(file.read_bytes()).hexdigest()
+    failure = record(repo, run_id="E-UNCOMMITTED", action_id="E-FORGED-BYTES",
+                     status="success", evidence=(
+                         "commit:" + original_commit,
+                         "path:deliverables/item.txt",
+                         "sha256:" + fraudulent_digest,
+                     ))
+    assert failure.returncode != 0
+    assert "verified Git commit" in failure.stderr
