@@ -71,7 +71,20 @@ def store(request):
   logging.getLogger(__name__).warning(
    "MojPlayWin store telemetry unavailable: %s", type(exc).__name__
   )
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ # Catalog discovery must not take down featured cards when the optional
+ # native product schema or its database is temporarily unavailable.
+ try:
+  from .mojplaywin_catalog import verified_catalog_cards
+  verified = verified_catalog_cards()
+ except Exception as exc:
+  import logging
+  logging.getLogger(__name__).warning(
+   "MojPlayWin verified catalog unavailable: %s", type(exc).__name__
+  )
+  verified = []
+ return render(request,"mojplaywin/store.html",{
+  "products":PRODUCTS, "verified_catalog":verified
+ })
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
