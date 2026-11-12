@@ -254,12 +254,16 @@ def cpanel_php_registry_snapshot(home: Path) -> dict:
             }
             if "runs" in tables:
                 result["run_status_counts"] = {
-                    str(status)[:32]: int(count) for status, count in
+                    str(status) if status in {"ok", "warning", "error"}
+                    else "unexpected_status": int(count)
+                    for status, count in
                     conn.execute("SELECT status, COUNT(*) FROM runs GROUP BY status")
                 }
             if "site_work_outputs" in tables:
                 result["recent_worker_output_status_counts"] = {
-                    str(status)[:32]: int(count) for status, count in
+                    str(status) if status in {"review", "blocked", "failed"}
+                    else "unexpected_status": int(count)
+                    for status, count in
                     conn.execute(
                         "SELECT status, COUNT(*) FROM site_work_outputs GROUP BY status"
                     )
