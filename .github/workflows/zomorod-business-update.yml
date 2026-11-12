@@ -26,13 +26,21 @@ concurrency:
   cancel-in-progress: false
 jobs:
   update:
-    runs-on: ubuntu-latest
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.ref == 'refs/heads/main'
+      && github.actor == 'mojtabarozegar11-ship-it'
+      && github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - name: Validate both PHP files and guarded installer
         run: |
           set -euo pipefail
+          test "${GITHUB_ACTOR}" = 'mojtabarozegar11-ship-it'
+          test "${GITHUB_REF}" = 'refs/heads/main'
+          test "${GITHUB_EVENT_NAME}" = 'workflow_dispatch'
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/genetics-center.php
           bash -n scripts/zomorod_business_genetics_guarded_install.sh
