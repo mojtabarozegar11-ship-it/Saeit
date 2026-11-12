@@ -183,21 +183,31 @@ def main():
     import json
     from pathlib import Path
     from trading.mojtrade_costed_oos import Settings, parse_bars
+    from trading.mojtrade_market_sessions import SessionGapError, load_closure_claims
 
     parser = argparse.ArgumentParser(
         description="Research-only XAUUSD multi-fold cost-stress validation; zero broker orders"
     )
     parser.add_argument("--bid-ask-csv", required=True, type=Path)
     parser.add_argument("--settings-json", required=True, type=Path)
+    parser.add_argument("--session-closures-json", type=Path,
+                        help="Optional explicitly evidenced closures; origin not authenticated")
     parser.add_argument("--folds", type=int, default=3)
     parser.add_argument("--test-bars", type=int, default=100)
     args = parser.parse_args()
     try:
         cfg = Settings.load(args.settings_json)
-        bars, digest = parse_bars(args.bid_ask_csv, cfg.timeframe_minutes)
+        claims, calendar_sha = (
+            load_closure_claims(args.session_closures_json, cfg.timeframe_minutes)
+            if args.session_closures_json else ([], None)
+        )
+        bars, digest = parse_bars(args.bid_ask_csv, cfg.timeframe_minutes, claims)
         result = walk_forward(bars, digest, cfg, folds=args.folds, test_bars=args.test_bars)
+        result["market_closure_claims_used"] = len(claims)
+        result["market_closure_manifest_sha256"] = calendar_sha
+        result["market_closure_broker_origin_verified"] = False
         print(json.dumps(result, sort_keys=True, indent=2, allow_nan=False))
-    except (ResearchError, OSError) as exc:
+    except (ResearchError, SessionGapError, OSError) as exc:
         parser.exit(2, f"MOJTRADE_WALK_FORWARD_REJECTED: {exc}\n")
 
 
