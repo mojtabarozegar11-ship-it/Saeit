@@ -7,7 +7,7 @@ action kinds are recorded as blocked until a dedicated adapter and owner
 approval gate exist. It never treats an empty queue as completed work.
 """
 from __future__ import annotations
-import argparse, json, subprocess, sys
+import argparse, hashlib, json, subprocess, sys
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -32,6 +32,22 @@ def record_action(args, item, status, evidence):
     for ref in evidence:
         cmd.extend(["--evidence", ref])
     subprocess.run(cmd, check=True, text=True, capture_output=True)
+
+
+def run_repo_readonly(item):
+    operation = item.get("operation")
+    path = Path(item.get("path", ""))
+    if not path.is_file():
+        return False, [f"missing:{path}"], "repository file is missing"
+    if operation == "file_exists":
+        return True, [f"file:{path}", f"bytes:{path.stat().st_size}"], "file exists"
+    if operation == "sha256":
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return True, [f"file:{path}", f"sha256:{digest}"], "sha256 recorded"
+    if operation == "json_validate":
+        json.loads(path.read_text(encoding="utf-8"))
+        return True, [f"file:{path}", "json:valid"], "JSON parsed successfully"
+    return False, [f"unsupported:{operation}"], "repo operation not allowlisted"
 
 
 def main():
@@ -69,6 +85,12 @@ def main():
             results.append({"action_id":aid,"status":status,
                             "operation":operation,"evidence":evidence,
                             "output_tail":(proc.stdout+proc.stderr)[-1200:]})
+        elif kind == "repo_readonly":
+            ok, evidence, message = run_repo_readonly(item)
+            status = "success" if ok else "failed"
+            record_action(args, item, status, evidence)
+            results.append({"action_id":aid,"status":status,"operation":item.get("operation"),
+                            "evidence":evidence,"message":message})
         else:
             evidence = item.get("evidence", [])
             record_action(args, item, "blocked", evidence)
