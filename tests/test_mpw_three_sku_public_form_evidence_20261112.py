@@ -7,6 +7,7 @@ import json
 from contextlib import redirect_stdout
 from pathlib import Path
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -182,6 +183,53 @@ class FormAuditTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(report["store_mode"], "STATIC_FALLBACK")
         self.assertEqual(report["form_gate"], "BLOCKED")
+
+    def test_live_http_error_reports_numeric_status_without_url(self):
+        pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
+        for sku in AUDIT.SKUS:
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+
+        def getter(path):
+            if path == "/store/product/72/checkout/":
+                raise urllib.error.HTTPError(
+                    "https://mojplaywin.com/store/product/72/checkout/?secret=DO_NOT_PRINT",
+                    404, "not found", {}, None
+                )
+            return pages[path]
+
+        output = io.StringIO()
+        with patch.object(AUDIT, "fetch", side_effect=getter):
+            with redirect_stdout(output):
+                code = AUDIT.live()
+        report = json.loads(output.getvalue().split(
+            "MPW_3SKU_LIVE_FORM_READONLY=", 1)[1])
+        self.assertEqual(code, 3)
+        self.assertEqual(report["products"]["72"]["http_status"], 404)
+        self.assertEqual(report["products"]["72"]["error_type"], "HTTPError")
+        self.assertNotIn("DO_NOT_PRINT", output.getvalue())
+        self.assertFalse(report["sale_proven"])
+
+    def test_live_storefront_503_is_reported_as_status_not_sale(self):
+        pages = {f"/store/product/{sku}/checkout/": (200, self._safe_page(sku))
+                 for sku in AUDIT.SKUS}
+
+        def getter(path):
+            if path == "/store/":
+                raise urllib.error.HTTPError(
+                    "https://mojplaywin.com/store/", 503, "temporarily unavailable",
+                    {}, None
+                )
+            return pages[path]
+
+        output = io.StringIO()
+        with patch.object(AUDIT, "fetch", side_effect=getter):
+            with redirect_stdout(output):
+                code = AUDIT.live()
+        report = json.loads(output.getvalue().split(
+            "MPW_3SKU_LIVE_FORM_READONLY=", 1)[1])
+        self.assertEqual(code, 3)
+        self.assertEqual(report["store_http_status"], 503)
+        self.assertFalse(report["all_email_free_forms"])
 
     def test_live_missing_checkout_is_blocked_not_silenced(self):
         pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
