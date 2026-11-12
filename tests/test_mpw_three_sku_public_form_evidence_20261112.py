@@ -121,6 +121,70 @@ class FormAuditTests(unittest.TestCase):
                         '</form>')
                 self.assertFalse(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
 
+    def test_external_form_associated_email_control_blocks_checkout(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        for email in (
+            '<input form="pay" type="hidden" name="buyer_email">',
+            '<textarea form="pay" name="customer_email"></textarea>',
+            '<input form="pay" id="delivery-email" name="contact">',
+        ):
+            with self.subTest(email=email):
+                html = (email + '<form id="pay" method="post" '
+                        'action="/commerce/trx-easy/start/72/">'
+                        + csrf + '<button type="submit">'
+                        'Create my TRX payment invoice</button></form>')
+                result = AUDIT.parse_checkout(html, 72)
+                self.assertTrue(result["checkout_email_control_present"])
+                self.assertFalse(result["checkout_post_csrf_cta_valid"])
+
+    def test_unrelated_footer_email_form_does_not_block_invoice(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        html = (
+            '<form id="pay" method="post" '
+            'action="/commerce/trx-easy/start/72/">' + csrf
+            + '<button type="submit">Create my TRX payment invoice</button></form>'
+            '<form id="newsletter" action="/newsletter/" method="post">'
+            '<input type="email" name="subscriber_email" required></form>'
+        )
+        result = AUDIT.parse_checkout(html, 72)
+        self.assertEqual(result["named_email_inputs"], 1)
+        self.assertFalse(result["checkout_email_control_present"])
+        self.assertEqual(result["checkout_form_count"], 1)
+        self.assertTrue(result["checkout_post_csrf_cta_valid"])
+
+    def test_duplicate_invoice_forms_block_even_if_one_is_valid(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        good = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                + csrf + '<button>Create my TRX payment invoice</button></form>')
+        bad = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+               '<input name="buyer_email"></form>')
+        result = AUDIT.parse_checkout(good + bad, 72)
+        self.assertEqual(result["checkout_form_count"], 2)
+        self.assertFalse(result["checkout_post_csrf_cta_valid"])
+
+    def test_duplicated_html_form_identifier_blocks_ambiguous_attachment(self):
+        csrf = '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
+        html = ('<form id="pay" method="post" '
+                'action="/commerce/trx-easy/start/72/">' + csrf
+                + '<button>Create my TRX payment invoice</button></form>'
+                '<form id="pay" method="post" action="/newsletter/"></form>')
+        self.assertFalse(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
+    def test_live_product_form_allows_independent_newsletter_email(self):
+        pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
+        for sku in AUDIT.SKUS:
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+        pages["/store/product/72/checkout/"] = (
+            200, self._safe_page(72)
+            + '<form action="/newsletter/" method="post">'
+              '<input name="newsletter_email" type="email"></form>'
+        )
+        code, report = self._live_report(pages)
+        self.assertEqual(code, 0)
+        self.assertTrue(report["products"]["72"]["email_free_form_evidence"])
+        self.assertEqual(report["products"]["72"]["named_email_inputs"], 1)
+        self.assertFalse(report["sale_proven"])
+
     def test_valid_submit_input_is_accepted(self):
         html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
                 '<input name="csrfmiddlewaretoken" type="hidden" value="'
