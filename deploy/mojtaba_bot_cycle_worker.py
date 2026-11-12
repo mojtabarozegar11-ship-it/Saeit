@@ -7,7 +7,7 @@ action kinds are recorded as blocked until a dedicated adapter and owner
 approval gate exist. It never treats an empty queue as completed work.
 """
 from __future__ import annotations
-import argparse, hashlib, json, subprocess, sys
+import argparse, hashlib, json, os, subprocess, sys
 from pathlib import Path
 from datetime import datetime, timezone
 from mojtaba_bot_cycle_coordinator import verified_git_artifact
@@ -23,6 +23,7 @@ def record_action(args, item, status, evidence):
         sys.executable, "deploy/mojtaba_bot_cycle_coordinator.py",
         "--state", args.state, "record",
         "--cycle", args.cycle,
+        "--run-id", args.run_id,
         "--action-id", item["action_id"],
         "--item", item["item"],
         "--kind", item.get("kind", "unknown"),
@@ -33,7 +34,13 @@ def record_action(args, item, status, evidence):
     ]
     for ref in evidence:
         cmd.extend(["--evidence", ref])
-    subprocess.run(cmd, check=True, text=True, capture_output=True)
+    try:
+        subprocess.run(cmd, check=True, text=True, capture_output=True)
+        return True, ""
+    except subprocess.CalledProcessError as exc:
+        # Duplicate identities or unsupported evidence must NEVER crash the
+        # whole cycle or be silently counted as delivery.
+        return False, (exc.stderr or exc.stdout or str(exc))[-400:]
 
 
 def run_repo_readonly(item):
@@ -66,8 +73,13 @@ def main():
     p.add_argument("--cycle", required=True, choices=list("ABCDE"))
     p.add_argument("--queue", required=True)
     p.add_argument("--state", default="runtime/central_cycle_state.json")
+    p.add_argument("--run-id", help="stable unique execution identity for the 50-action ledger")
     p.add_argument("--max-actions", type=int, default=50)
     args=p.parse_args()
+    if not args.run_id:
+        args.run_id = (f"{args.cycle}-"
+                       f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-"
+                       f"{os.getpid()}")
     queue=json.loads(Path(args.queue).read_text(encoding="utf-8"))
     if not isinstance(queue, list):
         raise SystemExit("queue must be a JSON list")
@@ -97,20 +109,27 @@ def main():
             evidence=item.get("evidence",[])
             evidence=evidence+[f"exit_code:{proc.returncode}"]
             status = "observed" if proc.returncode == 0 else "failed"
-            record_action(args, item, status, evidence)
+            saved, error = record_action(args, item, status, evidence)
+            if not saved:
+                status = "blocked"
             results.append({"action_id":aid,"status":status,
+                            "recorded":saved,"record_error":error,
                             "operation":operation,"evidence":evidence,
                             "output_tail":(proc.stdout+proc.stderr)[-1200:]})
         elif kind == "repo_readonly":
             ok, evidence, message = run_repo_readonly(item)
             status = "observed" if ok else "failed"
-            record_action(args, item, status, evidence)
-            results.append({"action_id":aid,"status":status,"operation":item.get("operation"),
+            saved, error = record_action(args, item, status, evidence)
+            if not saved:
+                status = "blocked"
+            results.append({"action_id":aid,"status":status,"recorded":saved,
+                            "record_error":error,"operation":item.get("operation"),
                             "evidence":evidence,"message":message})
         else:
             evidence = item.get("evidence", [])
-            record_action(args, item, "blocked", evidence)
-            results.append({"action_id":aid,"status":"blocked",
+            saved, error = record_action(args, item, "blocked", evidence)
+            results.append({"action_id":aid,"status":"blocked","recorded":saved,
+                            "record_error":error,
                             "reason":"no approved adapter for action kind","kind":kind})
     successful=sum(x["status"]=="success" for x in results)
     observed=sum(x["status"]=="observed" for x in results)
@@ -152,7 +171,8 @@ def main():
         except (OSError, ValueError, TypeError, AttributeError):
             cumulative_success=0
     # Historical qualified deliveries and this execution's new work are separate.
-    report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"started_at":now(),
+    report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"run_id":args.run_id,
+            "started_at":now(),
             "queued":len(queue),"processed":len(results),"successful":successful,
             "observed":observed,"cumulative_qualified_deliveries":cumulative_success,
             "cumulative_successful":cumulative_success,"target":50,
