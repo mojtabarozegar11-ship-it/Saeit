@@ -142,7 +142,20 @@
       "historical_data_action": "keep_original_story_and_task_FKs",
       "code_merge_committed": true,
       "live_cutover_verified": false,
-      "independent_scheduler_retired": false
+      "independent_scheduler_retired": false,
+      "handoff_blockers_in_code": [
+        "legacy_agent_row_still_active",
+        "legacy_queued_running_blocked_AgentTask",
+        "legacy_open_newsletter_draft_or_scheduled_story",
+        "legacy_queued_or_blocked_publication"
+      ],
+      "next_required_step": "reconcile_legacy_schedulers_weather_newsletter_distributions_and_actual_database_before_cutover",
+      "code_and_regression_files": [
+        "core/canonical_agent_handoff.py",
+        "core/newsletter_engine.py",
+        "core/tests/test_newsletter_queue_worker.py",
+        "core/tests.py"
+      ]
     },
     {
       "id": "knowledge_content_director",
@@ -167,7 +180,18 @@
       "historical_data_action": "keep_existing_KnowledgeAgentPlan_and_KnowledgeBook_slugs",
       "code_merge_committed": true,
       "live_cutover_verified": false,
-      "independent_scheduler_retired": false
+      "independent_scheduler_retired": false,
+      "handoff_blockers_in_code": [
+        "legacy_agent_row_still_active",
+        "legacy_queued_running_blocked_AgentTask"
+      ],
+      "next_required_step": "map_pending_knowledge_runs_and_paid_model_grants_to_canonical_owner_with_live_receipt",
+      "code_and_regression_files": [
+        "core/canonical_agent_handoff.py",
+        "core/knowledge_agent.py",
+        "core/management/commands/knowledge_agent_cycle.py",
+        "core/tests/test_knowledge_agent_scheduler.py"
+      ]
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -189,6 +213,9 @@
     "company_activity_live_handoff_verified": false,
     "company_activity_known_blocker_isolation_committed": true,
     "newsletter_and_knowledge_owner_guards_committed": true,
-    "newsletter_and_knowledge_live_handoffs_verified": false
+    "newsletter_and_knowledge_live_handoffs_verified": false,
+    "editorial_and_knowledge_new_task_canonical_routing_committed": true,
+    "editorial_and_knowledge_live_handoffs_verified": false,
+    "current_branch_tests_executed": false
   }
 }
