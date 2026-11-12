@@ -17,7 +17,7 @@ spec.loader.exec_module(release)
 
 def template(*, input_suffix=b' required=""', copy=True):
     return (
-        b'{% csrf_token %}\n<form method="post" action="/commerce/trx-easy/start/72/">\n'
+        b'<form method="post" action="/commerce/trx-easy/start/72/">\n{% csrf_token %}\n'
         + release.EMAIL_LABEL + b'\n'
         + b'<input id="mpw-buy-email" name="email" type="email"'
         + b' autocomplete="email" maxlength="254" placeholder="you@example.com"'
@@ -372,6 +372,57 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
     def test_copy_can_be_absent_without_disabling_no_email_release(self):
         output = release.patch_template(template(copy=False))
         release.verify_template(output)
+
+    def test_invoice_csrf_outside_form_is_not_a_valid_checkout(self):
+        clean = release.patch_template(template())
+        misplaced = b'{% csrf_token %}\n' + clean.replace(b'{% csrf_token %}\n', b'')
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(misplaced)
+
+    def test_unrelated_form_csrf_cannot_satisfy_invoice_form(self):
+        clean = release.patch_template(template())
+        unrelated = (
+            b'<form method="post" action="/support/">{% csrf_token %}</form>'
+            + clean.replace(b'{% csrf_token %}', b'')
+        )
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(unrelated)
+
+    def test_checkout_requires_post_and_internal_invoice_start_action(self):
+        clean = release.patch_template(template())
+        changes = (
+            clean.replace(b'method="post"', b'method="get"'),
+            clean.replace(b'action="/commerce/trx-easy/start/72/"',
+                          b'action="https://outside.example/start/72/"'),
+            clean.replace(b'action="/commerce/trx-easy/start/72/"',
+                          b'action="/support/"'),
+        )
+        for drifted in changes:
+            with self.subTest(drifted=drifted[:120]):
+                with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+                    release.verify_template(drifted)
+
+    def test_invoice_cta_must_be_inside_its_form(self):
+        clean = release.patch_template(template())
+        submit = b'<button type="submit">' + release.CTA + b'</button>'
+        misplaced = clean.replace(submit, b'') + submit
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(misplaced)
+
+    def test_hidden_csrf_field_inside_invoice_form_is_accepted(self):
+        clean = release.patch_template(template())
+        rendered = clean.replace(
+            b'{% csrf_token %}',
+            b'<input type="hidden" name="csrfmiddlewaretoken" value="verified-token">'
+        )
+        release.verify_template(rendered)
+
+    def test_nested_forms_are_rejected_before_release(self):
+        clean = release.patch_template(template())
+        nested = clean.replace(b'{% csrf_token %}',
+                               b'<form method="post" action="/support/"></form>{% csrf_token %}')
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(nested)
 
     def test_rejects_unknown_email_label(self):
         with self.assertRaisesRegex(RuntimeError, "EMAIL_LABEL_DRIFT"):

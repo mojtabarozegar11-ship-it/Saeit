@@ -280,13 +280,36 @@ def patch_template(original: bytes) -> bytes:
 
 
 class CheckoutEmailControlParser(HTMLParser):
-    """Detect buyer email fields through parsed HTML, not fragile tag regex."""
+    """Validate invoice-form/CSRF placement and reject all buyer email controls.
+
+    A CSRF marker elsewhere in the template is not evidence that the browser
+    submits it with the TRX invoice POST.  This preflight is deliberately
+    fail-closed for malformed or unfamiliar checkout forms.
+    """
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.has_email_control = False
+        self.forms = []
+        self.current_form = None
+        self.malformed_forms = False
 
     def handle_starttag(self, tag, attrs):
+        attributes = {name.lower(): (value or "").strip()
+                      for name, value in attrs}
+        if tag == "form":
+            if self.current_form is not None:
+                self.malformed_forms = True
+            self.current_form = {
+                "method": attributes.get("method", "").lower(),
+                "action": attributes.get("action", ""),
+                "csrf": False,
+                "cta": False,
+            }
+        if (self.current_form is not None and tag == "input" and
+                attributes.get("name", "").lower() == "csrfmiddlewaretoken" and
+                attributes.get("type", "hidden").lower() == "hidden"):
+            self.current_form["csrf"] = True
         if tag not in ("input", "textarea", "select", "button"):
             return
         for name, value in attrs:
@@ -296,13 +319,29 @@ class CheckoutEmailControlParser(HTMLParser):
                     (name in ("type", "autocomplete") and value == "email")):
                 self.has_email_control = True
 
+    def handle_data(self, data):
+        if self.current_form is None:
+            return
+        if re.search(r"{%\s*csrf_token\s*%}", data):
+            self.current_form["csrf"] = True
+        if CTA.decode("utf-8") in data:
+            self.current_form["cta"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            if self.current_form is None:
+                self.malformed_forms = True
+            else:
+                self.forms.append(self.current_form)
+                self.current_form = None
+
 
 def verify_template(raw: bytes):
     disallowed = (b'mpw-buy-email', b'name="email"', b"Email address for your order", EMAIL_COPY)
     if any(term in raw for term in disallowed):
         abort("EMAIL_FIELD_REMAINS")
-    # Parse real HTML start tags: regular expressions may truncate quoted
-    # attributes containing '>', hiding a later name='buyer_email' control.
+    # Parse real HTML tags. Regex alone can mistake a CSRF tag outside the
+    # invoice form for a usable token, yielding a customer-facing HTTP 403.
     try:
         inspector = CheckoutEmailControlParser()
         inspector.feed(raw.decode("utf-8"))
@@ -311,8 +350,21 @@ def verify_template(raw: bytes):
         abort("UNREADABLE_CHECKOUT_TEMPLATE")
     if inspector.has_email_control:
         abort("EMAIL_FIELD_REMAINS")
-    if raw.count(CTA) != 1 or (b"csrf_token" not in raw and b"csrfmiddlewaretoken" not in raw):
+    if inspector.malformed_forms or inspector.current_form is not None or raw.count(CTA) != 1:
         abort("FORM_CONTRACT_LOST")
+    invoice_forms = [form for form in inspector.forms if form["cta"]]
+    if len(invoice_forms) != 1:
+        abort("FORM_CONTRACT_LOST")
+    form = invoice_forms[0]
+    action = form["action"].strip()
+    allowed_action = (
+        action.startswith("/commerce/trx-easy/start/") or
+        (action.startswith("{%") and "url" in action.lower() and
+         "start" in action.lower())
+    )
+    if form["method"] != "post" or not allowed_action or not form["csrf"]:
+        abort("FORM_CONTRACT_LOST")
+
 
 
 def _source(path: Path) -> bytes:
