@@ -82,7 +82,7 @@ def test_invalid_or_unapproved_mutating_manual_requests_fail_closed():
     assert "github.actor != 'mojtabarozegar11-ship-it'" in blocked
     assert "inputs.recovery_authorized != true" in blocked
     assert "inputs.offhost_backup_verified != true" in blocked
-    assert "FACTORY_RECOVERY_GATE=BLOCKED_MISSING_OWNER_APPROVAL_OR_VERIFIED_BACKUP" in blocked
+    assert "FACTORY_RECOVERY_GATE=BLOCKED_UNAUTHORIZED_OR_REPLAY_OR_MISSING_APPROVAL" in blocked
     assert "exit 1" in blocked
     assert "VPS_SSH_PRIVATE_KEY" not in blocked
     assert "ssh " not in blocked
@@ -126,3 +126,37 @@ def test_manual_audit_does_not_require_mutating_backup_approvals():
     assert "inputs.operation == 'audit'" in audit
     assert "  schedule:" not in _on()
     assert "  push:" not in _on()
+
+
+def test_all_private_jobs_block_reruns_and_nonowner_triggering_actor():
+    """GitHub re-runs retain the original github.actor permissions.
+
+    A collaborator may re-run the original owner's job. All VPS-connected
+    jobs must therefore check actual triggering_actor and run_attempt.
+    """
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    blocker = _job("blocked-unapproved-recovery")
+    assert "github.triggering_actor != 'mojtabarozegar11-ship-it'" in blocker
+    assert "github.run_attempt != '1'" in blocker
+    assert "BLOCKED_UNAUTHORIZED_OR_REPLAY_OR_MISSING_APPROVAL" in blocker
+    for name in ("audit-readonly", "ensure", "pause-loop-low-disk"):
+        job = _job(name)
+        assert "github.actor == 'mojtabarozegar11-ship-it'" in job
+        assert "github.triggering_actor == 'mojtabarozegar11-ship-it'" in job
+        assert "github.run_attempt == '1'" in job
+        assert "github.ref == 'refs/heads/main'" in job
+        assert "github.event_name == 'workflow_dispatch'" in job
+    assert "  schedule:" not in _on()
+    assert "  push:" not in _on()
+    assert "  pull_request:" not in _on()
+
+
+def test_replay_blocker_is_on_hosted_runner_without_private_credentials():
+    blocker = _job("blocked-unapproved-recovery")
+    assert "runs-on: ubuntu-24.04" in blocker
+    assert "FACTORY_RECOVERY_GATE=BLOCKED_UNAUTHORIZED_OR_REPLAY_OR_MISSING_APPROVAL" in blocker
+    assert "exit 1" in blocker
+    assert "secrets." not in blocker
+    assert "VPS_SSH_PRIVATE_KEY" not in blocker
+    assert "ssh " not in blocker
+    assert "sudo " not in blocker
