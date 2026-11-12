@@ -40,6 +40,22 @@ class FormAuditTests(unittest.TestCase):
                 result = AUDIT.parse_checkout('<form>'+markup+'</form>')
                 self.assertEqual(result["named_email_inputs"], 1)
 
+    def test_email_named_submit_button_never_passes_form_gate(self):
+        csrf = ('<input type="hidden" name="csrfmiddlewaretoken" value="'
+                + 'a' * 64 + '">')
+        for submit in (
+            '<button type="submit" name="email">Create my TRX payment invoice</button>',
+            '<button type="submit" name="buyer_email" value="">Create my TRX payment invoice</button>',
+            '<button type="submit" id="email-alias">Create my TRX payment invoice</button>',
+            '<input type="submit" name="buyer_email" value="Create my TRX payment invoice">',
+        ):
+            with self.subTest(submit=submit):
+                html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                        + csrf + submit + '</form>')
+                report = AUDIT.parse_checkout(html, 72)
+                self.assertEqual(report["named_email_inputs"], 1)
+                self.assertFalse(report["checkout_post_csrf_cta_valid"])
+
     def test_valid_no_email_form(self):
         html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
                 '<input name="csrfmiddlewaretoken" type="hidden" value="' + 'a' * 64 + '">'
