@@ -32,9 +32,15 @@ def source_bytes(root: Path, relative: str) -> bytes:
         raise ValueError("OUTSIDE_ALLOWLIST")
     if root.is_symlink() or not root.is_dir():
         raise ValueError("UNSAFE_APPLICATION_ROOT")
-    path = root / relative
-    if any(part.is_symlink() for part in (path, path.parent, path.parent.parent)):
-        raise ValueError("SYMLINK_IN_SOURCE")
+    # Reject symlink traversal at every level, including nested template roots.
+    # Checking only the final parent can miss an ancestor such as
+    # /home/zomorod2/Saeit-staging/mpw_commerce -> an outside directory.
+    parts = Path(relative).parts
+    path = root
+    for component in parts:
+        path = path / component
+        if path.is_symlink():
+            raise ValueError("SYMLINK_IN_SOURCE")
     info = path.stat()
     if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_FILE_BYTES:
         raise ValueError("INVALID_SOURCE_FILE")
