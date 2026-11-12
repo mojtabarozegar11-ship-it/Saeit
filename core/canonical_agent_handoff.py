@@ -19,6 +19,15 @@ def canonical_owner_for(legacy_code: str) -> Agent:
     legacy = Agent.objects.filter(code=legacy_code).first()
     if legacy is not None:
         pending = AgentTask.objects.filter(agent=legacy, status__in=PENDING).exists()
-        if legacy.active or pending:
+        # A retired newsletter agent may still own drafts, scheduled posts or
+        # distribution retries. Preserve and reconcile those records before
+        # routing new editorial work to the canonical bot.
+        open_stories = legacy.newsletter_stories.filter(
+            status__in=("draft", "review", "approved", "scheduled", "queued", "processing")
+        ).exists()
+        pending_delivery = legacy.newsletter_stories.filter(
+            publications__status__in=("queued", "blocked")
+        ).exists()
+        if legacy.active or pending or open_stories or pending_delivery:
             raise RuntimeError("MOJTABA_LEGACY_HANDOFF_REQUIRED:" + legacy_code)
     return canonical
