@@ -48,6 +48,8 @@ class AvaMemory:
             raise ValueError("Memory owner is required")
         if not item.text or not item.text.strip():
             raise ValueError("Memory text is required")
+        if any((ord(ch) < 32 and ch not in "\\n\\r\\t") or ord(ch) == 127 for ch in item.text):
+            raise ValueError("Memory contains forbidden control characters")
         if item.id in self._items:
             raise ValueError("Memory identifier already exists")
         self._items[item.id] = item
