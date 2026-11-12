@@ -186,6 +186,53 @@ class ConsolidateLegacyAgentsTests(TestCase):
         assert self.legacy.active
         assert grant.used_at is None
 
+    def test_partial_handoff_receipt_never_deactivates_or_consumes_grant(self):
+        self._world_successor_proof()
+        receipt = self._handoff_receipt()
+        receipt.after_state["external_legacy_schedulers_stopped"] = False
+        receipt.save(update_fields=["after_state"])
+        grant = self._retirement_grant(receipt)
+        with self.assertRaisesRegex(CommandError, "LIVE_HANDOFF_RECEIPT_REQUIRED"):
+            self.run_command(
+                "--apply", "--agent-code", self.legacy.code,
+                "--approval-grant-id", str(grant.pk),
+            )
+        self.legacy.refresh_from_db()
+        grant.refresh_from_db()
+        assert self.legacy.active and grant.used_at is None
+        assert not AuditLog.objects.filter(action="legacy_agent_retired").exists()
+
+    def test_other_agent_approval_cannot_be_reused_for_retirement(self):
+        self._world_successor_proof()
+        receipt = self._handoff_receipt()
+        grant = self._retirement_grant(receipt)
+        grant.approval.target_id = str(self.busy.pk)
+        grant.approval.save(update_fields=["target_id"])
+        with self.assertRaisesRegex(CommandError, "EXACT_OWNER_APPROVAL_REQUIRED"):
+            self.run_command(
+                "--apply", "--agent-code", self.legacy.code,
+                "--approval-grant-id", str(grant.pk),
+            )
+        self.legacy.refresh_from_db()
+        grant.refresh_from_db()
+        assert self.legacy.active and grant.used_at is None
+
+    def test_wrong_grant_scope_rolls_back_without_deactivation(self):
+        self._world_successor_proof()
+        receipt = self._handoff_receipt()
+        grant = self._retirement_grant(receipt)
+        grant.scope["canonical_bot_code"] = "noncanonical-content-director"
+        grant.save(update_fields=["scope"])
+        with self.assertRaisesRegex(CommandError, "APPROVAL_GRANT_REJECTED"):
+            self.run_command(
+                "--apply", "--agent-code", self.legacy.code,
+                "--approval-grant-id", str(grant.pk),
+            )
+        self.legacy.refresh_from_db()
+        grant.refresh_from_db()
+        assert self.legacy.active and grant.used_at is None
+        assert not AuditLog.objects.filter(action="legacy_agent_retired").exists()
+
     def test_noncanonical_successor_receipts_cannot_authorize_retirement(self):
         independent = Agent.objects.create(
             code="content-director", name="Old newsletter bot",
