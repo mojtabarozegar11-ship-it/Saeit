@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -106,6 +110,77 @@ class FormAuditTests(unittest.TestCase):
                 + 'a' * 64 + '">'
                 '<input type="submit" value="Create my TRX payment invoice"></form>')
         self.assertTrue(AUDIT.parse_checkout(html, 72)["checkout_post_csrf_cta_valid"])
+
+    def _live_report(self, pages):
+        output = io.StringIO()
+
+        def local_get(path):
+            return pages[path]
+
+        with patch.object(AUDIT, "fetch", side_effect=local_get):
+            with redirect_stdout(output):
+                exit_code = AUDIT.live()
+        raw = output.getvalue().strip().split("MPW_3SKU_LIVE_FORM_READONLY=", 1)[1]
+        return exit_code, json.loads(raw)
+
+    def _safe_page(self, sku):
+        return (
+            '<form action="/commerce/trx-easy/start/' + str(sku)
+            + '/" method="post">'
+            + '<input type="hidden" name="csrfmiddlewaretoken" value="'
+            + 'a' * 64 + '">'
+            + '<button type="submit">Create my TRX payment invoice</button>'
+            + '</form>'
+        )
+
+    def test_live_success_is_only_form_evidence_not_sale(self):
+        pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
+        for sku in AUDIT.SKUS:
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+        code, report = self._live_report(pages)
+        self.assertEqual(code, 0)
+        self.assertEqual(report["form_gate"], "PASS")
+        self.assertEqual(report["status"], "FORM_ONLY_VERIFIED_SALE_UNPROVEN")
+        self.assertFalse(report["sale_proven"])
+        self.assertEqual(report["payments"], 0)
+
+    def test_live_email_form_blocks_process_exit(self):
+        pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
+        for sku in AUDIT.SKUS:
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+        pages["/store/product/225/checkout/"] = (
+            200, self._safe_page(225).replace(
+                "</form>", '<input name="email" type="email" required></form>')
+        )
+        code, report = self._live_report(pages)
+        self.assertEqual(code, 3)
+        self.assertFalse(report["all_email_free_forms"])
+        self.assertEqual(report["form_gate"], "BLOCKED")
+        self.assertFalse(report["sale_proven"])
+
+    def test_live_static_storefront_blocks_green_result(self):
+        pages = {"/store/": (200, "<!-- MPW_STATIC_STORE_FALLBACK_V1 -->")}
+        for sku in AUDIT.SKUS:
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+        code, report = self._live_report(pages)
+        self.assertEqual(code, 3)
+        self.assertEqual(report["store_mode"], "STATIC_FALLBACK")
+        self.assertEqual(report["form_gate"], "BLOCKED")
+
+    def test_live_missing_checkout_is_blocked_not_silenced(self):
+        pages = {"/store/": (200, "<main>Dynamic storefront</main>")}
+        for sku in (72, 225):
+            pages[f"/store/product/{sku}/checkout/"] = (200, self._safe_page(sku))
+        with patch.object(AUDIT, "fetch", side_effect=lambda path:
+                          pages[path] if path in pages else
+                          (_ for _ in ()).throw(OSError("not found"))):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = AUDIT.live()
+            report = json.loads(output.getvalue().split("MPW_3SKU_LIVE_FORM_READONLY=", 1)[1])
+        self.assertEqual(code, 3)
+        self.assertFalse(report["products"]["879"]["email_free_form_evidence"])
+        self.assertEqual(report["products"]["879"]["error_type"], "OSError")
 
     def test_no_form_cannot_pass_by_copy(self):
         result = AUDIT.parse_checkout('<h1>Create my TRX payment invoice</h1>')
