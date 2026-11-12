@@ -29,6 +29,81 @@ def template(*, input_suffix=b' required=""', copy=True):
 
 
 class EmailFreeCheckoutReleaseTests(unittest.TestCase):
+    @staticmethod
+    def _live_invoice_fixture(root, start_order_code, recorder_code):
+        sources = {
+            "services/mpw_trx_commercial_web.py": (
+                start_order_code + "\n" + recorder_code
+            ),
+            "services/mpw_trx_commercial_context.py": "def rights_cleared_for_sale(product):\n    return False\n",
+            "mpw_commerce/buyer_orders.py": "def _eligible(product):\n    return True\n",
+        }
+        for rel, source in sources.items():
+            dest = root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(source, encoding="utf-8")
+
+    def test_invoice_preflight_blocks_required_email_inside_record_invoice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n    return None\n",
+                "def record_invoice(order, buyer_email):\n"
+                "    if not buyer_email:\n        raise ValueError('required')\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_invoice_preflight_blocks_hidden_email_access_at_start(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get('buyer_email')\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_invoice_preflight_is_read_only_with_email_free_handler(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n    return product_id\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            before = {
+                str(p.relative_to(root)): p.read_bytes()
+                for p in root.rglob("*.py")
+            }
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertEqual(report["invoice_sources_examined"], 3)
+            self.assertTrue(report["invoice_handler_found"])
+            after = {
+                str(p.relative_to(root)): p.read_bytes()
+                for p in root.rglob("*.py")
+            }
+            self.assertEqual(before, after)
+
+    def test_invoice_preflight_rejects_missing_private_code(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n    return None\n",
+                "",
+            )
+            (root / "mpw_commerce/buyer_orders.py").unlink()
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
+                    release.audit_invoice_email_dependencies()
+
     def test_removes_entire_email_field_without_rewriting_branding(self):
         source = b'<h1>Brand preserved</h1>\n' + template()
         output = release.patch_template(source)
