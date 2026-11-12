@@ -105,12 +105,12 @@ class GuestReceiptRecoveryTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
-        self.assertIn("Invoice no longer payable", html)
-        self.assertIn("Do not send TRX to an expired quote.", html)
-        self.assertIn("Your private purchase receipt key", html)
-        self.assertIn("No email", html)
-        self.assertNotIn("Send exact", html)
-        self.assertNotIn('data-reconcile-url=', html)
+        self.assertTrue("Invoice no longer payable" in html, "expired-state notice absent")
+        self.assertTrue("Do not send TRX to an expired quote." in html, "stale-quote warning absent")
+        self.assertTrue("Your private purchase receipt key" in html, "owned receipt label absent")
+        self.assertTrue("No email" in html, "guest recovery explanation absent")
+        self.assertFalse("Send exact" in html, "expired payment instruction leaked")
+        self.assertFalse('data-reconcile-url=' in html, "expired reconciliation endpoint exposed")
         match = re.search(
             r'<textarea id="mpw-receipt-key" rows="4" readonly>([^<]+)</textarea>',
             html,
