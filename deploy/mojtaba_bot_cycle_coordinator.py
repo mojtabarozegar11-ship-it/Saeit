@@ -144,7 +144,7 @@ def cmd_summary(args: argparse.Namespace) -> None:
             "blocked": counts[BLOCKED],
             "failed": counts[FAILED],
             "remaining": max(TARGET - counts[SUCCESS], 0),
-            "complete": counts[SUCCESS] == TARGET,
+            "complete": counts[SUCCESS] >= TARGET,
             "closed_at": run["closed_at"],
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
