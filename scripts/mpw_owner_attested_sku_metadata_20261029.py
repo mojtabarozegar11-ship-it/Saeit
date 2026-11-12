@@ -32,6 +32,21 @@ def setup():
     from mpw_commerce.buyer_orders import _eligible
     return Product,_private_file,_eligible
 
+def canonical_sale_digest(meta, actual):
+    """Reconcile the verified asset with the canonical hash required by TRX.
+
+    The private file must already have matched an existing catalog digest.
+    A conflicting nonempty canonical value is a version mismatch, not a
+    reason to overwrite another product revision or relax payment rights.
+    """
+    canonical = meta.get("sha256")
+    if canonical not in (None, "") and (
+        type(canonical) is not str or canonical.lower() != actual.lower()
+    ):
+        raise RuntimeError("CANONICAL_CATALOG_HASH_CONFLICT")
+    return canonical or actual
+
+
 def inspect():
     Product,private_file,eligible=setup()
     rows={}
@@ -48,6 +63,7 @@ def inspect():
         catalog=[meta.get(k) for k in ("sha256","asset_sha256","final_pdf_sha256","pdf_sha256")]
         if actual not in catalog:
             raise RuntimeError("CATALOG_ASSET_HASH_MISMATCH:"+str(sku))
+        canonical_sale_digest(meta, actual)
         rows[sku]={"product":p,"metadata":meta,"asset_sha256":actual}
     return rows
 
@@ -80,7 +96,9 @@ def check():
     print("MPW_OWNER_RIGHTS_PREFLIGHT="+json.dumps({
       "read_only":True,"orders_created":0,"payments_created":0,
       "skus":{str(k):{"active":True,"eligible":True,
-       "asset_sha256_prefix":v["asset_sha256"][:16]} for k,v in rows.items()}},sort_keys=True))
+       "asset_sha256_prefix":v["asset_sha256"][:16],
+        "canonical_sha256_needs_reconciliation":not bool(v["metadata"].get("sha256"))}
+        for k,v in rows.items()}},sort_keys=True))
 
 def apply(run):
     rows=inspect()
@@ -94,6 +112,10 @@ def apply(run):
                 for sku,row in rows.items():
                     p=row["product"]
                     meta=dict(row["metadata"])
+                    # The payment rights guard reads sha256 exclusively.
+                    # Only fill an absent canonical field from the private
+                    # SHA-verified asset, never overwrite a conflicting one.
+                    meta["sha256"]=canonical_sale_digest(meta,row["asset_sha256"])
                     meta.update({
                       "rights_cleared":True,
                       "publication_approved":True,
@@ -116,6 +138,8 @@ def verify(run):
     for sku,row in rows.items():
         m=row["metadata"]
         if not (m.get("rights_cleared") is True and m.get("publication_approved") is True
+          and type(m.get("sha256")) is str
+          and m["sha256"].lower()==row["asset_sha256"].lower()
           and m.get("rights_asset_sha256")==row["asset_sha256"]
           and m.get("rights_document_sha256")==OWNER_STATEMENT_SHA256
           and m.get("rights_evidence_type")=="owner_attestation"
@@ -138,7 +162,9 @@ def rollback(run):
             if meta.get("rights_attestation_run_id")!=run:
                 raise RuntimeError("OWNER_RIGHTS_NEWER_METADATA_OR_WRONG_RUN:"+str(sku))
             expected=snapshot["products"][str(sku)]["asset_sha256"]
-            if meta.get("rights_asset_sha256")!=expected:
+            if (meta.get("rights_asset_sha256")!=expected
+                    or type(meta.get("sha256")) is not str
+                    or meta["sha256"].lower()!=expected.lower()):
                 raise RuntimeError("OWNER_RIGHTS_ASSET_CHANGED:"+str(sku))
         for sku in SKUS:
             p=Product.objects.select_for_update().get(pk=sku)
