@@ -157,9 +157,18 @@ def inspect(root: Path = ROOT) -> dict:
         for f in files if f["email_referencing_functions"]
     ]
     missing_start = not start or "_start_order" not in start["root_functions_found"]
+    recorder = next((f for f in files if f["file"] == SOURCE_PATHS[2]), None)
+    missing_recorder = not recorder or not recorder["record_invoice_present"]
+    email_template = bool(
+        template.get("legacy_email_input_marker") or template.get("email_name_marker")
+    )
+    missing_csrf = not template.get("csrf_template_marker")
     status = ("SOURCE_MISSING_OR_UNREADABLE" if missing or not template.get("exists")
               else "START_HANDLER_NOT_FOUND" if missing_start
+              else "INVOICE_RECORDER_NOT_FOUND" if missing_recorder
               else "EMAIL_REFERENCES_PRESENT" if email_hits
+              else "LEGACY_EMAIL_CHECKOUT_PRESENT" if email_template
+              else "CHECKOUT_CSRF_MARKER_MISSING" if missing_csrf
               else "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
     return {
         "mode": "readonly_ast_no_import_no_db_no_payment",
@@ -170,6 +179,9 @@ def inspect(root: Path = ROOT) -> dict:
         "files": files,
         "source_problems": missing,
         "template": template,
+        "checkout_source_requires_email": email_template,
+        "invoice_recorder_found": not missing_recorder,
+        "csrf_template_marker_found": not missing_csrf,
         "email_hit_functions": email_hits,
         "external_invoice_code_proven_email_free": False,
     }
