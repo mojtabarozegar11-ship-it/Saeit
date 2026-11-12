@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "E",
+  "run_id": "E-20261112-C04-verified-engine-fixes",
+  "actions": [
+    {
+      "action_id": "E-C04-REPLAY-001",
+      "item": "Cross-lane replay prevention in central five-cycle coordinator",
+      "kind": "source_change",
+      "before": "Previously a new commit SHA could cause identical file bytes to be counted a second time",
+      "change": "Deduplicate accepted sources globally by immutable path plus sha256 across all A-E runs",
+      "after": "Canonical artifact identity guards record and verified summary, tested against restored identical bytes",
+      "evidence": [
+        "commit:9d7092604ac25a7ee671108cc8678545c2509a56",
+        "path:deploy/mojtaba_bot_cycle_coordinator.py",
+        "sha256:ddd7caa35dde482504bdd67f204103a07cf6beedb3aa4ad945b20a20b7cc4133"
+      ]
+    },
+    {
+      "action_id": "E-C04-WORKER-002",
+      "item": "Worker cumulative successful-action counter anti-replay alignment",
+      "kind": "source_change",
+      "before": "Cumulative proof identity included commit and could accept same file content through a later commit",
+      "change": "Reuse central artifact_identity(path,sha256) in durable worker reconciliation",
+      "after": "Worker cumulative counting excludes proof replays with changed commit IDs, with ledger regression suite passing",
+      "evidence": [
+        "commit:fd60eb5e7148e9f8aa5daf2386511eebbbf53523",
+        "path:deploy/mojtaba_bot_cycle_worker.py",
+        "sha256:0ed1366b98d8fde7ca1a62e9d58e0533a1306d405925c61bb9c2eafe395c9d2c"
+      ]
+    },
+    {
+      "action_id": "E-C04-HOURLY-003",
+      "item": "Auditor refuses stale previous-hour results as current hourly success",
+      "kind": "source_change",
+      "before": "Auditor's most recent successful manifest counted indefinitely as latest 50/50 despite elapsed hours",
+      "change": "Apply 75-minute freshness gate to latest_run_success, preserve historical verified counters separately",
+      "after": "After hourly freshness expires, current success resets to zero while historical validated work remains visible; CI regression passed",
+      "evidence": [
+        "commit:c022e80163a40afd91d99741354668e376a1bf2b",
+        "path:deploy/mojtaba_bot_cycle_auditor.py",
+        "sha256:0cdc2e8f436f4e2b55bfa7c6e93d1ca98e36f30d89d8d1f8171fa57475b2cd2e"
+      ]
+    }
+  ]
+}
