@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import F
 
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
 from core.unified_bot_identity import BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES
@@ -47,7 +48,9 @@ class Command(BaseCommand):
             code__in=LEGACY_EXECUTOR_CODES
         ).order_by("pk"))
         if not options["apply_legacy_merge"] and any(
-            old.active or AgentTask.objects.filter(agent=old).exists()
+            old.active or AgentTask.objects.filter(agent=old).exclude(
+                status__in=("completed", "failed", "cancelled")
+            ).exists()
             for old in predecessors
         ):
             raise CommandError(
@@ -81,14 +84,34 @@ class Command(BaseCommand):
             old_code = old.code
             # A pending job may be moved only if its action is implemented in
             # the new bot. Unknown work must be reviewed, not lost/relabelled.
-            unknown = AgentTask.objects.filter(agent=old).exclude(
-                status__in=("completed", "failed", "cancelled")
-            ).exclude(capability_code__in=ASSIGNMENTS).order_by("pk").first()
+            # Terminal task ownership is immutable provenance. A blocked or
+            # unrecognized status may carry an outstanding owner approval,
+            # external effect, or unresolved retry; never silently reassign it.
+            unreconciled = AgentTask.objects.filter(agent=old).exclude(
+                status__in=("queued", "completed", "failed", "cancelled")
+            ).order_by("pk").first()
+            if unreconciled:
+                raise CommandError(
+                    f"UNIFIED_BOT_MIGRATION_BLOCKED_UNRECONCILED_TASK={unreconciled.pk}"
+                )
+            queued = AgentTask.objects.filter(agent=old, status="queued")
+            unknown = queued.exclude(capability_code__in=ASSIGNMENTS).order_by("pk").first()
             if unknown:
                 raise CommandError(
                     f"UNIFIED_BOT_UNMAPPED_LEGACY_TASK={unknown.pk}"
                 )
-            AgentTask.objects.filter(agent=old).update(agent=agent)
+            mismatched = queued.exclude(action_type=F("capability_code")).order_by("pk").first()
+            if mismatched:
+                raise CommandError(
+                    f"UNIFIED_BOT_MISMATCHED_LEGACY_TASK={mismatched.pk}"
+                )
+            # Only unstarted, supported tasks change owner. Historical
+            # completed/failed/cancelled tasks remain attached to their
+            # original Agent, preserving audit and delivery attribution.
+            historical_retained = AgentTask.objects.filter(
+                agent=old, status__in=("completed", "failed", "cancelled")
+            ).count()
+            queued_reassigned = queued.update(agent=agent)
             if old.active:
                 old.active = False
                 old.save(update_fields=["active", "updated_at"])
@@ -102,7 +125,10 @@ class Command(BaseCommand):
                     "actor_type": "system", "actor_id": BOT_CODE,
                     "before_state": {"code": old_code},
                     "after_state": {"internal_module_of": BOT_NAME,
-                                    "legacy_record_preserved": True},
+                                    "legacy_record_preserved": True,
+                                    "historical_task_ownership_preserved": True,
+                                    "terminal_tasks_retained": historical_retained,
+                                    "queued_tasks_reassigned": queued_reassigned},
                     "trace_id": f"mojtaba-merge-{old.pk}",
                 },
             )
