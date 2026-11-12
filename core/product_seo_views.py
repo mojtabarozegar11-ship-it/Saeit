@@ -7,6 +7,7 @@ from django.urls import Resolver404, resolve
 from django.utils.html import strip_tags
 from .models import Product
 from .mojplaywin_catalog import FEATURED_IDS, catalog_card
+from .mpw_trx_checkout_bridge import backend_ready as bridge_backend_ready
 
 def public_product_url(product):
     return "/store/product/{}/".format(product.pk)
@@ -42,10 +43,14 @@ def approved_guest_checkout_route(product_id):
         return None
     view = match.func
     if (match.kwargs.get("product_id") != product_id
-            or getattr(view, "__name__", None) != "product_checkout"
-            or getattr(view, "__module__", None) != "services.mpw_trx_guest_commerce"):
+            or getattr(view, "__name__", None) != "product_checkout"):
         return None
-    return target
+    origin = getattr(view, "__module__", None)
+    if origin == "services.mpw_trx_guest_commerce":
+        return target
+    if origin == "core.mpw_trx_checkout_bridge" and bridge_backend_ready():
+        return target
+    return None
 
 
 def product_detail(request, product_id):
