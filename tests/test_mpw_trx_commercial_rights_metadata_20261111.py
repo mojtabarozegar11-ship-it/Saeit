@@ -184,5 +184,74 @@ class RightsMetadataContract(unittest.TestCase):
         self.assertIn('return stream',paid)
 
 
+    def test_real_paid_file_opener_rejects_drift_and_closes_fd(self):
+        """Exercise the real payment file-opening function, not just text checks."""
+        import ast
+        import os
+        import stat
+        import sys
+        from types import ModuleType
+        from unittest.mock import Mock, patch
+
+        path=SOURCE.parent/'mpw_walletless_commercial_intent.py'
+        tree=ast.parse(path.read_text('utf-8'))
+        definitions=[node for node in tree.body
+                     if isinstance(node,ast.FunctionDef)
+                     and node.name=='open_commercial_paid_file']
+        self.assertEqual(len(definitions),1)
+        namespace={}
+        class PaymentHold(Exception):
+            pass
+        namespace.update(os=os,stat=stat,PaymentHold=PaymentHold,
+                         PROVIDER='mpw_walletless_trx_v1',
+                         commercial_buyer_status=lambda *a,**k: {'can_download':True})
+        exec(compile(ast.Module(body=definitions,type_ignores=[]),str(path),'exec'),
+             namespace)
+        handler=namespace['open_commercial_paid_file']
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/'sale.pdf'
+            approved=b'%PDF-1.4\\nThe original paid product'
+            source.write_bytes(approved)
+            digest=hashlib.sha256(approved).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest)
+            product=SimpleNamespace(metadata=metadata)
+            item=SimpleNamespace(product=product)
+            intent=SimpleNamespace(order=SimpleNamespace(customer_id=7),
+                                   provider='mpw_walletless_trx_v1')
+            payments=ModuleType('core.models')
+            payments.PaymentIntent=SimpleNamespace(objects=Mock())
+            payments.PaymentIntent.objects.select_related.return_value.get.return_value=intent
+            payments.OrderItem=SimpleNamespace(objects=Mock())
+            payments.OrderItem.objects.get.return_value=item
+            storage=ModuleType('mpw_commerce.downloads')
+            storage._private_file=lambda entry: source
+            rights=ModuleType('services.mpw_trx_commercial_context')
+            rights.private_paid_stream_matches_approved=CONTEXT.private_paid_stream_matches_approved
+            stubs={
+                'core.models':payments,
+                'mpw_commerce.downloads':storage,
+                'services.mpw_trx_commercial_context':rights,
+            }
+            streams=[]
+            original_fdopen=os.fdopen
+            def capture_fdopen(fd,mode):
+                stream=original_fdopen(fd,mode)
+                streams.append(stream)
+                return stream
+            with patch.dict(sys.modules,stubs),patch.object(os,'fdopen',side_effect=capture_fdopen):
+                stream=handler(31,7)
+                try:
+                    self.assertEqual(stream.tell(),0)
+                    self.assertEqual(stream.read(),approved)
+                finally:
+                    stream.close()
+                self.assertTrue(streams[-1].closed)
+                source.write_bytes(b'%PDF-1.4\\nAltered paid product copy')
+                with self.assertRaises(PaymentHold):
+                    handler(31,7)
+                self.assertTrue(streams[-1].closed)
+
+
 if __name__=="__main__":
     unittest.main()
