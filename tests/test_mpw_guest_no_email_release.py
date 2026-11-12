@@ -104,6 +104,37 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
                     release.audit_invoice_email_dependencies()
 
+    def test_missing_recorder_is_a_release_block_even_when_handler_exists(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n    return product_id\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(
+                    RuntimeError, "INVOICE_RECORDER_MISSING_OR_DUPLICATED"
+                ):
+                    release.audit_invoice_email_dependencies()
+
+    def test_duplicate_recorder_in_two_sources_is_a_release_block(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n    return product_id\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            (root / "mpw_commerce/buyer_orders.py").write_text(
+                "def record_invoice(order):\n    return order\n"
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(
+                    RuntimeError, "INVOICE_RECORDER_MISSING_OR_DUPLICATED"
+                ):
+                    release.audit_invoice_email_dependencies()
+
     def test_hidden_email_requirement_in_reachable_invoice_helper_is_blocked(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -197,7 +228,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 root,
                 "def _start_order(request, product_id):\n"
                 "    return request.POST.get('order_' + 'reference')\n",
-                "",
+                "def record_invoice(order):\n    return order\n",
             )
             with patch.object(release, "APP", root):
                 report = release.audit_invoice_email_dependencies()
