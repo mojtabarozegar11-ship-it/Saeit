@@ -343,5 +343,34 @@ class RightsMetadataContract(unittest.TestCase):
         self.assertIn('descriptor is not None',text)
 
 
+    def test_paid_order_remains_downloadable_after_unpublish_when_rights_still_clear(self):
+        """Unpublishing hides new sales, not an already-licensed paid asset."""
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'%PDF-1.4\\nA valid previous purchase\\n'
+            source=Path(tmp)/'paid.pdf'
+            source.write_bytes(payload)
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest, rights_asset_sha256=digest,
+                            publication_approved=False, rights_cleared=True)
+            product=SimpleNamespace(metadata=metadata)
+            self.assertFalse(CONTEXT.rights_cleared_for_sale(product))
+            with source.open('rb') as stream:
+                self.assertTrue(CONTEXT.private_paid_stream_matches_approved(product,stream))
+
+    def test_prior_paid_entitlement_still_requires_valid_rights_document_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'%PDF-1.4\\nPreviously purchased licensed asset\\n'
+            source=Path(tmp)/'paid.pdf'
+            source.write_bytes(payload)
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest, rights_asset_sha256=digest,
+                            publication_approved=False, rights_document_sha256='bad')
+            with source.open('rb') as stream:
+                self.assertFalse(CONTEXT.private_paid_stream_matches_approved(
+                    SimpleNamespace(metadata=metadata),stream))
+
+
 if __name__=="__main__":
     unittest.main()
