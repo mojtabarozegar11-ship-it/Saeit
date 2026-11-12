@@ -124,6 +124,9 @@ class ConversationEngine:
             raise ValueError("Cannot save empty memory")
         if len(text) > 10000:
             raise ValueError("Memory exceeds 10000 characters")
+        # Reject unsafe text before invoking an external persistence adapter.
+        if any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in text):
+            raise ValueError("Memory contains forbidden control characters")
         item = MemoryItem(
             id=str(uuid4()),
             owner_id=self.owner_id,
