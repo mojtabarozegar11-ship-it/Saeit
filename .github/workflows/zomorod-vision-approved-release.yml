@@ -1,0 +1,302 @@
+name: Zomorod VISION owner-approved reference design guarded release
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-vision-v3/**'
+      - '.github/workflows/zomorod-vision-approved-release.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'content/zomorod-vision-v3/**'
+      - '.github/workflows/zomorod-vision-approved-release.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  validate-and-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify responsive source, artwork bundle and rollback regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-vision-v3/deploy_guarded.py
+          python3 content/zomorod-vision-v3/test_release.py
+          node --check content/zomorod-vision-v3/assets/zm-reference-v3.js
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          p=Path('content/zomorod-vision-v3/index.html')
+          s=p.read_text()
+          for term in ('ونکوور','Vancouver','ISO 9001','ISO 14001','ISO 22000','+650','+600'):
+              assert term not in s,term
+          assert s.count('<h1')==1 and s.count('href="/assets/zm-reference-v3.css"')==1
+          assert 'موقعیت' not in s or 'مرودشت' in s
+          assert s.count('href=')>50
+          print('VISION_APPROVED_REFERENCE_CONTENT_GATES=PASS')
+          PY
+          unzip -q content/zomorod-vision-v3/artwork.zip -d content/zomorod-vision-v3/assets/zm-vision-v3
+          test -s content/zomorod-vision-v3/assets/zm-vision-v3/art/hero.webp
+      - name: Prepare isolated local preview using artwork, not fake business data
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=content/zomorod-vision-v3
+          mkdir -p "$root/static/site/zomorod-v7" "$root/static/site/heroes"
+          cp "$root/assets/zm-vision-v3/art/innovation.webp" "$root/static/site/zomorod-v7/company-logo.webp"
+          cp "$root/assets/zm-vision-v3/art/castle.webp" "$root/static/site/heroes/ai.webp"
+          cd "$root"
+          nohup python3 -m http.server 8096 --bind 127.0.0.1 > /tmp/zomorod-v3-local-http.log 2>&1 &
+          echo $! > "$RUNNER_TEMP/zm-preview-server.pid"
+      - name: Real Chromium preview at 390, 768 and 1440 pixels
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          node - <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const b=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const w of [390,768,1440]){
+              const page=await b.newPage({viewport:{width:w,height:850},deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('http://127.0.0.1:8096/',{waitUntil:'load',timeout:45000});
+              await page.locator('.hero-photo').waitFor({timeout:10000});
+              await page.waitForFunction(()=>{const image=document.querySelector('.hero-photo');return image&&image.complete&&image.naturalWidth>0;},null,{timeout:12000});
+              const d=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,h1:document.querySelectorAll('h1').length,links:document.querySelectorAll('a[href]').length,heroOK:document.querySelector('.hero-photo').naturalWidth>0,style:getComputedStyle(document.body).backgroundColor}));
+              if(d.scroll>d.width+2||d.h1!==1||d.links<65||!d.heroOK||errors.length)throw Error('Preview '+JSON.stringify({w,d,errors}));
+              if(w===390){
+                await page.locator('.mobile-menu-btn').click();
+                if(!await page.locator('#mobile-nav').isVisible())throw Error('Mobile menu cannot open');
+                await page.locator('.mobile-menu-btn').click();
+                await page.locator('.search-toggle').click();
+                if(!await page.locator('#search-wrap').isVisible())throw Error('Search cannot open');
+                await page.locator('#site-search').fill('ژنتیک');
+                await page.locator('.search-form button').click();
+                if(!(await page.locator('#search-feedback').innerText()).includes('پیدا'))throw Error('Search inactive');
+                await page.locator('.search-toggle').click();
+              }
+              for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=750){await page.evaluate(y=>window.scrollTo(0,y),y);await page.waitForTimeout(50);}
+              await page.evaluate(()=>window.scrollTo(0,0));
+              await page.screenshot({path:'zomorod-vision-preview-'+w+'.png',fullPage:true,animations:'disabled'});
+              console.log('VISION_PREVIEW_BROWSER_PASS='+w,JSON.stringify(d));
+              await page.close();
+            }
+            await b.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Preserve visible preview evidence for design acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-vision-preview
+          path: ${{ runner.temp }}/zomorod-vision-preview-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  publish:
+    needs: validate-and-preview
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm exact production baseline and inner route HTTP status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          with urlopen(Request(base+'/?vision_approved_baseline=20261112',headers={'Cache-Control':'no-cache'}),timeout=22) as r:
+              root=r.read(130000);assert r.status==200
+          actual=hashlib.sha256(root).hexdigest()
+          print('VISION_PRODUCTION_OLD_HOME_SHA256='+actual)
+          assert actual=='0eca61aa473b46dc5556298b96b0b2d6fb47e29aa111b93f83f2405747491af9','Unexpected home revision: abort'
+          for path in ('/agriculture/','/research/','/industry/','/services/','/store/','/contact/','/games/','/apps/','/topics/','/auctions/'):
+              with urlopen(base+path,timeout=20) as r:
+                  assert r.status==200 and len(r.read(2000))>200,path
+              print('VISION_BEFORE_ROUTE_OK='+path)
+          PY
+      - name: Prepare proven direct fingerprint-pinned cPanel SSH
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${HOST_KEY:-}"
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          pin_ok=0
+          for attempt in 1 2 3; do
+            if timeout 14s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
+              actual="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              test "$actual" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'VISION_CPANEL_FINGERPRINT_MISMATCH_STOP' >&2; exit 1; }
+              mv "$d/host.candidate" "$d/host.known"; pin_ok=1; break
+            fi
+            sleep "$attempt"
+          done
+          test "$pin_ok" = 1 || { echo 'VISION_CPANEL_HOST_UNREACHABLE_STOP' >&2; exit 1; }
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ServerAliveInterval 8
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config" "$d/host.known"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'id -un' | grep -Fxq 'zomorod2'
+          echo VISION_CPANEL_PINNED_AUTH=VERIFIED
+      - name: Transfer candidate into isolated private hosting staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          stage="/home/zomorod2/.zm-vision-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          tar -C content/zomorod-vision-v3 -cf - . | timeout 70s ssh -T -F "$d/config" saeit-cpanel "tar -C '$stage' -xf -"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' check" | head -c 1200
+      - name: Install only homepage and first-party versioned assets, with backup
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          timeout 115s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-vision-stage-$GITHUB_RUN_ID/deploy_guarded.py' apply 'vision-$GITHUB_RUN_ID'"
+      - name: Prove public page CSS JS and all protected internal routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-vision-stage-$GITHUB_RUN_ID/deploy_guarded.py' verify 'vision-$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          verified=False
+          for i in range(7):
+              try:
+                  with urlopen(Request(base+'/?vision_page_verify='+str(i),headers={'Cache-Control':'no-cache,no-store'}),timeout=20) as r:
+                      page=r.read(100000);assert r.status==200
+                  if b'<body class="zm-vision-v3">' in page and b'zm-reference-v3.css' in page:
+                      verified=True;break
+              except Exception as exc:
+                  print('VISION_PUBLIC_RETRY='+str(i)+' '+str(exc)[:100],flush=True)
+              time.sleep(3)
+          assert verified,'New site not visible publicly'
+          for path in ('/assets/zm-reference-v3.css','/assets/zm-reference-v3.js','/assets/zm-vision-v3/art/hero.webp','/assets/zm-vision-v3/art/genetics.webp','/agriculture/','/research/','/industry/','/services/','/store/','/contact/','/games/','/apps/','/topics/','/auctions/'):
+              with urlopen(base+path,timeout=22) as r:
+                  data=r.read(250000);assert r.status==200 and len(data)>200,path
+              print('VISION_PUBLIC_ASSET_OR_ROUTE_OK='+path)
+          print('VISION_V3_PUBLIC_RELEASE_VERIFIED=YES')
+          PY
+      - name: Local rollback on deployment or public verification failure
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-vision-stage-$GITHUB_RUN_ID/deploy_guarded.py' rollback 'vision-$GITHUB_RUN_ID'"
+      - name: Remove temporary SSH key material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-vision-ssh"
+          if test -d "$d"; then rm -rf -- "$d"; fi
+  verify-browser:
+    needs: publish
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Real public Chrome visual, image and mobile tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const b=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [390,768,1440]){
+              const page=await b.newPage({viewport:{width,height:850},deviceScaleFactor:1});
+              const errors=[],failed=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              page.on('requestfailed',r=>failed.push(r.url()+':'+r.failure()?.errorText));
+              await page.goto('https://zomorodmelal.ir/?vision_live_browser='+width,{waitUntil:'load',timeout:45000});
+              await page.waitForFunction(()=>{let img=document.querySelector('.hero-photo');return img?.complete&&img.naturalWidth>0;},null,{timeout:22000});
+              const x=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,h1:document.querySelectorAll('h1').length,links:document.querySelectorAll('a[href]').length,hero:document.querySelector('.hero-photo').naturalWidth,css:[...document.styleSheets].some(s=>s.href?.includes('zm-reference-v3.css'))}));
+              console.log('VISION_BROWSER_DIAGNOSTICS='+JSON.stringify({width,x,errors,failed}));
+              if(x.scroll>x.width+3||x.h1!==1||x.links<65||x.hero<250||!x.css||errors.length||failed.some(x=>/zm-vision-v3|zm-reference-v3/.test(x)))throw Error('Live page regression '+JSON.stringify({width,x,errors,failed}));
+              for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=750){await page.evaluate(y=>scrollTo(0,y),y);await page.waitForTimeout(50);}
+              await page.evaluate(()=>scrollTo(0,0));
+              await page.screenshot({path:'zomorod-vision-live-'+width+'.png',fullPage:true,animations:'disabled'});
+              console.log('VISION_V3_LIVE_BROWSER_OK='+width);
+              await page.close();
+            }
+            await b.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Save actual public-site screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-vision-live-screenshots
+          path: ${{ runner.temp }}/zomorod-vision-live-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  rollback-after-browser-failure:
+    needs: [publish,verify-browser]
+    if: ${{ always() && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' && needs.verify-browser.result != 'success' }}
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Restore previous homepage and remove only versioned VISION assets
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-vision-browser-rollback-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 16s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 70s ssh -T -p 1396 -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 zomorod2@178.239.147.125 "python3 '/home/zomorod2/.zm-vision-stage-$GITHUB_RUN_ID/deploy_guarded.py' rollback 'vision-$GITHUB_RUN_ID'"
+          echo VISION_V3_LIVE_BROWSER_ROLLBACK=VERIFIED
