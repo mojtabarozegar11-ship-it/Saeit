@@ -29,6 +29,8 @@ on:
       - 'core/tests/test_mpw_trx_invoice_bridge.py'
       - 'core/mpw_trx_purchases_bridge.py'
       - 'core/tests/test_mpw_trx_purchases_bridge.py'
+      - 'core/mpw_trx_invoice_routes.py'
+      - 'core/tests/test_mpw_trx_invoice_routes.py'
       - 'config/urls.py'
       - 'tests/test_mpw_trx_settings_contract.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
@@ -72,6 +74,8 @@ on:
       - 'core/tests/test_mpw_trx_invoice_bridge.py'
       - 'core/mpw_trx_purchases_bridge.py'
       - 'core/tests/test_mpw_trx_purchases_bridge.py'
+      - 'core/mpw_trx_invoice_routes.py'
+      - 'core/tests/test_mpw_trx_invoice_routes.py'
       - 'config/urls.py'
       - 'tests/test_mpw_trx_settings_contract.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
@@ -131,6 +135,8 @@ jobs:
             core/tests/test_mpw_trx_invoice_bridge.py \
             core/mpw_trx_purchases_bridge.py \
             core/tests/test_mpw_trx_purchases_bridge.py \
+            core/mpw_trx_invoice_routes.py \
+            core/tests/test_mpw_trx_invoice_routes.py \
             config/urls.py \
             tests/test_mpw_onefile_release_gate.py \
             tests/test_mpw_recovery_guarded_release_20261105.py \
