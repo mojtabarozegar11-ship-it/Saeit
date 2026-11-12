@@ -143,6 +143,17 @@ rejected_after=request('POST','projects',{'csrf':csrf,'action':'project',
 assert 'درخواست انجام نشد' in rejected_after
 with sqlite3.connect(str(private/'management.sqlite3')) as check:
     assert check.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
+# The dossier must reflect existing project data honestly, not falsely label changed rows as zero-budget.
+with sqlite3.connect(str(private/'management.sqlite3')) as synthetic:
+    synthetic.execute("UPDATE projects SET state='active',budget=12500 WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'")
+changed_dossier=request('GET','genetics_center')
+assert 'وضعیت واقعی رکورد: active' in changed_dossier
+assert 'نیازمند تطبیق مصوبه' in changed_dossier
+with sqlite3.connect(str(private/'management.sqlite3')) as synthetic:
+    synthetic.execute("UPDATE projects SET state='planned',budget=0 WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'")
+restored_dossier=request('GET','genetics_center')
+assert 'بودجه ثبت‌شده صفر (غیرمصوب)' in restored_dossier
+print('GENETICS_PROJECT_RECORDED_STATE_BUDGET_REFLECTED=PASS')
 print('GENETICS_PROJECT_ADMIN_IDEMPOTENT_ZERO_BUDGET=PASS')
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
