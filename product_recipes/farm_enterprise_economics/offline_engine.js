@@ -101,7 +101,7 @@
   function nameOf(row) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('Enterprise must be an object');
     const name = String(row.name || '').trim();
-    if (!name || name.length > 120 || !/^[\p{L}\p{N}]/u.test(name) || /[\u0000-\u001f\u007f]/.test(name)) {
+    if (!name || name.length > 120 || !/^[\p{L}\p{N}]/u.test(name) || /[\u0000-\u001f\u007f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(name)) {
       throw new Error('Enterprise name must start with a letter or digit, with no control characters');
     }
     return name;
@@ -132,8 +132,10 @@
     const threshold = reachable ? ceilNonnegative(div(fixed, contributionUnit)) : null;
     const priceThreshold = quantity.n > 0n && cmp(fee, ONE) < 0
       ? format(div(add(variable, div(fixed, quantity)), sub(ONE, fee)), 2, true) : null;
-    // Margin of safety uses exact break-even volume, not rounded-up units.
-    const safety = reachable ? sub(quantity, div(fixed, contributionUnit)) : null;
+    // Align with Python and operational whole-unit break-even count.
+    // Exact continuous threshold can produce an infinitely repeating decimal
+    // (e.g. 3000/5.5), making exact() throw and disabling the offline tool.
+    const safety = threshold === null ? null : sub(quantity, fraction(threshold));
     const land = optional(entry, 'land_area_hectares', true);
     const water = optional(entry, 'irrigation_water_m3');
     const result = {
@@ -143,6 +145,10 @@
       selling_fees: format(fees), variable_cost_total: format(variableTotal),
       total_cost: format(cost), contribution_margin_total: format(contribution),
       contribution_per_unit: format(contributionUnit), operating_profit: format(profit),
+      contribution_margin_percent: revenue.n === 0n
+        ? null : format(mul(div(contribution, revenue), HUNDRED)),
+      operating_profit_margin_percent: revenue.n === 0n
+        ? null : format(mul(div(profit, revenue), HUNDRED)),
       break_even_units: threshold === null ? null : safeInt(threshold),
       break_even_reachable: reachable,
       // Additional units needed to reach the operational whole-unit threshold.
@@ -227,6 +233,15 @@
     // items shown to a buyer, so detail reconciles exactly with the portfolio.
     const total = (field) => format(results.reduce((sum, x) =>
       add(sum, decimal(x[field], field, fraction(-(10n ** 70n)), fraction(10n ** 70n))), ZERO));
+    const portfolioPercent = (numeratorKey) => {
+      // Use DISPLAYED/rounded line totals, matching the Python report.
+      const max = fraction(10n ** 70n);
+      const min = fraction(-(10n ** 70n));
+      const revenue = decimal(total('sales_revenue'), 'portfolio_revenue', min, max);
+      if (revenue.n === 0n) return null;
+      const numerator = decimal(total(numeratorKey), numeratorKey, min, max);
+      return format(mul(div(numerator, revenue), HUNDRED));
+    };
     const resources = {};
     for (const field of ['land_area_hectares', 'irrigation_water_m3']) {
       const key = field === 'land_area_hectares' ? 'land' : 'water';
@@ -260,7 +275,9 @@
         'Resource intensity uses only reported values for the same accounting period.'
       ], results,
       portfolio: { sales_revenue: total('sales_revenue'), total_cost: total('total_cost'),
-        operating_profit: total('operating_profit'), contribution_margin_total: total('contribution_margin_total') },
+        operating_profit: total('operating_profit'), contribution_margin_total: total('contribution_margin_total'),
+        contribution_margin_percent: portfolioPercent('contribution_margin_total'),
+        operating_profit_margin_percent: portfolioPercent('operating_profit') },
       resource_coverage: resources, scenario_results: scenario };
     if (Object.prototype.hasOwnProperty.call(data, 'cashflow_plan')) {
       report.cashflow = cashflowPlan(data.cashflow_plan);
