@@ -60,13 +60,13 @@ EOF
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
       ;;
     cpanel_preflight)
-      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
       ;;
     django_check)
-      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; test -x "$python"; cd "$root"; "$python" manage.py check'
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py check'
       ;;
     django_migrations)
-      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
       ;;
   esac
   exit 0
