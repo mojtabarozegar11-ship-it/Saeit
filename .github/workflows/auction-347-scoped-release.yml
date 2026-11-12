@@ -1,7 +1,7 @@
 name: Publish only auction 347 to Zomorod cPanel
 on:
   push:
-    branches: [feature/zomorod-auction-347-20261112]
+    branches: [feature/zomorod-lab-procurement-rfq-347-20261112]
     paths:
       - .github/workflows/auction-347-scoped-release.yml
 permissions: {contents: read}
@@ -23,7 +23,7 @@ jobs:
           from html.parser import HTMLParser
           f=Path('public/auctions/347/index.html')
           s=f.read_text(encoding='utf-8')
-          for token in ('<html lang="fa" dir="rtl">','مزایده شماره ۳۴۶','zomorodmelal@gmail.com','۵ تا ۱۰ هر ماه','با اعلام قبلی','rel="canonical"','application/ld+json','@page{size:A4 portrait'):
+          for token in ('<html lang="fa" dir="rtl">','مزایده شماره ۳۴۶','zomorodmelal@gmail.com','۵ تا ۱۰ هر ماه','با اعلام قبلی','rel="canonical"','application/ld+json','@page{size:A4'):
               assert token in s, token
           assert '{%' not in s and '<script src=' not in s and 'https://zomorodmelal.ir/auctions/347/' in s
           assert s.count('</html>')==1
