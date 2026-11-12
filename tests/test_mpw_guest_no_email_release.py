@@ -104,6 +104,67 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
                     release.audit_invoice_email_dependencies()
 
+    def test_hidden_email_requirement_in_reachable_invoice_helper_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return invoice_helper(request)\n"
+                "def invoice_helper(request):\n"
+                "    return request.POST.get('customer_email')\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_hidden_email_constant_in_reachable_helper_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "EMAIL_PARAM = 'buyer_email'\n"
+                "def _start_order(request, product_id):\n"
+                "    return invoice_helper(request)\n"
+                "def invoice_helper(request):\n"
+                "    return request.POST.get(EMAIL_PARAM)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_outside_invoice_recorder_must_not_be_trusted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from some_other_module import record_invoice as external_recorder\n"
+                "def _start_order(request, product_id):\n"
+                "    return external_recorder(request)\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_unreachable_legacy_email_helper_does_not_block_checkout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return product_id\n"
+                "def old_email_recovery(request):\n"
+                "    return request.POST.get('email')\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertTrue(report["invoice_handler_found"])
+            self.assertGreaterEqual(report["invoice_functions_examined"], 2)
+
     def test_removes_entire_email_field_without_rewriting_branding(self):
         source = b'<h1>Brand preserved</h1>\n' + template()
         output = release.patch_template(source)
