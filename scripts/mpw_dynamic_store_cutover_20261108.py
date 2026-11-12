@@ -460,49 +460,94 @@ def public_response(run_id: str) -> bytes:
 
 
 class _InvoiceFormScanner(HTMLParser):
-    """Inspect GET-rendered forms only; never execute or disclose CSRF tokens."""
+    """Inspect form structure, including externally associated email controls.
+
+    A successful public probe requires exactly one matching invoice POST form.
+    Newsletter forms elsewhere on the page do not count as checkout forms.
+    """
 
     def __init__(self, action: str) -> None:
         super().__init__(convert_charrefs=True)
         self.action = action
         self.active = None
-        self.verified = False
+        self.forms = []
+        self.external_emails = set()
+        self.ids_seen = set()
+        self.duplicate_ids = set()
+        self.malformed = False
+
+    @staticmethod
+    def _is_email_control(attrs):
+        return (attrs.get("name", "").lower() == "email"
+                or attrs.get("type", "").lower() == "email"
+                or attrs.get("id", "").lower() == "mpw-buy-email")
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
         if tag == "form":
+            if self.active is not None:
+                self.malformed = True
+                return
+            form_id = attributes.get("id", "")
+            if form_id:
+                if form_id in self.ids_seen:
+                    self.duplicate_ids.add(form_id)
+                self.ids_seen.add(form_id)
             self.active = {
+                "id": form_id,
                 "method": (attributes.get("method") or "").lower(),
                 "action": attributes.get("action"),
                 "email_present": False,
                 "csrf": False,
             }
-        elif tag == "input" and self.active is not None:
-            if (attributes.get("name") == "email" or
-                    (attributes.get("type") or "").lower() == "email" or
-                    attributes.get("id") == "mpw-buy-email"):
+        elif tag == "input":
+            association = attributes.get("form")
+            if association and self._is_email_control(attributes):
+                self.external_emails.add(association)
+            if self.active is None:
+                return
+            # An input with a form attribute belongs to that other form,
+            # not automatically to the nearest enclosing form.
+            if association and association != self.active["id"]:
+                return
+            if self._is_email_control(attributes):
                 self.active["email_present"] = True
-            if (attributes.get("name") == "csrfmiddlewaretoken" and
-                    bool(attributes.get("value"))):
+            if (attributes.get("name") == "csrfmiddlewaretoken"
+                    and bool(attributes.get("value"))):
                 self.active["csrf"] = True
 
     def handle_endtag(self, tag):
-        if tag == "form" and self.active is not None:
-            self.verified |= (self.active["method"] == "post" and
-                              self.active["action"] == self.action and
-                              not self.active["email_present"] and self.active["csrf"])
-            self.active = None
+        if tag == "form":
+            if self.active is None:
+                self.malformed = True
+            else:
+                self.forms.append(self.active)
+                self.active = None
 
 
 def has_guarded_guest_invoice_form(body: bytes, product_id: int) -> bool:
-    """Require exact product-specific POST and CSRF, with NO email input."""
-    scanner = _InvoiceFormScanner(f"/commerce/trx-easy/start/{product_id}/")
+    """Enforce one exact no-email CSRF invoice form; reject ambiguous duplicates."""
+    if type(product_id) is not int or product_id <= 0:
+        return False
+    action = f"/commerce/trx-easy/start/{product_id}/"
+    scanner = _InvoiceFormScanner(action)
     try:
         scanner.feed(body.decode("utf-8"))
         scanner.close()
     except (UnicodeDecodeError, ValueError):
         return False
-    return scanner.verified
+    if scanner.malformed or scanner.active is not None:
+        return False
+    matching = [form for form in scanner.forms if form["action"] == action]
+    if len(matching) != 1:
+        return False
+    form = matching[0]
+    return (form["method"] == "post" and form["csrf"]
+            and not form["email_present"]
+            and (not form["id"] or (
+                form["id"] not in scanner.external_emails
+                and form["id"] not in scanner.duplicate_ids)))
+
 
 
 def verify_public_buyer_routes(run_id: str) -> bool:
