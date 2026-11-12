@@ -79,7 +79,7 @@ def test_existing_fail_closed_policy_and_ssh_identity_unchanged():
 def test_unreadable_crontab_exits_cron_gate_fail_closed():
     """Run actual health-workflow shell with a failing cron executable."""
     source = WORKFLOW.read_text(encoding="utf-8")
-    marker = "          # An unreadable crontab must not masquerade as an empty schedule."
+    marker = "          # Distinguish a normal empty user crontab from a permission or"
     following = "          # Presence of an active tagged Cron row"
     assert source.count(marker) == 1
     assert source.count(following) == 1
@@ -111,7 +111,7 @@ def test_readable_crontab_preserves_legacy_blocking_classification():
     """A real active tagged entry remains flagged until manually reviewed."""
     source = WORKFLOW.read_text(encoding="utf-8")
     cron_block = source.split(
-        "          # An unreadable crontab must not masquerade as an empty schedule.", 1
+        "          # Distinguish a normal empty user crontab from a permission or", 1
     )[1].split("          # Presence of an active tagged Cron row", 1)[0]
     gate = (
         '          if (( count > 0 )); then '
@@ -139,7 +139,7 @@ def test_readable_empty_crontab_is_not_conflated_with_error():
     """A successful but empty Cron observation is valid, unlike permission failures."""
     source = WORKFLOW.read_text(encoding="utf-8")
     cron_block = source.split(
-        "          # An unreadable crontab must not masquerade as an empty schedule.", 1
+        "          # Distinguish a normal empty user crontab from a permission or", 1
     )[1].split("          # Presence of an active tagged Cron row", 1)[0]
     unreadable_gate = (
         '          if (( cron_observed != 1 )); then '
@@ -167,3 +167,71 @@ def test_readable_empty_crontab_is_not_conflated_with_error():
     assert "HEALTH_FACTORY_CRON_READ=observed" in result.stdout
     assert "HEALTH_CRON_GATE_FLAG=0" in result.stdout
     assert "HEALTH_CRITICAL=" not in result.stdout
+
+
+def test_missing_crontab_is_expected_empty_not_permission_failure():
+    """The exact C-locale 'no crontab for githubops' status 1 is a valid empty state."""
+    source = WORKFLOW.read_text(encoding="utf-8")
+    marker = "          # Distinguish a normal empty user crontab from a permission or"
+    cron_block = source.split(marker, 1)[1].split(
+        "          # Presence of an active tagged Cron row", 1
+    )[0]
+    unreadable_gate = (
+        '          if (( cron_observed != 1 )); then '
+        'echo "HEALTH_CRITICAL=factory_crontab_unavailable"; gate_fail=1; fi'
+    )
+    tagged_gate = (
+        '          if (( count > 0 )); then '
+        'echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi'
+    )
+    shell = (
+        "set -euo pipefail\n"
+        'crontab() { printf "no crontab for githubops\\n" >&2; return 1; }\n'
+        + cron_block + "\n"
+        "gate_fail=0\n"
+        + unreadable_gate + "\n"
+        + tagged_gate + "\n"
+        'printf "HEALTH_CRON_GATE_FLAG=%s\\n" "$gate_fail"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        check=True, timeout=5,
+    )
+    assert "HEALTH_FACTORY_CRON_READ=none_installed" in result.stdout
+    assert "HEALTH_CRON_GATE_FLAG=0" in result.stdout
+    assert "HEALTH_CRITICAL=" not in result.stdout
+    assert "no crontab for githubops" not in result.stdout
+
+
+def test_malformed_missing_crontab_response_is_blocked_not_silently_accepted():
+    """Exact response must have status 1 with no unexpected stderr content."""
+    source = WORKFLOW.read_text(encoding="utf-8")
+    cron_block = source.split(
+        "          # Distinguish a normal empty user crontab from a permission or", 1
+    )[1].split("          # Presence of an active tagged Cron row", 1)[0]
+    gate = (
+        '          if (( cron_observed != 1 )); then '
+        'echo "HEALTH_CRITICAL=factory_crontab_unavailable"; gate_fail=1; fi'
+    )
+    for message, code in (
+        ("no crontab for githubops\npermission denied\n", 1),
+        ("no crontab for githubops\n", 2),
+        ("Permission denied\n", 1),
+    ):
+        shell = (
+            "set -euo pipefail\n"
+            "crontab() { printf '%s' " + repr(message) + " >&2; return "
+            + str(code) + "; }\n"
+            + cron_block + "\n"
+            + "gate_fail=0\n"
+            + gate + "\n"
+            + 'printf "HEALTH_CRON_GATE_FLAG=%s\\n" "$gate_fail"\n'
+        )
+        result = subprocess.run(
+            ["bash", "-c", shell], capture_output=True, text=True,
+            check=True, timeout=5,
+        )
+        assert "HEALTH_FACTORY_CRON_READ=unavailable_fail_closed" in result.stdout
+        assert "HEALTH_CRON_GATE_FLAG=1" in result.stdout
+        assert "HEALTH_CRITICAL=factory_crontab_unavailable" in result.stdout
+        assert message.strip() not in result.stdout
