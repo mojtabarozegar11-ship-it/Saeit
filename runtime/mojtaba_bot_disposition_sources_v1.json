@@ -229,7 +229,7 @@
       "paid_model_approval_gate_end_to_end_attested": false,
       "actual_weather_publication_attested": false,
       "known_live_count": null,
-      "execution_status": "code_committed__tests_and_live_runtime_unverified",
+      "execution_status": "proposed_code_and_tests_committed_ci_result_unverified",
       "prerequisites": [
         "inventory_live_weather_scheduler_and_source_commit",
         "read_only_agent_and_newsletter_publication_inventory",
@@ -237,7 +237,21 @@
         "require_explicit_owner_payment_grant_for_any_paid_generation",
         "prove_no_duplicate_weather_schedulers",
         "owner_approved_cutover_and_rollback"
-      ]
+      ],
+      "paid_model_authorization_source": "core/weather_agent.py::_validate_paid_weather_grant",
+      "paid_model_scope_required": {
+        "action": "weather_research_generation",
+        "owner_bot_id": "mojtaba.bot.ai",
+        "date": "current_local_date",
+        "model": "selected_model_name",
+        "max_model_calls": 1,
+        "max_articles": 2
+      },
+      "paid_model_grant_contract": "Approved ApprovalRequest target=MojtabaWeatherCycle/date; ApprovalGrant consumed once before a model invocation. Environment flags alone grant no authority.",
+      "paid_model_default": "no grant means no paid weather model invocation",
+      "paid_generated_articles_publication_policy": "draft_only_pending_owner_review",
+      "review_ci_workflow": ".github/workflows/mojtaba-one-bot-review-ci.yml",
+      "review_ci_test_file": "core/tests/test_weather_paid_grants.py"
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -265,6 +279,10 @@
     "current_branch_tests_executed": false,
     "weather_content_owner_code_guard_committed": true,
     "weather_live_handoff_verified": false,
-    "weather_paid_approval_scoped_verified": false
+    "weather_paid_approval_scoped_verified": false,
+    "weather_paid_grant_source_guard_committed": true,
+    "weather_ai_publication_default_draft_committed": true,
+    "one_bot_review_ci_workflow_committed": true,
+    "one_bot_review_ci_passed": null
   }
 }
