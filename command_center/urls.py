@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/integrated-ledger/", integrated_ledger_api, name="command_center_integrated_ledger_api"),
     path("api/commerce-funnel/", commerce_funnel_api, name="command_center_commerce_funnel_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
+    path("api/bot/modules/", directory, name="command_center_unified_bot_modules_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
     path("api/approvals/pending/", pending, name="command_center_pending_approvals_api"),

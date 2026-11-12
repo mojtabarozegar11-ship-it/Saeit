@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.db.models import Count, Q, Max
 from django.utils import timezone
 from core.models import Agent, AgentTask, ApprovalRequest
+from .unified_identity import public_bot_identity
 
 
 def snapshot():
@@ -25,14 +26,18 @@ def snapshot():
     for item in per_agent:
         item["last_task_at"] = item["last_task_at"].isoformat() if item["last_task_at"] else None
         item["live_worker_verified"] = False
+    agent_total = Agent.objects.count()
+    active_source_records = Agent.objects.filter(active=True).count()
     return {
+        "bot": public_bot_identity(),
+        "module_records": {"total": agent_total, "source_active": active_source_records},
         "captured_at": now.isoformat(),
         "source": "Django core database only (not VPS/cPanel heartbeat)",
         "scope": "django_core_records_not_tenant_filtered",
-        "agents": {"total": Agent.objects.count(), "enabled": Agent.objects.filter(active=True).count()},
+        "agents": {"total": agent_total, "enabled": active_source_records},
         "tasks": tasks,
         "per_agent": per_agent,
-        "per_agent_truncated": Agent.objects.count() > 200,
+        "per_agent_truncated": agent_total > 200,
         "approvals": {"pending": ApprovalRequest.objects.filter(status="pending").count()},
         "runtime_health": "unknown",
         "live_connected": False,

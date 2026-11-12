@@ -1,8 +1,8 @@
-"""Bind the private six-native rework queue to the actual Django master AgentTask runtime.
+"""Bind six private native rework reviews to Mojtaba.bot.ai's task runtime.
 
 A real running AgentTask is claimed by TaskRuntime and audited by ToolGateway.
-The factory tasks are actually owned by the registered moj_1ro_1 agent.
-The financial economic-master-agent remains separate. Never impersonates an owner,
+The factory is an internal module of the registered bot, not a separate agent.
+Never impersonates an owner,
 a professional reviewer, or a physical-device tester.
 """
 import os
@@ -17,6 +17,8 @@ from core.factory_native_review_gateway import (
 from core.models import Agent, AgentCapability, AgentTask
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
+from core.unified_bot_identity import BOT_CODE
+from core.management.commands.seed_online_income_agents import ASSIGNMENTS
 
 class Command(BaseCommand):
     help="Idempotently create and execute six real evidence-bound native review tasks using the live master agent."
@@ -44,8 +46,8 @@ class Command(BaseCommand):
             "family":family,"source_run":source_run,
             "review_sha256":whole,
             "family_receipt_sha256":digest(review_folder/(family+".json")),
-            "requested_logical_orchestrator":"moj_1ro_1",
-            "verified_task_runtime":"moj_1ro_1",
+            "requested_logical_orchestrator":BOT_CODE,
+            "verified_task_runtime":BOT_CODE,
         } for family in FAMILIES]
         # Fail *before* touching the master database if any original native
         # archive, policy flag, or external QA evidence was forged or tampered.
@@ -62,10 +64,10 @@ class Command(BaseCommand):
             return
         with transaction.atomic():
             master=Agent.objects.select_for_update().filter(
-                code="moj_1ro_1",active=True).first()
+                code=BOT_CODE,active=True).first()
             if not master:
                 raise CommandError("BRIDGE_VERIFIED_DJANGO_MOJ1RO1_INACTIVE")
-            if set(master.capabilities.filter(active=True).values_list("code",flat=True))!={ACTION,"factory_f41_private_build"}:
+            if set(master.capabilities.filter(active=True).values_list("code",flat=True)) != set(ASSIGNMENTS):
                 raise CommandError("BRIDGE_FACTORY_AGENT_UNEXPECTED_PRIVILEGES")
             capability=master.capabilities.filter(code=ACTION,active=True).first()
             if not capability or capability.risk_level!="low":
@@ -91,7 +93,7 @@ class Command(BaseCommand):
                         max_attempts=2)
                     created+=1
                 tasks.append(task)
-        self.stdout.write("MOJ1RO1_NATIVE_AUTHENTIC_MASTER_DB_CODE="+master.code)
+        self.stdout.write("MOJTABA_BOT_NATIVE_AUTHENTIC_MASTER_DB_CODE="+master.code)
         self.stdout.write("MOJ1RO1_NATIVE_MASTER_DB_PK="+str(master.pk))
         self.stdout.write("MOJ1RO1_NATIVE_AUDIT_TASKS="+str(len(tasks)))
         self.stdout.write("MOJ1RO1_NATIVE_AUDIT_TASKS_NEW="+str(created))

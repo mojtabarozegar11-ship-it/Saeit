@@ -13,7 +13,10 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Namespace-backed, fail-closed self-improvement regression tests require
+    # unprivileged user namespaces; Ubuntu 24.04 hosted images restrict these.
+    # Keep the namespace tests mandatory; never execute proposed code unsandboxed.
+    runs-on: ubuntu-22.04
     env:
       DEBUG: "true"
       SECRET_KEY: "ci-only-secret-key"
@@ -43,6 +46,17 @@ jobs:
         run: python manage.py migrate --noinput
       - name: Build static manifest
         run: python manage.py collectstatic --noinput
+      - name: Install mandatory Linux sandbox tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+      - name: Verify Linux namespace isolation prerequisites
+        run: |
+          set -eu
+          test -x /usr/bin/unshare
+          test -x /usr/bin/bwrap
+          test -x /usr/bin/python3
+          unshare -Urn /usr/bin/true
       - name: Run tests
         env:
           PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser
