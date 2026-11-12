@@ -92,7 +92,8 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             validate_store_source(broken)
         broken = original.replace(
             (b'return render(request,"mojplaywin/store.html",{\n'
-             b'  "products":PRODUCTS, "verified_catalog":verified\n'
+             b'  "products":PRODUCTS, "verified_catalog":verified,\n'
+             b'  "catalog_next_id":older_id, "catalog_has_cursor":before is not None\n'
              b' })'),
             b'return None', 1
         )
