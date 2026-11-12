@@ -215,7 +215,9 @@ class ProductDetailHostTests(unittest.TestCase):
             "sha256": valid, "rights_asset_sha256": valid,
             "rights_document_sha256": "b" * 64, "in_stock": True,
         }
-        fn = load_functions(item(metadata=approved))
+        # Rights and an actually resolved checkout are BOTH required
+        # before Google receives a purchasable Offer in structured data.
+        fn = load_functions(item(metadata=approved), checkout_ready=True)
         response = fn(request("mojplaywin.com"), 72)
         self.assertTrue(response["context"]["can_list_offer"])
         self.assertEqual(
