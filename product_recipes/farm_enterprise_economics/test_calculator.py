@@ -35,6 +35,19 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(row["break_even_units"], 546)
         self.assertEqual(len(result["scenario_results"]), 9)
 
+    def test_contribution_and_operating_profit_margins_are_separate(self):
+        row = evaluate(self.example)["results"][0]
+        # Revenue 10,000; contribution 5,500; operating profit 2,500.
+        self.assertEqual(row["contribution_margin_percent"], "55.00")
+        self.assertEqual(row["operating_profit_margin_percent"], "25.00")
+        zero = enterprise(dict(self.example["enterprises"][0], units_sold=0))
+        self.assertIsNone(zero["contribution_margin_percent"])
+        self.assertIsNone(zero["operating_profit_margin_percent"])
+        loss = enterprise(dict(self.example["enterprises"][0],
+                               unit_price=3, variable_cost_per_unit=5))
+        self.assertEqual(loss["contribution_margin_percent"], "-71.67")
+        self.assertEqual(loss["operating_profit_margin_percent"], "-171.67")
+
     def test_break_even_price_and_margin_of_safety(self):
         row = evaluate(self.example)["results"][0]
         self.assertEqual(row["break_even_unit_price_at_planned_volume"], "7.37")
