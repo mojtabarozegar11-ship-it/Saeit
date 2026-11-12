@@ -9,6 +9,7 @@ on:
       - scripts/zomorod_business_genetics_overlay_preview.py
       - scripts/zomorod_business_genetics_readonly_preflight.sh
       - scripts/zomorod_business_homepage_invariant.sh
+      - scripts/zomorod_business_public_surface_invariant.py
 permissions:
   contents: read
 concurrency:
@@ -146,3 +147,15 @@ jobs:
                   print('PUBLIC_DIR_' + dirname.upper() + '_FILES_CAP=' + str(min(n,4001)))
           print('PUBLIC_INVENTORY_FILES_MODIFIED=no')
           PUBLIC_ROOT_AUDIT
+          # Verify the public homepage files and local assets directly on cPanel.
+          # Only the checksum is transported; no private content is copied.
+          public_file_digest_1="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+              'python3 -B - capture' < scripts/zomorod_business_public_surface_invariant.py)"
+          public_file_digest_2="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+              'python3 -B - capture' < scripts/zomorod_business_public_surface_invariant.py)"
+          [[ "$public_file_digest_1" =~ ^[0-9a-f]{64}$ && "$public_file_digest_1" == "$public_file_digest_2" ]] || {
+            echo 'LIVE_PUBLIC_SURFACE=UNSTABLE_ABORT'
+            exit 9
+          }
+          echo 'LIVE_PUBLIC_SURFACE=STABLE_READ_ONLY'
+
