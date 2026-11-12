@@ -37,6 +37,17 @@ PRODUCT_ROUTES = (
     b"/store/product/225/checkout/",
     b"/store/product/879/",
 )
+BUYER_ROUTE_PROBES = (
+    ("/store/product/72/", b"The Science and Practice of Chess Improvement", b"Buy securely with native TRX"),
+    ("/store/product/225/", b"Taniya and the Little Baker Worms", b"Buy securely with native TRX"),
+    ("/store/product/879/", b"Atelier Interior", b"Buy securely with native TRX"),
+    ("/store/product/72/checkout/", b"The Science and Practice of Chess Improvement", b"Create my TRX payment invoice"),
+    ("/store/product/225/checkout/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
+    ("/store/product/879/checkout/", b"Atelier Interior", b"Create my TRX payment invoice"),
+    ("/commerce/book/72/", b"The Science and Practice of Chess Improvement", b"Create my TRX payment invoice"),
+    ("/commerce/book/225/", b"Taniya and the Little Baker Worms", b"Create my TRX payment invoice"),
+    ("/commerce/book/879/", b"Atelier Interior", b"Create my TRX payment invoice"),
+)
 
 
 def atomic_replace(target: Path, content: bytes, mode: int) -> None:
@@ -127,6 +138,41 @@ def public_response(run_id: str) -> bytes:
     return data
 
 
+def verify_public_buyer_routes(run_id: str) -> bool:
+    """Check all nine buyer-facing GET pages without orders or PII."""
+    checked = 0
+    for route, title, action in BUYER_ROUTE_PROBES:
+        url = "https://mojplaywin.com" + route + "?mpw_cutover_probe=" + run_id
+        request = urllib.request.Request(url, headers={
+            "User-Agent": "MojPlayWin-owner-cutover-smoke/1.0",
+            "Cache-Control": "no-cache, no-store",
+            "Pragma": "no-cache",
+        }, method="GET")
+        category = "unexpected_html"
+        try:
+            with urllib.request.urlopen(request, timeout=7) as reply:
+                if reply.status == 200 and reply.geturl() == url:
+                    body = reply.read(250_000)
+                    if title in body and action in body:
+                        checked += 1
+                        continue
+                category = "unexpected_response"
+        except urllib.error.HTTPError as exc:
+            category = "http_" + str(exc.code) if exc.code in (403, 404, 429, 500, 502, 503, 504) else "http_other"
+        except (OSError, TimeoutError, RuntimeError, urllib.error.URLError):
+            category = "network_or_read_error"
+        print("MPW_BUYER_ROUTE_PROBE=" + json.dumps({
+            "checked": checked, "passed": False,
+            "route_group": "checkout" if ("/checkout/" in route or route.startswith("/commerce/book/")) else "detail",
+            "category": category,
+        }, sort_keys=True))
+        return False
+    print("MPW_BUYER_ROUTE_PROBE=" + json.dumps({
+        "checked": checked, "passed": True,
+    }, sort_keys=True))
+    return True
+
+
 def verify_dynamic_public(run_id: str) -> bool:
     # Allow Passenger time to switch while bounding public requests and the
     # total observation window. A fixed six probes only waited ~15 seconds.
@@ -141,6 +187,14 @@ def verify_dynamic_public(run_id: str) -> bool:
             if (MARKER not in data and b"mpw-shop-kicker" in data and
                     b"mpw-store-catalog-20261026" in data and
                     all(route in data for route in PRODUCT_ROUTES)):
+                if not verify_public_buyer_routes(run_id + "-after"):
+                    observations["buyer_route_guard_failed"] = 1
+                    print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
+                        "dynamic_confirmed": False,
+                        "observations": observations,
+                        "attempts": attempts,
+                    }, sort_keys=True))
+                    return False
                 print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
                     "dynamic_confirmed": True,
                     "observations": observations,
@@ -230,6 +284,8 @@ def main(run_id: str) -> None:
     baseline = public_response(run_id + "-before")
     if MARKER not in baseline:
         raise RuntimeError("PUBLIC_FALLBACK_BASELINE_NOT_PROVEN")
+    if not verify_public_buyer_routes(run_id + "-before"):
+        raise RuntimeError("PUBLIC_BUYER_ROUTE_BASELINE_FAILED")
     print("MPW_STATIC_FALLBACK_BASELINE=CONFIRMED")
     perform_cutover(PUBLIC, BACKUP_BASE, run_id, lambda: verify_dynamic_public(run_id))
 
