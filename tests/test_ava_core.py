@@ -31,6 +31,12 @@ class AvaCoreTests(unittest.TestCase):
                     self.ava.remember(bad, consent=True)
         self.assertEqual(self.ava.list_memories(), ())
 
+    def test_memory_accepts_multiline_text_but_rejects_binary_controls(self):
+        saved = self.ava.remember("first line\nsecond line\tvalue", consent=True)
+        self.assertEqual(self.ava.list_memories()[0].text, saved.text)
+        with self.assertRaisesRegex(ValueError, "forbidden control"):
+            self.ava.remember("first\x00second", consent=True)
+
     def test_no_implicit_memory_writes(self):
         self.ava.converse("سلام")
         self.assertEqual(len(self.ava.list_memories()), 0)
