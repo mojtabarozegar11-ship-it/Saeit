@@ -1,0 +1,264 @@
+name: Publish official auction supplier response kit safely
+on:
+  push:
+    branches: [feature/zomorod-auctions-supplier-forms-20261112]
+    paths: [.github/workflows/auction-supplier-kit-release-20261112.yml]
+permissions: {contents: read}
+concurrency: {group: auction-supplier-kit-20261112, cancel-in-progress: false}
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Validate artifact and CSV integrity before touching cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import csv,json,pathlib,xml.etree.ElementTree as ET
+          base=pathlib.Path('public/auctions')
+          index=(base/'index.html').read_text('utf-8')
+          kit=(base/'supplier-kit/index.html').read_text('utf-8')
+          assert 'href="/auctions/supplier-kit/"' in index
+          assert 'بدون تعهد خرید' in index
+          assert 'غیرالزام‌آور' in kit and '۵ تا ۱۰' in kit
+          assert 'zomorodmelal@gmail.com' in kit
+          assert 'rel="canonical" href="https://zomorodmelal.ir/auctions/supplier-kit/"' in kit
+          assert kit.count('</html>')==1
+          ns={'x':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          urls={x.text for x in ET.parse(base/'sitemap.xml').findall('.//x:loc',ns)}
+          expected={'https://zomorodmelal.ir/auctions/','https://zomorodmelal.ir/auctions/supplier-kit/'}|{'https://zomorodmelal.ir/auctions/'+str(n)+'/' for n in range(346,350)}
+          assert urls==expected
+          for n in range(346,350):
+              assert 'href="/auctions/supplier-kit/templates/rfq-'+str(n)+'.csv"' in kit
+              path=base/'templates'/('rfq-'+str(n)+'.csv')
+              raw=path.read_bytes()
+              assert raw.startswith(bytes.fromhex('efbbbf'))
+              rows=list(csv.reader(raw.decode('utf-8-sig').splitlines()))
+              assert rows[0]==['بخش','فیلد','راهنمای تکمیل','پاسخ تأمین‌کننده']
+              assert len(rows)>30 and all(len(row)==4 for row in rows)
+              assert any('تعهد' in col for row in rows for col in row)
+              print('SUPPLIER_CSV_'+str(n)+'_ROWS='+str(len(rows)))
+          print('SUPPLIER_KIT_PREDEPLOY_QA=PASS')
+          print('SECONDARY_SITEMAP=6_VALID_URLS')
+          PY
+      - name: Pinned cPanel scoped release with prior-byte checks and rollback
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-supplier-kit-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          for path in "/" "/auctions/" "/sitemap-auctions.xml" "/robots.txt" "/sitemap.xml" "/auctions/346/" "/auctions/347/" "/auctions/348/" "/auctions/349/"; do
+            name="$(printf '%s' "$path" | tr '/' '_' )"
+            test "$name" != "_" || name=root
+            status="$(curl -sSL --max-time 18 -o "$d/before-$name" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            test "$status" = 200
+            echo "BASELINE_$name=HTTP200"
+          done
+          test "$(sha256sum "$d/before-_auctions_" | cut -c1-64)" = '65db4dbb09197ee81c17c6596d6e8ccb7b399464b7589d487dcce4c1f2fe49a1'
+          test "$(sha256sum "$d/before-_sitemap-auctions.xml" | cut -c1-64)" = 'ecf440d829a2680dbe62aa20516ed00686edbfcfd300c98fd074f1dadf6517d7'
+          grep -Fq 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' "$d/before-_robots.txt"
+          code="$(curl -sSL --max-time 16 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/auctions/supplier-kit/ || true)"
+          test "$code" = 404
+          stage="/home/zomorod2/.zm-supplier-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "install -d -m 700 '$stage'"
+          python3 - "$d/manifest.json" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          sources={'index.html':'public/auctions/index.html','sitemap.xml':'public/auctions/sitemap.xml','kit.html':'public/auctions/supplier-kit/index.html'}
+          sources.update({'rfq-'+str(n)+'.csv':'public/auctions/templates/rfq-'+str(n)+'.csv' for n in range(346,350)})
+          manifest={key:hashlib.sha256(Path(value).read_bytes()).hexdigest() for key,value in sources.items()}
+          Path(sys.argv[1]).write_text(json.dumps(manifest,sort_keys=True),encoding='utf-8')
+          print('BUNDLE_SHA256_ENTRIES='+str(len(manifest)))
+          PY
+          timeout 40s scp -q -F "$d/config" "$d/manifest.json" "saeit-cpanel:$stage/manifest.json"
+          timeout 40s scp -q -F "$d/config" public/auctions/index.html "saeit-cpanel:$stage/index.html"
+          timeout 40s scp -q -F "$d/config" public/auctions/sitemap.xml "saeit-cpanel:$stage/sitemap.xml"
+          timeout 40s scp -q -F "$d/config" public/auctions/supplier-kit/index.html "saeit-cpanel:$stage/kit.html"
+          for n in 346 347 348 349; do
+            timeout 40s scp -q -F "$d/config" "public/auctions/templates/rfq-$n.csv" "saeit-cpanel:$stage/rfq-$n.csv"
+          done
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'REMOTE'
+          import hashlib,json,os,pathlib,stat,sys
+          run=sys.argv[1]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html'
+          target=root/'zm-auctions-index';ht=root/'.htaccess';robot=root/'robots.txt'
+          stage=home/('.zm-supplier-stage-'+run)
+          assert os.getuid()==home.stat().st_uid
+          assert target.is_dir() and not target.is_symlink() and ht.is_file() and not ht.is_symlink()
+          assert robot.is_file() and not robot.is_symlink()
+          assert b'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' in robot.read_bytes()
+          prior={'index.html':'65db4dbb09197ee81c17c6596d6e8ccb7b399464b7589d487dcce4c1f2fe49a1','sitemap.xml':'ecf440d829a2680dbe62aa20516ed00686edbfcfd300c98fd074f1dadf6517d7'}
+          old={key:(target/key).read_bytes() for key in prior}
+          for key,digest in prior.items():
+              assert (target/key).is_file() and not (target/key).is_symlink()
+              assert hashlib.sha256(old[key]).hexdigest()==digest,'LIVE_SOURCE_DRIFT_'+key
+          ht_before=ht.read_bytes()
+          ht_digest='a4f287f07f51e71a823b67dad7e6ab2afb8bbe0ad2f7c6b011337bac7e51091e'
+          assert hashlib.sha256(ht_before).hexdigest()==ht_digest,'HTACCESS_DRIFT'
+          for n in range(346,350):
+              rule=('RewriteRule ^auctions/'+str(n)+'/?$ /zm-auction'+str(n)+'/index.html [END,NC]').encode()
+              assert rule in ht_before
+          anchor=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]'
+          assert ht_before.count(anchor)==1
+          assert b'auctions/supplier-kit' not in ht_before
+          lines=(b'RewriteRule ^auctions/supplier-kit/?$ /zm-auctions-index/supplier-kit/index.html [END,NC]\n'
+                 b'RewriteRule ^auctions/supplier-kit/templates/rfq-(346|347|348|349)[.]csv$ /zm-auctions-index/supplier-kit/templates/rfq-$1.csv [END,NC]\n')
+          ht_updated=ht_before.replace(anchor,lines+anchor)
+          kit_dir=target/'supplier-kit';csv_dir=kit_dir/'templates'
+          assert not kit_dir.exists() and not kit_dir.is_symlink()
+          assert stage.is_dir() and not stage.is_symlink()
+          manifest=json.loads((stage/'manifest.json').read_text('utf-8'))
+          names={'index.html','sitemap.xml','kit.html'}|{'rfq-'+str(n)+'.csv' for n in range(346,350)}
+          assert set(manifest)==names
+          new={}
+          for name in names:
+              f=stage/name
+              assert f.is_file() and not f.is_symlink()
+              new[name]=f.read_bytes()
+              assert hashlib.sha256(new[name]).hexdigest()==manifest[name],'TRANSFER_SHA256_'+name
+          assert all(new['rfq-'+str(n)+'.csv'].startswith(bytes.fromhex('efbbbf')) for n in range(346,350))
+          backups=home/'.backups'/'auction-supplier-kit'/run
+          backups.mkdir(parents=True,mode=0o700,exist_ok=False)
+          for name,data in (('htaccess.original',ht_before),('index.original',old['index.html']),('sitemap.original',old['sitemap.xml'])):
+              (backups/name).write_bytes(data)
+          (backups/'new-shas.json').write_text(json.dumps(manifest),encoding='utf-8')
+          modifications=[]
+          try:
+              kit_dir.mkdir(mode=0o755);csv_dir.mkdir(mode=0o755)
+              files={'index.html':kit_dir/'index.html'}
+              for n in range(346,350):
+                  files['rfq-'+str(n)+'.csv']=csv_dir/('rfq-'+str(n)+'.csv')
+              for name,p in files.items():
+                  source='kit.html' if name=='index.html' else name
+                  with open(p,'xb') as f:
+                      f.write(new[source]);f.flush();os.fsync(f.fileno())
+                  p.chmod(0o644);modifications.append(p)
+              for name in ('index.html','sitemap.xml'):
+                  tmp=target/('.'+name+'.supplier-'+run)
+                  with open(tmp,'xb') as f:
+                      f.write(new[name]);f.flush();os.fsync(f.fileno())
+                  tmp.chmod(stat.S_IMODE((target/name).stat().st_mode))
+                  os.replace(tmp,target/name)
+                  modifications.append(target/name)
+              ht_tmp=root/('.htaccess.supplier-'+run)
+              with open(ht_tmp,'xb') as f:
+                  f.write(ht_updated);f.flush();os.fsync(f.fileno())
+              ht_tmp.chmod(stat.S_IMODE(ht.stat().st_mode))
+              os.replace(ht_tmp,ht)
+          except Exception:
+              if ht.exists() and ht.read_bytes()==ht_updated:
+                  ht.write_bytes(ht_before)
+              for name in ('index.html','sitemap.xml'):
+                  if (target/name).is_file() and hashlib.sha256((target/name).read_bytes()).hexdigest()==manifest[name]:
+                      (target/name).write_bytes(old[name])
+              for p in reversed(modifications):
+                  if p.is_file() and p.name.startswith('rfq-'):p.unlink()
+                  elif p==kit_dir/'index.html' and p.is_file():p.unlink()
+              if csv_dir.is_dir() and not list(csv_dir.iterdir()):csv_dir.rmdir()
+              if kit_dir.is_dir() and not list(kit_dir.iterdir()):kit_dir.rmdir()
+              raise
+          for path in stage.iterdir():path.unlink()
+          stage.rmdir()
+          print('SUPPLIER_KIT_INSTALL=COMPLETE')
+          print('TRANSFER_SHA256_ALL_7=PASS')
+          print('HTACCESS_OLD_SHA256='+ht_digest)
+          REMOTE
+          verified=yes
+          for path in "/auctions/" "/sitemap-auctions.xml" "/auctions/supplier-kit/"; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            code="$(curl -sSL --max-time 18 -o "$d/new-$name" -w '%{http_code}' "https://zomorodmelal.ir$path?v=$GITHUB_RUN_ID" || true)"
+            test "$code" = 200 || verified=no
+          done
+          test "$(sha256sum "$d/new-_auctions_" | cut -c1-64)" = "$(sha256sum public/auctions/index.html | cut -c1-64)" || verified=no
+          test "$(sha256sum "$d/new-_sitemap-auctions.xml" | cut -c1-64)" = "$(sha256sum public/auctions/sitemap.xml | cut -c1-64)" || verified=no
+          test "$(sha256sum "$d/new-_auctions_supplier-kit_" | cut -c1-64)" = "$(sha256sum public/auctions/supplier-kit/index.html | cut -c1-64)" || verified=no
+          grep -Fq 'href="/auctions/supplier-kit/"' "$d/new-_auctions_" || verified=no
+          for n in 346 347 348 349; do
+            path="/auctions/supplier-kit/templates/rfq-$n.csv"
+            code="$(curl -sSL --max-time 18 -o "$d/quote-$n" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            test "$code" = 200 || verified=no
+            test "$(sha256sum "$d/quote-$n" | cut -c1-64)" = "$(sha256sum "public/auctions/templates/rfq-$n.csv" | cut -c1-64)" || verified=no
+            code="$(curl -sSL --max-time 18 -o "$d/current-auction-$n" -w '%{http_code}' "https://zomorodmelal.ir/auctions/$n/" || true)"
+            test "$code" = 200 || verified=no
+            test "$(sha256sum "$d/before-_auctions_$n"_" | cut -c1-64)" = "$(sha256sum "$d/current-auction-$n" | cut -c1-64)" || verified=no
+          done
+          for path in "/" "/robots.txt" "/sitemap.xml"; do
+            name="$(printf '%s' "$path" | tr '/' '_' )"
+            test "$name" != "_" || name=root
+            code="$(curl -sSL --max-time 18 -o "$d/current-$name" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            test "$code" = 200 || verified=no
+            test "$(sha256sum "$d/before-$name" | cut -c1-64)" = "$(sha256sum "$d/current-$name" | cut -c1-64)" || verified=no
+          done
+          if test "$verified" != yes; then
+            echo 'SUPPLIER_KIT_PUBLIC_CHECK=FAILED_ROLLING_BACK'
+            timeout 75s ssh -T -F "$d/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID'" <<'ROLLBACK'
+          import hashlib,json,os,pathlib,stat,sys
+          run=sys.argv[1];home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess';directory=root/'zm-auctions-index'
+          b=home/'.backups'/'auction-supplier-kit'/run
+          old_ht=(b/'htaccess.original').read_bytes()
+          old_index=(b/'index.original').read_bytes()
+          old_sitemap=(b/'sitemap.original').read_bytes()
+          manifest=json.loads((b/'new-shas.json').read_text('utf-8'))
+          anchor=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]'
+          prefix=(b'RewriteRule ^auctions/supplier-kit/?$ /zm-auctions-index/supplier-kit/index.html [END,NC]\n'
+                  b'RewriteRule ^auctions/supplier-kit/templates/rfq-(346|347|348|349)[.]csv$ /zm-auctions-index/supplier-kit/templates/rfq-$1.csv [END,NC]\n')
+          assert ht.read_bytes()==old_ht.replace(anchor,prefix+anchor),'CONCURRENT_HTACCESS_CHANGE'
+          for name in ('index.html','sitemap.xml'):
+              f=directory/name
+              assert hashlib.sha256(f.read_bytes()).hexdigest()==manifest[name],'CONCURRENT_FILE_'+name
+          kit=directory/'supplier-kit'
+          files={'kit.html':kit/'index.html'}
+          files.update({'rfq-'+str(n)+'.csv':kit/'templates'/('rfq-'+str(n)+'.csv') for n in range(346,350)})
+          for name,p in files.items():
+              assert p.is_file() and not p.is_symlink() and hashlib.sha256(p.read_bytes()).hexdigest()==manifest[name]
+          for name,raw in (('index.html',old_index),('sitemap.xml',old_sitemap)):
+              f=directory/name;tmp=directory/('.restore-'+name+'-'+run)
+              with open(tmp,'xb') as out:
+                  out.write(raw);out.flush();os.fsync(out.fileno())
+              tmp.chmod(stat.S_IMODE(f.stat().st_mode));os.replace(tmp,f)
+          tmp=root/('.htaccess.restore-supplier-'+run)
+          with open(tmp,'xb') as out:
+              out.write(old_ht);out.flush();os.fsync(out.fileno())
+          tmp.chmod(stat.S_IMODE(ht.stat().st_mode));os.replace(tmp,ht)
+          for p in files.values():p.unlink()
+          (kit/'templates').rmdir();kit.rmdir()
+          print('SUPPLIER_KIT_SCOPED_ROLLBACK=COMPLETE')
+          ROLLBACK
+            exit 1
+          fi
+          echo 'SUPPLIER_KIT_PUBLIC=200_VERIFIED'
+          echo 'FOUR_CSV_TEMPLATES=PUBLIC_200_SHA256_VERIFIED'
+          echo 'AUCTIONS_INDEX=UPDATED_WITH_SUPPLIER_LINK'
+          echo 'AUCTIONS_SITEMAP=SIX_URLS_VERIFIED'
+          echo 'PREVIOUS_NOTICES_346_TO_349=BYTE_IDENTICAL'
+          echo 'HOMEPAGE_ROBOTS_MAIN_SITEMAP=UNMODIFIED'
