@@ -190,12 +190,25 @@ jobs:
           (async()=>{
             const b=await chromium.launch({headless:true,args:['--no-sandbox']});
             for(const width of [390,768,1440]){
-              const page=await b.newPage({viewport:{width,height:850}}), errors=[];
+              const page=await b.newPage({viewport:{width,height:850}}), errors=[], assetResponses=[], requestsFailed=[];
               page.on('pageerror',e=>errors.push(e.message));
-              await page.goto('https://zomorodmelal.ir/?nexus_live_'+width+'=1',{waitUntil:'domcontentloaded',timeout:45000});
+              page.on('requestfailed',r=>requestsFailed.push({url:r.url(),error:r.failure()?.errorText}));
+              page.on('response',r=>{if(/zm-nexus-v1\\.css|smart-agriculture\\.webp/.test(r.url()))assetResponses.push({status:r.status(),url:r.url(),mime:r.headers()['content-type']||''})});
+              await page.goto('https://zomorodmelal.ir/?nexus_live_'+width+'=1',{waitUntil:'load',timeout:60000});
               await page.locator('.hero-cta a').first().waitFor({timeout:12000});
-              const x=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,width:innerWidth,h1:document.querySelectorAll('h1').length,links:document.querySelectorAll('a[href]').length,loaded:[...document.querySelectorAll('.hero-image')].every(i=>i.complete&&i.naturalWidth>0)}));
-              if(x.scrollWidth>x.width+3||x.h1!==1||x.links<45||!x.loaded||errors.length)throw Error(JSON.stringify({width,x,errors}));
+              await page.waitForFunction(()=>{const imgs=[...document.querySelectorAll('.hero-image')];return imgs.length>0&&imgs.every(i=>i.complete)},null,{timeout:20000});
+              const x=await page.evaluate(()=>({
+                scrollWidth:document.documentElement.scrollWidth,width:innerWidth,h1:document.querySelectorAll('h1').length,
+                links:document.querySelectorAll('a[href]').length,
+                images:[...document.querySelectorAll('.hero-image')].map(i=>({complete:i.complete,naturalWidth:i.naturalWidth,renderWidth:Math.round(i.getBoundingClientRect().width)})),
+                background:getComputedStyle(document.body).backgroundColor,
+                sheets:[...document.styleSheets].map(s=>({href:s.href,disabled:s.disabled}))
+              }));
+              const cssApplied=x.background==='rgb(7, 20, 18)';
+              const imagesValid=x.images.length>0&&x.images.every(i=>i.complete&&i.naturalWidth>0);
+              console.log('NEXUS_BROWSER_DIAGNOSTICS='+JSON.stringify({width,x,cssApplied,assetResponses,requestsFailed,errors}));
+              if(x.scrollWidth>x.width+3||x.h1!==1||x.links<45||!cssApplied||!imagesValid||errors.length)throw Error(JSON.stringify({width,x,cssApplied,assetResponses,requestsFailed,errors}));
+              await page.screenshot({path:'nexus-'+width+'.png',animations:'disabled'});
               console.log('NEXUS_BROWSER_OK='+width);
               await page.close();
             }
