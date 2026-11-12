@@ -9,6 +9,7 @@ on:
       - "tests/test_company_activity_workflow_handoff.py"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_topology_readonly.py"
+      - "deploy/mojtaba_live_disposition_readonly.py"
       - "runtime/mojtaba_bot_disposition_sources_v1.json"
       - ".github/workflows/mojtaba-one-bot-review-ci.yml"
       - ".github/workflows/mojtaba-live-topology-readonly.yml"
@@ -59,4 +60,5 @@ jobs:
             core/tests/test_consolidate_legacy_agents.py \
             core/tests.py \
             tests/test_company_activity_workflow_handoff.py \
-            tests/test_mojtaba_live_topology_readonly.py
+            tests/test_mojtaba_live_topology_readonly.py \
+            tests/test_mojtaba_live_disposition_readonly.py
