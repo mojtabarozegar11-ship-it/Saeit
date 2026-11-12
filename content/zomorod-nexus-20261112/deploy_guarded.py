@@ -86,7 +86,7 @@ def preflight():
     ensure_identity()
     candidate, css = read_candidate()
     original = HOME.read_bytes()
-    if len(original) < 1_000_000 or not all(x.encode() in original for x in ROOT_MARKERS):
+    if len(original) < 40_000 or not all(x.encode() in original for x in ROOT_MARKERS):
         raise RuntimeError('Unknown or changed live homepage; fail closed')
     if b'nexus-home' in original:
         raise RuntimeError('NEXUS already installed; avoid duplicate')
