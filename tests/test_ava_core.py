@@ -166,6 +166,18 @@ class AvaCoreTests(unittest.TestCase):
                     self.shared_store.add(invalid)
         self.assertEqual(self.ava.list_memories(), (original,))
 
+    def test_store_rejects_noncanonical_owner_even_without_engine(self):
+        # Direct writes from an adapter must not bypass tenant-key validation.
+        for owner_id in (" owner-1", "owner-1 ", "owner\nadmin",
+                         "owner\x00admin", "owner\u2028admin", "owner\u0085admin"):
+            with self.subTest(owner_id=repr(owner_id)):
+                with self.assertRaisesRegex(ValueError, "canonical single-line"):
+                    self.shared_store.add(MemoryItem(
+                        id="bad-tenant", owner_id=owner_id,
+                        text="private", created_at="2026-11-12T00:00:00Z"
+                    ))
+        self.assertEqual(self.shared_store.list_for_owner("owner-1"), ())
+
     def test_untrusted_store_cannot_leak_foreign_owner_memory(self):
         class LeakyStore(AvaMemory):
             def list_for_owner(self, owner_id):
