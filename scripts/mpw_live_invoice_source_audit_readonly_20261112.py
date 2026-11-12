@@ -98,10 +98,13 @@ def template_email_controls(raw: bytes) -> bool:
 
 def module_report(relative: str, raw: bytes) -> dict:
     tree = ast.parse(raw.decode("utf-8"), filename=relative)
-    functions = {
-        node.name: node for node in tree.body
+    definitions = [
+        node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    ]
+    functions = {node.name: node for node in definitions}
+    names = [node.name for node in definitions]
+    duplicate_functions = sorted(name for name in set(names) if names.count(name) > 1)
     aliases = {}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
@@ -122,12 +125,13 @@ def module_report(relative: str, raw: bytes) -> dict:
     roots = []
     if relative == SOURCE_PATHS[0]:
         roots = ["_start_order"]
-    elif relative == SOURCE_PATHS[2]:
-        roots = [name for name in functions if name == "record_invoice"]
     elif relative == SOURCE_PATHS[1]:
         roots = [name for name in functions if "invoice" in name.lower()]
     elif relative == SOURCE_PATHS[3]:
         roots = ["_new_user", "_identity", "patch_commercial"]
+    # Invoice recorders may reside in any of the three audited commerce modules.
+    if relative in SOURCE_PATHS[:3] and "record_invoice" in functions:
+        roots.append("record_invoice")
     explored = set()
     pending = list(roots)
     email_functions = []
@@ -167,6 +171,9 @@ def module_report(relative: str, raw: bytes) -> dict:
         "analyzed_local_functions": len(explored),
         "email_referencing_functions": sorted(set(email_functions)),
         "record_invoice_present": "record_invoice" in functions,
+        "invoice_recorder_definition_count": names.count("record_invoice"),
+        "start_handler_definition_count": names.count("_start_order"),
+        "duplicate_functions": duplicate_functions,
         "invoice_import_calls": [
             x for x in external_calls if "invoice" in x["import"].lower()
             or "record" in x["import"].lower()
@@ -204,11 +211,20 @@ def inspect(root: Path = ROOT) -> dict:
     start = next((f for f in files if f["file"] == SOURCE_PATHS[0]), None)
     email_hits = [
         {"file": f["file"], "functions": f["email_referencing_functions"]}
-        for f in files if f["email_referencing_functions"]
+        for f in files if f["file"] in SOURCE_PATHS[:3]
+        and f["email_referencing_functions"]
     ]
-    missing_start = not start or "_start_order" not in start["root_functions_found"]
-    recorder = next((f for f in files if f["file"] == SOURCE_PATHS[2]), None)
-    missing_recorder = not recorder or not recorder["record_invoice_present"]
+    guest_email_indicators = next((
+        f["email_referencing_functions"] for f in files
+        if f["file"] == SOURCE_PATHS[3]
+    ), [])
+    missing_start = not start or start["start_handler_definition_count"] != 1
+    recorder_count = sum(f["invoice_recorder_definition_count"] for f in files
+                         if f["file"] in SOURCE_PATHS[:3])
+    missing_recorder = recorder_count == 0
+    duplicate_recorder = recorder_count > 1
+    duplicate_functions = any(f["duplicate_functions"] for f in files)
+    truncated_graph = any(f["helper_limit_hit"] for f in files[:3])
     email_template = bool(
         template.get("legacy_email_input_marker")
         or template.get("email_name_marker")
@@ -216,11 +232,14 @@ def inspect(root: Path = ROOT) -> dict:
     )
     missing_csrf = not template.get("csrf_template_marker")
     status = ("SOURCE_MISSING_OR_UNREADABLE" if missing or not template.get("exists")
+              else "DUPLICATE_SOURCE_FUNCTIONS" if duplicate_functions
               else "START_HANDLER_NOT_FOUND" if missing_start
               else "INVOICE_RECORDER_NOT_FOUND" if missing_recorder
+              else "INVOICE_RECORDER_DUPLICATED" if duplicate_recorder
               else "EMAIL_REFERENCES_PRESENT" if email_hits
               else "LEGACY_EMAIL_CHECKOUT_PRESENT" if email_template
               else "CHECKOUT_CSRF_MARKER_MISSING" if missing_csrf
+              else "SOURCE_HELPER_GRAPH_TRUNCATED" if truncated_graph
               else "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
     return {
         "mode": "readonly_ast_no_import_no_db_no_payment",
@@ -232,9 +251,11 @@ def inspect(root: Path = ROOT) -> dict:
         "source_problems": missing,
         "template": template,
         "checkout_source_requires_email": email_template,
-        "invoice_recorder_found": not missing_recorder,
+        "invoice_recorder_found": recorder_count == 1,
+        "invoice_recorder_definition_count": recorder_count,
         "csrf_template_marker_found": not missing_csrf,
         "email_hit_functions": email_hits,
+        "guest_identity_email_indicators_not_buyer_capture": guest_email_indicators,
         "external_invoice_code_proven_email_free": False,
     }
 
