@@ -11,6 +11,7 @@ from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
+from .mpw_trx_invoice_bridge import invoice_start_ready
 
 
 def _reviewed_checkout():
@@ -33,7 +34,9 @@ def backend_ready():
     """Flag and reviewed adapter availability; never proof of invoice settlement."""
     if getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False) is not True:
         return False
-    return _reviewed_checkout() is not None
+    # A product form without its protected invoice POST endpoint is a dead
+    # end, not a commercially usable checkout. Require both reviewed handlers.
+    return _reviewed_checkout() is not None and invoice_start_ready()
 
 
 def _unavailable():
@@ -64,7 +67,7 @@ def product_checkout(request, product_id):
     if getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False) is not True:
         return _unavailable()
     handler = _reviewed_checkout()
-    if handler is None:
+    if handler is None or not invoice_start_ready():
         return _unavailable()
     # Authorization, CSRF, receiver readiness and rights checks remain owned
     # by the reviewed guest adapter and existing commercial backend.
