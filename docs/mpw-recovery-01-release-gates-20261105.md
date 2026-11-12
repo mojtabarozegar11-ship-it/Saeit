@@ -1,6 +1,46 @@
 # MojPlayWin — current release contract: guest TRX checkout without email
 **Supersedes the archived email-recovery design below. Status: draft, not deployed. Updated 2026-11-12.**
 
+## Read-only production source audit evidence — 2026-11-12
+
+**Observed, not inferred:**
+
+- Branch-only, bounded source-audit code was registered under
+  \`scripts/mpw_live_invoice_source_audit_readonly_20261112.py\`.
+  Its eight offline contract tests pass. It does not run Django or inspect
+  a live invoice unless SSH actually succeeds.
+- GitHub Actions run
+  [43241620015](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43241620015):
+  the first host-key acquisition step failed before reading source files.
+- GitHub Actions run
+  [43242036979](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43242036979):
+  direct cPanel host-key scan at the currently configured port 1396 returned
+  \`MPW_CPANEL_DIRECT=HOST_KEY_UNREACHABLE\`;
+  VPS relay port 22 returned
+  \`MPW_VPS_RELAY=PORT22_HOST_KEY_UNREACHABLE\`.
+  The step exited with code 11. This establishes network/SSH reachability
+  failure **from those GitHub runners only**, not a cPanel or VPS outage.
+- SSH key secret variables were supplied (redacted in Actions logs).
+  **Neither remote file was read; neither server fingerprint was verified in
+  the failing run.** Do not claim source inspection or safe release.
+- Previously verified isolated guest QA completed **110/110 tests** in
+  [run 43241283448](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43241283448).
+  These are source/offline tests, not real purchase receipts.
+
+**Remaining gate:** Establish an authorized path to read the existing cPanel
+Passenger/Django invoice sources and exact \`record_invoice\` dependencies.
+Verify the actual current SSH ports and allowed ingress from the hosting
+provider's already available dashboard/support history, or use a separately
+approved authenticated hosting interface. Do **not** guess ports, bypass
+host-key verification, alter firewall rules blindly, send a ticket/email,
+deploy, merge, or move funds as part of this audit.
+
+**Cost control:** Retire automatic network retry from PR pushes while both
+observed SSH routes remain unreachable. Preserve the manual read-only audit
+for later, after authorized network preconditions are confirmed.
+
+
+
 > CAUTION: The old `MPW-RECOVERY-01` email capture, SMTP authorization,
 > email claim migration, and email recovery activation sequence below is historical.
 > **Do not execute it** for the current no-email guest checkout release.
