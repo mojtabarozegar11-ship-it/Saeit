@@ -90,8 +90,30 @@ jobs:
           ssh -F "$d/config" saeit-cpanel '/home/zomorod2/Saeit/.venv/bin/python - --role cpanel' \
             < deploy/mojtaba_live_topology_readonly.py > "$d/cpanel.jsonline"
           python3 - "$d/vps.jsonline" "$d/cpanel.jsonline" <<'VERIFY'
+          import hashlib
           import json
           import sys
+          from pathlib import Path
+
+          # The remote source hash can be compared only to a fixed allowlist
+          # from the reviewed checkout. Remote JSON may not select files.
+          known_source_names = {
+              "vps": (
+                  "unified_bot_identity.py",
+                  "management/commands/audit_agent_fleet.py",
+                  "management/commands/online_income_cycle.py",
+                  "management/commands/consolidate_legacy_agents.py",
+              ),
+              "cpanel": (
+                  "unified_bot_identity.py",
+                  "canonical_agent_handoff.py",
+                  "newsletter_engine.py",
+                  "weather_agent.py",
+                  "management/commands/knowledge_agent_cycle.py",
+                  "management/commands/newsletter_process_queue.py",
+                  "management/commands/company_activity_agent_cycle.py",
+              ),
+          }
 
           seen = {}
           for role, path in zip(("vps", "cpanel"), sys.argv[1:]):
@@ -108,6 +130,28 @@ jobs:
               php = value.get("private_php_site_registry", {})
               if not isinstance(php, dict):
                   raise SystemExit("MOJTABA_TOPOLOGY_PHP_REGISTRY_INVALID")
+              source_status = {}
+              live_source = value.get("installed_source_digests", {})
+              if not isinstance(live_source, dict):
+                  raise SystemExit("MOJTABA_TOPOLOGY_SOURCE_DIGESTS_INVALID")
+              for relative in known_source_names[role]:
+                  local = Path("core") / relative
+                  remote = live_source.get(relative, {})
+                  if (not isinstance(remote, dict)
+                          or remote.get("state") != "file_observed_not_runtime_executed"
+                          or not isinstance(remote.get("sha256"), str)
+                          or len(remote["sha256"]) != 64
+                          or not local.is_file()
+                          or local.is_symlink()
+                          or not 0 < local.stat().st_size <= 512000):
+                      source_status[relative] = "unknown_source_revision"
+                      continue
+                  expected_sha = hashlib.sha256(local.read_bytes()).hexdigest()
+                  source_status[relative] = (
+                      "matches_reviewed_pr_source"
+                      if expected_sha == remote["sha256"]
+                      else "differs_from_reviewed_pr_source"
+                  )
               seen[role] = {
                   "cron_state": value["cron"]["state"],
                   "cron_entries_observed": value["cron"]["enumerated_entries"],
@@ -125,6 +169,8 @@ jobs:
                       row["state"] == "file_observed_not_runtime_executed"
                       for row in value["installed_source_digests"].values()
                   ),
+                  "source_revision_comparison": source_status,
+                  "source_revision_comparison_proves_active_runtime": False,
                   "live_handoff_attested": False,
                   "php_registry_state": php.get("state", "unknown_not_observed"),
                   "php_registry_rows": php.get("records"),
