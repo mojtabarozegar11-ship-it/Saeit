@@ -229,3 +229,33 @@ def test_coordinator_summary_counts_one_verified_change(tmp_path):
     assert actual["success"] == 1
     assert actual["remaining"] == 49
     assert actual["complete"] is False
+
+
+def test_restored_identical_file_under_new_commit_is_not_new_action(tmp_path):
+    """Same bytes restored in later commit must not pass as another delivery."""
+    repo, original_commit, digest = workspace(tmp_path)
+    evidence = (
+        "commit:" + original_commit,
+        "path:deliverables/item.txt",
+        "sha256:" + digest,
+    )
+    accepted = record(repo, run_id="E-REPLAY-FIRST", action_id="E-REPLAY-001",
+                      status="success", evidence=evidence)
+    assert accepted.returncode == 0, accepted.stderr
+    target = repo / "deliverables" / "item.txt"
+    original = target.read_bytes()
+    target.write_text("temporarily changed meaningful content\n")
+    git(repo, "add", "deliverables/item.txt")
+    git(repo, "commit", "-m", "intermediate distinct version")
+    target.write_bytes(original)
+    git(repo, "add", "deliverables/item.txt")
+    git(repo, "commit", "-m", "restore exact original bytes")
+    restored = git(repo, "rev-parse", "HEAD")
+    rejected = record(repo, run_id="B-REPLAY-SECOND", action_id="B-REPLAY-002",
+                      status="success", evidence=(
+                          "commit:" + restored,
+                          "path:deliverables/item.txt",
+                          "sha256:" + digest,
+                      ))
+    assert rejected.returncode != 0
+    assert "duplicate successful artifact proof" in rejected.stderr
