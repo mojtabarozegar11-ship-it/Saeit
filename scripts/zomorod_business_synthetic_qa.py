@@ -87,6 +87,13 @@ assert re.search(r'(?m)^  workflow_dispatch:$',deploy_workflow)
 assert not re.search(r'(?m)^  push:$',deploy_workflow)
 assert 'expected_current_app_sha256:' in deploy_workflow
 assert 'expected_current_dossier_sha256:' in deploy_workflow
+assert 'expected_merged_app_sha256:' in deploy_workflow
+assert "cat > '$stage/app.php'" not in deploy_workflow
+assert "cat > '$stage/proposed-app.php'" in deploy_workflow
+assert "cat > '$stage/overlay.py'" in deploy_workflow
+assert '--render-stage' in deploy_workflow
+assert "'$EXPECTED_MERGED' '$dossier_hash'" in deploy_workflow
+assert 'zomorod_business_genetics_overlay_preview.py' in deploy_workflow
 assert 'verified_cpanel_ssh_port:' in deploy_workflow
 assert 'DIRECT_CPANEL=verified' in deploy_workflow
 assert 'DIRECT_CONFIG' in deploy_workflow
