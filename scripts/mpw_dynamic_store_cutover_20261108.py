@@ -290,6 +290,95 @@ def verify_guest_order_claim_schema(guest_order_email_model, database_connection
         raise RuntimeError("STAGING_GUEST_ORDER_EMAIL_UNIQUE_ORDER_MISSING")
 
 
+
+def verify_email_free_guest_source(source: bytes) -> None:
+    """Fail closed unless staged checkout uses signed guest sessions, not buyer email."""
+    if not 500 < len(source) < 100_000:
+        raise RuntimeError("STAGING_EMAIL_FREE_GUEST_SOURCE_INVALID")
+    try:
+        tree = ast.parse(source.decode("utf-8"), "services/mpw_trx_guest_commerce.py")
+    except (SyntaxError, UnicodeDecodeError) as exc:
+        raise RuntimeError("STAGING_EMAIL_FREE_GUEST_SOURCE_INVALID") from exc
+    required_functions = ("_read_user", "_new_user", "_identity", "_dispatch",
+                          "_install_cookie", "_checkout_page", "patch_commercial")
+    functions = {
+        name: [node for node in tree.body if isinstance(node, ast.FunctionDef)
+               and node.name == name] for name in required_functions
+    }
+    if any(len(nodes) != 1 for nodes in functions.values()):
+        raise RuntimeError("STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN")
+    raw = source.decode("utf-8")
+    required = ("signing.loads(", "signing.dumps(", "set_unusable_password(",
+                "set_cookie(", "secure=True", "httponly=True", 'samesite="Lax"',
+                "csrf_protect(", "require_POST", "rights_cleared_for_sale(",
+                "_eligible(", "_configured_receiver(")
+    forbidden = ("request.POST", "_posted_email", "bound_checkout",
+                 "mpw_trx_email_recovery")
+    if any(part not in raw for part in required) or any(part in raw for part in forbidden):
+        raise RuntimeError("STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN")
+    called = {n.func.id for n in ast.walk(functions["_dispatch"][0])
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    if not {"_identity", "_install_cookie"}.issubset(called):
+        raise RuntimeError("STAGING_EMAIL_FREE_DISPATCH_NOT_PROVEN")
+
+
+def verify_email_free_invoice_sources(app: Path) -> None:
+    """Read-only email-dependency scan; does not assert that paid invoices succeed."""
+    files = ("services/mpw_trx_commercial_web.py",
+             "services/mpw_trx_commercial_context.py",
+             "mpw_commerce/buyer_orders.py")
+    start_count = 0
+    for rel in files:
+        p = app / rel
+        if p.is_symlink() or not p.is_file() or not 200 < p.stat().st_size <= 250_000:
+            raise RuntimeError("STAGING_INVOICE_SOURCE_MISSING_OR_UNSAFE")
+        try:
+            tree = ast.parse(p.read_text("utf-8"), filename=rel)
+        except (OSError, SyntaxError, UnicodeError) as exc:
+            raise RuntimeError("STAGING_INVOICE_SOURCE_UNREADABLE") from exc
+        funcs = {}
+        imported_recorders = set()
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                funcs.setdefault(n.name, []).append(n)
+            elif isinstance(n, ast.ImportFrom):
+                imported_recorders.update((a.asname or a.name) for a in n.names
+                                          if a.name == "record_invoice")
+        if rel.endswith("mpw_trx_commercial_web.py"):
+            start_count = len(funcs.get("_start_order", ()))
+        waiting = [n for n in ("_start_order", "record_invoice") if n in funcs]
+        reviewed = set()
+        while waiting:
+            name = waiting.pop()
+            if name in reviewed:
+                continue
+            reviewed.add(name)
+            if len(funcs.get(name, ())) != 1:
+                raise RuntimeError("STAGING_INVOICE_HELPER_AMBIGUOUS")
+            for node in ast.walk(funcs[name][0]):
+                if isinstance(node, ast.Name) and "email" in node.id.lower():
+                    raise RuntimeError("STAGING_INVOICE_EMAIL_DEPENDENCY")
+                if isinstance(node, ast.Attribute) and "email" in node.attr.lower():
+                    raise RuntimeError("STAGING_INVOICE_EMAIL_DEPENDENCY")
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and "email" in node.value.lower():
+                    raise RuntimeError("STAGING_INVOICE_EMAIL_DEPENDENCY")
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    if node.func.id in imported_recorders:
+                        raise RuntimeError("STAGING_INVOICE_IMPORTED_RECORDER_UNVERIFIED")
+                    if node.func.id in funcs and node.func.id not in reviewed:
+                        waiting.append(node.func.id)
+    if start_count != 1:
+        raise RuntimeError("STAGING_INVOICE_HANDLER_MISSING")
+    template = app / "mpw_commerce/templates/mpw_commerce/product_checkout.html"
+    if template.is_symlink() or not template.is_file() or not 100 < template.stat().st_size <= 250_000:
+        raise RuntimeError("STAGING_INVOICE_TEMPLATE_UNAVAILABLE")
+    markup = template.read_bytes().lower()
+    if (b'name="email"' in markup or b'type="email"' in markup or
+            b"mpw-buy-email" in markup or
+            not (b"csrf_token" in markup or b"csrfmiddlewaretoken" in markup)):
+        raise RuntimeError("STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL_OR_LACKS_CSRF")
+
+
 def verify_buyer_route_resolution(resolver):
     """Verify the actual Django URL table, not only a directly imported view.
 
@@ -324,16 +413,14 @@ def check_actual_staging_store() -> None:
     target = APP / "core/mojplaywin_views.py"
     funnel = APP / "core/commerce_funnel.py"
     guest_adapter = APP / "services/mpw_trx_guest_commerce.py"
-    guest_recovery = APP / "services/mpw_trx_email_recovery.py"
     if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
             not target.is_file() or funnel.is_symlink() or
             (funnel.exists() and not funnel.is_file()) or
-            guest_adapter.is_symlink() or not guest_adapter.is_file() or
-            guest_recovery.is_symlink() or not guest_recovery.is_file()):
+            guest_adapter.is_symlink() or not guest_adapter.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     verify_guarded_store_source(target.read_bytes())
-    verify_guest_email_ownership_source(guest_adapter.read_bytes())
-    verify_guest_recovery_checkout_source(guest_recovery.read_bytes())
+    verify_email_free_guest_source(guest_adapter.read_bytes())
+    verify_email_free_invoice_sources(APP)
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -341,20 +428,9 @@ def check_actual_staging_store() -> None:
     sys.path.insert(0, str(APP))
     import django
     django.setup()
-    from django.db import connection
     from django.test import RequestFactory
     from django.urls import resolve
-    from core.models import GuestOrderEmail
     from core import mojplaywin_views
-    try:
-        from services import mpw_trx_email_recovery as recovery_module
-    except ImportError as exc:
-        raise RuntimeError("STAGING_GUEST_RECOVERY_IMPORT_UNAVAILABLE") from exc
-    if (Path(getattr(recovery_module, "__file__", "")).resolve() != guest_recovery.resolve()
-            or not callable(getattr(recovery_module, "_posted_email", None))
-            or not callable(getattr(recovery_module, "bound_checkout", None))):
-        raise RuntimeError("STAGING_GUEST_RECOVERY_IMPORT_ORIGIN_MISMATCH")
-    verify_guest_order_claim_schema(GuestOrderEmail, connection)
     if Path(mojplaywin_views.__file__).resolve() != target.resolve():
         raise RuntimeError("STAGING_VIEW_IMPORT_ORIGIN_MISMATCH")
     store_callback = verify_buyer_route_resolution(resolve)
@@ -398,14 +474,14 @@ class _InvoiceFormScanner(HTMLParser):
             self.active = {
                 "method": (attributes.get("method") or "").lower(),
                 "action": attributes.get("action"),
-                "email": False,
+                "email_present": False,
                 "csrf": False,
             }
         elif tag == "input" and self.active is not None:
-            if (attributes.get("name") == "email" and
-                    (attributes.get("type") or "").lower() == "email" and
-                    "required" in attributes):
-                self.active["email"] = True
+            if (attributes.get("name") == "email" or
+                    (attributes.get("type") or "").lower() == "email" or
+                    attributes.get("id") == "mpw-buy-email"):
+                self.active["email_present"] = True
             if (attributes.get("name") == "csrfmiddlewaretoken" and
                     bool(attributes.get("value"))):
                 self.active["csrf"] = True
@@ -414,12 +490,12 @@ class _InvoiceFormScanner(HTMLParser):
         if tag == "form" and self.active is not None:
             self.verified |= (self.active["method"] == "post" and
                               self.active["action"] == self.action and
-                              self.active["email"] and self.active["csrf"])
+                              not self.active["email_present"] and self.active["csrf"])
             self.active = None
 
 
 def has_guarded_guest_invoice_form(body: bytes, product_id: int) -> bool:
-    """Require the exact product-specific POST form, email input and CSRF."""
+    """Require exact product-specific POST and CSRF, with NO email input."""
     scanner = _InvoiceFormScanner(f"/commerce/trx-easy/start/{product_id}/")
     try:
         scanner.feed(body.decode("utf-8"))
