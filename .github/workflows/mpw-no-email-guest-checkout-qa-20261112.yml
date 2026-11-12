@@ -14,6 +14,12 @@ on:
       - 'tests/test_mpw_product_host_route.py'
       - 'core/product_seo_views.py'
       - 'core/templates/core/product_detail.html'
+      - 'core/mojplaywin_catalog.py'
+      - 'core/mojplaywin_views.py'
+      - 'core/templates/mojplaywin/store.html'
+      - 'scripts/mpw_dynamic_store_cutover_20261108.py'
+      - 'tests/test_mpw_dynamic_store_cutover_20261108.py'
+      - 'tests/test_mpw_verified_catalog.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -40,6 +46,12 @@ on:
       - 'tests/test_mpw_product_host_route.py'
       - 'core/product_seo_views.py'
       - 'core/templates/core/product_detail.html'
+      - 'core/mojplaywin_catalog.py'
+      - 'core/mojplaywin_views.py'
+      - 'core/templates/mojplaywin/store.html'
+      - 'scripts/mpw_dynamic_store_cutover_20261108.py'
+      - 'tests/test_mpw_dynamic_store_cutover_20261108.py'
+      - 'tests/test_mpw_verified_catalog.py'
       - 'scripts/mpw_three_sku_preflight_20261029.py'
       - 'tests/test_mpw_three_sku_preflight_20261029.py'
       - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
@@ -83,6 +95,11 @@ jobs:
             tests/test_mpw_guest_no_email_release.py \
             tests/test_mpw_product_host_route.py \
             core/product_seo_views.py \
+            core/mojplaywin_catalog.py \
+            core/mojplaywin_views.py \
+            scripts/mpw_dynamic_store_cutover_20261108.py \
+            tests/test_mpw_dynamic_store_cutover_20261108.py \
+            tests/test_mpw_verified_catalog.py \
             tests/test_mpw_onefile_release_gate.py \
             tests/test_mpw_recovery_guarded_release_20261105.py \
             tests/test_mpw_guest_telemetry_isolation_20261108.py \
@@ -103,6 +120,8 @@ jobs:
           python3 -B -m unittest -v \
             tests.test_mpw_guest_no_email_release \
             tests.test_mpw_product_host_route \
+            tests.test_mpw_verified_catalog \
+            tests.test_mpw_dynamic_store_cutover_20261108 \
             tests.test_mpw_onefile_release_gate \
             tests.test_mpw_guest_telemetry_isolation_20261108 \
             tests.test_mpw_recovery_guarded_release_20261105 \
