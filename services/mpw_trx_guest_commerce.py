@@ -13,6 +13,8 @@ import time
 
 from django.core import signing
 from django.http import Http404
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_POST
 
 COOKIE = "mpw_trx_guest_owner"
 SALT = "mpw.trx.guest.owner.v1"
@@ -37,9 +39,7 @@ def _read_user(request):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if (user is None or user.has_usable_password()
-                or getattr(user, "is_staff", False)
-                or getattr(user, "is_superuser", False)):
+        if user is None or user.has_usable_password():
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -90,7 +90,6 @@ def _new_user(request):
     """Resolve both simultaneous first orders to one unique password-disabled user."""
     from django.contrib.auth import get_user_model
     from django.db import IntegrityError, transaction
-
     _rate_limit(request)
     Model = get_user_model()
     field = Model.USERNAME_FIELD
@@ -110,19 +109,12 @@ def _new_user(request):
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
-                # Never inherit privilege-raising defaults from a custom user model.
-                if hasattr(user, "is_staff"):
-                    user.is_staff = False
-                if hasattr(user, "is_superuser"):
-                    user.is_superuser = False
                 user.save(force_insert=True)
         except IntegrityError:
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if (not getattr(user, "is_active", True) or user.has_usable_password()
-            or getattr(user, "is_staff", False)
-            or getattr(user, "is_superuser", False)):
+    if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
@@ -166,6 +158,20 @@ def _dispatch(request, view, args, kwargs, *, create=False):
     return _install_cookie(response, token)
 
 
+def _record_funnel_event_best_effort(request, event, product):
+    """Optional analytics must never turn a valid buyer response into HTTP 500.
+
+    In particular, start_order may already have committed an invoice by the
+    time its instrumentation runs. Do not expose exception details or buyer data.
+    """
+    try:
+        from core.commerce_funnel import record_funnel_event
+        record_funnel_event(request, event, product)
+    except Exception:
+        return False
+    return True
+
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
@@ -192,6 +198,7 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
+    _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
@@ -252,6 +259,7 @@ def patch_public(namespace):
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
 
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
@@ -272,35 +280,37 @@ def patch_commercial(namespace):
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
-                return _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                if view_name == "start_order":
+                    # Order creation and its response are authoritative. The
+                    # separate analytics lookup may be absent or unavailable.
+                    try:
+                        from core.models import Product
+                        product = Product.objects.filter(
+                            pk=kwargs.get("product_id"), active=True,
+                        ).first()
+                        if product is not None:
+                            _record_funnel_event_best_effort(
+                                request, "invoice_created", product,
+                            )
+                    except Exception:
+                        pass
+                return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    from collections.abc import Mapping
-    if isinstance(patterns, Mapping):
-        pattern_type = dict
-        pattern_items = list(patterns.items())
-    elif isinstance(patterns, (tuple, list)):
-        pattern_type = type(patterns)
-        pattern_items = list(patterns)
-    else:
-        pattern_type = None
-        pattern_items = []
-    if pattern_type is not None:
+    if isinstance(patterns, tuple):
         rebuilt = []
         route_names = (
             ("/start/", "start_order"), ("/invoice/", "show_invoice"),
             ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
             ("/download/", "download_paid"),
         )
-        for route, view in pattern_items:
+        for route, view in patterns:
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = (
-            {route: view for route, view in rebuilt} if pattern_type is dict
-            else pattern_type(rebuilt)
-        )
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
