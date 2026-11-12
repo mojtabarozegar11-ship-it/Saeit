@@ -1,0 +1,152 @@
+name: Publish only auction 347 to Zomorod cPanel
+on:
+  push:
+    branches: [feature/zomorod-lab-procurement-rfq-347-20261112]
+    paths:
+      - .github/workflows/auction-347-scoped-release.yml
+permissions: {contents: read}
+concurrency: {group: auction347-one-time-scoped-release, cancel-in-progress: false}
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Validate standalone Persian notice before touching live files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          f=Path('public/auctions/347/index.html')
+          s=f.read_text(encoding='utf-8')
+          for token in ('<html lang="fa" dir="rtl">','فراخوان شماره ۳۴۷','zomorodmelal@gmail.com','۵ تا ۱۰ هر ماه','با اعلام قبلی','rel="canonical"','application/ld+json','@page{size:A4'):
+              assert token in s, token
+          assert '{%' not in s and '<script src=' not in s and 'https://zomorodmelal.ir/auctions/347/' in s
+          assert s.count('</html>')==1
+          print('NOTICE_347_SOURCE_QA=PASS')
+          PY
+      - name: Pinned direct cPanel publication with exact-path rollback
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/auction-347-live"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          before_auctions="$(curl -sSL --max-time 15 -o "$d/before_auctions.html" -w '%{http_code}' https://zomorodmelal.ir/auctions/)"
+          before_root="$(curl -sSL --max-time 15 -o "$d/before_root.html" -w '%{http_code}' https://zomorodmelal.ir/)"
+          before_347="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/auctions/347/)"
+          before_346="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/auctions/346/)"
+          test "$before_auctions" = 200 && test "$before_root" = 200 && test "$before_347" = 404 && test "$before_346" = 200
+          echo 'BASELINE_PUBLIC_STATUS=verified'
+          stage="/home/zomorod2/.auction347-stage-$GITHUB_RUN_ID.html"
+          timeout 50s scp -q -F "$d/config" public/auctions/347/index.html "saeit-cpanel:$stage"
+          local_sha="$(sha256sum public/auctions/347/index.html | awk '{print $1}')"
+          remote_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$stage' | cut -c1-64")"
+          test "$local_sha" = "$remote_sha"
+          echo "TRANSFER_SHA256=verified"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$stage' '$GITHUB_RUN_ID' '$local_sha'" <<'REMOTE'
+          import hashlib,os,pathlib,stat,sys
+          stage=pathlib.Path(sys.argv[1]);run=sys.argv[2];expected=sys.argv[3]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess'
+          targetdir=root/'zm-auction347';dest=targetdir/'index.html'
+          assert os.getuid()==home.stat().st_uid
+          assert not root.is_symlink() and root.is_dir()
+          assert ht.is_file() and not ht.is_symlink()
+          assert not targetdir.exists() and not targetdir.is_symlink()
+          assert not dest.exists() and not dest.is_symlink()
+          assert stage.is_file() and not stage.is_symlink()
+          raw=stage.read_bytes(); assert hashlib.sha256(raw).hexdigest()==expected
+          assert b'zomorodmelal@gmail.com' in raw and 'https://zomorodmelal.ir/auctions/347/'.encode() in raw
+          existing=ht.read_bytes()
+          original_hash=hashlib.sha256(existing).hexdigest()
+          assert b'PassengerAppRoot "/home/zomorod2/Saeit"' in existing, 'ROOT_MAPPING_NOT_VERIFIED'
+          assert b'RewriteRule ^auctions/346/?$ /zm-auction346/index.html [END,NC]' in existing, 'PRIOR_PUBLIC_NOTICE_RULE_MISSING'
+          anchor=b'RewriteRule ^auctions/346/?$ /zm-auction346/index.html [END,NC]'
+          assert existing.count(anchor)==1 and b'^auctions/347' not in existing
+          rule=b'RewriteRule ^auctions/347/?$ /zm-auction347/index.html [END,NC]\n'
+          updated=existing.replace(anchor,rule+anchor)
+          backups=home/'.backups'/'auction347-scoped'/run
+          backups.mkdir(parents=True,mode=0o700,exist_ok=False)
+          (backups/'htaccess.original').write_bytes(existing)
+          (backups/'htaccess.sha256').write_text(original_hash+'\n')
+          (backups/'notice.sha256').write_text(expected+'\n')
+          targetdir.mkdir(mode=0o755)
+          tmp=targetdir/('.index.'+run)
+          with open(tmp,'xb') as f:
+              f.write(raw);f.flush();os.fsync(f.fileno())
+          tmp.chmod(0o644);os.replace(tmp,dest)
+          ht_tmp=root/('.htaccess.auction347.'+run)
+          with open(ht_tmp,'xb') as f:
+              f.write(updated);f.flush();os.fsync(f.fileno())
+          ht_tmp.chmod(stat.S_IMODE(ht.stat().st_mode))
+          os.replace(ht_tmp,ht)
+          print('SCOPED_INSTALL=COMPLETE')
+          print('NOTICE_SHA256='+expected)
+          print('HTACCESS_ORIGINAL_SHA256='+original_hash)
+          REMOTE
+          verified=no
+          for attempt in 1 2 3 4; do
+            status="$(curl -sSL --max-time 18 -o "$d/public.html" -w '%{http_code}' "https://zomorodmelal.ir/auctions/347/?verify=$GITHUB_RUN_ID-$attempt" || true)"
+            if test "$status" = 200 && grep -Fq 'فراخوان شماره ۳۴۷' "$d/public.html" && grep -Fq 'zomorodmelal@gmail.com' "$d/public.html" && grep -Fq '۵ تا ۱۰ هر ماه' "$d/public.html"; then verified=yes; break; fi
+            sleep 2
+          done
+          after_auctions="$(curl -sSL --max-time 15 -o "$d/after_auctions.html" -w '%{http_code}' https://zomorodmelal.ir/auctions/ || true)"
+          after_root="$(curl -sSL --max-time 15 -o "$d/after_root.html" -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          after_346="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/auctions/346/ || true)"
+          if test "$verified" != yes || test "$after_auctions" != 200 || test "$after_root" != 200 || test "$after_346" != 200; then
+            echo "PUBLIC_VERIFY=FAILED; restoring prior .htaccess and removing only owned notice"
+            timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID' '$local_sha'" <<'ROLLBACK'
+          import hashlib,os,pathlib,stat,sys
+          run,expected=sys.argv[1:]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html'
+          backup=home/'.backups'/'auction347-scoped'/run/'htaccess.original'
+          ht=root/'.htaccess';dest=root/'zm-auction347'/'index.html'
+          assert backup.is_file() and not backup.is_symlink()
+          orig=backup.read_bytes()
+          assert hashlib.sha256(orig).hexdigest()==(backup.parent/'htaccess.sha256').read_text().strip()
+          current=ht.read_bytes()
+          assert current==orig.replace(b'RewriteRule ^auctions/346/?$ /zm-auction346/index.html [END,NC]',b'RewriteRule ^auctions/347/?$ /zm-auction347/index.html [END,NC]\nRewriteRule ^auctions/346/?$ /zm-auction346/index.html [END,NC]'),'UNEXPECTED_HTACCESS_CHANGE'
+          tmp=root/('.htaccess.rollback347.'+run)
+          with open(tmp,'xb') as f:f.write(orig);f.flush();os.fsync(f.fileno())
+          tmp.chmod(stat.S_IMODE(ht.stat().st_mode))
+          os.replace(tmp,ht)
+          assert dest.is_file() and hashlib.sha256(dest.read_bytes()).hexdigest()==expected
+          dest.unlink()
+          dest.parent.rmdir()
+          print('SCOPE_ROLLBACK=COMPLETE')
+          ROLLBACK
+            exit 1
+          fi
+          echo 'AUCTION_347_PUBLIC=200_VERIFIED'
+          echo 'AUCTIONS_INDEX_PUBLIC=200_PRESERVED'
+          echo 'HOMEPAGE_PUBLIC=200_PRESERVED'
+          echo 'AUCTION_346_PUBLIC=200_PRESERVED'
