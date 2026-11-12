@@ -4,16 +4,65 @@ from io import StringIO
 import json
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from core.models import Agent, AgentTask, AuditLog
+from core.approval import ApprovalService
+from core.models import Agent, AgentTask, AuditLog, ApprovalRequest
 from core.task_runtime import TaskExecutionError, TaskRuntime
-from core.unified_bot_identity import BOT_CODE, BOT_NAME, module_for_capability
+from core.unified_bot_identity import BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES, module_for_capability
+
+
+def approved_executor_handoff(old):
+    """Synthetic DB-only fixture: never production proof of stopped schedulers."""
+    owner = get_user_model().objects.create_user(username=f"merge-owner-{old.pk}")
+    receipt = AuditLog.objects.create(
+        actor_type="owner", actor_id=str(owner.pk),
+        action="single_bot_live_handoff_verified",
+        target_type="Agent", target_id=str(old.pk),
+        before_state={"legacy_code": old.code},
+        after_state={
+            "legacy_code": old.code,
+            "canonical_bot_code": BOT_CODE,
+            "canonical_successor_runtime_verified": True,
+            "external_legacy_schedulers_stopped": True,
+            "all_pending_tasks_reconciled": True,
+            "historical_data_preserved": True,
+            "rollback_ready": True,
+            "live_inventory_receipt_id": f"fixture-inventory-{old.pk}",
+            "canonical_successor_receipt_id": f"fixture-successor-{old.pk}",
+        },
+        trace_id=f"fixture-merge-handoff-{old.pk}",
+    )
+    request = ApprovalRequest.objects.create(
+        requested_by=owner, status="approved",
+        action_type="merge_legacy_executor", target_type="Agent",
+        target_id=str(old.pk), reason="Synthetic approved handoff fixture", risk="high",
+    )
+    grant = ApprovalService().issue_grant(request.pk, owner.pk, {
+        "action": "merge_legacy_executor",
+        "agent_code": old.code,
+        "canonical_bot_code": BOT_CODE,
+        "live_handoff_receipt": receipt.trace_id,
+    })
+    return receipt, grant
 
 
 def seed(*, merge=False):
-    call_command("seed_online_income_agents", apply_legacy_merge=merge, stdout=StringIO())
+    if not merge:
+        call_command("seed_online_income_agents", stdout=StringIO())
+        return
+    # Two separate one-agent operations, never a bulk owner-approval bypass.
+    for old in Agent.objects.filter(
+        code__in=LEGACY_EXECUTOR_CODES, active=True
+    ).order_by("pk"):
+        _, grant = approved_executor_handoff(old)
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=old.code, approval_grant_id=grant.pk,
+            stdout=StringIO(),
+        )
 
 
 @pytest.mark.django_db
@@ -282,3 +331,99 @@ def test_failed_and_cancelled_legacy_receipts_remain_with_original_owner():
     assert receipt.after_state["terminal_tasks_retained"] == 2
     assert receipt.after_state["queued_tasks_reassigned"] == 0
     seed()  # historical terminal rows alone never force another migration
+@pytest.mark.django_db
+def test_plain_apply_flag_cannot_disable_legacy_executor():
+    old = Agent.objects.create(code="moj_1ro_1", name="old", mission="factory", active=True)
+    with pytest.raises(CommandError, match="EXACT_LEGACY_AGENT_AND_APPROVAL_REQUIRED"):
+        call_command("seed_online_income_agents", apply_legacy_merge=True, stdout=StringIO())
+    old.refresh_from_db()
+    assert old.active
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+
+
+@pytest.mark.django_db
+def test_approval_without_handoff_is_not_enough_to_retire_executor():
+    old = Agent.objects.create(code="economic-master-agent", name="old", mission="economic", active=True)
+    _, grant = approved_executor_handoff(old)
+    AuditLog.objects.filter(action="single_bot_live_handoff_verified", target_id=str(old.pk)).delete()
+    with pytest.raises(CommandError, match="LIVE_HANDOFF_RECEIPT_REQUIRED"):
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=old.code, approval_grant_id=grant.pk,
+            stdout=StringIO(),
+        )
+    old.refresh_from_db()
+    grant.refresh_from_db()
+    assert old.active and grant.used_at is None
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+
+
+@pytest.mark.django_db
+def test_wrong_scope_grant_fails_atomically_without_legacy_retirement():
+    old = Agent.objects.create(code="moj_1ro_1", name="old", mission="factory", active=True)
+    _, grant = approved_executor_handoff(old)
+    grant.scope["agent_code"] = "economic-master-agent"
+    grant.save(update_fields=["scope"])
+    with pytest.raises(CommandError, match="APPROVAL_GRANT_REJECTED"):
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=old.code, approval_grant_id=grant.pk,
+            stdout=StringIO(),
+        )
+    old.refresh_from_db()
+    grant.refresh_from_db()
+    assert old.active and grant.used_at is None
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+
+
+@pytest.mark.django_db
+def test_one_executor_approval_cannot_retire_the_other():
+    first = Agent.objects.create(code="economic-master-agent", name="economic", mission="old", active=True)
+    second = Agent.objects.create(code="moj_1ro_1", name="factory", mission="old", active=True)
+    _, first_grant = approved_executor_handoff(first)
+    with pytest.raises(CommandError, match="EXACT_OWNER_APPROVAL_REQUIRED"):
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=second.code, approval_grant_id=first_grant.pk,
+            stdout=StringIO(),
+        )
+    first.refresh_from_db()
+    second.refresh_from_db()
+    first_grant.refresh_from_db()
+    assert first.active and second.active and first_grant.used_at is None
+    assert not Agent.objects.filter(code=BOT_CODE).exists()
+
+    call_command(
+        "seed_online_income_agents", apply_legacy_merge=True,
+        legacy_agent_code=first.code, approval_grant_id=first_grant.pk,
+        stdout=StringIO(),
+    )
+    first.refresh_from_db()
+    second.refresh_from_db()
+    first_grant.refresh_from_db()
+    assert not first.active and second.active and first_grant.used_at is not None
+    with pytest.raises(CommandError):
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=first.code, approval_grant_id=first_grant.pk,
+            stdout=StringIO(),
+        )
+    assert Agent.objects.get(pk=second.pk).active
+    assert AuditLog.objects.filter(action="internal_executor_merged").count() == 1
+
+
+@pytest.mark.django_db
+def test_partial_live_receipt_is_not_retirement_authority():
+    old = Agent.objects.create(code="economic-master-agent", name="old", mission="economic", active=True)
+    receipt, grant = approved_executor_handoff(old)
+    receipt.after_state["external_legacy_schedulers_stopped"] = False
+    receipt.save(update_fields=["after_state"])
+    with pytest.raises(CommandError, match="LIVE_HANDOFF_RECEIPT_REQUIRED"):
+        call_command(
+            "seed_online_income_agents", apply_legacy_merge=True,
+            legacy_agent_code=old.code, approval_grant_id=grant.pk,
+            stdout=StringIO(),
+        )
+    assert Agent.objects.get(pk=old.pk).active
+    grant.refresh_from_db()
+    assert grant.used_at is None
