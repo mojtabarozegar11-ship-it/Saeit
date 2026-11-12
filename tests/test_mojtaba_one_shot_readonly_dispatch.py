@@ -45,3 +45,15 @@ def test_only_expected_commit_on_main_can_call_existing_readonly_workflow():
     assert "  cancel-in-progress: false" in text
     assert "deploy" not in text.lower()
     assert "delete" not in text.lower()
+
+
+def test_guard_expression_is_yaml_quoted_when_it_contains_colon_space():
+    """Without enclosing quotes GitHub rejects the workflow before any jobs."""
+    lines = ONESHOT.read_text(encoding="utf-8").splitlines()
+    guards = [line.strip() for line in lines
+              if line.strip().startswith("if:")]
+    assert len(guards) == 1
+    guard = guards[0]
+    assert guard.startswith('if: "${{')
+    assert guard.endswith('}}"')
+    assert "'audit: run one-time" in guard
