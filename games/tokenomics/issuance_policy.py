@@ -23,8 +23,11 @@ def exact_supply(name: str, amount: object) -> int:
     name = token_name(name)
     if isinstance(amount, bool):
         raise ValueError("boolean supply forbidden")
+    raw = str(amount)
+    if len(raw) > 64 or not re.fullmatch(r"[0-9]+", raw):
+        raise ValueError("supply must be an unsigned decimal integer")
     try:
-        parsed = Decimal(str(amount))
+        parsed = Decimal(raw)
     except (InvalidOperation, ValueError):
         raise ValueError("invalid supply") from None
     if not parsed.is_finite() or parsed != parsed.to_integral_value():
@@ -55,8 +58,11 @@ def allocate(name: str, supply: object, allocations: dict[str, object]) -> dict[
 def exact_nonnegative(amount: object) -> int:
     if isinstance(amount, bool):
         raise ValueError("boolean allocation forbidden")
+    raw = str(amount)
+    if len(raw) > 64 or not re.fullmatch(r"[0-9]+", raw):
+        raise ValueError("allocation must be an unsigned decimal integer")
     try:
-        value = Decimal(str(amount))
+        value = Decimal(raw)
     except (InvalidOperation, ValueError):
         raise ValueError("invalid allocation") from None
     if not value.is_finite() or value < 0 or value != value.to_integral_value():
