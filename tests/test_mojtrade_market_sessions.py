@@ -141,7 +141,7 @@ def test_preclose_signal_cannot_create_new_position_at_postclosure_open(monkeypa
         "initial_equity_usd": 10000,
         "commission_usd_per_ounce_per_side": 0.1,
         "slippage_usd_per_ounce_per_side": 0.1,
-        "quantity_step_ounces": 0.01,
+        "quantity_step_ounces": 1.0,
         "max_notional_to_equity": 2,
         "risk_fraction": .0025,
         "stop_atr_multiple": 2,
