@@ -1,12 +1,42 @@
 # MojPlayWin — current release contract: guest TRX checkout without email
 **Supersedes the archived email-recovery design below. Status: draft, not deployed. Updated 2026-11-12.**
 
+## Hosting-provider evidence and network root cause — 2026-11-12
+
+The hosting provider's **existing** support replies were inspected read-only;
+no ticket or email was sent. These are provider assertions, not proof of
+reachability from a GitHub runner.
+
+- Ticket **666685**, dated 2026-11-11: two separate services. VPS SSH port
+  **22** on `178.239.147.150`; Python shared-host SSH port **1396**.
+  The Python host requires the *connecting source IP* to be allowlisted.
+- Ticket **419805**, dated 2026-11-12: provider replied "**انجام شد، بررسی
+  بفرمایید**" to the request to allow SSH **from the VPS static IP to the
+  Python host**. This does **not** allow all transient GitHub runner IPs.
+- Ticket **864652**, dated 2026-11-09: provider demonstrated successful SSH
+  to the VPS from its own network. It does not establish GitHub-runner access.
+- GitHub Actions audit run **43242036979**: from the runner, host-key
+  acquisition failed for direct Python-host SSH port **1396**, then for VPS
+  SSH port **22**. These failed paths must not be reclassified as healthy.
+- Technical implication: do not swap SSH ports or disable host identity
+  verification. Existing provider policy favors an authorized **VPS-to-host**
+  hop; the separate runner-to-VPS ingress remains unproven. Prefer the
+  previously established owner-authorized hosting portal or an authenticated
+  route with verifiable network origin to perform a bounded source audit.
+- No more unattended runner SSH retries are authorized until an access path
+  is demonstrably reachable. The existing source-audit workflow stays manual.
+
+**Commercial continuity:** The provider sent an expiry reminder for
+`mojplaywin.com` with a **2026-12-07** due date. Check renewal status
+through the existing authenticated provider portal; no payment, auto-renewal
+or financial obligation is approved in this PR.
+
 ## Read-only production source audit evidence — 2026-11-12
 
 **Observed, not inferred:**
 
 - Branch-only, bounded source-audit code was registered under
-  \`scripts/mpw_live_invoice_source_audit_readonly_20261112.py\`.
+  `scripts/mpw_live_invoice_source_audit_readonly_20261112.py`.
   Its eight offline contract tests pass. It does not run Django or inspect
   a live invoice unless SSH actually succeeds.
 - GitHub Actions run
@@ -15,9 +45,9 @@
 - GitHub Actions run
   [43242036979](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43242036979):
   direct cPanel host-key scan at the currently configured port 1396 returned
-  \`MPW_CPANEL_DIRECT=HOST_KEY_UNREACHABLE\`;
+  `MPW_CPANEL_DIRECT=HOST_KEY_UNREACHABLE`;
   VPS relay port 22 returned
-  \`MPW_VPS_RELAY=PORT22_HOST_KEY_UNREACHABLE\`.
+  `MPW_VPS_RELAY=PORT22_HOST_KEY_UNREACHABLE`.
   The step exited with code 11. This establishes network/SSH reachability
   failure **from those GitHub runners only**, not a cPanel or VPS outage.
 - SSH key secret variables were supplied (redacted in Actions logs).
@@ -28,7 +58,7 @@
   These are source/offline tests, not real purchase receipts.
 
 **Remaining gate:** Establish an authorized path to read the existing cPanel
-Passenger/Django invoice sources and exact \`record_invoice\` dependencies.
+Passenger/Django invoice sources and exact `record_invoice` dependencies.
 Verify the actual current SSH ports and allowed ingress from the hosting
 provider's already available dashboard/support history, or use a separately
 approved authenticated hosting interface. Do **not** guess ports, bypass
