@@ -1,4 +1,6 @@
 import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from core import weather_agent
 from core.models import Agent, AgentTask, NewsletterStory
@@ -137,3 +139,18 @@ def test_existing_historical_weather_story_keeps_original_agent_fk(monkeypatch):
     old_story.refresh_from_db()
     assert result["weather_story_id"] == old_story.pk
     assert old_story.agent_id == old.pk
+
+
+def test_weather_command_reports_handoff_block_not_success(monkeypatch):
+    _bot()
+    Agent.objects.create(
+        code="content-director", name="Legacy Content",
+        mission="Independent worker", active=True,
+    )
+    monkeypatch.setattr(
+        weather_agent, "province_forecast",
+        lambda days=7: pytest.fail("command must block before external weather IO"),
+    )
+    with pytest.raises(CommandError, match="WEATHER_MODULE_HANDOFF_BLOCKED"):
+        call_command("weather_agent_cycle")
+    assert not NewsletterStory.objects.exists()
