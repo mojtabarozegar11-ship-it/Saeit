@@ -1,0 +1,100 @@
+name: VPS read-only backup metadata inventory
+on:
+  pull_request:
+    paths: [".github/workflows/vps-backup-metadata-inventory-20261105.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Prepare pinned VPS identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-backup-meta-20261105"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo VPS_PINNED_SSH=verified
+      - name: Inventory backup metadata without reading contents or deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/vps-backup-meta-20261105"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -' <<'REMOTE'
+          import collections,os,re,stat,time
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"/"operations"/"backups"
+          if root.is_symlink() or not root.is_dir():
+              raise SystemExit("VPS_BACKUP_ROOT_UNSAFE_OR_MISSING")
+          root_dev=root.lstat().st_dev
+          snapshot=re.compile(r"master-before-[0-9]{8}T[0-9]{6}Z\.sqlite3")
+          records=[]
+          symlinks=0
+          for directory,subdirs,filenames in os.walk(root,topdown=True,followlinks=False):
+              parent=Path(directory)
+              depth=len(parent.relative_to(root).parts)
+              if depth>8:
+                  raise SystemExit("VPS_BACKUP_DEPTH_LIMIT")
+              good=[]
+              for child in subdirs:
+                  p=parent/child
+                  if p.is_symlink():
+                      symlinks+=1
+                  elif p.lstat().st_dev==root_dev:
+                      good.append(child)
+              subdirs[:]=good
+              for name in filenames:
+                  path=parent/name
+                  st=os.lstat(path)
+                  if stat.S_ISLNK(st.st_mode):
+                      symlinks+=1
+                      continue
+                  if not stat.S_ISREG(st.st_mode) or st.st_dev!=root_dev:
+                      continue
+                  kind=("master-sqlite" if parent==root and snapshot.fullmatch(name) else
+                        "other-sqlite" if name.endswith(".sqlite3") else
+                        "sqlite-sidecar" if name.endswith((".sqlite3-wal",".sqlite3-shm",".sqlite3-journal")) else
+                        "archive" if name.endswith((".gz",".tgz",".zip",".zst",".tar",".xz")) else
+                        "manifest" if name.endswith(".json") else "other")
+                  age=max(0,int((time.time()-st.st_mtime)//86400))
+                  records.append((kind,st.st_size,age,st.st_dev,st.st_ino,st.st_nlink))
+                  if len(records)>30000:
+                      raise SystemExit("VPS_BACKUP_FILE_LIMIT")
+          st=os.statvfs("/")
+          print("VPS_BACKUP_READ_ONLY=true")
+          print("VPS_BACKUP_FREE_BYTES="+str(st.f_bavail*st.f_frsize))
+          print("VPS_BACKUP_FILE_COUNT="+str(len(records)))
+          print("VPS_BACKUP_TOTAL_LOGICAL_BYTES="+str(sum(row[1] for row in records)))
+          print("VPS_BACKUP_SYMLINK_SKIP="+str(symlinks))
+          groups=collections.defaultdict(list)
+          for rec in records:
+              groups[rec[0]].append(rec)
+          for kind,rows in sorted(groups.items()):
+              total=sum(row[1] for row in rows)
+              old=sum(row[1] for row in rows if row[2]>=30)
+              print("VPS_BACKUP_CLASS="+kind+":count="+str(len(rows))+":bytes="+str(total)+":older30d_bytes="+str(old))
+          sizes=collections.Counter(row[1] for row in records if row[1]>=4096)
+          pairs=sum(n*(n-1)//2 for n in sizes.values() if n>1)
+          inodes=collections.Counter((row[3],row[4]) for row in records)
+          links=sum(1 for n in inodes.values() if n>1)
+          print("VPS_BACKUP_SAME_SIZE_PAIRS_NOT_PROOF="+str(pairs))
+          print("VPS_BACKUP_SHARED_INODE_GROUPS="+str(links))
+          for kind,size,age,dev,ino,nlink in sorted(records,key=lambda r:r[1],reverse=True)[:15]:
+              print("VPS_BACKUP_LARGE="+kind+":bytes="+str(size)+":age_days="+str(age)+":links="+str(nlink))
+          print("VPS_BACKUP_DELETE_PERMITTED=false")
+          REMOTE
+      - name: Remove temporary runner identity
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/vps-backup-meta-20261105"

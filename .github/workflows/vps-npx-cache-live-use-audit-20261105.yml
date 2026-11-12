@@ -1,0 +1,141 @@
+name: VPS bounded disposable npx cache cleanup
+on:
+  pull_request:
+    paths: [".github/workflows/vps-npx-cache-live-use-audit-20261105.yml"]
+  workflow_dispatch:
+    inputs:
+      cleanup_action:
+        description: "Inspect only (default), or apply deletion of the unused 254MB VPS npx download cache"
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - apply
+      confirm_cache_only:
+        description: "I confirm: ONLY the VPS githubops .npm/_npx disposable cache, never apps, databases or backups"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Prepare pinned VPS identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-backup-meta-20261105"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo VPS_PINNED_SSH=verified
+      - name: Inspect or explicitly reclaim one disposable npx cache with fail-closed guards
+        shell: bash
+        env:
+          REQUESTED_ACTION: ${{ inputs.cleanup_action }}
+          CONFIRM_CACHE_ONLY: ${{ inputs.confirm_cache_only }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/vps-backup-meta-20261105"
+          mode=preview
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "${REQUESTED_ACTION:-preview}" == apply ]]; then
+            test "${CONFIRM_CACHE_ONLY:-false}" = true || { echo "NPX_VPS_APPLY_REFUSED_CONFIRMATION"; exit 8; }
+            mode=apply
+          fi
+          echo "NPX_VPS_MODE=$mode"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "CACHE_CLEANUP_MODE=$mode python3 -" <<'REMOTE'
+          import collections,os,shutil,stat,subprocess
+          from pathlib import Path
+          home=Path.home()
+          cache=home/".npm"/"_npx"
+          print("NPX_VPS_INSPECT_READ_ONLY=true",flush=True)
+          if cache.is_symlink() or not cache.is_dir() or cache.resolve()!=home/".npm"/"_npx":
+              raise SystemExit("VPS_NPX_CACHE_UNSAFE_OR_ABSENT")
+          size=subprocess.run(["du","-sk",str(cache)],capture_output=True,text=True,timeout=24,check=True)
+          print("NPX_VPS_DISK_BYTES="+str(int(size.stdout.split()[0])*1024),flush=True)
+          ps=subprocess.run(["ps","-u",str(os.geteuid()),"-o","pid=,etimes=,args="],capture_output=True,text=True,timeout=10,check=True)
+          counts=collections.Counter()
+          cache_cwd=0
+          open_cache_fds=0
+          for row in ps.stdout.splitlines():
+              fields=row.strip().split(None,2)
+              if len(fields)!=3 or not fields[0].isdigit() or not fields[1].isdigit():
+                  continue
+              pid=int(fields[0])
+              cmd=fields[2].lower()
+              if any(token in cmd for token in ("npx ","npm ","pnpm ","yarn ",".npm/_npx")):
+                  counts["npx" if "npx" in cmd else "npm-other"]+=1
+              procdir=Path("/proc")/str(pid)
+              try:
+                  cwd=os.readlink(procdir/"cwd")
+                  if cwd==str(cache) or cwd.startswith(str(cache)+"/"):
+                      cache_cwd+=1
+              except OSError:pass
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          if target.startswith(str(cache)+"/"):
+                              open_cache_fds+=1
+                      except OSError:pass
+              except OSError:pass
+          for key,val in sorted(counts.items()):
+              print("NPX_VPS_ACTIVE_CLASS="+key+":"+str(val),flush=True)
+          print("NPX_VPS_ACTIVE_COUNT="+str(sum(counts.values())),flush=True)
+          print("NPX_VPS_CACHE_CWD_COUNT="+str(cache_cwd),flush=True)
+          print("NPX_VPS_CACHE_OPEN_FD_COUNT="+str(open_cache_fds),flush=True)
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          if cron.returncode not in (0,1):
+              print("NPX_VPS_CRON_REFERENCE=UNKNOWN",flush=True)
+          else:
+              print("NPX_VPS_CRON_REFERENCE="+str(".npm/_npx" in cron.stdout or "npx " in cron.stdout.lower()),flush=True)
+          units=home/".config"/"systemd"/"user"
+          references=0
+          if units.is_dir() and not units.is_symlink():
+              for p in list(units.glob("*.service"))[:100]:
+                  if not p.is_symlink() and p.is_file() and p.stat().st_size<=262144:
+                      content=p.read_text(errors="replace")
+                      if ".npm/_npx" in content or "npx " in content.lower():references+=1
+          print("NPX_VPS_USER_SERVICE_REFERENCES="+str(references),flush=True)
+          apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
+          print("NPX_VPS_APPLY_REQUESTED="+str(apply),flush=True)
+          if apply:
+              if sum(counts.values()) or cache_cwd or open_cache_fds:
+                  raise SystemExit("NPX_VPS_ACTIVE_USE_ABORT")
+              if cron.returncode not in (0,1) or ".npm/_npx" in cron.stdout or "npx " in cron.stdout.lower() or references:
+                  raise SystemExit("NPX_VPS_SCHEDULED_REFERENCE_ABORT")
+              if home!=Path("/home/githubops") or (home/".npm").is_symlink() or cache.is_symlink():
+                  raise SystemExit("NPX_VPS_PATH_IDENTITY_ABORT")
+              if cache.owner()!="githubops" or (home/".npm").owner()!="githubops":
+                  raise SystemExit("NPX_VPS_OWNERSHIP_ABORT")
+              if cache.resolve()!=home/".npm"/"_npx" or not cache.is_dir():
+                  raise SystemExit("NPX_VPS_PATH_CHANGED_ABORT")
+              before=int(size.stdout.split()[0])*1024
+              if before<100*1024*1024 or before>1024*1024*1024:
+                  raise SystemExit("NPX_VPS_SIZE_SCOPE_ABORT")
+              # Cache, not application code; no service or backup paths may be targeted.
+              free_before=os.statvfs(home).f_bavail*os.statvfs(home).f_frsize
+              shutil.rmtree(cache)
+              if cache.exists():
+                  raise SystemExit("NPX_VPS_DELETE_INCOMPLETE")
+              fs=os.statvfs(home)
+              free_after=fs.f_bavail*fs.f_frsize
+              print("NPX_VPS_DISPOSABLE_CACHE_REMOVED=true",flush=True)
+              print("NPX_VPS_FREE_GAIN_BYTES="+str(free_after-free_before),flush=True)
+          else:
+              print("NPX_VPS_DELETION_ATTEMPTED=false",flush=True)
+          REMOTE
+      - name: Remove temporary runner identity
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/vps-backup-meta-20261105"
