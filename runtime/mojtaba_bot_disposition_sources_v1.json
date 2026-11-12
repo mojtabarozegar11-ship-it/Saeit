@@ -134,10 +134,10 @@
         "core/management/commands/consolidate_legacy_agents.py"
       ],
       "unverified_dependencies": [
-        "weather_content_publisher_agent_assignment",
         "old_newsletter_schedulers",
         "existing_NewsletterStory_agent_foreign_keys",
-        "pending_NewsletterSubmission_and_AgentTask_rows"
+        "pending_NewsletterSubmission_and_AgentTask_rows",
+        "weather_publication_handoff_not_live_verified"
       ],
       "historical_data_action": "keep_original_story_and_task_FKs",
       "code_merge_committed": true,
@@ -192,6 +192,52 @@
         "core/management/commands/knowledge_agent_cycle.py",
         "core/tests/test_knowledge_agent_scheduler.py"
       ]
+    },
+    {
+      "id": "weather_publication_module",
+      "kind": "django_weather_report_and_content_publication",
+      "evidence_file": "core/weather_agent.py",
+      "evidence_command": "core/management/commands/weather_agent_cycle.py",
+      "historical_legacy_owner_codes": [
+        "content-research",
+        "content-director"
+      ],
+      "target_bot_id": "mojtaba.bot.ai",
+      "target_bot_code": "mojtaba-bot-ai",
+      "proposed_route": "canonical_weather_capability_after_both_legacy_handoffs",
+      "source_guard_status": "implemented_on_draft_branch_only",
+      "code_and_tests": [
+        "core/weather_agent.py",
+        "core/management/commands/weather_agent_cycle.py",
+        "core/tests/test_weather_agent_assignment.py"
+      ],
+      "source_side_effects": [
+        "31_external_forecast_requests_or_cached_responses",
+        "create_or_update_daily_weather_story_with_existing_publication_semantics",
+        "optional_paid_generation_behind_environment_date_gate"
+      ],
+      "migration_safeguards": [
+        "canonical_owner_resolved_before_forecast_network",
+        "both_legacy_content_codes_must_be_inactive_without_pending_tasks_or_stories",
+        "do_not_reassign_historical_NewsletterStory_FK",
+        "management_command_reports_blocker_as_error",
+        "no_live_cutover_authorized"
+      ],
+      "live_schedulers_discovered": false,
+      "legacy_processes_retired": false,
+      "live_replacement_tested": false,
+      "paid_model_approval_gate_end_to_end_attested": false,
+      "actual_weather_publication_attested": false,
+      "known_live_count": null,
+      "execution_status": "code_committed__tests_and_live_runtime_unverified",
+      "prerequisites": [
+        "inventory_live_weather_scheduler_and_source_commit",
+        "read_only_agent_and_newsletter_publication_inventory",
+        "verify_weather_output_quality_and_provenance",
+        "require_explicit_owner_payment_grant_for_any_paid_generation",
+        "prove_no_duplicate_weather_schedulers",
+        "owner_approved_cutover_and_rollback"
+      ]
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -216,6 +262,9 @@
     "newsletter_and_knowledge_live_handoffs_verified": false,
     "editorial_and_knowledge_new_task_canonical_routing_committed": true,
     "editorial_and_knowledge_live_handoffs_verified": false,
-    "current_branch_tests_executed": false
+    "current_branch_tests_executed": false,
+    "weather_content_owner_code_guard_committed": true,
+    "weather_live_handoff_verified": false,
+    "weather_paid_approval_scoped_verified": false
   }
 }
