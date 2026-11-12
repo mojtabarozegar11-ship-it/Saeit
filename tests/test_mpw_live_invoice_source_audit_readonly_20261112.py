@@ -143,6 +143,29 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                 self.assertTrue(report["template"]["email_control_marker"])
                 self.assertEqual(report["status"], "LEGACY_EMAIL_CHECKOUT_PRESENT")
 
+    def test_quoted_angle_brackets_do_not_mask_email_controls(self):
+        for control in (
+            '<input data-hint="enter > then continue" name="buyer_email" type="hidden">',
+            "<textarea title='a > b' id='customer-email'></textarea>",
+            '<button data-note="x > y" name="email" type="submit">Buy</button>',
+        ):
+            with self.subTest(control=control):
+                p = self.root / AUDIT.TEMPLATE
+                p.write_text("<form>{% csrf_token %}" + control + "</form>")
+                report = AUDIT.inspect(self.root)
+                self.assertEqual(report["status"], "LEGACY_EMAIL_CHECKOUT_PRESENT")
+                self.assertTrue(report["template"]["email_control_marker"])
+
+    def test_quoted_angle_bracket_non_email_control_is_allowed(self):
+        p = self.root / AUDIT.TEMPLATE
+        p.write_text(
+            '<form>{% csrf_token %}<input title="a > b" name="order_ref"></form>'
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(
+            report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
+        )
+
     def test_constructed_email_key_in_start_handler_blocks(self):
         p = self.root / AUDIT.SOURCE_PATHS[0]
         p.write_text("def _start_order(request):\n"
