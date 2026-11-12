@@ -16,7 +16,10 @@ from django.views.decorators.http import require_GET
 def _reviewed_checkout():
     try:
         module = import_module("services.mpw_trx_public_pages")
-    except ImportError:
+    except Exception:
+        # An unavailable or broken optional commerce source must not turn
+        # the public product page into a 500 or expose import details.
+        # This is a fail-closed availability result, not authorization.
         return None
     handler = getattr(module, "product_checkout", None)
     if (not callable(handler)
