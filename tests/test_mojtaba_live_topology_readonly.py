@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import hashlib
+import sqlite3
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -179,3 +181,84 @@ def test_manual_live_workflow_never_runs_on_pull_request_or_push():
     assert "automatic_deactivation_authorized" in workflow
     assert "ssh -F" in workflow
     assert "rm -rf --" in workflow  # Only ephemeral CI-runner SSH key material.
+
+
+def test_private_php_registry_inventory_is_immutable_and_redacted(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)"
+        )
+        connection.execute("CREATE TABLE runs (status TEXT, detail TEXT)")
+        connection.execute("CREATE TABLE site_work_outputs (status TEXT, title TEXT)")
+        connection.executemany("INSERT INTO agents VALUES (?, ?)", [
+            ("master", 1), ("weather", 0), ("seo", 1), ("unlisted_private", 1)
+        ])
+        connection.execute(
+            "INSERT INTO runs VALUES (?, ?)", ("ok", "private token=secret_value")
+        )
+        connection.execute(
+            "INSERT INTO site_work_outputs VALUES (?, ?)",
+            ("review", "Internal campaign with customer's phone number"),
+        )
+    before_hash = hashlib.sha256(db.read_bytes()).hexdigest()
+    before_files = sorted(path.name for path in private.iterdir())
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    after_files = sorted(path.name for path in private.iterdir())
+    assert before_files == after_files
+    assert hashlib.sha256(db.read_bytes()).hexdigest() == before_hash
+    assert report["state"] == "source_registry_snapshot_only"
+    assert report["records"] == 4
+    assert report["known_roles_found"] == 3
+    assert report["enabled_count"] == 3
+    assert report["unknown_code_records"] == 1
+    assert report["run_status_counts"] == {"ok": 1}
+    assert report["recent_worker_output_status_counts"] == {"review": 1}
+    assert "unlisted_private" not in json.dumps(report)
+    assert "secret_value" not in json.dumps(report)
+    assert "phone number" not in json.dumps(report)
+    assert report["database_state_proves_live_workers"] is False
+    assert report["live_scheduler_verified"] is False
+
+
+def test_private_php_registry_wal_refuses_stale_snapshot(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE agents(code TEXT, enabled INTEGER)")
+    (private / "site_agents.sqlite3-wal").write_bytes(b"simulated wal")
+    with patch.object(observer.sqlite3, "connect", side_effect=AssertionError(
+        "WAL snapshot must never be opened in immutable mode"
+    )):
+        report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "wal_present_snapshot_not_consistent"
+    assert report["incomplete_wal_snapshot"] is True
+    assert report["records"] is None
+
+
+def test_private_php_registry_missing_file_is_not_zero_agents(tmp_path):
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "private_database_not_observed"
+    assert report["records"] is None
+    assert report["enabled_count"] is None
+    assert report["agent_roles"] == []
+
+
+def test_private_php_registry_refuses_private_symlinked_parent(tmp_path):
+    actual = tmp_path / "secret-parent"
+    actual.mkdir()
+    (tmp_path / ".private").symlink_to(actual, target_is_directory=True)
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "unsafe_symlink"
+    assert report["records"] is None
+
+
+def test_cpanel_inventory_reports_php_sqlite_as_separate_unverified_source(tmp_path):
+    with patch.object(observer, "call_readonly", return_value=("unavailable", "")):
+        result = observer.collect("cpanel", home=tmp_path, username="zomorod2")
+    assert result["private_php_site_registry"]["state"] == "private_database_not_observed"
+    assert result["private_php_site_registry"]["database_state_proves_live_workers"] is False
+    assert result["attestation"]["external_schedulers_fully_enumerated"] is False
