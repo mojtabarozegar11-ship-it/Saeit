@@ -1,0 +1,189 @@
+name: Zomorod NEXUS protected homepage release
+on:
+  pull_request:
+    paths:
+      - content/zomorod-nexus-20261112/**
+      - .github/workflows/zomorod-nexus-20261112.yml
+  push:
+    branches: [main]
+    paths:
+      - content/zomorod-nexus-20261112/**
+      - .github/workflows/zomorod-nexus-20261112.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate candidate markup, CSS, links and safe deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check beautifulsoup4 tinycss2
+          python3 content/zomorod-nexus-20261112/validate.py
+          python3 -m py_compile content/zomorod-nexus-20261112/deploy_guarded.py
+  publish:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only public baseline and essential internal routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for path in ('/','/agriculture/','/research/','/industry/','/store/','/topics/','/contact/','/games/','/apps/','/auctions/'):
+              with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodNexusPreflight/1'}),timeout=20) as r:
+                  data=r.read(7000000)
+                  assert r.status==200 and len(data)>200,path
+              if path=='/':
+                  assert len(data)>1000000
+                  for marker in (b'ZOMOROD_ORBIT_DATA',b'id="main-view"',b'id="orbital-cards"',b'id="site-footer"'):
+                      assert marker in data,marker
+              print('PREFLIGHT_OK='+path)
+          PY
+      - name: Prepare pinned GitHub to VPS to cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo NEXUS_PINNED_RELAY_VERIFIED=yes
+      - name: Upload NEXUS package to private cPanel staging only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          tar -C content/zomorod-nexus-20261112 -cf - . | timeout 65s ssh -T -F "$d/config" saeit-cpanel "tar -C '$stage' -xf -"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/index.html' && test -s '$stage/assets/zm-nexus-v1.css' && test -s '$stage/validate.py' && python3 -m py_compile '$stage/deploy_guarded.py'"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' check" | head -c 2000
+      - name: Publish only homepage and isolated stylesheet with automatic local rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' apply 'nexus-$GITHUB_RUN_ID'"
+      - name: Verify public homepage, CSS and protected route availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' verify 'nexus-$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          ok=False
+          for attempt in range(6):
+              try:
+                  req=Request(base+'/?nexus_qa='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),headers={'Cache-Control':'no-cache,no-store','User-Agent':'NexusPublicVerify/1'})
+                  with urlopen(req,timeout=25) as r:
+                      root=r.read(200000)
+                      assert r.status==200
+                  assert b'<body class="nexus-home">' in root
+                  assert b'/assets/zm-nexus-v1.css' in root
+                  ok=True
+                  break
+              except Exception as e:
+                  print('PUBLIC_RETRY',attempt,str(e)[:150],flush=True)
+                  time.sleep(3)
+          assert ok,'Updated homepage not publicly visible'
+          with urlopen(base+'/assets/zm-nexus-v1.css',timeout=25) as r:
+              css=r.read(100000)
+              assert r.status==200 and b'Zomorod Mellal NEXUS' in css
+          for path in ('/agriculture/','/research/','/industry/','/store/','/topics/','/contact/','/games/','/apps/','/auctions/'):
+              with urlopen(base+path,timeout=20) as r:
+                  assert r.status==200 and len(r.read(2000))>200,path
+              print('PROTECTED_ROUTE_LIVE_OK='+path)
+          print('NEXUS_PUBLIC_RELEASE_VERIFIED=yes')
+          PY
+      - name: Live responsive browser smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const b=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [390,768,1440]){
+              const page=await b.newPage({viewport:{width,height:850}}), errors=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('https://zomorodmelal.ir/?nexus_live_'+width+'=1',{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.hero-cta a').first().waitFor({timeout:12000});
+              const x=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,width:innerWidth,h1:document.querySelectorAll('h1').length,links:document.querySelectorAll('a[href]').length,loaded:[...document.querySelectorAll('.hero-image')].every(i=>i.complete&&i.naturalWidth>0)}));
+              if(x.scrollWidth>x.width+3||x.h1!==1||x.links<45||!x.loaded||errors.length)throw Error(JSON.stringify({width,x,errors}));
+              console.log('NEXUS_BROWSER_OK='+width);
+              await page.close();
+            }
+            await b.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Roll back only the new homepage if any post-install check fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-nexus-ssh"
+          stage="/home/zomorod2/.zm-nexus-stage-$GITHUB_RUN_ID"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/deploy_guarded.py' rollback 'nexus-$GITHUB_RUN_ID'"
