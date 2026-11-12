@@ -13,7 +13,8 @@ from scripts.mpw_dynamic_store_cutover_20261108 import (
     verify_buyer_route_resolution, verify_dynamic_public,
     verify_guarded_store_source, verify_guest_email_ownership_source,
     verify_guest_recovery_checkout_source, verify_guest_order_claim_schema,
-    verify_public_buyer_routes,
+    verify_public_buyer_routes, verify_email_free_guest_source,
+    verify_email_free_invoice_sources,
 )
 
 
@@ -72,7 +73,6 @@ def public_buyer_body(route, title, action):
     product_id = int(route.split("/")[3])
     return (body +
             f'<form method="post" action="/commerce/trx-easy/start/{product_id}/">'.encode() +
-            b'<input type="email" name="email" required>' +
             b'<input type="hidden" name="csrfmiddlewaretoken" value="synthetic-token">' +
             b'</form>')
 
@@ -228,7 +228,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (root / "services/mpw_trx_guest_commerce.py").write_bytes(
                 SAFE_GUEST_EMAIL_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", root):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_SOURCE_DRIFT"):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
                     check_actual_staging_store()
 
     @staticmethod
@@ -292,7 +292,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (app / "services/mpw_trx_email_recovery.py").write_bytes(
                 SAFE_RECOVERY_CHECKOUT_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", app):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
                     check_actual_staging_store()
 
     def setUp(self):
@@ -539,25 +539,71 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         self.assertIn('"category": "unexpected_response"', sink.getvalue())
         self.assertIn('"checked": 0', sink.getvalue())
 
-    def test_checkout_form_requires_exact_post_email_and_csrf(self):
+    def test_checkout_form_requires_exact_post_and_csrf_without_email(self):
         expected = (b'<form method="post" action="/commerce/trx-easy/start/225/">'
-                    b'<input name="email" type="email" required>'
                     b'<input name="csrfmiddlewaretoken" value="synthetic">'
                     b'</form>')
         self.assertTrue(has_guarded_guest_invoice_form(expected, 225))
         variants = (
             expected.replace(b'method="post"', b'method="get"'),
             expected.replace(b'/start/225/', b'/start/72/'),
-            expected.replace(b'name="email"', b'name="other"'),
-            expected.replace(b' type="email"', b' type="text"'),
-            expected.replace(b' required', b''),
             expected.replace(b'name="csrfmiddlewaretoken"', b'name="other"'),
             expected.replace(b'value="synthetic"', b'value=""'),
             expected.replace(b'</form>', b''),
+            expected.replace(b'</form>', b'<input type="email" name="email"></form>'),
+            expected.replace(b'</form>', b'<input name="email" type="text"></form>'),
+            expected.replace(b'</form>', b'<input id="mpw-buy-email" type="text"></form>'),
         )
         for invalid in variants:
             with self.subTest(invalid=invalid):
                 self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
+
+    def test_main_guest_adapter_is_email_free_signed_cookie_source(self):
+        # This test proves the repository source contract, not the deployed host.
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "services/mpw_trx_guest_commerce.py").read_bytes()
+        verify_email_free_guest_source(source)
+        for old, new in (
+            (b"httponly=True", b"httponly=False"),
+            (b"secure=True", b"secure=False"),
+            (b"csrf_protect(", b"csrf_noop("),
+            (b"rights_cleared_for_sale(", b"skip_rights_gate("),
+        ):
+            with self.subTest(mutation=old):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+                    verify_email_free_guest_source(source.replace(old, new))
+
+    def test_invoice_source_dependency_preflight_fails_closed(self):
+        # synthetic cPanel staging tree, zero invoices or HTTP POSTs
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp)
+            for rel in ("services/mpw_trx_commercial_web.py",
+                        "services/mpw_trx_commercial_context.py",
+                        "mpw_commerce/buyer_orders.py",
+                        "mpw_commerce/templates/mpw_commerce/product_checkout.html"):
+                (app / rel).parent.mkdir(parents=True, exist_ok=True)
+            (app / "services/mpw_trx_commercial_web.py").write_text(
+                "def _start_order(request):\n    return helper(request)\n\n"
+                "def helper(request):\n    return 1\n" + "# safe\n" * 35)
+            (app / "services/mpw_trx_commercial_context.py").write_text(
+                "# context-only documentation\n" * 15)
+            (app / "mpw_commerce/buyer_orders.py").write_text(
+                "def record_invoice(request):\n    return 1\n" + "# safe\n" * 35)
+            template = app / "mpw_commerce/templates/mpw_commerce/product_checkout.html"
+            template.write_text("{% csrf_token %}\n" + "# original styled template\n" * 9)
+            verify_email_free_invoice_sources(app)
+            template.write_text("{% csrf_token %}\n<input name=\"email\" required>\n" +
+                                "# original styled template\n" * 9)
+            with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL"):
+                verify_email_free_invoice_sources(app)
+            template.write_text("{% csrf_token %}\n" + "# original styled template\n" * 9)
+            candidate = app / "services/mpw_trx_commercial_web.py"
+            candidate.write_text(candidate.read_text() + "\ndef bad_helper(request):\n    return request.POST['email']\n")
+            # unreachable helper does not block; reachable invoice path does.
+            verify_email_free_invoice_sources(app)
+            candidate.write_text(candidate.read_text().replace("return helper(request)", "return bad_helper(request)"))
+            with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_EMAIL_DEPENDENCY"):
+                verify_email_free_invoice_sources(app)
 
     def test_checkout_page_with_wrong_form_blocks_public_route_gate(self):
         from urllib.parse import urlsplit
