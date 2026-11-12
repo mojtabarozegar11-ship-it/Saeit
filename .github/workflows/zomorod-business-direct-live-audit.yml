@@ -7,6 +7,7 @@ on:
       - .github/workflows/zomorod-business-direct-live-audit.yml
       - scripts/zomorod_business_live_semantic_readonly.py
       - scripts/zomorod_business_genetics_overlay_preview.py
+      - scripts/zomorod_business_genetics_readonly_preflight.sh
 permissions:
   contents: read
 concurrency:
@@ -106,3 +107,8 @@ jobs:
           timeout 45s ssh -T -F "$d/config" saeit-cpanel \
             "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python -c 'exec(__import__(\"base64\").b64decode(\"$preview_code\"))' bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63" \
             < content/zomorod-business/app.php
+          # Execute the exact release preflight against real cPanel with no writes.
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -s -- \
+            bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63 ABSENT \
+            < scripts/zomorod_business_genetics_readonly_preflight.sh
+          echo 'LIVE_RELEASE_PREFLIGHT_VERIFICATION=READ_ONLY_COMPLETE'
