@@ -16,7 +16,7 @@ import re
 import stat
 
 PREFIX = "MOJTRADE_AUDIT_V1|"
-MAX_BYTES = 4_000_000
+MAX_BYTES = 8_000_000
 MAX_DEALS = 20_000
 START_FIELDS = frozenset({"session", "alias", "currency", "symbol", "mode", "count"})
 DEAL_FIELDS = frozenset({
@@ -53,7 +53,7 @@ def _fields(record: str, expected: frozenset[str]) -> dict[str, str]:
 
 
 def _count(value: str, field: str, *, lower: int = 0, upper: int = MAX_DEALS) -> int:
-    if not re.fullmatch(r"[0-9]{1,8}", value):
+    if not re.fullmatch(r"[0-9]{1,20}", value):
         raise DemoAuditError(field + "_invalid")
     result = int(value)
     if not lower <= result <= upper:
