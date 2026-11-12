@@ -69,7 +69,7 @@ jobs:
           stage="/home/zomorod2/.auction346-stage-$GITHUB_RUN_ID.html"
           timeout 50s scp -q -F "$d/config" public/auctions/346/index.html "saeit-cpanel:$stage"
           local_sha="$(sha256sum public/auctions/346/index.html | awk '{print $1}')"
-          remote_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$stage' | awk '{print \\$1}'")"
+          remote_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$stage' | cut -c1-64")"$d/config" saeit-cpanel "sha256sum '$stage' | awk '{print \\$1}'")"
           test "$local_sha" = "$remote_sha"
           echo "TRANSFER_SHA256=verified"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$stage' '$GITHUB_RUN_ID' '$local_sha'" <<'REMOTE'
