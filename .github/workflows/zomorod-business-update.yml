@@ -46,11 +46,13 @@ jobs:
           bash -n scripts/zomorod_business_genetics_guarded_install.sh
           bash -n scripts/zomorod_business_genetics_readonly_preflight.sh
           bash -n scripts/zomorod_business_homepage_invariant.sh
+          python3 -B -m py_compile scripts/zomorod_business_public_surface_invariant.py
           test -s scripts/zomorod_business_genetics_readonly_preflight.sh
           test -s content/zomorod-business/app.php
           test -s content/zomorod-business/genetics-center.php
           test -s scripts/zomorod_business_genetics_guarded_install.sh
           test -s scripts/zomorod_business_homepage_invariant.sh
+          test -s scripts/zomorod_business_public_surface_invariant.py
           python3 -m py_compile scripts/zomorod_business_genetics_overlay_preview.py
       - name: Prepare verified direct cPanel SSH connection (no VPS or relay)
         shell: bash
@@ -121,6 +123,7 @@ jobs:
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/overlay.py'" < scripts/zomorod_business_genetics_overlay_preview.py
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/install.sh'" < scripts/zomorod_business_genetics_guarded_install.sh
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/homepage-guard.sh'" < scripts/zomorod_business_homepage_invariant.sh
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/public-surface.py'" < scripts/zomorod_business_public_surface_invariant.py
           # Build the additive candidate privately from the exact current live file.
           ssh -T -F "$d/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python '$stage/overlay.py' '$EXPECTED_APP' --render-stage '$stage' < '$stage/proposed-app.php'"
           # Installer verifies the independently reviewed candidate SHA256 before touching live files.
