@@ -6,9 +6,12 @@ user records, accounting amounts or project titles.
 """
 from __future__ import annotations
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import sqlite3
 import stat
 import sys
@@ -98,6 +101,51 @@ wal = DATABASE.with_name(DATABASE.name + "-wal")
 print("LIVE_SQLITE_WAL_PRESENT=" + str(wal.exists() or wal.is_symlink()).lower())
 print("LIVE_DB_READ_MODE=IMMUTABLE_NO_WRITES")
 print("LIVE_METADATA_FRESHNESS_REQUIRES_WAL_RECONCILIATION=" + str(wal.exists() or wal.is_symlink()).lower())
+# The filesystem's free space does not prove the cPanel user's account quota.
+# UAPI data is bounded and sanitized; do not print raw JSON or any user records.
+quota_status = "UNVERIFIED"
+quota_headroom = None
+uapi = shutil.which("uapi")
+if uapi:
+    try:
+        result = subprocess.run(
+            [uapi, "--output=json", "Quota", "get_local_quota_info"],
+            capture_output=True, timeout=16, check=False,
+        )
+        if result.returncode == 0 and len(result.stdout) <= 1_000_000:
+            document = json.loads(result.stdout)
+            root = document.get("result") if isinstance(document, dict) else None
+            if isinstance(root, dict) and root.get("status") in (1, True, "1"):
+                data = root.get("data")
+                if isinstance(data, dict):
+                    def safe_nonnegative(raw):
+                        if type(raw) is int:
+                            return raw if 0 <= raw <= 10**15 else None
+                        if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+                            value = int(raw)
+                            return value if 0 <= value <= 10**15 else None
+                        return None
+                    limit = safe_nonnegative(data.get("byte_limit"))
+                    used = safe_nonnegative(data.get("bytes_used"))
+                    if limit is not None and limit > 0 and used is not None:
+                        quota_headroom = max(0, limit - used)
+                        quota_status = "VERIFIED"
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+print("LIVE_CPANEL_ACCOUNT_QUOTA=" + quota_status)
+if quota_headroom is not None:
+    print("LIVE_CPANEL_QUOTA_HEADROOM_BYTES=" + str(quota_headroom))
+    required = DATABASE.stat().st_size * 2 + 104857600
+    print("LIVE_CPANEL_BACKUP_MINIMUM_HEADROOM_CONFIRMED=" + str(quota_headroom > required).lower())
+backups = Path("/home/zomorod2/.backups")
+if backups.exists() or backups.is_symlink():
+    backup_valid = (
+        backups.is_dir() and not backups.is_symlink()
+        and backups.stat().st_uid == os.geteuid()
+    )
+    print("LIVE_BACKUP_PARENT_VALID=" + str(backup_valid).lower())
+else:
+    print("LIVE_BACKUP_PARENT_VALID=ABSENT")
 print("LIVE_APP_PRIVATE_SOURCE_EXPORTED=no")
 print("LIVE_FINANCIAL_RECORDS_EXPORTED=no")
 print("LIVE_SOURCE_OR_DATABASE_MODIFIED=no")
