@@ -26,6 +26,8 @@ SOURCE_PATHS = (
 TEMPLATE = "mpw_commerce/templates/mpw_commerce/product_checkout.html"
 MAX_FILE_BYTES = 400_000
 MAX_HELPERS = 64
+# The independently reviewed guest identity adapter used by the release guard.
+APPROVED_GUEST_SHA256 = "11b0aa037c31fbcd1198331444d88426d9b4722d13606a7fda846c8f7601d949"
 
 
 def source_bytes(root: Path, relative: str) -> bytes:
@@ -214,10 +216,15 @@ def inspect(root: Path = ROOT) -> dict:
         for f in files if f["file"] in SOURCE_PATHS[:3]
         and f["email_referencing_functions"]
     ]
-    guest_email_indicators = next((
-        f["email_referencing_functions"] for f in files
-        if f["file"] == SOURCE_PATHS[3]
-    ), [])
+    guest = next((f for f in files if f["file"] == SOURCE_PATHS[3]), None)
+    guest_email_indicators = (
+        guest["email_referencing_functions"] if guest is not None else []
+    )
+    # Only the exact reviewed synthetic-email auth adapter may have internal
+    # email schema identifiers without being called buyer-email collection.
+    reviewed_guest_source = bool(
+        guest is not None and guest["sha256"] == APPROVED_GUEST_SHA256
+    )
     missing_start = not start or start["start_handler_definition_count"] != 1
     recorder_count = sum(f["invoice_recorder_definition_count"] for f in files
                          if f["file"] in SOURCE_PATHS[:3])
@@ -239,6 +246,7 @@ def inspect(root: Path = ROOT) -> dict:
               else "EMAIL_REFERENCES_PRESENT" if email_hits
               else "LEGACY_EMAIL_CHECKOUT_PRESENT" if email_template
               else "CHECKOUT_CSRF_MARKER_MISSING" if missing_csrf
+              else "UNREVIEWED_GUEST_SOURCE" if not reviewed_guest_source
               else "SOURCE_HELPER_GRAPH_TRUNCATED" if truncated_graph
               else "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
     return {
@@ -255,7 +263,8 @@ def inspect(root: Path = ROOT) -> dict:
         "invoice_recorder_definition_count": recorder_count,
         "csrf_template_marker_found": not missing_csrf,
         "email_hit_functions": email_hits,
-        "guest_identity_email_indicators_not_buyer_capture": guest_email_indicators,
+        "guest_source_matches_reviewed_digest": reviewed_guest_source,
+        "guest_internal_email_indicators_review_required": guest_email_indicators,
         "external_invoice_code_proven_email_free": False,
     }
 
