@@ -7,6 +7,7 @@ secrets or deployment. A green diagnostic execution is NOT a green sale gate.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -19,6 +20,10 @@ MAX_BODY = 500_000
 
 
 class CheckoutParser(HTMLParser):
+    """Observe the *same* invoice POST form, never disjoint page fragments."""
+
+    CTA_TEXTS = ("create my trx payment invoice", "create invoice and pay with trx")
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.form_count = 0
@@ -26,49 +31,98 @@ class CheckoutParser(HTMLParser):
         self.required_email_inputs = 0
         self.submit_buttons = 0
         self.text_parts: list[str] = []
-        self.inside_button = False
         self.button_texts: list[str] = []
         self._button_fragments: list[str] = []
+        self._forms: list[dict] = []
+        self._active_form: int | None = None
+        self._button_form: int | None = None
+        self._malformed_forms = False
+        self.inside_button = False
+
+    @classmethod
+    def _is_cta(cls, text: str) -> bool:
+        return any(marker in " ".join(text.lower().split()) for marker in cls.CTA_TEXTS)
 
     def handle_starttag(self, tag, attrs):
         attrs = {str(k).lower(): ("" if v is None else str(v)) for k, v in attrs}
         if tag == "form":
+            if self._active_form is not None:
+                self._malformed_forms = True
             self.form_count += 1
+            self._forms.append({
+                "method": attrs.get("method", "get").lower(),
+                "action": attrs.get("action", ""),
+                "csrf": False, "email": False, "cta": False,
+            })
+            self._active_form = len(self._forms) - 1
+
         if tag in ("input", "textarea", "select"):
             name = attrs.get("name", "").lower()
-            t = attrs.get("type", "").lower()
-            if "email" in name or t == "email":
+            input_type = attrs.get("type", "").lower()
+            is_email = ("email" in name or input_type == "email"
+                        or "email" in attrs.get("id", "").lower()
+                        or attrs.get("autocomplete", "").lower() == "email")
+            if is_email:
                 self.email_inputs += 1
                 if "required" in attrs:
                     self.required_email_inputs += 1
-            if tag == "input" and t == "submit":
+                if self._active_form is not None:
+                    self._forms[self._active_form]["email"] = True
+            if (tag == "input" and self._active_form is not None
+                    and name == "csrfmiddlewaretoken" and input_type == "hidden"):
+                token = attrs.get("value", "")
+                if 32 <= len(token) <= 128 and token.isascii() and token.isalnum():
+                    self._forms[self._active_form]["csrf"] = True
+            if tag == "input" and input_type == "submit":
                 self.submit_buttons += 1
+                if self._active_form is not None and self._is_cta(attrs.get("value", "")):
+                    self._forms[self._active_form]["cta"] = True
+
         if tag == "button":
             self.inside_button = True
             self._button_fragments = []
+            self._button_form = (self._active_form
+                                 if attrs.get("type", "submit").lower() == "submit"
+                                 else None)
             if attrs.get("type", "submit").lower() == "submit":
                 self.submit_buttons += 1
 
     def handle_endtag(self, tag):
         if tag == "button" and self.inside_button:
             self.inside_button = False
-            self.button_texts.append(" ".join(" ".join(self._button_fragments).split())[:100])
+            label = " ".join(" ".join(self._button_fragments).split())[:100]
+            self.button_texts.append(label)
+            if self._button_form is not None and self._is_cta(label):
+                self._forms[self._button_form]["cta"] = True
+            self._button_form = None
+        if tag == "form":
+            if self._active_form is None or self.inside_button:
+                self._malformed_forms = True
+            self._active_form = None
 
     def handle_data(self, value):
         if self.inside_button:
             self._button_fragments.append(value)
-        # Only boolean checks consume this text; raw values are never returned.
         self.text_parts.append(value)
 
-    def summary(self):
+    def summary(self, sku: int | None = None):
         normalized = " ".join(" ".join(self.text_parts).split()).lower()
+        expected_action = f"/commerce/trx-easy/start/{sku}/" if sku is not None else None
+        valid_invoice_form = not self._malformed_forms and any(
+            form["method"] == "post"
+            and (form["action"] == expected_action if expected_action is not None
+                 else re.fullmatch(r"/commerce/trx-easy/start/[0-9]+/", form["action"]) is not None)
+            and form["csrf"] and form["cta"] and not form["email"]
+            for form in self._forms
+        )
         return {
             "form_count": self.form_count,
             "named_email_inputs": self.email_inputs,
             "required_email_inputs": self.required_email_inputs,
             "email_label_present": "email address for your order" in normalized,
-            "trx_invoice_cta_present": any("trx payment invoice" in x.lower() for x in self.button_texts),
+            "trx_invoice_cta_present": any(self._is_cta(x) for x in self.button_texts),
             "submit_button_count": self.submit_buttons,
+            "checkout_post_csrf_cta_valid": valid_invoice_form,
         }
 
 
@@ -84,10 +138,10 @@ class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def parse_checkout(raw: str) -> dict:
+def parse_checkout(raw: str, sku: int | None = None) -> dict:
     parser = CheckoutParser()
     parser.feed(raw)
-    return parser.summary()
+    return parser.summary(sku)
 
 
 def fetch(path: str) -> tuple[int, str]:
@@ -127,13 +181,13 @@ def live() -> int:
         path = f"/store/product/{sku}/checkout/"
         try:
             status, html = fetch(path)
-            parsed = parse_checkout(html)
+            parsed = parse_checkout(html, sku)
             parsed["http_200"] = status == 200
             parsed["email_free_form_evidence"] = (
                 status == 200 and parsed["form_count"] >= 1
                 and parsed["named_email_inputs"] == 0
                 and not parsed["email_label_present"]
-                and parsed["trx_invoice_cta_present"]
+                and parsed["checkout_post_csrf_cta_valid"]
             )
             report["products"][str(sku)] = parsed
         except (OSError, ValueError, urllib.error.HTTPError) as exc:
@@ -143,6 +197,7 @@ def live() -> int:
         record.get("email_free_form_evidence") is True
         for record in report["products"].values()
     ) and len(report["products"]) == len(SKUS)
+    ) and store_status == "OTHER" and report["store_http_200"]
     # Even email-free pages do not establish payment finality and paid delivery.
     report["sale_proven"] = False
     print("MPW_3SKU_LIVE_FORM_READONLY=" + json.dumps(report, sort_keys=True))
