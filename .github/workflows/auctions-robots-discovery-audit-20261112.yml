@@ -1,0 +1,27 @@
+name: Check public robots sitemap discovery without writes
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auctions-robots-discovery-audit-20261112.yml]
+permissions: {contents: read}
+jobs:
+  robots:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - name: Read live robots policy and sitemap entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          status="$(curl -sSL --max-time 20 -o "$tmp" -w '%{http_code}' 'https://zomorodmelal.ir/robots.txt' || true)"
+          echo "ROBOTS_STATUS=$status"
+          test "$status" = 200
+          echo "ROBOTS_SHA256=$(sha256sum "$tmp" | cut -c1-64)"
+          echo "ROBOTS_LINES=$(wc -l < "$tmp")"
+          echo 'ROBOTS_PUBLIC_BEGIN'
+          head -35 "$tmp"
+          echo 'ROBOTS_PUBLIC_END'
+          grep -Fq 'Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml' "$tmp" && echo 'AUCTIONS_SITEMAP_DISCOVERY=YES' || echo 'AUCTIONS_SITEMAP_DISCOVERY=NO'
+          echo 'PRODUCTION_WRITES=NONE'
