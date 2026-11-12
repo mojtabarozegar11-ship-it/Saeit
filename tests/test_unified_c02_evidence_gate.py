@@ -81,3 +81,29 @@ def test_repository_path_cannot_escape_checkout():
         result = json.loads(p.stdout)["results"][0]
         assert result["status"] == "failed"
         assert "path_outside_repo" in str(result["evidence"])
+
+def test_old_qualifications_cannot_complete_new_cycle():
+    with TemporaryDirectory() as d:
+        q = Path(d) / "q.json"
+        state = Path(d) / "state.json"
+        old = {"OLD-" + str(i): {
+            "kind": "source_change", "status": "success",
+            "evidence": ["old:receipt"]} for i in range(55)}
+        state.write_text(json.dumps({"schema": 1, "runs": {
+            "old-run": {"cycle": "E", "actions": old}
+        }}), encoding="utf-8")
+        q.write_text(json.dumps([{
+            "action_id": "E-TEST-NO-BACKFILL", "item": "inspect",
+            "kind": "repo_readonly", "operation": "file_exists",
+            "path": "runtime/unified_master_stage_v1.json",
+            "before": "unverified", "change": "inspect", "after": "observed"
+        }]), encoding="utf-8")
+        p = subprocess.run([sys.executable, str(WORKER), "--cycle", "E",
+                            "--queue", str(q), "--state", str(state)],
+                           cwd=ROOT, capture_output=True, text=True)
+        assert p.returncode == 2, p.stderr
+        report = json.loads(p.stdout)
+        assert report["stage_target_met"] is True
+        assert report["cumulative_qualified_deliveries"] == 55
+        assert report["successful"] == 0
+        assert report["complete"] is False
