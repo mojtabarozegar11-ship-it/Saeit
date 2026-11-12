@@ -48,7 +48,7 @@ jobs:
               348) expected=9ad9d6e5838a3b642326207ee9854d90b24138bde19f6a46109169221b36a9b0;;
               349) expected=93eb4af51f9e41c830224215e3fa29e54520fb11cc1185560af232f1cca4af99;;
             esac
-            actual="$(sha256sum "$d/auctions_$n_" | cut -c1-64)"
+            actual="$(sha256sum "$d/auctions_"$n"_" | cut -c1-64)"
             test "$actual" = "$expected"
             echo "NOTICE_$n=PRESERVED_BYTE_IDENTICAL"
           done
