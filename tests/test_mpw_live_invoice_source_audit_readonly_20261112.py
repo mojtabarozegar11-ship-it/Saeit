@@ -209,6 +209,64 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 self.assertIn("BLOCKED_", buf.getvalue())
 
+    def test_recorder_in_commercial_web_is_accepted_as_source_evidence(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text("def record_invoice(order):\n    return order\n"
+                       "def _start_order(request):\n    return record_invoice(request)\n")
+        buyer = self.root / AUDIT.SOURCE_PATHS[2]
+        buyer.write_text("def _eligible(product):\n    return True\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["invoice_recorder_definition_count"], 1)
+        self.assertTrue(report["invoice_recorder_found"])
+        self.assertEqual(
+            report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
+        )
+
+    def test_distinct_module_invoice_recorders_are_ambiguous(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text("def record_invoice(order):\n    return order\n"
+                       "def _start_order(request):\n    return record_invoice(request)\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "INVOICE_RECORDER_DUPLICATED")
+        self.assertEqual(report["invoice_recorder_definition_count"], 2)
+        self.assertFalse(report["invoice_recorder_found"])
+
+    def test_duplicate_same_module_functions_are_never_silently_overwritten(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text("def _start_order(request):\n    return 1\n"
+                       "def _start_order(request):\n    return 2\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "DUPLICATE_SOURCE_FUNCTIONS")
+        self.assertIn("_start_order", report["files"][0]["duplicate_functions"])
+
+    def test_guest_internal_email_schema_names_do_not_imply_buyer_capture(self):
+        guest = self.root / AUDIT.SOURCE_PATHS[3]
+        guest.write_text(
+            "def _new_user(request):\n"
+            "    field = 'email'\n"
+            "    return '@guest.mojplaywin.com' if field == 'email' else None\n"
+            "def _identity(request):\n    return None\n"
+            "def patch_commercial(namespace):\n    return namespace\n"
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"],
+                         "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
+        self.assertIn("_new_user",
+                      report["guest_identity_email_indicators_not_buyer_capture"])
+        self.assertEqual(report["email_hit_functions"], [])
+
+    def test_a_truncated_helper_graph_never_returns_clean(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        source = "def _start_order(request):\n    return helper0(request)\n"
+        for i in range(AUDIT.MAX_HELPERS + 1):
+            next_call = (f"helper{i + 1}(request)"
+                         if i < AUDIT.MAX_HELPERS else "request")
+            source += f"def helper{i}(request):\n    return {next_call}\n"
+        web.write_text(source)
+        report = AUDIT.inspect(self.root)
+        self.assertTrue(report["files"][0]["helper_limit_hit"])
+        self.assertEqual(report["status"], "SOURCE_HELPER_GRAPH_TRUNCATED")
+
     def test_nested_symlink_ancestor_must_not_expose_template(self):
         original_dir = self.root / "mpw_commerce"
         external_dir = self.root / "outside_public"
