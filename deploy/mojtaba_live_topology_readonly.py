@@ -52,6 +52,11 @@ TARGETS = {
 # Specific scheduler/worker identifiers, not generic words like "python",
 # "agent", "factory" or "mojtaba" that match the audit process itself.
 ROUTES = (
+    "mojtaba.bot.ai",
+    "mojtaba-bot-ai",
+    "mojtaba_bot",
+    "mojtrade_observer",
+    "mojcoin",
     "mojtaba_bot_cycle_worker.py",
     "mojtaba_bot_cycle_coordinator.py",
     "online_income_cycle",
@@ -279,6 +284,10 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
         "systemctl", "--user", "list-units", "--type=service",
         "--all", "--plain", "--no-legend", "--no-pager",
     ])
+    system_service_state, system_services_raw = call_readonly([
+        "systemctl", "list-units", "--type=service",
+        "--all", "--plain", "--no-legend", "--no-pager",
+    ])
     cron_rows = safe_cron(cron_raw) if cron_state == "observed" else []
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
@@ -301,7 +310,13 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "state": service_state,
             "candidate_units": safe_service_units(services_raw)
             if service_state == "observed" else [],
-            "system_services_inventoried": False,
+            "service_name_indicators_only": True,
+        },
+        "system_services": {
+            "state": system_service_state,
+            "candidate_units": safe_service_units(system_services_raw)
+            if system_service_state == "observed" else [],
+            "service_name_indicators_only": True,
         },
         "installed_source_digests": safe_source_digests(root, role),
         "private_php_site_registry": (
