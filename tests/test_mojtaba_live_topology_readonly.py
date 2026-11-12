@@ -5,6 +5,9 @@ import importlib.util
 import json
 import hashlib
 import sqlite3
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -323,3 +326,60 @@ def test_sqlite_status_aggregation_refuses_unapproved_table_names():
     with sqlite3.connect(":memory:") as connection:
         with pytest.raises(ValueError, match="unknown aggregate status table"):
             observer.safe_sqlite_status_counts(connection, "sqlite_master")
+
+
+def test_manual_two_host_summary_compares_only_allowlisted_source_digests(tmp_path):
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    verifier = workflow.split("<<'VERIFY'\n", 1)[1].split(
+        "\n          VERIFY", 1
+    )[0]
+    code = textwrap.dedent(verifier)
+    compile(code, "mojtaba_two_host_verifier", "exec")
+
+    with patch.object(observer, "call_readonly", return_value=("unavailable", "")):
+        vps = observer.collect("vps", username="githubops", home=tmp_path)
+        cpanel = observer.collect("cpanel", username="zomorod2", home=tmp_path)
+    same_source = (
+        ROOT / "core/unified_bot_identity.py"
+    ).read_bytes()
+    vps["installed_source_digests"] = {
+        "unified_bot_identity.py": {
+            "state": "file_observed_not_runtime_executed",
+            "sha256": hashlib.sha256(same_source).hexdigest(),
+        },
+        "../../.env": {
+            "state": "file_observed_not_runtime_executed",
+            "sha256": "0" * 64,
+        },
+    }
+    cpanel["installed_source_digests"] = {
+        "unified_bot_identity.py": {
+            "state": "file_observed_not_runtime_executed",
+            "sha256": "f" * 64,
+        },
+    }
+    paths = []
+    for role, record in (("vps", vps), ("cpanel", cpanel)):
+        target = tmp_path / (role + ".jsonline")
+        target.write_text("MOJTABA_LIVE_TOPOLOGY=" + json.dumps(record) + "\n",
+                          encoding="utf-8")
+        paths.append(str(target))
+    result = subprocess.run(
+        [sys.executable, "-", *paths], input=code, cwd=ROOT,
+        capture_output=True, text=True, check=True, timeout=10,
+    )
+    assert result.stdout.startswith("MOJTABA_TWO_HOST_OBSERVATION=")
+    sanitized = json.loads(result.stdout.strip().split("=", 1)[1])
+    assert sanitized["vps"]["source_revision_comparison"][
+        "unified_bot_identity.py"
+    ] == "matches_reviewed_pr_source"
+    assert sanitized["cpanel"]["source_revision_comparison"][
+        "unified_bot_identity.py"
+    ] == "differs_from_reviewed_pr_source"
+    assert "../../.env" not in result.stdout
+    assert sanitized["vps"][
+        "source_revision_comparison_proves_active_runtime"
+    ] is False
+    assert sanitized["cpanel"]["live_handoff_attested"] is False
