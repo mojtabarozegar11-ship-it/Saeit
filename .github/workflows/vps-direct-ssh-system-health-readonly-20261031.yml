@@ -62,14 +62,23 @@ jobs:
             state="$(systemctl is-active "$unit" 2>/dev/null || true)"
             echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
           done
-          # An unreadable crontab must not masquerade as an empty schedule.
+          # Distinguish a normal empty user crontab from a permission or
+          # interpreter failure. Never publish Cron source, errors or usernames.
+          # The remote SSH session has already verified user=githubops.
           cron_observed=0
-          if cron="$(crontab -l 2>/dev/null)"; then
+          if cron="$(LC_ALL=C crontab -l 2>&1)"; then
             cron_observed=1
             echo "HEALTH_FACTORY_CRON_READ=observed"
           else
-            cron=""
-            echo "HEALTH_FACTORY_CRON_READ=unavailable_fail_closed"
+            cron_exit=$?
+            if (( cron_exit == 1 )) && [[ "$cron" == "no crontab for githubops" ]]; then
+              cron_observed=1
+              cron=""
+              echo "HEALTH_FACTORY_CRON_READ=none_installed"
+            else
+              cron=""
+              echo "HEALTH_FACTORY_CRON_READ=unavailable_fail_closed"
+            fi
           fi
           count="$(printf '%s\n' "$cron" | awk '!/^[[:space:]]*(#|$)/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
           # Presence of an active tagged Cron row is not itself evidence of a
