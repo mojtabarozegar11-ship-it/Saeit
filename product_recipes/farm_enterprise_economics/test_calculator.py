@@ -127,6 +127,40 @@ class EconomicsTests(unittest.TestCase):
         self.assertLess(min(outcomes), 2500)
         self.assertGreater(max(outcomes), 2500)
 
+    def test_portfolio_profit_percentages_use_revenue_weights(self):
+        source = {
+            "currency": "USD",
+            "enterprises": [
+                dict(self.example["enterprises"][0]),
+                {"name": "Smaller market crop",
+                 "units_sold": 50, "unit_price": 100,
+                 "variable_cost_per_unit": 20,
+                 "allocated_fixed_cost": 1000},
+            ],
+        }
+        result = evaluate(source)
+        portfolio = result["portfolio"]
+        self.assertEqual(portfolio["sales_revenue"], "15000.00")
+        self.assertEqual(portfolio["contribution_margin_total"], "9500.00")
+        self.assertEqual(portfolio["operating_profit"], "5500.00")
+        self.assertEqual(portfolio["contribution_margin_percent"], "63.33")
+        self.assertEqual(portfolio["operating_profit_margin_percent"], "36.67")
+        # Unweighted averages (67.50 and 42.50) would be misleading.
+
+    def test_portfolio_zero_revenue_has_undefined_margin_not_infinity(self):
+        data = {
+            "currency": "USD",
+            "enterprises": [
+                {"name": "Idle farm", "units_sold": 0, "unit_price": 100,
+                 "variable_cost_per_unit": 10,
+                 "allocated_fixed_cost": 800},
+            ],
+        }
+        portfolio = evaluate(data)["portfolio"]
+        self.assertEqual(portfolio["operating_profit"], "-800.00")
+        self.assertIsNone(portfolio["contribution_margin_percent"])
+        self.assertIsNone(portfolio["operating_profit_margin_percent"])
+
     def test_portfolio_aggregation_without_double_fixed_costs(self):
         data = dict(self.example)
         data["enterprises"] = self.example["enterprises"] + [{
