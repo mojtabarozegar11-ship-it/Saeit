@@ -1,7 +1,7 @@
 /* Zomorod Mellal · VISION 3, faithful structural implementation of approved visual reference.
  * Entire stylesheet is homepage scoped. Never include on internal pages. */
 :root{color-scheme:dark;--black:#00100e;--bg:#001713;--panel:#02291f;--mint:#45ffd1;--lime:#84fbb2;--emerald:#00dc9f;--gold:#efca73;--muted:#bad9ce;--white:#f7fffb;--border:rgba(57,255,210,.62);--shadow:0 0 10px #00d7a35c,0 0 22px #00eaa22e;--round:18px}
-*,*:before,*:after{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:75px;overflow-x:clip}body.zm-vision-v3{margin:0;min-width:320px;overflow-x:clip;direction:rtl;background:radial-gradient(ellipse at 20% 12%,#053c2a 0,transparent 28%),linear-gradient(165deg,#001611 5%,#00100e 48%,#002218 90%);color:var(--white);font-family:Vazirmatn,Tahoma,Arial,sans-serif;font-size:14px;line-height:1.65}body.zm-vision-v3:before{content:"";position:fixed;inset:0;z-index:-1;background:repeating-radial-gradient(ellipse at 55% 70%,transparent 0 90px,#32f6b20a 92px,transparent 95px 160px),linear-gradient(135deg,transparent 15%,#04593a13 55%,transparent 90%);pointer-events:none}a{color:inherit;text-decoration:none}button,input{font:inherit}button{cursor:pointer}svg{width:1.2em;height:1.2em;vertical-align:middle;stroke:currentColor;stroke-width:1.75;fill:none;stroke-linecap:round;stroke-linejoin:round}img{max-width:100%;height:auto;display:block}.icon-defs{position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;visibility:hidden}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}.skip-link{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}.skip-link:focus-visible{position:fixed;top:5px;right:12px;width:auto;height:auto;margin:0;overflow:visible;clip-path:none;z-index:9999;background:var(--gold);color:#061910;padding:10px 20px;border-radius:10px;box-shadow:0 4px 16px #0009}:focus-visible{outline:3px solid #ffda8b!important;outline-offset:4px!important}
+*,*:before,*:after{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:75px;overflow-x:clip}body.zm-vision-v3{margin:0;min-width:320px;overflow-x:clip;direction:rtl;background:radial-gradient(ellipse at 20% 12%,#053c2a 0,transparent 28%),linear-gradient(165deg,#001611 5%,#00100e 48%,#002218 90%);color:var(--white);font-family:Vazirmatn,Tahoma,Arial,sans-serif;font-size:14px;line-height:1.65}body.zm-vision-v3:before{content:"";position:fixed;inset:0;z-index:-1;background:repeating-radial-gradient(ellipse at 55% 70%,transparent 0 90px,#32f6b20a 92px,transparent 95px 160px),linear-gradient(135deg,transparent 15%,#04593a13 55%,transparent 90%);pointer-events:none}a{color:inherit;text-decoration:none}button,input{font:inherit}button{cursor:pointer}svg{width:1.2em;height:1.2em;vertical-align:middle;stroke:currentColor;stroke-width:1.75;fill:none;stroke-linecap:round;stroke-linejoin:round}img{max-width:100%;height:auto;display:block}.icon-defs{position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;visibility:hidden}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}.skip-link{position:fixed;top:-100px;right:12px;z-index:9999;background:var(--gold);color:#061910;padding:10px 20px;border-radius:10px}.skip-link:focus{top:5px}:focus-visible{outline:3px solid #ffda8b!important;outline-offset:4px!important}
 /* thin, glassy reference header */
 .topbar{position:sticky;top:0;z-index:150;background:linear-gradient(90deg,rgba(0,15,15,.97),rgba(0,22,18,.97));border-bottom:1px solid #66f9b43d;box-shadow:0 6px 24px #0008;backdrop-filter:blur(12px)}.topbar-shell{max-width:1510px;margin:auto;min-height:57px;padding:4px clamp(14px,1.4vw,27px);display:flex;align-items:center;gap:14px}.identity{flex:0 0 auto;display:flex;align-items:center;gap:10px;min-width:185px}.identity-icon{width:52px;height:46px;display:grid;place-items:center;filter:drop-shadow(0 0 8px #f4c75a55)}.identity-icon img{width:48px;height:48px;object-fit:contain}.identity b{display:block;color:#fffdf2;font-size:clamp(17px,2vw,25px);line-height:1.1;text-shadow:0 0 9px #fff5;font-weight:950}.identity small{display:block;color:#f3fff9;font-size:8px;letter-spacing:.13em;line-height:1.5;text-align:right}.identity em{display:block;font-style:normal;color:#cbd8d0;font-size:8px;font-weight:650}.top-nav{display:flex;align-items:center;justify-content:center;gap:clamp(5px,.95vw,13px);margin-inline:auto;min-width:0}.top-nav a{white-space:nowrap;font-size:clamp(9px,.98vw,12px);font-weight:800;padding:5px 7px;color:#f3f4e6}.top-nav a:hover{color:#fbe09b}.top-nav a.selected{color:#ffdf96;border-radius:100px;border:1px solid #efbd6685;padding:5px 14px;box-shadow:0 0 13px #ffc65365,inset 0 0 10px #ffc6531b;background:linear-gradient(155deg,#40321477,#241b0b44)}.top-utilities{flex:0 0 auto;display:flex;align-items:center;gap:8px;direction:ltr}.ai-chip,.icon-btn,.lang-switch{border:1px solid #60f7cd56;border-radius:50px;background:linear-gradient(160deg,#063a2b,#041e1c);box-shadow:inset 0 0 10px #13da8952;min-height:30px;display:inline-flex;align-items:center;justify-content:center}.ai-chip{gap:5px;font-size:10px;padding:3px 10px;direction:rtl;white-space:nowrap;color:#daffe9;border-color:#3cf7b8;box-shadow:0 0 11px #00f5a777}.ai-chip svg{font-size:17px}.icon-btn{height:32px;width:32px;color:#faf6df}.icon-btn svg{font-size:16px}.lang-switch{padding:2px;gap:2px;background:#071714;direction:ltr}.lang-switch button{background:transparent;border:0;color:#b8d1cb;font:800 9px/1 Arial,sans-serif;border-radius:30px;padding:7px 6px}.lang-switch button.active{background:#00825a;color:white}.mobile-menu-btn{display:none;border:1px solid var(--border);color:var(--white);background:#083628;border-radius:9px;width:36px;height:34px}.search-wrap{max-width:1500px;margin:auto;padding:9px 20px 13px}.search-form{display:flex;align-items:center;gap:8px}.search-form label{white-space:nowrap;color:var(--gold);font-weight:bold}.search-form input{flex:1;min-width:0;padding:10px 14px;border-radius:10px;background:#092c22;border:1px solid var(--border);color:white}.search-form>button{background:var(--gold);border:0;border-radius:8px;color:#07251c;font-weight:900;padding:10px 18px}.search-form div{font-size:11px}.mobile-nav{display:none;flex-direction:column;background:#09251b;padding:12px 18px;border-top:1px solid var(--border);gap:10px}.mobile-nav a{padding:8px;border-bottom:1px solid #fff2}
 /* reference vertical pictogram menu */
@@ -34,15 +34,15 @@
 /* Visually faithful crop assets prepared from the user's approved reference. Text, metrics and CTAs remain DOM content. */
 .hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:contrast(1.12) saturate(1.1);opacity:.97}
 .hero-paint>svg{opacity:.17;mix-blend-mode:screen;position:relative;z-index:1}
-.book-spines{background:url('/assets/zm-vision-v3/art/books.webp') center/contain no-repeat}
+.book-spines{background:url('/assets/zm-v3-books.webp') center/contain no-repeat}
 .book-spines>.book{opacity:.08}
-.editorial-globe{background:url('/assets/zm-vision-v3/art/research-book.webp') center/contain no-repeat}
+.editorial-globe{background:url('/assets/zm-v3-research-book.webp') center/contain no-repeat}
 .editorial-globe>svg{opacity:.1}
-.coin-art{min-height:99px;background:url('/assets/zm-vision-v3/art/coins.webp') center/contain no-repeat}
+.coin-art{min-height:99px;background:url('/assets/zm-v3-coins.webp') center/contain no-repeat}
 .coin-art span{opacity:.08}
-.globe-trade{background:url('/assets/zm-vision-v3/art/globe-trade.webp') center/contain no-repeat}
+.globe-trade{background:url('/assets/zm-v3-globe-trade.webp') center/contain no-repeat}
 .globe-trade svg{opacity:.16}
-.robot-figure{width:105px;height:120px;background:url('/assets/zm-vision-v3/art/robot.webp') center/contain no-repeat;filter:drop-shadow(0 0 8px #14ffca)}
+.robot-figure{width:105px;height:120px;background:url('/assets/zm-v3-robot.webp') center/contain no-repeat;filter:drop-shadow(0 0 8px #14ffca)}
 .robot-figure>*{display:none}
 @media(max-width:640px){.hero-photo{object-position:center top}.hero-paint>svg{opacity:.07}.robot-figure{height:105px}}
 
@@ -62,33 +62,69 @@
 .triple-banners .small-banner{background:radial-gradient(ellipse at 40% 120%,#116c547a,transparent 64%),linear-gradient(155deg,#002a20,#001713)}
 .triple-banners .small-banner:first-child>svg,.triple-banners .small-banner:last-child>svg{visibility:hidden}
 .triple-banners .small-banner:first-child:after,.triple-banners .small-banner:last-child:after{position:absolute;top:7px;left:6px;width:92px;height:78px;content:"";pointer-events:none;filter:drop-shadow(0 0 10px #e7c65866);background-position:center;background-repeat:no-repeat;background-size:contain}
-.triple-banners .small-banner:first-child:after{background-image:url('/assets/zm-vision-v3/art/letter.webp')}
-.triple-banners .small-banner:last-child:after{background-image:url('/assets/zm-vision-v3/art/tools.webp')}
-.horizon{background:linear-gradient(0deg,#002e24d9,#002e24aa),url('/assets/zm-vision-v3/art/hero.webp') center 83%/cover}
+.triple-banners .small-banner:first-child:after{background-image:url('/assets/zm-v3-letter.webp')}
+.triple-banners .small-banner:last-child:after{background-image:url('/assets/zm-v3-tools.webp')}
+.horizon{background:linear-gradient(0deg,#002e24d9,#002e24aa),url('/assets/zm-v3-hero.webp') center 83%/cover}
 .horizon:before{background:linear-gradient(3deg,#003a28a1,#0a835339,#00c48520);filter:drop-shadow(0 -2px 6px #00e4a87a)}
 .robot-figure{width:137px;height:134px;flex-shrink:0}
 .footer-assistant{gap:12px}
 @media(max-width:640px){.triple-banners .small-banner:first-child:after,.triple-banners .small-banner:last-child:after{width:78px;height:66px}.robot-figure{width:117px;height:117px}}
 
-/* Owner-approved visual fidelity: reusing only artwork from provided reference. */
-.zm-vision-v3{background:radial-gradient(ellipse 55% 28% at 65% 14%,#00ab7e1e,transparent 80%),radial-gradient(ellipse 46% 23% at 20% 69%,#009f7518,transparent 85%),linear-gradient(180deg,#00100e,#001b13 68%,#00100d)}
-.zm-vision-v3 .neon-panel{border-color:#36ffbb8f;box-shadow:inset 0 0 21px #03ec9b24,0 0 14px #04f0ae40,0 9px 26px #0009}
-.zm-vision-v3 .neon-panel:after{content:"";pointer-events:none;position:absolute;bottom:-1px;right:9%;left:9%;height:2px;background:linear-gradient(90deg,transparent,#39faba8e,#fed165d8,transparent);filter:blur(2px)}
-.zm-vision-v3 .books-banner{background:radial-gradient(ellipse at 27% 65%,#00e19c2d,transparent 60%),linear-gradient(110deg,#001b15,#004332 50%,#001710)}
-.zm-vision-v3 .book-spines{background:url('/assets/zm-vision-v3/art/books.webp') center/contain no-repeat;filter:drop-shadow(0 0 12px #09f9a86b);min-height:113px}
+/* Owner-approved reference fidelity pass: reuse ONLY decorative crops from the
+   owner-approved screenshot; keep all text, links, and controls real DOM. */
+.zm-vision-v3{background:
+  radial-gradient(ellipse 58% 28% at 70% 11%,rgba(0,165,124,.15),transparent 80%),
+  radial-gradient(ellipse 40% 23% at 26% 72%,rgba(0,140,107,.14),transparent 84%),
+  linear-gradient(180deg,#00100e 0%,#00170e 47%,#001b13 74%,#00100d 100%)}
+.zm-vision-v3 .neon-panel{border-color:rgba(46,255,187,.59);
+  box-shadow:inset 0 0 19px rgba(3,236,155,.16),0 0 14px rgba(4,240,174,.25),0 9px 27px rgba(0,0,0,.55)}
+.zm-vision-v3 .neon-panel::after{content:"";pointer-events:none;position:absolute;inset:auto 9% -1px;
+  height:2px;background:linear-gradient(90deg,transparent,rgba(57,250,186,.5),rgba(254,209,101,.85),transparent);
+  filter:blur(2px)}
+.zm-vision-v3 .editorial-banner.books-banner{background:
+  radial-gradient(ellipse at 25% 65%,rgba(0,225,156,.22),transparent 55%),
+  linear-gradient(110deg,#001b15,#004332 50%,#001710)}
+.zm-vision-v3 .book-spines{background:url('/assets/zm-v3-books.webp') center /contain no-repeat;
+  filter:drop-shadow(0 0 12px rgba(9,249,168,.42));min-height:113px}
 .zm-vision-v3 .book-spines .book{opacity:0}
-.zm-vision-v3 .editorial-globe{background:url('/assets/zm-vision-v3/art/research-book.webp') center/contain no-repeat;filter:drop-shadow(0 0 10px #05fbd15c)}
+.zm-vision-v3 .editorial-globe{background:url('/assets/zm-v3-research-book.webp') center /contain no-repeat;
+  filter:drop-shadow(0 0 10px rgba(5,251,209,.34))}
 .zm-vision-v3 .editorial-globe>svg{opacity:0}
-.zm-vision-v3 .games-panel{background:radial-gradient(ellipse at 16% 72%,#02749c4d,transparent 60%),linear-gradient(125deg,#002223,#004337 48%,#001b17)}
-.zm-vision-v3 .tokens-panel{background:radial-gradient(ellipse at 26% 64%,#cf922a2b,transparent 68%),linear-gradient(125deg,#001a15,#00513d 48%,#001915)}
-.zm-vision-v3 .coin-art{background:url('/assets/zm-vision-v3/art/coins.webp') center/contain no-repeat;min-height:120px;flex-basis:31%;filter:drop-shadow(0 0 10px #f8bc3870)}
+.zm-vision-v3 .feature-banner.games-panel{background:
+  radial-gradient(ellipse at 16% 72%,rgba(2,116,156,.3),transparent 60%),
+  linear-gradient(125deg,#002223,#004337 48%,#001b17)}
+.zm-vision-v3 .feature-banner.tokens-panel{background:
+  radial-gradient(ellipse at 26% 64%,rgba(207,146,42,.17),transparent 68%),
+  linear-gradient(125deg,#001a15,#00513d 48%,#001915)}
+.zm-vision-v3 .coin-art{background:url('/assets/zm-v3-coins.webp') center /contain no-repeat;
+  min-height:120px;flex-basis:31%;filter:drop-shadow(0 0 10px rgba(248,188,56,.44))}
 .zm-vision-v3 .coin-art span{opacity:0}
-.zm-vision-v3 .trade-banner{background:radial-gradient(ellipse 45% 75% at 51% 80%,#03d9a352,transparent 90%),linear-gradient(130deg,#001a13,#004233 48%,#001a13)}
-.zm-vision-v3 .globe-trade{background:url('/assets/zm-vision-v3/art/globe-trade.webp') center/contain no-repeat;min-height:120px;filter:drop-shadow(0 0 12px #00e3b362)}
+.zm-vision-v3 .trade-banner{background:
+  radial-gradient(ellipse 45% 75% at 51% 80%,rgba(3,217,163,.31),transparent 90%),
+  linear-gradient(130deg,#001a13,#004233 48%,#001a13)}
+.zm-vision-v3 .globe-trade{background:url('/assets/zm-v3-globe-trade.webp') center /contain no-repeat;
+  min-height:120px;filter:drop-shadow(0 0 12px rgba(0,227,179,.38))}
 .zm-vision-v3 .globe-trade svg{opacity:0}
-.zm-vision-v3 .footer-assistant .robot-figure{width:146px;height:147px;background:url('/assets/zm-vision-v3/art/robot.webp') center/contain no-repeat;filter:drop-shadow(0 0 12px #11ffd19e)}
+.zm-vision-v3 .footer-assistant .robot-figure{width:146px;height:147px;
+  background:url('/assets/zm-v3-robot.webp') center /contain no-repeat;
+  filter:drop-shadow(0 0 12px rgba(17,255,209,.63))}
 .zm-vision-v3 .footer-assistant .robot-head,.zm-vision-v3 .footer-assistant .robot-body{opacity:0}
-.zm-vision-v3 .site-footer{background:radial-gradient(ellipse 65% 70% at 95% 45%,#00cb9c4d,transparent 80%),linear-gradient(145deg,#001c19,#003b30 65%,#00130e);border-color:#39fac38c}
-.zm-vision-v3 .horizon{background:linear-gradient(0deg,#003324 5%,transparent 95%),repeating-linear-gradient(115deg,#002718 0 20px,#065a3d 27px,#002b20 36px 55px)}
-@media(min-width:1000px){.zm-vision-v3 .editorial-banner{min-height:145px}.zm-vision-v3 .feature-banner{min-height:122px}.zm-vision-v3 .trade-banner{min-height:135px}.zm-vision-v3 .footer-grid{min-height:172px}}
-@media(max-width:640px){.zm-vision-v3 .footer-assistant .robot-figure{width:99px;height:121px}.zm-vision-v3 .coin-art{min-height:93px}.zm-vision-v3 .globe-trade,.zm-vision-v3 .book-spines{min-height:100px}}
+.zm-vision-v3 .site-footer{background:
+  radial-gradient(ellipse 65% 70% at 95% 45%,rgba(0,203,156,.3),transparent 80%),
+  linear-gradient(145deg,#001c19,#003b30 65%,#00130e);border-color:rgba(57,250,195,.55)}
+.zm-vision-v3 .horizon{background:
+  linear-gradient(0deg,#003324 5%,transparent 95%),
+  repeating-linear-gradient(115deg,#002718 0 20px,#065a3d 27px,#002b20 36px 55px)}
+.zm-vision-v3 .footer-assistant h2{color:#f6f8e5;text-shadow:0 0 9px rgba(46,255,195,.4)}
+@media(min-width:1000px){
+ .zm-vision-v3 .editorial-banner{min-height:145px}
+ .zm-vision-v3 .feature-banner{min-height:122px}
+ .zm-vision-v3 .trade-banner{min-height:135px}
+ .zm-vision-v3 .footer-grid{min-height:172px}
+}
+@media(max-width:640px){
+ .zm-vision-v3 .footer-assistant .robot-figure{width:99px;height:121px}
+ .zm-vision-v3 .coin-art{min-height:93px}
+ .zm-vision-v3 .globe-trade{min-height:100px}
+ .zm-vision-v3 .book-spines{min-height:100px}
+}
