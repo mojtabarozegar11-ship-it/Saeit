@@ -19,6 +19,7 @@ from django.db import transaction
 
 from core.models import Agent, AgentTask, AuditLog
 from core.task_runtime import TaskRuntime
+from core.mojtrade_strategy_risk import review_research
 from core.unified_bot_identity import BOT_CODE, MOJTRADE_RESEARCH_CAPABILITY
 from scripts.mojtrade_consume_observation import (
     ObservationError, validate_observation_payload,
@@ -134,6 +135,7 @@ def ingest_private_observation(now: datetime | None = None) -> tuple[AgentTask, 
         "action_performed": "canonical_private_market_observation_ingested",
         "evidence": {"source_sha256": source_sha},
         "market_observations": report["signals"],
+        "strategy_risk_review": review_research(report),
         "report_type": report["report_type"],
         "execution": "disabled",
         "orders": 0,
