@@ -36,6 +36,8 @@ function transact(resources, costs, rewards) {
 function purchaseOnce(state, purchaseId, costs, rewards) {
   if (!state || typeof state !== 'object' || !Array.isArray(state.applied) ||
       !/^[A-Za-z0-9_-]{8,128}$/.test(purchaseId)) throw new TypeError('invalid purchase state/id');
+  if (!state.applied.every(id => typeof id === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(id)) ||
+      new Set(state.applied).size !== state.applied.length) throw new TypeError('invalid purchase ledger');
   if (state.applied.includes(purchaseId)) return {ok:false, reason:'DUPLICATE_PURCHASE'};
   const result = transact(state.resources, costs, rewards);
   if (!result.ok) return result;
