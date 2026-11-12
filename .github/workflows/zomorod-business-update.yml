@@ -15,6 +15,10 @@ on:
         description: 'Confirmed direct cPanel SSH port supplied by owner/provider (no guessed defaults)'
         required: true
         type: string
+      expected_merged_app_sha256:
+        description: 'SHA256 from verified read-only additive overlay preview; never the plain GitHub app.php hash'
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -37,6 +41,7 @@ jobs:
           test -s content/zomorod-business/app.php
           test -s content/zomorod-business/genetics-center.php
           test -s scripts/zomorod_business_genetics_guarded_install.sh
+          python3 -m py_compile scripts/zomorod_business_genetics_overlay_preview.py
       - name: Prepare verified direct cPanel SSH connection (no VPS or relay)
         shell: bash
         env:
@@ -54,13 +59,13 @@ jobs:
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
           chmod 600 "$d/host.key"
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -p "$port" -t ed25519 zohal.pws-dns.net > "$d/host.known" 2>/dev/null
+          ssh-keyscan -T 10 -p "$port" -t ed25519 178.239.147.125 > "$d/host.known" 2>/dev/null
           test -s "$d/host.known"
           actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
           [[ "$actual" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'DIRECT_CPANEL_HOSTKEY=unverified'; exit 3; }
           cat > "$d/config" <<EOF
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port $port
             IdentityFile $d/host.key
@@ -84,14 +89,15 @@ jobs:
         env:
           EXPECTED_APP: ${{ inputs.expected_current_app_sha256 }}
           EXPECTED_DOSSIER: ${{ inputs.expected_current_dossier_sha256 }}
+          EXPECTED_MERGED: ${{ inputs.expected_merged_app_sha256 }}
         run: |
           set -euo pipefail
           [[ "$EXPECTED_APP" =~ ^[0-9a-f]{64}$ ]] || exit 2
           if [[ "$EXPECTED_DOSSIER" != ABSENT ]]; then
             [[ "$EXPECTED_DOSSIER" =~ ^[0-9a-f]{64}$ ]] || exit 2
           fi
+          [[ "$EXPECTED_MERGED" =~ ^[0-9a-f]{64}$ ]] || { echo 'RELEASE=NO_VERIFIED_ADDITIVE_CANDIDATE'; exit 2; }
           source_dir=content/zomorod-business
-          app_hash="$(sha256sum "$source_dir/app.php" | awk '{print $1}')"
           dossier_hash="$(sha256sum "$source_dir/genetics-center.php" | awk '{print $1}')"
           d="$DIRECT_CONFIG"
           stage="/home/zomorod2/.private/zomorod-business/.stage-$GITHUB_SHA"
@@ -99,10 +105,15 @@ jobs:
           ssh -T -F "$d/config" saeit-cpanel bash -s -- "$EXPECTED_APP" "$EXPECTED_DOSSIER" < scripts/zomorod_business_genetics_readonly_preflight.sh
           # Refuse to overwrite any earlier staging directory.
           ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
-          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/app.php'" < "$source_dir/app.php"
+          # Never stage the reviewed GitHub app.php as the target; it differs from live.
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/proposed-app.php'" < "$source_dir/app.php"
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/genetics-center.php'" < "$source_dir/genetics-center.php"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/overlay.py'" < scripts/zomorod_business_genetics_overlay_preview.py
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/install.sh'" < scripts/zomorod_business_genetics_guarded_install.sh
-          ssh -T -F "$d/config" saeit-cpanel "bash '$stage/install.sh' '$EXPECTED_APP' '$EXPECTED_DOSSIER' '$app_hash' '$dossier_hash' '$GITHUB_SHA' '$stage'"
+          # Build the additive candidate privately from the exact current live file.
+          ssh -T -F "$d/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python '$stage/overlay.py' '$EXPECTED_APP' --render-stage '$stage' < '$stage/proposed-app.php'"
+          # Installer verifies the independently reviewed candidate SHA256 before touching live files.
+          ssh -T -F "$d/config" saeit-cpanel "bash '$stage/install.sh' '$EXPECTED_APP' '$EXPECTED_DOSSIER' '$EXPECTED_MERGED' '$dossier_hash' '$GITHUB_SHA' '$stage'"
       - name: Remove temporary SSH keys
         if: always()
         run: rm -rf "${RUNNER_TEMP}/zomorod-business-update"
