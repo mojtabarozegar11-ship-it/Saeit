@@ -36,7 +36,7 @@ def cfg():
         timeframe_minutes=1, initial_equity_usd=10000.,
         commission_usd_per_ounce_per_side=.1,
         slippage_usd_per_ounce_per_side=.15,
-        quantity_step_ounces=.01, max_notional_to_equity=2.,
+        quantity_step_ounces=1.0, max_notional_to_equity=2.,
         risk_fraction=.0025, stop_atr_multiple=1.5,
         reward_to_risk=1.6, max_hold_bars=12,
     )
