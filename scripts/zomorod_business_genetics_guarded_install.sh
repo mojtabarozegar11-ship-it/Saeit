@@ -35,6 +35,7 @@ if [[ "$expected_dossier" != 'ABSENT' ]]; then valid_sha "$expected_dossier" || 
 [[ -f "$stage/public-surface.py" && ! -L "$stage/public-surface.py" ]] || exit 2
 [[ -f "$stage/public-references.py" && ! -L "$stage/public-references.py" ]] || exit 2
 [[ -f "$stage/pre-switch.py" && ! -L "$stage/pre-switch.py" ]] || exit 2
+[[ -f "$stage/rollback.py" && ! -L "$stage/rollback.py" ]] || exit 2
 [[ -d "/home/zomorod2/public_html" && ! -L "/home/zomorod2/public_html" ]] || exit 2
 [[ -f "/home/zomorod2/public_html/business/index.php" ]] || exit 2
 command -v flock >/dev/null
@@ -172,17 +173,18 @@ python3 -B "$stage/pre-switch.py" \
   "$expected_app" "$expected_dossier" "$candidate_app_hash" "$candidate_dossier_hash"
 changed=0
 rollback() {
-  rc="$1"
+  local rc="$1"
   if (( changed == 1 )); then
-    cp -p "$backup/app.php" "$private/.app.rollback-$release_sha"
-    mv -f "$private/.app.rollback-$release_sha" "$live_app"
-    if (( dossier_was_present == 1 )); then
-      cp -p "$backup/genetics-center.php" "$private/.genetics-center.rollback-$release_sha"
-      mv -f "$private/.genetics-center.rollback-$release_sha" "$live_dossier"
+    # Never claim success until the actual restored PHP bytes have been
+    # independently hash-verified. Preserve unexpected concurrent edits.
+    if python3 -B "$stage/rollback.py" \
+      "$private" "$backup" "$release_sha" \
+      "$expected_app" "$expected_dossier" "$candidate_app_hash" "$candidate_dossier_hash"; then
+      echo 'BUSINESS_GENETICS_ROLLBACK=verified' >&2
     else
-      rm -f "$live_dossier"
+      echo 'BUSINESS_GENETICS_ROLLBACK=FAILED_MANUAL_RECOVERY_REQUIRED' >&2
+      rc=97
     fi
-    echo 'BUSINESS_GENETICS_ROLLBACK=restored' >&2
   fi
   exit "$rc"
 }
