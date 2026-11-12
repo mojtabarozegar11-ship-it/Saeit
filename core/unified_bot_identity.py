@@ -26,6 +26,23 @@ KNOWLEDGE_TASK = ("knowledge_content_generation", "research-write-review")
 MOJTRADE_RESEARCH_CAPABILITY = "mojtrade_observation_ingest"
 MOJTRADE_DEMO_AUDIT_CAPABILITY = "mojtrade_demo_audit_ingest"
 
+# One exact task-pair registry shared by the worker exclusion boundary and
+# read-only fleet audit. A capability name alone never authorizes its task.
+SPECIALIST_TASK_PAIRS = (
+    KNOWLEDGE_TASK,
+    (MOJTRADE_RESEARCH_CAPABILITY, MOJTRADE_RESEARCH_CAPABILITY),
+    (MOJTRADE_DEMO_AUDIT_CAPABILITY, MOJTRADE_DEMO_AUDIT_CAPABILITY),
+)
+
+
+def specialist_task_scope():
+    """Recognize only reviewed (action_type, capability_code) pairs."""
+    from django.db.models import Q
+
+    scope = Q(pk__in=[])
+    for action_type, capability_code in SPECIALIST_TASK_PAIRS:
+        scope |= Q(action_type=action_type, capability_code=capability_code)
+    return scope
 
 
 def is_economic_capability(code):
@@ -56,18 +73,7 @@ def non_factory_task_scope():
         Q(capability_code__in=FACTORY_CAPABILITIES)
         & Q(action_type=F("capability_code"))
     )
-    editorial = Q(
-        action_type=KNOWLEDGE_TASK[0], capability_code=KNOWLEDGE_TASK[1],
-    )
-    mojtrade_research = Q(
-        action_type=MOJTRADE_RESEARCH_CAPABILITY,
-        capability_code=MOJTRADE_RESEARCH_CAPABILITY,
-    )
-    mojtrade_demo_audit = Q(
-        action_type=MOJTRADE_DEMO_AUDIT_CAPABILITY,
-        capability_code=MOJTRADE_DEMO_AUDIT_CAPABILITY,
-    )
-    return ~(factory | editorial | mojtrade_research | mojtrade_demo_audit)
+    return ~(factory | specialist_task_scope())
 
 
 def module_for_capability(code):
