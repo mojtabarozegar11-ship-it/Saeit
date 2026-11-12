@@ -117,6 +117,57 @@
         "replacement_output_quality",
         "live_schedulers_stopped"
       ]
+    },
+    {
+      "id": "content_director_newsletter",
+      "kind": "django_newsletter_draft_scheduler",
+      "evidence_file": "core/newsletter_engine.py",
+      "known_live_count": null,
+      "execution_status": "source_guard_committed_not_live_verified",
+      "proposed_route": "merge_under_canonical_bot_after_handoff",
+      "legacy_agent_code": "content-director",
+      "target_bot_code": "mojtaba-bot-ai",
+      "source_guard_status": "canonical_new_drafts_after_verified_legacy_handoff",
+      "dependents": [
+        "core/management/commands/newsletter_process_queue.py",
+        "core/weather_agent.py",
+        "core/management/commands/consolidate_legacy_agents.py"
+      ],
+      "unverified_dependencies": [
+        "weather_content_publisher_agent_assignment",
+        "old_newsletter_schedulers",
+        "existing_NewsletterStory_agent_foreign_keys",
+        "pending_NewsletterSubmission_and_AgentTask_rows"
+      ],
+      "historical_data_action": "keep_original_story_and_task_FKs",
+      "code_merge_committed": true,
+      "live_cutover_verified": false,
+      "independent_scheduler_retired": false
+    },
+    {
+      "id": "knowledge_content_director",
+      "kind": "django_knowledge_library_scheduler",
+      "evidence_file": "core/knowledge_agent.py",
+      "known_live_count": null,
+      "execution_status": "source_guard_committed_not_live_verified",
+      "proposed_route": "merge_under_canonical_bot_after_handoff",
+      "legacy_agent_code": "knowledge-content-director",
+      "target_bot_code": "mojtaba-bot-ai",
+      "source_guard_status": "canonical_new_knowledge_tasks_after_verified_legacy_handoff",
+      "dependents": [
+        "core/management/commands/knowledge_agent_cycle.py",
+        "core/management/commands/knowledge_agent_generate.py",
+        "core/management/commands/consolidate_legacy_agents.py"
+      ],
+      "unverified_dependencies": [
+        "old_knowledge_schedulers",
+        "pending_KnowledgeAgentRun_and_AgentTask",
+        "paid_model_approval_grant_for_legacy_tasks"
+      ],
+      "historical_data_action": "keep_existing_KnowledgeAgentPlan_and_KnowledgeBook_slugs",
+      "code_merge_committed": true,
+      "live_cutover_verified": false,
+      "independent_scheduler_retired": false
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
@@ -136,6 +187,8 @@
     "live_consolidation_percentage": null,
     "company_activity_legacy_guard_committed": true,
     "company_activity_live_handoff_verified": false,
-    "company_activity_known_blocker_isolation_committed": true
+    "company_activity_known_blocker_isolation_committed": true,
+    "newsletter_and_knowledge_owner_guards_committed": true,
+    "newsletter_and_knowledge_live_handoffs_verified": false
   }
 }
