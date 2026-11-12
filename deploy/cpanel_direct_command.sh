@@ -63,7 +63,7 @@ EOF
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
       ;;
     django_check)
-      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python=""; while IFS= read -r candidate; do if test -x "$candidate"; then python="$candidate"; break; fi; done < <(find /home/zomorod2 -type f -path "*/bin/python*" -perm -u+x -print 2>/dev/null | head -50); if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; find /home/zomorod2 -type f -path "*/bin/python*" -print 2>/dev/null | head -50; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python="$(find /home/zomorod2 -type f -path "*/bin/python*" -perm -u+x -print 2>/dev/null | head -1)"; if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; find /home/zomorod2 -type f -path "*/bin/python*" -print 2>/dev/null | head -50; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
       ;;  esac
   exit 0
 fi
