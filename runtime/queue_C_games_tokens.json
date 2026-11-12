@@ -1,5 +1,38 @@
 [
   {
+    "action_id": "C-C02-MOJCOIN-ATOMIC-WORLD-REWARD-LEDGER",
+    "item": "Moj Coin creator world and bank MOJ reward integrity",
+    "kind": "delivery_pending",
+    "status": "queued_not_executed",
+    "source_repository": "mojtabarozegar11-ship-it/Bazei",
+    "source_path": "apps/games/mojcoin_completion.py",
+    "target": "full gameplay economic and building consistency",
+    "technical_progress": {
+      "status": "isolated_core_qa_passed",
+      "source_blob_sha": "55250bcf30a92b1f293fc943b7a2b7d9b5111438",
+      "source_commit": "7d6cd5e020aecf45188086d41395d126e233fbf0",
+      "tests_commit": "61686c1d919cb3714f2b02bfbf71e6ecc8b95486",
+      "tested": "5 isolated tests passed with stub catalog; exact implementation blob matched",
+      "not_yet_verified": [
+        "full Django integration",
+        "database atomicity",
+        "TRX payment security",
+        "client-side gameplay",
+        "live deployment"
+      ],
+      "release_ready": false
+    },
+    "before": "Creator world could mutate state before validation, and reward stages could be granted twice",
+    "change": "Commit-after-validation, reward level dedupe, replay guard, regression tests",
+    "after": "Source fixed on independent Bazei branch; no production deploy",
+    "evidence": [
+      "git_commit:7d6cd5e020aecf45188086d41395d126e233fbf0",
+      "test:isolated_5_of_5",
+      "git_blob_sha:55250bcf30a92b1f293fc943b7a2b7d9b5111438"
+    ],
+    "requires_approval_for_publication": true
+  },
+  {
     "action_id": "C-C02-GAME-01",
     "item": "air-supremacy-fa",
     "kind": "delivery_pending",
