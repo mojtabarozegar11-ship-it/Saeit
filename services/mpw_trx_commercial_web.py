@@ -144,6 +144,7 @@ def _show_invoice(request, invoice_id):
     from django.http import Http404,HttpResponse
     from django.utils import timezone
     from django.middleware.csrf import get_token
+    from services.mpw_trx_receipt_recovery import receipt_markup
     _ensure_live(request)
     intent=_get_owner_invoice(request,invoice_id)
     try:
@@ -155,14 +156,17 @@ def _show_invoice(request, invoice_id):
         # customer's own invoice URL should still explain the next step.
         # No rate, receiving address or stale payment amount is displayed.
         from services.mpw_trx_public_pages import _page
-        return _page("Invoice no longer payable",
+        response = _page("Invoice no longer payable",
             '<p>This payment quote has expired or is no longer awaiting payment. '
             'Do not send TRX to an expired quote.</p>'
             '<p>If you already paid, do not pay again. Check payment status in '
             '<a href="/commerce/trx-easy/purchases/">My TRX purchases</a> '
             'or contact support with your order number.</p>'
             '<p>For a fresh quote, open the product again from the '
-            '<a href="/store/">store</a>.</p>')
+            '<a href="/store/">store</a>.</p>'
+            + receipt_markup(invoice_id, request.user))
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
     html,csp=render_one_tap_invoice(invoice,
         status_path=f"/commerce/trx-easy/status/{invoice_id}/")
     # Include a same-origin, CSRF-protected POST path. The GET status endpoint
@@ -173,7 +177,6 @@ def _show_invoice(request, invoice_id):
     if html.count(b"<main ")!=1:
         raise Http404("Unexpected invoice markup")
     html=html.replace(b"<main ",extra.encode("ascii"),1)
-    from services.mpw_trx_receipt_recovery import receipt_markup
     receipt = receipt_markup(invoice_id, request.user)
     if receipt:
         if html.count(b"</main>")!=1:
@@ -181,6 +184,7 @@ def _show_invoice(request, invoice_id):
         html=html.replace(b"</main>",receipt.encode("utf-8")+b"</main>",1)
     response=HttpResponse(html,content_type="text/html; charset=utf-8")
     response["Content-Security-Policy"]=csp
+    response["X-Robots-Tag"]="noindex, nofollow"
     return _nocache(response)
 
 
