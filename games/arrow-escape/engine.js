@@ -90,7 +90,9 @@
   function generate(level) {
     // Saved progress and URL parameters are untrusted. Infinity/NaN or
     // unsafe magnitudes must not poison board size, seeded RNG or target count.
-    const requested = Number(level);
+    let requested;
+    try { requested = Number(level); }
+    catch (_) { requested = NaN; }
     const number = Number.isFinite(requested)
       ? Math.min(1000000, Math.max(1, Math.floor(requested))) : 1;
     const size = Math.min(11, 7 + Math.floor((number - 1) / 20));
