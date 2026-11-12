@@ -24,6 +24,7 @@ EDITORIAL_CAPABILITIES = frozenset({
 KNOWLEDGE_TASK = ("knowledge_content_generation", "research-write-review")
 # Private offline research ingestion is a module, NEVER an order-execution tool.
 MOJTRADE_RESEARCH_CAPABILITY = "mojtrade_observation_ingest"
+MOJTRADE_DEMO_AUDIT_CAPABILITY = "mojtrade_demo_audit_ingest"
 
 
 
@@ -62,10 +63,16 @@ def non_factory_task_scope():
         action_type=MOJTRADE_RESEARCH_CAPABILITY,
         capability_code=MOJTRADE_RESEARCH_CAPABILITY,
     )
-    return ~(factory | editorial | mojtrade_research)
+    mojtrade_demo_audit = Q(
+        action_type=MOJTRADE_DEMO_AUDIT_CAPABILITY,
+        capability_code=MOJTRADE_DEMO_AUDIT_CAPABILITY,
+    )
+    return ~(factory | editorial | mojtrade_research | mojtrade_demo_audit)
 
 
 def module_for_capability(code):
+    if code == MOJTRADE_DEMO_AUDIT_CAPABILITY:
+        return "mojtrade_demo_execution_evidence"
     if code == MOJTRADE_RESEARCH_CAPABILITY:
         return "mojtrade_private_research"
     if code == "research-write-review":
