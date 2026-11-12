@@ -11,7 +11,25 @@
     "after": "Pending execution; no outcome claimed",
     "evidence": [],
     "acceptance_criteria": "Original complete sourced manuscript; scientific review; rights verified; no published claim",
-    "requires_approval_for_publication": true
+    "requires_approval_for_publication": true,
+    "technical_progress": {
+      "status": "original_chapter_01_draft_created",
+      "artifact": "deliverables/books/ZM-BK-0001/chapter_01.md",
+      "source_commit": "9ee5ff90fb570d99556a7a9b5dd736c1d516c5c4",
+      "validated_properties": [
+        "distinct original chapter draft",
+        "worked synthetic arithmetic",
+        "PhD-level exercises and solutions"
+      ],
+      "pending": [
+        "complete all chapters",
+        "source verification",
+        "scientific peer-review",
+        "Word/PDF QA",
+        "author/release approval"
+      ],
+      "counts_as_complete_book": false
+    }
   },
   {
     "action_id": "A-C02-ZM-BK-0002-MANUSCRIPT",
