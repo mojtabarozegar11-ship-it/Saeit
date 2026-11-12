@@ -121,6 +121,51 @@ class VerifiedCatalogTests(unittest.TestCase):
         ):
             self.assertIsNone(catalog.catalog_card(product, frozenset((991,))))
 
+    def test_approved_products_continue_through_multiple_pages(self):
+        products = [
+            item(pk=1100 - number, price="12.00", metadata=paid_metadata())
+            for number in range(70)
+        ]
+        allowed = frozenset(p.pk for p in products)
+        page1, next1 = catalog._page_cards(products, allowed)
+        self.assertEqual(len(page1), catalog.PAGE_SIZE)
+        self.assertEqual(next1, products[catalog.PAGE_SIZE - 1].pk)
+        page2, next2 = catalog._page_cards(
+            [p for p in products if p.pk < next1], allowed
+        )
+        self.assertEqual(len(page2), catalog.PAGE_SIZE)
+        self.assertIsNotNone(next2)
+        page3, next3 = catalog._page_cards(
+            [p for p in products if p.pk < next2], allowed
+        )
+        self.assertEqual(len(page3), 22)
+        self.assertIsNone(next3)
+        self.assertEqual(
+            len({r["id"] for r in page1 + page2 + page3}), 70
+        )
+
+    def test_unapproved_products_do_not_consume_page_slots(self):
+        published = [
+            item(pk=1100 - i, price="12.00",
+                 metadata=paid_metadata() if i % 2 else {})
+            for i in range(64)
+        ]
+        allowed = frozenset(p.pk for p in published)
+        first, cursor = catalog._page_cards(published, allowed)
+        self.assertEqual(len(first), catalog.PAGE_SIZE)
+        self.assertIsNotNone(cursor)
+        self.assertTrue(all(r["id"] in allowed for r in first))
+
+    def test_store_has_verified_catalog_keyset_navigation(self):
+        source = (ROOT / "core/mojplaywin_views.py").read_text(encoding="utf-8")
+        template = (ROOT / "core/templates/mojplaywin/store.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('verified_catalog_cards(before_id=before)', source)
+        self.assertIn("catalog_next_id", template)
+        self.assertIn("Browse older verified releases", template)
+        self.assertIn("Newest verified releases", template)
+
     def test_store_renders_optional_verified_catalog_without_exposing_customer_data(self):
         source = (ROOT / "core/mojplaywin_views.py").read_text(encoding="utf-8")
         template = (ROOT / "core/templates/mojplaywin/store.html").read_text(
