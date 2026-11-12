@@ -56,6 +56,37 @@ class WaterBudgetTests(unittest.TestCase):
         value = evaluate(data)
         self.assertEqual(Decimal(value["unused_water_m3"]), 3500)
 
+    def test_negative_margin_enterprises_are_visible_but_not_forced_into_water_plan(self):
+        data = sample()
+        data["crops"][0]["gross_margin_per_ha"] = -500
+        outcome = evaluate(data)
+        losses = [row for row in outcome["allocations"] if row["crop"] == "Crop A"]
+        self.assertEqual(len(losses), 1)
+        self.assertEqual(losses[0]["gross_margin_per_ha"], "-500.000000")
+        self.assertEqual(losses[0]["area_allocated_ha"], "0.000000")
+        self.assertEqual(outcome["estimated_total_gross_margin"], "1500.000000")
+        self.assertEqual(outcome["unused_water_m3"], "500.000000")
+
+    def test_all_loss_making_enterprises_leave_water_unallocated(self):
+        data = sample()
+        for crop in data["crops"]:
+            crop["gross_margin_per_ha"] = -1
+        outcome = evaluate(data)
+        self.assertEqual(outcome["water_used_m3"], "0.000000")
+        self.assertEqual(outcome["estimated_total_gross_margin"], "0.000000")
+        self.assertIsNone(outcome["next_unfilled_profitable_crop"])
+        self.assertFalse(outcome["water_budget_binding"])
+
+    def test_negative_margins_bounded_and_inputs_still_nonnegative(self):
+        data = sample()
+        data["crops"][0]["gross_margin_per_ha"] = "-1e50"
+        with self.assertRaises(ValueError):
+            evaluate(data)
+        data["crops"][0]["gross_margin_per_ha"] = -100
+        data["crops"][0]["max_area_ha"] = -1
+        with self.assertRaises(ValueError):
+            evaluate(data)
+
     def test_zero_margin_not_allocated(self):
         data = sample()
         data["crops"][0]["gross_margin_per_ha"] = 0
