@@ -38,7 +38,7 @@ def model_settings(tmp_path):
         "timeframe_minutes": 1, "initial_equity_usd": 10000,
         "commission_usd_per_ounce_per_side": 0.10,
         "slippage_usd_per_ounce_per_side": 0.15,
-        "quantity_step_ounces": 0.01, "max_notional_to_equity": 2,
+        "quantity_step_ounces": 1.0, "max_notional_to_equity": 2,
         "risk_fraction": 0.0025, "stop_atr_multiple": 1.5,
         "reward_to_risk": 1.6, "max_hold_bars": 12,
     }
@@ -171,6 +171,7 @@ def test_corrupt_broker_quote_data_is_never_backtested(sample_quotes, changed):
     ("slippage_usd_per_ounce_per_side", -1),
     ("max_notional_to_equity", 100), ("max_hold_bars", 0),
     ("timeframe_minutes", 60), ("quantity_step_ounces", 0),
+    ("quantity_step_ounces", 0.01),
 ])
 def test_invalid_or_unrealistic_cost_config_fails_closed(model_settings, key, value):
     cfg = json.loads(model_settings.read_text())
