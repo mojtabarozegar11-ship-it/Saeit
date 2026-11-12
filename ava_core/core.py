@@ -220,6 +220,8 @@ class ConversationEngine:
             raise TypeError("Brain must return a string")
         if not result.strip():
             raise ValueError("Brain returned an empty response")
+        if len(result) > 10000:
+            raise ValueError("Brain response exceeds 10000 characters")
         return AvaReply(text=result, memories_used=len(items))
 
 
