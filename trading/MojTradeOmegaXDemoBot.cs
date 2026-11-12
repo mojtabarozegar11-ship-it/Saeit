@@ -48,10 +48,11 @@ namespace MojTrade.OmegaX
         [Parameter("Enable Demo Trading", DefaultValue = false)]
         public bool EnableDemoTrading { get; set; }
 
-        private ExponentialMovingAverage _fastEma;
-        private ExponentialMovingAverage _slowEma;
-        private RelativeStrengthIndex _rsi;
-        private AverageTrueRange _atr;
+        // Indicators are initialized on a validated OnStart path.
+        private ExponentialMovingAverage _fastEma = null!;
+        private ExponentialMovingAverage _slowEma = null!;
+        private RelativeStrengthIndex _rsi = null!;
+        private AverageTrueRange _atr = null!;
         private double _sessionStartEquity;
         private int _consecutiveLosses;
 
@@ -100,7 +101,7 @@ namespace MojTrade.OmegaX
 
             var index = Bars.Count - 1;
             var atrPrice = _atr.Result[index];
-            if (atrPrice <= 0)
+            if (atrPrice <= 0 || double.IsNaN(atrPrice) || double.IsInfinity(atrPrice))
                 return;
 
             var buyVotes = 0;
@@ -143,7 +144,9 @@ namespace MojTrade.OmegaX
 
         protected override void OnTick()
         {
-            if (Account.IsLive)
+            // Observation mode must also block modifications of positions
+            // left from a previous demo run.
+            if (Account.IsLive || !EnableDemoTrading)
                 return;
 
             foreach (var position in Positions.FindAll(Label, SymbolName))
@@ -163,19 +166,29 @@ namespace MojTrade.OmegaX
                     var breakEven = position.TradeType == TradeType.Buy
                         ? position.EntryPrice + Symbol.PipSize
                         : position.EntryPrice - Symbol.PipSize;
-                    ModifyPosition(position, breakEven, position.TakeProfit);
+                    // Absolute prices, never relative pips. The legacy
+                    // three-argument overload is obsolete.
+                    var modified = ModifyPosition(
+                        position, breakEven, position.TakeProfit, ProtectionType.Absolute);
+                    if (!modified.IsSuccessful)
+                        Print("OMEGA X DEMO protection update rejected: {0}", modified.Error);
                 }
             }
         }
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
+            if (Account.IsLive || !EnableDemoTrading || Symbol.PipSize <= 0)
+                return;
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
+            if (double.IsNaN(stopPips) || double.IsInfinity(stopPips))
+                return;
             var takePips = stopPips * RewardRisk;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
-            if (volume < Symbol.VolumeInUnitsMin)
+            if (double.IsNaN(volume) || double.IsInfinity(volume) ||
+                volume < Symbol.VolumeInUnitsMin || volume > Symbol.VolumeInUnitsMax)
                 return;
 
             var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
@@ -188,7 +201,11 @@ namespace MojTrade.OmegaX
 
         private double CurrentSpreadPips()
         {
-            return (Symbol.Ask - Symbol.Bid) / Symbol.PipSize;
+            if (Symbol.PipSize <= 0 || double.IsNaN(Symbol.PipSize))
+                return double.PositiveInfinity;
+            var spread = (Symbol.Ask - Symbol.Bid) / Symbol.PipSize;
+            return spread >= 0 && !double.IsNaN(spread) && !double.IsInfinity(spread)
+                ? spread : double.PositiveInfinity;
         }
 
         private bool DailyLossReached()
