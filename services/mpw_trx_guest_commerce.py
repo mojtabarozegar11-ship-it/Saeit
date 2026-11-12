@@ -293,19 +293,38 @@ def patch_commercial(namespace):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
+                    # Record invoice creation only after an actual successful
+                    # redirect to a positive-ID local TRX invoice. Validation
+                    # errors, 200 pages and unrelated redirects are NOT sales
+                    # funnel successes; analytics may never break checkout.
                     try:
-                        from core.models import Product
-                        product = Product.objects.filter(
-                            pk=kwargs.get("product_id"), active=True,
-                        ).first()
-                        if product is not None:
-                            _record_funnel_event_best_effort(
-                                request, "invoice_created", product,
-                            )
-                    except Exception:
-                        pass
+                        import re
+                        from urllib.parse import urlsplit
+                        location = response.get("Location", "")
+                        redirect = urlsplit(location) if type(location) is str else None
+                        invoice_created = (
+                            getattr(response, "status_code", None) in (302, 303)
+                            and redirect is not None
+                            and not redirect.scheme and not redirect.netloc
+                            and re.fullmatch(
+                                r"/commerce/trx-easy/invoice/[1-9][0-9]*/",
+                                redirect.path,
+                            ) is not None
+                        )
+                    except (AttributeError, TypeError, ValueError):
+                        invoice_created = False
+                    if invoice_created:
+                        try:
+                            from core.models import Product
+                            product = Product.objects.filter(
+                                pk=kwargs.get("product_id"), active=True,
+                            ).first()
+                            if product is not None:
+                                _record_funnel_event_best_effort(
+                                    request, "invoice_created", product,
+                                )
+                        except Exception:
+                            pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf

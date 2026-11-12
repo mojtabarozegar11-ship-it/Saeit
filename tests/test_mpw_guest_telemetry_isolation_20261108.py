@@ -52,7 +52,13 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        # A real invoice-start success redirects to an owned invoice URL.
+        response = types.SimpleNamespace(
+            status_code=302,
+            get=lambda key, default="": (
+                "/commerce/trx-easy/invoice/57/" if key == "Location" else default
+            ),
+        )
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -82,9 +88,27 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
             self.assertEqual(record.call_count, 1)
+            # Failed validation must never count as an issued invoice.
+            error_response = types.SimpleNamespace(
+                status_code=400, get=lambda key, default="": "/commerce/trx-easy/invoice/57/"
+            )
+            dispatch.return_value = error_response
+            self.assertIs(namespace["start_order"](request, product_id=72), error_response)
+            self.assertEqual(record.call_count, 1)
+            # External or arbitrary redirects do not prove an invoice either.
+            external = types.SimpleNamespace(
+                status_code=302,
+                get=lambda key, default="": "https://example.org/commerce/trx-easy/invoice/57/"
+            )
+            dispatch.return_value = external
+            self.assertIs(namespace["start_order"](request, product_id=72), external)
+            self.assertEqual(record.call_count, 1)
+            # Even when the product DB is unavailable, an existing invoice
+            # redirect is returned unchanged and telemetry remains optional.
+            dispatch.return_value = response
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
-            self.assertEqual(dispatch.call_count, 2)
+            self.assertEqual(dispatch.call_count, 4)
 
 
 if __name__ == "__main__":
