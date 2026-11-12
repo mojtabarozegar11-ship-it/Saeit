@@ -41,3 +41,27 @@ Works completely offline; no telemetry, remote requests, customer order,
 subscription or payment. Factory output is a PRIVATE QA candidate.
 Technical tests do not establish scientific, market or commercial fitness.
 Final licensing and public release need review and authorization.
+
+## C02 input safety and numerical precision
+
+All numeric inputs must be finite, nonnegative, at most 10^20 and have
+no more than six decimal places. Per-hectare water demand must be positive.
+These constraints prevent runaway numeric exponents, invalid CSV results
+and quantization exceptions. Arithmetic uses 80 significant decimal digits.
+
+Crop names must begin with a Unicode letter/number, contain no embedded
+control characters, and cannot start with spreadsheet formula operators
+(=, +, -, @). This blocks a common CSV formula-injection vector.
+Downstream spreadsheet imports still require ordinary data-security review.
+
+The aggregate gross margin uses unrounded allocation quantities. Displayed
+row outputs are rounded to six decimal places; their visible sum can differ
+very slightly from the rounded aggregate because of rounding.
+
+Buyer acceptance dossier:
+`deliverables/products/water_budget_economics/commercial_package.md`.
+Preliminary non-sensitive customer data contract:
+`deliverables/services/water-production/client_intake.schema.json`.
+
+**State:** Technical hardening in a draft branch only; no deployment,
+third-party field validation, paid order or sales-readiness attestation.
