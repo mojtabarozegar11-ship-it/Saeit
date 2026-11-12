@@ -188,6 +188,14 @@ class AvaCoreTests(unittest.TestCase):
             assistant.converse("سلام")
         self.assertEqual(assistant.list_memories(), ())
 
+
+    def test_binary_control_characters_in_user_message_are_rejected_before_brain(self):
+        for bad in ("hello\x00world", "hello\x1bworld", "hello\x7fworld"):
+            with self.subTest(value=repr(bad)):
+                with self.assertRaisesRegex(ValueError, "forbidden control characters"):
+                    self.ava.converse(bad)
+        self.assertEqual(self.calls, [])
+
     def test_oversized_message_never_reaches_model(self):
         with self.assertRaisesRegex(ValueError, "10000 characters"):
             self.ava.converse("x" * 10001)
