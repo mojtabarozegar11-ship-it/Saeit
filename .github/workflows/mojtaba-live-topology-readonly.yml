@@ -186,6 +186,15 @@ jobs:
               seen, sort_keys=True, separators=(",", ":"),
           ))
           VERIFY
+      - name: Reconcile both observations into nine fail-closed source decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojtaba-live-observation"
+          python3 deploy/mojtaba_live_disposition_readonly.py \
+            --vps "$d/vps.jsonline" \
+            --cpanel "$d/cpanel.jsonline" \
+            --manifest runtime/mojtaba_bot_disposition_sources_v1.json
       - name: Remove ephemeral CI SSH files
         if: always()
         shell: bash
