@@ -408,7 +408,7 @@ def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive
     assert "    runs-on: [self-hosted, factory-vps]" in workflow
     assert 'python3 deploy/mojtaba_live_topology_readonly.py --role vps' in workflow
     assert 'secrets.SAEIT_HOST_SSH_PRIVATE_KEY' in workflow
-    assert 'secrets.VPS_SSH_PRIVATE_KEY' not in workflow
+    assert 'secrets.VPS_SSH_PRIVATE_KEY' in workflow
     assert 'sudo ' not in workflow
     assert 'systemctl restart' not in workflow
     assert 'crontab -e' not in workflow
@@ -416,17 +416,25 @@ def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive
     assert 'MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof' in workflow
 
 
-def test_local_vps_preflight_classifies_runner_user_without_disclosing_identity():
-    """Do not silently treat a non-githubops self-hosted runner as the VPS app user."""
+def test_local_vps_runner_mismatch_has_existing_pinned_ssh22_fallback():
+    """Runner OS identity is not confused with VPS health or SSH port state."""
     workflow = (
         ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
     ).read_text(encoding="utf-8")
-    assert 'if [[ "$(id -un)" != "githubops" ]]; then' in workflow
-    assert "MOJTABA_VPS_OBSERVATION=wrong_host_user" in workflow
-    assert 'grep -Fqx "MOJTABA_TOPOLOGY_PREFLIGHT=wrong_host_user"' in workflow
-    assert workflow.index('if [[ "$(id -un)" != "githubops" ]]') < workflow.index(
-        'elif python3 deploy/mojtaba_live_topology_readonly.py --role vps'
+    assert 'if [[ "$(id -un)" == "githubops" ]]; then' in workflow
+    assert "MOJTABA_VPS_LOCAL_OBSERVATION=runner_user_not_githubops" in workflow
+    assert 'if [[ "$vps_ok" != "1" ]]; then' in workflow
+    assert workflow.index('if [[ "$(id -un)" == "githubops" ]]') < workflow.index(
+        'if [[ "$vps_ok" != "1" ]]; then'
     )
+    assert 'secrets.VPS_SSH_PRIVATE_KEY' in workflow
+    assert 'ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150' in workflow
+    assert 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' in workflow
+    assert '-p 22 githubops@178.239.147.150' in workflow
+    assert "'exec python3 - --role vps'" in workflow
+    assert "MOJTABA_VPS_ROUTE=pinned_ssh_22_githubops" in workflow
+    assert 'IdentitiesOnly=yes' in workflow
+    assert 'StrictHostKeyChecking=yes' in workflow
     assert 'cat "$d/vps.err"' not in workflow
     assert 'echo "$runner_user"' not in workflow
     assert "sudo " not in workflow
@@ -446,7 +454,7 @@ def test_incomplete_two_host_inventory_fails_closed_not_green():
         '            exit 1'
     ) in workflow
     assert "github.ref == 'refs/heads/main'" in workflow
-    assert "secrets.VPS_SSH_PRIVATE_KEY" not in workflow
+    assert "secrets.VPS_SSH_PRIVATE_KEY" in workflow
     assert "StrictHostKeyChecking=yes" in workflow
 
 
@@ -495,3 +503,22 @@ def test_secret_bearing_selfhosted_manual_workflows_require_main_ref():
         assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in workflow, relative
         assert "pull_request:" not in workflow.split("on:", 1)[1].split("permissions:", 1)[0], relative
         assert "StrictHostKeyChecking=no" not in workflow, relative
+
+
+def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
+    """No unpinned SSH, fake port switching, secret echo, or permission bypass."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert 'if [[ -z "${VPS_KEY:-}" ]]; then' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=missing_existing_key' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=host_fingerprint_mismatch_stop' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=host_key_unreachable' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=ssh_or_interpreter_failed' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=invalid_existing_key' in workflow
+    assert workflow.count('-p 22 githubops@178.239.147.150') == 1
+    assert 'StrictHostKeyChecking=no' not in workflow
+    assert 'UserKnownHostsFile=/dev/null' not in workflow
+    assert 'echo "$VPS_KEY"' not in workflow
+    assert 'sudo ' not in workflow
+    assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in workflow
