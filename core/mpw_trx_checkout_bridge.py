@@ -30,8 +30,22 @@ def _reviewed_checkout():
 
 
 def backend_ready():
-    """Availability of the reviewed route implementation, not proof of payment."""
+    """Flag and reviewed adapter availability; never proof of invoice settlement."""
+    if getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False) is not True:
+        return False
     return _reviewed_checkout() is not None
+
+
+def _unavailable():
+    response = HttpResponse(
+        "Secure TRX checkout is temporarily unavailable. "
+        "No invoice was created. Please do not send funds.",
+        status=503, content_type="text/plain; charset=utf-8",
+    )
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    response["Referrer-Policy"] = "same-origin"
+    return response
 
 
 @never_cache
@@ -45,17 +59,13 @@ def product_checkout(request, product_id):
     ids = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
     if not isinstance(ids, (list, tuple, set, frozenset)) or product_id not in ids:
         raise Http404
+    # A configured product ID is not a mandate to accept payment. An explicit
+    # public switch is required in addition to backend and owner-rights checks.
+    if getattr(settings, "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", False) is not True:
+        return _unavailable()
     handler = _reviewed_checkout()
     if handler is None:
-        response = HttpResponse(
-            "Secure TRX checkout is temporarily unavailable. "
-            "No invoice was created. Please do not send funds.",
-            status=503, content_type="text/plain; charset=utf-8",
-        )
-        response["Cache-Control"] = "private, no-store, max-age=0"
-        response["X-Robots-Tag"] = "noindex, nofollow"
-        response["Referrer-Policy"] = "same-origin"
-        return response
+        return _unavailable()
     # Authorization, CSRF, receiver readiness and rights checks remain owned
     # by the reviewed guest adapter and existing commercial backend.
     return handler(request, product_id)
