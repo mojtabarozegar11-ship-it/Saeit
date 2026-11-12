@@ -73,6 +73,16 @@ def test_market_receipt_is_owned_by_one_bot_and_has_no_execution(canonical_marke
     assert task.output_data["broker_connected"] is False
     assert task.output_data["published"] is False
     assert task.output_data["revenue_verified"] is False
+    review = task.output_data["strategy_risk_review"]
+    assert review["schema"] == "mojtrade-research-gate-v1"
+    assert review["setup_candidates_not_trades"] == 1
+    assert review["decisions"][0]["classification"] == "monitor_bullish"
+    assert review["decisions"][1]["classification"] == "no_setup"
+    assert review["risk_gate"] == "blocked_missing_broker_verified_inputs"
+    assert review["executable_order_intents"] == []
+    assert review["broker_connected"] is False
+    assert review["orders"] == 0 and review["execution"] == "disabled"
+    assert len(review["decision_digest_sha256"]) == 64
     assert len(task.output_data["market_observations"]) == 2
     assert task.output_data["market_observations"][1]["data_source"] == "bitstamp-public-ohlc"
     assert "validated-payload.json" not in json.dumps(task.input_data)
