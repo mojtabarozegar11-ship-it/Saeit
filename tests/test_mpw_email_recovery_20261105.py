@@ -286,13 +286,20 @@ class RecoveryIsolationTests(TransactionTestCase):
                  "_download_paid": handler}
         names["COMMERCIAL_URLPATTERNS"] = (
             ("commerce/trx-easy/start/<int:product_id>/", handler),
+            ("commerce/trx-easy/invoice/<int:invoice_id>/", handler),
+            ("commerce/trx-easy/invoice/<int:invoice_id>/status/", handler),
+            ("commerce/trx-easy/invoice/<int:invoice_id>/reconcile/", handler),
             ("commerce/trx-easy/download/<int:invoice_id>/", handler),
         )
         guest_adapter.patch_commercial(names)
         routes = dict(names["COMMERCIAL_URLPATTERNS"])
-        self.assertEqual(len(routes), 2)
+        self.assertEqual(len(routes), 5)
         self.assertFalse(any("recover" in key for key in routes))
         self.assertIsNot(names["start_order"], handler)
+        self.assertIs(routes["commerce/trx-easy/invoice/<int:invoice_id>/status/"],
+                      names["invoice_status"])
+        self.assertIs(routes["commerce/trx-easy/invoice/<int:invoice_id>/reconcile/"],
+                      names["reconcile_invoice"])
 
     def _legacy_public_adapter(self):
         """Build the old public route shape without a live web server."""
