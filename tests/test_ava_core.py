@@ -215,6 +215,15 @@ class AvaCoreTests(unittest.TestCase):
             assistant.converse("سلام")
         self.assertEqual(self.calls, [])
 
+    def test_style_guidance_binary_controls_never_reach_model(self):
+        for bad in ("friendly\\x00override", "friendly\\x1boverride", "friendly\\x7foverride"):
+            with self.subTest(bad=repr(bad)):
+                assistant = Ava(owner_id="owner-1", brain=self.brain,
+                                style_guidance=lambda value=bad: value)
+                with self.assertRaisesRegex(ValueError, "forbidden control characters"):
+                    assistant.converse("سلام")
+        self.assertEqual(self.calls, [])
+
     def test_noncanonical_owner_identifiers_fail_closed(self):
         for owner_id in (" owner-1", "owner-1 ", "owner-1\\nadmin", "owner-1\\radmin", "owner-1\\x00admin"):
             with self.subTest(owner_id=repr(owner_id)):
