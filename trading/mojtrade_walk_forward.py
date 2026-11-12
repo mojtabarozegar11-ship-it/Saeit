@@ -175,3 +175,31 @@ def walk_forward(bars, source_sha256, cfg, *, folds=3, test_bars=100):
         "order_execution_enabled": False,
         "warning": "Synthetic data and backtests never prove sustainable income. Source authentication, financing, spread/commission verification, independent statistics and broker forward receipts remain necessary.",
     }
+
+
+def main():
+    """Run read-only walk-forward on a provided local broker quote extract."""
+    import argparse
+    import json
+    from pathlib import Path
+    from trading.mojtrade_costed_oos import Settings, parse_bars
+
+    parser = argparse.ArgumentParser(
+        description="Research-only XAUUSD multi-fold cost-stress validation; zero broker orders"
+    )
+    parser.add_argument("--bid-ask-csv", required=True, type=Path)
+    parser.add_argument("--settings-json", required=True, type=Path)
+    parser.add_argument("--folds", type=int, default=3)
+    parser.add_argument("--test-bars", type=int, default=100)
+    args = parser.parse_args()
+    try:
+        cfg = Settings.load(args.settings_json)
+        bars, digest = parse_bars(args.bid_ask_csv, cfg.timeframe_minutes)
+        result = walk_forward(bars, digest, cfg, folds=args.folds, test_bars=args.test_bars)
+        print(json.dumps(result, sort_keys=True, indent=2, allow_nan=False))
+    except (ResearchError, OSError) as exc:
+        parser.exit(2, f"MOJTRADE_WALK_FORWARD_REJECTED: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()
