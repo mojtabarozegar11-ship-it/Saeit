@@ -1,9 +1,11 @@
 """Safe public SEO surfaces for active native catalog products."""
 import json
+from django.conf import settings
 from django.http import Http404
 from django.shortcuts import render
 from django.utils.html import strip_tags
 from .models import Product
+from .mojplaywin_catalog import FEATURED_IDS, catalog_card
 
 def public_product_url(product):
     return "/store/product/{}/".format(product.pk)
@@ -37,6 +39,18 @@ def product_detail(request, product_id):
         raise Http404
 
     metadata = product.metadata if isinstance(product.metadata, dict) else {}
+    if site == "mojplaywin" and product.pk not in FEATURED_IDS:
+        # Do not leak arbitrary active USD products from Zomorod's shared DB.
+        # Additional paid/free items must first pass the SAME eligibility
+        # policy used by the public MojPlayWin catalog.
+        allowed = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+        if not isinstance(allowed, (tuple, list, set, frozenset)):
+            allowed = ()
+        paid_ids = frozenset(
+            value for value in allowed if type(value) is int and value > 0
+        )
+        if catalog_card(product, paid_ids) is None:
+            raise Http404
     description = public_product_description(product, "MojPlayWin" if site == "mojplaywin" else "Zomorod Melal")
     image = metadata.get("seo_image") or metadata.get("image_url")
     image = image if isinstance(image, str) and image.startswith("https://") and len(image) < 1024 else None
