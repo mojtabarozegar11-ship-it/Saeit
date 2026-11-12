@@ -54,7 +54,7 @@ REQUIRED_PATHS = (
     "/studio.Roham/",
     "/zahra$$/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
