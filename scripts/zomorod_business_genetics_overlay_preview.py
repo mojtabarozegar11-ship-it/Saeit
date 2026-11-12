@@ -138,8 +138,20 @@ def apply(live: str, proposed: str) -> tuple[str, list[tuple[str, str, str]], st
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or not re.fullmatch(r"[0-9a-f]{64}", sys.argv[1]):
+    if len(sys.argv) not in (2, 4) or not re.fullmatch(r"[0-9a-f]{64}", sys.argv[1]):
         stop("INVALID_BASELINE_HASH")
+    staging = None
+    if len(sys.argv) == 4:
+        if sys.argv[2] != "--render-stage":
+            stop("INVALID_MODE")
+        stage_name = sys.argv[3]
+        if not re.fullmatch(r"/home/zomorod2/\.private/zomorod-business/\.stage-[0-9a-f]{40}", stage_name):
+            stop("INVALID_STAGE_DIRECTORY")
+        staging = Path(stage_name)
+        if not staging.is_dir() or staging.is_symlink() or staging.parent != LIVE.parent:
+            stop("UNSAFE_STAGE_DIRECTORY")
+        if staging.stat().st_uid != os.geteuid() or stat.S_IMODE(staging.stat().st_mode) != 0o700:
+            stop("INSECURE_STAGE_DIRECTORY")
     if not LIVE.is_file() or LIVE.is_symlink():
         stop("LIVE_APP_UNSAFE")
     meta = LIVE.stat()
@@ -177,9 +189,28 @@ def main() -> None:
     )
     if parsed.returncode != 0:
         stop("CANDIDATE_PHP_SYNTAX_INVALID")
+    digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest()
+    if staging is not None:
+        target = staging / "app.php"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(target, flags, 0o600)
+        except OSError:
+            stop("STAGE_APP_MUST_NOT_EXIST")
+        with os.fdopen(fd, "wb") as sink:
+            sink.write(candidate.encode("utf-8"))
+            sink.flush()
+            os.fsync(sink.fileno())
+        if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+            stop("STAGE_APP_READBACK_MISMATCH")
+        print("OVERLAY_PRIVATE_STAGE_WRITTEN=true")
+    else:
+        print("OVERLAY_PRIVATE_STAGE_WRITTEN=false")
     print("OVERLAY_ADDITIONS_COUNT=" + str(len(changes)))
     print("OVERLAY_LEGACY_CONTENT_PRESERVED=true")
-    print("OVERLAY_CANDIDATE_SHA256=" + hashlib.sha256(candidate.encode("utf-8")).hexdigest())
+    print("OVERLAY_CANDIDATE_SHA256=" + digest)
     print("OVERLAY_CANDIDATE_PHP_LINT=PASS")
     print("OVERLAY_LIVE_SOURCE_EXPORTED=no")
     print("OVERLAY_LIVE_FILES_MODIFIED=no")
