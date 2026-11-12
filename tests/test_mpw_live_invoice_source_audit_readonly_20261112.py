@@ -125,6 +125,49 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertEqual(report["status"], "SOURCE_MISSING_OR_UNREADABLE")
         self.assertEqual(report["source_problems"][0]["reason"], "ValueError")
 
+    def test_email_type_and_aliased_hidden_controls_block(self):
+        for control in (
+            '<input type="email" name="contact">',
+            '<input type="hidden" name="buyer_email">',
+            "<textarea id='notification_email'></textarea>",
+            '<select autocomplete="email" name="contact"></select>',
+            '<input name=customer_email type=hidden>',
+        ):
+            with self.subTest(control=control):
+                p = self.root / AUDIT.TEMPLATE
+                p.write_text("<form>{% csrf_token %}" + control + "</form>")
+                report = AUDIT.inspect(self.root)
+                self.assertTrue(report["template"]["email_control_marker"])
+                self.assertEqual(report["status"], "LEGACY_EMAIL_CHECKOUT_PRESENT")
+
+    def test_constructed_email_key_in_start_handler_blocks(self):
+        p = self.root / AUDIT.SOURCE_PATHS[0]
+        p.write_text("def _start_order(request):\n"
+                     "    return request.POST.get('buyer_' + 'e' + 'mail')\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "EMAIL_REFERENCES_PRESENT")
+        self.assertIn("_start_order", report["email_hit_functions"][0]["functions"])
+
+    def test_module_level_constant_alias_email_blocks(self):
+        p = self.root / AUDIT.SOURCE_PATHS[0]
+        p.write_text("BUYER_FIELD = 'buyer_' + 'email'\n"
+                     "def _start_order(request):\n"
+                     "    return request.POST.get(BUYER_FIELD)\n")
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "EMAIL_REFERENCES_PRESENT")
+
+    def test_unrelated_field_does_not_trigger_email_false_positive(self):
+        p = self.root / AUDIT.SOURCE_PATHS[0]
+        p.write_text("PRODUCT_FIELD = 'order_' + 'reference'\n"
+                     "def _start_order(request):\n"
+                     "    return request.POST.get(PRODUCT_FIELD)\n")
+        p = self.root / AUDIT.TEMPLATE
+        p.write_text('<form>{% csrf_token %}<input name="order_reference"></form>')
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(
+            report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
+        )
+
     def test_source_content_not_printed_or_returned(self):
         p = self.root / AUDIT.SOURCE_PATHS[0]
         p.write_text("def _start_order(request):\n"
