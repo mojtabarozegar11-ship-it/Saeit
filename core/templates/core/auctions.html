@@ -6,6 +6,12 @@
 {% block content %}
 <div class="commerce-page auctions-page">
   <section class="auctions-hero"><span>COMPANY AUCTIONS · OFFICIAL NOTICES</span><h1>مزایدات شرکت</h1><p>فرصت‌های مزایده فقط پس از ثبت و انتشار رسمی در این بخش نمایش داده می‌شوند.</p></section>
+  <section class="auction346-index" aria-labelledby="auction346-head" style="max-width:940px;margin:22px auto;padding:26px;border:2px solid #ba9f59;border-radius:16px;background:#123b2c;color:#f5e8be;text-align:center">
+    <img src="{% static 'site/company/company-logo.png' %}" alt="لوگوی شرکت کشت و صنعت زمرد ملل" width="96" height="96" style="object-fit:contain;max-width:100%;height:auto">
+    <h2 id="auction346-head" style="color:#f5e8be;margin:10px 0">فراخوان شماره ۳۴۶ — تأمین گونه‌های مجاز پرندگان و حیوانات پژوهشی</h2>
+    <p style="color:#f0f1db">تحقیقات علمی، ژنتیک و اصلاح نژاد؛ زمان دریافت پیشنهادها از ۵ تا ۱۰ هر ماه، صرفاً با اعلام قبلی.</p>
+    <p><a href="/auctions/346/" style="display:inline-block;color:#0e3523;background:#f5df98;padding:11px 22px;border-radius:9px;font-weight:bold;text-decoration:none">شرح کامل و شرایط ارسال پیشنهاد</a></p>
+  </section>
   <section class="auctions-list" aria-labelledby="auctions-title">
     <header><span>OFFICIAL OPPORTUNITIES</span><h2 id="auctions-title">فرصت‌های منتشرشده</h2></header>
     {% if auctions %}<div class="auction-grid">{% for auction in auctions %}<article><h3>{{ auction.title }}</h3></article>{% endfor %}</div>

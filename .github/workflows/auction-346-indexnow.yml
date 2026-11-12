@@ -1,0 +1,39 @@
+name: IndexNow notification for published auction 346
+on:
+  push:
+    branches: [feature/zomorod-auction-346-20261112]
+    paths:
+      - .github/workflows/auction-346-indexnow.yml
+permissions: {contents: read}
+jobs:
+  notify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 3
+    steps:
+      - name: Verify published URL and existing official IndexNow key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="f5e9e3dccc5c2511c452f26b011ec43e"
+          url="https://zomorodmelal.ir/auctions/346/"
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          status="$(curl -sSL --max-time 15 -o "$d/page" -w '%{http_code}' "$url")"
+          test "$status" = 200
+          grep -Fq 'مزایده شماره ۳۴۶' "$d/page"
+          grep -Fq 'rel="canonical" href="https://zomorodmelal.ir/auctions/346/"' "$d/page"
+          echo "PUBLISHED_AUCTION_346_VERIFIED=YES"
+          key_status="$(curl -sSL --max-time 15 -o "$d/key" -w '%{http_code}' "https://zomorodmelal.ir/$key.txt" || true)"
+          if test "$key_status" != 200 || test "$(tr -d '\r\n ' < "$d/key")" != "$key"; then
+            echo "INDEXNOW_KEY_NOT_VERIFIED=NO_SUBMISSION"
+            exit 0
+          fi
+          echo "INDEXNOW_KEY_VERIFIED=YES"
+          answer="$(curl -sS --max-time 25 -G --data-urlencode "url=$url" --data-urlencode "key=$key" -o "$d/answer" -w '%{http_code}' 'https://api.indexnow.org/indexnow' || true)"
+          echo "INDEXNOW_RESPONSE=$answer"
+          case "$answer" in
+            200) echo "INDEXNOW_SUBMISSION=RECEIVED";;
+            202) echo "INDEXNOW_SUBMISSION=RECEIVED_PENDING_KEY_VALIDATION";;
+            *) echo "INDEXNOW_SUBMISSION=NOT_CONFIRMED"; exit 1;;
+          esac

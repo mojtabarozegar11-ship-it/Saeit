@@ -7,7 +7,7 @@ from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
-from core.commerce_views import store_home, auctions_home
+from core.commerce_views import store_home, auctions_home, auction_346
 from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
@@ -61,6 +61,7 @@ urlpatterns = [
     path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
     path("auctions/", auctions_home, name="auctions"),
+    path("auctions/346/", auction_346, name="auction_346"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
     path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),
