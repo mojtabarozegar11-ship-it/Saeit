@@ -44,7 +44,13 @@ def section(text: str, start: str, end: str, label: str) -> str:
     return fragment
 
 
-def apply(live: str, proposed: str) -> tuple[str, list[tuple[str, str, str]]]:
+def is_subsequence(original: str, expanded: str) -> bool:
+    # Insertion-only means every original character retains its exact order.
+    iterator = iter(expanded)
+    return all(any(character == wanted for character in iterator) for wanted in original)
+
+
+def apply(live: str, proposed: str) -> tuple[str, list[tuple[str, str, str]], str]:
     if "genetics_project_register" in live or "$page==='genetics_center'" in live:
         stop("GENETICS_PARTIALLY_INSTALLED_MANUAL_RECONCILIATION")
     changes: list[tuple[str, str, str]] = []
@@ -52,7 +58,7 @@ def apply(live: str, proposed: str) -> tuple[str, list[tuple[str, str, str]]]:
     def replace_once(needle: str, replacement: str, label: str) -> None:
         nonlocal live
         unique(live, needle, label)
-        if replacement == needle or needle not in replacement:
+        if replacement == needle or not is_subsequence(needle, replacement):
             stop("NOT_ADDITIVE_" + label)
         live = live.replace(needle, replacement, 1)
         changes.append((needle, replacement, label))
