@@ -68,7 +68,8 @@ def test_existing_fail_closed_policy_and_ssh_identity_unchanged():
     assert "HEALTH_GATE=PASS" in source
     assert "github.ref == 'refs/heads/main'" in source
     assert "StrictHostKeyChecking=yes" in source
-    assert "githubops@178.239.147.150" in source
+    assert "-p 22 githubops@178.239.147.150" in source
+    assert "ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150" in source
     assert "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" in source
     assert "crontab -e" not in source
     assert "crontab -r" not in source
@@ -132,3 +133,37 @@ def test_readable_crontab_preserves_legacy_blocking_classification():
     assert "HEALTH_FACTORY_CRON_READ=observed" in result.stdout
     assert "HEALTH_CRITICAL=factory_hold_cron_violation" in result.stdout
     assert "HEALTH_CRON_GATE_FLAG=1" in result.stdout
+
+
+def test_readable_empty_crontab_is_not_conflated_with_error():
+    """A successful but empty Cron observation is valid, unlike permission failures."""
+    source = WORKFLOW.read_text(encoding="utf-8")
+    cron_block = source.split(
+        "          # An unreadable crontab must not masquerade as an empty schedule.", 1
+    )[1].split("          # Presence of an active tagged Cron row", 1)[0]
+    unreadable_gate = (
+        '          if (( cron_observed != 1 )); then '
+        'echo "HEALTH_CRITICAL=factory_crontab_unavailable"; gate_fail=1; fi'
+    )
+    tagged_gate = (
+        '          if (( count > 0 )); then '
+        'echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi'
+    )
+    assert source.count(unreadable_gate) == 1
+    assert source.count(tagged_gate) == 1
+    shell = (
+        "set -euo pipefail\n"
+        'crontab() { printf ""; return 0; }\n'
+        + cron_block + "\n"
+        "gate_fail=0\n"
+        + unreadable_gate + "\n"
+        + tagged_gate + "\n"
+        'printf "HEALTH_CRON_GATE_FLAG=%s\\n" "$gate_fail"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        check=True, timeout=5,
+    )
+    assert "HEALTH_FACTORY_CRON_READ=observed" in result.stdout
+    assert "HEALTH_CRON_GATE_FLAG=0" in result.stdout
+    assert "HEALTH_CRITICAL=" not in result.stdout
