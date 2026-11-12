@@ -69,7 +69,7 @@ class ProductSeoTests(TestCase):
             response, "<title>Original English Chess Guide | MojPlayWin Digital Store</title>"
         )
 
-    @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,))
+    @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,), MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True)
     def test_approved_new_mojplaywin_sku_has_separate_public_detail(self):
         sha = "a" * 64
         product = Product.objects.create(
@@ -89,6 +89,25 @@ class ProductSeoTests(TestCase):
         self.assertContains(response, "https://mojplaywin.com/store/product/991/")
         self.assertContains(response, '"@type": "Offer"')
         self.assertContains(response, '"priceCurrency": "USD"')
+
+    @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,), MPW_WALLETLESS_TRX_PUBLIC_ENABLED=False)
+    def test_mojplaywin_payment_disabled_never_advertises_purchase_offer(self):
+        sha = "a" * 64
+        product = Product.objects.create(
+            pk=991, title="Owner-approved Digital Guide",
+            product_type="Digital_Book", price="12.00", currency="USD",
+            active=True, metadata={
+                "rights_cleared": True, "publication_approved": True,
+                "sha256": sha, "rights_asset_sha256": sha,
+                "rights_document_sha256": "b" * 64,
+            },
+        )
+        response = self.client.get(
+            "/store/product/991/", HTTP_HOST="mojplaywin.com"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '"@type": "Offer"')
+        self.assertContains(response, "verified checkout is not yet available")
 
     def test_explicit_sale_status_allows_offer_schema(self):
         p=self.create_product(metadata={"sales_enabled":True,"in_stock":True,"seo_description":"کتاب آموزشی"})
