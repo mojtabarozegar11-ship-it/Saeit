@@ -1,0 +1,80 @@
+name: Verify IndexNow ownership and notify auction 346
+on:
+  push:
+    branches: [feature/zomorod-auction-346-20261112]
+    paths: [.github/workflows/auction-346-indexnow-ownership.yml]
+permissions: {contents: read}
+jobs:
+  key-and-submit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Publish only missing domain key file via pinned cPanel SSH
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key="f5e9e3dccc5c2511c452f26b011ec43e"
+          d="$RUNNER_TEMP/auction346-indexnow"
+          umask 077; install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,stat
+          home=Path('/home/zomorod2');root=home/'public_html'
+          key='f5e9e3dccc5c2511c452f26b011ec43e'
+          target=root/(key+'.txt')
+          assert root.is_dir() and not root.is_symlink() and os.getuid()==home.stat().st_uid
+          contents=(key+'\n').encode()
+          if target.exists() or target.is_symlink():
+              assert target.is_file() and not target.is_symlink() and target.read_bytes()==contents, 'KEY_ALREADY_EXISTS_DIFFERENT'
+              print('INDEXNOW_KEY_STATE=EXISTING_VALID')
+          else:
+              tmp=root/('.indexnow346.'+key+'.tmp')
+              with open(tmp,'xb') as stream:
+                  stream.write(contents)
+                  stream.flush();os.fsync(stream.fileno())
+              tmp.chmod(0o644)
+              os.replace(tmp,target)
+              print('INDEXNOW_KEY_STATE=CREATED_SCOPED_FILE')
+          PY
+          http="$(curl -sSL --max-time 20 -o "$d/received" -w '%{http_code}' "https://zomorodmelal.ir/$key.txt" || true)"
+          echo "INDEXNOW_KEY_PUBLIC_HTTP=$http"
+          test "$http" = 200
+          test "$(tr -d '\r\n ' < "$d/received")" = "$key"
+          echo "INDEXNOW_KEY_PUBLIC=VERIFIED"
+          url="https://zomorodmelal.ir/auctions/346/"
+          page_status="$(curl -sSL --max-time 20 -o "$d/page" -w '%{http_code}' "$url")"
+          test "$page_status" = 200
+          grep -Fq 'مزایده شماره ۳۴۶' "$d/page"
+          echo 'AUCTION346_PUBLIC=VERIFIED'
+          response="$(curl -sS --max-time 25 -G --data-urlencode "url=$url" --data-urlencode "key=$key" -o "$d/answer" -w '%{http_code}' https://api.indexnow.org/indexnow || true)"
+          echo "INDEXNOW_HTTP=$response"
+          case "$response" in
+            200) echo "INDEXNOW_SUBMITTED=ACCEPTED";;
+            202) echo "INDEXNOW_SUBMITTED=PENDING_VALIDATION";;
+            *) echo "INDEXNOW_SUBMITTED=NOT_CONFIRMED"; exit 1;;
+          esac
