@@ -90,7 +90,7 @@ class ProductSeoTests(TestCase):
         # Owning the product and enabling the switch do NOT prove the
         # verified guest payment handler has been installed on cPanel.
         self.assertNotContains(response, '"@type": "Offer"')
-        self.assertContains(response, "verified checkout is not yet available")
+        self.assertContains(response, "secure TRX checkout is not yet verified")
 
     @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,), MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True)
     def test_reviewed_checkout_route_allows_owner_approved_offer(self):
