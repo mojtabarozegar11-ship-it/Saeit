@@ -77,7 +77,10 @@ def test_market_receipt_is_owned_by_one_bot_and_has_no_execution(canonical_marke
     assert task.output_data["market_observations"][1]["data_source"] == "bitstamp-public-ohlc"
     assert "validated-payload.json" not in json.dumps(task.input_data)
     assert not task.agent.capabilities.filter(code__in=["trade", "payment", "withdraw", "deploy"]).exists()
-    assert Agent.objects.count() == 1
+    # Existing Django migrations seed unrelated agent records; the bridge must
+    # not create an extra MojTrade executor identity.
+    assert Agent.objects.filter(code=BOT_CODE).count() == 1
+    assert not Agent.objects.filter(code__startswith="mojtrade").exists()
     assert module_for_capability(MOJTRADE_RESEARCH_CAPABILITY) == "mojtrade_private_research"
     assert AuditLog.objects.filter(target_type="AgentTask", target_id=str(task.pk), action="task_claimed").count() == 1
     assert AuditLog.objects.filter(target_type="AgentTask", target_id=str(task.pk), action="task_completed").count() == 1
