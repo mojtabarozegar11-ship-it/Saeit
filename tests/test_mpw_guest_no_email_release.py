@@ -149,6 +149,60 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"):
                     release.audit_invoice_email_dependencies()
 
+    def test_inline_imported_invoice_recorder_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    from external_ledger import record_invoice as commit_sale\n"
+                "    return commit_sale(product_id)\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_module_qualified_invoice_recorder_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "import external_ledger as ledger\n"
+                "def _start_order(request, product_id):\n"
+                "    return ledger.record_invoice(product_id)\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_split_string_email_key_blocks_publication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get('buyer_' + 'e' + 'mail')\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_unrelated_joined_order_reference_remains_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get('order_' + 'reference')\n",
+                "",
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+                self.assertTrue(report["invoice_handler_found"])
+
     def test_unreachable_legacy_email_helper_does_not_block_checkout(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

@@ -104,9 +104,28 @@ def audit_invoice_email_dependencies() -> dict:
     invoice_handlers = 0
     inspected_functions = 0
 
+    def folded_string(node):
+        """Resolve only bounded, literal concatenations; never execute source."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value if len(node.value) <= 256 else None
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left = folded_string(node.left)
+            right = folded_string(node.right)
+            if left is not None and right is not None and len(left) + len(right) <= 256:
+                return left + right
+        if isinstance(node, ast.JoinedStr):
+            parts = [folded_string(item) for item in node.values]
+            if all(part is not None for part in parts) and sum(map(len, parts)) <= 256:
+                return "".join(parts)
+        return None
+
     def email_tokens(node, constant_aliases):
         matches = []
         for child in ast.walk(node):
+            if isinstance(child, (ast.BinOp, ast.JoinedStr)):
+                folded = folded_string(child)
+                if folded is not None and "email" in folded.lower():
+                    matches.append("constructed-string")
             if isinstance(child, ast.Name):
                 if "email" in child.id.lower():
                     matches.append(child.id)
@@ -172,9 +191,20 @@ def audit_invoice_email_dependencies() -> dict:
             if email_tokens(fn, constant_aliases):
                 abort("INVOICE_EMAIL_DEPENDENCY:" + path.name + ":" + name)
 
+            for child in ast.walk(fn):
+                # A recorder imported inside a handler bypasses the module-level
+                # import index; its implementation has not been inspected.
+                if isinstance(child, ast.ImportFrom):
+                    if any(alias.name == "record_invoice" for alias in child.names):
+                        abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
             for call in ast.walk(fn):
                 if not isinstance(call, ast.Call):
                     continue
+                # Namespace-qualified recording (e.g., ledger.record_invoice)
+                # is also external to the audited local call graph.
+                if (isinstance(call.func, ast.Attribute) and
+                        call.func.attr == "record_invoice"):
+                    abort("INVOICE_RECORDER_OUTSIDE_AUDIT_SCOPE:" + path.name)
                 if isinstance(call.func, ast.Name):
                     callee = call.func.id
                     if callee in recorder_imports:
