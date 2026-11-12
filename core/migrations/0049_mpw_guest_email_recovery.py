@@ -3,7 +3,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("core", "0048_business_market_architecture")]
+    dependencies = [("core", "0040_commercefunnelevent")]
 
     operations = [
         migrations.CreateModel(
