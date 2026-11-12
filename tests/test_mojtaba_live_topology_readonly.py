@@ -478,3 +478,20 @@ def test_partial_dual_host_failure_exit_code_is_nonzero_offline():
     assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in completed.stdout
     assert "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof" in completed.stdout
     assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" not in completed.stdout
+
+
+def test_secret_bearing_selfhosted_manual_workflows_require_main_ref():
+    """Every inventoried SSH-bearing factory runner job must reject non-main refs."""
+    paths = (
+        ".github/workflows/cpanel-direct-command-bridge.yml",
+        ".github/workflows/vps-to-cpanel-ssh-readonly-20261112.yml",
+        ".github/workflows/vps-direct-ssh-system-health-readonly-20261031.yml",
+        ".github/workflows/mojtaba-live-topology-readonly.yml",
+    )
+    for relative in paths:
+        workflow = (ROOT / relative).read_text(encoding="utf-8")
+        assert "runs-on: [self-hosted, factory-vps]" in workflow, relative
+        assert "github.ref == 'refs/heads/main'" in workflow, relative
+        assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in workflow, relative
+        assert "pull_request:" not in workflow.split("on:", 1)[1].split("permissions:", 1)[0], relative
+        assert "StrictHostKeyChecking=no" not in workflow, relative
