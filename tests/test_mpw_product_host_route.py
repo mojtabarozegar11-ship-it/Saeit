@@ -63,6 +63,7 @@ def load_functions(product, *, checkout_ready=False):
         "Http404": NotFound,
         "Resolver404": NotFound,
         "resolve": fake_resolve,
+        "bridge_backend_ready": lambda: checkout_ready,
         "settings": SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879, 991)),
         "FEATURED_IDS": FEATURED_IDS,
         "catalog_card": catalog_card,
