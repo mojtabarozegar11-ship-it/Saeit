@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "B",
+  "run_id": "B-20261112-C07-climate-data",
+  "actions": [
+    {
+      "action_id": "B-C07-CLIMATE-PANEL-DATA",
+      "item": "Operational research data dictionary and pre-analysis plan for climate farm panels",
+      "kind": "deliverable_created",
+      "before": "Editorial climate risk draft lacked this independent operational panel dictionary",
+      "change": "Authored reproducibility fields, timing, causal assumptions, quality gates and falsification procedures with IPCC source",
+      "after": "Complete standalone methods draft committed; no empirical observations, model estimates or journal submission claimed",
+      "evidence": [
+        "commit:b39e0a047f7834a29dca824fbd6f0b05ddf5b0a5",
+        "path:deliverables/research/editorial-2/climate_panel_data_dictionary_and_preanalysis.md",
+        "sha256:63b6a2ead533379330a09bb309c511fe7970dc49a34949fddedcf37a835b797f"
+      ]
+    }
+  ]
+}

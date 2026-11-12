@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "E",
+  "run_id": "E-20261112-C07-batch-preflight",
+  "actions": [
+    {
+      "action_id": "E-C07-FIFTY-SYNTAX-PREFLIGHT",
+      "item": "Whole-run 50-item syntax validation before first Git batch",
+      "kind": "source_change",
+      "before": "Malformed Python/JS in late batch could leave checkout partly written before failure",
+      "change": "Added syntax verification of all candidate authored files before any filesystem source mutation or Git commit",
+      "after": "Rejects malformed final item without modifying checkout; C07 full CI regression verifies both Python and JS cases",
+      "evidence": [
+        "commit:2cd8c27da94a2e86dd565a2dcf2ab4287fa1716e",
+        "path:deploy/mojtaba_bot_cycle_batch_executor.py",
+        "sha256:493e53463b8f6edd2460990b718dd59b79101781ae2ab3c20b27306f1098f92c"
+      ]
+    }
+  ]
+}

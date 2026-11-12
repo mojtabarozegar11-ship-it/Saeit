@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "D",
+  "run_id": "D-20261112-C07-farm-water",
+  "actions": [
+    {
+      "action_id": "D-C07-WATER-BIDI-SAFETY",
+      "item": "Unicode bidirectional CSV spoofing resistance in irrigation water planning tool",
+      "kind": "source_change",
+      "before": "Crop labels allowed invisible bidi override and Unicode paragraph separators in export",
+      "change": "Blocked bidi spoofing controls and invisible line separators while preserving legitimate Persian ZWNJ",
+      "after": "Water budget CSV labels are safer; 19 calculator tests plus 13 subtests passed in CI",
+      "evidence": [
+        "commit:4e01db72c18b16b01ecb35e3d12b50c8dec238e9",
+        "path:product_recipes/water_budget_economics/calculator.py",
+        "sha256:6a616abfa461087790edf63e42a29d246a7181c382e0d19018acc5f7e86e5ea9"
+      ]
+    },
+    {
+      "action_id": "D-C07-FARM-MARGIN-KPIS",
+      "item": "Explicit contribution and operating profit percent metrics in farm enterprise calculator",
+      "kind": "source_change",
+      "before": "User could see cash values but not distinct relative contribution and operating profitability ratios",
+      "change": "Added decimal-safe two margin percentages with zero-revenue null and loss-making negative cases",
+      "after": "Economic planning output now distinguishes variable contribution from after-fixed-cost operating margin; tests passed",
+      "evidence": [
+        "commit:a24f914d9ededac5cda6466b8b702d77c3e10cf3",
+        "path:product_recipes/farm_enterprise_economics/calculator.py",
+        "sha256:2e56c4feccab56803cf4b5eddf52931f1762431fdbdcfa9fe3f9c50b8473d7b5"
+      ]
+    }
+  ]
+}

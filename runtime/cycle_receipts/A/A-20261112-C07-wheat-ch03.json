@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "A",
+  "run_id": "A-20261112-C07-wheat-ch03",
+  "actions": [
+    {
+      "action_id": "A-C07-WHEAT-LP-CH03",
+      "item": "Original wheat dryland chapter 3 teaching joint land, water and cash allocation",
+      "kind": "deliverable_created",
+      "before": "Chapter 03 did not exist",
+      "change": "Authored standalone doctoral-level third chapter with derived LP, numerical scenarios, constraints, and advanced exercises",
+      "after": "Independent original chapter committed; book publication and scientific review remain pending",
+      "evidence": [
+        "commit:a73b0e57c27d0619d85505cefac04e59428fed4b",
+        "path:deliverables/books/ZM-BK-0001/chapter_03.md",
+        "sha256:7517e87672b28cfeef9f9c13c9d5db1f993b0abe017f4f6933f008230c1f685d"
+      ]
+    }
+  ]
+}
