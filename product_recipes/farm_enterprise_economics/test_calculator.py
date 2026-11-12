@@ -97,6 +97,21 @@ class EconomicsTests(unittest.TestCase):
                          "contribution_profit_before_depreciation_financing_tax")
         self.assertFalse(result["input_values_independently_validated"])
 
+    def test_bidi_spoofing_and_unicode_line_injection_are_rejected(self):
+        # A finance report must not allow hidden character reordering in labels.
+        bad_names = (
+            "Wheat\u202e=500", "Crop\u2028=HYPERLINK(1,2)",
+            "Rice\u2066secret\u2069", "Tomato\u200fFake",
+            "Potato\u061cNote", "Olive\u2029NextRow",
+        )
+        for name in bad_names:
+            with self.subTest(name=repr(name)):
+                with self.assertRaises(ValueError):
+                    enterprise(dict(self.example["enterprises"][0], name=name))
+        good = enterprise(dict(self.example["enterprises"][0],
+                               name="گندم\u200cدیم"))
+        self.assertEqual(good["name"], "گندم\u200cدیم")
+
     def test_negative_contribution_has_no_break_even(self):
         row = enterprise({
             "name": "Loss-making", "units_sold": 50, "unit_price": 3,
