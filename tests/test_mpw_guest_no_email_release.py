@@ -165,6 +165,27 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             self.assertTrue(report["invoice_handler_found"])
             self.assertGreaterEqual(report["invoice_functions_examined"], 2)
 
+    def test_backup_dir_rejects_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            actual = root / "real"
+            actual.mkdir()
+            linked = root / "linked"
+            linked.symlink_to(actual, target_is_directory=True)
+            target = linked / "private-backups"
+            with patch.object(release, "BACKUPS", target):
+                with self.assertRaisesRegex(RuntimeError, "BACKUP_ANCESTOR_SYMLINK"):
+                    release._backup_dir("202611120001")
+            self.assertFalse(target.exists())
+
+    def test_private_backup_creates_owner_only_directory(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "private-backups"
+            with patch.object(release, "BACKUPS", target):
+                run = release._backup_dir("202611120002")
+                self.assertTrue(run.is_dir())
+                self.assertEqual(run.stat().st_mode & 0o777, 0o700)
+
     def test_removes_entire_email_field_without_rewriting_branding(self):
         source = b'<h1>Brand preserved</h1>\n' + template()
         output = release.patch_template(source)
