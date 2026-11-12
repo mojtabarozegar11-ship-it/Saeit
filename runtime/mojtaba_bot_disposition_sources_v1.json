@@ -1,0 +1,126 @@
+{
+  "schema": "mojtaba.bot.ai.disposition-sources.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "purpose": "Track non-Django autonomous/agent surfaces pending merge or safe retirement. No deployment or deletion is authorized.",
+  "evidence_scope": "verified_repository_source_not_live_runtime",
+  "snapshot_from": "Saeit integration/mojtaba-bot-ai-20261112",
+  "sources": [
+    {
+      "id": "django_agent_registry",
+      "kind": "django_database",
+      "evidence_file": "core/management/commands/audit_agent_fleet.py",
+      "discovery": "requires_read_only_database_command",
+      "known_live_count": null,
+      "proposed_route": "merge_or_retire_per_row",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "read_only_agent_fleet_snapshot",
+        "pending_tasks_and_receipts",
+        "live_scheduler_mapping"
+      ]
+    },
+    {
+      "id": "zomorod_php_site_agent_runtime",
+      "kind": "php_sqlite_site_agent_system",
+      "evidence_file": "content/zomorod-v11/site_agents.php",
+      "evidence_worker": "content/zomorod-v11/site_agent_workforce.php",
+      "source_defined_seed_codes": [
+        "master",
+        "content",
+        "seo",
+        "commerce",
+        "agriculture",
+        "research",
+        "economic",
+        "weather",
+        "quality",
+        "media",
+        "security"
+      ],
+      "source_defined_seed_count": 11,
+      "known_live_count": null,
+      "proposed_route": "merge_all_as_canonical_internal_site_observability_adapters",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "read_only_private_sqlite_inventory",
+        "cron_and_entrypoint_inventory",
+        "evidence_receipt_mapping",
+        "replacement_adapter_tests",
+        "single_scheduler_cutover"
+      ],
+      "caution": "Seed codes are not proof of live, independently running agents. Keep site evidence/history."
+    },
+    {
+      "id": "factory_site_federation",
+      "kind": "private_factory_site_bridge",
+      "evidence_file": "scripts/factory_site_federation.py",
+      "source_declared_module_slots": 77,
+      "source_declared_watch_groups": {
+        "five": 5,
+        "six": 6
+      },
+      "known_live_count": null,
+      "proposed_route": "consolidate_verified_executors_under_canonical_worker",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "private_site_source_snapshot",
+        "VPS_process_inventory",
+        "real_receipts_not_import_only",
+        "worker_deduplication",
+        "rollback_and_handoff"
+      ],
+      "caution": "77 slots and 5+6 named roles are source-defined registry concepts, not verified active distinct bots."
+    },
+    {
+      "id": "company_activity_intelligence",
+      "kind": "django_agent_constructor",
+      "evidence_file": "core/company_activity_agent.py",
+      "declared_code": "company-activity-intelligence",
+      "known_live_count": null,
+      "proposed_route": "merge_under_canonical_content_module",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "detect_ensure_agent_calls",
+        "scheduler_and_report_dependent_routes",
+        "pending_publication_review"
+      ]
+    },
+    {
+      "id": "newsletter_legacy_roles",
+      "kind": "django_agent_migration_and_content_workers",
+      "evidence_file": "core/management/commands/consolidate_legacy_agents.py",
+      "source_declared_codes": [
+        "core_research",
+        "newsletter-specialist",
+        "newsletter-company-news",
+        "newsletter-world-watch",
+        "newsletter-unit-reports"
+      ],
+      "known_live_count": null,
+      "proposed_route": "merge_tasks_then_retire_only_with_successor_delivery_evidence",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "subscriber_and_story_receipts",
+        "pending_distribution_handoff",
+        "replacement_output_quality",
+        "live_schedulers_stopped"
+      ]
+    }
+  ],
+  "not_yet_enumerated_runtime_scopes": [
+    "independent_MojTrade_schedulers_and_broker_adapters",
+    "Moj_Coin_workers_and_game_schedulers",
+    "all_VPS_systemd_cron_supervisor_processes",
+    "all_cPanel_Passenger_cron_and_site_php_workers",
+    "external_automation_and_connected_app_agents"
+  ],
+  "completion_gates": {
+    "unique_public_bot_identity": "mojtaba.bot.ai",
+    "all_source_records_mapped": false,
+    "external_process_inventory_attested": false,
+    "handoffs_verified": false,
+    "duplicated_executors_retired": false,
+    "irreversible_deletion_authorized": false,
+    "live_consolidation_percentage": null
+  }
+}
