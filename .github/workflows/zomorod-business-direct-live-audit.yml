@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/zomorod-business-direct-live-audit.yml
       - scripts/zomorod_business_live_semantic_readonly.py
+      - scripts/zomorod_business_genetics_overlay_preview.py
 permissions:
   contents: read
 concurrency:
@@ -100,3 +101,8 @@ jobs:
           timeout 40s ssh -T -F "$d/config" saeit-cpanel \
             'test -x /home/zomorod2/Saeit/.venv/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python - bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63' \
             < scripts/zomorod_business_live_semantic_readonly.py
+          # A candidate is built and linted only IN MEMORY on cPanel; it is never saved.
+          preview_code="$(base64 -w0 scripts/zomorod_business_genetics_overlay_preview.py)"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel \
+            "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python -c 'exec(__import__(\"base64\").b64decode(\"$preview_code\"))' bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63" \
+            < content/zomorod-business/app.php
