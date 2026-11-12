@@ -49,6 +49,7 @@ jobs:
           python3 -B -m py_compile scripts/zomorod_business_public_surface_invariant.py
           python3 -B -m py_compile scripts/zomorod_business_public_reference_audit.py
           python3 -B -m py_compile scripts/zomorod_business_pre_switch_drift_guard.py
+          python3 -B -m py_compile scripts/zomorod_business_verified_rollback.py
           test -s scripts/zomorod_business_genetics_readonly_preflight.sh
           test -s content/zomorod-business/app.php
           test -s content/zomorod-business/genetics-center.php
@@ -57,6 +58,7 @@ jobs:
           test -s scripts/zomorod_business_public_surface_invariant.py
           test -s scripts/zomorod_business_public_reference_audit.py
           test -s scripts/zomorod_business_pre_switch_drift_guard.py
+          test -s scripts/zomorod_business_verified_rollback.py
           python3 -m py_compile scripts/zomorod_business_genetics_overlay_preview.py
       - name: Prepare verified direct cPanel SSH connection (no VPS or relay)
         shell: bash
@@ -130,6 +132,7 @@ jobs:
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/public-surface.py'" < scripts/zomorod_business_public_surface_invariant.py
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/public-references.py'" < scripts/zomorod_business_public_reference_audit.py
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/pre-switch.py'" < scripts/zomorod_business_pre_switch_drift_guard.py
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/rollback.py'" < scripts/zomorod_business_verified_rollback.py
           # Build the additive candidate privately from the exact current live file.
           ssh -T -F "$d/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python '$stage/overlay.py' '$EXPECTED_APP' --render-stage '$stage' < '$stage/proposed-app.php'"
           # Installer verifies the independently reviewed candidate SHA256 before touching live files.
