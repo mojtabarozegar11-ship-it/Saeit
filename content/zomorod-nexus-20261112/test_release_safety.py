@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix='zm-nexus-test-') as td:
     (site/'site-heritage').mkdir()
     private=base/'.backups';private.mkdir()
     source=P
-    legacy=('<!doctype html><html lang="fa" dir="rtl"><head></head><body><div id="main-view"></div><div id="orbital-cards"></div><footer id="site-footer"></footer><script>window.ZOMOROD_ORBIT_DATA={};</script></body></html>'+'z'*1100000).encode()
+    legacy=('<!doctype html><html lang="fa" dir="rtl"><head></head><body><div id="main-view"></div><div id="orbital-cards"></div><footer id="site-footer"></footer><script>window.ZOMOROD_ORBIT_DATA={};</script></body></html>'+'z'*90000).encode()
     (site/'index.html').write_bytes(legacy)
     protected=[]
     for p in mod.PROTECTED[:7]:
