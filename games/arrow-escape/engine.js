@@ -23,7 +23,7 @@
   function canExit(piece, others, size) {
     const occupied = new Set();
     for (const other of others) {
-      if (other.id === piece.id) continue;
+      if (other === piece) continue;
       for (const p of other.path) occupied.add(key(p.x, p.y));
     }
     const [dx, dy] = DIRECTIONS[piece.dir];
@@ -41,6 +41,8 @@
     return false;
   }
   function solve(pieces, size) {
+    // Duplicate identifiers make move/reward bookkeeping ambiguous.
+    if (new Set(pieces.map(piece => piece.id)).size !== pieces.length) return null;
     const remaining = pieces.slice();
     const order = [];
     while (remaining.length) {
