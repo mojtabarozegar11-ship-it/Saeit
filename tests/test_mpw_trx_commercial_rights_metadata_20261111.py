@@ -253,5 +253,95 @@ class RightsMetadataContract(unittest.TestCase):
                 self.assertTrue(streams[-1].closed)
 
 
+    def test_legacy_paid_delivery_hashes_opened_file_and_closes_denied_fd(self):
+        """Run the actual legacy delivery function in isolation: no DB or payment."""
+        import ast
+        import os
+        import sys
+        from types import ModuleType
+        from unittest.mock import Mock, patch
+
+        path=SOURCE.parent.parent/'mpw_commerce/downloads.py'
+        tree=ast.parse(path.read_text('utf-8'))
+        nodes=[node for node in tree.body if isinstance(node,ast.FunctionDef)
+               and node.name=='download_paid_item']
+        self.assertEqual(len(nodes),1)
+        nodes[0].decorator_list=[]
+        class NotFound(Exception):
+            pass
+        item=SimpleNamespace(product=SimpleNamespace(metadata={}))
+        item_model=SimpleNamespace(objects=Mock())
+        item_model.objects.select_related.return_value.filter.return_value.first.return_value=item
+        class Delivered(dict):
+            def __init__(self,stream,*,as_attachment,filename):
+                super().__init__()
+                self.stream=stream
+                self.filename=filename
+                self.as_attachment=as_attachment
+        namespace=dict(
+            settings=SimpleNamespace(MPW_COMMERCE_DOWNLOADS_ENABLED=True),
+            Http404=NotFound,
+            HttpResponseForbidden=lambda reason: ('forbidden',reason),
+            FileResponse=Delivered,
+            DOMAIN_ALLOWLIST=frozenset(('mojplaywin.com','www.mojplaywin.com')),
+            OrderItem=item_model,
+            can_access_purchased_digital_item=lambda item_id,buyer_id: True,
+            os=os,
+        )
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),namespace)
+        handler=namespace['download_paid_item']
+        request=SimpleNamespace(
+            is_secure=lambda:True,get_host=lambda:'mojplaywin.com',
+            user=SimpleNamespace(pk=7))
+        rights=ModuleType('services.mpw_trx_commercial_context')
+        rights.private_paid_stream_matches_approved=CONTEXT.private_paid_stream_matches_approved
+        streams=[]
+        fdopen=os.fdopen
+        def record_fdopen(fd,mode):
+            stream=fdopen(fd,mode)
+            streams.append(stream)
+            return stream
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/'approved.pdf'
+            approved=b'%PDF-1.4\\nLicensed paid content\\n'
+            source.write_bytes(approved)
+            digest=hashlib.sha256(approved).hexdigest()
+            item.product.metadata=evidence()
+            item.product.metadata.update(sha256=digest,rights_asset_sha256=digest)
+            namespace['_private_file']=lambda row:source
+            with patch.dict(sys.modules,{'services.mpw_trx_commercial_context':rights}), \\
+                 patch.object(os,'fdopen',side_effect=record_fdopen):
+                response=handler(request,41)
+                self.assertEqual(response.stream.read(),approved)
+                self.assertEqual(response['Cache-Control'],'no-store, private')
+                self.assertEqual(response['X-Robots-Tag'],'noindex, nofollow')
+                response.stream.close()
+                self.assertTrue(streams[-1].closed)
+
+                source.write_bytes(b'%PDF-1.4\\nModified paid content\\n')
+                with self.assertRaises(NotFound):
+                    handler(request,41)
+                self.assertTrue(streams[-1].closed)
+
+                item.product.metadata['rights_cleared']=False
+                with self.assertRaises(NotFound):
+                    handler(request,41)
+                self.assertTrue(streams[-1].closed)
+
+            namespace['can_access_purchased_digital_item']=lambda *_:False
+            with self.assertRaises(NotFound):
+                handler(request,41)
+
+    def test_legacy_download_does_not_run_for_disabled_release(self):
+        """No entitlement query or file access when download permission is off."""
+        path=SOURCE.parent.parent/'mpw_commerce/downloads.py'
+        text=path.read_text('utf-8')
+        self.assertIn('MPW_COMMERCE_DOWNLOADS_ENABLED',text)
+        self.assertIn('can_access_purchased_digital_item(item_id,request.user.pk)',text)
+        self.assertIn('private_paid_stream_matches_approved(item.product,stream)',text)
+        self.assertIn('stream.close()',text)
+        self.assertIn('descriptor is not None',text)
+
+
 if __name__=="__main__":
     unittest.main()
