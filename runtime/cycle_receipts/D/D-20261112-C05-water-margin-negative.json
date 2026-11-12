@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "D",
+  "run_id": "D-20261112-C05-water-margin-negative",
+  "actions": [
+    {
+      "action_id": "D-C05-WATER-NEGATIVE-MARGIN-001",
+      "item": "Water budget optimizer accepts genuine loss-making crop economics",
+      "kind": "source_change",
+      "before": "Optimizer refused negative gross margins, hiding a real agricultural loss-making enterprise from client planning data",
+      "change": "Allow bounded signed gross margins per hectare while preserving nonnegative area and water and excluding loss-making crops from optimal allocations",
+      "after": "Calculator implementation and three regression cases committed; CI water calculator 18 tests passed; not a commercial service or customer delivery",
+      "evidence": [
+        "commit:bb81801bbec928e03e060654f21078a4600aeebd",
+        "path:product_recipes/water_budget_economics/calculator.py",
+        "sha256:b57db6d6dd7ad7f59fd68e131dd6a2c46b101613751fd5db409aa687b39d3641"
+      ]
+    }
+  ]
+}

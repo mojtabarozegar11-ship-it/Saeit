@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "engine": "mojtaba.bot.ai",
+  "cycle": "A",
+  "run_id": "A-20261112-C05-original-wheat-chapter-02",
+  "actions": [
+    {
+      "action_id": "A-C05-WHEAT-CHAPTER-02-001",
+      "item": "Original chapter 2 of dryland wheat PhD book ZM-BK-0001",
+      "kind": "deliverable_created",
+      "before": "Only chapter 01 existed; risk, cultivar choice and pre-harvest liquidity chapter was absent",
+      "change": "Authored original chapter 2 with a fully worked three-state scenario, risk choice, cash constraints, data dictionary, exercises and solutions; corrected LaTeX formatting",
+      "after": "Independent chapter 02 committed and read back; scientific review and author/publication approval still pending",
+      "evidence": [
+        "commit:8a0783742e9629456be943b24c1d78a55f87045a",
+        "path:deliverables/books/ZM-BK-0001/chapter_02.md",
+        "sha256:17d42f4fbb9f9489d20d7f12d2fe0293b0da28635434e2f8875927f44e0ac042"
+      ]
+    }
+  ]
+}
