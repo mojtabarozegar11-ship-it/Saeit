@@ -150,3 +150,31 @@ def test_uncommitted_working_tree_change_does_not_forge_original_proof(tmp_path)
                      ))
     assert failure.returncode != 0
     assert "verified Git commit" in failure.stderr
+
+
+def test_old_unrecorded_commits_cannot_claim_new_hourly_action(tmp_path):
+    import os
+    repo, _, digest = workspace(tmp_path)
+    old_date = "2024-01-01T00:00:00+00:00"
+    env = dict(os.environ, GIT_AUTHOR_DATE=old_date, GIT_COMMITTER_DATE=old_date)
+    amended = subprocess.run(
+        ["git", "commit", "--amend", "--no-edit", "--date", old_date],
+        cwd=repo, env=env, capture_output=True, text=True,
+    )
+    assert amended.returncode == 0, amended.stderr
+    old_commit = git(repo, "rev-parse", "HEAD")
+    proof = ["commit:" + old_commit, "path:deliverables/item.txt", "sha256:" + digest]
+    from deploy.mojtaba_bot_cycle_coordinator import verified_git_artifact
+    current = Path.cwd()
+    try:
+        os.chdir(repo)
+        assert verified_git_artifact("source_change", proof)
+        assert not verified_git_artifact(
+            "source_change", proof, max_age_seconds=75 * 60
+        )
+    finally:
+        os.chdir(current)
+    rejected = record(repo, run_id="E-STALE-01", action_id="E-STALE-CLAIM",
+                      status="success", evidence=proof)
+    assert rejected.returncode != 0
+    assert "verified Git commit" in rejected.stderr
