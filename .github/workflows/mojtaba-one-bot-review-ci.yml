@@ -9,9 +9,12 @@ on:
       - "trading/mojtrade_costed_oos.py"
       - "trading/mojtrade_walk_forward.py"
       - "trading/mojtrade_market_sessions.py"
+      - "trading/mojtrade_demo_receipt_reconcile.py"
+      - "trading/MojTradeDemoHistoryAuditBot.cs"
       - "tests/test_mojtrade_costed_oos.py"
       - "tests/test_mojtrade_walk_forward.py"
       - "tests/test_mojtrade_market_sessions.py"
+      - "tests/test_mojtrade_demo_receipts.py"
       - "tests/test_company_activity_workflow_handoff.py"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "deploy/mojtaba_live_topology_readonly.py"
@@ -64,10 +67,12 @@ jobs:
             core/tests/test_unified_bot_merge.py \
             core/tests/test_mojtrade_canonical_bridge.py \
             core/tests/test_mojtrade_strategy_risk.py \
+            core/tests/test_mojtrade_demo_evidence_bridge.py \
             tests/test_mojtrade_consume_observation.py \
             tests/test_mojtrade_costed_oos.py \
             tests/test_mojtrade_walk_forward.py \
             tests/test_mojtrade_market_sessions.py \
+            tests/test_mojtrade_demo_receipts.py \
             tests/test_approval_security.py \
             core/tests/test_knowledge_agent_generate.py \
             core/tests/test_consolidate_legacy_agents.py \
