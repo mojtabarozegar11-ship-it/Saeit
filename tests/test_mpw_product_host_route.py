@@ -36,11 +36,11 @@ class FakeProducts:
         return SimpleNamespace(first=lambda: found)
 
 
-def load_functions(product):
+def load_functions(product, *, checkout_ready=False):
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"), filename=str(SOURCE))
     names = {
         "public_product_url", "public_product_description",
-        "storefront_for_host", "product_detail",
+        "storefront_for_host", "approved_guest_checkout_route", "product_detail",
     }
     functions = [
         node for node in tree.body
@@ -48,8 +48,21 @@ def load_functions(product):
         and node.name in names
     ]
     assert {node.name for node in functions} == names
+    def fake_resolve(path):
+        if not checkout_ready:
+            raise NotFound
+        def product_checkout(request, product_id):
+            return None
+        product_checkout.__module__ = "services.mpw_trx_guest_commerce"
+        product_id = int(path.split("/")[3])
+        return SimpleNamespace(
+            kwargs={"product_id": product_id}, func=product_checkout,
+        )
+
     namespace = {
         "Http404": NotFound,
+        "Resolver404": NotFound,
+        "resolve": fake_resolve,
         "settings": SimpleNamespace(MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879, 991)),
         "FEATURED_IDS": FEATURED_IDS,
         "catalog_card": catalog_card,
@@ -86,6 +99,7 @@ class ProductDetailHostTests(unittest.TestCase):
             "https://mojplaywin.com/store/product/72/",
         )
         self.assertFalse(result["context"]["can_list_offer"])
+        self.assertIsNone(result["context"]["checkout_url"])
         self.assertNotIn("offers", json.loads(result["context"]["schema_json"]))
 
     def test_both_www_and_port_domains_are_supported(self):
@@ -110,6 +124,33 @@ class ProductDetailHostTests(unittest.TestCase):
             with self.subTest(host=host, currency=product.currency, active=product.active):
                 with self.assertRaises(NotFound):
                     load_functions(product)(request(host), 72)
+
+    def test_approved_guest_checkout_link_requires_real_resolved_handler(self):
+        sha = "a" * 64
+        metadata = {
+            "sales_enabled": True, "rights_cleared": True,
+            "publication_approved": True,
+            "sha256": sha, "rights_asset_sha256": sha,
+            "rights_document_sha256": "b" * 64,
+        }
+        product = item(pk=991, metadata=metadata)
+        no_route = load_functions(product)(request("mojplaywin.com"), 991)
+        self.assertTrue(no_route["context"]["can_list_offer"])
+        self.assertIsNone(no_route["context"]["checkout_url"])
+
+        ready = load_functions(product, checkout_ready=True)(
+            request("mojplaywin.com"), 991
+        )
+        self.assertEqual(
+            ready["context"]["checkout_url"], "/store/product/991/checkout/"
+        )
+
+    def test_unreleased_product_never_gets_checkout_link_even_if_url_exists(self):
+        product = item(pk=991, metadata={"sales_enabled": True})
+        with self.assertRaises(NotFound):
+            load_functions(product, checkout_ready=True)(
+                request("mojplaywin.com"), 991
+            )
 
     def test_description_without_product_summary_uses_correct_brand(self):
         product = item(metadata={})
@@ -173,6 +214,8 @@ class ProductDetailHostTests(unittest.TestCase):
         self.assertIn("{% if mojplaywin_store %}", template)
         self.assertIn("{% if can_list_offer %}", template)
         self.assertIn("A verified checkout is not yet available", template)
+        self.assertIn("Continue to secure TRX checkout", template)
+        self.assertIn("{% if checkout_url %}", template)
         self.assertIn("بازگشت به فهرست محصولات", template)
 
 
