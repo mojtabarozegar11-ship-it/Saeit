@@ -192,7 +192,7 @@ def calculate(data):
             "break_even_price_per_kg": break_even_price,
             "minimum_gross_yield_kg_per_m2_to_break_even": break_even_gross_yield,
             "minimum_gross_yield_reachable": break_even_gross_yield is not None,
-            "break_even_reachable": saleable_yield > 0,
+            "break_even_reachable": total_cost == 0 or saleable_yield > 0,
             "downside_stress_test": {
                 "yield_multiplier": "0.90",
                 "price_multiplier": "0.90",
