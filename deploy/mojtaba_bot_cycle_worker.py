@@ -97,11 +97,29 @@ def main():
             results.append({"action_id":aid,"status":"blocked",
                             "reason":"no approved adapter for action kind","kind":kind})
     successful=sum(x["status"]=="success" for x in results)
+    # Completion is cumulative across durable ledger runs for this cycle.
+    # This prevents a split queue from being reported incomplete after all
+    # evidence-gated actions have already succeeded.
+    cumulative_success=successful
+    state_path=Path(args.state)
+    if state_path.is_file():
+        try:
+            state=json.loads(state_path.read_text(encoding="utf-8"))
+            cumulative_success=sum(
+                1
+                for run in state.get("runs", {}).values()
+                if run.get("cycle")==args.cycle
+                for action in run.get("actions", {}).values()
+                if action.get("status")=="success"
+            )
+        except (OSError, ValueError, TypeError):
+            cumulative_success=successful
     report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"started_at":now(),
             "queued":len(queue),"processed":len(results),"successful":successful,
-            "target":50,"complete":successful==50,"results":results}
+            "cumulative_successful":cumulative_success,"target":50,
+            "complete":cumulative_success>=50,"results":results}
     print(json.dumps(report,ensure_ascii=False,indent=2))
-    if successful != 50:
+    if cumulative_success < 50:
         return 2
     return 0
 
