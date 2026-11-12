@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import tempfile
 import unittest
@@ -169,6 +172,62 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertEqual(
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
+
+    def _remote_gate_result(self, report):
+        remote = AUDIT.REPORT_PREFIX + json.dumps(report)
+        printed = io.StringIO()
+        with redirect_stdout(printed):
+            code = AUDIT.validate_remote_report(remote)
+        return code, printed.getvalue()
+
+    def test_remote_report_blocks_legacy_checkout_instead_of_green(self):
+        p = self.root / AUDIT.TEMPLATE
+        p.write_text('<input name="buyer_email">{% csrf_token %}')
+        code, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        self.assertEqual(code, 21)
+        self.assertIn("BLOCKED_LEGACY_EMAIL_CHECKOUT_PRESENT", printed)
+        self.assertNotIn("SAFE_TO_DEPLOY", printed)
+
+    def test_remote_report_clean_snapshot_still_does_not_prove_sale(self):
+        code, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        self.assertEqual(code, 22)
+        self.assertIn("UNVERIFIED_EXTERNAL_HELPERS_AND_PAID_RECEIPT", printed)
+
+    def test_malformed_or_duplicate_remote_report_is_a_failure(self):
+        for report in (
+            "",
+            "MPW_LIVE_INVOICE_SOURCE_AUDIT={broken}",
+            "MPW_LIVE_INVOICE_SOURCE_AUDIT={}",
+            AUDIT.REPORT_PREFIX + '{"mode":"wrong","status":"READY"}',
+            (AUDIT.REPORT_PREFIX + json.dumps(AUDIT.inspect(self.root)) + "\n"
+             + AUDIT.REPORT_PREFIX + json.dumps(AUDIT.inspect(self.root))),
+        ):
+            with self.subTest(report=report[:100]):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code = AUDIT.validate_remote_report(report)
+                self.assertNotEqual(code, 0)
+                self.assertIn("BLOCKED_", buf.getvalue())
+
+    def test_nested_symlink_ancestor_must_not_expose_template(self):
+        original_dir = self.root / "mpw_commerce"
+        external_dir = self.root / "outside_public"
+        external_dir.mkdir()
+        # Move existing directory to a sibling and reintroduce a symlink in
+        # the first template-path ancestor, not the final two path components.
+        original_dir.rename(external_dir / "source_tree")
+        original_dir.symlink_to(external_dir / "source_tree", target_is_directory=True)
+        report = AUDIT.inspect(self.root)
+        self.assertFalse(report["template"]["exists"])
+        self.assertEqual(report["template"]["reason"], "ValueError")
+        self.assertEqual(report["status"], "SOURCE_MISSING_OR_UNREADABLE")
+
+    def test_source_gate_checks_are_present_in_manual_workflow(self):
+        yml = (ROOT / ".github/workflows/"
+               "mpw-live-invoice-source-audit-readonly-20261112.yml").read_text()
+        self.assertIn("mpw_live_invoice_source_audit_readonly_20261112.py --validate-report", yml)
+        self.assertIn("workflow_dispatch:", yml)
+        self.assertNotIn("MPW_LIVE_SOURCE_AUDIT=TRANSPORT_VERIFIED", yml)
 
     def test_source_content_not_printed_or_returned(self):
         p = self.root / AUDIT.SOURCE_PATHS[0]
