@@ -22,7 +22,10 @@ TARGET = 50
 SUCCESS = "success"
 BLOCKED = "blocked"
 FAILED = "failed"
-VALID = {SUCCESS, BLOCKED, FAILED}
+OBSERVED = "observed"
+# Only value-creating, independently accepted work may count toward the target.
+DELIVERABLE_KINDS = {"deliverable_created", "source_change", "verified_order", "verified_publication"}
+VALID = {SUCCESS, BLOCKED, FAILED, OBSERVED}
 
 
 def now() -> str:
@@ -95,13 +98,16 @@ def cmd_record(args: argparse.Namespace) -> None:
     evidence = [x for x in args.evidence if x.strip()]
     if args.status not in VALID:
         raise SystemExit(f"invalid status: {args.status}")
-    if args.status == SUCCESS and not evidence_ok(evidence):
-        raise SystemExit("success requires at least one non-empty evidence reference")
+    if args.status == SUCCESS:
+        if args.kind not in DELIVERABLE_KINDS:
+            raise SystemExit("inspection/unsupported kind cannot be successful delivery")
+        if not evidence_ok(evidence):
+            raise SystemExit("success requires at least one non-empty evidence reference")
     with locked_state(Path(args.state)) as state:
         rid, run = ensure_run(state, args.cycle, args.run_id)
         actions = run["actions"]
-        if args.action_id in actions:
-            raise SystemExit(f"duplicate action_id refused: {args.action_id}")
+        if any(args.action_id in past.get("actions", {}) for past in state["runs"].values()):
+            raise SystemExit(f"duplicate action_id refused globally: {args.action_id}")
         actions[args.action_id] = {
             "item": args.item,
             "kind": args.kind,

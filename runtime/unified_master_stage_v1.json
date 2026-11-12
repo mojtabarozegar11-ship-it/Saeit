@@ -103,5 +103,22 @@
     "next_cursor": "UNIFIED-MASTER-STAGE-01:C02",
     "picm": "retired_excluded"
   },
-  "completion_definition": "مرحله فقط زمانی بسته می‌شود که همه اقلام موجودی دارای خروجی واقعی، کنترل کیفیت، مسیر تحویل/فروش و شاهد مستقل باشند؛ گزارش به‌تنهایی تکمیل محسوب نمی‌شود."
+  "completion_definition": "مرحله فقط زمانی بسته می‌شود که همه اقلام موجودی دارای خروجی واقعی، کنترل کیفیت، مسیر تحویل/فروش و شاهد مستقل باشند؛ گزارش به‌تنهایی تکمیل محسوب نمی‌شود.",
+  "c02_preparation": {
+    "status": "prepared_not_executed",
+    "inventory": "runtime/unified_inventory_C02.json",
+    "service_kits": "runtime/c02_strategic_service_kits.json",
+    "queues_present": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "evidence_gate": "inspection_is_observed_not_success",
+    "approval_scope": "nonpublic draft branch only",
+    "last_verified_legacy_cumulative_successes": 61,
+    "qualified_deliveries_this_change": "not_measured",
+    "note": "Do not advance C02 cursor or claim delivery until validated evidence and test run."
+  }
 }

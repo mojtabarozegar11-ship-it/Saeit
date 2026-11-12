@@ -1,0 +1,6411 @@
+{
+  "schema_version": "2026-11-12.C02.v1",
+  "stage_id": "UNIFIED-MASTER-STAGE-01",
+  "scope": "GitHub Saeit main source snapshot; other repos, Drive, Gmail and live-site inventory not yet reconciled",
+  "source_commit": "4ddb68e75933f0110b5565a558bb232b78846659",
+  "verified_receipts": [],
+  "earnings_received_verified": 0,
+  "policy": "Existence in repository or planned title is not authorship, launch, paid order, or revenue.",
+  "counts": {
+    "book_series_planned": 37,
+    "book_volumes_planned": 225,
+    "additional_book_titles_planned": 456,
+    "agri_bilingual_topics_planned": 200,
+    "agri_editions_planned": 400,
+    "editorial_documents": 5,
+    "research_protocols": 1,
+    "game_top_level_directories": 8,
+    "product_recipes": 3,
+    "strategic_services": 5
+  },
+  "books": {
+    "source": "content/zomorod-encyclopedia-master-37-series-plus-456-books-20261019.json",
+    "series": [
+      {
+        "id": "zm-r01",
+        "title": "زراعت و تولیدات گیاهی",
+        "planned_volumes": [
+          {
+            "id": "zm-r01-v1",
+            "title": "غلات و دانه‌های روغنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r01-v2",
+            "title": "محصولات صنعتی، غده‌ای و ریشه‌ای",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r01-v3",
+            "title": "حبوبات، علوفه و گیاهان دارویی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r01-v4",
+            "title": "زراعت دیم، آبی و نظام‌های کشت",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r01-v5",
+            "title": "کشاورزی دقیق، بهره‌وری و مدیریت مزرعه",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r02",
+        "title": "باغبانی و باغداری",
+        "planned_volumes": [
+          {
+            "id": "zm-r02-v1",
+            "title": "باغ‌های میوه و گونه‌های سردسیری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r02-v2",
+            "title": "محصولات گرمسیری و نیمه‌گرمسیری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r02-v3",
+            "title": "خشکبار و باغ‌های اقتصادی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r02-v4",
+            "title": "سبزی، نهال و تولیدات ویژه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r02-v5",
+            "title": "هرس، تغذیه، حفاظت و مدیریت پس از برداشت",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r03",
+        "title": "گلخانه و کشت کنترل‌شده",
+        "planned_volumes": [
+          {
+            "id": "zm-r03-v1",
+            "title": "طراحی، احداث و تجهیزات گلخانه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r03-v2",
+            "title": "کشت خاکی، هیدروپونیک و عمودی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r03-v3",
+            "title": "محیط، نور و بهینه‌سازی انرژی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r03-v4",
+            "title": "آبیاری، تغذیه و پرورش نشا",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r03-v5",
+            "title": "اتوماسیون، بهداشت و بهره‌وری تولید",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r04",
+        "title": "دامپروری",
+        "planned_volumes": [
+          {
+            "id": "zm-r04-v1",
+            "title": "پرورش دام سنگین و تولید لبنی و گوشتی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r04-v2",
+            "title": "دام سبک و گونه‌های بومی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r04-v3",
+            "title": "خوراک، جیره و اقتصاد تغذیه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r04-v4",
+            "title": "ژنتیک، تولیدمثل و بهداشت دام",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r04-v5",
+            "title": "مدیریت گله، استاندارد و اقتصاد دامداری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r05",
+        "title": "طیور",
+        "planned_volumes": [
+          {
+            "id": "zm-r05-v1",
+            "title": "پرورش طیور گوشتی و تخم‌گذار",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r05-v2",
+            "title": "مولدها، جوجه‌کشی و گونه‌های پرورشی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r05-v3",
+            "title": "خوراک، تجهیزات، تهویه و شرایط سالن",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r05-v4",
+            "title": "امنیت زیستی، بهداشت و ارزیابی عملکرد",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r06",
+        "title": "آبزیان",
+        "planned_volumes": [
+          {
+            "id": "zm-r06-v1",
+            "title": "گونه‌های ماهی، میگو و سامانه‌های پرورش",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r06-v2",
+            "title": "تکثیر، بچه‌ماهی و تغذیه آبزیان",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r06-v3",
+            "title": "کیفیت آب، زیست‌امنیتی و سلامت",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r06-v4",
+            "title": "اقتصاد، فناوری و بازار محصولات آبزی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r07",
+        "title": "بذر، نهال و نهاده‌ها",
+        "planned_volumes": [
+          {
+            "id": "zm-r07-v1",
+            "title": "اصلاح، تولید و آزمون بذر",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r07-v2",
+            "title": "تولید نهال و نشا",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r07-v3",
+            "title": "کودها، آفت‌کش‌ها و سایر نهاده‌ها",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r07-v4",
+            "title": "گواهی کیفیت، نگهداری و زنجیره تأمین",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r08",
+        "title": "ژنتیک و اصلاح نژاد",
+        "planned_volumes": [
+          {
+            "id": "zm-r08-v1",
+            "title": "مبانی ژنتیک، وراثت و نشانگرهای مولکولی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r08-v2",
+            "title": "اصلاح ژنتیکی محصولات زراعی و باغی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r08-v3",
+            "title": "اصلاح دام، طیور و آبزیان",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r08-v4",
+            "title": "ژنومیک و زیست‌فناوری کشاورزی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r08-v5",
+            "title": "ذخایر ژنتیکی، تنوع و اخلاق پژوهش",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r08-v6",
+            "title": "طرح‌های ژنتیکی، داده‌ها و انتقال فناوری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r09",
+        "title": "آبیاری، آب و خاک",
+        "planned_volumes": [
+          {
+            "id": "zm-r09-v1",
+            "title": "روش‌های آبیاری قطره‌ای، بارانی و هوشمند",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r09-v2",
+            "title": "مدیریت منابع و کیفیت آب",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r09-v3",
+            "title": "فیزیک، شیمی و حاصلخیزی خاک",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r09-v4",
+            "title": "زهکشی، شوری و حفاظت خاک",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r09-v5",
+            "title": "اقلیم، کاربری زمین و مدیریت یکپارچه منابع",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r10",
+        "title": "ادوات و ماشین‌آلات کشاورزی",
+        "planned_volumes": [
+          {
+            "id": "zm-r10-v1",
+            "title": "تراکتور، نیروی محرکه و خاک‌ورزی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r10-v2",
+            "title": "ماشین‌های کاشت، داشت و برداشت",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r10-v3",
+            "title": "مکانیزاسیون هوشمند و کشاورزی دقیق",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r10-v4",
+            "title": "نگهداری، ایمنی و اقتصاد ماشین‌آلات",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r11",
+        "title": "صنعت و فرآوری",
+        "planned_volumes": [
+          {
+            "id": "zm-r11-v1",
+            "title": "مواد اولیه و فرایندهای صنایع تبدیلی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r11-v2",
+            "title": "فرآوری محصولات کشاورزی و صنایع غذایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r11-v3",
+            "title": "سردخانه، خشک‌کردن و بسته‌بندی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r11-v4",
+            "title": "کنترل کیفیت، استاندارد و رهگیری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r11-v5",
+            "title": "بازده، محصولات ارزش‌افزوده و تجارت صنعتی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r18",
+        "title": "صنایع غذایی",
+        "planned_volumes": [
+          {
+            "id": "zm-r18-v1",
+            "title": "طراحی محصول و فرمولاسیون غذا",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r18-v2",
+            "title": "صنایع لبنی، آرد و نان",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r18-v3",
+            "title": "گوشت، کنسرو، نوشیدنی و فرآوری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r18-v4",
+            "title": "ایمنی، آزمون و کیفیت مواد غذایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r18-v5",
+            "title": "بسته‌بندی، رهگیری و اقتصاد بازار غذا",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r19",
+        "title": "کارخانجات و مهندسی تولید",
+        "planned_volumes": [
+          {
+            "id": "zm-r19-v1",
+            "title": "امکان‌سنجی، طراحی کارخانه و جانمایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r19-v2",
+            "title": "خط تولید، اتوماسیون و کنترل فرایند",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r19-v3",
+            "title": "ظرفیت، نگهداری و بهره‌وری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r19-v4",
+            "title": "مهندسی کیفیت، ایمنی و محیط‌زیست",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r19-v5",
+            "title": "لجستیک، ماشین‌سازی و نوسازی کارخانه",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r12",
+        "title": "تحقیقات و پژوهش‌های علمی",
+        "planned_volumes": [
+          {
+            "id": "zm-r12-v1",
+            "title": "سؤال علمی، فرضیه و طرح پژوهش",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r12-v2",
+            "title": "روش‌شناسی، آزمایش میدانی و آزمایشگاهی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r12-v3",
+            "title": "آمار، طراحی آزمایش و علوم داده",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r12-v4",
+            "title": "انتشار علمی، اخلاق و مستندسازی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r12-v5",
+            "title": "نوآوری، مدیریت پژوهش و تجاری‌سازی دانش",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "research-units",
+        "title": "واحدهای تخصصی تحقیقات",
+        "planned_volumes": [
+          {
+            "id": "research-units-v1",
+            "title": "ژنتیک مولکولی، کمی و ژنومیک",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-units-v2",
+            "title": "اصلاح نژاد محصولات، دام، طیور و آبزیان",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-units-v3",
+            "title": "میکروبیولوژی و بیوتکنولوژی",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-units-v4",
+            "title": "بیوانفورماتیک، آمار زیستی و هوش مصنوعی",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-units-v5",
+            "title": "علوم گیاهی، خاک، آب، اقلیم و غذا",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "research-laboratories",
+        "title": "آزمایشگاه‌های تخصصی",
+        "planned_volumes": [
+          {
+            "id": "research-laboratories-v1",
+            "title": "آزمایشگاه‌های DNA، RNA، ژنوم و سلول",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-laboratories-v2",
+            "title": "میکروبیولوژی، زیست‌فناوری و بیوشیمی",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-laboratories-v3",
+            "title": "آزمون خاک، آب، گیاه و بذر",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-laboratories-v4",
+            "title": "کنترل کیفیت غذا، ترکیبات زیست‌فعال و تخمیر",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-laboratories-v5",
+            "title": "آزمون خوراک، مواد و تضمین کیفیت آزمایشگاهی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "research-centers",
+        "title": "مراکز تحقیقات",
+        "planned_volumes": [
+          {
+            "id": "research-centers-v1",
+            "title": "مراکز ژنتیک، ژنومیک و اصلاح نژاد",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-centers-v2",
+            "title": "میکروبیولوژی و زیست‌فناوری",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-centers-v3",
+            "title": "هوش مصنوعی و زیست‌اطلاعات",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-centers-v4",
+            "title": "آب، خاک، اقلیم و حفاظت گیاه",
+            "status": "outline_only"
+          },
+          {
+            "id": "research-centers-v5",
+            "title": "علوم غذایی، تنوع زیستی و توسعه فناوری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r13",
+        "title": "دانش، فناوری و هوش مصنوعی",
+        "planned_volumes": [
+          {
+            "id": "zm-r13-v1",
+            "title": "مبانی هوش مصنوعی، یادگیری ماشین و تحلیل داده",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r13-v2",
+            "title": "اینترنت اشیا، سنجش از دور و کشاورزی دیجیتال",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r13-v3",
+            "title": "سامانه‌های تصمیم‌یار و پایش هوشمند",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r13-v4",
+            "title": "ربات‌ها، دستیارها و اتوماسیون سازمانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r13-v5",
+            "title": "امنیت اطلاعات و توسعه پلتفرم‌های نرم‌افزاری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r14",
+        "title": "آموزش، آکادمی و توانمندسازی",
+        "planned_volumes": [
+          {
+            "id": "zm-r14-v1",
+            "title": "دروس کشاورزی، باغبانی و گلخانه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r14-v2",
+            "title": "آموزش دامپروری و آبزی‌پروری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r14-v3",
+            "title": "آموزش اقتصاد، مدیریت و فناوری‌های نو",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r14-v4",
+            "title": "طراحی آموزشی، ارزیابی، کارگاه و آموزش الکترونیکی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r15",
+        "title": "خدمات، پروژه‌ها و بازرگانی",
+        "planned_volumes": [
+          {
+            "id": "zm-r15-v1",
+            "title": "مشاوره تخصصی و طراحی پروژه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r15-v2",
+            "title": "اجرا، نظارت فنی و ممیزی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r15-v3",
+            "title": "امکان‌سنجی، مدیریت و سرمایه‌گذاری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r15-v4",
+            "title": "خدمات آزمایشگاهی، مهندسی و قراردادی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r15-v5",
+            "title": "تأمین، بازاریابی، واردات و صادرات",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r20",
+        "title": "عمران و صنعت ساختمان",
+        "planned_volumes": [
+          {
+            "id": "zm-r20-v1",
+            "title": "معماری و مهندسی سازه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r20-v2",
+            "title": "تأسیسات، مصالح و ساختمان هوشمند",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r20-v3",
+            "title": "پیمانکاری، اجرا و کنترل هزینه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r20-v4",
+            "title": "ایمنی، نگهداری و تحویل ساختمان",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r21",
+        "title": "املاک و مستغلات",
+        "planned_volumes": [
+          {
+            "id": "zm-r21-v1",
+            "title": "اقتصاد بازار، ارزیابی و انواع ملک",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r21-v2",
+            "title": "کاربری زمین و توسعه ملک",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r21-v3",
+            "title": "اجاره، قرارداد و مدیریت دارایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r21-v4",
+            "title": "سرمایه‌گذاری، ریسک و سامانه‌های مکانی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r22",
+        "title": "طلا، جواهر و گوهرسنگ",
+        "planned_volumes": [
+          {
+            "id": "zm-r22-v1",
+            "title": "طلا، نقره، سکه و فلزات گران‌بها",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r22-v2",
+            "title": "گوهرشناسی، الماس و سنگ‌های رنگی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r22-v3",
+            "title": "طراحی، ساخت و تعمیر جواهرات",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r22-v4",
+            "title": "عیارسنجی، اصالت و ارزش‌گذاری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r22-v5",
+            "title": "حسابداری تخصصی، تجارت قانونی و امنیت",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r23",
+        "title": "فرش دستباف و صنایع دستی",
+        "planned_volumes": [
+          {
+            "id": "zm-r23-v1",
+            "title": "تاریخ، مکاتب و فنون بافت فرش",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r23-v2",
+            "title": "طرح، رنگ، الیاف و مواد اولیه",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r23-v3",
+            "title": "اصالت، کارشناسی و مرمت فرش",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r23-v4",
+            "title": "صنایع دستی مکمل، نگهداری و بازاریابی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r24",
+        "title": "رستوران، آشپزی و مهمان‌داری",
+        "planned_volumes": [
+          {
+            "id": "zm-r24-v1",
+            "title": "توسعه منو و آشپزی حرفه‌ای",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r24-v2",
+            "title": "قنادی، نوشیدنی و کافه‌داری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r24-v3",
+            "title": "مدیریت آشپزخانه و ایمنی غذایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r24-v4",
+            "title": "خدمات پذیرایی، تشریفات و عملیات رستوران",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r24-v5",
+            "title": "تجربه مهمان، بازاریابی و سودآوری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r25",
+        "title": "فناوری اطلاعات و خدمات دیجیتال",
+        "planned_volumes": [
+          {
+            "id": "zm-r25-v1",
+            "title": "طراحی وب و مهندسی نرم‌افزار",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r25-v2",
+            "title": "اپلیکیشن، تجربه کاربری و طراحی محصول",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r25-v3",
+            "title": "هوش مصنوعی، داده و اتوماسیون کسب‌وکار",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r25-v4",
+            "title": "شبکه، زیرساخت و امنیت سایبری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r25-v5",
+            "title": "آزمون کیفیت، راهبری و اقتصاد خدمات دیجیتال",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r26",
+        "title": "گردشگری، رویدادها و خدمات حرفه‌ای",
+        "planned_volumes": [
+          {
+            "id": "zm-r26-v1",
+            "title": "گردشگری فرهنگی، طبیعی و برنامه‌ریزی مقصد",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r26-v2",
+            "title": "هتلداری، اقامت و خدمات سفر",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r26-v3",
+            "title": "رویدادها، نمایشگاه‌ها و خدمات تخصصی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r26-v4",
+            "title": "بازاریابی گردشگری و همکاری بین‌المللی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r16",
+        "title": "شرکت، رسانه و ارتباطات",
+        "planned_volumes": [
+          {
+            "id": "zm-r16-v1",
+            "title": "هویت، مأموریت، تاریخچه و ساختار سازمانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r16-v2",
+            "title": "مدیریت برند، رسانه و دانش سازمانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r16-v3",
+            "title": "روابط عمومی، مسئولیت‌پذیری و همکاری‌ها",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "zm-r17",
+        "title": "اخبار شرکت و اطلاع‌رسانی تخصصی",
+        "planned_volumes": [
+          {
+            "id": "zm-r17-v1",
+            "title": "خبرنویسی، منابع و راستی‌آزمایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r17-v2",
+            "title": "خبرهای پژوهش، کشاورزی، صنعت و فناوری",
+            "status": "outline_only"
+          },
+          {
+            "id": "zm-r17-v3",
+            "title": "روابط عمومی، آرشیو و اصلاحیه‌های خبری",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "business-foundations",
+        "title": "دانشنامه جامع کسب‌وکار و کارآفرینی",
+        "planned_volumes": [
+          {
+            "id": "business-foundations-v1",
+            "title": "مبانی کسب‌وکار، کارآفرینی و مدل‌های کسب‌وکار",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v2",
+            "title": "تحقیقات بازار، شناخت مشتری و ارزش پیشنهادی",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v3",
+            "title": "راه‌اندازی شرکت، فرایندها و عملیات اجرایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v4",
+            "title": "بازاریابی، برندینگ، مذاکره و فروش",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v5",
+            "title": "حسابداری، بودجه‌ریزی و تأمین مالی کسب‌وکار",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v6",
+            "title": "منابع انسانی، مدیریت تیم و رهبری سازمانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v7",
+            "title": "راهبرد رقابت، رشد، مقیاس‌پذیری و نوآوری",
+            "status": "outline_only"
+          },
+          {
+            "id": "business-foundations-v8",
+            "title": "حقوق کسب‌وکار، قراردادها، مالیات و مدیریت ریسک",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "income-creation",
+        "title": "دانشنامه درآمد، استقلال مالی و اقتصاد شخصی",
+        "planned_volumes": [
+          {
+            "id": "income-creation-v1",
+            "title": "مفهوم درآمد، ثروت، جریان نقدی و اقتصاد شخصی",
+            "status": "outline_only"
+          },
+          {
+            "id": "income-creation-v2",
+            "title": "درآمد فعال از مهارت‌ها، مشاغل و خدمات تخصصی",
+            "status": "outline_only"
+          },
+          {
+            "id": "income-creation-v3",
+            "title": "درآمد از تولید محصول، دانش و مالکیت فکری",
+            "status": "outline_only"
+          },
+          {
+            "id": "income-creation-v4",
+            "title": "مدل‌های درآمدی کسب‌وکار و دارایی‌ها",
+            "status": "outline_only"
+          },
+          {
+            "id": "income-creation-v5",
+            "title": "بودجه شخصی، هزینه‌ها، مالیات و مدیریت بدهی",
+            "status": "outline_only"
+          },
+          {
+            "id": "income-creation-v6",
+            "title": "تنوع‌بخشی درآمد، تحلیل ریسک و پایداری مالی",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "internet-income",
+        "title": "دانشنامه روش‌های کسب درآمد از اینترنت",
+        "planned_volumes": [
+          {
+            "id": "internet-income-v1",
+            "title": "زیرساخت فعالیت آنلاین، اعتبار حرفه‌ای و امنیت دیجیتال",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v2",
+            "title": "دورکاری، فریلنسینگ و ارائه خدمات آنلاین",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v3",
+            "title": "کسب‌وکار خدماتی و راه‌اندازی آژانس دیجیتال",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v4",
+            "title": "فروشگاه اینترنتی، تجارت الکترونیک و خدمات مشتری",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v5",
+            "title": "رسانه، تولید محتوا و مدل‌های درآمدی مخاطب‌محور",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v6",
+            "title": "آموزش آنلاین، محصولات دانلودی و اشتراک دیجیتال",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v7",
+            "title": "همکاری در فروش، تبلیغات و مشارکت‌های تجاری",
+            "status": "outline_only"
+          },
+          {
+            "id": "internet-income-v8",
+            "title": "تحلیل داده، قیف فروش، بازاریابی و رشد پایدار آنلاین",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "chatgpt-income",
+        "title": "دانشنامه درآمدزایی حرفه‌ای با ChatGPT",
+        "planned_volumes": [
+          {
+            "id": "chatgpt-income-v1",
+            "title": "مبانی کار با ChatGPT، توانایی‌ها، محدودیت‌ها و طراحی دستور",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v2",
+            "title": "پژوهش، خلاصه‌سازی، ویراستاری و تولید محتوای قابل‌راستی‌آزمایی",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v3",
+            "title": "خدمات نویسندگی، بازاریابی و تولید محتوای چندرسانه‌ای با نظارت انسانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v4",
+            "title": "ساخت دوره، محتوای آموزشی و دستیارهای دانش تخصصی",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v5",
+            "title": "تحلیل داده، تهیه گزارش و خدمات تصمیم‌یار برای مشتریان",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v6",
+            "title": "طراحی محصولات دیجیتال، نمونه‌سازی نرم‌افزار و کنترل کیفیت خروجی",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v7",
+            "title": "طراحی گردش‌کار و اتوماسیون با حفظ محرمانگی و تأیید انسانی",
+            "status": "outline_only"
+          },
+          {
+            "id": "chatgpt-income-v8",
+            "title": "قیمت‌گذاری خدمات، یافتن مشتری، قراردادها، حقوق نشر و مدیریت ریسک",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "success-evidence",
+        "title": "دانشنامه علمی موفقیت، رشد فردی و حرفه‌ای",
+        "planned_volumes": [
+          {
+            "id": "success-evidence-v1",
+            "title": "تعریف موفقیت، هدف‌گذاری و سنجش پیشرفت",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v2",
+            "title": "خودشناسی، توانمندی‌ها و انگیزش مبتنی بر شواهد",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v3",
+            "title": "عادت‌سازی، تمرکز، مدیریت زمان و بهره‌وری",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v4",
+            "title": "یادگیری مستمر، تفکر انتقادی و خلاقیت",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v5",
+            "title": "تاب‌آوری، مدیریت فشار روانی و تعادل زندگی",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v6",
+            "title": "ارتباط مؤثر، مذاکره، همکاری و رهبری",
+            "status": "outline_only"
+          },
+          {
+            "id": "success-evidence-v7",
+            "title": "تصمیم‌گیری، اخلاق حرفه‌ای و اصلاح مسیر رشد",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "shia-islamic-studies",
+        "title": "دانشنامه جامع معارف اسلامی و مذهب شیعه",
+        "planned_volumes": [
+          {
+            "id": "shia-islamic-studies-v1",
+            "title": "مبانی اعتقادی و کلام امامیه",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v2",
+            "title": "تاریخ اسلام و شکل‌گیری مکاتب شیعی",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v3",
+            "title": "سیره پیامبر اسلام در منابع و پژوهش‌های شیعی",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v4",
+            "title": "زندگی و سیره امامان اهل‌بیت",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v5",
+            "title": "امامت و ولایت در منابع و مباحث کلامی",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v6",
+            "title": "حدیث شیعه، درایه و رجال",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v7",
+            "title": "فقه عبادات در مکتب امامیه",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v8",
+            "title": "فقه معاملات، حقوق و مسائل نوپدید",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v9",
+            "title": "اخلاق، تربیت و سبک زندگی در میراث شیعه",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v10",
+            "title": "ادعیه، زیارت و فرهنگ مناسک",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v11",
+            "title": "اندیشه اجتماعی و سیاسی شیعه در تاریخ",
+            "status": "outline_only"
+          },
+          {
+            "id": "shia-islamic-studies-v12",
+            "title": "مکتب‌شناسی، تاریخ اندیشه و مطالعات تطبیقی مذاهب",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "quran-encyclopedia",
+        "title": "دانشنامه جامع قرآن کریم",
+        "planned_volumes": [
+          {
+            "id": "quran-encyclopedia-v1",
+            "title": "تاریخ وحی، نزول، جمع و تدوین قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v2",
+            "title": "علوم قرآن و مبانی مطالعات قرآنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v3",
+            "title": "قرائات، رسم‌الخط و تاریخ متن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v4",
+            "title": "واژگان‌شناسی و ریشه‌های لغوی قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v5",
+            "title": "دستور زبان، نحو و بلاغت قرآنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v6",
+            "title": "سیاق، محکم و متشابه و روش تحلیل آیات",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v7",
+            "title": "تاریخ تفسیر و روش‌شناسی تفسیر قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v8",
+            "title": "توحید، خداشناسی و صفات الهی در قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v9",
+            "title": "قصص قرآن و تاریخ پیامبران",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v10",
+            "title": "انسان‌شناسی، اختیار و مسئولیت در قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v11",
+            "title": "اخلاق فردی، خانواده و تربیت در قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v12",
+            "title": "جامعه، عدالت و مناسبات اقتصادی در قرآن",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v13",
+            "title": "آیات احکام و مطالعات حقوقی قرآنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v14",
+            "title": "آفرینش، طبیعت و شیوه فهم گزاره‌های قرآنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v15",
+            "title": "مطالعات تطبیقی تفاسیر شیعه و اهل سنت",
+            "status": "outline_only"
+          },
+          {
+            "id": "quran-encyclopedia-v16",
+            "title": "فرهنگ‌نامه واژگان، اطلس موضوعی و نمایه جامع قرآن",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      },
+      {
+        "id": "occult-history-27-volumes",
+        "title": "دانشنامه تاریخی و انتقادی علوم غریبه",
+        "planned_volumes": [
+          {
+            "id": "occult-history-27-volumes-v1",
+            "title": "مبانی تاریخی، تعاریف و اصطلاح‌شناسی علوم غریبه",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v2",
+            "title": "نسخه‌شناسی، کتاب‌شناسی و تصحیح انتقادی متون",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v3",
+            "title": "علوم غریبه در سنت‌های ایران باستان",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v4",
+            "title": "تاریخ علوم غریبه در جهان اسلام",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v5",
+            "title": "میراث یونانی و هلنیستی و انتقال متون",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v6",
+            "title": "حروف، اعداد و رمزپردازی در تاریخ اندیشه",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v7",
+            "title": "جفر در منابع تاریخی و ارزیابی انتقادی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v8",
+            "title": "رمل و شیوه‌های فال‌گیری در مطالعات فرهنگی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v9",
+            "title": "تاریخ نجوم احکامی و طالع‌بینی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v10",
+            "title": "کیمیاگری و پیوندهای تاریخی آن با دانش مواد",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v11",
+            "title": "سیمیا در تاریخ متون و روایت‌های فرهنگی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v12",
+            "title": "هیمیا و ادبیات نیروها و عوامل نامرئی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v13",
+            "title": "لیمیا در منابع تاریخی، نمایش و افسون",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v14",
+            "title": "طلسمات: تاریخ، نقش‌ها و نمادشناسی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v15",
+            "title": "حرز و تعویذ در فرهنگ عامه و تاریخ ادیان",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v16",
+            "title": "ادعیه و اوراد در نسخه‌ها و سنت‌های متنی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v17",
+            "title": "اسامی، نشانه‌ها و نظام‌های رمزآمیز",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v18",
+            "title": "خواب‌گزاری و تعبیر رؤیا در تمدن‌های مختلف",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v19",
+            "title": "کهانت، پیشگویی و تاریخ ادعاهای غیب‌گویی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v20",
+            "title": "جادو، سحر و روایت‌های اجتماعی و تاریخی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v21",
+            "title": "تصوف، مکاشفه و تجربه‌های عرفانی در منابع",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v22",
+            "title": "باورهای درمانی تاریخی و ارزیابی شواهد پزشکی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v23",
+            "title": "باورهای حفاظت، بدیُمنی و آیین‌های عامیانه",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v24",
+            "title": "علوم غریبه در فقه، کلام و اخلاق اسلامی شیعه",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v25",
+            "title": "مطالعات تطبیقی سنت‌های یهودی، مسیحی و غربی",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v26",
+            "title": "روان‌شناسی باور، سوگیری شناختی و آزمون تجربی ادعاها",
+            "status": "outline_only"
+          },
+          {
+            "id": "occult-history-27-volumes-v27",
+            "title": "اطلس نسخه‌ها، منابع، واژه‌نامه و نمایه انتقادی جامع",
+            "status": "outline_only"
+          }
+        ],
+        "status": "planned_not_authored"
+      }
+    ],
+    "independent": [
+      {
+        "id": "ZM-BK-0001",
+        "title": "دانش تخصصی گندم در اقلیم‌های خشک",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0002",
+        "title": "برنج‌کاری کم‌آب و مدیریت کیفیت محصول",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0003",
+        "title": "فیزیولوژی جو و تولید علوفه باکیفیت",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0004",
+        "title": "ذرت دانه‌ای و علوفه‌ای از کاشت تا برداشت",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0005",
+        "title": "مدیریت علمی کشت کلزا",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0006",
+        "title": "نخود و عدس در تناوب زراعی",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0007",
+        "title": "پنبه‌کاری دقیق و مدیریت الیاف",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0008",
+        "title": "چغندرقند و مدیریت عملکرد ریشه",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0009",
+        "title": "گیاهان دارویی و زنجیره ارزش آن‌ها",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0010",
+        "title": "زعفران‌کاری علمی و مدیریت بنه",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0011",
+        "title": "طراحی تناوب کشت برای سلامت خاک",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0012",
+        "title": "تولید پایدار محصولات دیم",
+        "series": "zm-r01",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0013",
+        "title": "مدیریت علمی باغ پسته در مناطق خشک",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0014",
+        "title": "پرورش زیتون و تولید روغن باکیفیت",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0015",
+        "title": "مرکبات و مدیریت باغ‌های نیمه‌گرمسیری",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0016",
+        "title": "باغ‌های انار و مدیریت ترک‌خوردگی میوه",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0017",
+        "title": "سیب‌کاری پیشرفته و مدیریت تاج",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0018",
+        "title": "تاکستان‌های انگور و اصول پرورش مو",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0019",
+        "title": "خرما و مدیریت نخلستان‌های اقتصادی",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0020",
+        "title": "گردو و مدیریت بیماری‌های باغ",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0021",
+        "title": "بادام‌کاری در اقلیم‌های کم‌آب",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0022",
+        "title": "تولید نهال گواهی‌شده در خزانه",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0023",
+        "title": "تغذیه دقیق درختان میوه",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0024",
+        "title": "تاب‌آوری باغ‌های میوه در تغییر اقلیم",
+        "series": "zm-r02",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0025",
+        "title": "کشت تجاری گوجه‌فرنگی گلخانه‌ای",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0026",
+        "title": "پرورش خیار در سامانه‌های کنترل‌شده",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0027",
+        "title": "فلفل دلمه‌ای و مدیریت تولید گلخانه‌ای",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0028",
+        "title": "توت‌فرنگی بدون خاک و کنترل کیفیت",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0029",
+        "title": "کشت عمودی سبزی‌های برگی",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0030",
+        "title": "طراحی محلول غذایی در هیدروپونیک",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0031",
+        "title": "بسترهای کشت جایگزین و مدیریت شوری",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0032",
+        "title": "نور مصنوعی و فیزیولوژی گیاه گلخانه‌ای",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0033",
+        "title": "کنترل رطوبت و انرژی در گلخانه",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0034",
+        "title": "مدیریت تلفیقی آفات محیط‌های بسته",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0035",
+        "title": "سامانه‌های هوشمند آبیاری و کوددهی گلخانه",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0036",
+        "title": "اقتصاد تولید و فروش محصولات گلخانه‌ای",
+        "series": "zm-r03",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0037",
+        "title": "مدیریت گاوداری شیری مبتنی بر داده",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0038",
+        "title": "پرواربندی اقتصادی گوساله",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0039",
+        "title": "پرورش گوسفند در نظام‌های مرتعی",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0040",
+        "title": "بزهای شیری و محصولات ارزش‌افزوده",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0041",
+        "title": "پرورش شتر و سازگاری با اقلیم خشک",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0042",
+        "title": "فیزیولوژی تولیدمثل نشخوارکنندگان",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0043",
+        "title": "فرمولاسیون جیره در دامپروری صنعتی",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0044",
+        "title": "ژنتیک صفات تولیدی گاو شیری",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0045",
+        "title": "پیشگیری و مدیریت ورم پستان",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0046",
+        "title": "رفاه دام و استانداردهای پرورش",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0047",
+        "title": "حسگرها و پایش هوشمند سلامت گله",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0048",
+        "title": "مدیریت کود دامی و اقتصاد چرخشی",
+        "series": "zm-r04",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0049",
+        "title": "پرورش صنعتی مرغ گوشتی با استاندارد کیفیت",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0050",
+        "title": "مدیریت مرغ تخم‌گذار و کیفیت پوسته",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0051",
+        "title": "مدیریت گله‌های مادر و تولید جوجه",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0052",
+        "title": "اصول عملی جوجه‌کشی و بهداشت هچری",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0053",
+        "title": "پرورش بلدرچین با رویکرد اقتصادی",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0054",
+        "title": "پرورش بوقلمون در سامانه‌های متنوع",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0055",
+        "title": "مدیریت پرورش اردک و غاز",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0056",
+        "title": "جیره‌نویسی علمی برای طیور",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0057",
+        "title": "تهویه و کنترل آمونیاک سالن‌های مرغداری",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0058",
+        "title": "سموم قارچی خوراک و ایمنی طیور",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0059",
+        "title": "طراحی برنامه امنیت زیستی مرغداری",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0060",
+        "title": "رهگیری محصول و رفاه طیور",
+        "series": "zm-r05",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0061",
+        "title": "پرورش قزل‌آلا و بهینه‌سازی کیفیت آب",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0062",
+        "title": "پرورش کپور و ماهیان گرم‌آبی",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0063",
+        "title": "تیلاپیا و ارزیابی پایداری محیطی",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0064",
+        "title": "میگوپروری و مدیریت بیماری‌های ویروسی",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0065",
+        "title": "تکثیر و پرورش ماهیان خاویاری",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0066",
+        "title": "ماهیان زینتی و مدیریت ژنتیکی مولدین",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0067",
+        "title": "طراحی سامانه بازچرخانی آب آبزی‌پروری",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0068",
+        "title": "آکواپونیک و تولید تلفیقی گیاه و ماهی",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0069",
+        "title": "تکثیر مصنوعی ماهیان اقتصادی",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0070",
+        "title": "خوراک آبزیان و بهینه‌سازی ضریب تبدیل",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0071",
+        "title": "امنیت زیستی و تشخیص بیماری آبزیان",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0072",
+        "title": "اقتصاد واحدهای آبزی‌پروری کوچک و بزرگ",
+        "series": "zm-r06",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0073",
+        "title": "تولید بذر اصلاح‌شده گندم",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0074",
+        "title": "تولید بذر هیبرید برنج و ارزیابی خلوص",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0075",
+        "title": "بذر سبزی و صیفی برای کشت گلخانه‌ای",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0076",
+        "title": "پایه‌های مقاوم درختان میوه",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0077",
+        "title": "ریزازدیادی گیاهان تجاری",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0078",
+        "title": "فناوری پوشش‌دهی و ضدعفونی بذر",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0079",
+        "title": "خواب بذر و آزمون جوانه‌زنی",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0080",
+        "title": "نظام گواهی بذر و کنترل اصالت",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0081",
+        "title": "انتخاب بستر استاندارد تولید نشا",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0082",
+        "title": "تغذیه نهال در نهالستان",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0083",
+        "title": "کودهای زیستی و محرک‌های رشد گیاه",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0084",
+        "title": "انبارداری بذر و حفظ توان رویشی",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0085",
+        "title": "راهنمای طراحی بانک بذر بومی و حفاظت برون‌زیستگاهی",
+        "series": "zm-r07",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0086",
+        "title": "نشانگرهای مولکولی در اصلاح گیاهان زراعی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0087",
+        "title": "نقشه‌یابی QTL و صفات کمی پیچیده",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0088",
+        "title": "مطالعات ارتباط ژنومی گسترده در کشاورزی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0089",
+        "title": "انتخاب ژنومی در جمعیت‌های اصلاحی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0090",
+        "title": "ویرایش ژنوم و ملاحظات اخلاقی کشاورزی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0091",
+        "title": "ژنتیک مقاومت گیاهان به خشکی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0092",
+        "title": "ژنومیک درختان میوه چندساله",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0093",
+        "title": "توالی‌یابی و ژنتیک گاوهای بومی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0094",
+        "title": "اصلاح نژاد طیور با نشانگرهای ژنتیکی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0095",
+        "title": "ژنومیک ماهیان پرورشی و حفاظت تنوع",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0096",
+        "title": "بانک ژن و مدیریت ذخایر ژنتیکی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0097",
+        "title": "اپی‌ژنتیک و سازگاری موجودات زنده",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0098",
+        "title": "ژنتیک جمعیت و راهبردهای جلوگیری از فرسایش ژنتیکی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0099",
+        "title": "هوش مصنوعی توضیح‌پذیر در انتخاب ژنومی",
+        "series": "zm-r08",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0100",
+        "title": "طراحی شبکه آبیاری قطره‌ای در مزارع",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0101",
+        "title": "سنجش راندمان سامانه‌های آبیاری بارانی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0102",
+        "title": "پایش کیفیت منابع آب کشاورزی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0103",
+        "title": "آبیاری کسری و مدیریت تنش آبی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0104",
+        "title": "شوری خاک و انتخاب راهکار اصلاح",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0105",
+        "title": "فیزیک خاک و انتقال آب در ریشه‌گاه",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0106",
+        "title": "مدیریت مواد آلی و کربن خاک",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0107",
+        "title": "میکروبیوم خاک در تولید پایدار",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0108",
+        "title": "زهکشی اراضی و کنترل سطح ایستابی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0109",
+        "title": "نقشه‌برداری دیجیتال خاک و پهنه‌بندی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0110",
+        "title": "مدیریت آب باران و تغذیه سفره‌های زیرزمینی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0111",
+        "title": "سازگاری کشاورزی با خشکسالی‌های پی‌درپی",
+        "series": "zm-r09",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0112",
+        "title": "انتخاب تراکتور متناسب با توان مزرعه",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0113",
+        "title": "طراحی ادوات خاک‌ورزی حفاظتی",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0114",
+        "title": "ماشین‌های کاشت دقیق بذر",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0115",
+        "title": "مکانیزاسیون برداشت غلات",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0116",
+        "title": "سامانه‌های برداشت محصولات باغی",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0117",
+        "title": "ماشین‌آلات کودپاشی و سم‌پاشی هدفمند",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0118",
+        "title": "پهپادهای کشاورزی برای پایش و نقشه‌برداری",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0119",
+        "title": "ربات‌های برداشت و عملیات مزرعه",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0120",
+        "title": "سامانه هدایت خودکار ماشین‌های کشاورزی",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0121",
+        "title": "تعمیر و نگهداری پیشگیرانه ادوات",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0122",
+        "title": "ارگونومی و ایمنی اپراتور ماشین‌آلات",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0123",
+        "title": "تحلیل هزینه مالکیت و بهره‌برداری ماشین‌های مزرعه",
+        "series": "zm-r10",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0124",
+        "title": "فناوری خشک‌کردن میوه و سبزی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0125",
+        "title": "طراحی زنجیره سرد محصولات تازه",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0126",
+        "title": "استخراج اسانس و ترکیبات ارزشمند گیاهی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0127",
+        "title": "بسته‌بندی فعال و هوشمند مواد غذایی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0128",
+        "title": "تولید آرد و بهبود کیفیت آسیابانی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0129",
+        "title": "فرآوری شیر و کنترل کیفیت محصولات لبنی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0130",
+        "title": "روغن‌کشی دانه‌های گیاهی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0131",
+        "title": "فناوری تولید کنسانتره و پوره میوه",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0132",
+        "title": "فرآوری و نگهداری محصولات گوشتی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0133",
+        "title": "فناوری انجماد سریع محصولات کشاورزی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0134",
+        "title": "کاهش ضایعات در کارخانه‌های صنایع تبدیلی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0135",
+        "title": "اقتصاد چرخشی و استفاده از پسماند کشاورزی",
+        "series": "zm-r11",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0136",
+        "title": "غذاهای فراسودمند و طراحی محصولات نوآورانه",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0137",
+        "title": "پروبیوتیک‌ها و پری‌بیوتیک‌ها در غذا",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0138",
+        "title": "کنترل آلرژن‌ها در تولید مواد غذایی",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0139",
+        "title": "فناوری نان کامل و غلات تخمیری",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0140",
+        "title": "فرآورده‌های لبنی تخمیری نوین",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0141",
+        "title": "نوشیدنی‌های کم‌قند و فرمولاسیون پایدار",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0142",
+        "title": "محصولات گیاهی جایگزین پروتئین حیوانی",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0143",
+        "title": "ارزیابی ماندگاری و پایداری مواد غذایی",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0144",
+        "title": "ردیابی آلودگی میکروبی در کارخانه غذا",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0145",
+        "title": "حسی‌سنجی و پذیرش مصرف‌کننده",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0146",
+        "title": "برچسب‌گذاری تغذیه‌ای و ادعاهای سلامت",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0147",
+        "title": "مدیریت ایمنی غذا با HACCP و ISO 22000",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0148",
+        "title": "کنترل کیفیت و سلامت غذاهای ویژه و فراسودمند",
+        "series": "zm-r18",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0149",
+        "title": "مکان‌یابی کارخانه و تحلیل دسترسی لجستیکی",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0150",
+        "title": "طراحی چیدمان خطوط تولید چندمحصولی",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0151",
+        "title": "شبیه‌سازی جریان مواد در کارخانه",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0152",
+        "title": "اتوماسیون صنعتی مبتنی بر PLC و SCADA",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0153",
+        "title": "برنامه‌ریزی ظرفیت و بالانس خط تولید",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0154",
+        "title": "مدیریت نگهداری و قابلیت اطمینان تجهیزات",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0155",
+        "title": "تولید ناب و حذف اتلاف در صنعت",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0156",
+        "title": "کنترل آماری فرایندهای تولیدی",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0157",
+        "title": "مستندسازی دستورالعمل استاندارد عملیات",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0158",
+        "title": "کنترل کیفیت مرحله‌ای و بازکاری محصول معیوب",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0159",
+        "title": "مدیریت انرژی و آب در کارخانه",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0160",
+        "title": "تحلیل اقتصادی نوسازی ماشین‌آلات صنعتی",
+        "series": "zm-r19",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0161",
+        "title": "روش تحقیق تجربی در علوم کشاورزی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0162",
+        "title": "طراحی آزمایش‌های فاکتوریل و بلوک‌بندی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0163",
+        "title": "نمونه‌گیری علمی و مدیریت داده پژوهش",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0164",
+        "title": "تحلیل آماری آزمایش‌های زیستی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0165",
+        "title": "فراتحلیل و مرور نظام‌مند منابع علمی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0166",
+        "title": "نگارش مقاله پژوهشی و گزارش آزمایشگاه",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0167",
+        "title": "اصول بازتولیدپذیری در پژوهش",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0168",
+        "title": "مدیریت داده باز و مستندسازی آزمایش",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0169",
+        "title": "اخلاق پژوهش، تعارض منافع و مالکیت فکری",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0170",
+        "title": "تبدیل مسئله صنعت به پرسش پژوهشی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0171",
+        "title": "داوری همتا و ارزیابی کیفیت تحقیقات",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0172",
+        "title": "انتقال فناوری و سنجش اثر پژوهش",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0173",
+        "title": "مدیریت انتشارات علمی و پیشگیری از سرقت ادبی",
+        "series": "zm-r12",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0174",
+        "title": "طراحی و مدیریت واحد ژنتیک مولکولی",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0175",
+        "title": "واحد اصلاح غلات و محصولات راهبردی",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0176",
+        "title": "واحد اصلاح باغبانی و ژنتیک درختان",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0177",
+        "title": "واحد اصلاح دام‌های مزرعه‌ای",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0178",
+        "title": "واحد اصلاح ژنتیکی طیور اقتصادی",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0179",
+        "title": "واحد ژنتیک و تکثیر آبزیان",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0180",
+        "title": "واحد میکروبیولوژی کاربردی کشاورزی",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0181",
+        "title": "واحد زیست‌فناوری و کشت سلول",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0182",
+        "title": "واحد بیوانفورماتیک و تحلیل ژنوم",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0183",
+        "title": "واحد مدل‌سازی آماری و هوش مصنوعی",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0184",
+        "title": "واحد پژوهش خاک و تغذیه گیاه",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0185",
+        "title": "واحد نوآوری غذا و ترکیبات زیست‌فعال",
+        "series": "research-units",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0186",
+        "title": "راه‌اندازی آزمایشگاه استخراج DNA و RNA",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0187",
+        "title": "کنترل کیفیت توالی‌یابی نسل جدید",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0188",
+        "title": "طراحی آزمایشگاه کشت بافت گیاهی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0189",
+        "title": "استانداردهای آزمایشگاه میکروبیولوژی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0190",
+        "title": "آزمون‌های بیوشیمیایی و آنزیم‌شناسی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0191",
+        "title": "روش‌های سنجش حاصلخیزی خاک",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0192",
+        "title": "آزمون آلاینده‌ها در نمونه‌های آب",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0193",
+        "title": "تشخیص مولکولی عوامل بیماری‌زای گیاهی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0194",
+        "title": "آزمون کیفیت بذر و قدرت جوانه‌زنی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0195",
+        "title": "آزمون تغذیه‌ای و ایمنی مواد غذایی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0196",
+        "title": "اعتبارسنجی روش‌های اندازه‌گیری آزمایشگاهی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0197",
+        "title": "مدیریت تجهیزات و ردیابی نمونه با سامانه LIMS",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0198",
+        "title": "تضمین کیفیت و آزمون مهارت بین‌آزمایشگاهی",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0199",
+        "title": "ردیابی دیجیتال داده‌های آزمون و زنجیره تحویل نمونه",
+        "series": "research-laboratories",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0200",
+        "title": "راهبری مرکز تحقیقات اصلاح نباتات",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0201",
+        "title": "برنامه‌ریزی مرکز تحقیقات ژنتیک دام",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0202",
+        "title": "مدیریت مرکز تخصصی آبزی‌پروری",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0203",
+        "title": "مدیریت مرکز ژنومیک و زیست‌فناوری",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0204",
+        "title": "مرکز پژوهش میکروبیوم و سلامت خاک",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0205",
+        "title": "طراحی مرکز تحقیقات اقلیم و آب کشاورزی",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0206",
+        "title": "مرکز پژوهش ایمنی و کیفیت غذا",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0207",
+        "title": "مرکز مطالعات گیاهان دارویی و فراسودمند",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0208",
+        "title": "مرکز هوش مصنوعی و علوم داده زیستی",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0209",
+        "title": "مرکز پایش تنوع زیستی و ذخایر ژنتیکی",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0210",
+        "title": "مرکز ارزیابی فناوری و تجاری‌سازی پژوهش",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0211",
+        "title": "نظام ارزیابی عملکرد مراکز تحقیقاتی خصوصی",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0212",
+        "title": "تأمین مالی و ارزیابی اثربخشی تحقیقات خصوصی",
+        "series": "research-centers",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0213",
+        "title": "یادگیری ماشین برای پیش‌بینی عملکرد محصول",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0214",
+        "title": "بینایی ماشین در تشخیص آفات گیاهی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0215",
+        "title": "مدل‌های زبانی در مدیریت دانش علمی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0216",
+        "title": "دوقلوی دیجیتال سامانه‌های کشاورزی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0217",
+        "title": "اینترنت اشیا برای پایش محیطی مزرعه",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0218",
+        "title": "داده‌های ماهواره‌ای در تحلیل پوشش گیاهی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0219",
+        "title": "طراحی سامانه تصمیم‌یار تغذیه گیاه",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0220",
+        "title": "تشخیص ناهنجاری با داده‌های حسگر",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0221",
+        "title": "تحلیل پیش‌بینانه خرابی تجهیزات تولید",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0222",
+        "title": "رباتیک مشارکتی در بسته‌بندی صنعتی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0223",
+        "title": "معماری داده برای کارخانه هوشمند",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0224",
+        "title": "حکمرانی، امنیت و اخلاق کاربردهای هوش مصنوعی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0225",
+        "title": "ارزیابی سوگیری و قابلیت اطمینان مدل‌های هوش مصنوعی",
+        "series": "zm-r13",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0226",
+        "title": "طراحی برنامه درسی آموزش کشاورزی تخصصی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0227",
+        "title": "آموزش مهارت‌های عملی باغبانی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0228",
+        "title": "پرورش مربیان گلخانه‌های هوشمند",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0229",
+        "title": "برنامه آموزشی دامپروری مبتنی بر شایستگی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0230",
+        "title": "آموزش ایمنی زیستی در آزمایشگاه",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0231",
+        "title": "طراحی دوره‌های مدیریت کیفیت مواد غذایی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0232",
+        "title": "آموزش آماری و روش تحقیق برای پژوهشگران",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0233",
+        "title": "طراحی آموزش الکترونیکی و کلاس ترکیبی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0234",
+        "title": "روش‌های ارزیابی اثربخشی دوره آموزشی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0235",
+        "title": "تولید محتوای تعاملی علمی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0236",
+        "title": "آموزش مهارت‌های کارآفرینی روستایی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0237",
+        "title": "مدیریت مراکز آموزش فنی و حرفه‌ای کشاورزی",
+        "series": "zm-r14",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0238",
+        "title": "امکان‌سنجی فنی و مالی پروژه‌های صنعتی",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0239",
+        "title": "مدیریت قراردادهای خدمات پژوهشی",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0240",
+        "title": "تدوین شرح خدمات مهندسی مشاور",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0241",
+        "title": "برنامه‌ریزی و کنترل زمان پروژه",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0242",
+        "title": "مدیریت کیفیت در خدمات آزمایشگاهی",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0243",
+        "title": "نظارت بر اجرای پروژه‌های گلخانه‌ای",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0244",
+        "title": "مدیریت خرید و تدارکات پروژه‌ها",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0245",
+        "title": "طراحی نظام مدیریت تأمین‌کنندگان",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0246",
+        "title": "بازرگانی صادرات محصولات کشاورزی",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0247",
+        "title": "حمل‌ونقل بین‌المللی و اسناد تجاری",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0248",
+        "title": "مدیریت ریسک در پروژه‌های چندرشته‌ای",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0249",
+        "title": "داوری فنی و ارزیابی تحویل پروژه",
+        "series": "zm-r15",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0250",
+        "title": "طراحی سازه‌های سبک گلخانه و سوله",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0251",
+        "title": "اصول ژئوتکنیک در احداث ساختمان صنعتی",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0252",
+        "title": "بهینه‌سازی مصرف انرژی ساختمان",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0253",
+        "title": "طراحی تأسیسات مکانیکی کارخانه‌ها",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0254",
+        "title": "طراحی سیستم‌های برق و کنترل ساختمان",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0255",
+        "title": "مدیریت کیفیت بتن و مصالح نوین",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0256",
+        "title": "فناوری ساختمان‌های پیش‌ساخته",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0257",
+        "title": "ایمنی کارگاه‌های ساختمانی",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0258",
+        "title": "برآورد هزینه و متره پروژه عمرانی",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0259",
+        "title": "مدیریت نگهداری ساختمان‌های صنعتی",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0260",
+        "title": "مقاوم‌سازی لرزه‌ای سازه‌های موجود",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0261",
+        "title": "کاربرد BIM در مدیریت پروژه ساختمانی",
+        "series": "zm-r20",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0262",
+        "title": "روش‌های ارزیابی اقتصادی املاک",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0263",
+        "title": "تحلیل بازار زمین کشاورزی",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0264",
+        "title": "توسعه اقتصادی زمین‌های صنعتی",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0265",
+        "title": "مدیریت دارایی‌های ملکی سازمان",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0266",
+        "title": "اصول قراردادنویسی اجاره تجاری",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0267",
+        "title": "ارزیابی حقوقی کاربری اراضی",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0268",
+        "title": "تحلیل ریسک سرمایه‌گذاری ملکی",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0269",
+        "title": "نقشه‌های GIS در ارزش‌گذاری زمین",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0270",
+        "title": "بازسازی و نوسازی ساختمان‌های درآمدزا",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0271",
+        "title": "مدیریت بهره‌برداری مجتمع‌های تجاری",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0272",
+        "title": "اصول حرفه‌ای کارشناسی رسمی املاک",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0273",
+        "title": "داده‌کاوی و پیش‌بینی شاخص‌های بازار مسکن",
+        "series": "zm-r21",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0274",
+        "title": "مبانی متالورژی طلا و آلیاژهای جواهر",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0275",
+        "title": "نقره و فلزات گروه پلاتین در جواهرسازی",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0276",
+        "title": "گوهرشناسی علمی الماس",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0277",
+        "title": "شناخت یاقوت و سفایر طبیعی و مصنوعی",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0278",
+        "title": "زمرد و گوهرهای خانواده بریل",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0279",
+        "title": "روش‌های غیرمخرب تشخیص اصالت گوهرسنگ",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0280",
+        "title": "طراحی جواهر با مدل‌سازی سه‌بعدی",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0281",
+        "title": "ریخته‌گری و پرداخت قطعات جواهر",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0282",
+        "title": "هنر مخراج‌کاری و کنترل کیفیت اتصال سنگ",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0283",
+        "title": "سنجش عیار فلزات گران‌بها",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0284",
+        "title": "حسابداری موجودی و سود کارگاه طلاسازی",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0285",
+        "title": "اخلاق تجارت و رهگیری منشأ گوهرسنگ",
+        "series": "zm-r22",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0286",
+        "title": "شناخت مکاتب فرش دستباف ایران",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0287",
+        "title": "طراحی نقشه و موتیف فرش سنتی",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0288",
+        "title": "رنگرزی طبیعی نخ و الیاف",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0289",
+        "title": "شناخت ابریشم و پشم در قالیبافی",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0290",
+        "title": "ساختار گره و رج‌شمار فرش",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0291",
+        "title": "شناسایی اصالت فرش مناطق مختلف",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0292",
+        "title": "آسیب‌شناسی و مرمت فرش نفیس",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0293",
+        "title": "نگهداری پیشگیرانه منسوجات تاریخی",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0294",
+        "title": "اقتصاد تولید فرش روستایی",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0295",
+        "title": "صادرات فرش دستباف و مقررات تجاری",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0296",
+        "title": "طراحی معاصر با حفظ هویت فرش",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0297",
+        "title": "ثبت و مستندسازی میراث صنایع دستی",
+        "series": "zm-r23",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0298",
+        "title": "مهندسی منو در رستوران‌های حرفه‌ای",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0299",
+        "title": "اصول طعم‌شناسی و روش‌های پخت",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0300",
+        "title": "هنر نان و خمیر در آشپزخانه تخصصی",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0301",
+        "title": "قنادی مدرن و کنترل فرمولاسیون",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0302",
+        "title": "فناوری نوشیدنی‌های سرد و گرم",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0303",
+        "title": "ایمنی غذا در آشپزخانه صنعتی",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0304",
+        "title": "طراحی جریان کار آشپزخانه رستوران",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0305",
+        "title": "مدیریت خرید و ضایعات مواد اولیه",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0306",
+        "title": "حسابداری بهای تمام‌شده غذا",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0307",
+        "title": "استانداردهای خدمات هتل و پذیرایی",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0308",
+        "title": "تجربه مشتری و مدیریت شکایت رستوران",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0309",
+        "title": "برندینگ و بازاریابی خدمات غذا",
+        "series": "zm-r24",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0310",
+        "title": "معماری سامانه‌های تحت وب مقیاس‌پذیر",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0311",
+        "title": "طراحی رابط کاربری دسترس‌پذیر",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0312",
+        "title": "توسعه اپلیکیشن‌های اندروید کاربردی",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0313",
+        "title": "مهندسی نرم‌افزار و آزمون خودکار",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0314",
+        "title": "پایگاه‌های داده و حفظ یکپارچگی اطلاعات",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0315",
+        "title": "مدیریت زیرساخت لینوکس و سرویس‌های ابری",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0316",
+        "title": "امنیت برنامه‌های وب و کنترل دسترسی",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0317",
+        "title": "طراحی API و مدیریت نسخه سرویس",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0318",
+        "title": "مشاهده‌پذیری و پایش سامانه تولید",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0319",
+        "title": "مهندسی داده و انبار داده سازمانی",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0320",
+        "title": "مدیریت چرخه عمر محصول دیجیتال",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0321",
+        "title": "تداوم کسب‌وکار و بازیابی سامانه پس از بحران",
+        "series": "zm-r25",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0322",
+        "title": "طراحی مسیرهای گردشگری طبیعت‌محور",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0323",
+        "title": "مدیریت مقصدهای گردشگری روستایی",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0324",
+        "title": "حفاظت میراث فرهنگی در گردشگری",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0325",
+        "title": "مدیریت اقامتگاه‌های بوم‌گردی",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0326",
+        "title": "اقتصاد هتلداری و شاخص‌های عملکرد",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0327",
+        "title": "طراحی تجربه مسافر و خدمات راهنما",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0328",
+        "title": "مدیریت رویدادهای علمی و تجاری",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0329",
+        "title": "برنامه‌ریزی نمایشگاه‌های بین‌المللی",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0330",
+        "title": "گردشگری غذا و محصولات محلی",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0331",
+        "title": "بازاریابی دیجیتال مقصد گردشگری",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0332",
+        "title": "مدیریت ریسک و ایمنی سفر",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0333",
+        "title": "گردشگری پایدار و مسئولیت‌پذیری اجتماعی",
+        "series": "zm-r26",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0334",
+        "title": "طراحی هویت سازمانی شرکت پژوهشی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0335",
+        "title": "مدیریت راهبردی ارتباطات شرکتی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0336",
+        "title": "نویسندگی علمی برای رسانه سازمان",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0337",
+        "title": "مدیریت دانش و آرشیو دیجیتال شرکت",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0338",
+        "title": "تدوین گزارش سالانه فعالیت پژوهشی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0339",
+        "title": "سنجش اعتبار برند و اعتماد عمومی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0340",
+        "title": "تولید محتوای چندزبانه سازمانی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0341",
+        "title": "اخلاق اطلاع‌رسانی و تعارض منافع",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0342",
+        "title": "برقراری ارتباط با نهادهای علمی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0343",
+        "title": "مدیریت بحران رسانه‌ای سازمان",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0344",
+        "title": "ارتباطات داخلی و فرهنگ سازمانی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0345",
+        "title": "سنجش اثربخشی روابط عمومی",
+        "series": "zm-r16",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0346",
+        "title": "اصول خبرنویسی علمی و تخصصی",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0347",
+        "title": "راستی‌آزمایی ادعاهای منتشرشده",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0348",
+        "title": "تدوین پرونده خبری پژوهش کشاورزی",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0349",
+        "title": "خبرنگاری داده‌محور در صنعت",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0350",
+        "title": "پوشش خبری نوآوری‌های زیست‌فناوری",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0351",
+        "title": "روایت دقیق اخبار بازار محصولات",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0352",
+        "title": "گزارشگری تغییرات اقلیمی کشاورزی",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0353",
+        "title": "آرشیوسازی و نسخه‌بندی خبر سازمانی",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0354",
+        "title": "اصول انتشار اصلاحیه و تکذیبیه",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0355",
+        "title": "اخلاق و حقوق رسانه‌های خبری",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0356",
+        "title": "خبرنامه تخصصی و بخش‌بندی مخاطبان",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0357",
+        "title": "سنجش کیفیت و اثرگذاری محتوای خبری",
+        "series": "zm-r17",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0358",
+        "title": "ساخت مدل کسب‌وکار برای شرکت‌های کوچک",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0359",
+        "title": "کشف مسئله مشتری و اعتبارسنجی ایده",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0360",
+        "title": "طراحی ارزش پیشنهادی رقابت‌پذیر",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0361",
+        "title": "راهبرد ورود محصول جدید به بازار",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0362",
+        "title": "مدیریت جریان نقدی در کسب‌وکار نوپا",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0363",
+        "title": "اصول قیمت‌گذاری مبتنی بر ارزش",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0364",
+        "title": "فروش سازمانی و مدیریت مذاکرات B2B",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0365",
+        "title": "مدیریت فرایند و استانداردسازی عملیات",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0366",
+        "title": "استخدام و توسعه تیم در شرکت نوپا",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0367",
+        "title": "مدیریت تعارض مؤسسان و شرکا",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0368",
+        "title": "سنجش شاخص‌های کلیدی عملکرد کسب‌وکار",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0369",
+        "title": "برنامه‌ریزی توسعه شعب و بازارهای جدید",
+        "series": "business-foundations",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0370",
+        "title": "نقشه عملی درآمد مبتنی بر مهارت",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0371",
+        "title": "تبدیل تجربه تخصصی به خدمات قابل فروش",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0372",
+        "title": "طراحی سبد محصولات درآمدزا",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0373",
+        "title": "اصول درآمد دوره‌ای و اشتراک خدمات",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0374",
+        "title": "مدیریت درآمدهای فصلی و نامنظم",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0375",
+        "title": "تحلیل سود واقعی پس از هزینه‌ها",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0376",
+        "title": "سواد مالی برای خوداشتغالان",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0377",
+        "title": "ارزیابی ریسک مدل‌های درآمدی",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0378",
+        "title": "مدیریت مالی خانواده با درآمد متغیر",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0379",
+        "title": "اصول مالیات و ثبت درآمد کسب‌وکار کوچک",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0380",
+        "title": "ساخت صندوق اضطراری و بودجه انعطاف‌پذیر",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0381",
+        "title": "طراحی مسیر بلندمدت استقلال مالی",
+        "series": "income-creation",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0382",
+        "title": "ساخت نمونه‌کار حرفه‌ای برای بازار آنلاین",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0383",
+        "title": "کسب درآمد از نویسندگی و ویراستاری اینترنتی",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0384",
+        "title": "فریلنسینگ طراحی گرافیک از جذب مشتری تا تحویل",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0385",
+        "title": "ساخت فروشگاه اینترنتی محصولات تخصصی",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0386",
+        "title": "فروش آموزش دیجیتال به مخاطب هدف",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0387",
+        "title": "درآمدزایی از وبلاگ تخصصی و سئو",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0388",
+        "title": "مدیریت کانال ویدئویی آموزشی",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0389",
+        "title": "پادکست تخصصی و مدل‌های حمایت مالی",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0390",
+        "title": "طراحی خبرنامه پولی و باشگاه اعضا",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0391",
+        "title": "همکاری در فروش با شفافیت تبلیغاتی",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0392",
+        "title": "فروش محصولات چاپ سفارشی و مدیریت سفارش",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0393",
+        "title": "ایجاد کسب‌وکار خدمات پشتیبانی آنلاین",
+        "series": "internet-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0394",
+        "title": "طراحی خدمت پژوهش و خلاصه‌سازی با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0395",
+        "title": "تولید محتوای سئوی مسئولانه با کمک ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0396",
+        "title": "نگارش پیشنهادهای تجاری با ChatGPT و بازبینی انسانی",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0397",
+        "title": "ساخت دستیار پاسخ‌گویی دانش سازمانی با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0398",
+        "title": "طراحی کارگاه آموزشی مبتنی بر ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0399",
+        "title": "تحلیل بازخورد مشتری با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0400",
+        "title": "تهیه گزارش مدیریتی با کمک ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0401",
+        "title": "ساخت نمونه اولیه اپلیکیشن با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0402",
+        "title": "طراحی بسته‌های محتوای چندزبانه با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0403",
+        "title": "اتوماسیون مستندات و فرایندهای اداری با ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0404",
+        "title": "فروش خدمات پرامپت‌نویسی حرفه‌ای",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0405",
+        "title": "کنترل کیفیت، حقوق مؤلف و حفظ محرمانگی در خدمات ChatGPT",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0406",
+        "title": "خدمات مشاوره استفاده سازمانی از ChatGPT بدون افشای داده",
+        "series": "chatgpt-income",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0407",
+        "title": "علم هدف‌گذاری و تبدیل رؤیا به برنامه",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0408",
+        "title": "عادت‌سازی با شواهد روان‌شناسی رفتاری",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0409",
+        "title": "پرورش ذهنیت یادگیری مادام‌العمر",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0410",
+        "title": "مدیریت توجه در محیط‌های پرحواس‌پرتی",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0411",
+        "title": "مقابله با تعلل‌ورزی در کار و تحصیل",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0412",
+        "title": "برنامه‌ریزی شغلی در دوره‌های تغییر فناوری",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0413",
+        "title": "روش‌های علمی افزایش خودکارآمدی",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0414",
+        "title": "مذاکره و ارتباط سازنده در محیط کار",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0415",
+        "title": "راهبرد مدیریت شکست و یادگیری از آن",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0416",
+        "title": "توسعه تفکر انتقادی برای تصمیم‌های مهم",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0417",
+        "title": "ایجاد تعادل میان کار و زندگی",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0418",
+        "title": "سنجش رشد فردی با شاخص‌های قابل‌پیگیری",
+        "series": "success-evidence",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0419",
+        "title": "سیر تاریخی شکل‌گیری فقه امامیه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0420",
+        "title": "زندگی و سیره امام علی در منابع تاریخی",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0421",
+        "title": "امام حسین و مطالعات تاریخی واقعه کربلا",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0422",
+        "title": "سیره امام رضا و میراث علمی خراسان",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0423",
+        "title": "مکتب حدیثی قم و بغداد",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0424",
+        "title": "دانش رجال در میراث حدیثی شیعه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0425",
+        "title": "اصول فقه و اجتهاد در مکتب امامیه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0426",
+        "title": "نهج‌البلاغه: متن‌پژوهی و مباحث اخلاقی",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0427",
+        "title": "صحیفه سجادیه و مطالعات دعا",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0428",
+        "title": "تاریخ حوزه‌های علمی شیعه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0429",
+        "title": "مهدویت در منابع کلامی امامیه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0430",
+        "title": "مطالعات تطبیقی شیعه و دیگر مکاتب اسلامی",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0431",
+        "title": "فلسفه اخلاق و مسئولیت اجتماعی در اندیشه امامیه",
+        "series": "shia-islamic-studies",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0432",
+        "title": "تاریخ کتابت قرآن و نسخه‌های کهن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0433",
+        "title": "ساختار سوره‌های مکی و مدنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0434",
+        "title": "دانش اسباب نزول در تفسیر قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0435",
+        "title": "روش‌های موضوع‌یابی مفاهیم قرآنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0436",
+        "title": "واژه‌های کلیدی عدالت در قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0437",
+        "title": "بلاغت تصویر و تمثیل در آیات قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0438",
+        "title": "زندگی پیامبران در روایت قرآنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0439",
+        "title": "اخلاق اقتصادی و مسئولیت اجتماعی در قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0440",
+        "title": "آموزه‌های خانواده و تربیت قرآنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0441",
+        "title": "رویکردهای شیعی به تفسیر قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0442",
+        "title": "مطالعات تطبیقی ترجمه‌های فارسی قرآن",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0443",
+        "title": "طراحی اطلس جغرافیای تاریخی اشارات قرآنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0444",
+        "title": "روش‌شناسی اعتبارسنجی منابع در پژوهش‌های قرآنی",
+        "series": "quran-encyclopedia",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0445",
+        "title": "تاریخ‌نگاری انتقادی جفر در منابع فارسی و عربی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0446",
+        "title": "نشانه‌شناسی حروف ابجد در متون تاریخی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0447",
+        "title": "مطالعات نسخه‌شناسی رمل در جهان اسلام",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0448",
+        "title": "اوفاق و مربع‌های عددی در تاریخ ریاضیات فرهنگی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0449",
+        "title": "نجوم احکامی در تاریخ اندیشه ایرانی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0450",
+        "title": "تاریخ کیمیاگری از نسخه تا آزمایشگاه",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0451",
+        "title": "طلسمات در هنر و ادبیات پیشامدرن",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0452",
+        "title": "باورهای عامه درباره حرز و تعویذ",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0453",
+        "title": "تعبیر خواب در سنت‌های تفسیری تاریخی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0454",
+        "title": "علوم غریبه در نقدهای کلامی و فقهی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0455",
+        "title": "روان‌شناسی شناختی پیشگویی و باورهای فراطبیعی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      },
+      {
+        "id": "ZM-BK-0456",
+        "title": "شیوه ارزیابی علمی ادعاهای غیرعادی",
+        "series": "occult-history-27-volumes",
+        "status": "title_proposed",
+        "authored": false,
+        "published": false
+      }
+    ]
+  },
+  "products": {
+    "agri_topics_source": "docs/agri200_p0_catalog.tsv",
+    "agri_topics": [
+      {
+        "id": "AGRI-001",
+        "fa": "نجات گیاهان آپارتمانی",
+        "en": "Houseplant Rescue Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-002",
+        "fa": "تشخیص زردی برگ گیاهان",
+        "en": "Diagnose Yellow Plant Leaves",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-003",
+        "fa": "تقویم آبیاری گیاهان آپارتمانی",
+        "en": "Houseplant Watering Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-004",
+        "fa": "نگهداری سانسوریا و زامیفولیا",
+        "en": "Snake Plant and ZZ Plant Care",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-005",
+        "fa": "پرورش پتوس و فیلودندرون",
+        "en": "Pothos and Philodendron Care",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-006",
+        "fa": "نور مناسب گیاهان خانگی",
+        "en": "Indoor Plant Lighting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-007",
+        "fa": "انتخاب خاک و گلدان",
+        "en": "Potting Mix and Planter Selection",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-008",
+        "fa": "قلمه‌زنی گیاهان آپارتمانی",
+        "en": "Houseplant Cutting Propagation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-009",
+        "fa": "نگهداری ارکیده و گلدهی دوباره",
+        "en": "Orchid Care and Reblooming",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-010",
+        "fa": "شناخت آفات گیاهان آپارتمانی",
+        "en": "Houseplant Pest Identification",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-011",
+        "fa": "سبزی‌کاری در بالکن",
+        "en": "Balcony Vegetable Gardening",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-012",
+        "fa": "باغچه خوراکی در فضای کوچک",
+        "en": "Small-Space Food Gardening",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-013",
+        "fa": "ساخت باغچه بستر بلند",
+        "en": "Raised Bed Garden Construction",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-014",
+        "fa": "کشت سبزی در گلدان",
+        "en": "Container Vegetable Gardening",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-015",
+        "fa": "کاشت همراه گیاهان با بررسی شواهد",
+        "en": "Evidence-Rated Companion Planting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-016",
+        "fa": "نقشه باغچه خوراکی چهارفصل",
+        "en": "Four-Season Kitchen Garden Layouts",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-017",
+        "fa": "باغچه پربازده در حیاط کوچک",
+        "en": "Productive Backyard Garden",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-018",
+        "fa": "ساخت باغچه عمودی",
+        "en": "DIY Vertical Vegetable Garden",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-019",
+        "fa": "کشت ایمن روی پشت‌بام",
+        "en": "Safe Rooftop Food Gardening",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-020",
+        "fa": "باغچه بدون شخم و مالچ",
+        "en": "No-Dig Gardening and Mulching",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-021",
+        "fa": "تقویم کاشت بذر بر اساس اقلیم",
+        "en": "Climate-Zone Seed Starting Calendar",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-022",
+        "fa": "آماده‌سازی بستر نشا",
+        "en": "Seed Starting Mix and Trays",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-023",
+        "fa": "نور و دمای پرورش نشا",
+        "en": "Seedling Light and Temperature",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-024",
+        "fa": "انتقال اصولی نشا",
+        "en": "Successful Seedling Transplanting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-025",
+        "fa": "قلمه‌زنی گیاهان زینتی",
+        "en": "Ornamental Plant Cuttings",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-026",
+        "fa": "تکثیر گیاه با تقسیم بوته",
+        "en": "Plant Division Techniques",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-027",
+        "fa": "پیوند درخت میوه",
+        "en": "Fruit Tree Grafting Basics",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-028",
+        "fa": "نگهداری و آزمون جوانه‌زنی بذر",
+        "en": "Seed Storage and Germination Tests",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-029",
+        "fa": "دفتر ثبت بذر و کاشت",
+        "en": "Seed Inventory and Sowing Log",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-030",
+        "fa": "رفع مشکلات نشا در خزانه",
+        "en": "Seedling Nursery Troubleshooting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-031",
+        "fa": "پرورش گوجه‌فرنگی از بذر تا برداشت",
+        "en": "Tomato Seed-to-Harvest Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-032",
+        "fa": "پرورش خیار در باغچه",
+        "en": "Garden Cucumber Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-033",
+        "fa": "کاشت فلفل دلمه‌ای و تند",
+        "en": "Sweet Pepper and Chili Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-034",
+        "fa": "سیب‌زمینی در کیسه کشت",
+        "en": "Potatoes in Grow Bags",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-035",
+        "fa": "کاشت پیاز و سیر",
+        "en": "Onion and Garlic Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-036",
+        "fa": "کاهو و سبزی‌های برگی",
+        "en": "Lettuce and Leafy Green Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-037",
+        "fa": "کاشت هویج و تربچه",
+        "en": "Carrot and Radish Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-038",
+        "fa": "لوبیا و نخودفرنگی باغچه‌ای",
+        "en": "Garden Beans and Peas",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-039",
+        "fa": "کدو و کدوحلوایی",
+        "en": "Zucchini and Pumpkin Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-040",
+        "fa": "راهنمای کاشت ۵۰ سبزی",
+        "en": "50-Vegetable Planting Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-041",
+        "fa": "ریحان و نعناع خانگی",
+        "en": "Basil and Mint at Home",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-042",
+        "fa": "جعفری و گشنیز در گلدان",
+        "en": "Container Parsley and Cilantro",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-043",
+        "fa": "تولید ریزسبزی در سینی",
+        "en": "Microgreens Tray Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-044",
+        "fa": "هزینه تولید ریزسبزی",
+        "en": "Microgreens Cost Workbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-045",
+        "fa": "برداشت ایمن ریزسبزی",
+        "en": "Microgreens Harvest Safety",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-046",
+        "fa": "جوانه خوراکی با رعایت بهداشت",
+        "en": "Safe Edible Sprout Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-047",
+        "fa": "گیاهان معطر برای بازار محلی",
+        "en": "Culinary Herbs for Local Markets",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-048",
+        "fa": "خشک‌کردن سبزی‌های معطر",
+        "en": "Drying and Storing Herbs",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-049",
+        "fa": "رزماری و آویشن در گلدان",
+        "en": "Container Rosemary and Thyme",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-050",
+        "fa": "برنامه‌ریز سبزی خانگی",
+        "en": "Homegrown Greens Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-051",
+        "fa": "قارچ صدفی در منزل",
+        "en": "Oyster Mushrooms at Home",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-052",
+        "fa": "اصول پرورش قارچ دکمه‌ای",
+        "en": "Button Mushroom Basics",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-053",
+        "fa": "بستر قارچ خوراکی",
+        "en": "Edible Mushroom Substrate Preparation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-054",
+        "fa": "دما و رطوبت سالن قارچ",
+        "en": "Mushroom Room Climate Control",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-055",
+        "fa": "پیشگیری از آلودگی سالن قارچ",
+        "en": "Mushroom Contamination Prevention",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-056",
+        "fa": "برداشت و نگهداری قارچ",
+        "en": "Mushroom Harvest and Storage",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-057",
+        "fa": "واحد کوچک قارچ صدفی",
+        "en": "Small Oyster Mushroom Farm",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-058",
+        "fa": "هزینه و سود پرورش قارچ",
+        "en": "Mushroom Farm Profit Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-059",
+        "fa": "دفتر ثبت عملکرد سالن قارچ",
+        "en": "Mushroom Production Log",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-060",
+        "fa": "ایمنی تشخیص قارچ خوراکی",
+        "en": "Edible Mushroom Identification Safety",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-061",
+        "fa": "ساخت گلخانه اقتصادی",
+        "en": "Budget Greenhouse Construction",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-062",
+        "fa": "کشت چهارفصل در گلخانه",
+        "en": "Year-Round Greenhouse Calendar",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-063",
+        "fa": "تهویه و رطوبت گلخانه",
+        "en": "Greenhouse Ventilation and Humidity",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-064",
+        "fa": "خنک‌سازی گلخانه تابستانی",
+        "en": "Summer Greenhouse Cooling",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-065",
+        "fa": "کاهش هزینه گرمایش گلخانه",
+        "en": "Greenhouse Heating Efficiency",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-066",
+        "fa": "گوجه‌فرنگی گلخانه‌ای",
+        "en": "Greenhouse Tomato Production",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-067",
+        "fa": "خیار گلخانه‌ای",
+        "en": "Greenhouse Cucumber Production",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-068",
+        "fa": "فلفل دلمه‌ای گلخانه‌ای",
+        "en": "Greenhouse Bell Pepper Production",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-069",
+        "fa": "گرده‌افشانی در گلخانه",
+        "en": "Greenhouse Pollination and Fruit Set",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-070",
+        "fa": "چک‌لیست روزانه گلخانه",
+        "en": "Daily Greenhouse Checklist",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-071",
+        "fa": "هیدروپونیک برای مبتدیان",
+        "en": "Hydroponics for Beginners",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-072",
+        "fa": "هیدروپونیک کراکتکی",
+        "en": "DIY Kratky Hydroponics",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-073",
+        "fa": "ساخت سامانه NFT",
+        "en": "Build an NFT Hydroponic System",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-074",
+        "fa": "سبزی برگی هیدروپونیک",
+        "en": "Hydroponic Leafy Greens",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-075",
+        "fa": "تنظیم pH و EC",
+        "en": "Hydroponic pH and EC",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-076",
+        "fa": "کمبود غذایی در هیدروپونیک",
+        "en": "Hydroponic Nutrient Deficiency",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-077",
+        "fa": "سلامت ریشه در کشت بدون خاک",
+        "en": "Hydroponic Root Health",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-078",
+        "fa": "نور LED برای کشت خانگی",
+        "en": "LED Lighting for Indoor Crops",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-079",
+        "fa": "طراحی کشت عمودی چندطبقه",
+        "en": "Vertical Farm Layout Planning",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-080",
+        "fa": "دفتر تغذیه و رشد هیدروپونیک",
+        "en": "Hydroponic Growth Logbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-081",
+        "fa": "تفسیر آزمایش خاک",
+        "en": "Understand Farm Soil Tests",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-082",
+        "fa": "اصلاح بافت و ساختمان خاک",
+        "en": "Soil Texture and Structure",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-083",
+        "fa": "کمپوست پسماند گیاهی",
+        "en": "Composting Plant Residues",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-084",
+        "fa": "ورمی‌کمپوست خانگی",
+        "en": "Home Vermicomposting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-085",
+        "fa": "انتخاب کود مناسب",
+        "en": "Choosing Fertilizers Responsibly",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-086",
+        "fa": "محاسبه کود با آزمون خاک",
+        "en": "Soil-Test Fertilizer Planning",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-087",
+        "fa": "کمبود و سمیت عناصر غذایی",
+        "en": "Plant Nutrient Deficiency and Toxicity",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-088",
+        "fa": "ماده آلی و کربن خاک",
+        "en": "Soil Organic Matter and Carbon",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-089",
+        "fa": "کودهای آلی و معدنی",
+        "en": "Organic and Mineral Fertilizers",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-090",
+        "fa": "چک‌لیست نمونه‌برداری خاک",
+        "en": "Soil Sampling Checklist",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-091",
+        "fa": "آبیاری قطره‌ای باغچه",
+        "en": "DIY Garden Drip Irrigation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-092",
+        "fa": "برنامه آبیاری محصول",
+        "en": "Crop Irrigation Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-093",
+        "fa": "کاربرد سنسور رطوبت خاک",
+        "en": "Soil Moisture Sensors",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-094",
+        "fa": "دبی و فشار آبیاری",
+        "en": "Irrigation Flow and Pressure",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-095",
+        "fa": "نگهداری نوار تیپ",
+        "en": "Drip Tape Maintenance",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-096",
+        "fa": "مدیریت شوری آب و خاک",
+        "en": "Irrigation and Soil Salinity",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-097",
+        "fa": "تنش گرمایی گیاه",
+        "en": "Crop Heat Stress Protection",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-098",
+        "fa": "آبیاری در خشکسالی",
+        "en": "Drought-Aware Irrigation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-099",
+        "fa": "ذخیره آب باران",
+        "en": "Garden Rainwater Harvesting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-100",
+        "fa": "بودجه آب فصلی مزرعه",
+        "en": "Seasonal Farm Water Budget",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-101",
+        "fa": "آفات سبزیجات با تصویر",
+        "en": "Vegetable Pest Identification",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-102",
+        "fa": "مدیریت تلفیقی آفات",
+        "en": "Integrated Pest Management",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-103",
+        "fa": "پایش آفات و تله‌ها",
+        "en": "Pest Monitoring and Traps",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-104",
+        "fa": "حشرات مفید",
+        "en": "Beneficial Insects in Gardens",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-105",
+        "fa": "بیماری‌های قارچی رایج",
+        "en": "Common Fungal Plant Diseases",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-106",
+        "fa": "بیماری باکتریایی و ویروسی",
+        "en": "Bacterial and Viral Crop Diseases",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-107",
+        "fa": "کنترل علف‌های هرز",
+        "en": "Garden and Field Weed Management",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-108",
+        "fa": "مقاومت آفات به سموم",
+        "en": "Pesticide Resistance Prevention",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-109",
+        "fa": "خواندن برچسب آفت‌کش",
+        "en": "Reading Pesticide Labels Safely",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-110",
+        "fa": "دفتر سم‌پاشی و دوره کارنس",
+        "en": "Pesticide Application and PHI Log",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-111",
+        "fa": "هرس سیب و گلابی",
+        "en": "Apple and Pear Pruning",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-112",
+        "fa": "هلو و شلیل",
+        "en": "Peach and Nectarine Orchard Care",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-113",
+        "fa": "پرورش انگور و داربست",
+        "en": "Grape Trellis and Vine Care",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-114",
+        "fa": "احداث باغ زیتون",
+        "en": "Olive Orchard Establishment",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-115",
+        "fa": "باغ انار و کیفیت میوه",
+        "en": "Pomegranate Orchard Quality",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-116",
+        "fa": "تغذیه باغ میوه",
+        "en": "Fruit Orchard Nutrition",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-117",
+        "fa": "آبیاری درختان میوه",
+        "en": "Fruit Tree Irrigation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-118",
+        "fa": "تکثیر و پیوند نهال",
+        "en": "Fruit Tree Propagation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-119",
+        "fa": "آفات رایج باغ میوه",
+        "en": "Fruit Orchard Pest Scouting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-120",
+        "fa": "تقویم سالانه باغ میوه",
+        "en": "Annual Orchard Work Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-121",
+        "fa": "زعفران از پیاز تا برداشت",
+        "en": "Saffron Bulb-to-Harvest Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-122",
+        "fa": "خشک‌کردن و بسته‌بندی زعفران",
+        "en": "Saffron Drying and Packaging",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-123",
+        "fa": "پسته در اقلیم خشک",
+        "en": "Pistachio Orchards in Arid Climates",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-124",
+        "fa": "آبیاری و تغذیه پسته",
+        "en": "Pistachio Irrigation and Nutrition",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-125",
+        "fa": "خرما و گرده‌افشانی",
+        "en": "Date Palm Care and Pollination",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-126",
+        "fa": "گردو و سرمازدگی",
+        "en": "Walnut Orchard Frost Management",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-127",
+        "fa": "پرورش گل محمدی",
+        "en": "Damask Rose Flower Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-128",
+        "fa": "گیاه دارویی کم‌آب‌بر",
+        "en": "Drought-Tolerant Medicinal Herbs",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-129",
+        "fa": "کشت زیره سبز",
+        "en": "Cumin Field Cultivation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-130",
+        "fa": "کشت کنجد",
+        "en": "Sesame Production",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-131",
+        "fa": "تولید گندم",
+        "en": "Wheat Field Production",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-132",
+        "fa": "تولید جو",
+        "en": "Barley Production Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-133",
+        "fa": "آب در برنج‌کاری",
+        "en": "Water-Efficient Rice Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-134",
+        "fa": "ذرت دانه‌ای و علوفه‌ای",
+        "en": "Grain and Silage Corn",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-135",
+        "fa": "یونجه و برنامه برداشت",
+        "en": "Alfalfa Cutting Schedule",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-136",
+        "fa": "تناوب زراعی",
+        "en": "Crop Rotation Planning",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-137",
+        "fa": "نخود و عدس",
+        "en": "Chickpea and Lentil Growing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-138",
+        "fa": "بذر و تراکم کشت دیم",
+        "en": "Dryland Seeding Density",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-139",
+        "fa": "ثبت مراحل رشد مزرعه",
+        "en": "Crop Growth Stage Records",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-140",
+        "fa": "هزینه و عملکرد زراعت",
+        "en": "Field Crop Cost Workbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-141",
+        "fa": "کاهش ضایعات برداشت",
+        "en": "Harvest Loss Reduction",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-142",
+        "fa": "سردکردن سبزی پس از برداشت",
+        "en": "Postharvest Vegetable Cooling",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-143",
+        "fa": "بهداشت بسته‌بندی محصول تازه",
+        "en": "Fresh Produce Packaging Hygiene",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-144",
+        "fa": "شست‌وشوی ایمن محصول",
+        "en": "Produce Wash Water Safety",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-145",
+        "fa": "پایش دمای سردخانه",
+        "en": "Cold Chain Monitoring",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-146",
+        "fa": "درجه‌بندی میوه و سبزی",
+        "en": "Produce Quality Grading",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-147",
+        "fa": "خشک‌کردن میوه و سبزی",
+        "en": "Safe Produce Drying",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-148",
+        "fa": "رهگیری محصول تا خریدار",
+        "en": "Farm-to-Buyer Traceability",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-149",
+        "fa": "آماده‌سازی محصول برای بازار",
+        "en": "Produce Market Preparation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-150",
+        "fa": "ثبت ضایعات و مرجوعی",
+        "en": "Postharvest Waste Log",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-151",
+        "fa": "زنبورداری مبتدی",
+        "en": "Beekeeping for Beginners",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-152",
+        "fa": "بازرسی ایمن کندو",
+        "en": "Safe Hive Inspection",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-153",
+        "fa": "بهداشت برداشت عسل",
+        "en": "Honey Harvest Hygiene",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-154",
+        "fa": "کشت گیاهان شهدزا",
+        "en": "Pollinator-Friendly Planting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-155",
+        "fa": "پرورش مرغ بومی",
+        "en": "Backyard Chicken Keeping",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-156",
+        "fa": "بهداشت گله طیور کوچک",
+        "en": "Small Poultry Flock Biosecurity",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-157",
+        "fa": "هزینه تغذیه مرغ بومی",
+        "en": "Backyard Poultry Feed Costs",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-158",
+        "fa": "کاربرد بهداشتی کود دامی",
+        "en": "Safe Manure Handling",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-159",
+        "fa": "پرورش کرم خاکی",
+        "en": "Earthworm Farming",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-160",
+        "fa": "مدیریت چرای مرتع",
+        "en": "Pasture Grazing Management",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-161",
+        "fa": "بودجه شروع گلخانه",
+        "en": "Greenhouse Startup Budget",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-162",
+        "fa": "سود کسب‌وکار قارچ",
+        "en": "Mushroom Business Profit Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-163",
+        "fa": "طرح کسب‌وکار ریزسبزی",
+        "en": "Microgreens Business Plan",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-164",
+        "fa": "قیمت‌گذاری محصول کشاورزی",
+        "en": "Cost-Based Farm Product Pricing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-165",
+        "fa": "دفتر درآمد و هزینه مزرعه",
+        "en": "Farm Income and Expense Log",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-166",
+        "fa": "فروش مستقیم میوه و سبزی",
+        "en": "Direct-to-Consumer Produce Sales",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-167",
+        "fa": "بازاریابی محلی گلخانه",
+        "en": "Local Greenhouse Marketing",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-168",
+        "fa": "برندینگ و بسته‌بندی محصول",
+        "en": "Farm Product Branding",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-169",
+        "fa": "تولید بر اساس سفارش فصلی",
+        "en": "Seasonal Production Planning",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-170",
+        "fa": "فروشگاه اینترنتی محصولات مزرعه",
+        "en": "Online Farm Store Starter Guide",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-171",
+        "fa": "ثبت مزرعه با موبایل",
+        "en": "Mobile Farm Recordkeeping",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-172",
+        "fa": "تحلیل مزرعه در اکسل",
+        "en": "Farm Spreadsheet Analytics",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-173",
+        "fa": "پایش ماهواره‌ای محصول",
+        "en": "Satellite Crop Monitoring",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-174",
+        "fa": "پهپاد نقشه‌برداری مزرعه",
+        "en": "Agricultural Drone Mapping",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-175",
+        "fa": "انتخاب سنسور گلخانه",
+        "en": "Smart Greenhouse Sensors",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-176",
+        "fa": "داشبورد رطوبت خاک",
+        "en": "Soil Moisture Dashboard",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-177",
+        "fa": "استفاده مسئولانه از هوش مصنوعی",
+        "en": "Responsible AI in Farming",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-178",
+        "fa": "تقویم دیجیتال کار مزرعه",
+        "en": "Digital Farm Task Calendar",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-179",
+        "fa": "ثبت آفات با عکس",
+        "en": "Photo-Based Pest Scouting",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-180",
+        "fa": "بازگشت سرمایه فناوری کشاورزی",
+        "en": "AgTech ROI Workbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-181",
+        "fa": "باغچه در گرمای شدید",
+        "en": "Hot-Weather Garden Plan",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-182",
+        "fa": "محافظت گیاه از سرما",
+        "en": "Frost Protection for Crops",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-183",
+        "fa": "کاهش تبخیر با مالچ",
+        "en": "Mulching to Reduce Evaporation",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-184",
+        "fa": "آمادگی گلخانه در قطع برق",
+        "en": "Greenhouse Power-Outage Plan",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-185",
+        "fa": "بازیابی مزرعه پس از تگرگ",
+        "en": "Hail and Wind Damage Recovery",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-186",
+        "fa": "انتخاب کشت با آب محدود",
+        "en": "Water-Limited Crop Choices",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-187",
+        "fa": "نگهداری باغچه در چهار فصل",
+        "en": "Four-Season Garden Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-188",
+        "fa": "زهکشی پس از باران شدید",
+        "en": "Heavy Rain Garden Drainage",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-189",
+        "fa": "پنجره کشت در اقلیم متغیر",
+        "en": "Planting Windows in Changing Climate",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-190",
+        "fa": "چک‌لیست تاب‌آوری مزرعه",
+        "en": "Farm Resilience Checklist",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-191",
+        "fa": "فرم کاشت و برداشت",
+        "en": "Sowing and Harvest Logbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-192",
+        "fa": "جدول آبیاری و کوددهی",
+        "en": "Irrigation and Fertilizer Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-193",
+        "fa": "چک‌لیست تجهیزات باغبانی",
+        "en": "Gardening Equipment Checklist",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-194",
+        "fa": "برگه مشاهده علائم گیاه",
+        "en": "Plant Symptom Worksheets",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-195",
+        "fa": "کاربرگ آزمایش خاک",
+        "en": "Soil Test Interpretation Workbook",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-196",
+        "fa": "فرم کنترل کیفیت محصول",
+        "en": "Produce Quality Control Forms",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-197",
+        "fa": "پیش‌بینی برداشت و بازار",
+        "en": "Harvest Forecast Planner",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-198",
+        "fa": "راهنمای تصویری ابزار باغبانی",
+        "en": "Illustrated Gardening Tools",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-199",
+        "fa": "پاسخ مشکلات رایج کشاورزی",
+        "en": "Farming Troubleshooting FAQ",
+        "status": "planned_not_delivered"
+      },
+      {
+        "id": "AGRI-200",
+        "fa": "برنامه ۹۰ روزه کسب‌وکار باغبانی",
+        "en": "90-Day Gardening Business Plan",
+        "status": "planned_not_delivered"
+      }
+    ],
+    "recipes": [
+      {
+        "id": "farm_enterprise_economics",
+        "source": "product_recipes/farm_enterprise_economics/README.md",
+        "status": "code_present_sales_unverified"
+      },
+      {
+        "id": "greenhouse_crop_margin",
+        "source": "product_recipes/greenhouse_crop_margin/README.md",
+        "status": "code_present_sales_unverified"
+      },
+      {
+        "id": "water_budget_economics",
+        "source": "product_recipes/water_budget_economics/README.md",
+        "status": "code_present_sales_unverified"
+      }
+    ]
+  },
+  "research": {
+    "editorial": [
+      {
+        "id": "RESEARCH-EDITORIAL-1",
+        "source": "editorial/agricultural-economics-2026/agricultural-value-chains-contract-market-power.md",
+        "status": "draft_publication_unverified"
+      },
+      {
+        "id": "RESEARCH-EDITORIAL-2",
+        "source": "editorial/agricultural-economics-2026/climate-risk-farm-panel-econometrics.md",
+        "status": "draft_publication_unverified"
+      },
+      {
+        "id": "RESEARCH-EDITORIAL-3",
+        "source": "editorial/agricultural-economics-2026/groundwater-shadow-price-dynamic-allocation.md",
+        "status": "draft_publication_unverified"
+      },
+      {
+        "id": "RESEARCH-EDITORIAL-4",
+        "source": "editorial/agricultural-economics-2026/technical-efficiency-sfa-dea-tfp.md",
+        "status": "draft_publication_unverified"
+      },
+      {
+        "id": "RESEARCH-EDITORIAL-5",
+        "source": "editorial/agricultural-economics-2026/true-cost-accounting-ecosystem-services.md",
+        "status": "draft_publication_unverified"
+      }
+    ],
+    "protocols": [
+      {
+        "id": "MR-2026-001",
+        "source": "research/manuscripts/MR-2026-001/PROTOCOL.md",
+        "status": "protocol_in_preparation"
+      }
+    ]
+  },
+  "games": {
+    "directories": [
+      {
+        "id": "GAME-DIR-air-supremacy-fa",
+        "source": "games/air-supremacy-fa",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-air-supremacy",
+        "source": "games/air-supremacy",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-arrow-escape",
+        "source": "games/arrow-escape",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-corwn-defender",
+        "source": "games/corwn-defender",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-crown-defender",
+        "source": "games/crown-defender",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-farm-wars-v3",
+        "source": "games/farm-wars-v3",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-farm-wars",
+        "source": "games/farm-wars",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      },
+      {
+        "id": "GAME-DIR-ramadan-war",
+        "source": "games/ramadan-war",
+        "status": "repository_directory_only",
+        "note": "Distinct commercial title and live gameplay not established"
+      }
+    ],
+    "moj_coin": {
+      "status": "requires_discovery_in_other_repositories_or_branches"
+    }
+  },
+  "services": [
+    {
+      "id": "E-SVC-01",
+      "title": "ارزیابی اقتصادی واحد کشاورزی",
+      "status": "not_live_not_sold"
+    },
+    {
+      "id": "E-SVC-02",
+      "title": "مدیریت آب و منابع تولید",
+      "status": "not_live_not_sold"
+    },
+    {
+      "id": "E-SVC-03",
+      "title": "لیزر و مراقبت پوست فریماه",
+      "status": "not_live_not_sold"
+    },
+    {
+      "id": "E-SVC-04",
+      "title": "اقتصاد دیجیتال و فناوری MojPlayWin",
+      "status": "not_live_not_sold"
+    },
+    {
+      "id": "E-SVC-05",
+      "title": "دستیارها و سامانه‌های هوش مصنوعی MojPlayWin",
+      "status": "not_live_not_sold"
+    }
+  ],
+  "socials": {
+    "source": "content/mojtaba_official_social_registry_20261026.json",
+    "registered_verified_links": 0,
+    "status": "no_verified_links_in_this_registry"
+  },
+  "dedup_rules": [
+    "series plans are not independently authored books",
+    "agri bilingual topics are not finished products",
+    "folders are not unique released games",
+    "publish/paid order requires independent live evidence"
+  ]
+}

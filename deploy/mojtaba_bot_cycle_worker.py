@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 ALLOWED_CPANEL = {"relay_preflight","cpanel_preflight","django_check","django_migrations"}
+DELIVERABLE_KINDS = {"deliverable_created", "source_change", "verified_order", "verified_publication"}
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -36,7 +37,13 @@ def record_action(args, item, status, evidence):
 
 def run_repo_readonly(item):
     operation = item.get("operation")
-    path = Path(item.get("path", ""))
+    raw_path = item.get("path", "")
+    if not isinstance(raw_path, str) or not raw_path or Path(raw_path).is_absolute():
+        return False, ["invalid:repo_relative_path"], "repository-relative path is required"
+    root = Path.cwd().resolve()
+    path = (root / raw_path).resolve()
+    if not path.is_relative_to(root):
+        return False, ["invalid:path_outside_repo"], "path escapes repository checkout"
     if not path.is_file():
         return False, [f"missing:{path}"], "repository file is missing"
     if operation == "file_exists":
@@ -45,8 +52,11 @@ def run_repo_readonly(item):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         return True, [f"file:{path}", f"sha256:{digest}"], "sha256 recorded"
     if operation == "json_validate":
-        json.loads(path.read_text(encoding="utf-8"))
-        return True, [f"file:{path}", "json:valid"], "JSON parsed successfully"
+        try:
+            json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return False, [f"file:{raw_path}", "json:invalid"], "JSON failed validation"
+        return True, [f"file:{raw_path}", "json:valid"], "JSON parsed successfully"
     return False, [f"unsupported:{operation}"], "repo operation not allowlisted"
 
 
@@ -64,6 +74,11 @@ def main():
         raise SystemExit("queue exceeds one-cycle limit")
     if not queue:
         raise SystemExit("EMPTY_QUEUE: no real action was executed")
+    if not all(isinstance(x, dict) for x in queue):
+        raise SystemExit("INVALID_QUEUE: every action must be an object")
+    action_ids = [x.get("action_id") for x in queue]
+    if len(action_ids) != len(set(action_ids)):
+        raise SystemExit("DUPLICATE_QUEUE_ID: each action ID must be unique")
     results=[]
     for item in queue:
         aid=item.get("action_id")
@@ -80,14 +95,14 @@ def main():
                                 text=True,capture_output=True,timeout=120)
             evidence=item.get("evidence",[])
             evidence=evidence+[f"exit_code:{proc.returncode}"]
-            status = "success" if proc.returncode == 0 else "failed"
+            status = "observed" if proc.returncode == 0 else "failed"
             record_action(args, item, status, evidence)
             results.append({"action_id":aid,"status":status,
                             "operation":operation,"evidence":evidence,
                             "output_tail":(proc.stdout+proc.stderr)[-1200:]})
         elif kind == "repo_readonly":
             ok, evidence, message = run_repo_readonly(item)
-            status = "success" if ok else "failed"
+            status = "observed" if ok else "failed"
             record_action(args, item, status, evidence)
             results.append({"action_id":aid,"status":status,"operation":item.get("operation"),
                             "evidence":evidence,"message":message})
@@ -97,25 +112,29 @@ def main():
             results.append({"action_id":aid,"status":"blocked",
                             "reason":"no approved adapter for action kind","kind":kind})
     successful=sum(x["status"]=="success" for x in results)
-    # Completion is cumulative across durable ledger runs for this cycle.
-    # This prevents a split queue from being reported incomplete after all
-    # evidence-gated actions have already succeeded.
-    cumulative_success=successful
+    observed=sum(x["status"]=="observed" for x in results)
+    # Legacy inspection-only successes are excluded from deliverable progress.
+    # Across runs, one action_id can contribute at most once.
+    cumulative_success=0
     state_path=Path(args.state)
     if state_path.is_file():
         try:
             state=json.loads(state_path.read_text(encoding="utf-8"))
-            cumulative_success=sum(
-                1
+            accepted_ids={
+                action_id
                 for run in state.get("runs", {}).values()
                 if run.get("cycle")==args.cycle
-                for action in run.get("actions", {}).values()
+                for action_id, action in run.get("actions", {}).items()
                 if action.get("status")=="success"
-            )
-        except (OSError, ValueError, TypeError):
-            cumulative_success=successful
+                and action.get("kind") in DELIVERABLE_KINDS
+                and bool(action.get("evidence"))
+            }
+            cumulative_success=len(accepted_ids)
+        except (OSError, ValueError, TypeError, AttributeError):
+            cumulative_success=0
     report={"engine":"mojtaba.bot.ai","cycle":args.cycle,"started_at":now(),
             "queued":len(queue),"processed":len(results),"successful":successful,
+            "observed":observed,"cumulative_qualified_deliveries":cumulative_success,
             "cumulative_successful":cumulative_success,"target":50,
             "complete":cumulative_success>=50,"results":results}
     print(json.dumps(report,ensure_ascii=False,indent=2))
