@@ -106,13 +106,17 @@ def product_detail(request, product_id):
     if not isinstance(allowed_ids, (tuple, list, set, frozenset)):
         allowed_ids = ()
     allowed_ids = frozenset(x for x in allowed_ids if type(x) is int and x > 0)
+    # The TRX storefront already requires explicit public SKU authorization,
+    # current asset-bound publication rights, and a positive USD price.
+    # Do not add an unrelated legacy Zomorod sales_enabled flag: the
+    # owner-attested MojPlayWin rights release does not set that flag.
     can_list_offer = (
-        metadata.get("sales_enabled") is True
-        and product.currency in ("USD", "EUR", "IRR", "CAD")
+        product.currency in ("USD", "EUR", "IRR", "CAD")
         and product.price >= 0
-        and (site != "mojplaywin" or (
-            approved_paid and product.pk in allowed_ids
-        ))
+        and (
+            (site == "mojplaywin" and approved_paid and product.pk in allowed_ids)
+            or (site != "mojplaywin" and metadata.get("sales_enabled") is True)
+        )
     )
     checkout_url = (approved_guest_checkout_route(product.pk)
                     if site == "mojplaywin" and can_list_offer else None)
