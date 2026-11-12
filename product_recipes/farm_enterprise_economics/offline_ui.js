@@ -148,11 +148,17 @@
   function render(report) {
     $('scope').textContent = 'Currency: ' + report.currency + '. Contribution accounting only; period and assumptions are yours.';
     $('portfolio').replaceChildren();
-    [['sales_revenue', 'Revenue'], ['total_cost', 'Total modeled cost'],
-      ['operating_profit', 'Operating profit (pre-tax etc.)'],
-      ['contribution_margin_total', 'Contribution margin']].forEach(([key, label]) => {
+    [['sales_revenue', 'Revenue', 'money'], ['total_cost', 'Total modeled cost', 'money'],
+      ['operating_profit', 'Operating profit (pre-tax etc.)', 'money'],
+      ['contribution_margin_total', 'Contribution margin', 'money'],
+      ['operating_profit_margin_percent', 'Operating profit margin', 'percent'],
+      ['contribution_margin_percent', 'Contribution margin', 'percent']
+    ].forEach(([key, label, unit]) => {
       const cell = element('div', null, 'kpi');
-      cell.append(element('span', label), element('strong', report.portfolio[key] + ' ' + report.currency));
+      const value = report.portfolio[key];
+      const shown = value === null || value === undefined ? '—'
+        : unit === 'percent' ? value + '%' : value + ' ' + report.currency;
+      cell.append(element('span', label), element('strong', shown));
       $('portfolio').append(cell);
     });
     tabulate($('results'), report.results, [
