@@ -132,7 +132,7 @@ def main():
             evidence = item.get("evidence", [])
             if not isinstance(evidence, list):
                 evidence = []
-            valid = verified_git_artifact(kind, evidence)
+            valid = verified_git_artifact(kind, evidence, max_age_seconds=75 * 60)
             if item.get("before", "").strip() == item.get("after", "").strip():
                 valid = False
             if not valid:
