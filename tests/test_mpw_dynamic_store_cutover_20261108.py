@@ -558,6 +558,54 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
 
+    def test_checkout_duplicate_invoice_forms_are_never_accepted(self):
+        form = (b'<form id="checkout" method="post" '
+                b'action="/commerce/trx-easy/start/72/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        self.assertTrue(has_guarded_guest_invoice_form(form, 72))
+        self.assertFalse(has_guarded_guest_invoice_form(form + form, 72))
+        # A conflicting second form addressed to the same action must fail
+        # even if the first invoice form is valid.
+        second = (b'<form method="get" '
+                  b'action="/commerce/trx-easy/start/72/"></form>')
+        self.assertFalse(has_guarded_guest_invoice_form(form + second, 72))
+
+    def test_checkout_external_email_control_and_duplicate_id_are_rejected(self):
+        form = (b'<form id="checkout" method="post" '
+                b'action="/commerce/trx-easy/start/72/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        self.assertFalse(has_guarded_guest_invoice_form(
+            b'<input type="email" name="email" form="checkout">' + form, 72
+        ))
+        self.assertFalse(has_guarded_guest_invoice_form(
+            form + b'<input name="email" type="text" form="checkout">', 72
+        ))
+        self.assertFalse(has_guarded_guest_invoice_form(
+            form + b'<form id="checkout" action="/subscribe/"></form>', 72
+        ))
+
+    def test_unrelated_newsletter_email_does_not_block_invoice_form(self):
+        form = (b'<form id="pay" method="post" '
+                b'action="/commerce/trx-easy/start/879/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        newsletter = (b'<form id="newsletter" action="/subscribe/" method="post">'
+                      b'<input name="email" type="email"></form>')
+        self.assertTrue(has_guarded_guest_invoice_form(newsletter + form, 879))
+        self.assertTrue(has_guarded_guest_invoice_form(
+            form + b'<input form="newsletter" type="email" name="email">', 879
+        ))
+        self.assertTrue(has_guarded_guest_invoice_form(
+            form + b'<input novalue name="other">', 879
+        ))
+
+    def test_unclosed_or_nested_checkout_form_is_rejected(self):
+        form = (b'<form method="post" action="/commerce/trx-easy/start/72/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic">')
+        self.assertFalse(has_guarded_guest_invoice_form(form, 72))
+        self.assertFalse(has_guarded_guest_invoice_form(
+            form + b'<form method="post" action="/subscribe/"></form></form>', 72
+        ))
+
     def test_main_guest_adapter_is_email_free_signed_cookie_source(self):
         # This test proves the repository source contract, not the deployed host.
         root = Path(__file__).resolve().parents[1]
