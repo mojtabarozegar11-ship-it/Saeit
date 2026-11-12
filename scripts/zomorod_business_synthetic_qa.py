@@ -119,6 +119,10 @@ for clause in ('PREFLIGHT=PASS_READ_ONLY','PREFLIGHT=APP_DRIFT','PREFLIGHT=DISK_
 invalid=subprocess.run(['bash',str(guard_script),'INVALID','ABSENT','0'*64,'0'*64,'0'*40,'/tmp/not-real-stage'],capture_output=True,text=True)
 assert invalid.returncode!=0,('Malformed hash accepted',invalid.stdout,invalid.stderr)
 guard_source=guard_script.read_text(encoding='utf-8')
+assert 'python3 -B "$stage/pre-switch.py"' in guard_source
+assert "'$stage/pre-switch.py'" in deploy_workflow
+assert 'zomorod_business_pre_switch_drift_guard.py' in deploy_workflow
+assert guard_source.index('python3 -B "$stage/pre-switch.py"') < guard_source.index('mv -f "$private/.genetics-center.new-')
 assert "python3 -B \"$stage/public-references.py\" enforce" in guard_source
 assert "'PUBLIC_REFERENCES_PROTECTED=VERIFIED'" in guard_source
 assert "cat > '$stage/public-references.py'" in deploy_workflow
