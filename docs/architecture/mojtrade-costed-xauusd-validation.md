@@ -223,10 +223,13 @@ Public XAUUSD contract page reports **100 troy ounces per standard lot**
 and current instrument listing a **0.01-lot minimum and volume step**,
 equivalent to a nominal **1-ounce minimum and step**. This does not
 prove the account's leverage, slippage, margin or order permissions.
-The synthetic test settings use 0.01-ounce granularity only as a
-mathematical fixture, **not a tradable LiteFinance volume**. Production
-position sizing must explicitly convert between contract lots and
-ounces using the authenticated account's specifications.
+The research settings loader now **rejects** any XAUUSD
+`quantity_step_ounces` other than 1.0. It does not simulate
+untradeable micro-ounce positions. The public listing does not verify
+the particular account's contract configuration: this must be
+reconciled before brokerage execution, and a genuine broker change
+requires reviewing this research contract rather than silently
+using an invalid lot conversion.
 
 Official contract specifications:
 https://www.litefinance.org/trading/trading-instruments/commodities/
