@@ -110,3 +110,68 @@ The source has no automatic promotion or false 100%-profit guarantees.
 The exact same risk controls make commercial deployment more robust;
 they are not restrictions on research, markets, strategy innovation or
 the legitimate ambition to earn income.
+
+## Expanding walk-forward / three execution-cost scenarios
+
+The new `trading/mojtrade_walk_forward.py` runs repeated chronological,
+past-only training/selection. The default study uses **three separate
+100-bar future windows**. Each fold is separated from its training cut-off
+by an embargo of `max(40, max_hold_bars)` bars. Later folds may train on
+earlier historical periods, including observations from earlier test
+windows **only after those prices existed in time**. A selected model is
+never selected on its own future test performance.
+
+In each test window, use the **same past-only signal model** under three
+hypothetical executable cost conditions:
+
+| Scenario | Observed spread | Slippage | Commission |
+|---|---:|---:|---:|
+| supplied broker assumptions | 1× | 1× | 1× |
+| wider market | 1.5× | 1.5× | 1.5× |
+| severe cost shock | 3× | 3× | 2× |
+
+The observed bid/ask levels come from the supplied CSV; in stress cases
+the bid quote is preserved and the ask quote is widened relative to
+its original bid. The underlying price history and signal inputs stay
+unchanged. Neither the broker origin of the CSV nor future market
+liquidity, funding costs or order-book depth can be proven by a
+backtest.
+
+**Read-only command:**
+
+```bash
+python3 -m trading.mojtrade_walk_forward \
+  --bid-ask-csv /private/reconciled-xauusd-bidask-m1.csv \
+  --settings-json /private/verified-costs.json \
+  --folds 3 \
+  --test-bars 100
+```
+
+The tool refuses insufficient history, an invalid fingerprint,
+unsupported fold counts, and too-short test ranges rather than
+filling missing evidence with profits. The minimum for the default
+three-fold design and the current research parameters is 720
+**consecutive** source bars. This is a research minimum, not enough to
+claim statistically reliable profitability.
+
+**Real-market-data blocker:** The current `parse_bars` implementation
+demands exact timestamp continuity. Real XAUUSD trading commonly has
+broker-specific daily session breaks, weekends and holidays. Therefore
+a representative multiweek broker export will be rejected until
+broker-attested trading-session closure gaps can be distinguished
+from genuine missing quotes. Do **not** fabricate intervening candles
+or delete losing market intervals to bypass this blocker. Verified
+LiteFinance session/calendar metadata is needed to implement that
+rule correctly.
+
+The output keeps each fold's all-candidate training scores, selected
+strategy (or none), embargo and untouched future-test results, plus
+the three cost-sensitivity outcomes. A historical robustness
+candidate is not `commercial_ready`; the latter remains false.
+There is no claimed demo fill, received income, brokerage account
+connection, or permission to place a trade.
+
+The GitHub CI exercises chronological boundaries, anti-lookahead,
+invalid input, low-quality strategy rejection and synthetic
+spread-shock behavior. These fixtures prove only that source code
+behaves as specified; they are **not actual market experiments**.
