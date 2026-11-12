@@ -106,5 +106,83 @@ class RightsMetadataContract(unittest.TestCase):
                 SimpleNamespace(metadata=metadata), approved))
 
 
+    def test_paid_stream_matches_exact_approved_bytes_and_resets_position(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'%PDF-1.4\\nExact purchased private content\\n'
+            path=Path(tmp)/'paid.pdf'
+            path.write_bytes(payload)
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest)
+            product=SimpleNamespace(metadata=metadata)
+            with path.open('rb') as stream:
+                stream.read(6)
+                self.assertTrue(CONTEXT.private_paid_stream_matches_approved(product,stream))
+                self.assertEqual(stream.tell(),0)
+                self.assertEqual(stream.read(),payload)
+
+    def test_paid_stream_denies_modified_content_even_when_size_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            approved=b'%PDF-1.4\\nOriginal file content\\n'
+            altered=approved.replace(b'Original',b'Altered!')
+            self.assertEqual(len(approved),len(altered))
+            path=Path(tmp)/'paid.pdf'
+            path.write_bytes(altered)
+            digest=hashlib.sha256(approved).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest)
+            with path.open('rb') as stream:
+                self.assertFalse(CONTEXT.private_paid_stream_matches_approved(
+                    SimpleNamespace(metadata=metadata),stream))
+
+    def test_paid_stream_rejects_revoked_rights_even_with_valid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'valid licensed file bytes'
+            path=Path(tmp)/'private.zip'
+            path.write_bytes(payload)
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest,
+                            rights_cleared=False)
+            with path.open('rb') as stream:
+                self.assertFalse(CONTEXT.private_paid_stream_matches_approved(
+                    SimpleNamespace(metadata=metadata),stream))
+
+    def test_paid_stream_rejects_hardlinked_open_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'merchant approved stream'
+            path=Path(tmp)/'asset.pdf'
+            path.write_bytes(payload)
+            import os
+            os.link(path,Path(tmp)/'hardlink.pdf')
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest)
+            with path.open('rb') as stream:
+                self.assertFalse(CONTEXT.private_paid_stream_matches_approved(
+                    SimpleNamespace(metadata=metadata),stream))
+
+    def test_paid_stream_rejects_removed_inode_after_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload=b'approved original'
+            path=Path(tmp)/'paid.pdf'
+            path.write_bytes(payload)
+            digest=hashlib.sha256(payload).hexdigest()
+            metadata=evidence()
+            metadata.update(sha256=digest,rights_asset_sha256=digest)
+            with path.open('rb') as stream:
+                path.unlink()
+                self.assertFalse(CONTEXT.private_paid_stream_matches_approved(
+                    SimpleNamespace(metadata=metadata),stream))
+
+    def test_paid_delivery_source_uses_open_fd_verifier_and_cleanup(self):
+        source=(SOURCE.parent/'mpw_walletless_commercial_intent.py').read_text('utf-8')
+        paid=source.split('def open_commercial_paid_file(',1)[1]
+        self.assertIn('private_paid_stream_matches_approved(item.product,stream)',paid)
+        self.assertIn('getattr(os,"O_NOFOLLOW",0)',paid)
+        self.assertIn('stream.close()',paid)
+        self.assertIn('return stream',paid)
+
+
 if __name__=="__main__":
     unittest.main()
