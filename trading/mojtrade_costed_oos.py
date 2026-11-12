@@ -242,6 +242,7 @@ def simulate(bars, data, cfg, strategy, start, end):
     equity = cfg.initial_equity_usd
     peak = equity
     worst_drawdown = 0.0
+    worst_intrabar_drawdown = 0.0
     trades = []
     position = None
     pending = None
@@ -282,6 +283,16 @@ def simulate(bars, data, cfg, strategy, start, end):
                     else:
                         skipped_minimum_size += 1
         if position is not None:
+            side, entry, _stop, _take, qty, _opened, _fee = position
+            # Stress mark on the adverse intrabar quote, including possible
+            # slippage and both commissions. It is NOT a live equity statement.
+            adverse_exit = (bar.bl - cfg.slippage_usd_per_ounce_per_side
+                            if side == 1 else bar.ah + cfg.slippage_usd_per_ounce_per_side)
+            stress_pnl = ((adverse_exit - entry) * side * qty
+                          - 2 * qty * cfg.commission_usd_per_ounce_per_side)
+            worst_intrabar_drawdown = max(
+                worst_intrabar_drawdown, max(0.0, peak - (equity + stress_pnl)) / peak
+            )
             forced = (i - position[5] >= cfg.max_hold_bars or i == end - 1)
             outcome = _close(position, bar, forced=forced, settings=cfg)
             if outcome is not None:
@@ -312,6 +323,9 @@ def simulate(bars, data, cfg, strategy, start, end):
         "win_rate": round(len(wins) / len(trades), 6) if trades else None,
         "profit_factor": round(gross_gain / gross_loss, 6) if gross_loss > 0 else None,
         "max_closed_equity_drawdown_fraction": round(worst_drawdown, 6),
+        "max_intrabar_stress_drawdown_fraction": round(
+            max(worst_intrabar_drawdown, worst_drawdown), 6
+        ),
         "commissions_usd": round(sum(t["fees"] for t in trades), 6),
         "stops": sum(t["reason"] in ("stop", "gap_stop") for t in trades),
         "gap_stops": sum(t["reason"] == "gap_stop" for t in trades),
@@ -347,7 +361,8 @@ def evaluate(bars, source_digest, cfg):
         "symbol": "XAUUSD",
         "source_sha256": source_digest,
         "source_is_cryptographically_authenticated_to_broker": False,
-        "data_assumed_real_broker_bid_ask": True,
+        "bid_ask_ohlc_required_by_input_contract": True,
+        "broker_quote_provenance_unverified": True,
         "timeframe_minutes": cfg.timeframe_minutes,
         "input_bars": n,
         "train_bars": training_end - 40,
