@@ -56,7 +56,9 @@ class CheckoutParser(HTMLParser):
             })
             self._active_form = len(self._forms) - 1
 
-        if tag in ("input", "textarea", "select"):
+        # Submit buttons can carry a successful named field to the server too.
+        # A named email button must block the email-free purchase contract.
+        if tag in ("input", "textarea", "select", "button"):
             name = attrs.get("name", "").lower()
             input_type = attrs.get("type", "").lower()
             is_email = ("email" in name or input_type == "email"
