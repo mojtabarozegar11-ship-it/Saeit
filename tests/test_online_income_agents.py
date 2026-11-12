@@ -18,6 +18,22 @@ def test_seed_online_income_agents_is_idempotent_and_single_agent():
 
 
 @pytest.mark.django_db
+def test_seeding_master_preserves_live_specialist_with_pending_task():
+    specialist = Agent.objects.create(
+        code="income-independent-specialist", name="Existing specialist",
+        mission="Preserve useful independent task", active=True,
+    )
+    task = AgentTask.objects.create(
+        agent=specialist, action_type="independent_delivery", status="queued"
+    )
+    call_command("seed_online_income_agents")
+    specialist.refresh_from_db()
+    task.refresh_from_db()
+    assert specialist.active is True
+    assert task.status == "queued"
+
+
+@pytest.mark.django_db
 def test_registry_resolves_income_capability_to_master():
     call_command("seed_online_income_agents")
     agent = AgentRegistry().resolve("income_market_research")

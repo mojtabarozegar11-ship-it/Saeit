@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 import sys
 import sqlite3
+import shutil
 import time
 from datetime import datetime, timezone
 
@@ -36,8 +37,8 @@ SCRIPTS = Path(__file__).resolve().parent
 
 PRODUCT_SLOT_CAPACITY = 1
 PRODUCT_LINE_ID = 41
+MIN_FREE_MANUFACTURING_BYTES = 512 * 1024 * 1024
 SLOT_SCHEMA = "saeit.factory.product-slots.v1"
-CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -75,19 +76,40 @@ def _write_private_json(path, value):
             os.unlink(temporary)
 
 
-def _verified_quality_exit(root, recipe):
-    """Only a current, signed 1000/1000 clearance frees a production slot."""
+def _verified_technical_exit(root, recipe, source_sha):
+    """Release the *manufacturing slot*, never a product for public sale.
+
+    A completed build must have matching current source, archive bytes and an
+    independently executed customer-ZIP receipt. A numerical grade is never
+    a condition for manufacturing or for freeing the one-product slot.
+    """
+    if not isinstance(source_sha, str) or not HEX_SHA256.fullmatch(source_sha):
+        return None
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
-    clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
     manifest = _read_private_json(manifest_path)
-    clearance = _read_private_json(clearance_path)
-    if (not manifest or not clearance or archive_path.is_symlink()
+    receipt_dir = root / "customer-extracted-acceptance" / recipe / source_sha
+    receipt_path = receipt_dir / "technical-receipt-v2.json"
+    if not receipt_path.exists():
+        # Immutable legacy acceptance files remain valid for historical ZIPs.
+        receipt_path = receipt_dir / "technical-receipt.json"
+    receipt = _read_private_json(receipt_path)
+    if (not manifest or not receipt or archive_path.is_symlink()
             or not archive_path.is_file()):
         return None
     artifact_sha = manifest.get("artifact_sha256")
     if (manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
+            or manifest.get("qa_evidence") != "unit_tests_passed"
+            or manifest.get("source_sha256") != source_sha
+            or manifest.get("commercial_status") != "private_internal_qa_pass_not_published"
+            or manifest.get("professional_quality_approved") is not False
+            or manifest.get("public_listing_enabled") is not False
+            or manifest.get("owner_publication_approval") is not False
             or not isinstance(artifact_sha, str) or not HEX_SHA256.fullmatch(artifact_sha)):
+        return None
+    measured = manifest.get("qa_measurements")
+    if (not isinstance(measured, dict) or type(measured.get("tests_run")) is not int
+            or measured["tests_run"] < 1 or measured.get("successful_tests") != measured["tests_run"]):
         return None
     digest = hashlib.sha256()
     try:
@@ -96,58 +118,31 @@ def _verified_quality_exit(root, recipe):
                 digest.update(block)
     except OSError:
         return None
-    roles = clearance.get("valid_signed_roles")
-    roles = set(roles) if isinstance(roles, list) and all(isinstance(x, str) for x in roles) else set()
-    independent_roles = {"domain_specialist", "independent_quality_auditor", "rights_reviewer"}
     if (digest.hexdigest() != artifact_sha
-            or clearance.get("schema") != CLEARANCE_SCHEMA
-            or clearance.get("eligible") is not True
-            or clearance.get("verified_grade_total") != 1000
-            or clearance.get("artifact_sha256") != artifact_sha
-            or not independent_roles.issubset(roles)
-            or clearance.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent")
-            or clearance.get("publication_executed") is not False
-            or clearance.get("payment_activated") is not False):
+            or receipt.get("schema") not in (
+                "zomorodmelal.factory.customer-extracted-acceptance.v1",
+                "zomorodmelal.factory.customer-extracted-acceptance.v2")
+            or receipt.get("recipe") != recipe
+            or receipt.get("source_sha256") != source_sha
+            or receipt.get("artifact_sha256") != artifact_sha
+            or receipt.get("customer_zip_extract_test") != "passed"
+            or receipt.get("customer_archive_tests_run") != measured["tests_run"]
+            or receipt.get("original_manufacturer_tests_run") != measured["tests_run"]
+            or (receipt.get("schema", "").endswith(".v1")
+                and receipt.get("professional_quality_1000_approved") is not False)
+            or (receipt.get("schema", "").endswith(".v2")
+                and (receipt.get("objective_customer_package_accepted") is not True
+                     or receipt.get("commercial_publication_approved") is not False))
+            or receipt.get("public_listing_enabled") is not False
+            or receipt.get("commerce_enabled") is not False):
         return None
-    return {"artifact_sha256": artifact_sha,
-            "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
+    return {"source_sha256": source_sha, "artifact_sha256": artifact_sha,
+            "technical_customer_qa": "passed", "commercial_release": False,
+            "customer_receipt_sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest()}
 
 
-def _cleanup_completed_product_extras(root, recipe):
-    """Free per-product working files only after exact signed 1000 clearance.
-
-    Keep the certified deliverable, its manufacturing manifest, exact-version
-    clearance and exit receipt. Remove disposable source/rework candidates.
-    """
-    import shutil
-    root = Path(root)
-    if root.is_symlink():
-        raise RuntimeError("PRODUCT_CLEANUP_ROOT_UNSAFE")
-    targets = [
-        root / "generated-product-recipes" / recipe,
-        root / "quality-excellence" / "evolved-source-technical-products" / recipe,
-        root / "quality-excellence" / "rework" / recipe,
-        root / "qa-rework" / recipe,
-        root / "research-dossiers" / recipe,
-        root / "quality-excellence" / "engineering-workorders" / recipe,
-    ]
-    revisions = root / "generated-source-revisions"
-    if revisions.exists():
-        if revisions.is_symlink() or not revisions.is_dir():
-            raise RuntimeError("PRODUCT_CLEANUP_REVISION_ROOT_UNSAFE")
-        targets.extend(p for p in revisions.iterdir()
-                       if p.name.startswith(recipe + "-") and p.is_dir())
-    for target in targets:
-        if target.is_symlink():
-            raise RuntimeError("PRODUCT_CLEANUP_SYMLINK_BLOCKED")
-        if target.is_dir():
-            shutil.rmtree(target)
-        elif target.exists():
-            raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
-
-
-def _maintain_product_slots(root, recipe_names):
-    """Line 41 runs one product at a time; exact signed 1000 exits the line."""
+def _maintain_product_slots(root, recipe_names, source_hashes):
+    """Line 41 builds serially, retaining completed artifacts for separate review."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
                   / "active-slots" / "current.json")
     if state_path.is_symlink():
@@ -171,10 +166,17 @@ def _maintain_product_slots(root, recipe_names):
             seen.add(item["recipe"])
     if len(active) > 100:
         raise RuntimeError("PRODUCT_SLOT_MIGRATION_LIMIT_EXCEEDED")
-    exited = state.get("exited", {})
+    exited = state.get("exited", {})  # Preserve historical signed approvals.
+    technical_exited = state.get("technical_exited", {})
     waiting = state.get("waiting", [])
-    if not isinstance(exited, dict) or not isinstance(waiting, list):
+    if (not isinstance(exited, dict) or not isinstance(technical_exited, dict)
+            or not isinstance(waiting, list)):
         raise RuntimeError("PRODUCT_SLOT_QUEUE_INVALID")
+    # Do not keep a stale engineering completion against modified source.
+    technical_exited = {name: proof for name, proof in technical_exited.items()
+                        if isinstance(proof, dict)
+                        and proof.get("source_sha256") == source_hashes.get(name)
+                        and _verified_technical_exit(root, name, source_hashes.get(name))}
     queue = []
     queued = set()
     for recipe in waiting:
@@ -189,18 +191,22 @@ def _maintain_product_slots(root, recipe_names):
         if recipe not in queued:
             queue.append(recipe)
             queued.add(recipe)
+    candidates = sorted({name for name in recipe_names
+                         if isinstance(name, str) and PRODUCT_SLUG.fullmatch(name)})
+    available = set(candidates)
     retained = []
     for item in active[:1]:
         recipe = item["recipe"]
-        clearance = _verified_quality_exit(root, recipe)
-        if clearance:
-            exited[recipe] = dict(clearance)
-            _cleanup_completed_product_extras(root, recipe)
+        proof = _verified_technical_exit(root, recipe, source_hashes.get(recipe))
+        if proof:
+            technical_exited[recipe] = proof
+        elif recipe not in available:
+            if recipe not in queued:
+                queue.append(recipe)
+                queued.add(recipe)
         else:
             retained.append(item)
     active = retained
-    candidates = sorted({name for name in recipe_names
-                         if isinstance(name, str) and PRODUCT_SLUG.fullmatch(name)})
     cursor = state.get("last_admitted_recipe", "")
     if not isinstance(cursor, str):
         cursor = ""
@@ -209,40 +215,50 @@ def _maintain_product_slots(root, recipe_names):
     for recipe in rotated:
         if recipe in seen or recipe in queued or any(x["recipe"] == recipe for x in active):
             continue
-        clearance = _verified_quality_exit(root, recipe)
-        if clearance:
-            exited[recipe] = dict(clearance)
-            continue
-        manifest = _read_private_json(Path(root) / "digital-products" / recipe
-                                      / "manufacturing_manifest.json")
-        current_artifact = manifest.get("artifact_sha256") if manifest else None
-        prior_exit = exited.get(recipe)
-        if isinstance(prior_exit, dict) and prior_exit.get("artifact_sha256") == current_artifact:
+        proof = _verified_technical_exit(root, recipe, source_hashes.get(recipe))
+        if proof:
+            technical_exited[recipe] = proof
             continue
         queue.append(recipe)
         queued.add(recipe)
+    unavailable_queue = []
     while not active and queue:
         next_recipe = queue.pop(0)
-        clearance = _verified_quality_exit(root, next_recipe)
-        if clearance:
-            exited[next_recipe] = dict(clearance)
-            _cleanup_completed_product_extras(root, next_recipe)
+        if next_recipe not in available:
+            # Old inventory references may outlive the installed recipe files.
+            # Never let a missing source occupy the one executable slot.
+            unavailable_queue.append(next_recipe)
             continue
-        manifest = _read_private_json(Path(root) / "digital-products" / next_recipe
-                                      / "manufacturing_manifest.json")
-        current_artifact = manifest.get("artifact_sha256") if manifest else None
-        prior_exit = exited.get(next_recipe)
-        if isinstance(prior_exit, dict) and prior_exit.get("artifact_sha256") == current_artifact:
+        proof = _verified_technical_exit(root, next_recipe, source_hashes.get(next_recipe))
+        if proof:
+            technical_exited[next_recipe] = proof
             continue
         active = [{"recipe": next_recipe, "status": "active"}]
         cursor = next_recipe
+    queue = unavailable_queue + queue
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
              "active": active, "waiting": queue, "exited": exited,
+             "technical_exited": technical_exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "exact passed artifact with valid signed 1000/1000 clearance",
-             "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
+             "unavailable_recipe_count": len(unavailable_queue),
+             "exit_rule": "exact-source-archive-and-extracted-customer-tests-private-only",
+             "cleanup_rule": "no_deletion_of_product_or_rework_evidence",
+             "commercial_release": False,
+             "quality_policy": "objective_customer_acceptance_v1"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
+
+
+def _current_recipe_hashes(recipe_catalog, recipe_roots, maker):
+    """Do not graduate an old ZIP if its recipe changed since QA."""
+    result = {}
+    for recipe, (_name, files) in recipe_catalog.items():
+        try:
+            result[recipe] = maker.source_digest(recipe_roots[recipe] / recipe, files)
+        except (OSError, ValueError, RuntimeError):
+            # The manufacturing worker reports an exact defect on this slot.
+            result[recipe] = None
+    return result
 
 
 
@@ -355,6 +371,19 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         recipe_catalog = maker.discover_recipes(recipes, errors=admission_failures)
         recipe_roots = {key: Path(recipes) for key in recipe_catalog}
         generated_root = root / "generated-product-recipes"
+        if generated_root.is_symlink():
+            raise RuntimeError("GENERATED_RECIPE_ROOT_SYMLINK")
+        # A deliberately non-generating VPS runner must still be able to finish
+        # previously compiled, valid recipes waiting in the private queue.
+        if not enable_designer and generated_root.is_dir():
+            existing_failures = []
+            existing = maker.discover_recipes(generated_root, errors=existing_failures)
+            admission_failures.extend(existing_failures)
+            recipe_roots.update({item["recipe"]: generated_root for item in existing_failures})
+            if set(existing) & set(recipe_catalog):
+                raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
+            recipe_catalog.update(existing)
+            recipe_roots.update({key: generated_root for key in existing})
         if enable_designer and generated_root.is_dir():
             generated_failures = []
             generated = maker.discover_recipes(generated_root, errors=generated_failures)
@@ -376,7 +405,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
             recipe_catalog.update(generated)
             recipe_roots.update({key: generated_root for key in generated})
-            active_recipe_names = _maintain_product_slots(root, recipe_catalog)
+            active_recipe_names = _maintain_product_slots(
+                root, recipe_catalog, _current_recipe_hashes(recipe_catalog, recipe_roots, maker))
             # Quality-driven product evolution: compiler-owned goods really gain
             # a bounded customer batch API, with holdout and real unit tests.
             # Rotate the bounded queue across ticks; never leave later product
@@ -419,8 +449,13 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             repair.record_failure(root,item['recipe'],RuntimeError(item['reason']),
                                   str(recipe_roots.get(item['recipe'],Path(recipes))/item['recipe']))
         if active_recipe_names is None:
-            active_recipe_names = _maintain_product_slots(root, recipe_catalog)
+            active_recipe_names = _maintain_product_slots(
+                root, recipe_catalog, _current_recipe_hashes(recipe_catalog, recipe_roots, maker))
         selected = [recipe for recipe in active_recipe_names if recipe in recipe_catalog]
+        free_bytes = shutil.disk_usage(root).free
+        storage_hold = free_bytes < MIN_FREE_MANUFACTURING_BYTES
+        if storage_hold:
+            selected = []
         # Persist rotation: bounded cycles must not starve later recipe names.
         cursor_file = root / "recipe-cursor.json"
         try:
@@ -559,16 +594,23 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             failures, admission_failures, designer_failures, research_failures)
         state = {
             "schema_version": 1,
-            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
+            "cycle_status": "needs_rework" if storage_hold or failures or admission_failures or designer_failures or research_failures else "ok",
             "runtime_health": runtime_health,
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
             "api_usage": "none",
             "token_usage": 0,
-            "build_policy": "line_41_single_product_signed-1000-gated",
+            "build_policy": "line_41_single_active_product_technical_completion_then_next",
             "active_product_slot_capacity": PRODUCT_SLOT_CAPACITY,
             "active_production_line_id": PRODUCT_LINE_ID,
             "active_product_slot_recipes": active_recipe_names,
+            "private_technical_completion_count": len((_read_private_json(
+                root / "quality-excellence" / "product-flow" / "active-slots" / "current.json")
+                or {}).get("technical_exited", {})),
+            "objective_quality_gates": "technical_archive_tests_and_release_readiness_separate",
+            "manufacturing_disk_hold": storage_hold,
+            "manufacturing_free_bytes_at_admission": free_bytes,
+            "manufacturing_minimum_free_bytes": MIN_FREE_MANUFACTURING_BYTES,
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
             "engineering_intake":engineering_state,
@@ -600,7 +642,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "exact_sha_cached_customer_checks_passed": cached_customer_checks,
             "real_customer_zip_technical_receipts": customer_acceptances,
             "mechanical_customer_zip_repairs_verified": customer_repairs,
-            "professional_quality_1000_customer_checks_cannot_approve": True,
+            "customer_zip_tests_cannot_authorize_commercial_publication": True,
             "artifact_qa_passed": bool(produced) and not failures and not admission_failures and all(
                 p["qa_status"] == "passed" for p in produced),
             "quality_failures_this_cycle": [
@@ -640,7 +682,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         healthy=state['cycle_status']=='ok'
         fresh=state['new_or_updated_product_count']>0
         reason = (None if fresh else
-                  'awaiting_independent_quality_clearance' if (
+                  'insufficient_manufacturing_disk_reserve' if storage_hold else
+                  'technical_quality_rework_pending' if (
                       runtime_health["status"] == "ok"
                       and quality_return_orders and active_recipe_names) else
                   'blocked_design_or_research' if not healthy else
@@ -664,7 +707,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                   'last_new_artifact_at_utc':state['cycle_finished_at_utc'] if fresh else health.get('last_new_artifact_at_utc'),
                   'consecutive_zero_new_cycles':0 if fresh else counter('consecutive_zero_new_cycles')+1,
                   'zero_new_products_reason_code':reason,
-                  'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures
+                  'unfinished_rework_requires_attention':bool(storage_hold or failures or admission_failures or designer_failures or research_failures
                       or quality_return_orders or quality_return_state['invalid_orders']
                       or rework_counts.get('needs_rework') or rework_counts.get('expert_review')
                       or research_rework_counts.get('research_correction_required')),
@@ -675,7 +718,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
+        return {"status": "needs_rework" if storage_hold or failures or admission_failures or designer_failures or research_failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),

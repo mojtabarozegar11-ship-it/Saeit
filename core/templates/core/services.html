@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}زمرد ملل — مرجع خدمات کشاورزی{% endblock %}
+{% block title %}شرکت خدمات کشاورزی زمرد ملل | مشاوره و امکان‌سنجی{% endblock %}
+{% block meta_description %}خدمات کشاورزی زمرد ملل؛ ارزیابی اقتصادی مزرعه، مدیریت آب و منابع تولید، امکان‌سنجی گلخانه و طرح‌های تولیدی، پژوهش کاربردی و ثبت استعلام تخصصی.{% endblock %}
 {% block body_class %}services-page{% endblock %}
+{% block page_head %}{{ block.super }}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Service","@id":"https://zomorodmelal.ir/services/#service","name":"خدمات تخصصی کشاورزی و اقتصاد تولید زمرد ملل","provider":{"@type":"Organization","name":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/"},"areaServed":{"@type":"Country","name":"ایران"},"serviceType":["ارزیابی اقتصادی مزرعه","مدیریت آب و منابع تولید","امکان‌سنجی پروژه کشاورزی","پژوهش کاربردی کشاورزی"],"url":"https://zomorodmelal.ir/services/"}</script>{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}">{% endblock %}
 {% block content %}
 <section class="services-hero">

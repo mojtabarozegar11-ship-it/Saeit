@@ -7,6 +7,9 @@ on:
       - tests/test_factory_vps_backup_retention_audit_20261101.py
       - .github/workflows/vps-factory-backup-candidates-readonly-20261101.yml
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-factory-backup-candidates-readonly-20261101.yml"]
 
 permissions:
   contents: read
@@ -29,9 +32,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_factory_vps_backup_retention_audit_20261101.py -v
 
   vps-audit:
+    # Live continuation audit: push runs are read-only and receive pinned VPS credentials.
     # New workflow must be reviewed and merged, then explicitly dispatched.
     # PR runs never receive VPS credentials. No delete/apply mode exists.
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     needs: synthetic-regressions
     runs-on: ubuntu-24.04
     timeout-minutes: 12

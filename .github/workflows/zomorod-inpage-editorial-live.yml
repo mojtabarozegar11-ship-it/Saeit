@@ -4,10 +4,12 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-inpage-editorial-live.yml"
+      - "core/templates/core/includes/zomorod_editorial_20261016.html"
+      - "public/agriculture/**"
 permissions:
   contents: read
 concurrency:
-  group: zomorod-inpage-content
+  group: zomorod-site-deploy
   cancel-in-progress: false
 jobs:
   publish:
@@ -37,8 +39,10 @@ jobs:
           sections["/services/"]=sections["/company/"]
           agri="<section class='zm-editorial' id='zm-editorial-20261016' aria-label='آموزش تخصصی کشاورزی'><style>.zm-editorial{margin:32px auto;max-width:1180px;padding:22px;background:#252b19;color:#f4f0df;border:5px double #e2c373;direction:rtl}.zm-editorial h2,.zm-editorial h3{color:#f5d991}.zm-editorial .zm-ed-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}.zm-editorial article{border:2px solid #e2c373;padding:18px;background:#303822}.zm-editorial p{line-height:2}.zm-editorial a{color:#f8d98b}</style><h2>دانش کاربردی کشاورزی و تولید</h2><div class='zm-ed-grid'><article><h3>برنامه‌ریزی تولید</h3><p>برای هر قطعه یا واحد تولیدی، محدودیت‌های آب، زمین، نیروی انسانی، هزینه نهاده‌ها، کیفیت محصول و نیاز بازار را در یک جدول تصمیم ثبت کنید. سودآوری را در سناریوهای مختلف قیمت و عملکرد مقایسه کنید؛ سناریوی خوش‌بینانه به‌تنهایی برای سرمایه‌گذاری کافی نیست.</p></article><article><h3>پایش و کنترل کیفیت</h3><p>ثبت داده خاک و آب، سلامت نهاده، تغییرات دما و کیفیت محصول زمینه تصمیم علمی را فراهم می‌کند. زمان نمونه‌برداری، ابزار اندازه‌گیری و منشأ هر داده باید مشخص باشد تا تحلیل بعدی بازتولیدپذیر بماند.</p></article><article><h3>مسیر یادگیری</h3><p>در هر حوزه کشاورزی، ابتدا سؤال را دقیق تعریف کنید، شواهد معتبر محلی را بررسی و سپس گزینه‌ها را با معیارهای هزینه، کیفیت، ریسک و پایداری مقایسه کنید. توصیه تخصصی بدون اطلاعات واقعی محل، قابل تعمیم قطعی نیست.</p><a href='/zm-specialist-library-2026.html'>مطالعه راهنمای جامع ←</a></article></div></section>"
           sections["/agriculture/"]=agri
+          weather_tool="<section class='zm-editorial' id='zm-editorial-weather-tool-20261106' aria-label='ابزار تصمیم‌یار ریسک آبیاری'><h2>تصمیم‌یار سریع ریسک آبیاری</h2><p>این ابزار بر پایه داده‌ای که شما وارد می‌کنید یک امتیاز اولیه می‌دهد؛ پیش‌بینی زنده هواشناسی یا توصیه قطعی نیست.</p><form id='zm-weather-risk-form'><label>دمای روز (°C) <input name='temp' type='number' step='0.1' required></label><label>بارش ۲۴ ساعت اخیر (mm) <input name='rain' type='number' min='0' step='0.1' required></label><label>رطوبت نسبی (%) <input name='humidity' type='number' min='0' max='100' required></label><label>باد (km/h) <input name='wind' type='number' min='0' step='0.1' required></label><button type='submit'>محاسبه ریسک</button></form><p id='zm-weather-risk-result' role='status' aria-live='polite'>مقادیر را وارد کنید.</p></section>"
+          sections["/weather/"]=weather_tool
           guide_paths=sorted(Path("public/agriculture").glob("*/index.html"))
-          assert len(guide_paths)==13
+          assert len(guide_paths)==14
           for page in guide_paths:
               slug=page.parent.name
               content=page.read_text(encoding="utf-8")
@@ -83,6 +87,23 @@ jobs:
               holder.innerHTML=html;
               holder.setAttribute("data-zomorod-inpage-editorial","20261016");
               root.appendChild(holder);
+              if(path==="/services/"){
+                var requestHub=document.getElementById("zm-services-action-hub-20261106");
+                if(requestHub&&!document.getElementById("company-request")) requestHub.id="company-request";
+              }
+              if(path==="/weather/"){
+                var form=document.getElementById("zm-weather-risk-form"),out=document.getElementById("zm-weather-risk-result");
+                if(form&&out) form.addEventListener("submit",function(ev){
+                  ev.preventDefault();
+                  var d=Object.fromEntries(new FormData(form).entries()),t=Number(d.temp),r=Number(d.rain),h=Number(d.humidity),w=Number(d.wind),score=0;
+                  if(t>32)score+=2; else if(t>27)score+=1;
+                  if(r<2)score+=2; else if(r<8)score+=1;
+                  if(h<35)score+=2; else if(h<55)score+=1;
+                  if(w>25)score+=2; else if(w>15)score+=1;
+                  var level=score>=6?"ریسک بالا":score>=3?"ریسک متوسط":"ریسک پایین";
+                  out.textContent=level+" — امتیاز "+score+"/8. پیش از آبیاری، رطوبت واقعی خاک و وضعیت محصول را کنترل کنید.";
+                });
+              }
             }catch(e){/* never interrupt existing site functionality */}
           }
           if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",inject,{once:true});
@@ -92,6 +113,9 @@ jobs:
           Path("zm-inpage-editorial-2026.js").write_text(code,encoding="utf-8")
           loader=''';\n/* ZM_INPAGE_EDITORIAL_LOADER_20261016 additive / independent of master agents */\n(function(){try{if(location.hostname!=="zomorodmelal.ir"&&location.hostname!=="www.zomorodmelal.ir")return;var t=document.createElement("script");t.src="/zm-inpage-editorial-2026.js?v=20261016";t.async=true;t.setAttribute("data-zm-editorial","yes");(document.head||document.documentElement).appendChild(t)}catch(e){}})();\n'''
           Path("zm-modern-loader.txt").write_text(loader,encoding="utf-8")
+          static_routes=["blog/index.html","weather/index.html","store/index.html","newsletter/index.html","amozeshgah/index.html","academy/index.html","education/index.html","industry/index.html","research/index.html","knowledge/index.html","market/index.html","economy/index.html","studio/index.html","agents/index.html","company/index.html","services/index.html","agriculture/index.html"]
+          static_routes.extend(str(p.relative_to(Path("public"))) for p in sorted(Path("public/agriculture").glob("*/index.html")))
+          Path("zm-static-routes.txt").write_text("\n".join(static_routes)+"\n",encoding="utf-8")
           print("SITE_PAGES_WITH_EDITORIAL="+str(len(sections)))
           print("STANDALONE_MODULES="+str(16*3))
           PY
@@ -152,12 +176,12 @@ jobs:
           echo "CONFIRMED_PINNED_RELAY_READY=yes"
 
 
-      - name: Stage only editorial JavaScript and loader
+      - name: Stage editorial JavaScript and loader
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
-          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
+          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt zm-static-routes.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
       - name: Back up original JS and append isolated loader
         id: install
         shell: bash
@@ -167,7 +191,7 @@ jobs:
           public_sha="$(cat "$RUNNER_TEMP/public-sha")"
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" "$public_sha" <<'PY'
           from pathlib import Path
-          import hashlib,os,sys
+          import hashlib,json,os,re,sys
           sha,expected=sys.argv[1:]
           home=Path.home()
           root=home/"public_html"
@@ -179,25 +203,76 @@ jobs:
           assert modern.stat().st_uid==os.getuid()
           original=modern.read_bytes()
           assert len(original)>2500 and hashlib.sha256(original).hexdigest()==expected, "Public JS changed or mismatched"
-          assert b"ZM_INPAGE_EDITORIAL_LOADER_20261016" not in original
-          assert not page.exists() and not page.is_symlink()
           loader=(stage/"zm-modern-loader.txt").read_bytes()
           content=(stage/"zm-inpage-editorial-2026.js").read_bytes()
           assert b"zm-editorial-20261016" in content and len(content)>40000
+          if page.exists():
+              assert page.is_file() and not page.is_symlink() and page.stat().st_uid==os.getuid()
+              prior_module=page.read_bytes()
+              assert b"zm-editorial-20261016" in prior_module
+          else:
+              prior_module=None
+          loader_present=b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in original
+          if loader_present:
+              assert b"/zm-inpage-editorial-2026.js" in original
+
+          route_files=(stage/"zm-static-routes.txt").read_text(encoding="utf-8").splitlines()
+          required={"blog/index.html","weather/index.html"}
+          available=[]
+          for rel in route_files:
+              target=root/rel
+              if not target.exists():
+                  if rel in required: raise RuntimeError("Required static page missing: "+rel)
+                  continue
+              assert target.is_file() and not target.is_symlink(), "Unsafe route target: "+rel
+              assert target.stat().st_uid==os.getuid(), "Unexpected page owner: "+rel
+              raw=target.read_bytes()
+              if len(raw)<=1500 or b"</body>" not in raw.lower():
+                  if rel in required: raise RuntimeError("Required static page has unsupported shape: "+rel)
+                  print("SKIPPED_UNSUPPORTED_STATIC_PAGE="+rel)
+                  continue
+              available.append((rel,target,raw,target.stat().st_mode & 0o777))
+          assert required.issubset({x[0] for x in available})
           assert not backup.exists()
           backup.mkdir(parents=True)
           (backup/"modern.original.js").write_bytes(original)
-          assert (backup/"modern.original.js").read_bytes()==original
+          if prior_module is not None:
+              (backup/"editorial.original.js").write_bytes(prior_module)
+          static_backup=backup/"static-pages"
+          static_backup.mkdir(parents=True)
+          modes={}
+          for rel,target,raw,mode in available:
+              saved=static_backup/rel
+              saved.parent.mkdir(parents=True,exist_ok=True)
+              saved.write_bytes(raw)
+              modes[rel]=mode
+          (backup/"static-pages.json").write_text(json.dumps(modes,ensure_ascii=False),encoding="utf-8")
+          (backup/"module-existed").write_text("yes" if prior_module is not None else "no",encoding="ascii")
+          (backup/"install-started").write_text(sha,encoding="ascii")
+
           temp_page=page.with_suffix(".js.tmp")
           temp_page.write_bytes(content)
           os.chmod(temp_page,0o644)
           os.replace(temp_page,page)
-          temp=modern.with_name("modern.zm-"+sha+".tmp")
-          temp.write_bytes(original+b"\n"+loader)
-          os.chmod(temp,modern.stat().st_mode & 0o777)
-          os.replace(temp,modern)
+          if not loader_present:
+              temp=modern.with_name("modern.zm-"+sha+".tmp")
+              temp.write_bytes(original+b"\n"+loader)
+              os.chmod(temp,modern.stat().st_mode & 0o777)
+              os.replace(temp,modern)
+          pattern=re.compile(r'<script\b[^>]*data-zm-editorial-loader="yes"[^>]*></script>',re.I)
+          tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106-r2"></script>'
+          for rel,target,raw,mode in available:
+              text=raw.decode("utf-8")
+              text=pattern.sub("",text)
+              idx=text.lower().rfind("</body>")
+              updated=text[:idx]+tag+text[idx:]
+              temp_html=target.with_name(target.name+".zm-"+sha+".tmp")
+              temp_html.write_text(updated,encoding="utf-8")
+              os.chmod(temp_html,mode)
+              os.replace(temp_html,target)
           print("JS_ORIGINAL_PRESERVED=yes")
-          print("NEW_IN_PAGE_EDITORIAL_INSTALLED=yes")
+          print("EXISTING_MODULE_UPDATED="+str(prior_module is not None))
+          print("STATIC_HTML_PAGES_CONNECTED="+str(len(available)))
           PY
       - name: Verify shared script plus content on public site and old pages remain online
         run: |
@@ -212,29 +287,66 @@ jobs:
             echo "PROTECTED_ROUTE=/$route HTTP=$result"
             test "$result" = 200
           done
-          echo "JS_CONTENT_AVAILABLE_AND_OLD_ROUTES_OK=yes"
+          verified=0
+          for route in blog/ weather/ store/ newsletter/ amozeshgah/ industry/ research/ knowledge/ company/; do
+            file="$RUNNER_TEMP/zm-static-${route//\//_}.html"
+            result="$(curl -L -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route")"
+            test "$result" = 200
+            if grep -q 'data-zm-editorial-loader="yes"' "$file"; then
+              grep -Fq 'src="/zm-inpage-editorial-2026.js?v=20261106-r2"' "$file"
+              echo "EDITORIAL_LOADER_ROUTE=/$route HTTP=200"
+              verified=$((verified+1))
+            fi
+          done
+          test "$verified" -ge 2
+          curl -fsSL --max-time 25 "https://zomorodmelal.ir/blog/" | grep -Fq 'data-zm-editorial-loader="yes"'
+          curl -fsSL --max-time 25 "https://zomorodmelal.ir/weather/" | grep -Fq 'data-zm-editorial-loader="yes"'
+          echo "STATIC_EDITORIAL_LOADER_ROUTES_VERIFIED=$verified"
       - name: Automatically restore exact modern.js and remove content on failure
-        if: failure() && steps.install.outcome == 'success'
+        if: failure()
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
           from pathlib import Path
-          import os,sys
+          import json,os,sys
           sha=sys.argv[1]
           home=Path.home()
-          modern=home/"public_html/static/site/modern.js"
-          content=home/"public_html/zm-inpage-editorial-2026.js"
-          backup=home/".backups"/"zomorod-live-inpage"/sha/"modern.original.js"
-          if modern.is_file() and backup.is_file() and b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in modern.read_bytes():
+          root=home/"public_html"
+          modern=root/"static/site/modern.js"
+          content=root/"zm-inpage-editorial-2026.js"
+          backup_root=home/".backups"/"zomorod-live-inpage"/sha
+          if not backup_root.joinpath("install-started").is_file():
+              print("NO_REMOTE_CHANGES_TO_ROLL_BACK=yes")
+              raise SystemExit(0)
+          modern_backup=backup_root/"modern.original.js"
+          module_backup=backup_root/"editorial.original.js"
+          if modern.is_file() and modern_backup.is_file():
               temp=modern.with_name("modern.zm-rollback-"+sha+".tmp")
-              temp.write_bytes(backup.read_bytes())
+              temp.write_bytes(modern_backup.read_bytes())
               os.chmod(temp,modern.stat().st_mode & 0o777)
               os.replace(temp,modern)
-          if content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
-              target=home/".backups"/"zomorod-live-inpage"/sha/"editorial.unpublished.js"
-              content.rename(target)
-          print("SHARED_SCRIPT_ORIGINAL_RESTORED=yes")
+          if module_backup.is_file():
+              temp=content.with_name("editorial.zm-rollback-"+sha+".tmp")
+              temp.write_bytes(module_backup.read_bytes())
+              os.chmod(temp,0o644)
+              os.replace(temp,content)
+          elif content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
+              target=backup_root/"editorial.unpublished.js"
+              content.replace(target)
+          manifest=backup_root/"static-pages.json"
+          static_backup=backup_root/"static-pages"
+          if manifest.is_file():
+              modes=json.loads(manifest.read_text(encoding="utf-8"))
+              for rel,mode in modes.items():
+                  target=root/rel
+                  saved=static_backup/rel
+                  if target.is_file() and saved.is_file() and not target.is_symlink():
+                      temp=target.with_name(target.name+".zm-rollback-"+sha+".tmp")
+                      temp.write_bytes(saved.read_bytes())
+                      os.chmod(temp,mode)
+                      os.replace(temp,target)
+          print("SHARED_SCRIPT_MODULE_AND_STATIC_PAGES_RESTORED=yes")
           PY
       - name: Remove temporary SSH keys
         if: always()

@@ -1,3 +1,5 @@
+from django.db.models import Case, IntegerField, Value, When
+
 from .models import Agent, AgentCapability
 from .services import normalize_risk
 
@@ -12,16 +14,24 @@ class AgentRegistry:
         normalized = self._normalize(action)
         if not normalized:
             return None
-        capability = self._capability(normalized)
-        if not capability:
-            for token in normalized.split("_"):
-                if len(token) >= 3:
-                    capability = self._capability(token)
-                    if capability:
-                        break
+        # Dispatch only on a capability that the execution gate will accept.
+        # Matching an arbitrary token can select an agent that cannot run the
+        # requested action, leaving the task unplanned.
+        capability = self._capability(normalized) or self._capability(f"core_{normalized}")
         if not capability:
             return None
-        return capability.agents.filter(active=True).order_by("risk_level", "id").first()
+        # String ordering puts "critical" before "low". Use policy risk order.
+        risk_priority = Case(
+            *(When(risk_level=name, then=Value(priority)) for name, priority in RISK_ORDER.items()),
+            default=Value(len(RISK_ORDER)),
+            output_field=IntegerField(),
+        )
+        return (
+            capability.agents.filter(active=True)
+            .annotate(_risk_priority=risk_priority)
+            .order_by("_risk_priority", "id")
+            .first()
+        )
 
     def capability_for(self, agent, action):
         normalized = self._normalize(action)

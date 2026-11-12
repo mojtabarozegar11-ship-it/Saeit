@@ -190,29 +190,30 @@ def make_zip(path, source, recipe, files):
 
 
 def ensure_professional_quality_stop(product_dir, manifest, zip_path):
-    """Separate technical-package success from paid/public sales eligibility.
+    """Apply objective commercial readiness policy, including to cached ZIPs.
 
-    Works for cached (unchanged) archives too, and cannot self-certify a
-    product's 1000/1000 professional quality from its unit-test counters.
+    Technical acceptance is independent of an arbitrary numeric quality score.
+    It does not itself prove distribution rights or authorize public listing.
     """
     actual = sha256_file(zip_path)
     if actual != manifest.get("artifact_sha256"):
         raise RuntimeError("QUALITY_STOP_PACKAGE_VERSION_CHANGED")
     document = {
-        "schema": "saeit.factory.manufacturing-commercial-release-stop.v1",
+        "schema": "saeit.factory.manufacturing-commercial-release-stop.v2",
         "recipe": manifest["recipe"],
         "artifact_sha256": actual,
         "technical_qa": manifest.get("qa_status"),
-        "quality_standard": "100_independent_groups_x_10",
-        "professional_grade": None,
-        "professional_approval_verified": False,
-        "requires_externally_signed_1000_quality_clearance": True,
+        "quality_policy": "objective_customer_acceptance_and_commercial_readiness_v1",
+        "technical_acceptance_required": True,
+        "commercial_rights_verification_required": True,
+        "security_and_privacy_review_required": True,
+        "exact_artifact_storefront_review_required": True,
         "requires_exact_version_owner_approval": True,
         "commercial_release_permitted_from_manufacturing": False,
     }
     atomic_text(product_dir / "professional_quality_release_stop.json",
                 json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
-    return "pending_independent_1000_quality_review"
+    return "technical_qa_passed_commercial_readiness_separate"
 
 
 def manufacture(recipe, recipes_root, private_root):
@@ -275,9 +276,8 @@ def manufacture(recipe, recipes_root, private_root):
         "qa_status": "passed", "qa_evidence": qa_status,
         "qa_measurements": measurements,
         "commercial_status": "private_internal_qa_pass_not_published",
-        "professional_quality_standard": "100_groups_x_10",
-        "professional_quality_score": None,
-        "professional_quality_release_gate": "signed_expert_and_owner_approval_required",
+        "professional_quality_standard": "objective_acceptance_v1",
+        "professional_quality_release_gate": "functional_rights_security_store_and_owner_approval_required",
         "professional_quality_approved": False,
         "factory_trigger": "inventory_and_scheduled_manufacturing",
         "customer_order_required": False, "price": None,

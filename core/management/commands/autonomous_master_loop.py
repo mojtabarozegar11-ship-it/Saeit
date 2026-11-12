@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
+from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
 from core.economic_tool_pack import build_economic_gateway
@@ -13,21 +14,47 @@ class Command(BaseCommand):
 
     def handle(self,*args,**opts):
         brain=AutonomousBrain()
-        requested_steps=max(1,opts["max_steps"])
-        steps=1
+        gateway = build_economic_gateway()
+        supported = frozenset(
+            code for code, spec in gateway.describe().items()
+            if spec.get("enabled", False)
+            and (code.startswith("income_") or code == "master_self_improvement")
+        )
+        if not supported:
+            self.stdout.write("AUTO_BLOCKED_NO_REGISTERED_TOOLS")
+            return
+        runner = None
+        requested_steps=max(1, opts["max_steps"])
+        steps=min(20, requested_steps)
         if requested_steps>steps:
-            self.stdout.write(f"AUTO_SINGLE_STEP_CAP requested={requested_steps} applied={steps}")
+            self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")
         for step in range(steps):
-            active=AgentTask.objects.filter(agent__code="economic-master-agent",status="queued").order_by("created_at").first()
+            active=self._next_eligible_task(supported)
             if not active:
                 call_command("online_income_cycle")
-                active=AgentTask.objects.filter(agent__code="economic-master-agent",status="queued").order_by("created_at").first()
+                active=self._next_eligible_task(supported)
             if not active:
+                unsupported = AgentTask.objects.filter(
+                    agent__code="economic-master-agent", agent__active=True, status="queued",
+                ).exclude(
+                    capability_code__in=supported,
+                    action_type=F("capability_code"),
+                ).order_by("created_at", "pk").first()
+                if unsupported:
+                    self.stdout.write(
+                        f"AUTO_BLOCKED_UNSUPPORTED_TASK task={unsupported.pk} "
+                        f"capability={unsupported.capability_code} requires_review=true"
+                    )
+                    return
                 self.stdout.write("AUTONOMOUS_IDLE"); return
             try:
-                done=WorkerRunner(build_economic_gateway()).run(active.pk)
+                if runner is None:
+                    runner = WorkerRunner(gateway)
+                done=runner.run(active.pk)
                 self.stdout.write(self.style.SUCCESS(
-                    f"AUTO step={step+1} task={done.pk} action={done.action_type} verified={done.output_data.get('verified_effect')}"
+                    f"AUTO step={step+1} task={done.pk} action={done.action_type} "
+                    f"internal_effect_verified={bool(done.output_data.get('verified_effect'))} "
+                    f"revenue_not_assessed=true"
                 ))
             except Exception as exc:
                 prereq=brain.prerequisite_from_error(exc)
@@ -53,6 +80,19 @@ class Command(BaseCommand):
             # Stop when progress reaches an external-world boundary rather than
             # pretending an internal artifact equals a sale.
             done.refresh_from_db()
+            if done.output_data.get("verified_effect") is not True:
+                self.stdout.write(
+                    f"AUTO_UNVERIFIED_STOP task={done.pk} action={done.action_type} requires_review=true"
+                )
+                return
             if done.action_type=="income_growth_experiment":
                 self.stdout.write("AUTO_EXTERNAL_BOUNDARY growth experiment prepared; real acquisition requires an authorized external channel.")
                 return
+
+    @staticmethod
+    def _next_eligible_task(supported):
+        return AgentTask.objects.filter(
+            agent__code="economic-master-agent", agent__active=True, status="queued",
+            capability_code__in=supported,
+            action_type=F("capability_code"),
+        ).order_by("created_at", "pk").first()

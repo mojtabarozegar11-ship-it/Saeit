@@ -1,0 +1,22 @@
+name: Zomorod business deployment — temporarily suspended
+# Fail-closed safety state. The live private app.php differs from repository
+# sources; the previous push-triggered workflow could overwrite host-only code.
+# This placeholder performs no network, file, database, email or payment writes.
+# Reenable only after approved merge of reviewed additive overlay safeguards.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  do-not-deploy:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject deployment pending owner-approved additive release
+        run: |
+          echo "BUSINESS_DEPLOYMENT=BLOCKED_TO_PRESERVE_LIVE_HOST_CUSTOMIZATIONS"
+          echo "BUSINESS_LIVE_FILE_MODIFIED=no"
+          echo "BUSINESS_ACCOUNTING_DATABASE_MODIFIED=no"
+          echo "::error::Full-file deployment is paused until the owner approves the tested additive-merge release."
+          exit 78

@@ -121,3 +121,97 @@ class PrivateAuction(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class CycleReport(models.Model):
+    """Durable, staff-only result record for the C01-C50 operating ledger."""
+    DOMAIN_CHOICES = (("command", "فرمان و چرخه‌ها"), ("virtual", "سایت‌ها و کسب‌وکار مجازی"), ("physical", "شرکت و کسب‌وکار فیزیکی"))
+    domain = models.CharField(max_length=12, choices=DOMAIN_CHOICES, default="command", db_index=True)
+    cycle = models.CharField(max_length=3, db_index=True)
+    project_key = models.CharField(max_length=80, db_index=True)
+    project_name = models.CharField(max_length=200)
+    action = models.TextField()
+    action_key = models.CharField(max_length=64)
+    result = models.CharField(max_length=240)
+    measure = models.CharField(max_length=160)
+    blocker = models.CharField(max_length=240, blank=True)
+    next_action = models.CharField(max_length=240)
+    evidence = models.TextField()
+    owner = models.CharField(max_length=160)
+    action_date = models.DateField()
+    readonly = models.BooleanField(default=False)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="cycle_reports")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-action_date", "-created_at")
+        constraints = [models.UniqueConstraint(fields=("cycle", "project_key", "action_key"), name="uniq_cycle_project_action")]
+
+
+class CycleIssue(models.Model):
+    DOMAIN_CHOICES = (("command", "فرمان و چرخه‌ها"), ("virtual", "سایت‌ها و کسب‌وکار مجازی"), ("physical", "شرکت و کسب‌وکار فیزیکی"))
+    domain = models.CharField(max_length=12, choices=DOMAIN_CHOICES, default="command", db_index=True)
+    CERTAINTY_CHOICES = (("unverified", "نیازمند تأیید"), ("verified", "تأییدشده"))
+    STATUS_CHOICES = (("open", "باز"), ("resolved", "رفع‌شده"))
+    cycle = models.CharField(max_length=3, db_index=True)
+    project_key = models.CharField(max_length=80, db_index=True)
+    title = models.TextField()
+    owner = models.CharField(max_length=160)
+    observed_on = models.DateField()
+    certainty = models.CharField(max_length=12, choices=CERTAINTY_CHOICES, default="unverified")
+    source = models.TextField(blank=True)
+    next_action = models.CharField(max_length=240)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="open", db_index=True)
+    resolution_evidence = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="cycle_issues")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("status", "-created_at")
+
+
+class ApprovalDecision(models.Model):
+    KIND_CHOICES = (("email", "ارسال ایمیل"), ("deploy", "استقرار و انتشار"), ("cost", "هزینه یا تعهد مالی"))
+    STATUS_CHOICES = (("approved", "تأیید شد"), ("rejected", "رد شد"))
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, db_index=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES)
+    approver = models.CharField(max_length=160)
+    evidence = models.TextField(blank=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="approval_decisions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+
+class LedgerAuditEvent(models.Model):
+    """Immutable audit trail for every central-ledger mutation."""
+    ACTION_CHOICES = (("create", "ایجاد"), ("verify", "تأیید"), ("resolve", "رفع"), ("approve", "تصمیم"))
+    action = models.CharField(max_length=12, choices=ACTION_CHOICES, db_index=True)
+    entity = models.CharField(max_length=40, db_index=True)
+    entity_id = models.CharField(max_length=80)
+    summary = models.TextField()
+    evidence = models.TextField(blank=True)
+    actor = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="ledger_audit_events")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("entity", "entity_id"), name="ledger_audit_entity")]
+
+
+class CommandRequest(models.Model):
+    STATUS_CHOICES = (("pending", "در انتظار بررسی"), ("approved", "تأییدشده"), ("executed", "اجراشده"), ("blocked", "مسدود"))
+    domain = models.CharField(max_length=12, choices=CycleReport.DOMAIN_CHOICES, default="command", db_index=True)
+    command = models.TextField()
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="pending", db_index=True)
+    read_only = models.BooleanField(default=True)
+    result = models.TextField(blank=True)
+    requested_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="ledger_command_requests")
+    approved_by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT, related_name="ledger_approved_commands")
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("status", "-created_at")

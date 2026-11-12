@@ -313,6 +313,68 @@ jobs:
               except subprocess.TimeoutExpired:
                   print("SECONDARY_STORAGE="+directory.name+":TIMEOUT_NO_CHANGES",flush=True)
           PY
+      - name: Inspect remaining ZIP central directories without extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import collections,hashlib,os,stat,time,zipfile
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          uid=os.geteuid()
+          now=time.time()
+          print("ZIP_INSPECTION=READ_ONLY_NO_EXTRACTION",flush=True)
+          seen=0
+          for path in home.iterdir():
+              try:
+                  if path.is_symlink() or not path.is_file() or path.suffix.lower()!=".zip":
+                      continue
+                  item=path.lstat()
+                  if not stat.S_ISREG(item.st_mode) or item.st_uid!=uid:
+                      continue
+                  if item.st_size<50000000 or now-item.st_mtime<20*86400:
+                      continue
+                  seen+=1
+                  key=hashlib.sha256(path.name.encode()).hexdigest()[:12]
+                  with zipfile.ZipFile(path,"r") as archive:
+                      infos=archive.infolist()
+                      kinds=collections.Counter()
+                      signals=collections.Counter()
+                      encrypted=0
+                      total_uncompressed=0
+                      top_levels=set()
+                      for info in infos:
+                          name=info.filename.replace("\\","/").lower()
+                          top_levels.add(name.split("/",1)[0])
+                          if not info.is_dir():
+                              kinds[(Path(name).suffix.lower() or "(none)")]+=1
+                          encrypted+=bool(info.flag_bits&1)
+                          total_uncompressed+=info.file_size
+                          for signal,tokens in {
+                              "app_or_site":("public_html/","saeit/","site/","app/","django","passenger"),
+                              "database":(".sql",".sqlite",".db","database/","dump"),
+                              "security_or_secrets":(".env",".ssh/","ssl/","certificate","private_key"),
+                              "backup":("backup","snapshot","restore"),
+                              "dependency_or_source":("node_modules/","vendor/","site-packages/",".git/","requirements.txt"),
+                              "static_assets":(".js",".css",".png",".jpg",".webp",".svg"),
+                          }.items():
+                              if any(token in name for token in tokens):
+                                  signals[signal]+=1
+                      protected=any(signals[x] for x in ("app_or_site","database","security_or_secrets","backup","dependency_or_source"))
+                      print("ZIP_CANDIDATE="+key+":BYTES="+str(item.st_size)+
+                            ":AGE_DAYS="+str(int((now-item.st_mtime)/86400))+
+                            ":MEMBERS="+str(len(infos))+
+                            ":TOP_LEVEL_COUNT="+str(len(top_levels))+
+                            ":UNCOMPRESSED_BYTES="+str(total_uncompressed)+
+                            ":ENCRYPTED_MEMBERS="+str(encrypted)+
+                            ":CLASS="+("PROTECT_APP_OR_BACKUP" if protected else "UNKNOWN_PROTECT"),flush=True)
+                      print("ZIP_TYPES="+key+":"+",".join(k+":"+str(v) for k,v in kinds.most_common(8)),flush=True)
+                      print("ZIP_SIGNALS="+key+":"+",".join(k+":"+str(v) for k,v in sorted(signals.items())),flush=True)
+              except (OSError,zipfile.BadZipFile,zipfile.LargeZipFile,RuntimeError,ValueError) as exc:
+                  print("ZIP_CANDIDATE=UNREADABLE_PROTECT:ERROR="+type(exc).__name__,flush=True)
+          print("ZIP_INSPECTED_COUNT="+str(seen),flush=True)
+          PY
       - name: Classify cPanel generic cache and temp contents without reading files
         shell: bash
         run: |
@@ -805,6 +867,76 @@ jobs:
           python3 tools/cpanel_backup_archive_relocate.py
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           ssh -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_quota_info' | python3 -c 'import json,sys;j=json.load(sys.stdin).get("result",{}).get("data",{});print("AFTER_ARCHIVE_MB_USED="+str(j.get("megabytes_used")));print("AFTER_ARCHIVE_MB_LIMIT="+str(j.get("megabyte_limit")))'
+      - name: Clear only stale user logs and temporary files
+        shell: bash
+        env:
+          REQUESTED_ACTION: ${{ inputs.cleanup_action }}
+          CONFIRM_DISPOSABLE_ONLY: ${{ inputs.confirm_disposable_only }}
+        run: |
+          set -euo pipefail
+          mode=preview
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${REQUESTED_ACTION:-preview}" == "apply" ]]; then
+            [[ "${CONFIRM_DISPOSABLE_ONLY:-false}" == "true" ]] || { echo "STALE_CLEANUP_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"; exit 8; }
+            mode=apply
+          fi
+          echo "STALE_CLEANUP_MODE=$mode"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          for host in saeit-cpanel saeit-vps; do
+            ssh -F "$d/config" "$host" "STALE_CLEANUP_MODE=$mode python3 - <<'PY'
+          import os, shutil, stat, time
+          from pathlib import Path
+          home=Path.home()
+          mode=os.environ.get('STALE_CLEANUP_MODE','preview')
+          if home != Path('/home/zomorod2') and home.name != 'githubops':
+              raise SystemExit('STALE_CLEANUP_HOME_UNEXPECTED')
+          candidates=[home/'.npm/_logs', home/'tmp']
+          uid=os.geteuid()
+          now=time.time()
+          cutoff=now-30*86400
+          for root in candidates:
+              if not root.exists():
+                  print('STALE_TARGET_ABSENT='+str(root),flush=True); continue
+              if root.is_symlink() or not root.is_dir() or root.stat().st_uid!=uid:
+                  print('STALE_TARGET_UNSAFE_SKIP='+str(root),flush=True); continue
+              busy=False
+              for proc in Path('/proc').iterdir():
+                  if not proc.name.isdigit(): continue
+                  try:
+                      if proc.stat().st_uid!=uid: continue
+                      refs=[]
+                      try: refs.append(os.readlink(proc/'cwd'))
+                      except OSError: pass
+                      try:
+                          for fd in (proc/'fd').iterdir():
+                              try: refs.append(os.readlink(fd))
+                              except OSError: pass
+                      except OSError: pass
+                      base=str(root)
+                      if any(r==base or r.startswith(base+'/') for r in refs):
+                          busy=True; break
+                  except OSError:
+                      busy=True; break
+              if busy:
+                  print('STALE_TARGET_HELD='+str(root),flush=True); continue
+              found=0; eligible=0; deleted=0; bytes_freed=0
+              for dirpath,dirs,files in os.walk(root,topdown=True,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(dirpath)/d).is_symlink()]
+                  for name in files:
+                      p=Path(dirpath)/name
+                      try:
+                          s=p.lstat()
+                          if not stat.S_ISREG(s.st_mode) or s.st_uid!=uid: continue
+                          found+=1
+                          if s.st_mtime>=cutoff: continue
+                          eligible+=1
+                          if mode=='apply':
+                              p.unlink()
+                              deleted+=1; bytes_freed+=s.st_size
+                      except FileNotFoundError: pass
+                      except OSError: pass
+              print('STALE_TARGET='+str(root)+':FILES='+str(found)+':ELIGIBLE='+str(eligible)+':DELETED='+str(deleted)+':BYTES_FREED='+str(bytes_freed),flush=True)
+          PY"
+          done
       - name: Public smoke after cache cleanup
         shell: bash
         run: |

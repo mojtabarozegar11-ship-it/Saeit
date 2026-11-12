@@ -59,6 +59,18 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
+ # Analytics must never make the public storefront unavailable. The cPanel
+ # main-site deploy may publish this view before the optional funnel module
+ # and migration have been installed in the independent runtime.
+ try:
+  from .commerce_funnel import record_funnel_event
+  record_funnel_event(request, "view_store")
+ except Exception as exc:
+  # No visitor identity, query string or other buyer data enters the log.
+  import logging
+  logging.getLogger(__name__).warning(
+   "MojPlayWin store telemetry unavailable: %s", type(exc).__name__
+  )
  return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
 
 def venture(request, slug):
@@ -90,3 +102,9 @@ def platform_section(request, section):
  title,lead,image,cards=data
  related_url, related_label = RELATED_SECTION_LINKS.get(section, ("/store/", "Browse related resources"))
  return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES,"related_url":related_url,"related_label":related_label})
+
+
+# Production deployment verification marker: store and IndexNow smoke coverage.
+
+
+# Live store recovery release marker: 20261107

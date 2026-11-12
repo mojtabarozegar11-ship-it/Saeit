@@ -1,0 +1,44 @@
+name: Direct cPanel command bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read-only operation to execute through the VPS-to-cPanel relay
+        required: true
+        type: choice
+        options:
+          - relay_preflight
+          - cpanel_version
+          - passenger_inventory
+          - cpanel_preflight
+          - django_check
+          - django_migrations
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-cpanel-direct-bridge
+  cancel-in-progress: false
+
+jobs:
+  cpanel:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - name: Checkout pinned verifier
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Execute selected read-only cPanel operation
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"

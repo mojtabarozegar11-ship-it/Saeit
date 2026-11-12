@@ -1,0 +1,136 @@
+name: VPS F01 Single Product Source Upgrade
+on:
+  # Dormant manual bridge, not an autonomous factory scheduler. The 2026-11-06
+  # automatic run failed at the old "active must equal F01" assertion after
+  # Line 41 validly technical-exited F01 (Action 42275993209). Never auto-stage
+  # source on each main push until the runtime's current slot and recoverable
+  # rollback evidence are re-audited. VPS-native cron remains independent.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-single-product-factory
+  cancel-in-progress: false
+jobs:
+  source-upgrade:
+    # Previous operator assumes the obsolete pre-technical-exit lifecycle and
+    # backs up source alone, not all private manufacturing manifests/archives.
+    # Do not allow manual dispatch to bypass a correct rollback redesign.
+    if: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the one active agricultural economics recipe
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s product_recipes/farm_enterprise_economics -p 'test_calculator.py'
+      - name: Safely replace only F01 source and build private ZIP
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-exact-source"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          tar -cf - product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 \
+            'set -e; umask 077; root="$HOME/factory-runtime/operations/f01-source-upgrade-${{ github.sha }}"; install -d -m 700 "$root"; tar -xf - -C "$root"'
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          private="$base/private/autonomous-product-cycle"
+          runtime="$ops/single-product-runtime"
+          py="$base/.venv/bin/python"
+          runner="$runtime/run-single-product-cycle.sh"
+          current="$runtime/product_recipes/farm_enterprise_economics"
+          candidate="$ops/f01-source-upgrade-${{ github.sha }}/product_recipes/farm_enterprise_economics"
+          backup="$ops/backups/f01-source-${{ github.sha }}"
+          lock="$private/.single-product-cycle.lock"
+          test -x "$py" && test -x "$runner" && test -d "$current" && test -d "$candidate"
+          test ! -L "$current" && test ! -L "$candidate" && test ! -L "$lock"
+          test ! -e "$backup" && test ! -L "$backup"
+          "$py" -B -m unittest discover -s "$candidate" -p 'test_calculator.py' >/dev/null
+          "$py" -B - "$private" <<'PY'
+          import json, pathlib, sys
+          base=pathlib.Path(sys.argv[1])
+          slots=json.loads((base/'quality-excellence/product-flow/active-slots/current.json').read_text())
+          assert slots.get('line_id')==41 and slots.get('capacity')==1
+          assert [x.get('recipe') for x in slots.get('active',[])]==['farm_enterprise_economics']
+          state=json.loads((base/'production-state.json').read_text())
+          assert state.get('active_product_slot_recipes')==['farm_enterprise_economics']
+          assert state.get('publishable_product_count')==0
+          PY
+          # Preserve the exact previous source, never alter cron, other recipes or signatures.
+          exec 9>"$lock"
+          flock -w 50 9
+          install -d -m 700 "$backup"
+          mv -T "$current" "$backup/previous-source"
+          if ! mv -T "$candidate" "$current"; then
+            mv -T "$backup/previous-source" "$current"
+            exit 1
+          fi
+          flock -u 9
+          # An existing native runner owns the lock and builds a new private ZIP.
+          # Repeat only when cron had momentarily acquired that same lock.
+          for attempt in 1 2 3 4; do
+            if ! "$runner" >/dev/null; then
+              echo 'F01_PRIVATE_RUNNER_RETRY=REQUIRED'
+              sleep 2
+              continue
+            fi
+            if "$py" -B - "$runtime" "$private" <<'PY'
+          import hashlib, json, pathlib, sys, zipfile
+          runtime, private = map(pathlib.Path, sys.argv[1:])
+          src=runtime/'product_recipes/farm_enterprise_economics'
+          product=private/'digital-products/farm_enterprise_economics'
+          manifest=json.loads((product/'manufacturing_manifest.json').read_text())
+          files=sorted(p.relative_to(src).as_posix() for p in src.rglob('*') if p.is_file() and not p.name.startswith('.'))
+          digest=hashlib.sha256()
+          for name in files:
+              digest.update(name.encode()+b'\x00')
+              digest.update((src/name).read_bytes())
+          assert manifest.get('source_sha256')==digest.hexdigest()
+          assert manifest.get('qa_status')=='passed'
+          z=product/'farm_enterprise_economics-internal-qa.zip'
+          assert hashlib.sha256(z.read_bytes()).hexdigest()==manifest.get('artifact_sha256')
+          with zipfile.ZipFile(z) as archive:
+              assert set(archive.namelist()) == {'farm_enterprise_economics/'+n for n in files}
+              for name in files:
+                  assert archive.read('farm_enterprise_economics/'+name)==(src/name).read_bytes()
+          state=json.loads((private/'production-state.json').read_text())
+          assert state.get('active_product_slot_recipes')==['farm_enterprise_economics']
+          assert state.get('publishable_product_count')==0
+          assert state.get('commercial_quality_review_completed') is False
+          assert any(x.get('recipe')=='farm_enterprise_economics' and
+                     x.get('status')=='awaiting_independent_reinspection'
+                     for x in state.get('quality_return_build_candidates',[]))
+          PY
+            then
+              echo 'F01_VERIFIED_CHANGED_PRIVATE_ARTIFACT=PASS'
+              echo 'F01_HUMAN_QUALITY_CLEARANCE=STILL_REQUIRED'
+              echo 'F01_COMMERCIAL_RELEASE=LOCKED'
+              exit 0
+            fi
+            sleep 2
+          done
+          # Fail closed: preserve the previous source if verification did not pass.
+          flock -w 50 9
+          mv -T "$current" "$backup/unverified-new-source"
+          mv -T "$backup/previous-source" "$current"
+          echo 'F01_SOURCE_UPGRADE=ROLLED_BACK'
+          exit 1
+          REMOTE

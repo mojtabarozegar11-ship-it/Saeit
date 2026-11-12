@@ -12,6 +12,8 @@ from .knowledge_agent_models import KnowledgeBook, KnowledgeDomain
 from .newsletter_models import NewsletterStory
 from .blog_models import BlogPage
 
+INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
+
 
 def _norm(value):
     return " ".join(str(value or "").replace("ي", "ی").replace("ك", "ک").replace("‌", " ").split()).strip().lower()
@@ -65,13 +67,22 @@ def site_search(request):
 
 @require_GET
 def robots_txt(request):
-    body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nSitemap: https://zomorodmelal.ir/sitemap.xml\n"
+    body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\nDisallow: /__zm_\nDisallow: /site-heritage/\nDisallow: /zm-agriculture-guides/\nSitemap: https://zomorodmelal.ir/sitemap.xml\nSitemap: https://zomorodmelal.ir/topics/sitemap.xml\nSitemap: https://zomorodmelal.ir/ghanadi/sitemap.xml\n"
     return HttpResponse(body, content_type="text/plain; charset=utf-8")
 
 
 @require_GET
+def indexnow_key(request, key):
+    """Public IndexNow verification file for the MojPlayWin host only."""
+    host = request.get_host().split(":")[0].lower()
+    if host not in {"mojplaywin.com", "www.mojplaywin.com"} or key != INDEXNOW_KEY:
+        return HttpResponse(status=404)
+    return HttpResponse(INDEXNOW_KEY + "\n", content_type="text/plain; charset=utf-8")
+
+
+@require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/ghanadi/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
+    urls = ["/", "/company/", "/company/executive/", "/about/", "/services/", "/contact/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/business/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():

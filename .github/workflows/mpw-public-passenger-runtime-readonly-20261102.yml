@@ -158,6 +158,15 @@ jobs:
           timeout 100s ssh -T -F "$d/config" "$COMMAND_HOST" \
             "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$payload' inspect"
           echo "MPW_PASSENGER_READ_ONLY=FINISHED;NO_APPLICATION_WRITE=YES;NO_RESTART=YES"
+      - name: Diagnose current Django store rendering without recording orders
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/mpw-guest-ssh"
+          timeout 100s ssh -T -F "$d/config" "$COMMAND_HOST" "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_store_dynamic_readonly_diag_20261107.py
       - name: Remove runner-only SSH material
         if: always()
         run: |

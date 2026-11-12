@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Farm Enterprise Economics | Offline Planner</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:light;background:#f2f6f3;color:#172d27}
+    *{box-sizing:border-box}body{margin:0;line-height:1.55}main{max-width:1100px;margin:auto;padding:1.1rem}
+    header{background:#113f32;color:white;padding:2.3rem max(1rem,calc((100vw - 1100px)/2));border-bottom:6px solid #80d3a2}
+    h1{font-size:clamp(1.7rem,4vw,2.5rem);line-height:1.2;margin:.2rem 0}h2{margin:.3rem 0 1rem}
+    header p{max-width:65ch}.eyebrow{color:#9ff0c7;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .panel,fieldset{background:#fff;border:1px solid #c5d9d0;border-radius:14px;padding:1.1rem;margin:1.1rem 0;box-shadow:0 2px 9px #112b2010}
+    fieldset legend{font-weight:800;padding:0 .4rem}label{display:block;font-weight:650;font-size:.9rem}
+    input{font:inherit;display:block;width:100%;padding:.68rem;border:1px solid #829f93;border-radius:8px;background:#fff;color:#172d27;margin-top:.25rem}
+    input:focus-visible,button:focus-visible{outline:3px solid #ffb941;outline-offset:2px}
+    .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem}
+    .actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem;align-items:center}
+    button,.file-label{font:inherit;font-weight:700;border:1px solid #196245;border-radius:9px;padding:.65rem .9rem;cursor:pointer;background:#196245;color:white}
+    button.secondary,.file-label{background:white;color:#154d38}button.danger{border-color:#a13636;color:#922a2a;background:white}
+    button:hover,.file-label:hover{filter:brightness(.93)}button:disabled{opacity:.5;cursor:not-allowed}
+    .hint{font-size:.89rem;color:#365d4e}.notice{padding:.9rem;border-radius:8px;background:#eef7ed;border-left:5px solid #309660}
+    .error{padding:1rem;color:#8b1824;background:#ffe7e9;border:1px solid #dc8290;border-radius:9px}
+    .success{color:#13563b}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem}
+    .kpi{background:#eaf5ef;border-radius:9px;padding:.9rem}.kpi span{display:block;font-size:.87rem}
+    .kpi strong{font-size:1.4rem;overflow-wrap:anywhere}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+    th,td{border-bottom:1px solid #d6e6dc;padding:.65rem;text-align:left;vertical-align:top}th{background:#eaf4ed}
+    .scroll{overflow-x:auto}td{white-space:nowrap}td:first-child{white-space:normal}
+    .small{font-size:.87rem}.hidden{display:none!important}
+    .cash-input{min-width:115px;max-width:155px;padding:.45rem;margin:0}.cash-month{font-weight:700;white-space:nowrap}
+    @media print{header{padding:1rem;color:#113f32;background:white}.actions,.editor,.file-label{display:none!important}body{background:white}main{max-width:none}}
+  </style>
+  <script src="offline_engine.js" defer></script>
+  <script src="offline_ui.js" defer></script>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Private review edition · Works entirely offline</div>
+  <h1>Farm Enterprise Economics</h1>
+  <p>Compare farm activities, calculate contribution and break-even thresholds, explore price/volume changes and plan monthly liquidity using your own data. No account, network access or installation.</p>
+</header>
+<main>
+  <div class="notice" role="note"><strong>Illustrative numbers are not market quotations.</strong> Enterprise profit excludes tax, borrowing, depreciation and investments. The optional 12-month cash plan models only cash movements you enter; it does not predict receipts or solve financing. This is not professional financial advice. <strong>Commercial release and license are pending review.</strong></div>
+  <section class="panel editor" aria-labelledby="input-title">
+    <h2 id="input-title">Your enterprise assumptions</h2>
+    <div class="fields"><label>Currency or units (no conversion)<input id="currency" value="USD" maxlength="12" autocomplete="off" required></label></div>
+    <p class="hint">Use the same currency, accounting period and sold-unit definition in every entry. Optional land and water must describe that same period. Plain decimal numbers only, up to 30 fractional places.</p>
+    <div id="enterprise-list"></div>
+    <div class="actions">
+      <button id="add" type="button" class="secondary">+ Add enterprise</button>
+      <button id="calculate" type="button">Calculate results</button>
+      <button id="import" type="button" class="secondary">Import local JSON</button>
+      <input id="import-file" class="hidden" type="file" accept=".json,application/json" aria-label="Choose a local JSON input file">
+      <button id="export-input" type="button" class="secondary">Save inputs as JSON</button>
+    </div>
+    <p class="hint">Files are read only on this device. No values are sent to a server. Your browser does not automatically save entries.</p>
+  </section>
+  <section class="panel editor" aria-labelledby="cash-title">
+    <h2 id="cash-title">12-month cash-flow and liquidity plan</h2>
+    <p class="hint">Optional planning module. Enter actual expected cash receipts and payments by month, separately from the enterprise profit calculation. Each cash movement is entered once; all figures use the same currency as above. Zero is permitted. The model checks <em>month-end</em> cash only and cannot establish whether bills can be paid within the month.</p>
+    <div class="fields"><label>Opening available cash<input id="cash-opening" value="0" inputmode="decimal" maxlength="64" autocomplete="off" required></label></div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th>Customer cash receipts</th><th>Operating cash payments</th><th>Asset purchases</th><th>Loan cash received</th><th>Loan principal + interest payments</th><th>Other cash payments</th></tr></thead><tbody id="cash-month-inputs"></tbody></table></div>
+    <p class="hint">Do not count a loan receipt as sales or a capital purchase as a production expense. Put cash taxes, owner drawings and other cash uses in the appropriate payment field once. Enter only amounts collected or paid that month, not invoices due later.</p>
+  </section>
+  <div id="feedback" role="alert" aria-live="assertive"></div>
+  <section class="panel hidden" id="report" aria-labelledby="report-title">
+    <h2 id="report-title">Scenario results</h2>
+    <p class="hint" id="scope"></p>
+    <div class="kpis" id="portfolio"></div>
+    <h3>Enterprise comparison</h3>
+    <div class="scroll"><table><thead><tr><th>Enterprise</th><th>Revenue</th><th>Operating profit</th><th>Break-even units</th><th>Break-even price</th><th>Safety (%)</th></tr></thead><tbody id="results"></tbody></table></div>
+    <h3>Resource indicators (only where supplied)</h3>
+    <p class="hint" id="coverage"></p>
+    <div class="scroll"><table><thead><tr><th>Enterprise</th><th>Hectares</th><th>Profit per hectare</th><th>Irrigation m³</th><th>Profit per m³</th></tr></thead><tbody id="resources"></tbody></table></div>
+    <h3>Sensitivity: volume ±20%, price ±10%</h3>
+    <p class="hint">Each scenario keeps variable cost per sold unit, fees and fixed costs unchanged. These are illustrations, not probabilities.</p>
+    <div class="scroll"><table><thead><tr><th>Enterprise</th><th>Volume multiplier</th><th>Price multiplier</th><th>Modeled profit</th></tr></thead><tbody id="scenarios"></tbody></table></div>
+    <h3>12-month liquidity and cash-shortfall warning</h3>
+    <p class="hint">Separate from modeled enterprise profit; does not infer collections or financing needs automatically. A negative month-end balance signals additional liquidity would be needed under these assumptions.</p>
+    <div class="kpis" id="cash-summary"></div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th>Net cash movement</th><th>Closing cash</th></tr></thead><tbody id="cash-results"></tbody></table></div>
+    <div class="actions">
+      <button id="export-report" class="secondary" type="button">Save full report as JSON</button>
+      <button id="export-csv" class="secondary" type="button">Save scenarios as CSV</button>
+      <button id="export-cashflow-csv" class="secondary" type="button">Save 12-month cash plan as CSV</button>
+      <button id="print" class="secondary" type="button">Print / save as PDF</button>
+    </div>
+  </section>
+  <footer class="hint">Software is provided for private technical and editorial review only. Validate every input and local legal/accounting requirement before decisions. The independent Python calculation engine is also included in this package.</footer>
+</main>
+</body>
+</html>

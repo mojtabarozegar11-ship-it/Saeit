@@ -147,9 +147,13 @@ def require_customer_package_qa(root, recipe, manifest):
     for parent in (evidence_dir, ticket_dir):
         if parent.is_symlink() or not parent.is_dir():
             raise RuntimeError("WAREHOUSE_CUSTOMER_PACKAGE_QA_MISSING")
-    evidence = read_json(evidence_dir / "technical-receipt.json")
-    ticket = read_json(ticket_dir / "pending.json")
-    schema = "zomorodmelal.factory.customer-extracted-acceptance.v1"
+    recent = (evidence_dir / "technical-receipt-v2.json").exists()
+    evidence = read_json(evidence_dir / (
+        "technical-receipt-v2.json" if recent else "technical-receipt.json"))
+    ticket = read_json(ticket_dir / (
+        "readiness-v2.json" if recent else "pending.json"))
+    schema = "zomorodmelal.factory.customer-extracted-acceptance." + (
+        "v2" if recent else "v1")
     measurements = manifest.get("qa_measurements", {})
     if (evidence.get("schema") != schema
             or evidence.get("recipe") != recipe
@@ -159,7 +163,9 @@ def require_customer_package_qa(root, recipe, manifest):
             or type(evidence.get("customer_archive_tests_run")) is not int
             or evidence["customer_archive_tests_run"] < 1
             or evidence["customer_archive_tests_run"] != measurements.get("tests_run")
-            or evidence.get("professional_quality_1000_approved") is not False
+            or (not recent and evidence.get("professional_quality_1000_approved") is not False)
+            or (recent and (evidence.get("objective_customer_package_accepted") is not True
+                            or evidence.get("commercial_publication_approved") is not False))
             or evidence.get("public_listing_enabled") is not False
             or evidence.get("commerce_enabled") is not False
             or ticket.get("schema") != schema
@@ -167,9 +173,16 @@ def require_customer_package_qa(root, recipe, manifest):
             or ticket.get("source_sha256") != sha
             or ticket.get("artifact_sha256") != digest_expected
             or ticket.get("technical_customer_qa") != "passed"
-            or ticket.get("rubric_maximum") != 1000
-            or ticket.get("verified_total_score") is not None
-            or ticket.get("professional_quality_1000_approved") is not False
+            or (not recent and (ticket.get("rubric_maximum") != 1000
+                                or ticket.get("verified_total_score") is not None
+                                or ticket.get("professional_quality_1000_approved") is not False))
+            or (recent and (ticket.get("objective_customer_package_accepted") is not True
+                            or ticket.get("release_readiness") != {
+                                "security_and_privacy": "not_yet_reviewed",
+                                "legal_rights_and_attribution": "not_yet_verified",
+                                "claims_and_user_documentation": "not_yet_reviewed",
+                                "storefront_and_delivery": "not_yet_verified",
+                                "owner_exact_version_publication": "not_authorized"}))
             or ticket.get("commercial_release") is not False):
         raise RuntimeError("WAREHOUSE_CUSTOMER_PACKAGE_QA_NOT_VERIFIED")
 

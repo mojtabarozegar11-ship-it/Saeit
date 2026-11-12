@@ -18,6 +18,7 @@ BACKUP_ROOT = HOME / ".mojplaywin-backups"
 BASELINE_ROOT = Path("deploy_baseline")
 MERGED_FILES = (
     Path("config/urls.py"),
+    Path("core/seo_views.py"),
     Path("core/services_views.py"),
     Path("core/commerce_views.py"),
     Path("core/views.py"),
@@ -31,6 +32,9 @@ OWNED_FILES = (
     Path("core/templates/mojplaywin/footer.html"),
 )
 FILES = MERGED_FILES + OWNED_FILES
+INDEXNOW_KEY = "f5e9e3dccc5c2511c452f26b011ec43e"
+INDEXNOW_FILE = DOCROOT / f"{INDEXNOW_KEY}.txt"
+
 ASSETS = (
     "site/heroes/research.webp", "site/heroes/game-studio.webp",
     "site/heroes/education-detail.webp", "site/heroes/store.webp",
@@ -88,6 +92,10 @@ def apply_three_way(base_text, desired_text, live_text, label):
                 continue
             if not positions and len(subsequence_positions(live, new)) == 1:
                 continue
+            if label == "core/seo_views.py":
+                # SEO is live-owned and has drifted independently; retain it and
+                # apply the explicitly validated IndexNow addition below.
+                continue
             raise RuntimeError(f"Safe merge conflict in {label}: expected one matching source hunk, found {len(positions)}")
         # Anchor insertions to the nearest unique context line. Host deployments can
         # add unrelated lines between the pinned context lines, so exact boundaries
@@ -113,6 +121,35 @@ def apply_three_way(base_text, desired_text, live_text, label):
             continue
         raise RuntimeError(f"Safe merge conflict in {label}: insertion anchor is not unique")
     return "".join(live)
+
+def ensure_indexnow_seo(source_text):
+    """Add a collision-safe public IndexNow endpoint without replacing live-only SEO code."""
+    if "def mojplaywin_indexnow_key(" in source_text:
+        return source_text
+    block = '''\n\n@require_GET\ndef mojplaywin_indexnow_key(request, key):\n    """Public IndexNow verification file for MojPlayWin."""\n    host = request.get_host().split(":")[0].lower()\n    if host not in {"mojplaywin.com", "www.mojplaywin.com"} or key != "f5e9e3dccc5c2511c452f26b011ec43e":\n        return HttpResponse(status=404)\n    return HttpResponse("f5e9e3dccc5c2511c452f26b011ec43e\\n", content_type="text/plain; charset=utf-8")\n\n'''
+    anchor = "\ndef _norm(value):\n"
+    if anchor not in source_text:
+        raise RuntimeError("Unable to anchor collision-safe IndexNow SEO addition")
+    return source_text.replace(anchor, block + anchor, 1)
+
+def ensure_indexnow_route(urlconf):
+    """Bind the public key route to the collision-safe handler."""
+    import_anchor = "from core.seo_views import "
+    line = next((x for x in urlconf.splitlines() if x.startswith(import_anchor)), None)
+    if line is None:
+        raise RuntimeError("Unable to locate SEO import for IndexNow route")
+    if "mojplaywin_indexnow_key" not in line:
+        urlconf = urlconf.replace(line, line.rstrip() + ", mojplaywin_indexnow_key", 1)
+    # Remove any legacy public key route regardless of indentation or handler name.
+    # The dedicated MojPlayWin route must be the only route for this filename.
+    urlconf = "".join(
+        line for line in urlconf.splitlines(keepends=True)
+        if not ('path("<str:key>.txt"' in line and 'name="indexnow_key"' in line)
+    )
+    marker = "urlpatterns = [\n"
+    if marker not in urlconf:
+        raise RuntimeError("Unable to anchor IndexNow URL route")
+    return urlconf.replace(marker, marker + '    path("<str:key>.txt", mojplaywin_indexnow_key, name="indexnow_key"),\n', 1)
 
 def route_mojplaywin_brand_home(urlconf):
     old_route = 'path("", branded_home, name="home"),'
@@ -167,6 +204,18 @@ def rollback(run_id):
         print("NO_MOJPLAYWIN_BACKUP_TO_RESTORE")
         return
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    key_entry = manifest.get("__indexnow_key_file__")
+    if key_entry:
+        ensure_safe_path(INDEXNOW_FILE)
+        saved_key = backup / "indexnow-key.txt"
+        if key_entry["existed"]:
+            if not saved_key.is_file() or saved_key.is_symlink():
+                raise RuntimeError("Missing or unsafe IndexNow backup")
+            atomic_write(INDEXNOW_FILE, saved_key.read_text(encoding="utf-8"), key_entry["mode"])
+        elif INDEXNOW_FILE.exists():
+            if INDEXNOW_FILE.is_dir():
+                raise RuntimeError("Unexpected directory at IndexNow key path")
+            INDEXNOW_FILE.unlink()
     for relative in FILES:
         target = APP_ROOT / relative
         ensure_safe_path(target)
@@ -197,6 +246,7 @@ def deploy(run_id, commit_sha, stage_arg):
     for required in (DOCROOT / ".htaccess", DOCROOT / "passenger_wsgi.py"):
         if not required.is_file() or required.is_symlink():
             raise RuntimeError(f"Missing or unsafe MojPlayWin routing file: {required}")
+    ensure_safe_path(INDEXNOW_FILE)
     if "Saeit-staging" not in (DOCROOT / "passenger_wsgi.py").read_text(encoding="utf-8", errors="replace"):
         raise RuntimeError("Passenger no longer points to the verified Saeit-staging app")
 
@@ -228,8 +278,11 @@ def deploy(run_id, commit_sha, stage_arg):
         live = live_path.read_text(encoding="utf-8")
         outputs[relative] = apply_three_way(baseline, source, live, str(relative))
         if relative == Path("config/urls.py"):
+            outputs[relative] = ensure_indexnow_route(outputs[relative])
             outputs[relative] = route_mojplaywin_brand_home(outputs[relative])
             outputs[relative] = route_mojplaywin_brand_store(outputs[relative])
+        if relative == Path("core/seo_views.py"):
+            outputs[relative] = ensure_indexnow_seo(outputs[relative])
         if relative.suffix == ".py":
             ast.parse(outputs[relative], filename=str(relative))
 
@@ -249,6 +302,9 @@ def deploy(run_id, commit_sha, stage_arg):
         raise RuntimeError("Deployment backup already exists")
     backup.mkdir(mode=0o700, parents=True)
     manifest = {}
+    manifest["__indexnow_key_file__"] = {"existed": INDEXNOW_FILE.is_file(), "mode": INDEXNOW_FILE.stat().st_mode & 0o777 if INDEXNOW_FILE.is_file() else 0o644}
+    if INDEXNOW_FILE.is_file():
+        shutil.copy2(INDEXNOW_FILE, backup / "indexnow-key.txt")
     for relative in FILES:
         target = APP_ROOT / relative
         existed = target.is_file()
@@ -264,6 +320,7 @@ def deploy(run_id, commit_sha, stage_arg):
         for relative in FILES:
             target = APP_ROOT / relative
             atomic_write(target, outputs[relative], manifest[str(relative)]["mode"])
+        atomic_write(INDEXNOW_FILE, INDEXNOW_KEY + "\n", manifest["__indexnow_key_file__"]["mode"])
         restart_passenger()
     except Exception:
         rollback(run_id)

@@ -151,6 +151,50 @@ def cycle_error_buckets(private):
         return {"state": "unreadable"}
 
 
+def quality_return_scope(private):
+    """Separate current F01 rework from unrelated historical quality returns."""
+    path = Path(private) / "production-state.json"
+    if not path.exists() and not path.is_symlink():
+        return {"state": "absent"}
+    try:
+        data = safe_json(path, 2_000_000)
+        active = data.get("active_product_slot_recipes")
+        section = data.get("quality_returns_to_production")
+        candidates = data.get("quality_return_build_candidates")
+        if (not isinstance(active, list) or not isinstance(section, dict)
+                or not isinstance(section.get("orders"), list)
+                or not isinstance(candidates, list)
+                or any(not isinstance(x, str) or not RECIPE.fullmatch(x) for x in active)):
+            return {"state": "invalid"}
+        active_names = set(active)
+        orders = section["orders"]
+        if any(not isinstance(x, dict) or not isinstance(x.get("recipe"), str)
+               for x in orders):
+            return {"state": "invalid"}
+        active_orders = sum(x["recipe"] in active_names for x in orders)
+        statuses = collections.Counter()
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if candidate.get("recipe") not in active_names:
+                continue
+            status = candidate.get("status")
+            statuses[status if status in (
+                "source_repair_still_required", "awaiting_independent_reinspection")
+                else "other"] += 1
+        return {
+            "state": "valid",
+            "total_open_quality_returns": len(orders),
+            "active_product_count": len(active_names),
+            "active_product_quality_returns": active_orders,
+            "other_product_quality_returns": len(orders) - active_orders,
+            "active_product_build_candidate_status_counts": dict(statuses),
+            "invalid_order_count": section.get("invalid_orders"),
+        }
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"state": "unreadable"}
+
+
 def production_heartbeat(private):
     """Return only a schema-checked subset of real cycle counters and timestamps."""
     path = private / "production-health.json"
@@ -188,12 +232,103 @@ def cron_production_channels(active):
         return None
     rules = {
         "autonomous_cycle": r"autonomous-product-runtime|factory_vps_product_cycle|SAEIT_AUTONOMOUS_PRODUCTS_V2|SAEIT_FACTORY_EVERY_MINUTE_V1",
+        "single_product_runner": r"single-product-runtime/run-single-product-cycle[.]sh|SAEIT_SINGLE_PRODUCT_FACTORY_V1",
         "forty_family": r"factory[-_]40|family[-_]master|build50",
         "science_stage_workers": r"stage[2-6]|research-navigator|agri200|qc1000",
         "unreviewed_leech": r"leech",
     }
     return {k: sum(bool(re.search(regex, row, re.I)) for row in active)
             for k, regex in rules.items()}
+
+
+def native_single_product_log_diagnostic(base):
+    """Bounded, redacted evidence about a stalled cron; never emit log text."""
+    log = Path(base) / "operations/single-product-cycle.log"
+    if log.is_symlink():
+        return {"state": "unsafe_symlink"}
+    if not log.is_file():
+        return {"state": "missing"}
+    try:
+        stat = log.stat()
+        with log.open("rb") as stream:
+            stream.seek(max(0, stat.st_size - 32768))
+            tail = stream.read(32768).decode("utf-8", errors="replace")
+        groups = {
+            "python_traceback": r"Traceback \(most recent call last\)",
+            "module_not_found": r"ModuleNotFoundError|ImportError",
+            "file_missing": r"No such file or directory|FileNotFoundError",
+            "permission_denied": r"Permission denied|PermissionError",
+            "database_locked": r"database is locked|OperationalError",
+            "timeout_or_killed": r"timed out|Terminated|Killed",
+            "shell_failure": r"command not found|syntax error|unbound variable",
+        }
+        return {
+            "state": "readable", "bytes": stat.st_size,
+            "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            "tail_error_group_counts": {
+                name: len(re.findall(pattern, tail, re.I))
+                for name, pattern in groups.items()
+            },
+            "tail_line_count": len(tail.splitlines()),
+        }
+    except OSError:
+        return {"state": "unreadable"}
+
+
+def cron_recent_journal_diagnostic():
+    """Aggregate the last ten minutes of cron's own journal; never print commands."""
+    journal = command(["journalctl", "-t", "CRON", "--since", "10 minutes ago",
+                       "--no-pager", "--output=cat"])
+    if journal is None:
+        return {"state": "unavailable"}
+    if "No journal files were found" in journal or "No entries" in journal:
+        return {"state": "empty_or_unavailable"}
+    rows = journal.splitlines()[-3000:]
+    return {
+        "state": "readable",
+        "recent_entry_count": len(rows),
+        "githubops_job_count": sum("(githubops) CMD" in row for row in rows),
+        "single_product_job_count": sum(
+            "(githubops) CMD" in row and "single-product-runtime/" in row
+            for row in rows
+        ),
+        "cron_job_error_count": sum(bool(re.search(
+            r"BAD FILE MODE|BAD USERNAME|ERROR|RELOAD|No MTA installed", row,
+            re.IGNORECASE)) for row in rows),
+    }
+
+
+def single_product_cron_wrapper_diagnostic(active):
+    """Classify extra scheduler guards; never output cron source or arguments."""
+    if active is None:
+        return {"state": "unavailable"}
+    rows = [r for r in active if "SAEIT_SINGLE_PRODUCT_FACTORY_V1" in r]
+    if len(rows) != 1:
+        return {"state": "missing_or_duplicate", "count": len(rows)}
+    line = rows[0]
+    runner = "/home/githubops/factory-runtime/operations/single-product-runtime/run-single-product-cycle.sh"
+    timer = "/usr/bin/timeout 55s "
+    log = "/home/githubops/factory-runtime/operations/single-product-cycle.log"
+    start = line.find(timer)
+    runner_at = line.find(runner)
+    log_at = line.find(log)
+    segment_lengths = (
+        [start, runner_at - (start + len(timer)),
+         log_at - (runner_at + len(runner)),
+         len(line) - (log_at + len(log))]
+        if start >= 0 and runner_at > start and log_at > runner_at else None
+    )
+    return {
+        "state": "classified" if segment_lengths is not None else "unrecognized",
+        "segment_lengths": segment_lengths,
+        "extra_shell_and_count": line.count("&&"),
+        "extra_shell_or_count": line.count("||"),
+        "contains_test_guard": bool(re.search(r"\btest\b|\[.*\]", line)),
+        "contains_flock": "flock" in line,
+        "contains_shell_wrapper": "bash -c" in line or "sh -c" in line,
+        "contains_paused_or_hold_guard": bool(re.search(r"PAUSE|HOLD|DISABLE|STOP", line, re.I)),
+        "ends_expected_marker": line.endswith("# SAEIT_SINGLE_PRODUCT_FACTORY_V1"),
+    }
 
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
@@ -259,6 +394,14 @@ def inventory():
     sha = None
     if serial.is_file() and not serial.is_symlink() and serial.stat().st_size < 200000:
         sha = hashlib.sha256(serial.read_bytes()).hexdigest()
+    runner = BASE / "operations/single-product-runtime/run-single-product-cycle.sh"
+    runner_info = {"present": False, "sha256": None, "executable": False}
+    if runner.is_file() and not runner.is_symlink() and runner.stat().st_size < 100000:
+        runner_info = {
+            "present": True,
+            "sha256": hashlib.sha256(runner.read_bytes()).hexdigest(),
+            "executable": bool(runner.stat().st_mode & 0o111),
+        }
     state = PRIVATE / "production-instructions/stage-06/strict-serial-active-v1.json"
     state_summary = {"present": state.is_file() and not state.is_symlink()}
     if state_summary["present"]:
@@ -295,6 +438,17 @@ def inventory():
         "cron_active_count": len(active) if active is not None else None,
         "cron_marker_counts": ({tag: sum(tag in row for row in active)
                                 for tag in tags} if active is not None else None),
+        "single_product_cron_marker_count": (
+            sum("SAEIT_SINGLE_PRODUCT_FACTORY_V1" in row for row in active)
+            if active is not None else None),
+        "native_single_product_runner": runner_info,
+        "native_single_product_log": native_single_product_log_diagnostic(BASE),
+        "cron_recent_journal": cron_recent_journal_diagnostic(),
+        "single_product_cron_wrapper": single_product_cron_wrapper_diagnostic(active),
+        "cron_service_state": (
+            (lambda value: value if value in ("active\n", "inactive\n", "failed\n")
+             else "unknown")(command(["systemctl", "is-active", "cron.service"]))
+        ).strip(),
         "leech_cron_like_count": (sum(bool(re.search("leech|WO-26102501", row, re.I))
                                       for row in active) if active is not None else None),
         "systemd_timers_readable": timers is not None,
@@ -317,6 +471,7 @@ def inventory():
         "line41": line41_diagnostic(PRIVATE),
         "production_heartbeat": production_heartbeat(PRIVATE),
         "cycle_error_buckets": cycle_error_buckets(PRIVATE),
+        "quality_return_scope": quality_return_scope(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
     }
 

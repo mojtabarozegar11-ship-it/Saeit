@@ -1,5 +1,6 @@
 name: MojPlayWin verified paid downloads isolated source patch
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [".github/workflows/mpw-buyer-verified-download-links-live-20261020.yml"]

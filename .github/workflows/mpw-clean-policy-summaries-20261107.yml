@@ -1,0 +1,73 @@
+name: MojPlayWin clean policy summaries
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-clean-policy-summaries-20261107.yml"]
+permissions: {contents: read}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
+          chmod 600 "$d/"*; ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null
+          printf 'Host v\n HostName 178.239.147.150\n User githubops\n IdentityFile %s\n UserKnownHostsFile %s\nHost h\n HostName zohal.pws-dns.net\n User zomorod2\n Port 1396\n IdentityFile %s\n UserKnownHostsFile %s\n ProxyJump v\nHost *\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 10\n RequestTTY no\n' "$d/v" "$d/vk" "$d/h" "$d/hk" > "$d/c"
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hk" 2>/dev/null
+      - name: Replace only duplicate summaries and verify
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,hashlib,stat
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging'); W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py'); P=A/'core/brand_views.py'
+          if A.is_symlink() or W.is_symlink() or not P.is_file() or P.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text(errors='replace'): raise RuntimeError('UNTRUSTED_TARGET')
+          s=P.read_text('utf8')
+          old_priv='body":"This notice describes the current email-only TRX digital store, purchase records and support. Effective 3 November 2026."'
+          new_priv='body":"Privacy information for invoices, payment verification, protected digital delivery and support. Effective 3 November 2026."'
+          old_terms='body":"These terms describe the live MojPlayWin digital-product purchase flow. Effective 3 November 2026. Product-specific licenses and applicable consumer law also apply."'
+          new_terms='body":"Rules for digital-product orders paid with native TRX on TRON, including verification, private delivery, support and refunds. Effective 3 November 2026."'
+          if s.count(old_priv)!=1 or s.count(old_terms)!=1: raise RuntimeError('EXPECTED_SUMMARIES_NOT_FOUND_EXACTLY_ONCE')
+          backup=P.with_name('brand_views.py.mpw-policy-preclean-'+hashlib.sha256(s.encode()).hexdigest()[:12]); backup.write_text(s,'utf8')
+          n=s.replace(old_priv,new_priv).replace(old_terms,new_terms)
+          tmp=P.with_name('.mpw-policy-summary-clean'); fd=os.open(str(tmp),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o640)
+          try:
+              with os.fdopen(fd,'w',encoding='utf8') as f:f.write(n);f.flush();os.fsync(f.fileno())
+              os.replace(tmp,P)
+          finally:
+              if tmp.exists():tmp.unlink()
+          for folder in (A/'tmp',W.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True); flag=folder/'restart.txt'; fd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.close(fd); os.utime(flag,None)
+          compile(n,str(P),'exec'); print('MPW_POLICY_SUMMARIES=PASS')
+          PY
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          ps=('/support/','/terms/','/privacy/','/store/','/commerce/trx-easy/','/commerce/trx-easy/purchases/')
+          out={}
+          for p in ps:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=30) as r:out[p]=r.status
+              except urllib.error.HTTPError as e:out[p]=e.code
+          print('MPW_POLICY_ROUTES='+json.dumps(out,sort_keys=True))
+          if any(v!=200 for v in out.values()): raise RuntimeError('POLICY_ROUTE_QA_FAILED')
+          PY
+          timeout 90s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product,OrderItem
+          p=Product.objects.get(pk=779);n=OrderItem.objects.filter(product_id=779).count()
+          print('MPW_ORDERS_PRESERVED',p.active,n)
+          if not p.active or n<1: raise RuntimeError('ORDER_PRESERVATION_FAILED')
+          PY
+      - name: Clean
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"

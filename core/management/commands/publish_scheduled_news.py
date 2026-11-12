@@ -11,7 +11,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         now = timezone.now()
         schedule = NewsletterSchedule.objects.filter(active=True).first()
-        approval_required = bool(schedule and schedule.publication_requires_approval)
+        if schedule is None:
+            self.stdout.write("Published 0 due newsletter stories: no active approval policy.")
+            return
+        approval_required = schedule.publication_requires_approval
         allowed_status = "approved" if approval_required else "scheduled"
         qs = NewsletterStory.objects.filter(
             status=allowed_status, published_at__isnull=False, published_at__lte=now

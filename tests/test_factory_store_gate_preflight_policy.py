@@ -55,9 +55,15 @@ class NativeStoreGatePreflightPolicy(unittest.TestCase):
         self.assertIn('if hashlib.sha256(current).hexdigest()!=sha:', source)
         self.assertIn('os.replace(name,target)', source)
 
-    def test_protected_django_site_deploy_remains_locked(self):
+    def test_factory_release_is_separate_from_guarded_main_site_deploy(self):
         text = (ROOT / ".github/workflows/mojplaywin-main-deploy.yml").read_text(encoding="utf-8")
-        self.assertIn('if: ${{ false }}', text)
+        self.assertIn("jobs:\n  deploy-main:\n", text)
+        self.assertIn("Validate source and pinned baseline", text)
+        self.assertIn("MOJPLAYWIN_SAFE_MERGE_CHECK=passed", text)
+        self.assertIn("Smoke-test MojPlayWin pages", text)
+        self.assertIn("Roll back if smoke checks fail", text)
+        # Factory publication remains protected by its own preflight (tested above).
+        self.assertNotIn("vps-native-store-publish-free.yml", text)
 
 
 if __name__ == "__main__":

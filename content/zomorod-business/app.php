@@ -11,7 +11,8 @@ header('X-Robots-Tag: noindex, nofollow');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
-header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()');
+header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; script-src \'unsafe-inline\'; connect-src \'self\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
 if (extension_loaded('session')) {
     session_name('ZM_BUSINESS');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
@@ -52,6 +53,7 @@ function db(string $private): PDO {
     $db->exec("CREATE TABLE IF NOT EXISTS employees (id INTEGER PRIMARY KEY, fullname TEXT NOT NULL, job_title TEXT NOT NULL, start_date TEXT NOT NULL, monthly_salary INTEGER NOT NULL DEFAULT 0 CHECK(monthly_salary>=0), active INTEGER NOT NULL DEFAULT 1)");
     $db->exec("CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY, title TEXT NOT NULL, category TEXT NOT NULL, body TEXT NOT NULL, created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY, title TEXT NOT NULL, owner TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('planned','active','paused','done')), budget INTEGER NOT NULL DEFAULT 0 CHECK(budget>=0), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+    $db->exec("CREATE TABLE IF NOT EXISTS mpw_checks (id INTEGER PRIMARY KEY, stage TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pass','blocked','unknown','read_only')), certainty TEXT NOT NULL CHECK(certainty IN ('confirmed','unverified','readonly')), evidence TEXT NOT NULL, confirmed_error TEXT NOT NULL DEFAULT '', buyer_impact TEXT NOT NULL, next_action TEXT NOT NULL, readiness TEXT NOT NULL, before_metric TEXT NOT NULL DEFAULT '', after_metric TEXT NOT NULL DEFAULT '', issue_status TEXT NOT NULL DEFAULT 'open' CHECK(issue_status IN ('open','resolved')), resolution_evidence TEXT NOT NULL DEFAULT '', created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), verb TEXT NOT NULL, subject TEXT NOT NULL, entity_id INTEGER, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $seed=['1000'=>['صندوق','asset'],'1010'=>['بانک','asset'],'1100'=>['حساب‌های دریافتنی','asset'],'1200'=>['موجودی کالا','asset'],'1500'=>['دارایی ثابت','asset'],'2000'=>['حساب‌های پرداختنی','liability'],'2100'=>['مالیات پرداختنی','liability'],'3000'=>['سرمایه','equity'],'4000'=>['درآمد فروش','income'],'5000'=>['بهای تمام‌شده','expense'],'5100'=>['هزینه عملیاتی','expense'],'5200'=>['هزینه حقوق','expense']];
     $s=$db->prepare('INSERT OR IGNORE INTO ledger_accounts(code,name,type) VALUES (?,?,?)');foreach($seed as $code=>$parts)$s->execute([$code,$parts[0],$parts[1]]);
@@ -80,12 +82,67 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','mojplaywin'=>'پایش MojPlayWin','approval_register'=>'دفتر مصوبات','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
     echo '</div></header>';
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
+    if($user)echo <<<'HTML'
+<section id="zm-approval-widget" style="margin:14px 4%;padding:14px 18px;border:2px solid #d9b85f;border-radius:14px;background:#182d1d;color:#f3e4b0">
+  <strong>🔔 اعلان و تأیید مدیریتی</strong> <button type="button" id="zm-enable-phone">فعال‌سازی اعلان گوشی</button> <a href="/staff/command-center/integrated/" style="color:#f3d584;margin-right:10px">بازکردن مرکز تأییدها</a>
+  <span id="zm-approval-status" style="margin-right:12px">در حال بررسی صف تأیید…</span>
+  <div id="zm-approval-request" hidden style="margin-top:10px;padding:12px;border-top:1px solid #806a37">
+    <div id="zm-approval-text"></div>
+    <textarea id="zm-approval-note" rows="2" placeholder="توضیح یا شاهد تصمیم" style="width:100%;margin-top:8px;background:#0c1a12;color:#fff;border:1px solid #806a37;border-radius:8px;padding:8px"></textarea>
+    <button type="button" data-zm-approval="approved">قبول</button>
+    <button type="button" data-zm-approval="rejected">رد</button>
+    <button type="button" data-zm-approval="explanation">توضیح</button>
+  </div>
+  <small style="display:block;margin-top:7px">در صورت بازبودن صف، هر درخواست با سه گزینهٔ قبول، رد و توضیح تعیین‌تکلیف می‌شود.</small>
+</section>
+<script>
+(function(){
+  const status=document.getElementById('zm-approval-status'), req=document.getElementById('zm-approval-request'), text=document.getElementById('zm-approval-text'), note=document.getElementById('zm-approval-note');
+  let current=null;
+  const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const phone=document.getElementById('zm-enable-phone');
+  function phoneStatus(){if(!phone)return;if(!('Notification' in window)){phone.disabled=true;phone.textContent='اعلان وب پشتیبانی نمی‌شود';return;}phone.textContent=Notification.permission==='granted'?'🔔 اعلان گوشی فعال است':'🔔 فعال‌سازی اعلان گوشی';}
+  phone?.addEventListener('click',async()=>{if(!('Notification' in window)){phoneStatus();return;}const p=await Notification.requestPermission();phoneStatus();if(p==='granted'){const n=new Notification('زمرد ملل — اعلان فعال شد',{body:'صف تأییدهای مدیریتی از این صفحه پایش می‌شود.',dir:'rtl',lang:'fa-IR'});n.onclick=()=>window.focus();}else if(p==='denied'){status.textContent='اعلان گوشی در Chrome مسدود است؛ از تنظیمات سایت اجازه اعلان را فعال کنید.';}});
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('/business/notification-sw.js',{scope:'/business/'}).catch(()=>{});}
+  phoneStatus();
+  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='zm-approval-action'){if(event.data.action==='explanation'){req.hidden=false;note.focus();status.textContent='توضیح تصمیم را وارد کنید و دکمهٔ توضیح را بزنید.';}else{decide(event.data.action);}}});
+  async function refresh(){
+    try{
+      const r=await fetch('/staff/command-center/api/integrated-ledger/',{credentials:'include',cache:'no-store'});
+      if(!r.ok)throw 0;
+      const x=await r.json(); current=(x.pending_approvals||[])[0]||null;
+      status.textContent=current?'یک درخواست تأیید در انتظار است.':'صف تأیید فعلاً خالی است.';
+      req.hidden=!current;
+      if(current){
+        text.innerHTML='<b>'+esc(current.action_type||'درخواست حساس')+'</b><br>'+esc(current.reason||'تصمیم مالک لازم است.');
+        const noticeKey='zm-approval-notified-'+String(current.id||'unknown');
+        if('Notification' in window && Notification.permission==='granted' && !sessionStorage.getItem(noticeKey) && navigator.serviceWorker){
+          navigator.serviceWorker.ready.then(reg=>reg.showNotification('زمرد ملل — تأیید لازم است',{body:String(current.reason||'یک درخواست مدیریتی در انتظار تصمیم است.'),dir:'rtl',lang:'fa-IR',tag:'zm-approval-'+String(current.id||'unknown'),renotify:false,actions:[{action:'approved',title:'قبول'},{action:'rejected',title:'رد'},{action:'explanation',title:'توضیح'}],data:{url:'/staff/command-center/integrated/'}})).catch(()=>{});
+          sessionStorage.setItem(noticeKey,'1');
+        }
+      }
+    }catch(_){status.innerHTML='اتصال صف این صفحه برقرار نیست؛ <a href="/staff/command-center/integrated/" style="color:#f3d584">مرکز تأییدها را باز کنید</a>.';req.hidden=true;}
+  }
+  async function decide(action){
+    if(!current)return;
+    const value=note.value.trim();
+    if(action==='explanation'&&!value){note.focus();alert('لطفاً توضیح را وارد کنید.');return;}
+    const token=document.cookie.split('; ').find(x=>x.startsWith('csrftoken='))?.split('=')[1]||'';
+    const r=await fetch('/staff/command-center/api/integrated-ledger/',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-CSRFToken':token},body:JSON.stringify({kind:'approval_request',id:current.id,action,note:value})});
+    if(!r.ok){location.href='/staff/command-center/integrated/';return;}
+    note.value='';await refresh();
+  }
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-zm-approval]');if(b)decide(b.dataset.zmApproval)});
+  refresh();setInterval(refresh,60000);
+})();
+</script>
+HTML;
     echo '<main>';
 }
 function layoutEnd():void {echo '</main><footer>تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</footer></body></html>';}
@@ -204,6 +261,14 @@ try {
         } elseif($action==='project'){
             $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
             $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
+        } elseif($action==='mpw_check'){
+            $stage=req('stage');$status=req('status','unknown');$certainty=req('certainty','unverified');
+            $allowed=['guest_email','trx_payment','server_verify','receipt','download','recovery'];
+            if(!in_array($stage,$allowed,true)||!in_array($status,['pass','blocked','unknown','read_only'],true)||!in_array($certainty,['confirmed','unverified','readonly'],true))bail('مرحله یا وضعیت پایش نامعتبر است.');
+            $evidence=req('evidence');$error=req('confirmed_error');$impact=req('buyer_impact');$next=req('next_action');$readiness=req('readiness');
+            if($evidence===''||$impact===''||$next==='')bail('شاهد، اثر بر خریدار و اقدام بعدی الزامی است.');
+            $db->prepare('INSERT INTO mpw_checks(stage,status,certainty,evidence,confirmed_error,buyer_impact,next_action,readiness,before_metric,after_metric,issue_status,resolution_evidence,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$stage,$status,$certainty,$evidence,$error,$impact,$next,$readiness,req('before_metric'),req('after_metric'),$status==='pass'?'resolved':'open',req('resolution_evidence'),actor()]);
+            audit($db,'create','mpw-check',(int)$db->lastInsertId());
         } elseif(in_array($action,['agent_toggle','agent_run'],true)){
             if(role()!=='admin')bail('فقط مدیر اصلی مجاز است.',403);
             if(!function_exists('zmAgentDb'))bail('موتور ایجنت آماده نیست.',503);
@@ -227,6 +292,44 @@ try {
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
         echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section>';
+    } elseif($page==='mojplaywin'){
+        authorize('view');
+        $stages=[
+          'guest_email'=>['ورود ایمیل مهمان','ثبت خرید بدون ساخت حساب و بدون اتصال اجباری کیف پول'],
+          'trx_payment'=>['پرداخت TRX','نمایش مبلغ، شبکه و شناسه تراکنش برای خریدار'],
+          'server_verify'=>['تأیید سمت‌سرور بلاک‌چین','تأیید تراکنش فقط از سمت سرور و جلوگیری از اعتماد به مرورگر'],
+          'receipt'=>['صدور رسید','ایجاد شماره رسید و ثبت نتیجه قابل‌ردیابی'],
+          'download'=>['ارسال لینک دانلود','تحویل امن لینک پس از تأیید پرداخت'],
+          'recovery'=>['بازیابی با ایمیل','بازیابی سفارش و لینک با همان ایمیل خرید']
+        ];
+        $checks=q($db,'SELECT * FROM mpw_checks ORDER BY id DESC LIMIT 200');
+        $stageFilter=(string)($_GET['stage']??''); $statusFilter=(string)($_GET['status']??''); $certaintyFilter=(string)($_GET['certainty']??'');
+        echo '<section class="notice danger"><strong>هشدار پایش read-only:</strong> تا وقتی تست زنده و شاهد معتبر ثبت نشده، وضعیت هر مرحله «تأییدنشده» است. این پنل هیچ ایمیل، پرداخت، حذف فاکتور یا استقراری انجام نمی‌دهد.</section>';
+        echo '<div class="grid">';
+        foreach($stages as $key=>$meta){
+            $latest=q($db,'SELECT * FROM mpw_checks WHERE stage=? ORDER BY id DESC LIMIT 1',[$key]);
+            $row=$latest[0]??null; $label=$row?($row['status']==='pass'?'عبور':($row['status']==='blocked'?'مسدود':($row['status']==='read_only'?'فقط پایش':'نامشخص'))):'بدون تست';
+            $certainty=$row?($row['certainty']==='confirmed'?'تأییدشده':($row['certainty']==='readonly'?'read-only':'تأییدنشده')):'تأییدنشده';
+            echo '<article class="card"><h3>'.esc($meta[0]).'</h3><p>'.esc($meta[1]).'</p><div class="tags"><span>'.esc($label).'</span><span>'.esc($certainty).'</span></div><small>'.esc($row['evidence']??'هنوز شاهد تست زنده ثبت نشده است.').'</small></article>';
+        }
+        echo '</div>';
+        echo '<section><h2>ثبت تست زنده و نتیجه قابل‌سنجش</h2><p class="muted">فقط نتیجه مشاهده و شواهد ثبت می‌شود؛ هیچ اقدام بیرونی از این فرم اجرا نمی‌شود.</p>';
+        formBegin('mpw_check');
+        echo '<div class="form"><div><label>مرحله</label><select name="stage">';
+        foreach($stages as $key=>$meta)echo '<option value="'.esc($key).'">'.esc($meta[0]).'</option>';
+        echo '</select></div><div><label>وضعیت</label><select name="status"><option value="unknown">نامشخص</option><option value="pass">عبور</option><option value="blocked">مسدود</option><option value="read_only">فقط پایش</option></select></div><div><label>قطعیت</label><select name="certainty"><option value="unverified">تأییدنشده</option><option value="confirmed">تأییدشده</option><option value="readonly">read-only</option></select></div><div><label>آمادگی بهره‌برداری</label><select name="readiness"><option>آماده نیست</option><option>نیازمند تأیید</option><option>آماده پایش</option><option>آماده انتشار</option></select></div><div class="full"><label>شواهد</label><textarea name="evidence" required placeholder="زمان تست، مسیر، شماره سفارش، هش یا لینک شاهد"></textarea></div><div><label>خطای تأییدشده</label><textarea name="confirmed_error"></textarea></div><div><label>اثر بر خریدار</label><textarea name="buyer_impact" required></textarea></div><div><label>اقدام بعدی</label><textarea name="next_action" required></textarea></div><div><label>قبل</label><input name="before_metric" placeholder="مثلاً نرخ عبور"></div><div><label>بعد</label><input name="after_metric" placeholder="مثلاً نرخ عبور"></div><div class="full"><label>شاهد رفع کامل</label><textarea name="resolution_evidence"></textarea></div></div><button>ثبت تست و نتیجه</button></form></section>';
+        echo '<section><h2>فیلتر تاریخچه تست‌ها</h2><form method="get"><input type="hidden" name="page" value="mojplaywin"><div class="form"><div><label>مرحله</label><select name="stage"><option value="">همه</option>';
+        foreach($stages as $key=>$meta)echo '<option value="'.esc($key).'"'.($stageFilter===$key?' selected':'').'>'.esc($meta[0]).'</option>';
+        echo '</select></div><div><label>وضعیت</label><select name="status"><option value="">همه</option><option value="pass">عبور</option><option value="blocked">مسدود</option><option value="unknown">نامشخص</option><option value="read_only">فقط پایش</option></select></div><div><label>قطعیت</label><select name="certainty"><option value="">همه</option><option value="confirmed">تأییدشده</option><option value="unverified">تأییدنشده</option><option value="readonly">read-only</option></select></div></div><button>اعمال فیلتر</button></form><div class="scroll"><table><tr><th>مرحله</th><th>وضعیت</th><th>قطعیت</th><th>شاهد</th><th>خطا</th><th>اثر</th><th>اقدام بعدی</th><th>زمان</th></tr>';
+        foreach($checks as $row){
+            if($stageFilter!==''&&$row['stage']!==$stageFilter)continue;
+            if($statusFilter!==''&&$row['status']!==$statusFilter)continue;
+            if($certaintyFilter!==''&&$row['certainty']!==$certaintyFilter)continue;
+            $stageName=$stages[$row['stage']][0]??$row['stage'];$statusName=['pass'=>'عبور','blocked'=>'مسدود','unknown'=>'نامشخص','read_only'=>'فقط پایش'][$row['status']]??$row['status'];$certaintyName=['confirmed'=>'تأییدشده','unverified'=>'تأییدنشده','readonly'=>'read-only'][$row['certainty']]??$row['certainty'];
+            echo '<tr><td>'.esc($stageName).'</td><td>'.esc($statusName).'</td><td>'.esc($certaintyName).'</td><td>'.esc($row['evidence']).'</td><td>'.esc($row['confirmed_error']?:'—').'</td><td>'.esc($row['buyer_impact']).'</td><td>'.esc($row['next_action']).'</td><td>'.esc($row['created_at']).'</td></tr>';
+        }
+        echo '</table></div></section>';
+        echo '<section class="grid"><article class="card"><h3>موانع خرید</h3><p>مرحله‌های مسدود یا نامشخص با اثر مستقیم بر خریدار.</p></article><article class="card"><h3>فروش و درآمد</h3><p>تا ثبت سند فروش قطعی، درآمد تأییدنشده جدا نگه داشته می‌شود.</p></article><article class="card"><h3>کارهای بدون خروجی</h3><p>تست بدون شاهد یا نتیجه قابل‌سنجش در این دسته قرار می‌گیرد.</p></article><article class="card"><h3>موارد در انتظار تأیید</h3><p>ایمیل، حذف فاکتور، استقرار و هر تغییر بیرونی نیازمند تصمیم جداگانه است.</p></article></section>';
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);

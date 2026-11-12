@@ -15,9 +15,7 @@ HOME = Path("/home/zomorod2")
 DOCROOT = HOME / "mojplaywin.com"
 APP_ROOT = HOME / "Saeit-staging"
 BACKUP_ROOT = HOME / ".mojplaywin-backups"
-FILES = (
-    Path("config/urls.py"),
-    Path("core/views.py"),
+SAMAN_TEMPLATES = (
     Path("templates/saman/index.html"),
     Path("templates/saman/learn.html"),
     Path("templates/saman/play.html"),
@@ -26,8 +24,12 @@ FILES = (
     Path("templates/saman/partners.html"),
     Path("templates/saman/about.html"),
 )
+FINANCE_TEMPLATE = Path("core/templates/core/financial_brand_page.html")
+FINANCE_SOURCE = Path("core/financial_brand_pages.py")
+FILES = (Path("config/urls.py"), Path("core/views.py"), *SAMAN_TEMPLATES, FINANCE_SOURCE, FINANCE_TEMPLATE)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from saman_patch import patch_urls, patch_views  # noqa: E402
+from financial_brand_patch import patch_financial_urls  # noqa: E402
 
 
 def safe_id(run_id):
@@ -51,9 +53,14 @@ def atomic_write(path, content, mode):
 
 
 def restart_passenger():
-    restart = DOCROOT / "tmp" / "restart.txt"
-    restart.parent.mkdir(parents=True, exist_ok=True)
-    restart.touch()
+    # The verified Passenger wrapper loads Saeit-staging; restart both the
+    # document-root marker and the active application marker.
+    for restart in (DOCROOT / "tmp" / "restart.txt", APP_ROOT / "tmp" / "restart.txt"):
+        restart.parent.mkdir(parents=True, exist_ok=True)
+        restart.touch()
+    wrapper = DOCROOT / "passenger_wsgi.py"
+    if wrapper.is_file() and not wrapper.is_symlink():
+        wrapper.touch()
 
 
 def rollback(run_id):
@@ -114,7 +121,7 @@ def deploy(run_id, commit_sha):
         "about": "A broader home for curiosity.",
     }
     staged_templates = {}
-    for relative in FILES[2:]:
+    for relative in SAMAN_TEMPLATES:
         template_source = stage / relative
         if not template_source.is_file() or template_source.is_symlink():
             raise RuntimeError(f"Staged SAMAN page is missing or unsafe: {relative}")
@@ -132,6 +139,14 @@ def deploy(run_id, commit_sha):
             raise RuntimeError("SAMAN home content validation failed")
         staged_templates[relative] = html
 
+    finance_source = stage / FINANCE_SOURCE
+    finance_template = stage / FINANCE_TEMPLATE
+    for staged in (finance_source, finance_template):
+        if not staged.is_file() or staged.is_symlink():
+            raise RuntimeError(f"Missing or unsafe finance deployment file: {staged}")
+    if "financial_brand_page" not in finance_source.read_text(encoding="utf-8") or "page_notice" not in finance_template.read_text(encoding="utf-8"):
+        raise RuntimeError("Finance source or template failed content validation")
+
     template_dir = APP_ROOT / "templates" / "saman"
     if (APP_ROOT / "templates").is_symlink() or template_dir.is_symlink():
         raise RuntimeError("Refusing to write through a template symlink")
@@ -144,8 +159,10 @@ def deploy(run_id, commit_sha):
     url_target = APP_ROOT / FILES[0]
     view_target = APP_ROOT / FILES[1]
     patched = {
-        FILES[0]: patch_urls(url_target.read_text(encoding="utf-8")),
+        FILES[0]: patch_financial_urls(patch_urls(url_target.read_text(encoding="utf-8"))),
         FILES[1]: patch_views(view_target.read_text(encoding="utf-8")),
+        FINANCE_SOURCE: finance_source.read_text(encoding="utf-8"),
+        FINANCE_TEMPLATE: finance_template.read_text(encoding="utf-8"),
         **staged_templates,
     }
     ast.parse(patched[FILES[0]], filename=str(FILES[0]))

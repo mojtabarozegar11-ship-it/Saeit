@@ -141,6 +141,66 @@ jobs:
             exit 0
           fi
           echo "SITE_AGENT_MIGRATIONS_PENDING=no"
+          # Bounded read-only inventory: diagnose source/schema drift before any
+          # command is allowed to create drafts or queue tasks.
+          "$python_path" - <<'AGENT_READONLY'
+          import os
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.core.management import get_commands
+          from django.db import connection
+          from django.db.migrations.loader import MigrationLoader
+          from django.db.migrations.recorder import MigrationRecorder
+          app = Path("/home/zomorod2/Saeit")
+          required = {
+              "company_activity_agent_cycle": "core/management/commands/company_activity_agent_cycle.py",
+              "company_activity_agent_module": "core/company_activity_agent.py",
+              "knowledge_agent_cycle": "core/management/commands/knowledge_agent_cycle.py",
+              "knowledge_agent_module": "core/knowledge_agent.py",
+              "knowledge_quality_module": "core/knowledge_quality.py",
+              "newsletter_process_queue": "core/management/commands/newsletter_process_queue.py",
+          }
+          registered = get_commands()
+          for label, rel in required.items():
+              print(f"CPANEL_AGENT_SOURCE_{label.upper()}={'present' if (app / rel).is_file() else 'missing'}")
+              if label.endswith("_cycle") or label == "newsletter_process_queue":
+                  print(f"CPANEL_AGENT_COMMAND_{label.upper()}={'present' if label in registered else 'missing'}")
+          existing = set(connection.introspection.table_names())
+          for table in ("core_companyactivityagentplan", "core_companyactivityreport", "core_knowledgeagentplan", "core_knowledgebook", "core_knowledgeagentrun", "core_newslettersubmission"):
+              print(f"CPANEL_AGENT_TABLE_{table.upper()}={'present' if table in existing else 'missing'}")
+          loader = MigrationLoader(connection)
+          applied = MigrationRecorder(connection).applied_migrations()
+          print("CPANEL_CORE_MIGRATIONS_ON_DISK=" + str(sum(1 for app_label, _ in loader.disk_migrations if app_label == "core")))
+          print("CPANEL_CORE_MIGRATIONS_APPLIED=" + str(sum(1 for app_label, _ in applied if app_label == "core")))
+          # Only bounded aggregate counts; no owner submissions, messages or payloads.
+          from core.newsletter_models import NewsletterSubmission
+          from core.models import Agent, NewsletterSchedule, AgentTask
+          from core.knowledge_agent_models import KnowledgeAgentRun
+          print("CPANEL_NEWSLETTER_ENGINE_SOURCE=" + ("present" if (app / "core/newsletter_engine.py").is_file() else "missing"))
+          print("CPANEL_NEWSLETTER_CONTENT_LINK_SOURCE=" + ("present" if (app / "core/company_content_models.py").is_file() else "missing"))
+          for status in ("queued", "processing", "drafted", "rejected"):
+              print(f"CPANEL_NEWSLETTER_SUBMISSIONS_{status.upper()}=" + str(NewsletterSubmission.objects.filter(status=status).count()))
+          schedules = list(NewsletterSchedule.objects.filter(active=True).values_list("publication_requires_approval", flat=True)[:2])
+          print("CPANEL_NEWSLETTER_ACTIVE_SCHEDULE_COUNT=" + str(NewsletterSchedule.objects.filter(active=True).count()))
+          print("CPANEL_NEWSLETTER_UNAPPROVED_SCHEDULING_ENABLED=" + str(any(not required for required in schedules)))
+          for code in ("content-director", "newsletter-specialist", "newsletter-company-news", "newsletter-world-watch", "newsletter-unit-reports", "knowledge-content-director"):
+              agent = Agent.objects.filter(code=code).values_list("active", flat=True).first()
+              print("CPANEL_AGENT_" + code.upper().replace("-", "_") + "=" + ("missing" if agent is None else "active" if agent else "disabled"))
+          for status in ("queued", "blocked", "completed"):
+              print("CPANEL_KNOWLEDGE_RUNS_" + status.upper() + "=" + str(KnowledgeAgentRun.objects.filter(status=status).count()))
+          print("CPANEL_KNOWLEDGE_QUEUED_TASKS=" + str(AgentTask.objects.filter(action_type="knowledge_content_generation", status="queued").count()))
+          print("CPANEL_AGENT_INVENTORY=readonly_no_changes")
+          AGENT_READONLY
+          available="$("$python_path" manage.py help --commands)"
+          for command in company_activity_agent_cycle knowledge_agent_cycle; do
+            if ! printf '%s\n' "$available" | grep -Fxq "$command"; then
+              echo "SITE_AGENT_COMMAND_MISSING=$command" >&2
+              exit 1
+            fi
+          done
+          echo "SITE_AGENT_COMMANDS=verified"
           echo "SITE_AGENT_RUNTIME=ready"
           REMOTE
       - name: Run one bounded, approval-gated site cycle
@@ -157,10 +217,24 @@ jobs:
           echo "SITE_AGENT_RUN_INTERPRETER=verified"
           cd "$app"
           if "$python_path" manage.py migrate --check >/dev/null 2>&1; then
-            "$python_path" manage.py company_activity_agent_cycle
-            "$python_path" manage.py knowledge_agent_cycle
-            "$python_path" manage.py knowledge_agent_generate
-            echo "SITE_AGENT_DJANGO_CYCLE=executed"
+            activity_output="$("$python_path" manage.py company_activity_agent_cycle)"
+            queue_output="$("$python_path" manage.py knowledge_agent_cycle)"
+            printf '%s\n' "$activity_output" "$queue_output"
+            # A zero-exit Django command may have only reported WAIT. Count
+            # documented outputs separately from successful task invocation.
+            reports=0
+            if [[ "$activity_output" =~ COMPANY_ACTIVITY_AGENT=QUEUED\ REPORTS=([0-9]+) ]]; then
+              reports="${BASH_REMATCH[1]}"
+            fi
+            echo "SITE_AGENT_CREATED_REPORTS=$reports"
+            echo "SITE_AGENT_DRAFTS_GENERATED=0"
+            echo "SITE_AGENT_PAID_GENERATION=not_scheduled"
+            if (( reports > 0 )); then
+              echo "SITE_AGENT_MEASURED_OUTPUT=created_for_review"
+            else
+              echo "SITE_AGENT_MEASURED_OUTPUT=none"
+            fi
+            echo "SITE_AGENT_DJANGO_CYCLE=invoked"
           else
             agent_file="$HOME/.private/zomorod-business/site_agents.php"
             agent_db="$HOME/.private/zomorod-business/site_agents.sqlite3"
@@ -182,7 +256,8 @@ jobs:
               $seen[]=$code;
             }
             if(count($out)!==11 || $after-$before!==11 || array_diff($expected,$seen) || count(array_unique($seen))!==11) exit(8);
-            echo "SITE_AGENT_PRIVATE_FALLBACK_ACTIVE=11\n";
+            echo "SITE_AGENT_PRIVATE_HTTP_CHECKS=11\n";
+            echo "SITE_AGENT_PRIVATE_BUSINESS_OUTPUT=unverified\n";
             ' "$agent_file"
             echo "SITE_AGENT_DJANGO_CYCLE=unavailable_database_schema"
           fi

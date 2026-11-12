@@ -1,10 +1,13 @@
 from datetime import timedelta
+from io import StringIO
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
 from core.knowledge_agent import DEFAULT_OUTLINE, queue_cycle, seed_library
 from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeAgentRun
+from core.models import AgentTask
 
 
 class KnowledgeAgentSchedulerTests(TestCase):
@@ -16,6 +19,10 @@ class KnowledgeAgentSchedulerTests(TestCase):
         first = queue_cycle()
         self.assertIsNotNone(first)
         self.assertEqual(KnowledgeAgentRun.objects.filter(plan=first.plan).count(), 1)
+        task = AgentTask.objects.get(action_type="knowledge_content_generation", input_data__run_id=first.pk)
+        self.assertEqual(task.risk_snapshot, "high")
+        self.assertTrue(task.input_data["paid_model"])
+        self.assertTrue(first.approval_required)
         self.assertIsNotNone(first.plan.next_run_at)
         self.assertIsNone(queue_cycle())
         first.plan.next_run_at = timezone.now() - timedelta(minutes=1)
@@ -38,3 +45,24 @@ class KnowledgeAgentSchedulerTests(TestCase):
         seed_library()
         book = KnowledgeBook.objects.get(code="food-agriculture")
         self.assertEqual(book.outline, DEFAULT_OUTLINE)
+
+    def test_command_reports_existing_queued_run_instead_of_false_completion(self):
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: queued run=", output.getvalue())
+
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: awaiting_execution queued=1 running=0", output.getvalue())
+        self.assertNotIn("library complete", output.getvalue())
+        self.assertEqual(KnowledgeAgentRun.objects.count(), 1)
+
+    def test_command_reports_inactive_plan_without_false_completion(self):
+        plan = KnowledgeAgentPlan.objects.create(
+            code="knowledge-content-director", title="Paused", mission="paused", goal="paused",
+            active=False,
+        )
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: inactive", output.getvalue())
+        self.assertEqual(KnowledgeAgentRun.objects.filter(plan=plan).count(), 0)

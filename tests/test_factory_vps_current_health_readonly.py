@@ -59,6 +59,31 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
                     audit.inventory()
 
+    def test_quality_returns_separate_active_from_historical_without_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp)
+            state = {
+                "active_product_slot_recipes": ["farm_enterprise_economics"],
+                "quality_returns_to_production": {"orders": [
+                    {"recipe": "farm_enterprise_economics"},
+                    {"recipe": "old_product_a"},
+                    {"recipe": "old_product_b"}], "invalid_orders": 2},
+                "quality_return_build_candidates": [
+                    {"recipe": "farm_enterprise_economics",
+                     "status": "source_repair_still_required"},
+                    {"recipe": "old_product_a",
+                     "status": "awaiting_independent_reinspection"}],
+            }
+            (private / "production-state.json").write_text(json.dumps(state))
+            result = audit.quality_return_scope(private)
+            self.assertEqual(result["total_open_quality_returns"], 3)
+            self.assertEqual(result["active_product_quality_returns"], 1)
+            self.assertEqual(result["other_product_quality_returns"], 2)
+            self.assertEqual(result["active_product_build_candidate_status_counts"],
+                             {"source_repair_still_required": 1})
+            self.assertNotIn("old_product_a", json.dumps(result))
+            self.assertNotIn("farm_enterprise_economics", json.dumps(result))
+
 
     def test_line41_diagnoses_stale_full_slot_without_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -100,6 +125,78 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
     def test_wrapper_schedule_is_classified_as_autonomous_cycle(self):
         rows = ["23 * * * * /bin/bash /private/worker.sh # SAEIT_AUTONOMOUS_PRODUCTS_V2"]
         self.assertEqual(audit.cron_production_channels(rows)["autonomous_cycle"], 1)
+
+    def test_single_product_runner_cron_is_counted_separately(self):
+        rows = ["* * * * * /private/single-product-runtime/run-single-product-cycle.sh "
+                "# SAEIT_SINGLE_PRODUCT_FACTORY_V1"]
+        groups = audit.cron_production_channels(rows)
+        self.assertEqual(groups["single_product_runner"], 1)
+        self.assertNotIn("/private/", json.dumps(groups))
+
+    def test_single_product_runner_report_does_not_invoke_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "factory-runtime"
+            private = base / "private/autonomous-product-cycle"
+            ops = base / "operations/production-instructions"
+            orders = private / "production-instructions/orders"
+            runner = base / "operations/single-product-runtime/run-single-product-cycle.sh"
+            runner.parent.mkdir(parents=True)
+            runner.write_text("#!/bin/sh\nexit 41\n", encoding="utf8")
+            ops.mkdir(parents=True)
+            orders.mkdir(parents=True)
+            with patch.object(audit, "BASE", base), patch.object(audit, "PRIVATE", private), \
+                 patch.object(audit, "OPS", ops), patch.object(audit, "ORDERS", orders), \
+                 patch.object(audit.os, "geteuid", return_value=1000), \
+                 patch.object(audit, "command", return_value=(
+                     "* * * * * /private/single-product-runtime/run-single-product-cycle.sh "
+                     "# SAEIT_SINGLE_PRODUCT_FACTORY_V1")):
+                result = audit.inventory()
+            self.assertEqual(result["single_product_cron_marker_count"], 1)
+            self.assertTrue(result["native_single_product_runner"]["present"])
+            self.assertEqual(result["native_single_product_runner"]["executable"], False)
+            self.assertEqual(result["server_written_bytes"], 0)
+
+    def test_stalled_runner_log_reports_only_redacted_error_classes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ops = base / "operations"
+            ops.mkdir()
+            log = ops / "single-product-cycle.log"
+            secret = "private key path /home/user/secrettoken"
+            log.write_text("Traceback (most recent call last):\n"
+                           "ModuleNotFoundError: " + secret + "\n"
+                           "No such file or directory: " + secret + "\n", encoding="utf8")
+            before = log.read_bytes()
+            result = audit.native_single_product_log_diagnostic(base)
+            self.assertEqual(result["state"], "readable")
+            self.assertEqual(result["tail_error_group_counts"]["python_traceback"], 1)
+            self.assertEqual(result["tail_error_group_counts"]["module_not_found"], 1)
+            self.assertNotIn(secret, json.dumps(result))
+            self.assertEqual(log.read_bytes(), before)
+
+    def test_cron_journal_reports_aggregates_and_never_command_text(self):
+        raw = ("(githubops) CMD (/private/single-product-runtime/run-single-product-cycle.sh "
+               "--secret do-not-print)\n(root) CMD (other)\n"
+               "(githubops) CMD (/usr/bin/true)\n")
+        with patch.object(audit, "command", return_value=raw):
+            result = audit.cron_recent_journal_diagnostic()
+        self.assertEqual(result["recent_entry_count"], 3)
+        self.assertEqual(result["githubops_job_count"], 2)
+        self.assertEqual(result["single_product_job_count"], 1)
+        self.assertNotIn("do-not-print", json.dumps(result))
+
+    def test_cron_wrapper_classifier_reports_guards_without_sensitive_path(self):
+        runner = ("/home/githubops/factory-runtime/operations/"
+                  "single-product-runtime/run-single-product-cycle.sh")
+        log = "/home/githubops/factory-runtime/operations/single-product-cycle.log"
+        secret = "secret-private-guard"
+        row = ("* * * * * test -f /" + secret + " && /usr/bin/timeout 55s "
+               + runner + " >> " + log + " 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1")
+        result = audit.single_product_cron_wrapper_diagnostic([row])
+        self.assertEqual(result["state"], "classified")
+        self.assertEqual(result["extra_shell_and_count"], 1)
+        self.assertTrue(result["contains_test_guard"])
+        self.assertNotIn(secret, json.dumps(result))
 
     def test_heartbeat_real_counter_only_and_no_server_write(self):
         with tempfile.TemporaryDirectory() as tmp:

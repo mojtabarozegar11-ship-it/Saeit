@@ -18,12 +18,12 @@ def load_guard():
     return obj
 
 class ReleaseMustHaveRealExecutionReceipts(unittest.TestCase):
-    def test_old_editions_never_receive_qc1000(self):
+    def test_old_editions_never_receive_automatic_release_readiness(self):
         gate=load_guard()
         gate.require_rights_clearance=lambda *args,**kwargs: {"status":"test-only"}
-        row=gate.require_quality_clearance("/dev/null","some_product","a"*64,
-             {"professional_quality_standard":"legacy"},"/dev/null")
-        self.assertIs(row["1000_quality_verified"],False)
+        with self.assertRaises(ValueError):
+            gate.require_quality_clearance("/dev/null","some_product","a"*64,
+                 {"professional_quality_standard":"legacy"},"/dev/null")
 
     def test_forged_report_and_four_claimed_signers_still_block_without_executions(self):
         gate=load_guard()
@@ -58,7 +58,7 @@ class ReleaseMustHaveRealExecutionReceipts(unittest.TestCase):
             gate.require_rights_clearance=lambda *args,**kwargs: {"status":"test-only"}
             try:
                 with self.assertRaisesRegex(ValueError,
-                       "QC1000_TRUSTED_REAL_EXECUTION_EVIDENCE_MISSING"):
+                       "OBJECTIVE_GATE_FUNCTIONAL_EVIDENCE_MISSING"):
                     gate.require_quality_clearance(inbox,"test_product",digest,
                         {"professional_quality_standard":"100_groups_x_10"},archive)
             finally:

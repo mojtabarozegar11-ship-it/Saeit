@@ -32,10 +32,11 @@ class RuntimeHealth:
 
 
 class FinancialRuntime:
-    def __init__(self, health_provider, risk_authorizer, audit_sink):
+    def __init__(self, health_provider, risk_authorizer, audit_sink, owner_approval_verifier=None):
         self.health_provider = health_provider
         self.risk_authorizer = risk_authorizer
         self.audit_sink = audit_sink
+        self.owner_approval_verifier = owner_approval_verifier
 
     def readiness(self):
         health = self.health_provider()
@@ -44,13 +45,16 @@ class FinancialRuntime:
         return health.readiness()
 
     def agent_bridge(self):
-        return FinancialAgentBridge(self.readiness(), self.risk_authorizer, self.audit_sink)
+        return FinancialAgentBridge(
+            self.readiness(), self.risk_authorizer, self.audit_sink,
+            owner_approval_verifier=self.owner_approval_verifier,
+        )
 
     def status(self):
         ready = self.readiness()
         return {
             'financial_core': 'ready' if ready.ready else 'guarded',
             'agent_read_access': True,
-            'agent_real_execution': ready.ready,
+            'agent_real_execution': ready.ready and self.owner_approval_verifier is not None,
             'custody_keys_exposed_to_agents': False,
         }

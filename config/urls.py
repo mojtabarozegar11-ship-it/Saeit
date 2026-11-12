@@ -10,7 +10,7 @@ from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
-from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile
+from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
 from core.academy_views import (
     academy, education, education_course_detail, education_enroll,
@@ -21,18 +21,27 @@ from core.academy_views import (
 from core.services_views import services
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
+from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
     path("", services, name="home"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
+    path("faremah/", faremah_home, name="faremah_home"),
     path("agriculture/", agriculture_index, name="agriculture"),
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
     path("agriculture/<slug:slug>/", agriculture_guide, name="agriculture_guide"),
     path("amozeshgah/assets/zomorod-education-v1/<str:filename>.webp", zomorod_hero_image, name="education_hero_asset"),
     path("static/site/heroes/<str:filename>.webp", zomorod_hero_image, name="site_hero_image"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
+    path("guides/agriculture/", RedirectView.as_view(pattern_name="agriculture", permanent=True), name="guide_agriculture_legacy"),
+    path("guides/industry/", RedirectView.as_view(pattern_name="industry", permanent=True), name="guide_industry_legacy"),
+    path("guides/research/", RedirectView.as_view(pattern_name="research", permanent=True), name="guide_research_legacy"),
+    path("vehicles/", lambda request: platform_page(request, "vehicles"), name="vehicles"),
+    path("gold/", lambda request: platform_page(request, "gold"), name="gold"),
+    path("marketing/", lambda request: platform_page(request, "marketing"), name="marketing"),
+    path("chain-stores/", lambda request: platform_page(request, "chain-stores"), name="chain_stores"),
     path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
@@ -46,6 +55,7 @@ urlpatterns = [
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
+    path("<str:key>.txt", indexnow_key, name="indexnow_key"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
     path("store/", store_home, name="store"),
     path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
@@ -54,13 +64,13 @@ urlpatterns = [
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
     path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),
-    # Temporary root-only fallback while the private Django office is release-blocked.
-    # Replace this route at the validated private-office cutover.
-    path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback"),
+    # Keep the company-office entry point private: unauthenticated visitors must
+    # go through the staff login instead of being silently sent to a public page.
+    path("company/office/", RedirectView.as_view(url="/company/office/login/", permanent=False), name="company_office_fallback"),
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
-    path("contact/", RedirectView.as_view(pattern_name="company", permanent=True), name="contact"),
+    path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False), name="contact"),
     path("weather/", weather, name="weather"),
     # Canonical education platform under the requested company path.
     path("amozeshgah/", education, name="education"),
@@ -94,6 +104,22 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
+
+from functools import partial
+from core.financial_brand_pages import BRANDS, financial_brand_page
+
+# Prepend these distinct service routes so existing brand roots and app includes
+# continue to resolve normally while the new finance subpages take precedence.
+_finance_routes = []
+for _brand_slug, _fa, _en, _ar in BRANDS:
+    _finance_routes.extend([
+        path(f"{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="signals"), name=f"finance_{_brand_slug}_signals"),
+        path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),
+        path(f"{_brand_slug}/game/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="game"), name=f"game_{_brand_slug}"),
+        path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
+        path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
+    ])
+urlpatterns = _finance_routes + urlpatterns
 
 from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]

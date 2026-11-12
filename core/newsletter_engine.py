@@ -2,6 +2,7 @@ import hashlib
 import re
 from datetime import date
 
+from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
@@ -87,26 +88,50 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     return story, "created" if can_schedule or not publish_at else "quality_hold"
 
 
+@transaction.atomic
 def process_submission(submission):
-    """Turn an owner/admin submission into an agent-owned draft; publishing remains approval-gated."""
+    """Claim exactly one queued submission and draft it under a database lock."""
     from django.utils import timezone
-    if submission.status not in ("queued", "processing"):
-        return submission.generated_story
+
+    # Reload under the transaction: a caller may hold an obsolete in-memory
+    # status. A second worker must not take over an in-flight submission.
+    submission = type(submission).objects.select_for_update().get(pk=submission.pk)
+    if submission.status != "queued":
+        return submission.generated_story if submission.status == "drafted" else None
     submission.status = "processing"
     submission.save(update_fields=["status"])
 
-    agent = Agent.objects.filter(code="content-director", active=True).first()
-    if not agent:
-        submission.status = "rejected"
-        submission.processed_at = timezone.now()
-        submission.save(update_fields=["status", "processed_at"])
+    # An administrative submission is actual work: provision its single owner
+    # once, without creating placeholder roles or requiring a GitHub runner.
+    agent, _ = Agent.objects.get_or_create(
+        code="content-director",
+        defaults={
+            "name": "Content Director",
+            "mission": "Turn approved owner submissions into traceable editorial drafts.",
+            "risk_level": "low",
+            "active": True,
+        },
+    )
+    if not agent.active:
+        # A deliberately disabled successor must not be silently reactivated,
+        # and owner work must not be irreversibly rejected for that reason.
+        submission.status = "queued"
+        submission.save(update_fields=["status"])
         return None
 
+    # No publication scheduling by an automatically provisioned worker while
+    # approval is required (the safe default when the schedule is absent).
+    schedule = NewsletterSchedule.objects.filter(active=True).first()
+    publish_at = (
+        submission.requested_publish_at
+        if schedule is not None and not schedule.publication_requires_approval
+        else None
+    )
     story, reason = create_draft(
         agent_code="content-director", story_type="company", title=submission.subject,
         summary=submission.body[:500], body=submission.body,
         keywords=[submission.subject, "شرکت کشت و صنعت زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر"],
-        event_date=timezone.localdate(), publish_at=submission.requested_publish_at,
+        event_date=timezone.localdate(), publish_at=publish_at,
     )
     if story:
         unit_title = submission.company_unit_title.strip() or f"واحد تحقیق و توسعه · {submission.subject.strip()}"

@@ -143,3 +143,5 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
 
 # Read-only storage and preservation recheck authorized 2026-10-28.
+
+# ZM live continuation audit marker 20261107

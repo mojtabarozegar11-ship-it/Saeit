@@ -104,8 +104,305 @@ jobs:
                   if find.returncode:print("FIND_INCOMPLETE="+relative)
           print("BACKUP_TRANSFER_CANDIDATES_AUDITED=yes")
           PY
+      - name: Fingerprint duplicate cPanel backup files read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,os,stat,time
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          uid=os.geteuid(); total=0; count=0; old=0; groups={}; largest=[]
+          cutoff=time.time()-30*86400
+          for p in root.rglob("*"):
+              try:
+                  s=p.lstat()
+                  if not stat.S_ISREG(s.st_mode) or s.st_uid!=uid: continue
+                  count+=1; total+=s.st_size
+                  if s.st_mtime<cutoff: old+=1
+                  largest.append((s.st_size,p))
+                  if s.st_size<1024*1024: continue
+                  h=hashlib.sha256()
+                  with p.open("rb") as f:
+                      for chunk in iter(lambda:f.read(1024*1024),b""): h.update(chunk)
+                  groups.setdefault((s.st_size,h.hexdigest()),[]).append(p)
+              except (OSError,FileNotFoundError): pass
+          print("BACKUP_DEDUP_FILES="+str(count)+":BYTES="+str(total)+":OLDER_30D="+str(old),flush=True)
+          largest.sort(reverse=True,key=lambda x:x[0])
+          for size,p in largest[:20]:
+              print("BACKUP_LARGEST_BYTES="+str(size)+":AGE_DAYS="+str(max(0,int((time.time()-p.stat().st_mtime)/86400))),flush=True)
+          dup_groups=[(size,digest,paths) for (size,digest),paths in groups.items() if len(paths)>1]
+          dup_groups.sort(reverse=True,key=lambda x:x[0]*len(x[2]))
+          print("BACKUP_DUPLICATE_GROUPS="+str(len(dup_groups)),flush=True)
+          print("BACKUP_DUPLICATE_BYTES_EXCESS="+str(sum(size*(len(paths)-1) for size,digest,paths in dup_groups)),flush=True)
+          for size,digest,paths in dup_groups[:20]:
+              print("BACKUP_DUPLICATE=size:"+str(size)+":count:"+str(len(paths))+":sha256_prefix:"+digest[:16],flush=True)
+              for p in sorted(paths, key=lambda q:(q.stat().st_mtime, str(q))):
+                  age=max(0,int((time.time()-p.stat().st_mtime)/86400))
+                  print("BACKUP_DUPLICATE_PATH=age_days:"+str(age)+":path:"+str(p.relative_to(Path("/home/zomorod2"))),flush=True)
+          PY
+      - name: Classify old cPanel backup groups read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat,time
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          now=time.time()
+          keywords=("old","preview","quarantine","candidate","snapshot","release","restore","before","v6","v8","v9","v11","v12")
+          rows=[]
+          for group in sorted(root.iterdir()):
+              try:
+                  if not group.is_dir() or group.is_symlink(): continue
+                  total=files=0; oldest=now; newest=0
+                  for p in group.rglob("*"):
+                      try:
+                          s=p.lstat()
+                          if not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid(): continue
+                          files+=1; total+=s.st_size; oldest=min(oldest,s.st_mtime); newest=max(newest,s.st_mtime)
+                      except (OSError,FileNotFoundError): pass
+                  age=max(0,int((now-newest)/86400)) if newest else -1
+                  label="keyword" if any(k in group.name.lower() for k in keywords) else "ordinary"
+                  rows.append((total,files,age,label,group.name))
+              except (OSError,FileNotFoundError): pass
+          rows.sort(reverse=True)
+          print("BACKUP_GROUPS="+str(len(rows)),flush=True)
+          for total,files,age,label,name in rows[:80]:
+              print("BACKUP_GROUP=bytes:"+str(total)+":files:"+str(files)+":age_days:"+str(age)+":class:"+label+":name:"+name,flush=True)
+          print("BACKUP_KEYWORD_GROUPS="+str(sum(1 for r in rows if r[3]=="keyword")),flush=True)
+          print("BACKUP_KEYWORD_BYTES="+str(sum(r[0] for r in rows if r[3]=="keyword")),flush=True)
+          PY
+      - name: Check live references to backup archives read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          open_refs=[]; symlinks=[]
+          for ent in Path("/proc").glob("[0-9]*"):
+              try:
+                  pid=int(ent.name)
+                  for fd in (ent/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          if str(root) in target: open_refs.append((pid,str(fd),target))
+                      except (OSError,FileNotFoundError): pass
+              except (OSError,ValueError): pass
+          for p in Path("/home/zomorod2").rglob("*"):
+              try:
+                  if p.is_symlink() and str(root) in os.readlink(p): symlinks.append((str(p),os.readlink(p)))
+              except (OSError,FileNotFoundError): pass
+          print("BACKUP_OPEN_REFERENCES="+str(len(open_refs)),flush=True)
+          for pid,fd,target in open_refs[:40]: print("BACKUP_OPEN_REF=pid:"+str(pid)+":fd:"+fd+":target:"+target,flush=True)
+          print("BACKUP_SYMLINK_REFERENCES="+str(len(symlinks)),flush=True)
+          for path,target in symlinks[:40]: print("BACKUP_SYMLINK_REF=path:"+path+":target:"+target,flush=True)
+          PY
+      - name: Audit npm cache and active processes read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,stat,time,subprocess
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          for rel in (".npm/_cacache",".npm/_npx",".npm/_logs"):
+              target=root/rel
+              count=total=old=0
+              if target.is_dir() and not target.is_symlink():
+                  cutoff=time.time()-7*86400
+                  for p in target.rglob("*"):
+                      try:
+                          s=p.lstat()
+                          if stat.S_ISREG(s.st_mode) and s.st_uid==os.geteuid():
+                              count+=1; total+=s.st_size
+                              if s.st_mtime<cutoff: old+=s.st_size
+                      except (OSError,FileNotFoundError): pass
+              print("NPM_CACHE="+rel+":FILES="+str(count)+":BYTES="+str(total)+":OLDER_7D_BYTES="+str(old),flush=True)
+          p=subprocess.run(["ps","-eo","pid,etime,args"],capture_output=True,text=True,timeout=15)
+          hits=[line for line in p.stdout.splitlines() if any(token in line.lower() for token in ("npm","npx","node")) and "grep" not in line.lower()]
+          print("NPM_ACTIVE_PROCESS_LINES="+str(len(hits)),flush=True)
+          for line in hits[:20]: print("NPM_PROCESS="+line,flush=True)
+          PY
+      - name: Delete only exact duplicate cPanel backup files once
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import fcntl, hashlib, os, stat, time
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          backup=root/".backups"
+          marker=backup/".dedup-cleanup-20261107.done"
+          if root != Path.home() or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_DEDUP_ABORT_UNSAFE_ROOT")
+          with (root/".dedup-cleanup-20261107.lock").open("a+") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+              if marker.exists():
+                  print("CPANEL_DEDUP_ALREADY_APPLIED=1", flush=True)
+              else:
+                  open_refs=[]
+                  for ent in Path("/proc").glob("[0-9]*"):
+                      for fd in (ent/"fd").glob("*"):
+                          try:
+                              target=os.readlink(fd)
+                              if str(backup) in target: open_refs.append(target)
+                          except (OSError,FileNotFoundError): pass
+                  if open_refs:
+                      raise SystemExit("CPANEL_DEDUP_ABORT_OPEN_REFERENCE")
+                  groups={}
+                  for p in backup.rglob("*"):
+                      try:
+                          s=p.lstat()
+                          if not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid() or s.st_size<1024*1024:
+                              continue
+                          h=hashlib.sha256()
+                          with p.open("rb") as fh:
+                              for chunk in iter(lambda:fh.read(1024*1024),b""): h.update(chunk)
+                          groups.setdefault((s.st_size,h.hexdigest()),[]).append(p)
+                      except (OSError,FileNotFoundError): pass
+                  removed=0
+                  reclaimed=0
+                  for (size,digest), paths in groups.items():
+                      if len(paths)<2: continue
+                      paths.sort(key=lambda p:(p.stat().st_mtime,str(p)), reverse=True)
+                      keep=paths[0]
+                      for p in paths[1:]:
+                          if p.is_symlink() or not p.is_file():
+                              raise SystemExit("CPANEL_DEDUP_ABORT_TARGET_CHANGED")
+                          p.unlink()
+                          removed+=1; reclaimed+=size
+                          print("CPANEL_DUPLICATE_REMOVED="+str(p.relative_to(root))+":BYTES="+str(size)+":KEPT="+str(keep.relative_to(root)),flush=True)
+                  marker.write_text("exact-content duplicate cleanup completed 2026-11-07\\n")
+                  os.chmod(marker,0o600)
+                  print("CPANEL_DUPLICATE_REMOVED_COUNT="+str(removed),flush=True)
+                  print("CPANEL_DUPLICATE_RECLAIMED_BYTES="+str(reclaimed),flush=True)
+              print("CPANEL_DEDUP_NO_SERVICE_RESTART=1",flush=True)
+              print("CPANEL_DEDUP_NO_CRON_CHANGED=1",flush=True)
+          PY
+
+      - name: Remove only verified quarantined preview groups once
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import fcntl, os, shutil, stat, time
+          from pathlib import Path
+          root=Path.home()
+          backup=root/".backups"
+          marker=backup/".quarantined-preview-cleanup-20261107.done"
+          targets=[
+              backup/"zomorod-quarantined-old-previews-20261101",
+              backup/"zomorod-quarantined-last-two-variants-20261101",
+          ]
+          forbidden={".py",".pyc",".sqlite",".sqlite3",".db",".db3",".env",".zip",".tar",".gz",".bz2",".7z",".pdf",".docx",".xlsx",".xls"}
+          if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_QUARANTINE_ABORT_UNSAFE_ROOT")
+          with (root/".quarantined-preview-cleanup-20261107.lock").open("a+") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+              if marker.exists():
+                  print("CPANEL_QUARANTINE_ALREADY_APPLIED=1",flush=True)
+              else:
+                  for target in targets:
+                      if target.is_symlink() or not target.is_dir():
+                          raise SystemExit("CPANEL_QUARANTINE_ABORT_TARGET="+str(target))
+                      newest=0; files=[]
+                      for p in target.rglob("*"):
+                          if p.is_symlink(): raise SystemExit("CPANEL_QUARANTINE_ABORT_SYMLINK="+str(p))
+                          if p.is_file():
+                              s=p.stat()
+                              newest=max(newest,s.st_mtime)
+                              files.append(p)
+                              if p.suffix.lower() in forbidden:
+                                  raise SystemExit("CPANEL_QUARANTINE_ABORT_PROTECTED_FILE="+str(p))
+                      if not files or newest >= time.time()-3*86400:
+                          raise SystemExit("CPANEL_QUARANTINE_ABORT_AGE_OR_EMPTY="+target.name)
+                      shutil.rmtree(target)
+                      print("CPANEL_QUARANTINE_GROUP_REMOVED="+str(target.relative_to(root))+":FILES="+str(len(files)),flush=True)
+                  marker.write_text("verified quarantined preview cleanup completed 2026-11-07\\n")
+                  os.chmod(marker,0o600)
+                  print("CPANEL_QUARANTINE_GROUP_REMOVED_COUNT=2",flush=True)
+              print("CPANEL_QUARANTINE_NO_SERVICE_RESTART=1",flush=True)
+              print("CPANEL_QUARANTINE_NO_CRON_CHANGED=1",flush=True)
+          PY
+
+      - name: Audit remaining obsolete preview versions read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os, stat, time
+          from pathlib import Path
+          root=Path.home()
+          backup=root/".backups"
+          targets=[backup/"zomorod-one-stage-p0p3-20261019", backup/"zm-gold-title-pair-20261020", backup/"zm-dual-frame-brightgold-20261020", backup/"zm-dual-gold-frames-20261020", backup/"zm-home-layer-perf-20261019", backup/"zomorod-official-contacts-20261019", backup/"zomorod-home-header-footer-glass-20261019", backup/"zomorod-home-copy-glass-20261019", backup/"zomorod-home-template-fixes-20261018", backup/"zomorod-glass-row-headers-20261018", backup/"zomorod-glass-cards-20261018", backup/"zomorod-fixed-background-20261018"]
+          forbidden={".py",".pyc",".sqlite",".sqlite3",".db",".db3",".env",".zip",".tar",".gz",".bz2",".7z",".pdf",".docx",".xlsx",".xls",".json",".yaml",".yml",".txt",".csv",".html",".htm",".css",".js",".png",".jpg",".jpeg",".webp",".svg"}
+          if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_PREVIEW_AUDIT_ABORT_UNSAFE_ROOT")
+          for target in targets:
+              if not target.exists():
+                  print("CPANEL_PREVIEW_TARGET_ABSENT="+str(target.relative_to(root)), flush=True)
+                  continue
+              if target.is_symlink() or not target.is_dir():
+                  raise SystemExit("CPANEL_PREVIEW_AUDIT_ABORT_TARGET="+str(target))
+              files=[]
+              for p in target.rglob("*"):
+                  if p.is_symlink():
+                      raise SystemExit("CPANEL_PREVIEW_AUDIT_ABORT_SYMLINK="+str(p))
+                  if p.is_file():
+                      s=p.stat()
+                      files.append((p,s.st_size,max(0,int((time.time()-s.st_mtime)/86400)),p.suffix.lower() in forbidden))
+              print("CPANEL_PREVIEW_AUDIT_GROUP="+str(target.relative_to(root))+":FILES="+str(len(files))+":BYTES="+str(sum(x[1] for x in files))+":OLDEST_AGE_DAYS="+str(max((x[2] for x in files), default=-1)), flush=True)
+              for p,size,age,protected in sorted(files,key=lambda x:str(x[0])):
+                  print("CPANEL_PREVIEW_AUDIT_FILE="+str(p.relative_to(root))+":BYTES="+str(size)+":AGE_DAYS="+str(age)+":PROTECTED_SUFFIX="+str(int(protected)), flush=True)
+          print("CPANEL_PREVIEW_AUDIT_NO_DELETION=1", flush=True)
+          PY
+
+      - name: Remove only empty cPanel backup directories once
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import fcntl, os, stat
+          from pathlib import Path
+          root=Path.home()
+          backup=root/".backups"
+          marker=backup/".empty-directory-cleanup-20261107.done"
+          if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
+              raise SystemExit("CPANEL_EMPTY_ABORT_UNSAFE_ROOT")
+          with (root/".empty-directory-cleanup-20261107.lock").open("a+") as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+              if marker.exists():
+                  print("CPANEL_EMPTY_ALREADY_APPLIED=1",flush=True)
+              else:
+                  removed=0
+                  for p in sorted((x for x in backup.rglob("*") if x.is_dir() and not x.is_symlink()), key=lambda x:len(x.parts), reverse=True):
+                      try:
+                          if any(p.iterdir()): continue
+                          p.rmdir()
+                          removed+=1
+                          print("CPANEL_EMPTY_DIR_REMOVED="+str(p.relative_to(root)),flush=True)
+                      except (OSError,FileNotFoundError): pass
+                  marker.write_text("empty directory cleanup completed 2026-11-07\\n")
+                  os.chmod(marker,0o600)
+                  print("CPANEL_EMPTY_DIR_REMOVED_COUNT="+str(removed),flush=True)
+              print("CPANEL_EMPTY_NO_SERVICE_RESTART=1",flush=True)
+              print("CPANEL_EMPTY_NO_CRON_CHANGED=1",flush=True)
+          PY
+
       - name: Remove runner-only SSH files
         if: always()
         run: |
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           if test -d "$d"; then rm -rf -- "$d"; fi
+# Continued read-only backup metadata audit; no transfer or deletion.

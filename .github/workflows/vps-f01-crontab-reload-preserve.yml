@@ -1,0 +1,107 @@
+name: VPS F01 reload unchanged existing Cron (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-vps-f01-crontab-reload-preserve
+  cancel-in-progress: false
+
+jobs:
+  reload-identical-owner-crontab:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Reload only identical githubops crontab without changing jobs
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          keydir="$RUNNER_TEMP/saeit-f01-crontab-reload"
+          install -d -m 700 "$keydir"
+          trap 'rm -rf -- "$keydir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$keydir/key"
+          chmod 600 "$keydir/key"
+          ssh-keygen -y -P '' -f "$keydir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$keydir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$keydir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$keydir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$keydir/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'python3 -B -' <<'REMOTE'
+          import hashlib
+          import os
+          import pwd
+          from pathlib import Path
+          import subprocess
+
+          if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != 'githubops':
+              raise SystemExit('F01_CRON_RELOAD_ABORT_WRONG_USER')
+          runner = Path('/home/githubops/factory-runtime/operations/single-product-runtime/run-single-product-cycle.sh')
+          expected_sha = '546895c9d04d21360132394335f08851ab0ed2e5603e3d47e8a7d2471ed1e0d9'
+          if not runner.is_file() or runner.is_symlink() or not os.access(runner, os.X_OK):
+              raise SystemExit('F01_CRON_RELOAD_ABORT_MISSING_RUNNER')
+          if hashlib.sha256(runner.read_bytes()).hexdigest() != expected_sha:
+              raise SystemExit('F01_CRON_RELOAD_ABORT_CHANGED_RUNNER')
+          original = subprocess.run(['crontab', '-l'], text=True, capture_output=True,
+                                    timeout=7, check=False)
+          if original.returncode or not original.stdout.endswith('\n'):
+              raise SystemExit('F01_CRON_RELOAD_ABORT_UNREADABLE_CRONTAB')
+          rules = [r for r in original.stdout.splitlines() if r.strip() and
+                   not r.lstrip().startswith('#')]
+          marker = 'SAEIT_SINGLE_PRODUCT_FACTORY_V1'
+          exact = ('* * * * * /usr/bin/timeout 55s ' + str(runner) +
+                   ' >> /home/githubops/factory-runtime/operations/single-product-cycle.log 2>&1 # ' + marker)
+          matched = [r for r in rules if marker in r]
+          if len(matched) == 1 and matched[0] != exact:
+              # Never reveal the owner's private crontab command or its arguments.
+              print('F01_CRON_ENTRY_DIAGNOSTIC_PREFIX_ONE_MINUTE=' + str(
+                  matched[0].startswith('* * * * * ')).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_TIMEOUT_55=' + str(
+                  '/usr/bin/timeout 55s ' in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_PINNED_RUNNER_PATH=' + str(
+                  str(runner) in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_EXPECTED_LOG=' + str(
+                  '/home/githubops/factory-runtime/operations/single-product-cycle.log' in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_ENDS_MARKER=' + str(
+                  matched[0].endswith('# ' + marker)).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_LENGTH=' + str(len(matched[0])))
+              print('F01_CRON_ENTRY_DIAGNOSTIC_EXPECTED_LENGTH=' + str(len(exact)))
+          # An existing owner's Cron entry may contain extra environment guards.
+          # Preserve those bytes; require the known cadence, runner, timeout,
+          # output location, and unique trailing marker, not a replacement line.
+          if len(matched) != 1 or not (
+              matched[0].startswith('* * * * * ')
+              and '/usr/bin/timeout 55s ' in matched[0]
+              and str(runner) in matched[0]
+              and '/home/githubops/factory-runtime/operations/single-product-cycle.log' in matched[0]
+              and matched[0].endswith('# ' + marker)
+          ):
+              raise SystemExit('F01_CRON_RELOAD_ABORT_SCHEDULE_CONTRACT_DIFFERENT')
+          active = subprocess.run(['systemctl', 'is-active', 'cron.service'],
+                                  text=True, capture_output=True, timeout=7, check=False)
+          if active.returncode or active.stdout.strip() != 'active':
+              raise SystemExit('F01_CRON_RELOAD_ABORT_CRON_NOT_ACTIVE')
+          # Do not alter any line, interval, command, or existing job.
+          rerun = subprocess.run(['crontab', '-l'], text=True, capture_output=True,
+                                 timeout=7, check=False)
+          if rerun.returncode or rerun.stdout != original.stdout:
+              raise SystemExit('F01_CRON_RELOAD_ABORT_CONCURRENT_UPDATE')
+          refreshed = subprocess.run(['crontab', '-'], input=original.stdout, text=True,
+                                     capture_output=True, timeout=12, check=False)
+          if refreshed.returncode:
+              raise SystemExit('F01_CRON_RELOAD_ABORT_INSTALL_FAILED')
+          after = subprocess.run(['crontab', '-l'], text=True, capture_output=True,
+                                 timeout=7, check=False)
+          if after.returncode or after.stdout != original.stdout:
+              raise SystemExit('F01_CRON_RELOAD_ABORT_CONTENT_CHANGED')
+          print('F01_CRON_RELOAD_EXISTING_JOBS_PRESERVED=' + str(len(rules)))
+          print('F01_CRON_RELOAD_SINGLE_F01_MARKER=PASS')
+          print('F01_CRON_RELOAD_CONTENT_UNCHANGED=PASS')
+          print('F01_CRON_RELOAD_EXISTING_SCHEDULER_SIGNALLED=PASS')
+          print('F01_CRON_RELOAD_NO_PUBLICATION_OR_PRODUCTION_TRIGGER=PASS')
+          REMOTE

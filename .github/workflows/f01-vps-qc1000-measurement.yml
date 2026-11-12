@@ -1,0 +1,57 @@
+name: F01 private VPS QC1000 measurement
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/f01_quality_1000_machine_gate.py
+      - scripts/f01_vps_quality_measurement.py
+      - scripts/f01_generate_live_evidence.py
+      - factory_config/f01_quality_100_criteria.json
+      - .github/workflows/f01-vps-qc1000-measurement.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: f01-private-qc1000-measurement
+  cancel-in-progress: false
+jobs:
+  measure:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prepare pinned private VPS access
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f01-qc1000"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+      - name: Measure exact private F01 artifact
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/f01-qc1000"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          host=githubops@178.239.147.150
+          stage="/home/githubops/factory-runtime/operations/.f01-qc1000-$RUN_ID"
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
+          python="/home/githubops/factory-runtime/.venv/bin/python"
+          timeout 35s ssh -T "${opts[@]}" "$host" "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
+          scp -q "${opts[@]}" scripts/f01_quality_1000_machine_gate.py scripts/f01_vps_quality_measurement.py scripts/f01_generate_live_evidence.py factory_config/f01_quality_100_criteria.json "$host:$stage/"
+          artifact="$(ssh -T "${opts[@]}" "$host" "ls -t '$root'/digital-products/farm_enterprise_economics/*.zip | head -n1")"
+          timeout 300s ssh -T "${opts[@]}" "$host" python3 -B "$stage/f01_generate_live_evidence.py" "$artifact" "$root/quality-excellence/f01-qc1000/evidence" "$RUN_ID"
+          timeout 300s ssh -T "${opts[@]}" "$host" python3 -B "$stage/f01_vps_quality_measurement.py" --private-root "$root" --catalog "$stage/f01_quality_100_criteria.json" --gate "$stage/f01_quality_1000_machine_gate.py" --run-id "$RUN_ID"
+          ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/f01_quality_1000_machine_gate.py' '$stage/f01_vps_quality_measurement.py' '$stage/f01_generate_live_evidence.py' '$stage/f01_quality_100_criteria.json'; rmdir -- '$stage'"
+      - name: Remove runner credential
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/f01-qc1000"

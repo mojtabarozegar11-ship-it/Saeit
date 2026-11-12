@@ -1,0 +1,813 @@
+{
+  "schema": "saeit.factory.f01-quality-100-groups.v1",
+  "product_id": "farm_enterprise_economics",
+  "edition": "1.5",
+  "target_points": 1000,
+  "points_per_criterion": 10,
+  "criterion_count": 100,
+  "noncompensatory": true,
+  "independent_specialist_verification_required": true,
+  "commercial_release_requires_independent_signatures": true,
+  "criteria": [
+    {
+      "id": "F01-01-1",
+      "group": "calculation",
+      "title": "صحت محاسبات درآمد هزینه سود — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-01-1.json"
+    },
+    {
+      "id": "F01-01-2",
+      "group": "calculation",
+      "title": "صحت محاسبات درآمد هزینه سود — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-01-2.json"
+    },
+    {
+      "id": "F01-01-3",
+      "group": "calculation",
+      "title": "صحت محاسبات درآمد هزینه سود — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-01-3.json"
+    },
+    {
+      "id": "F01-01-4",
+      "group": "calculation",
+      "title": "صحت محاسبات درآمد هزینه سود — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-01-4.json"
+    },
+    {
+      "id": "F01-01-5",
+      "group": "calculation",
+      "title": "صحت محاسبات درآمد هزینه سود — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-01-5.json"
+    },
+    {
+      "id": "F01-02-1",
+      "group": "land_water",
+      "title": "صحت اثر زمین و آب — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-02-1.json"
+    },
+    {
+      "id": "F01-02-2",
+      "group": "land_water",
+      "title": "صحت اثر زمین و آب — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-02-2.json"
+    },
+    {
+      "id": "F01-02-3",
+      "group": "land_water",
+      "title": "صحت اثر زمین و آب — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-02-3.json"
+    },
+    {
+      "id": "F01-02-4",
+      "group": "land_water",
+      "title": "صحت اثر زمین و آب — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-02-4.json"
+    },
+    {
+      "id": "F01-02-5",
+      "group": "land_water",
+      "title": "صحت اثر زمین و آب — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-02-5.json"
+    },
+    {
+      "id": "F01-03-1",
+      "group": "validation",
+      "title": "اعتبارسنجی ورودی و خطاهای مرزی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-03-1.json"
+    },
+    {
+      "id": "F01-03-2",
+      "group": "validation",
+      "title": "اعتبارسنجی ورودی و خطاهای مرزی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-03-2.json"
+    },
+    {
+      "id": "F01-03-3",
+      "group": "validation",
+      "title": "اعتبارسنجی ورودی و خطاهای مرزی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-03-3.json"
+    },
+    {
+      "id": "F01-03-4",
+      "group": "validation",
+      "title": "اعتبارسنجی ورودی و خطاهای مرزی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-03-4.json"
+    },
+    {
+      "id": "F01-03-5",
+      "group": "validation",
+      "title": "اعتبارسنجی ورودی و خطاهای مرزی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-03-5.json"
+    },
+    {
+      "id": "F01-04-1",
+      "group": "reproducibility",
+      "title": "تکرارپذیری و شناسه محاسبه — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-04-1.json"
+    },
+    {
+      "id": "F01-04-2",
+      "group": "reproducibility",
+      "title": "تکرارپذیری و شناسه محاسبه — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-04-2.json"
+    },
+    {
+      "id": "F01-04-3",
+      "group": "reproducibility",
+      "title": "تکرارپذیری و شناسه محاسبه — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-04-3.json"
+    },
+    {
+      "id": "F01-04-4",
+      "group": "reproducibility",
+      "title": "تکرارپذیری و شناسه محاسبه — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-04-4.json"
+    },
+    {
+      "id": "F01-04-5",
+      "group": "reproducibility",
+      "title": "تکرارپذیری و شناسه محاسبه — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-04-5.json"
+    },
+    {
+      "id": "F01-05-1",
+      "group": "reporting",
+      "title": "گزارش HTML و یکپارچگی خروجی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-05-1.json"
+    },
+    {
+      "id": "F01-05-2",
+      "group": "reporting",
+      "title": "گزارش HTML و یکپارچگی خروجی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-05-2.json"
+    },
+    {
+      "id": "F01-05-3",
+      "group": "reporting",
+      "title": "گزارش HTML و یکپارچگی خروجی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-05-3.json"
+    },
+    {
+      "id": "F01-05-4",
+      "group": "reporting",
+      "title": "گزارش HTML و یکپارچگی خروجی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-05-4.json"
+    },
+    {
+      "id": "F01-05-5",
+      "group": "reporting",
+      "title": "گزارش HTML و یکپارچگی خروجی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-05-5.json"
+    },
+    {
+      "id": "F01-06-1",
+      "group": "customer_flow",
+      "title": "مسیر کامل کاربر و راهنمایی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-06-1.json"
+    },
+    {
+      "id": "F01-06-2",
+      "group": "customer_flow",
+      "title": "مسیر کامل کاربر و راهنمایی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-06-2.json"
+    },
+    {
+      "id": "F01-06-3",
+      "group": "customer_flow",
+      "title": "مسیر کامل کاربر و راهنمایی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-06-3.json"
+    },
+    {
+      "id": "F01-06-4",
+      "group": "customer_flow",
+      "title": "مسیر کامل کاربر و راهنمایی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-06-4.json"
+    },
+    {
+      "id": "F01-06-5",
+      "group": "customer_flow",
+      "title": "مسیر کامل کاربر و راهنمایی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-06-5.json"
+    },
+    {
+      "id": "F01-07-1",
+      "group": "accessibility",
+      "title": "خوانایی و دسترسی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-07-1.json"
+    },
+    {
+      "id": "F01-07-2",
+      "group": "accessibility",
+      "title": "خوانایی و دسترسی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-07-2.json"
+    },
+    {
+      "id": "F01-07-3",
+      "group": "accessibility",
+      "title": "خوانایی و دسترسی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-07-3.json"
+    },
+    {
+      "id": "F01-07-4",
+      "group": "accessibility",
+      "title": "خوانایی و دسترسی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-07-4.json"
+    },
+    {
+      "id": "F01-07-5",
+      "group": "accessibility",
+      "title": "خوانایی و دسترسی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-07-5.json"
+    },
+    {
+      "id": "F01-08-1",
+      "group": "offline",
+      "title": "اجرای مستقل و آفلاین — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-08-1.json"
+    },
+    {
+      "id": "F01-08-2",
+      "group": "offline",
+      "title": "اجرای مستقل و آفلاین — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-08-2.json"
+    },
+    {
+      "id": "F01-08-3",
+      "group": "offline",
+      "title": "اجرای مستقل و آفلاین — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-08-3.json"
+    },
+    {
+      "id": "F01-08-4",
+      "group": "offline",
+      "title": "اجرای مستقل و آفلاین — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-08-4.json"
+    },
+    {
+      "id": "F01-08-5",
+      "group": "offline",
+      "title": "اجرای مستقل و آفلاین — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-08-5.json"
+    },
+    {
+      "id": "F01-09-1",
+      "group": "security",
+      "title": "امنیت داده و عدم اجرای ناامن — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-09-1.json"
+    },
+    {
+      "id": "F01-09-2",
+      "group": "security",
+      "title": "امنیت داده و عدم اجرای ناامن — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-09-2.json"
+    },
+    {
+      "id": "F01-09-3",
+      "group": "security",
+      "title": "امنیت داده و عدم اجرای ناامن — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-09-3.json"
+    },
+    {
+      "id": "F01-09-4",
+      "group": "security",
+      "title": "امنیت داده و عدم اجرای ناامن — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-09-4.json"
+    },
+    {
+      "id": "F01-09-5",
+      "group": "security",
+      "title": "امنیت داده و عدم اجرای ناامن — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-09-5.json"
+    },
+    {
+      "id": "F01-10-1",
+      "group": "rights",
+      "title": "حقوق محتوا و مجوز استفاده — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-10-1.json"
+    },
+    {
+      "id": "F01-10-2",
+      "group": "rights",
+      "title": "حقوق محتوا و مجوز استفاده — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-10-2.json"
+    },
+    {
+      "id": "F01-10-3",
+      "group": "rights",
+      "title": "حقوق محتوا و مجوز استفاده — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-10-3.json"
+    },
+    {
+      "id": "F01-10-4",
+      "group": "rights",
+      "title": "حقوق محتوا و مجوز استفاده — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-10-4.json"
+    },
+    {
+      "id": "F01-10-5",
+      "group": "rights",
+      "title": "حقوق محتوا و مجوز استفاده — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-10-5.json"
+    },
+    {
+      "id": "F01-11-1",
+      "group": "packaging",
+      "title": "کامل‌بودن بسته مشتری — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-11-1.json"
+    },
+    {
+      "id": "F01-11-2",
+      "group": "packaging",
+      "title": "کامل‌بودن بسته مشتری — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-11-2.json"
+    },
+    {
+      "id": "F01-11-3",
+      "group": "packaging",
+      "title": "کامل‌بودن بسته مشتری — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-11-3.json"
+    },
+    {
+      "id": "F01-11-4",
+      "group": "packaging",
+      "title": "کامل‌بودن بسته مشتری — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-11-4.json"
+    },
+    {
+      "id": "F01-11-5",
+      "group": "packaging",
+      "title": "کامل‌بودن بسته مشتری — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-11-5.json"
+    },
+    {
+      "id": "F01-12-1",
+      "group": "operations",
+      "title": "استقرار و پشتیبان‌گیری — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-12-1.json"
+    },
+    {
+      "id": "F01-12-2",
+      "group": "operations",
+      "title": "استقرار و پشتیبان‌گیری — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-12-2.json"
+    },
+    {
+      "id": "F01-12-3",
+      "group": "operations",
+      "title": "استقرار و پشتیبان‌گیری — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-12-3.json"
+    },
+    {
+      "id": "F01-12-4",
+      "group": "operations",
+      "title": "استقرار و پشتیبان‌گیری — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-12-4.json"
+    },
+    {
+      "id": "F01-12-5",
+      "group": "operations",
+      "title": "استقرار و پشتیبان‌گیری — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-12-5.json"
+    },
+    {
+      "id": "F01-13-1",
+      "group": "compatibility",
+      "title": "سازگاری محیط‌های پشتیبانی‌شده — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-13-1.json"
+    },
+    {
+      "id": "F01-13-2",
+      "group": "compatibility",
+      "title": "سازگاری محیط‌های پشتیبانی‌شده — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-13-2.json"
+    },
+    {
+      "id": "F01-13-3",
+      "group": "compatibility",
+      "title": "سازگاری محیط‌های پشتیبانی‌شده — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-13-3.json"
+    },
+    {
+      "id": "F01-13-4",
+      "group": "compatibility",
+      "title": "سازگاری محیط‌های پشتیبانی‌شده — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-13-4.json"
+    },
+    {
+      "id": "F01-13-5",
+      "group": "compatibility",
+      "title": "سازگاری محیط‌های پشتیبانی‌شده — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-13-5.json"
+    },
+    {
+      "id": "F01-14-1",
+      "group": "performance",
+      "title": "کارایی قابل‌قبول — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-14-1.json"
+    },
+    {
+      "id": "F01-14-2",
+      "group": "performance",
+      "title": "کارایی قابل‌قبول — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-14-2.json"
+    },
+    {
+      "id": "F01-14-3",
+      "group": "performance",
+      "title": "کارایی قابل‌قبول — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-14-3.json"
+    },
+    {
+      "id": "F01-14-4",
+      "group": "performance",
+      "title": "کارایی قابل‌قبول — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-14-4.json"
+    },
+    {
+      "id": "F01-14-5",
+      "group": "performance",
+      "title": "کارایی قابل‌قبول — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-14-5.json"
+    },
+    {
+      "id": "F01-15-1",
+      "group": "observability",
+      "title": "ثبت خطا و رسید عملیات — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-15-1.json"
+    },
+    {
+      "id": "F01-15-2",
+      "group": "observability",
+      "title": "ثبت خطا و رسید عملیات — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-15-2.json"
+    },
+    {
+      "id": "F01-15-3",
+      "group": "observability",
+      "title": "ثبت خطا و رسید عملیات — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-15-3.json"
+    },
+    {
+      "id": "F01-15-4",
+      "group": "observability",
+      "title": "ثبت خطا و رسید عملیات — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-15-4.json"
+    },
+    {
+      "id": "F01-15-5",
+      "group": "observability",
+      "title": "ثبت خطا و رسید عملیات — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-15-5.json"
+    },
+    {
+      "id": "F01-16-1",
+      "group": "regression",
+      "title": "پوشش آزمون و جلوگیری از بازگشت — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-16-1.json"
+    },
+    {
+      "id": "F01-16-2",
+      "group": "regression",
+      "title": "پوشش آزمون و جلوگیری از بازگشت — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-16-2.json"
+    },
+    {
+      "id": "F01-16-3",
+      "group": "regression",
+      "title": "پوشش آزمون و جلوگیری از بازگشت — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-16-3.json"
+    },
+    {
+      "id": "F01-16-4",
+      "group": "regression",
+      "title": "پوشش آزمون و جلوگیری از بازگشت — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-16-4.json"
+    },
+    {
+      "id": "F01-16-5",
+      "group": "regression",
+      "title": "پوشش آزمون و جلوگیری از بازگشت — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-16-5.json"
+    },
+    {
+      "id": "F01-17-1",
+      "group": "domain",
+      "title": "صحت مفاهیم اقتصاد بنگاه کشاورزی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-17-1.json"
+    },
+    {
+      "id": "F01-17-2",
+      "group": "domain",
+      "title": "صحت مفاهیم اقتصاد بنگاه کشاورزی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-17-2.json"
+    },
+    {
+      "id": "F01-17-3",
+      "group": "domain",
+      "title": "صحت مفاهیم اقتصاد بنگاه کشاورزی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-17-3.json"
+    },
+    {
+      "id": "F01-17-4",
+      "group": "domain",
+      "title": "صحت مفاهیم اقتصاد بنگاه کشاورزی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-17-4.json"
+    },
+    {
+      "id": "F01-17-5",
+      "group": "domain",
+      "title": "صحت مفاهیم اقتصاد بنگاه کشاورزی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-17-5.json"
+    },
+    {
+      "id": "F01-18-1",
+      "group": "decision_support",
+      "title": "قابل‌فهم‌بودن تحلیل اقتصادی — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-18-1.json"
+    },
+    {
+      "id": "F01-18-2",
+      "group": "decision_support",
+      "title": "قابل‌فهم‌بودن تحلیل اقتصادی — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-18-2.json"
+    },
+    {
+      "id": "F01-18-3",
+      "group": "decision_support",
+      "title": "قابل‌فهم‌بودن تحلیل اقتصادی — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-18-3.json"
+    },
+    {
+      "id": "F01-18-4",
+      "group": "decision_support",
+      "title": "قابل‌فهم‌بودن تحلیل اقتصادی — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-18-4.json"
+    },
+    {
+      "id": "F01-18-5",
+      "group": "decision_support",
+      "title": "قابل‌فهم‌بودن تحلیل اقتصادی — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-18-5.json"
+    },
+    {
+      "id": "F01-19-1",
+      "group": "localization",
+      "title": "زبان، واحدها و قالب نمایش — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-19-1.json"
+    },
+    {
+      "id": "F01-19-2",
+      "group": "localization",
+      "title": "زبان، واحدها و قالب نمایش — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-19-2.json"
+    },
+    {
+      "id": "F01-19-3",
+      "group": "localization",
+      "title": "زبان، واحدها و قالب نمایش — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-19-3.json"
+    },
+    {
+      "id": "F01-19-4",
+      "group": "localization",
+      "title": "زبان، واحدها و قالب نمایش — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-19-4.json"
+    },
+    {
+      "id": "F01-19-5",
+      "group": "localization",
+      "title": "زبان، واحدها و قالب نمایش — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-19-5.json"
+    },
+    {
+      "id": "F01-20-1",
+      "group": "release_integrity",
+      "title": "قفل انتشار و تطبیق هش — معیار 1",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-20-1.json"
+    },
+    {
+      "id": "F01-20-2",
+      "group": "release_integrity",
+      "title": "قفل انتشار و تطبیق هش — معیار 2",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-20-2.json"
+    },
+    {
+      "id": "F01-20-3",
+      "group": "release_integrity",
+      "title": "قفل انتشار و تطبیق هش — معیار 3",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-20-3.json"
+    },
+    {
+      "id": "F01-20-4",
+      "group": "release_integrity",
+      "title": "قفل انتشار و تطبیق هش — معیار 4",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-20-4.json"
+    },
+    {
+      "id": "F01-20-5",
+      "group": "release_integrity",
+      "title": "قفل انتشار و تطبیق هش — معیار 5",
+      "points": 10,
+      "measurement": "artifact_bound_evidence",
+      "required_evidence": "evidence/F01-20-5.json"
+    }
+  ]
+}

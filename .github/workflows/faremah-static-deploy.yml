@@ -1,0 +1,155 @@
+name: Publish Faremah static subsite
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "faremah/**"
+      - "core/faremah_views.py"
+      - ".github/workflows/faremah-static-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: faremah-static-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate isolated Faremah package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s faremah/index.html
+          grep -Fq 'فریماه' faremah/index.html
+          grep -Fq 'مرکز لیزر و زیبایی' faremah/index.html
+          test -s faremah/poster.jpg
+          grep -Fq 'poster.jpg' faremah/index.html
+          grep -Fq '/ask-master/index.php?service=1' faremah/contact.html
+          test -s core/faremah_views.py
+          python3 -m py_compile core/faremah_views.py
+          echo "FAREMAH_PACKAGE=verified"
+
+      - name: Prepare pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/faremah-relay"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          scan="$(ssh -i "$d/vps.key" -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 githubops@178.239.147.150 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          echo "FAREMAH_RELAY=verified"
+
+      - name: Publish only public_html/faremah
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/faremah-relay"
+          sha="$GITHUB_SHA"
+          archive="/home/zomorod2/.faremah-release-$sha.tgz"
+          tar -czf "$RUNNER_TEMP/faremah.tgz" -C faremah .
+          scp -F "$d/config" "$RUNNER_TEMP/faremah.tgz" "saeit-cpanel:$archive"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" "$archive" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          archive="$2"
+          root="$HOME/public_html"
+          target="$root/faremah"
+          stage="$HOME/.faremah-stage-$sha"
+          backup="$HOME/.faremah-backup-$sha"
+          test -d "$root"
+          test ! -L "$target"
+          rm -rf -- "$stage"
+          mkdir -m 700 "$stage"
+          tar -xzf "$archive" -C "$stage"
+          rm -f -- "$archive"
+          test -s "$stage/index.html"
+          if test -e "$target"; then
+            test -d "$target"
+            test ! -L "$target"
+            rm -rf -- "$backup"
+            cp -a "$target" "$backup"
+          fi
+          rm -rf -- "$target"
+          mv -- "$stage" "$target"
+          printf '%s\n' "$sha" > "$target/.faremah-deployed-sha"
+          test -s "$target/index.html"
+          echo "FAREMAH_STATIC_DEPLOY=PASS target=$target sha=$sha"
+          REMOTE
+
+      - name: Publish Faremah canonical route fix only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/faremah-relay"
+          sha="$GITHUB_SHA"
+          app="$HOME/Saeit"
+          scp -F "$d/config" core/faremah_views.py "saeit-cpanel:/home/zomorod2/.faremah-view-$sha"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          app="$HOME/Saeit"
+          source="$HOME/.faremah-view-$sha"
+          target="$app/core/faremah_views.py"
+          test -d "$app"
+          test -f "$source"
+          test -f "$target"
+          cp -p -- "$target" "$target.bak.$sha"
+          install -m 0644 -- "$source" "$target"
+          rm -f -- "$source"
+          if test -d "$app/tmp"; then
+            touch "$app/tmp/restart.txt"
+          fi
+          python3 -m py_compile "$target"
+          echo "FAREMAH_ROUTE_DEPLOY=PASS target=$target sha=$sha"
+          REMOTE
+
+# Final live-sync verification trigger for Faremah
+# Final serialized publish after contact overflow repair
+# Final contact gateway contract repair
+# Local SEO and social preview completion

@@ -43,6 +43,26 @@ class PassengerDiagnosticTests(unittest.TestCase):
         self.assertFalse(result["staging_root"])
         self.assertNotIn("other-app", json.dumps(result))
 
+    def test_store_source_probe_reports_only_safe_file_metadata(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_store_sources
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "public"
+            app = Path(td) / "staging"
+            public.mkdir()
+            (app / "core").mkdir(parents=True)
+            (app / "core" / "mojplaywin_views.py").write_text(
+                "def store(request):\\n  record_funnel_event(request, 'view_store')\\n"
+                "  # synthetic confidential marker must never be printed\\n"
+            )
+            info = inspect_store_sources(public=public, app=app)
+            self.assertEqual(info["classification"], "MPW_STORE_SOURCE_METADATA_ONLY")
+            self.assertFalse(info["roots"]["public"]["view"]["present"])
+            self.assertTrue(info["roots"]["staging"]["view"]["present"])
+            self.assertFalse(info["database_read"])
+            self.assertFalse(info["files_modified"])
+            self.assertNotIn("confidential marker", json.dumps(info))
+            self.assertNotIn(str(app), json.dumps(info))
+
     def test_synthetic_public_app_contract_and_no_mutation(self):
         with tempfile.TemporaryDirectory() as td:
             public = Path(td) / "public"
@@ -71,6 +91,149 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertFalse(report["files_modified"])
             self.assertFalse(report["effective_public_worker_proven"])
             self.assertFalse(report["release_permitted"])
+
+
+    def test_exact_static_fallback_inventory_without_printing_names(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import (
+            STORE_FALLBACK_PREFIX, inspect_public_store_fallback,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td)
+            store = public / "store"
+            store.mkdir()
+            (store / "index.html").write_text(
+                "<h1>Static fallback</h1>MPW_STATIC_STORE_FALLBACK_V1"
+            )
+            result = inspect_public_store_fallback(public, STORE_FALLBACK_PREFIX + "PassengerAppRoot public\n")
+            self.assertTrue(result["exact_leading_rule"])
+            self.assertTrue(result["exact_block_once"])
+            self.assertTrue(result["normalized_block_once"])
+            later_position = inspect_public_store_fallback(public, "PassengerAppRoot public\n" + STORE_FALLBACK_PREFIX)
+            self.assertFalse(later_position["exact_leading_rule"])
+            self.assertTrue(later_position["exact_block_once"])
+            self.assertFalse(later_position["marker_at_first_line"])
+            self.assertEqual(later_position["marker_line_capped"], 1)
+            self.assertTrue(result["rule_marker_once"])
+            self.assertTrue(result["store_index_only"])
+            self.assertTrue(result["index_owner_marker"])
+            self.assertEqual(result["entry_count_capped"], 1)
+            (store / "other-unrelated-file.txt").write_text("private-synthetic")
+            later = inspect_public_store_fallback(public, STORE_FALLBACK_PREFIX)
+            self.assertFalse(later["store_index_only"])
+            self.assertEqual(later["entry_count_capped"], 2)
+            self.assertNotIn("private-synthetic", json.dumps(later))
+            self.assertNotIn("other-unrelated-file", json.dumps(later))
+
+
+
+    def test_error_log_probe_returns_only_fixed_categories(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/order/SECRET ModuleNotFoundError: No module named 'whatever'\n"
+                "Traceback (most recent call last)\n",
+            )
+            result = inspect_error_classes(root)
+            self.assertEqual(result["regular_recent_error_files"], 1)
+            self.assertEqual(result["classes"]["module_missing"], 1)
+            self.assertEqual(result["classes"]["python_traceback"], 1)
+            self.assertEqual(result["missing_module_categories"]["other_unclassified"], 1)
+            self.assertEqual(result["missing_module_shapes"]["exception_message_line"], 1)
+            self.assertEqual(result["missing_module_shapes"]["module_phrase_near_marker"], 1)
+            self.assertFalse(result["files_modified"])
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_module_error_shapes_and_html_quote_are_redacted(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/SECRET except ModuleNotFoundError:\n"
+                "ModuleNotFoundError: No module named &#39;config&#39;\n"
+                "ModuleNotFoundError: No module named django\n"
+                "ModuleNotFoundError occurred in code context\n",
+            )
+            result = inspect_error_classes(root)
+            shapes = result["missing_module_shapes"]
+            self.assertEqual(shapes["exception_message_line"], 2)
+            self.assertEqual(shapes["non_exception_reference"], 2)
+            self.assertEqual(shapes["module_phrase_near_marker"], 2)
+            self.assertEqual(shapes["module_phrase_absent_near_marker"], 2)
+            self.assertEqual(result["missing_module_categories"]["project_config"], 1)
+            self.assertEqual(result["missing_module_categories"]["django_dependency"], 1)
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_fixed_exception_type_signatures_do_not_leak_details(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /secret/ORDER Traceback (most recent call last)\n"
+                "django.core.exceptions.DisallowedHost: private hostname\n"
+                "ValueError: hidden value\n"
+                "except AttributeError:\n"
+                "AttributeError: hidden attribute\n"
+            )
+            result = inspect_error_classes(root)
+            signatures = result["exception_type_signatures"]
+            self.assertEqual(signatures["django_disallowed_host"], 1)
+            self.assertEqual(signatures["python_value"], 1)
+            self.assertEqual(signatures["python_attribute"], 1)
+            self.assertEqual(sum(signatures.values()), 3)
+            self.assertFalse(result["files_modified"])
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("ORDER", json.dumps(result))
+            self.assertNotIn("private hostname", json.dumps(result))
+
+    def test_runtime_error_cause_buckets_only_emit_fixed_labels(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_error_classes
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "error_log").write_text(
+                "buyer@example.com /private/SECRET RuntimeError: WSGI startup private-key\n"
+                "RuntimeError: resource temporarily unavailable\n"
+                "except RuntimeError:\n"
+                "RuntimeError: WSGI startup private-key\n"
+            )
+            result = inspect_error_classes(root)
+            buckets = result["runtime_error_cause_buckets"]
+            self.assertEqual(buckets["passenger_wsgi_startup"], 2)
+            self.assertEqual(buckets["resource_exhaustion"], 1)
+            self.assertEqual(sum(buckets.values()), 3)
+            self.assertEqual(result["runtime_error_message_distinct_capped"], 2)
+            self.assertEqual(result["runtime_error_leading_words"]["wsgi"], 2)
+            self.assertFalse(result["raw_log_emitted"])
+            self.assertNotIn("buyer@", json.dumps(result))
+            self.assertNotIn("SECRET", json.dumps(result))
+            self.assertNotIn("private-key", json.dumps(result))
+
+    def test_missing_module_name_is_binned_without_exposing_raw_name(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import classify_missing_module
+        self.assertEqual(classify_missing_module(b"config"), "project_config")
+        self.assertEqual(classify_missing_module(b"core.commerce_funnel"), "optional_commerce_telemetry")
+        self.assertEqual(classify_missing_module(b"django.conf"), "django_dependency")
+        self.assertEqual(classify_missing_module(b"MySQLdb"), "database_driver")
+        self.assertEqual(classify_missing_module(b"buyer_private_secret"), "other_unclassified")
+
+
+    def test_wiring_flags_are_redacted(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_passenger_wiring
+        conf = ("PassengerPython /home/zomorod2/virtualenv/other-app/3.11/bin/python\n"
+                "PassengerStartupFile passenger_wsgi.py\n"
+                "RewriteRule ^store/?$ store/index.html [END]\n")
+        result = inspect_passenger_wiring(conf, "APP='/home/zomorod2/Saeit-staging'\nfrom config.wsgi import application")
+        self.assertEqual(result["passenger_python_directives"], 1)
+        self.assertTrue(result["passenger_python_311"])
+        self.assertTrue(result["passenger_python_other_venv"])
+        self.assertFalse(result["passenger_python_stage_venv"])
+        self.assertTrue(result["wsgi_mentions_staging_source"])
+        self.assertTrue(result["wsgi_has_django_entrypoint"])
+        self.assertNotIn("other-app", json.dumps(result))
 
 
 if __name__ == "__main__":

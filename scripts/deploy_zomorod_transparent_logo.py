@@ -1,8 +1,9 @@
-"""Atomic, asset-only Zomorod approved logo deployment.
+"""Atomic, asset-only Zomorod logo deployment that preserves live page edits.
 
-Only the root homepage, six already-created Nova company pages and the
-site-local Django Admin branding are modified. Everything else is
-treated as immutable. Caller has already staged source files privately.
+Approved templates validate logo adoption, but are NEVER copied wholesale
+onto a live site. Only a legacy logo URL in an existing page may be replaced.
+This prevents a later branding release from discarding newer service links,
+contact text, or other independent production changes.
 """
 import hashlib
 import os
@@ -55,6 +56,25 @@ def atomic_copy(src,dest):
     finally:
         if temp.exists():temp.unlink()
 
+def atomic_bytes(data,dest):
+    temp=dest.with_name(dest.name+".zm-logo-stage")
+    if temp.exists():raise RuntimeError("Temporary file exists; refusing overwrite")
+    try:
+        with temp.open("xb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp,dest.stat().st_mode & 0o777)
+        os.replace(temp,dest)
+    finally:
+        if temp.exists():temp.unlink()
+
+def logo_only(source):
+    """Replace only the retired logo URL, never an approved page snapshot."""
+    if NEW_PATH not in source and OLD_PATH not in source:
+        raise RuntimeError("Live page has no known company logo URL")
+    return source.replace(OLD_PATH,NEW_PATH)
+
 def request(path,required=None):
     url="https://zomorodmelal.ir"+path
     q="?logo_release="+STAGE.parent.name
@@ -73,8 +93,17 @@ def main():
         raise RuntimeError("No approved private staging")
     if any(p.is_symlink() or not p.is_file() for p in PROTECTED):
         raise RuntimeError("Original protected source missing or symlinked")
-    if ASSET.exists() or ASSET.is_symlink():
-        raise RuntimeError("Target transparent asset already exists; no overwrite permitted")
+    if ASSET.is_symlink():
+        raise RuntimeError("Target transparent asset is a symlink; refusing overwrite")
+    previous_asset=ORIGINAL/"logo.png"
+    if ASSET.exists():
+        if previous_asset.exists():
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup mismatch")
+        else:
+            shutil.copy2(ASSET, previous_asset)
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup validation failed")
     logo=STAGE/"logo.png"
     png=logo.read_bytes()
     if not png.startswith(b"\x89PNG\r\n\x1a\n") or b"tRNS" not in png or len(png)<4000:
@@ -86,11 +115,13 @@ def main():
             raise RuntimeError("Missing expected original page: "+name)
         approved=(STAGE/(name+".html")).read_bytes()
         old=target.read_bytes()
-        if NEW_PATH not in approved or NEW_PATH in old:
-            raise RuntimeError("Expected old/new logo ref not found: "+name)
-        if approved.replace(NEW_PATH,OLD_PATH)!=old:
-            raise RuntimeError("Non-logo content difference / concurrent edit: "+name)
-        prepared[name]=approved
+        if NEW_PATH not in approved:
+            raise RuntimeError("Approved source is missing the required logo reference: "+name)
+        prepared[name]=logo_only(old)
+        if prepared[name]!=old:
+            print("ZM_LOGO_URL_UPDATE_REQUIRED="+name,flush=True)
+        else:
+            print("ZM_LOGO_PAGE_CONTENT_PRESERVED="+name,flush=True)
         previous=ORIGINAL/(name+".html")
         if previous.exists():raise RuntimeError("Backup file already exists: "+name)
         shutil.copy2(target,previous)
@@ -110,9 +141,10 @@ def main():
         for name,target in PAGES.items():
             if target.read_bytes()!=(ORIGINAL/(name+".html")).read_bytes():
                 raise RuntimeError("Concurrent content edit: "+name)
-            atomic_copy(STAGE/(name+".html"),target)
-            changed.append(name)
-            print("ZM_LOGO_BRANDING_UPDATED="+name,flush=True)
+            if target.read_bytes()!=prepared[name]:
+                atomic_bytes(prepared[name],target)
+                changed.append(name)
+                print("ZM_LOGO_BRANDING_UPDATED="+name,flush=True)
         image=request("/static/site/company/company-logo-transparent.png")
         if image!=png:raise RuntimeError("Public image is different from approved image")
         for path in ("/","/company/","/about/","/services/",
@@ -135,7 +167,10 @@ def main():
             except Exception as exc:
                 print("ZM_LOGO_ROLLBACK_MANUAL_CHECK="+name+" "+type(exc).__name__,flush=True)
         if uploaded and ASSET.is_file() and not ASSET.is_symlink() and ASSET.read_bytes()==png:
-            ASSET.unlink()
+            if previous_asset.is_file():
+                atomic_copy(previous_asset, ASSET)
+            else:
+                ASSET.unlink()
         print("ZM_LOGO_RELEASE=rolled_back_after_failed_verification",flush=True)
         raise
 

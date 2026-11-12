@@ -4,6 +4,7 @@ from openai import OpenAI
 
 from .models import ChatMessage
 from .master_agent_capability_pack import capability_pack_prompt
+from .chat_operation_security import is_authorized_chat_operator
 
 
 SYSTEM_PROMPT = """
@@ -29,6 +30,85 @@ class MasterAgentChat:
             raise ValueError("Message cannot be empty")
 
         ChatMessage.objects.create(session=session, role="user", content=text)
+
+        # Explicit operational language becomes a structured operation.
+        # The owner chat executes synchronously; all other users remain queued
+        # behind the existing approval lifecycle.
+        from .operation_planner import approval_reason, plan_chat_operation
+        from .models import ApprovalRequest, AuditLog
+
+        operation = plan_chat_operation(text)
+        if operation is not None:
+            direct_owner = is_authorized_chat_operator(session.user)
+            if not direct_owner:
+                reply = "اجرای دستور مدیریتی از این حساب مجاز نیست؛ فقط مدیر ارشد فعال می‌تواند دستور عملیاتی صادر کند."
+                ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content=reply,
+                    metadata={
+                        "agent": "master_agent",
+                        "capability_pack": "1.0.0",
+                        "operation_id": operation.operation_id,
+                        "execution": "forbidden",
+                    },
+                )
+                return reply
+            approval = ApprovalRequest.objects.create(
+                action_type="chat:" + operation.action,
+                target_type="ChatOperation",
+                target_id=operation.operation_id,
+                reason=approval_reason(operation),
+                risk=operation.risk,
+                status="approved" if direct_owner else "pending",
+                decision_note="direct_owner_chat_execution" if direct_owner else "",
+                requested_by=session.user,
+            )
+            if direct_owner:
+                from .operation_executor import execute_approved_chat_operation
+                import json
+                try:
+                    result = execute_approved_chat_operation(approval)
+                    reply = (
+                        "اجرا انجام شد. "
+                        f"عملیات: {operation.action} | "
+                        + json.dumps(result.get("result", result), ensure_ascii=False, default=str)[:3500]
+                    )
+                    execution = "direct_owner_chat_executed"
+                except Exception as exc:
+                    # The executor owns terminal states. Never reset an already
+                    # claimed action to "approved" or hide an ambiguous outcome.
+                    AuditLog.objects.create(
+                        actor_type="owner_chat",
+                        actor_id=str(session.user.pk),
+                        action="chat_operation_failed",
+                        target_type="ApprovalRequest",
+                        target_id=str(approval.pk),
+                        after_state={"operation": operation.action, "error": type(exc).__name__},
+                        trace_id="chat-operation-failed-" + operation.operation_id,
+                    )
+                    reply = "اجرای مستقیم ناموفق بود و هیچ موفقیتی گزارش نشده است: " + type(exc).__name__
+                    execution = "direct_owner_chat_failed"
+            else:
+                reply = (
+                    "درخواست عملیاتی ثبت شد و هنوز اجرا نشده است. "
+                    f"شماره تأیید: {approval.pk} | عملیات: {operation.action} | "
+                    "این درخواست فقط پس از تأیید مالک اجرا می‌شود."
+                )
+                execution = "approval_required"
+            ChatMessage.objects.create(
+                session=session,
+                role="assistant",
+                content=reply,
+                metadata={
+                    "agent": "master_agent",
+                    "capability_pack": "1.0.0",
+                    "operation_id": operation.operation_id,
+                    "approval_id": approval.pk,
+                    "execution": execution,
+                },
+            )
+            return reply
 
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:

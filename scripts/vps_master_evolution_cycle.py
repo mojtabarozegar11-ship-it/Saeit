@@ -2,7 +2,8 @@
 """Bounded VPS master-agent strategy evolution from private, verified task states.
 
 No database writes, network calls, financial actions or self-editing source code.
-The private master runner is permanently capped at one step per cycle.
+The private master runner executes up to 20 serial tasks per cycle, with
+single-product, no-spend, and approval guards unchanged.
 """
 import argparse
 import json
@@ -70,43 +71,44 @@ def evaluate(db_path: Path, state_path: Path):
     delta_failed = counts["failed"] - int(prev_count.get("failed", counts["failed"]))
     delta_blocked = counts["blocked"] - int(prev_count.get("blocked", counts["blocked"]))
     old_steps = int(previous.get("max_steps", 1))
-    if old_steps not in (1, 2, 3):
+    if old_steps not in (1, 2, 3, 20):
         raise RuntimeError("INVALID_PREVIOUS_EVOLUTION_POLICY")
-    # Compare only the newly completed portion, not historical successes.
+    # Compare only newly completed tasks; do not count historical successes.
     recent_new = recent_verified_actions[:min(max(delta_completed, 0), len(recent_verified_actions))]
     diversity = len(set(recent_new))
-    # The owner requested controlled production with no volume expansion.
-    # Keep one master task per five-minute cycle even after diverse successes.
-    steps = 1
-    if old_steps != 1:
-        decision = "rollback_to_single_step_volume_cap"
-    elif delta_failed > 0 or delta_blocked > 0:
-        decision = "hold_single_step_after_regression"
-    elif delta_completed >= 2 and diversity >= 2 and counts["blocked"] == 0:
-        decision = "hold_single_step_after_verified_progress"
+    # Serial task depth is distinct from factory product volume. Never run
+    # parallel master tasks or remove financial/owner approval gates.
+    regressed = delta_failed > 0 or delta_blocked > 0 or counts["blocked"] > 0
+    steps = 1 if regressed else 20
+    if regressed:
+        decision = "limit_serial_steps_after_regression"
+    elif old_steps != 20:
+        decision = "enable_serial_chain_up_to_20"
+    elif delta_completed >= 2 and diversity >= 2:
+        decision = "hold_serial_chain_after_verified_progress"
     elif delta_completed >= 2:
-        decision = "hold_single_step_no_verified_diversity"
+        decision = "hold_serial_chain_no_verified_diversity"
     else:
-        decision = "hold_single_step_until_verified_progress"
+        decision = "hold_serial_chain_until_verified_progress"
     report = {
         "schema": "saeit.master.evolution.v1",
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "agent_code": "economic-master-agent",
-        "operating_mode": "private_vps_single_step_controlled",
+        "operating_mode": "private_vps_serial_tasks_controlled",
         "task_counts": counts,
         "delta": {"verified_completed_tasks": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
         "recent_new_verified_action_types": diversity,
         "repeat_completion_is_not_diverse_progress": True,
         "max_steps": steps,
-        "hard_max_steps_cap": 1,
+        "hard_max_steps_cap": 20,
         "volume_scaling_enabled": False,
         "parallel_master_tasks": False,
         "previous_max_steps": old_steps,
         "decision": decision,
         "revision": int(previous.get("revision", 0)) + int(steps != old_steps),
         "self_modifying_code": False,
-        "capacity_policy_change": "disabled_by_owner_volume_cap",
+        "capacity_policy_change": "serial_task_depth_only_no_product_volume_expansion",
         "commercial_publication_enabled": False,
         "financial_actions_enabled": False,
     }

@@ -4,4 +4,19 @@ This file is intentionally non-destructive. Its purpose is to create a new commi
 
 Current release change: restore /company/office/login/ as a redirect to the existing authenticated Django admin login, with the staff command center as the post-login destination.
 
-No visual design, database records, secrets, production settings, or application data are changed by this route fix. The normal cPanel deployment hook may run the repository's existing checks, migrations, and static collection as part of its established deployment process.
+No visual design, database records, secrets, production settings, or application data are changed by this route fix.
+Direct owner-chat execution activation trigger: aa5ecc4f145ad5f1cffcabb08871f65b52ac1017
+
+Current Faremah release: 039e3748433bd3a9d244e0de508dd14c76c2176a
+Public target: /faremah/
+
+Static Faremah release: b92b475d352b093668640b48d051b8d12d97584c
+Static target: public_html/faremah/index.html
+
+Current store release: 7f6047329706502d6a41edbadbc0048b71367235
+Public target: /store/
+Change: add leather, family clothing, herbalist, and direct agricultural supply storefront links alongside the existing perfume/beauty and toys/models stores.
+
+
+Live store theme repair: 538e2debcccc91fd14a05e60c6524c7794a7b224
+Change: add the six specialty storefront cards inside the existing green/gold responsive Zomorod store layout; no replacement template.

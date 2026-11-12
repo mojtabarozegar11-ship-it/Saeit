@@ -1,4 +1,4 @@
-"""Master production stays capped at one step despite verified progress."""
+"""Master runs up to 20 serial tasks without increasing product volume."""
 import importlib.util
 import json
 import os
@@ -37,32 +37,32 @@ class EvolutionTests(unittest.TestCase):
 
     def test_repeated_verified_task_does_not_count_as_diverse_progress(self):
         with tempfile.TemporaryDirectory() as temp:
-            db, state = self.fixture(temp, ["income_profit_optimize"] * 3)
+            db, state = self.fixture(temp, ["income_profit_optimize"] * 3, previous_steps=20)
             mod.evaluate(db,state)
             out = json.loads(state.read_text())
-            self.assertEqual(out["max_steps"],1)
+            self.assertEqual(out["max_steps"],20)
             self.assertEqual(out["recent_new_verified_action_types"],1)
-            self.assertEqual(out["decision"],"hold_single_step_no_verified_diversity")
+            self.assertEqual(out["decision"],"hold_serial_chain_no_verified_diversity")
 
-    def test_diverse_verified_actions_do_not_expand_production_volume(self):
+    def test_diverse_verified_actions_do_not_expand_product_volume(self):
         with tempfile.TemporaryDirectory() as temp:
-            db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"])
+            db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"], previous_steps=20)
             mod.evaluate(db,state)
             out = json.loads(state.read_text())
-            self.assertEqual(out["max_steps"],1)
-            self.assertEqual(out["hard_max_steps_cap"],1)
+            self.assertEqual(out["max_steps"],20)
+            self.assertEqual(out["hard_max_steps_cap"],20)
             self.assertFalse(out["volume_scaling_enabled"])
             self.assertEqual(out["recent_new_verified_action_types"],2)
-            self.assertEqual(out["decision"],"hold_single_step_after_verified_progress")
+            self.assertEqual(out["decision"],"hold_serial_chain_after_verified_progress")
 
-    def test_legacy_expanded_state_is_reduced_to_one_step(self):
+    def test_legacy_state_migrates_to_serial_task_chain(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research", "income_opportunity_score"],
                                      previous_steps=3)
             mod.evaluate(db, state)
             out = json.loads(state.read_text())
-            self.assertEqual(out["max_steps"], 1)
-            self.assertEqual(out["decision"], "rollback_to_single_step_volume_cap")
+            self.assertEqual(out["max_steps"], 20)
+            self.assertEqual(out["decision"], "enable_serial_chain_up_to_20")
 
     def test_existing_nonprivate_directory_fails_without_chmod_side_effect(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -88,11 +88,11 @@ class EvolutionTests(unittest.TestCase):
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"],
-                                     failures=1)
+                                     previous_steps=20, failures=1)
             mod.evaluate(db,state)
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"],1)
-            self.assertEqual(out["decision"],"hold_single_step_after_regression")
+            self.assertEqual(out["decision"],"limit_serial_steps_after_regression")
 
 
 if __name__ == "__main__":

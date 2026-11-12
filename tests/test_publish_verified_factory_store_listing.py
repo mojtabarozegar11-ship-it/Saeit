@@ -28,8 +28,7 @@ def script(name):
                         "status": "VERIFIED_SIGNED_ARTIFACT_RIGHTS"
                     },
                     require_quality_clearance=lambda *args: {
-                    "status": "VERIFIED_SIGNED_PREMIUM_1000",
-                    "1000_quality_verified": True,
+                    "status": "VERIFIED_OBJECTIVE_RELEASE_READINESS",
                     "chatgpt_final_review": "CHATGPT_FINAL_REVIEW_VERIFIED",
                 })
             return original_loaded(module_name, filename)

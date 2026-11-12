@@ -18,7 +18,7 @@ def imported():
 
 
 class ScopedPrivateQC1000Install(unittest.TestCase):
-    def test_install_guard_and_preserve_existing_source_with_backups(self):
+    def test_retired_numeric_installer_refuses_and_preserves_existing_files(self):
         mod = imported()
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)
@@ -38,21 +38,11 @@ class ScopedPrivateQC1000Install(unittest.TestCase):
                 (staged / name).write_bytes(raw)
                 expected[name] = hashlib.sha256(raw).hexdigest()
             mod.TARGET = dest
-            mod.install(staged, expected)
-            for name in mod.FILES:
-                self.assertEqual(
-                    hashlib.sha256((dest / name).read_bytes()).hexdigest(),
-                    expected[name])
-            backup = (dest / ".qc1000-versioned-backups" /
-                      hashlib.sha256(old).hexdigest() / mod.FILES[0])
-            self.assertEqual(backup.read_bytes(), old)
-            self.assertIn("quality.require_quality_clearance", (dest / mod.PUBLISHER).read_text())
-            original_publisher_backup = (dest / ".qc1000-versioned-backups" /
-                       hashlib.sha256(publisher.encode()).hexdigest() / mod.PUBLISHER)
-            self.assertEqual(original_publisher_backup.read_text(), publisher)
-            # Idempotent re-execution must preserve exact bytes.
-            mod.install(staged, expected)
-            self.assertEqual(backup.read_bytes(), old)
+            with self.assertRaisesRegex(RuntimeError,"RETIRED_NUMERIC_QC_INSTALLER"):
+                mod.install(staged, expected)
+            self.assertEqual((dest / mod.FILES[0]).read_bytes(), old)
+            self.assertEqual((dest / mod.PUBLISHER).read_text(), publisher)
+            self.assertFalse((dest / ".qc1000-versioned-backups").exists())
 
     def test_wrong_upload_hash_refuses_before_install(self):
         mod = imported()
@@ -73,7 +63,7 @@ class ScopedPrivateQC1000Install(unittest.TestCase):
                 expected[name] = hashlib.sha256(raw).hexdigest()
             expected[mod.FILES[0]] = "a" * 64
             mod.TARGET = dest
-            with self.assertRaisesRegex(RuntimeError, "UPLOAD_HASH_MISMATCH"):
+            with self.assertRaisesRegex(RuntimeError, "RETIRED_NUMERIC_QC_INSTALLER"):
                 mod.install(staged, expected)
             self.assertFalse((dest / mod.FILES[0]).exists())
 

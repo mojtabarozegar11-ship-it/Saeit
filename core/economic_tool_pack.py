@@ -300,17 +300,27 @@ def growth_experiment(payload):
 
 
 def revenue_verify(payload):
-    # Never invent revenue: only persisted payment/ledger evidence may support it.
+    # A payment webhook or an internal ledger entry is NOT proof that funds were
+    # independently settled. In particular, payment + settlement for the same
+    # order must never be summed as two receipts. An external reconciliation
+    # adapter must establish provider reference, finality and currency before
+    # this agent is allowed to publish a non-null verified revenue figure.
     from .models import LedgerEntry
-    settled = list(LedgerEntry.objects.filter(entry_type__in=("settlement", "payment")).values(
-        "id", "amount", "currency", "reference"
-    )[:100])
-    total = sum((item["amount"] for item in settled), 0)
+    payment_events = LedgerEntry.objects.filter(entry_type="payment").count()
+    settlement_candidates = LedgerEntry.objects.filter(entry_type="settlement").count()
     return {
-        "action_performed": "Reconciled persisted ledger payment/settlement evidence; no unevidenced revenue was counted.",
+        "action_performed": (
+            "Inspected internal payment and settlement entry counts; "
+            "withheld revenue claims pending independent external reconciliation."
+        ),
         "verified_effect": True,
-        "evidence": _evidence("ledger_reconciliation", {"entries": len(settled), "total": total}),
-        "verified_revenue": str(total),
+        "evidence": _evidence("internal_ledger_inventory", {
+            "payment_entries": payment_events,
+            "settlement_candidates": settlement_candidates,
+            "external_reconciliation_verified": False,
+        }),
+        "verified_revenue": None,
+        "revenue_status": "external_settlement_evidence_required",
         "next_action": "income_profit_optimize",
     }
 
@@ -332,7 +342,32 @@ def master_self_improvement(payload):
     repo = Path(__file__).resolve().parents[1]
     engine_path = repo / "scripts" / "factory_code_self_upgrade.py"
     if engine_path.is_symlink() or not engine_path.is_file():
-        raise ValueError("MASTER_SELF_IMPROVEMENT_ENGINE_MISSING")
+        # The factory owns its independent upgrade runner on VPS; its source
+        # is not necessarily installed inside Django. Consume the existing
+        # private evidence read-only instead of copying factory executables,
+        # rerunning a competing repair cron, or failing the master cycle.
+        root = Path.home() / "factory-runtime"
+        independent_engine = (
+            root / "operations/factory-code-self-upgrade/source/scripts/factory_code_self_upgrade.py"
+        )
+        dossier = (
+            root / "private/autonomous-product-cycle/code-self-upgrade/evolution-proof.json"
+        )
+        if independent_engine.is_symlink() or not independent_engine.is_file():
+            raise ValueError("MASTER_INDEPENDENT_UPGRADE_ENGINE_MISSING")
+        from .isolated_upgrade_proof import inspect_isolated_proof
+        proof = inspect_isolated_proof(dossier)
+        return {
+            "action_performed": (
+                "Inspected the existing fresh, private factory self-upgrade dossier "
+                "without modifying factory source or starting a competing runner."
+            ),
+            "verified_effect": True,  # the *inspection*, not source improvement
+            "evidence": _evidence("independent_factory_upgrade_dossier_inspection", proof),
+            "code_improvement_performed": False,
+            "production_promotion": False,
+            "next_action": "income_market_research",
+        }
     spec = importlib.util.spec_from_file_location("master_self_upgrade_engine", engine_path)
     if spec is None or spec.loader is None:
         raise ValueError("MASTER_SELF_IMPROVEMENT_ENGINE_LOAD_FAILED")

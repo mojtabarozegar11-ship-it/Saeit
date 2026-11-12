@@ -1,0 +1,98 @@
+name: VPS deep candidate content audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-deep-candidate-content-audit-20261107.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-deep-candidate-content-audit
+  cancel-in-progress: false
+jobs:
+  read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect only large retired-looking candidates
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/deep-audit"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 360s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import collections, json, os, re, subprocess, time
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          candidates=[
+            root/"operations/backups/native-master-20261027T123903Z-72038",
+            root/"operations/backups/native-master-20261028T194214Z-622692",
+            root/"operations/backups/native-master-20261022T035843Z-2127891",
+            root/"autonomous_factory/build-50",
+            root/"autonomous_factory/native-candidate-evidence",
+          ]
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8).stdout
+          proc=subprocess.run(["ps","-u","githubops","-o","args="],capture_output=True,text=True,timeout=8).stdout
+          def du(p):
+              try:return int(subprocess.run(["du","-s","-B1","--",str(p)],check=True,capture_output=True,text=True,timeout=60).stdout.split()[0])
+              except Exception:return None
+          out=[]
+          for p in candidates:
+              row={"path":str(p.relative_to(root)),"present":p.exists(),"deleted":0}
+              if not p.exists(): out.append(row); continue
+              if p.is_symlink() or not p.is_dir(): raise SystemExit("UNSAFE_CANDIDATE")
+              row.update({"bytes":du(p),"age_days":round((time.time()-p.stat().st_mtime)/86400,1),
+                          "cron_reference":p.name in cron or str(p) in cron,
+                          "process_reference":p.name in proc or str(p) in proc})
+              counts=collections.Counter(); largest=[]; text_hits=[]; files=0; total=0
+              for base,dirs,names in os.walk(p,followlinks=False):
+                  b=Path(base)
+                  dirs[:]=[n for n in dirs if not (b/n).is_symlink()]
+                  for n in names:
+                      q=b/n
+                      if q.is_symlink(): continue
+                      try: st=q.stat()
+                      except OSError: continue
+                      files+=1; total+=st.st_size; counts[q.suffix.lower() or "(none)"]+=1
+                      if st.st_size>=8*1024*1024:
+                          largest.append({"name":q.relative_to(p).as_posix()[:180],"bytes":st.st_size})
+                      if st.st_size<=512*1024 and q.suffix.lower() in {".txt",".md",".json",".jsonl",".py",".sh",".yml",".yaml",".toml",".ini",".conf"}:
+                          try:
+                              s=q.read_text(errors="ignore")[:200000]
+                              if any(k in s.lower() for k in ("production","release","master","source","deploy","active","restore")):
+                                  text_hits.append(q.relative_to(p).as_posix()[:180])
+                          except OSError: pass
+              row.update({"files":files,"file_bytes":total,"types":counts.most_common(20),
+                          "largest_files":sorted(largest,key=lambda x:-x["bytes"])[:20],
+                          "text_metadata_hits":sorted(set(text_hits))[:40]})
+              out.append(row)
+          # Search only bounded-size configuration/text files for candidate basenames.
+          refs={}
+          needles=[p.name for p in candidates]
+          for scan in (root/"operations",root/"django-app"):
+              for base,dirs,names in os.walk(scan,followlinks=False):
+                  b=Path(base); dirs[:]=[n for n in dirs if n not in {".git",".venv"} and not (b/n).is_symlink()]
+                  for n in names:
+                      q=b/n
+                      if q.is_symlink(): continue
+                      try:
+                          if q.stat().st_size>512*1024: continue
+                          s=q.read_text(errors="ignore")
+                      except OSError: continue
+                      for needle in needles:
+                          if needle in s: refs.setdefault(needle,[]).append(str(q.relative_to(root))[:200])
+          print("FACTORY_DEEP_CANDIDATE_AUDIT="+json.dumps({"read_only":True,"candidates":out,"text_references":{k:v[:30] for k,v in refs.items()}},sort_keys=True))
+          PY
+
+# Fresh re-audit requested 2026-11-07; guarded/idempotent execution.

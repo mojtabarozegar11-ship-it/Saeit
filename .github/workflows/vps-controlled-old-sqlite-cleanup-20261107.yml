@@ -1,0 +1,136 @@
+name: Controlled VPS old SQLite retention cleanup
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-controlled-old-sqlite-cleanup-20261107.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: vps-controlled-old-sqlite-cleanup-20261107
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned VPS and cPanel identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/vps-old-sqlite-cleanup"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_IDENTITIES=verified"
+      - name: Verify restore proof and delete only four named old SQLite backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/vps-old-sqlite-cleanup"
+          root="/home/githubops/factory-runtime/operations/backups"
+          offsite="/home/zomorod2/restore-staging/factory/master-before-20261105T210434Z.sqlite3"
+          source="/home/githubops/factory-runtime/operations/backups/master-before-20261105T210434Z.sqlite3"
+          source_hash="$(ssh -F "$d/config" saeit-vps "sha256sum '$source' | awk '{print \$1}'")"
+          offsite_hash="$(ssh -F "$d/config" saeit-cpanel "sha256sum '$offsite' | awk '{print \$1}'")"
+          test -n "$source_hash" && test "$source_hash" = "$offsite_hash"
+          echo "OFFSITE_HASH_RECHECK=match"
+          ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import fcntl, hashlib, os, re, sqlite3, time
+          from pathlib import Path
+          root=Path("/home/githubops/factory-runtime/operations/backups")
+          lock=Path("/home/githubops/factory-runtime/operations/master-agent/activation.lock")
+          keep_names={
+              "master-before-20261105T210434Z.sqlite3",
+              "master-before-20261105T154953Z.sqlite3",
+          }
+          remove_expected={
+              "master-before-20261105T212019Z.sqlite3":1408634880,
+              "master-before-20261105T144755Z.sqlite3":1408634880,
+              "master-before-20261028T004026Z.sqlite3":1396473856,
+              "master-before-20261027T184914Z.sqlite3":1396379648,
+          }
+          pattern=re.compile(r"^master-before-\d{8}T\d{6}Z\.sqlite3$")
+          if root.is_symlink() or not root.is_dir(): raise SystemExit("SQLITE_CLEANUP_UNSAFE_ROOT")
+          with lock.open("a+") as fh:
+              fcntl.flock(fh,fcntl.LOCK_EX|fcntl.LOCK_NB)
+              for name in keep_names:
+                  p=root/name
+                  if p.is_symlink() or not p.is_file(): raise SystemExit("SQLITE_KEEP_MISSING="+name)
+                  conn=sqlite3.connect("file:"+str(p)+"?mode=ro",uri=True,timeout=90)
+                  result=conn.execute("PRAGMA quick_check").fetchone()[0]
+                  conn.close()
+                  print("SQLITE_KEEP_CHECK="+name+":"+result,flush=True)
+                  if result!="ok": raise SystemExit("SQLITE_KEEP_NOT_VERIFIED="+name)
+              for name,size in remove_expected.items():
+                  p=root/name
+                  if p.is_symlink() or not p.is_file(): raise SystemExit("SQLITE_REMOVE_TARGET_MISSING="+name)
+                  if p.stat().st_uid!=os.getuid() or p.stat().st_size!=size: raise SystemExit("SQLITE_REMOVE_TARGET_CHANGED="+name)
+                  for ent in Path("/proc").glob("[0-9]*"):
+                      for fd in (ent/"fd").glob("*"):
+                          try:
+                              if str(p)==os.readlink(fd): raise SystemExit("SQLITE_REMOVE_TARGET_OPEN="+name)
+                          except (OSError,FileNotFoundError): pass
+              manifest=root/("retention-"+time.strftime("%Y%m%dT%H%M%SZ",time.gmtime())+".json")
+              removed=0
+              records=[]
+              for name,size in remove_expected.items():
+                  p=root/name
+                  digest=hashlib.sha256(p.read_bytes()).hexdigest()
+                  p.unlink()
+                  removed+=size
+                  records.append({"name":name,"bytes":size,"sha256":digest})
+                  print("SQLITE_REMOVED="+name+":BYTES="+str(size),flush=True)
+              manifest.write_text(__import__("json").dumps({"kept":sorted(keep_names),"removed":records,"status":"complete"},sort_keys=True),encoding="utf-8")
+              os.chmod(manifest,0o600)
+              print("SQLITE_REMOVED_COUNT="+str(len(records)),flush=True)
+              print("SQLITE_RECLAIMED_BYTES="+str(removed),flush=True)
+              print("SQLITE_MANIFEST="+manifest.name,flush=True)
+              print("SQLITE_NO_CRON_CHANGED=1",flush=True)
+              print("SQLITE_NO_SERVICE_RESTART=1",flush=True)
+              print("SQLITE_OFFSITE_COPY_REQUIRED=present",flush=True)
+              print("VPS_FREE_BYTES_AFTER="+str(os.statvfs(root).f_bavail*os.statvfs(root).f_frsize),flush=True)
+          PY
+      - name: Remove runner-only SSH files
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/vps-old-sqlite-cleanup"
+          if test -d "$d"; then rm -rf -- "$d"; fi

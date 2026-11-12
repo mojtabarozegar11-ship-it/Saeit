@@ -24,6 +24,44 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# A SQLite rollback snapshot needs at least the size of the live database on
+# the backup filesystem. Refuse activation BEFORE changing cron if insufficient.
+# No database rows are read, and this gate creates no files.
+master_capacity_preflight() {
+  SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings \
+    "$py" - "$ops" <<'PY'
+import os
+import sys
+from pathlib import Path
+from django.conf import settings
+
+ops = Path(sys.argv[1])
+database = settings.DATABASES["default"]
+if "sqlite3" not in database["ENGINE"]:
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNEXPECTED_DB_ENGINE")
+source = Path(database["NAME"])
+if source.is_symlink() or not source.is_file():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_DB_PATH")
+if ops.is_symlink() or not ops.is_dir():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_BACKUP_PARENT")
+db_bytes = source.stat().st_size
+fs = os.statvfs(ops)
+available = fs.f_bavail * fs.f_frsize
+total = fs.f_blocks * fs.f_frsize
+# Keep room for live writes, SQLite backup journals, cron and rollback.
+reserve = max(2 * 1024**3, (total * 5 + 99) // 100)
+required = db_bytes + reserve
+print("MASTER_CAPACITY_AVAILABLE_BYTES=" + str(available), flush=True)
+print("MASTER_CAPACITY_REQUIRED_BYTES=" + str(required), flush=True)
+if available < required:
+    raise SystemExit("MASTER_CAPACITY_ABORT_INSUFFICIENT_FREE_SPACE")
+print("MASTER_CAPACITY_PREFLIGHT_OK", flush=True)
+PY
+}
+# Resolve config.settings relative to the live Django app before importing it.
+# This read-only directory change precedes every backup or cron mutation.
+cd "$app"
+master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
 flock -w 20 8
@@ -34,6 +72,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 modules=(
   core/autonomous_brain.py
   core/economic_tool_pack.py
+  core/isolated_upgrade_proof.py
   core/economic_master_agent.py
   core/self_funding_policy.py
   core/task_runtime.py
@@ -90,7 +129,14 @@ old="$ops/backups/cron-before-master-$stamp.txt"
 crontab -l > "$old" 2>/dev/null || : > "$old"
 chmod 600 "$old"
 tagged_count="$(grep -c 'SAEIT_MASTER_AGENT_V1' "$old" || true)"
-test "$tagged_count" -eq 2 || { echo MASTER_EXPECTED_TWO_TAGGED_CRON_ENTRIES; exit 1; }
+if [ "$tagged_count" -eq 0 ]; then
+  # Read-only preflight proved that the master can exist with no scheduled
+  # entries. Recover that state while preserving every unrelated cron line.
+  echo MASTER_CRON_RECOVERY_FROM_ZERO
+elif [ "$tagged_count" -ne 2 ]; then
+  echo MASTER_INCONSISTENT_TAGGED_CRON_ENTRIES
+  exit 1
+fi
 if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
   exit 1
@@ -152,10 +198,13 @@ for module in "${modules[@]}"; do
   mv -f "$target.deploy.tmp" "$target"
 done
 "$py" -m py_compile \
-  core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py \
+  core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py \
   core/self_funding_policy.py core/task_runtime.py \
   core/management/commands/seed_online_income_agents.py \
   core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+"$py" -m py_compile \
+  core/management/commands/autonomous_master_loop.py \
+  core/management/commands/online_income_cycle.py
 "$py" manage.py check
 "$py" manage.py seed_online_income_agents
 "$py" - <<'PY'
@@ -192,12 +241,19 @@ try:
     steps=int(json.loads(p.read_text(encoding="utf-8")).get("max_steps",1))
 except (FileNotFoundError,ValueError,TypeError,KeyError):
     steps=1
-# Enforce the owner's single-step volume ceiling even if stored state is stale.
-print(1)
+# Execute up to 20 tasks serially. Product volume and approvals remain gated.
+print(min(20, max(1, steps)))
 PY
 )"
-flock -n "$root/master-cycle.lock" timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
-flock -n "$root/master-cycle.lock" timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
+# Hold one lock across recovery AND planning/execution. Two independent
+# flock invocations leave a race window that can spawn duplicate master work.
+exec 9>"$root/master-cycle.lock"
+if ! flock -n 9; then
+  echo MASTER_CYCLE_ALREADY_RUNNING
+  exit 0
+fi
+timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
+timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH
 chmod 700 "$master/run-cycle.sh.tmp"
 mv -f "$master/run-cycle.sh.tmp" "$master/run-cycle.sh"
@@ -241,6 +297,6 @@ else
   echo MASTER_INITIAL_CYCLE_DEFERRED_TO_SCHEDULE
 fi
 echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
-echo MASTER_SINGLE_STEP_CAPACITY_REVIEW_VERIFIED
+echo MASTER_SERIAL_STEPS_UP_TO_20_VERIFIED
 echo MASTER_FACTORY_LOOP_UNMODIFIED
 echo MASTER_NO_PUBLIC_SITE_CHANGES

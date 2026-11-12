@@ -59,8 +59,16 @@ jobs:
           home=Path.home()
           cache=home/".npm"/"_npx"
           print("NPX_VPS_INSPECT_READ_ONLY=true",flush=True)
-          if cache.is_symlink() or not cache.is_dir() or cache.resolve()!=home/".npm"/"_npx":
-              raise SystemExit("VPS_NPX_CACHE_UNSAFE_OR_ABSENT")
+          parent=home/".npm"
+          if parent.is_symlink() or cache.is_symlink() or (parent.exists() and not parent.is_dir()):
+              raise SystemExit("VPS_NPX_CACHE_UNSAFE_PATH")
+          if not cache.exists():
+              print("NPX_VPS_CACHE_ABSENT=true",flush=True)
+              print("NPX_VPS_DISK_BYTES=0",flush=True)
+              print("NPX_VPS_DELETION_ATTEMPTED=false",flush=True)
+              raise SystemExit(0)
+          if not cache.is_dir() or cache.resolve()!=parent/"_npx":
+              raise SystemExit("VPS_NPX_CACHE_UNSAFE_PATH")
           size=subprocess.run(["du","-sk",str(cache)],capture_output=True,text=True,timeout=24,check=True)
           print("NPX_VPS_DISK_BYTES="+str(int(size.stdout.split()[0])*1024),flush=True)
           ps=subprocess.run(["ps","-u",str(os.geteuid()),"-o","pid=,etimes=,args="],capture_output=True,text=True,timeout=10,check=True)

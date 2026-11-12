@@ -1,0 +1,97 @@
+name: VPS native private Farm Toolkit 2.0 activation
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-farm-v2-private-activation-20261107.yml
+      - deploy/activate_farm_v2_private_20261107.sh
+  pull_request:
+    paths:
+      - .github/workflows/vps-farm-v2-private-activation-20261107.yml
+      - deploy/activate_farm_v2_private_20261107.sh
+permissions:
+  contents: read
+concurrency:
+  group: saeit-native-farm-v2-private-activation
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify reviewed offline calculator and exact native bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          bash -n deploy/activate_farm_v2_private_20261107.sh
+          python3 -B -m unittest discover -s product_recipes/farm_enterprise_economics -p 'test_*.py' -v
+          python3 -B -m unittest -v tests.test_farm_browser_parity
+          python3 -B -m unittest -v tests.test_farm_private_vps_activation_contract
+          node --check product_recipes/farm_enterprise_economics/offline_engine.js
+          node --check product_recipes/farm_enterprise_economics/offline_ui.js
+          test -z "$(find product_recipes/farm_enterprise_economics -type l -print -quit)"
+          python3 -B scripts/factory_product_maker.py \
+            --out "$RUNNER_TEMP/farm-qa" --recipe farm_enterprise_economics
+          echo FARM_V2_PREDEPLOY_TESTS_AND_PRIVATE_MANUFACTURING=PASS
+  activate:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Deploy one reviewed product to private native VPS inventory only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/farm-v2-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_vps() { ssh -F "$d/config" saeit-vps "$@"; }
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B scripts/factory_product_maker.py --out "$d/private-qa" --recipe farm_enterprise_economics
+          expected="$(sha256sum "$d/private-qa/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip" | awk '{print $1}')"
+          test "${#expected}" = 64
+          test -z "$(find product_recipes/farm_enterprise_economics -type l -print -quit)"
+          tar -C product_recipes -czf "$d/recipe.tgz" farm_enterprise_economics
+          stage="/home/githubops/factory-runtime/operations/.farm-v2-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_vps "test ! -e '$stage' && install -d -m 700 '$stage/recipes'"
+          scp -F "$d/config" "$d/recipe.tgz" "saeit-vps:$stage/recipe.tgz"
+          scp -F "$d/config" deploy/activate_farm_v2_private_20261107.sh "saeit-vps:$stage/activate.sh"
+          script_sha="$(sha256sum deploy/activate_farm_v2_private_20261107.sh | awk '{print $1}')"
+          tar_sha="$(sha256sum "$d/recipe.tgz" | awk '{print $1}')"
+          ssh_vps "test \"\$(sha256sum '$stage/activate.sh'|cut -d' ' -f1)\" = '$script_sha' && test \"\$(sha256sum '$stage/recipe.tgz'|cut -d' ' -f1)\" = '$tar_sha'"
+          ssh_vps "tar -xzf '$stage/recipe.tgz' -C '$stage/recipes'"
+          ssh_vps "timeout 540s bash '$stage/activate.sh' '$stage' '$expected'"
+          echo FARM_V2_PRIVATE_VPS_EXACT_SHA_ACTIVATION=PASS
+          echo FACTORY_PUBLIC_RELEASE_AND_PAYMENTS_NOT_MODIFIED=true

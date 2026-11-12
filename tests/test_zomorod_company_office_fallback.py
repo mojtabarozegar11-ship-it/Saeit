@@ -15,7 +15,7 @@ class CompanyOfficeFallbackTests(SimpleTestCase):
 
         response = match.func(RequestFactory().get("/company/office/"))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], "/business/")
+        self.assertEqual(response["Location"], "/company/office/login/")
 
     def test_existing_office_login_route_is_preserved(self):
         match = resolve("/company/office/login/")
