@@ -151,7 +151,7 @@ def safe_source_digests(home: Path, role: str) -> dict:
             # Refuse symlinked parents too: do not follow an app-directory
             # redirect to a private file outside the known runtime root.
             parents = tuple(parent for parent in path.parents
-                            if parent == root or root in parent.parents)
+                            if parent == home or home in parent.parents)
             if (any(folder.is_symlink() for folder in parents)
                     or path.is_symlink() or not path.is_file()
                     or not 0 < path.stat().st_size <= 512000):
