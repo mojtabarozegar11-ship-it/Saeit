@@ -248,3 +248,34 @@ def test_interrupted_cycle_restarts_after_two_verified_ten_action_batches(
     assert response["newly_committed_batches"] == 3
     assert int(git(root, "rev-list", "--count", "HEAD")) == 7
     assert not git(root, "status", "--porcelain")
+
+
+@pytest.mark.parametrize(
+    "suffix,bad_code,error_fragment",
+    [
+        (".py", "def invalid_python(:\\n" + ("# code must be rejected before write\\n" * 12),
+         "Python syntax invalid"),
+        (".js", "function broken( {\\n" + ("// malformed JS is intentionally invalid\\n" * 12),
+         "JavaScript syntax invalid"),
+    ],
+)
+def test_last_item_syntax_failure_writes_nothing_and_preserves_clean_checkout(
+        tmp_path, suffix, bad_code, error_fragment):
+    """Even invalid action 50 MUST NOT cause 49 commits or dirty worktree."""
+    root = checkout(tmp_path)
+    all_jobs = [job(i) for i in range(50)]
+    all_jobs[-1] = job(
+        49, target="deliverables/books/c07-invalid-last" + suffix,
+        content=bad_code,
+    )
+    source = tmp_path / "jobs.json"
+    source.write_text(json.dumps(all_jobs))
+    first_head = git(root, "rev-parse", "HEAD")
+    result = command(root, source, "A", "A-C07-SYNTAX-FAIL-" + suffix[1:],
+                     tmp_path / "ledger.json", commit=True)
+    assert result.returncode == 2, result.stderr
+    assert error_fragment in json.loads(result.stdout)["error"]
+    assert git(root, "rev-parse", "HEAD") == first_head
+    assert not git(root, "status", "--porcelain")
+    assert not (root / "deliverables").exists()
+    assert not (root / "runtime").exists()
