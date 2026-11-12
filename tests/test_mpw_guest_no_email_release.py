@@ -331,6 +331,8 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             b'<input name="contact" type="email">',
             b"<input type='email' name='contact'>",
             b'<input type=email name=contact>',
+            b'<button name="buyer_email" type="submit">Create my TRX payment invoice</button>',
+            b'<button name=contact id=email-submit type=submit>Buy</button>',
         )
         for extra in variants:
             with self.subTest(extra=extra):
