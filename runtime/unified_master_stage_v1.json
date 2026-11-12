@@ -156,5 +156,62 @@
       "received_income_this_cycle": "not_confirmed"
     },
     "approval": "no payment, email, public release, production deploy or destructive operation performed"
+  },
+  "c03_receipt_integration": {
+    "status": "five_automations_updated_and_read_only_receipt_auditor_verified",
+    "branch": "work/unified-master-c02-evidence-gates-20261112",
+    "new_modules": [
+      "deploy/mojtaba_bot_cycle_receipt_bridge.py",
+      "deploy/mojtaba_bot_cycle_auditor.py"
+    ],
+    "contract": "docs/mojtaba_bot_five_cycle_receipt_contract.md",
+    "verified_CI": {
+      "commit": "5d9ec0c0b70cabf1dd58ee66c63010fb8c898af0",
+      "run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43217404002",
+      "tests_passed": 32,
+      "tests_failed": 0
+    },
+    "automations": {
+      "count_enabled": 5,
+      "per_cycle_target": 50,
+      "schedules_unchanged": true,
+      "receipt_contract_configured": 5,
+      "task_ids": [
+        "Automation_426a63c3dd2481918b3fe7ea2a39a639",
+        "Automation_7f1897163d70819182618f0f1e5ac32a",
+        "Automation_863c3d50e26c8191a720c9089fa4f80d",
+        "Automation_f676728eec508191afa613c8b2ebb70b",
+        "Automation_6643bf4b4d788191a8ed4c1efd50cb38"
+      ]
+    },
+    "audited_evidence": {
+      "manifest_count": 0,
+      "actions_latest_round": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0,
+        "E": 0
+      },
+      "total": 0,
+      "denominator": 250,
+      "interpretation": "no accepted production/action receipts found in committed manifest paths; does not prove none occurred elsewhere"
+    },
+    "current_queues_pending": {
+      "A": 50,
+      "B": 6,
+      "C": 10,
+      "D": 20,
+      "E": 10,
+      "total": 96
+    },
+    "unverified": [
+      "inbox receipt submitted by each task",
+      "cross-repo private-repo secure evidence adapter",
+      "persistent factory runner availability",
+      "50 committed genuine actions per cycle per hour",
+      "live deployments, sales, delivery and received revenue"
+    ],
+    "unchanged_safety": "no merge to main, deploy, payments, external email, tickets, deletes or real trades performed"
   }
 }
