@@ -110,13 +110,32 @@
       ],
       "known_live_count": null,
       "proposed_route": "merge_tasks_then_retire_only_with_successor_delivery_evidence",
-      "execution_status": "not_yet_attested",
+      "execution_status": "source_route_and_approval_gates_committed_tests_in_progress",
       "prerequisites": [
         "subscriber_and_story_receipts",
         "pending_distribution_handoff",
         "replacement_output_quality",
         "live_schedulers_stopped"
-      ]
+      ],
+      "canonical_successor_code": "mojtaba-bot-ai",
+      "canonical_successor_id": "mojtaba.bot.ai",
+      "legacy_successor_aliases_rejected": [
+        "content-director",
+        "knowledge-content-director"
+      ],
+      "deactivation_gate": "single_legacy_agent_only_with_exact_owner_approval_grant_and_recent_live_handoff_receipt",
+      "handoff_receipt_required_fields": [
+        "canonical_successor_runtime_verified",
+        "external_legacy_schedulers_stopped",
+        "all_pending_tasks_reconciled",
+        "historical_data_preserved",
+        "rollback_ready",
+        "live_inventory_receipt_id",
+        "canonical_successor_receipt_id"
+      ],
+      "source_only_successor_receipts_requirement": "published_with_newsroom_quality_audit_metadata_for_each_required_story_type",
+      "application_authorization_source": "core/management/commands/consolidate_legacy_agents.py",
+      "operational_retirement_status": "not_performed"
     },
     {
       "id": "content_director_newsletter",
@@ -291,6 +310,11 @@
     "one_bot_review_ci_passed": true,
     "one_bot_review_ci_last_verified_sha": "16d85abcef4c26e848dd8c1e6374e336467832e7",
     "weather_one_grant_per_approval_source_guard_committed": true,
-    "all_integrated_runtime_tests_passed": false
+    "all_integrated_runtime_tests_passed": false,
+    "legacy_retirement_canonical_successor_mapping_committed": true,
+    "legacy_single_agent_owner_grant_gate_committed": true,
+    "legacy_live_handoff_receipts_attested": false,
+    "legacy_retirement_performed": false,
+    "legacy_deletion_performed": false
   }
 }
