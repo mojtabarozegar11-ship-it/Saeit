@@ -129,3 +129,25 @@ def test_expired_grant_does_not_spend(monkeypatch):
     ):
         weather_agent.generate_research_contents("Evidence", approval_grant_id=grant.pk)
     model.assert_not_called()
+
+
+def test_reissuing_grant_from_same_approval_cannot_charge_again(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "ci-test-key")
+    monkeypatch.setenv("OPENAI_WEATHER_CONTENT_MODEL", "gpt-5.6")
+    initial = _grant()
+    owner = initial.actor
+    # The underlying approval service permits several grants. Weather is
+    # stricter: only the first grant of that exact approved request is usable.
+    duplicate = ApprovalService().issue_grant(
+        initial.approval_id, owner.pk, initial.scope,
+    )
+    with patch("openai.OpenAI") as model, pytest.raises(
+        RuntimeError, match="WEATHER_PAID_GRANT_INVALID_OR_CONSUMED"
+    ):
+        weather_agent.generate_research_contents(
+            "Weather evidence", approval_grant_id=duplicate.pk,
+        )
+    model.assert_not_called()
+    duplicate.refresh_from_db()
+    assert duplicate.used_at is None
+    assert weather_agent._validate_paid_weather_grant(initial.pk)[0] == "gpt-5.6"
