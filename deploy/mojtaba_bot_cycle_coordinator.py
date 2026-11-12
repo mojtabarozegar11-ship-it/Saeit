@@ -117,15 +117,12 @@ def verified_git_artifact(kind: str, evidence: list[str]) -> bool:
                 or not rel):
             return False
         relative = Path(rel)
-        if relative.is_absolute():
+        if (relative.is_absolute() or rel != relative.as_posix()
+                or any(part in ("..", ".", ".git") for part in relative.parts)
+                or len(rel) > 512):
             return False
         checkout = Path.cwd().resolve()
-        destination = (checkout / relative).resolve()
-        if not destination.is_relative_to(checkout) or not destination.is_file():
-            return False
-        if hashlib.sha256(destination.read_bytes()).hexdigest() != digest.lower():
-            return False
-        # The named commit must belong to the current checked-out history.
+        # Check that the named commit is in this locally checked-out history.
         ancestor = subprocess.run(
             ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
             cwd=checkout, capture_output=True, timeout=15,
@@ -138,7 +135,23 @@ def verified_git_artifact(kind: str, evidence: list[str]) -> bool:
             cwd=checkout, capture_output=True, text=True, timeout=15,
         )
         paths = set(changed.stdout.splitlines())
-        return changed.returncode == 0 and relative.as_posix() in paths
+        if changed.returncode != 0 or relative.as_posix() not in paths:
+            return False
+        # Verify the bytes of the named immutable Git commit, NOT the HEAD
+        # worktree. A later authorized revision cannot erase past delivery
+        # evidence, and uncommitted local modifications cannot forge proof.
+        git_ref = f"{commit}:{relative.as_posix()}"
+        size = subprocess.run(
+            ["git", "cat-file", "-s", git_ref],
+            cwd=checkout, capture_output=True, text=True, timeout=15,
+        )
+        if size.returncode != 0 or int(size.stdout.strip()) > 64 * 1024 * 1024:
+            return False
+        blob = subprocess.run(
+            ["git", "show", git_ref],
+            cwd=checkout, capture_output=True, timeout=20,
+        )
+        return blob.returncode == 0 and hashlib.sha256(blob.stdout).hexdigest() == digest.lower()
     except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
         return False
 
