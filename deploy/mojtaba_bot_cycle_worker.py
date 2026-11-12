@@ -16,6 +16,24 @@ ALLOWED_CPANEL = {"relay_preflight","cpanel_preflight","django_check","django_mi
 def now():
     return datetime.now(timezone.utc).isoformat()
 
+def record_action(args, item, status, evidence):
+    cmd = [
+        sys.executable, "deploy/mojtaba_bot_cycle_coordinator.py",
+        "--state", args.state, "record",
+        "--cycle", args.cycle,
+        "--action-id", item["action_id"],
+        "--item", item["item"],
+        "--kind", item.get("kind", "unknown"),
+        "--before", item.get("before", "unrecorded"),
+        "--change", item.get("change", "worker execution"),
+        "--after", item.get("after", "unverified"),
+        "--status", status,
+    ]
+    for ref in evidence:
+        cmd.extend(["--evidence", ref])
+    subprocess.run(cmd, check=True, text=True, capture_output=True)
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--cycle", required=True, choices=list("ABCDE"))
@@ -46,10 +64,14 @@ def main():
                                 text=True,capture_output=True,timeout=120)
             evidence=item.get("evidence",[])
             evidence=evidence+[f"exit_code:{proc.returncode}"]
-            results.append({"action_id":aid,"status":"success" if proc.returncode==0 else "failed",
+            status = "success" if proc.returncode == 0 else "failed"
+            record_action(args, item, status, evidence)
+            results.append({"action_id":aid,"status":status,
                             "operation":operation,"evidence":evidence,
                             "output_tail":(proc.stdout+proc.stderr)[-1200:]})
         else:
+            evidence = item.get("evidence", [])
+            record_action(args, item, "blocked", evidence)
             results.append({"action_id":aid,"status":"blocked",
                             "reason":"no approved adapter for action kind","kind":kind})
     successful=sum(x["status"]=="success" for x in results)
