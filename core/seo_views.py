@@ -108,14 +108,55 @@ def sitemap_xml(request):
     # Independent cPanel sitemap sources are outside this Django fallback.
     host = request.get_host().split(":")[0].lower()
     if host in {"mojplaywin.com", "www.mojplaywin.com"}:
-        # The native store route exists for this host; the shared Product detail
-        # view deliberately returns 404 on MojPlayWin, so exclude product URLs.
-        url = "https://mojplaywin.com/store/"
-        item = f"<url><loc>{xml_escape(url)}</loc></url>"
-        return HttpResponse(
-            f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{item}</urlset>',
-            content_type="application/xml",
-        )
+        # WARNING: this is the Django-only emergency fallback, NOT the native
+        # cPanel/PHP 152+ page publisher. Do not deploy before proving routing.
+        # Never silently replace the native map with a one-page response.
+        from django.conf import settings
+        from pathlib import Path
+        from urllib.parse import urlsplit
+        from xml.etree import ElementTree
+
+        source = (Path(settings.BASE_DIR) / "docs/seo/evidence/"
+                  "mpw-public-152-page-reconstructed-baseline-20261112.xml")
+        try:
+            if source.is_symlink() or not source.is_file() or source.stat().st_size > 262144:
+                raise ValueError("MojPlayWin fallback baseline unavailable")
+            payload = source.read_bytes()
+            root = ElementTree.fromstring(payload)
+            ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+            if root.tag != ns + "urlset":
+                raise ValueError("MojPlayWin fallback is not a sitemap urlset")
+            urls = []
+            for entry in root.findall(ns + "url"):
+                loc = entry.findtext(ns + "loc")
+                parts = urlsplit(loc or "")
+                if (not loc or loc != loc.strip() or parts.scheme != "https"
+                        or parts.netloc != "mojplaywin.com" or parts.query
+                        or parts.fragment or not parts.path.startswith("/")
+                        or parts.username or parts.password
+                        or any(parts.path.startswith("/" + private + "/") for private
+                               in ("admin", "api", "checkout", "private", "download",
+                                   "account", "orders"))):
+                    raise ValueError("Nonpublic or foreign sitemap URL in fallback")
+                urls.append(loc)
+            required = {
+                "https://mojplaywin.com/store/",
+                "https://mojplaywin.com/store/product/72/",
+                "https://mojplaywin.com/store/product/225/",
+                "https://mojplaywin.com/store/product/879/",
+            }
+            if len(urls) < 152 or len(urls) != len(set(urls)) or not required.issubset(urls):
+                raise ValueError("Incomplete MojPlayWin fallback sitemap")
+        except (OSError, ValueError, ElementTree.ParseError):
+            # Transient 503 is safer than a valid-looking sitemap with 151
+            # missing pages. It must not be used as normal production routing.
+            response = HttpResponse("MojPlayWin fallback sitemap unavailable",
+                                    content_type="text/plain; charset=utf-8",
+                                    status=503)
+            response["Retry-After"] = "3600"
+            response["Cache-Control"] = "no-store"
+            return response
+        return HttpResponse(payload, content_type="application/xml")
     # Sitemap entries must be canonical public destinations, not redirects or gated pages.
     urls = ["/", "/company/", "/company/executive/", "/services/", "/amozeshgah/", "/research/", "/research/projects/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/gold/", "/vehicles/", "/marketing/", "/chain-stores/", "/agents/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/agriculture/free-tools/20261025/", "/auctions/", "/faremah/", "/ghanadi/", "/ghanadi/cafe-shiraz/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
