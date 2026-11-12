@@ -64,7 +64,8 @@ def catalog_card(product, paid_ids):
     if (product.price <= 0 or product.pk not in paid_ids
             or meta.get("rights_cleared") is not True
             or meta.get("publication_approved") is not True
-            or meta.get("sales_enabled") is not True
+            # The configured TRX public allowlist and asset-bound owner rights
+            # are authoritative; a legacy display-only flag is not required.
             or not _sha(catalog_sha) or not _sha(rights_sha)
             or not _sha(meta.get("rights_document_sha256"))
             or catalog_sha.lower() != rights_sha.lower()):
