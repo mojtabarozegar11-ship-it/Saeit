@@ -148,3 +148,74 @@ def test_canonical_specialist_knowledge_queue_is_not_mislabelled_economic_unknow
     knowledge.refresh_from_db()
     unknown.refresh_from_db()
     assert knowledge.status == unknown.status == "queued"
+
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("capability", [
+    "mojtrade_observation_ingest",
+    "mojtrade_demo_audit_ingest",
+])
+def test_mojtrade_specialist_exact_pair_shared_by_worker_and_audit(capability):
+    """Known internal MojTrade tasks must not look unsupported or become trades."""
+    from core.unified_bot_identity import non_factory_task_scope
+
+    owner = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", mission="One owner", active=True,
+    )
+    permitted, _ = AgentCapability.objects.get_or_create(
+        code=capability,
+        defaults={"name": "MojTrade internal evidence", "active": True},
+    )
+    permitted.agents.add(owner)
+    known = AgentTask.objects.create(
+        agent=owner, action_type=capability, capability_code=capability,
+        status="queued", risk_snapshot="low",
+    )
+    mismatched = AgentTask.objects.create(
+        agent=owner, action_type="unreviewed_external_broker_write",
+        capability_code=capability, status="queued", risk_snapshot="high",
+    )
+    before = (AgentTask.objects.count(), AuditLog.objects.count())
+    # Only the mismatched action enters the economic worker's unknown-task
+    # review. A capability-name match on its own never grants trade authority.
+    candidates = AgentTask.objects.filter(
+        agent=owner, status="queued",
+    ).filter(non_factory_task_scope())
+    assert list(candidates.values_list("pk", flat=True)) == [mismatched.pk]
+
+    output = StringIO()
+    call_command("audit_agent_fleet", stdout=output)
+    report = json.loads(output.getvalue())
+    row = next(a for a in report["agents"] if a["code"] == BOT_CODE)
+    assert row["tasks"]["queued_under_known_specialist_contract"] == 1
+    assert row["tasks"]["queued_without_known_handler"] == 1
+    assert report["summary"]["unsupported_known_queue_tasks"] == 1
+    assert report["summary"]["known_specialist_queued_not_live_attested"] == 1
+    assert report["live_scheduler_attested"] is False
+    assert report["verified_revenue_attested"] is False
+    assert (AgentTask.objects.count(), AuditLog.objects.count()) == before
+    known.refresh_from_db()
+    mismatched.refresh_from_db()
+    assert known.status == mismatched.status == "queued"
+
+
+@pytest.mark.django_db
+def test_legacy_mojtrade_name_does_not_gain_canonical_specialist_exemption():
+    """Old executor identities cannot borrow canonical module registration."""
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old executor",
+        mission="Legacy trading watcher", active=True,
+    )
+    AgentTask.objects.create(
+        agent=old, action_type="mojtrade_observation_ingest",
+        capability_code="mojtrade_observation_ingest", status="queued",
+    )
+    output = StringIO()
+    call_command("audit_agent_fleet", stdout=output)
+    report = json.loads(output.getvalue())
+    row = next(a for a in report["agents"] if a["code"] == old.code)
+    assert row["tasks"]["queued_under_known_specialist_contract"] == 0
+    assert row["tasks"]["queued_without_known_handler"] == 1
+    assert "queued_task_not_supported_by_known_executor" in row["findings"]
+    assert row["disposition"]["deactivation_or_deletion_authorized"] is False
