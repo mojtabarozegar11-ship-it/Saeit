@@ -17,8 +17,10 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 import subprocess
 import sys
+from urllib.parse import quote
 
 
 SCHEMA = "mojtaba.bot.ai.live-topology-observation.v1"
@@ -166,6 +168,103 @@ def safe_source_digests(home: Path, role: str) -> dict:
     return result
 
 
+PHP_SITE_CODES = frozenset({
+    "master", "content", "seo", "commerce", "agriculture", "research",
+    "economic", "weather", "quality", "media", "security",
+})
+PHP_SITE_TABLES = frozenset({
+    "agents", "runs", "site_work_state", "site_work_outputs",
+    "site_work_generation_evidence",
+})
+
+
+def cpanel_php_registry_snapshot(home: Path) -> dict:
+    """Read the site's known private SQLite without making or mutating files.
+
+    SQLite mode=ro,immutable=1 never creates journal/WAL/SHM files; if a
+    WAL sidecar is present, fail closed rather than reading a possibly stale
+    main DB and calling the result complete.
+    """
+    root = home / ".private" / "zomorod-business"
+    db = root / "site_agents.sqlite3"
+    base = {
+        "state": "unknown_not_observed",
+        "path_scope": "private_site_agents_sqlite3_only",
+        "read_only_immutable": True,
+        "database_state_proves_live_workers": False,
+        "live_scheduler_verified": False,
+        "records": None,
+        "known_source_roles": len(PHP_SITE_CODES),
+        "known_roles_found": None,
+        "enabled_count": None,
+        "agent_roles": [],
+        "run_status_counts": {},
+        "recent_worker_output_status_counts": {},
+        "incomplete_wal_snapshot": False,
+    }
+    try:
+        if (home.is_symlink() or (home / ".private").is_symlink()
+                or root.is_symlink() or db.is_symlink()):
+            return {**base, "state": "unsafe_symlink"}
+        if not db.is_file():
+            return {**base, "state": "private_database_not_observed"}
+        if db.stat().st_size <= 0 or db.stat().st_size > 512 * 1024 * 1024:
+            return {**base, "state": "unsupported_database_size"}
+        if (root / (db.name + "-wal")).exists():
+            return {**base, "state": "wal_present_snapshot_not_consistent",
+                    "incomplete_wal_snapshot": True}
+    except OSError:
+        return {**base, "state": "database_metadata_unavailable"}
+
+    # No PRAGMA journal_mode change and no write-capable handle; only approved
+    # aggregate metadata leaves the host. A missing table is not zero rows.
+    uri = "file:" + quote(str(db), safe="/") + "?mode=ro&immutable=1"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+            conn.execute("PRAGMA query_only=ON")
+            tables = set(
+                name for (name,) in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ) if name in PHP_SITE_TABLES
+            )
+            if "agents" not in tables:
+                return {**base, "state": "agents_table_unavailable"}
+            roles = [
+                (str(code), int(enabled)) for code, enabled in
+                conn.execute("SELECT code, enabled FROM agents ORDER BY code")
+            ]
+            known = [
+                {"code": code, "enabled": enabled == 1}
+                for code, enabled in roles if code in PHP_SITE_CODES
+            ]
+            unknown_rows = sum(code not in PHP_SITE_CODES for code, _ in roles)
+            result = {
+                **base,
+                "state": "source_registry_snapshot_only",
+                "records": len(roles),
+                "known_roles_found": len(known),
+                "enabled_count": sum(enabled == 1 for _, enabled in roles),
+                "unknown_code_records": unknown_rows,
+                "agent_roles": known,
+            }
+            if "runs" in tables:
+                result["run_status_counts"] = {
+                    str(status)[:32]: int(count) for status, count in
+                    conn.execute("SELECT status, COUNT(*) FROM runs GROUP BY status")
+                }
+            if "site_work_outputs" in tables:
+                result["recent_worker_output_status_counts"] = {
+                    str(status)[:32]: int(count) for status, count in
+                    conn.execute(
+                        "SELECT status, COUNT(*) FROM site_work_outputs GROUP BY status"
+                    )
+                }
+            result["missing_expected_tables"] = sorted(PHP_SITE_TABLES - tables)
+            return result
+    except (sqlite3.DatabaseError, OSError, ValueError, TypeError):
+        return {**base, "state": "sqlite_read_failed"}
+
+
 def collect(role: str, *, home: Path | None = None, username: str | None = None) -> dict:
     if role not in TARGETS:
         raise ValueError("unknown host role")
@@ -205,6 +304,10 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "system_services_inventoried": False,
         },
         "installed_source_digests": safe_source_digests(root, role),
+        "private_php_site_registry": (
+            cpanel_php_registry_snapshot(root) if role == "cpanel"
+            else {"state": "not_applicable", "database_state_proves_live_workers": False}
+        ),
         "attestation": {
             "source_code_deployment_matches_pr": False,
             "canonical_worker_executed": False,
