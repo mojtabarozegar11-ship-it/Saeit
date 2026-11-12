@@ -23,7 +23,7 @@ jobs:
           from html.parser import HTMLParser
           f=Path('public/auctions/347/index.html')
           s=f.read_text(encoding='utf-8')
-          for token in ('<html lang="fa" dir="rtl">','مزایده شماره ۳۴۶','zomorodmelal@gmail.com','۵ تا ۱۰ هر ماه','با اعلام قبلی','rel="canonical"','application/ld+json','@page{size:A4'):
+          for token in ('<html lang="fa" dir="rtl">','فراخوان شماره ۳۴۷','zomorodmelal@gmail.com','۵ تا ۱۰ هر ماه','با اعلام قبلی','rel="canonical"','application/ld+json','@page{size:A4'):
               assert token in s, token
           assert '{%' not in s and '<script src=' not in s and 'https://zomorodmelal.ir/auctions/347/' in s
           assert s.count('</html>')==1
@@ -116,7 +116,7 @@ jobs:
           verified=no
           for attempt in 1 2 3 4; do
             status="$(curl -sSL --max-time 18 -o "$d/public.html" -w '%{http_code}' "https://zomorodmelal.ir/auctions/347/?verify=$GITHUB_RUN_ID-$attempt" || true)"
-            if test "$status" = 200 && grep -Fq 'مزایده شماره ۳۴۶' "$d/public.html" && grep -Fq 'zomorodmelal@gmail.com' "$d/public.html" && grep -Fq '۵ تا ۱۰ هر ماه' "$d/public.html"; then verified=yes; break; fi
+            if test "$status" = 200 && grep -Fq 'فراخوان شماره ۳۴۷' "$d/public.html" && grep -Fq 'zomorodmelal@gmail.com' "$d/public.html" && grep -Fq '۵ تا ۱۰ هر ماه' "$d/public.html"; then verified=yes; break; fi
             sleep 2
           done
           after_auctions="$(curl -sSL --max-time 15 -o "$d/after_auctions.html" -w '%{http_code}' https://zomorodmelal.ir/auctions/ || true)"
