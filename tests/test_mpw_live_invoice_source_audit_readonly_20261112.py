@@ -132,6 +132,8 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
             "<textarea id='notification_email'></textarea>",
             '<select autocomplete="email" name="contact"></select>',
             '<input name=customer_email type=hidden>',
+            '<button name="buyer_email" type="submit">Buy</button>',
+            '<button type="submit" id="contact-email">Buy</button>',
         ):
             with self.subTest(control=control):
                 p = self.root / AUDIT.TEMPLATE
