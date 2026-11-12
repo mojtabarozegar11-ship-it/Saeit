@@ -18,7 +18,8 @@ class ApprovalService:
             raise ValueError("Approval is no longer pending")
         if not isinstance(approved, bool):
             raise ValueError("Approval decision must be a boolean")
-        if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
+        # Every decision requires the designated owner, including direct service calls.
+        if actor_type != "owner" or actor_id is None or approval.requested_by_id != actor_id:
             raise ValueError("Only the designated owner can make this approval decision")
         if approval.target_type == "ChatOperation":
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
