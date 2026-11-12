@@ -93,8 +93,10 @@ def preflight():
         raise RuntimeError('Live root hash differs from verified baseline; fail closed')
     if b'nexus-home' in original:
         raise RuntimeError('NEXUS already installed; avoid duplicate')
-    if ARCHIVE.exists() or ARCHIVE.is_symlink():
-        raise RuntimeError('Archive location already occupied; do not overwrite')
+    if ARCHIVE.is_symlink() or (ARCHIVE.parent.exists() and (not ARCHIVE.parent.is_dir() or ARCHIVE.parent.is_symlink())):
+        raise RuntimeError('Unsafe archive path')
+    if ARCHIVE.exists() and (not ARCHIVE.is_file() or sha(ARCHIVE.read_bytes()) != sha(original)):
+        raise RuntimeError('Previously saved archive differs from baseline')
     if CSS.exists() or CSS.is_symlink():
         raise RuntimeError('New asset path already exists; do not overwrite')
     # These assets are referenced on existing live pages and must be in the same site.
@@ -175,11 +177,18 @@ def apply(run: str):
             raise RuntimeError('Homepage changed after preflight')
         html, css = read_candidate()
         archive_created = False
+        archive_dir_created = False
         css_created = False
         try:
-            ARCHIVE.parent.mkdir(mode=0o755, parents=True, exist_ok=False)
-            atomic(ARCHIVE, before, 0o644)
-            archive_created = True
+            if ARCHIVE.exists():
+                if sha(ARCHIVE.read_bytes()) != baseline['original']:
+                    raise RuntimeError('Previously saved archive changed')
+            else:
+                if not ARCHIVE.parent.exists():
+                    ARCHIVE.parent.mkdir(mode=0o755, parents=True, exist_ok=False)
+                    archive_dir_created = True
+                atomic(ARCHIVE, before, 0o644)
+                archive_created = True
             atomic(CSS, css, 0o644)
             css_created = True
             atomic(HOME, html, mode)
@@ -191,7 +200,8 @@ def apply(run: str):
                 CSS.unlink()
             if archive_created and ARCHIVE.is_file() and sha(ARCHIVE.read_bytes()) == baseline['original']:
                 ARCHIVE.unlink()
-                ARCHIVE.parent.rmdir()
+                if archive_dir_created:
+                    ARCHIVE.parent.rmdir()
             raise
     print('NEXUS_HOMEPAGE_APPLIED=YES')
 

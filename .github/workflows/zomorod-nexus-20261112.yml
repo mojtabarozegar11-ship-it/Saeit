@@ -174,7 +174,7 @@ jobs:
   verify-browser:
     needs: publish
     if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - name: Live responsive browser smoke test
