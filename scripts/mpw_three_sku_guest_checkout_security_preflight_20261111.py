@@ -83,10 +83,9 @@ def audit_source(source: str) -> dict:
             or "'unsafe-inline'" in script_directives[0]
             or "'unsafe-eval'" in script_directives[0]):
         raise RuntimeError('GUEST_CSP_SECURITY_DIRECTIVES_INCOMPLETE')
-    # A CSP/rights pass is not evidence that the buyer has a usable recovery
-    # email. Inspect the specific pre-invoice identity functions independently.
-    # These are indicators only; even positive source indicators would need a
-    # database and mailbox delivery proof before declaring recovery operational.
+    # Owner policy: no buyer email at all for new guest checkout. Inspect
+    # reachable identity helpers, not unrelated historic recovery functions.
+    # CSP/rights checks remain mandatory and independent of this policy.
     funcs = {node.name: node for node in tree.body
              if isinstance(node, ast.FunctionDef)}
     # Follow only helpers that the guest identity path actually calls.  Email
@@ -164,6 +163,17 @@ def audit_source(source: str) -> dict:
         for fn in identity_nodes for node in ast.walk(fn))
     email_before_invoice_source_indicators = (
         email_validator_seen and post_email_seen and email_stored_seen)
+    email_recovery_wired = any(
+        (isinstance(node, ast.ImportFrom)
+         and node.module == 'services.mpw_trx_email_recovery')
+        or (isinstance(node, ast.Name) and node.id == 'bound_checkout')
+        for node in ast.walk(tree))
+    # Missing email is now the *required* guest state, not a sales blocker.
+    # Any visible attempt to collect/store/validate it in guest checkout
+    # blocks the release. Historical email-claim code is not inspected here.
+    guest_email_policy_violation = (
+        email_validator_seen or post_email_seen or email_stored_seen
+        or email_recovery_wired)
     return {'guest_handler_found': True, 'commercial_db_checked': True,
             'merchant_receiver_checked': True, 'rights_gate_checked': True,
             'strict_guest_csp': True, 'orders_created': 0, 'payments_created': 0,
@@ -171,10 +181,12 @@ def audit_source(source: str) -> dict:
             'buyer_email_post_read_in_identity_source': post_email_seen,
             'buyer_email_stored_in_identity_source': email_stored_seen,
             'buyer_email_before_invoice_source_indicators': email_before_invoice_source_indicators,
-            'email_based_recovery_end_to_end': 'not_examined',
+            'guest_email_policy': 'no_buyer_email',
+            'guest_email_recovery_wiring_in_adapter': email_recovery_wired,
+            'email_based_recovery_end_to_end': 'disabled_for_new_guest_orders',
             'checkout_template_email_input': 'not_examined',
-            'commercial_email_block': None if email_before_invoice_source_indicators
-                else 'BUYER_EMAIL_NOT_ENFORCED_BY_GUEST_IDENTITY_SOURCE',
+            'commercial_email_block': 'GUEST_EMAIL_COLLECTION_OR_RECOVERY_WIRING'
+                if guest_email_policy_violation else None,
             'read_only': True}
 
 
