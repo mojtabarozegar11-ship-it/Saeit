@@ -28,6 +28,8 @@ jobs:
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/genetics-center.php
           bash -n scripts/zomorod_business_genetics_guarded_install.sh
+          bash -n scripts/zomorod_business_genetics_readonly_preflight.sh
+          test -s scripts/zomorod_business_genetics_readonly_preflight.sh
           test -s content/zomorod-business/app.php
           test -s content/zomorod-business/genetics-center.php
           test -s scripts/zomorod_business_genetics_guarded_install.sh
@@ -94,6 +96,8 @@ jobs:
           dossier_hash="$(sha256sum "$source_dir/genetics-center.php" | awk '{print $1}')"
           d="$RELAY_CONFIG"
           stage="/home/zomorod2/.private/zomorod-business/.stage-$GITHUB_SHA"
+          # This command reads only; it must pass BEFORE creating any staging files.
+          ssh -T -F "$d/config" saeit-cpanel bash -s -- "$EXPECTED_APP" "$EXPECTED_DOSSIER" < scripts/zomorod_business_genetics_readonly_preflight.sh
           # Refuse to overwrite any earlier staging directory.
           ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/app.php'" < "$source_dir/app.php"
