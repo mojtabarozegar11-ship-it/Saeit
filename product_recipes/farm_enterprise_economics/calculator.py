@@ -173,6 +173,17 @@ def enterprise(entry):
         "contribution_margin_total": money(contribution),
         "contribution_per_unit": money(contribution_unit),
         "operating_profit": money(operating_profit),
+        # Distinguish operating margin from contribution: fixed costs affect
+        # profitability but not contribution, and zero-revenue scenarios have
+        # no meaningful percentage denominator.
+        "contribution_margin_percent": (
+            str((contribution / revenue * 100).quantize(Decimal("0.01")))
+            if revenue > 0 else None
+        ),
+        "operating_profit_margin_percent": (
+            str((operating_profit / revenue * 100).quantize(Decimal("0.01")))
+            if revenue > 0 else None
+        ),
         "break_even_units": break_even,
         "break_even_reachable": contribution_unit > 0,
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
