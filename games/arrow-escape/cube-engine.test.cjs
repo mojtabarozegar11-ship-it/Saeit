@@ -26,4 +26,18 @@ for (let level = 1; level <= 250; level++) {
   }
   assert.deepEqual(Cube.solution(puzzle, removed), []);
 }
+const malformed = [
+  [Number.NaN, 1], [Infinity, 1], [-Infinity, 1],
+  ['Infinity', 1], ['not-a-level', 1],
+  [0, 1], [-17, 1], [2.8, 2],
+  [1e99, 1000000],
+  [{valueOf() { throw new Error('hostile level input'); }}, 1],
+];
+for (const [input, expected] of malformed) {
+  const board = Cube.generate(input);
+  assert.equal(board.level, expected, 'invalid saved 3D level');
+  assert.equal(board.faces.length, 6);
+  assert.equal(Cube.solution(board).length, board.total);
+}
+console.log('ARROW_CUBE_3D_10_MALFORMED_LEVELS=PASS');
 console.log('ARROW_CUBE_3D_250_LEVELS_FULL_COVERAGE_AND_ALL_EXIT_MOVES=PASS');
