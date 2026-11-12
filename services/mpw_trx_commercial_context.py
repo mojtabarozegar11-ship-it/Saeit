@@ -106,9 +106,17 @@ def private_paid_stream_matches_approved(product, stream):
     import os
     import stat
 
-    if not rights_cleared_for_sale(product):
+    metadata=getattr(product,"metadata",None)
+    # Previously paid orders survive storefront withdrawal. Publishing a new
+    # offer requires publication_approved; delivering an already-paid item
+    # requires continuing rights clearance and the exact rights-bound bytes.
+    if (type(metadata) is not dict or metadata.get("rights_cleared") is not True
+        or not _sha256_hex(metadata.get("sha256"))
+        or not _sha256_hex(metadata.get("rights_asset_sha256"))
+        or not _sha256_hex(metadata.get("rights_document_sha256"))
+        or metadata["sha256"].lower()!=metadata["rights_asset_sha256"].lower()):
         return False
-    expected=product.metadata["sha256"].lower()
+    expected=metadata["sha256"].lower()
     try:
         before=os.fstat(stream.fileno())
         if (not stat.S_ISREG(before.st_mode)
