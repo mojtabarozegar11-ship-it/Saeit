@@ -207,15 +207,42 @@ https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/MarketHours/
 Historical bars can be requested using `ProtoOAGetTrendbarsReq`:
 https://help.ctrader.com/open-api/symbol-data/
 
-**Remaining blocker:** Obtain and reconcile actual LiteFinance
-XAUUSD symbol-specific schedule, holidays, timestamps and bid/ask
-quotes from the authorized account before accepting any claimed
-calendar as real evidence. Do not fabricate closed-market prices
-or discard losing intervals to make a strategy profitable. A signal
-issued just before an accepted market closure is also discarded at
-the next reopening rather than optimistically filled as an immediate
-next-bar order. Open positions remain exposed to potential gap
-loss; overnight financing is still not modeled or verified.
+**Independent official source check (2026-11-12):**
+LiteFinance's public XAUUSD instrument-details page currently displays
+Monday 01:06–23:59, Tuesday–Friday 01:02–23:59 and no weekend trading.
+These are **terminal/server schedule times, NOT UTC**. The 2023
+LiteFinance session notice listed Monday opening 01:05; the updated
+instrument page differs by a minute. Never extrapolate either
+schedule into UTC dates without the actual terminal's UTC offset,
+daylight-saving policy and holiday exceptions.
+
+Official public instrument details:
+https://my.litefinance.org/de/trading/info?symbol=XAUUSD
+
+Public XAUUSD contract page reports **100 troy ounces per standard lot**
+and current instrument listing a **0.01-lot minimum and volume step**,
+equivalent to a nominal **1-ounce minimum and step**. This does not
+prove the account's leverage, slippage, margin or order permissions.
+The synthetic test settings use 0.01-ounce granularity only as a
+mathematical fixture, **not a tradable LiteFinance volume**. Production
+position sizing must explicitly convert between contract lots and
+ounces using the authenticated account's specifications.
+
+Official contract specifications:
+https://www.litefinance.org/trading/trading-instruments/commodities/
+Official historical notice:
+https://www.litefinance.org/company/detail/news/103358/
+
+**Remaining blocker:** Obtain and reconcile the exact LiteFinance
+server offset, XAUUSD symbol-specific schedule, holidays, timestamps,
+actual contract/account lot and step, and historical bid/ask quotes from
+the authorized account before accepting any claimed calendar as real
+evidence. Do not fabricate closed-market prices or discard losing
+intervals to make a strategy profitable. A signal issued just before
+an accepted market closure is discarded at the next reopening rather
+than optimistically filled as an immediate next-bar order. Open
+positions remain exposed to potential gap loss; overnight financing
+is still not modeled or verified.
 
 The output keeps each fold's all-candidate training scores, selected
 strategy (or none), embargo and untouched future-test results, plus
