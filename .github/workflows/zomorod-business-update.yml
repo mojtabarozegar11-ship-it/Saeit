@@ -11,6 +11,10 @@ on:
         description: 'SHA256 of live genetics-center.php, or ABSENT if independently verified missing'
         required: true
         type: string
+      verified_cpanel_ssh_port:
+        description: 'Confirmed direct cPanel SSH port supplied by owner/provider (no guessed defaults)'
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -33,37 +37,34 @@ jobs:
           test -s content/zomorod-business/app.php
           test -s content/zomorod-business/genetics-center.php
           test -s scripts/zomorod_business_genetics_guarded_install.sh
-      - name: Prepare pinned relay
+      - name: Prepare verified direct cPanel SSH connection (no VPS or relay)
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          PORT: ${{ inputs.verified_cpanel_ssh_port }}
         run: |
           set -euo pipefail
           umask 077
+          [[ "$PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'DIRECT_CPANEL_PORT=invalid'; exit 2; }
+          port="$((10#$PORT))"
+          (( port >= 1 && port <= 65535 )) || { echo 'DIRECT_CPANEL_PORT=out_of_range'; exit 2; }
+          [[ -n "$HOST_KEY" ]] || { echo 'DIRECT_CPANEL_KEY=missing'; exit 2; }
           d="$RUNNER_TEMP/zomorod-business-update"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
-          chmod 600 "$d"/*.key
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          chmod 600 "$d/host.key"
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh-keyscan -T 10 -p "$port" -t ed25519 zohal.pws-dns.net > "$d/host.known" 2>/dev/null
+          test -s "$d/host.known"
+          actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$actual" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'DIRECT_CPANEL_HOSTKEY=unverified'; exit 3; }
           cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
             HostName zohal.pws-dns.net
             User zomorod2
-            Port 1396
+            Port $port
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
@@ -74,12 +75,10 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          scan="$(ssh -T -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$d/host.known"
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          echo "PINNED_RELAY=verified"
-          echo "RELAY_CONFIG=$d" >> "$GITHUB_ENV"
+          # Authenticated no-side-effect probe; never stage unless this succeeds.
+          ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/.private/zomorod-business'
+          echo 'DIRECT_CPANEL=verified'
+          echo "DIRECT_CONFIG=$d" >> "$GITHUB_ENV"
       - name: Stage and publish the verified private files only
         shell: bash
         env:
@@ -94,7 +93,7 @@ jobs:
           source_dir=content/zomorod-business
           app_hash="$(sha256sum "$source_dir/app.php" | awk '{print $1}')"
           dossier_hash="$(sha256sum "$source_dir/genetics-center.php" | awk '{print $1}')"
-          d="$RELAY_CONFIG"
+          d="$DIRECT_CONFIG"
           stage="/home/zomorod2/.private/zomorod-business/.stage-$GITHUB_SHA"
           # This command reads only; it must pass BEFORE creating any staging files.
           ssh -T -F "$d/config" saeit-cpanel bash -s -- "$EXPECTED_APP" "$EXPECTED_DOSSIER" < scripts/zomorod_business_genetics_readonly_preflight.sh
