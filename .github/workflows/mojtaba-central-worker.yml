@@ -1,0 +1,38 @@
+name: mojtaba.bot.ai central cycle worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      cycle:
+        description: "Cycle A, B, C, D or E"
+        required: true
+        type: choice
+        options: [A, B, C, D, E]
+      queue_path:
+        description: "Repository-relative JSON queue containing real actions"
+        required: true
+        default: "runtime/central_cycle_queue.json"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  central-worker:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Execute evidence-gated cycle worker
+        env:
+          CYCLE: ${{ inputs.cycle }}
+          QUEUE_PATH: ${{ inputs.queue_path }}
+        run: |
+          set -euo pipefail
+          test -f "$QUEUE_PATH"
+          python3 deploy/mojtaba_bot_cycle_worker.py             --cycle "$CYCLE"             --queue "$QUEUE_PATH"             --state "runtime/central_cycle_state.json"
