@@ -91,7 +91,9 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "STAGING_STORE_ANALYTICS_GUARD_ABSENT"):
             validate_store_source(broken)
         broken = original.replace(
-            b'return render(request,"mojplaywin/store.html",{"products":PRODUCTS})',
+            (b'return render(request,"mojplaywin/store.html",{\n'
+             b'  "products":PRODUCTS, "verified_catalog":verified\n'
+             b' })'),
             b'return None', 1
         )
         self.assertNotEqual(broken, original)
