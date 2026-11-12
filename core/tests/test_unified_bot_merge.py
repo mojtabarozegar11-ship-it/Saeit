@@ -24,6 +24,11 @@ def test_one_economic_and_factory_bot_is_seeded_with_bounded_permissions():
     assert {"income_market_research", "factory_native_review", "factory_f41_private_build"}.issubset(
         set(owner.capabilities.values_list("code", flat=True))
     )
+    assert {"research-write-review", "content-editorial-draft"}.issubset(
+        set(owner.capabilities.values_list("code", flat=True))
+    )
+    assert module_for_capability("research-write-review") == "knowledge_library"
+    assert module_for_capability("content-editorial-draft") == "content_editorial"
     assert not owner.capabilities.filter(code__in=["trade", "payment", "deploy", "withdraw"]).exists()
     assert module_for_capability("factory_native_review") == "private_factory"
     assert module_for_capability("income_revenue_verify") == "economic_operations"
@@ -172,3 +177,51 @@ def test_factory_queue_is_not_misreported_as_unknown_economic_capability():
     call_command("run_economic_worker", stdout=out)
     assert "IDLE: no queued economic task." in out.getvalue()
     assert "BLOCKED_UNSUPPORTED" not in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_knowledge_task_under_canonical_owner_is_not_executed_as_economic_work():
+    seed()
+    owner = Agent.objects.get(code=BOT_CODE)
+    knowledge = AgentTask.objects.create(
+        agent=owner, action_type="knowledge_content_generation",
+        capability_code="research-write-review", risk_snapshot="high",
+        status="queued", input_data={"approval_required": True, "paid_model": True},
+    )
+    output = StringIO()
+    call_command("run_economic_worker", stdout=output)
+    assert "IDLE: no queued economic task." in output.getvalue()
+    assert "BLOCKED_UNSUPPORTED" not in output.getvalue()
+    knowledge.refresh_from_db()
+    assert knowledge.status == "queued"
+    assert knowledge.attempt_count == 0
+
+
+@pytest.mark.django_db
+def test_mismatched_editorial_task_is_not_hidden_from_unknown_work_review():
+    seed()
+    owner = Agent.objects.get(code=BOT_CODE)
+    bad = AgentTask.objects.create(
+        agent=owner, action_type="unexpected_external_action",
+        capability_code="research-write-review", status="queued",
+    )
+    output = StringIO()
+    call_command("run_economic_worker", stdout=output)
+    assert f"BLOCKED_UNSUPPORTED: task={bad.pk}" in output.getvalue()
+    bad.refresh_from_db()
+    assert bad.status == "queued"
+
+
+@pytest.mark.django_db
+def test_known_knowledge_queue_does_not_appear_as_economic_brain_continue():
+    seed()
+    owner = Agent.objects.get(code=BOT_CODE)
+    job = AgentTask.objects.create(
+        agent=owner, action_type="knowledge_content_generation",
+        capability_code="research-write-review", status="queued",
+    )
+    output = StringIO()
+    call_command("online_income_cycle", "--dry-run", stdout=output)
+    assert f"BRAIN_CONTINUE task={job.pk}" not in output.getvalue()
+    job.refresh_from_db()
+    assert job.status == "queued"
