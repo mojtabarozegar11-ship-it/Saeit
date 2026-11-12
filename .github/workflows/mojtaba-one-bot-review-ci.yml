@@ -56,6 +56,7 @@ jobs:
             core/tests/test_weather_agent_assignment.py \
             core/tests/test_weather_paid_grants.py \
             core/tests/test_unified_bot_merge.py \
+            tests/test_approval_security.py \
             core/tests/test_knowledge_agent_generate.py \
             core/tests/test_consolidate_legacy_agents.py \
             core/tests.py \
