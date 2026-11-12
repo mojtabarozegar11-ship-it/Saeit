@@ -105,6 +105,9 @@ jobs:
               assert value["attestation"]["automatic_deactivation_authorized"] is False
               assert value["attestation"]["handoff_verified"] is False
               # Render only a controlled summary, not raw host data.
+              php = value.get("private_php_site_registry", {})
+              if not isinstance(php, dict):
+                  raise SystemExit("MOJTABA_TOPOLOGY_PHP_REGISTRY_INVALID")
               seen[role] = {
                   "cron_state": value["cron"]["state"],
                   "cron_entries_observed": value["cron"]["enumerated_entries"],
@@ -116,6 +119,15 @@ jobs:
                       for row in value["installed_source_digests"].values()
                   ),
                   "live_handoff_attested": False,
+                  "php_registry_state": php.get("state", "unknown_not_observed"),
+                  "php_registry_rows": php.get("records"),
+                  "php_known_roles_found": php.get("known_roles_found"),
+                  "php_enabled_rows": php.get("enabled_count"),
+                  "php_run_status_counts": php.get("run_status_counts", {}),
+                  "php_worker_output_status_counts": php.get(
+                      "recent_worker_output_status_counts", {}
+                  ),
+                  "php_registry_proves_live_process": False,
               }
           print("MOJTABA_TWO_HOST_OBSERVATION=" + json.dumps(
               seen, sort_keys=True, separators=(",", ":"),
