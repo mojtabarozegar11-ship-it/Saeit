@@ -92,6 +92,24 @@ for clause in ('GUARD=app_drift','GUARD=dossier_drift','source.backup(target','B
     assert clause in guard_source
 print('GENETICS_DEPLOY_GUARD_SYNTHETIC=PASS')
 print('GENETICS_DOSSIER_AUTH_READONLY_SYNTHETIC=PASS')
+# An explicit admin action registers a planned project with zero budget exactly once.
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    financial_before=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('journal_entries','journal_lines','invoices','invoice_payments')]
+request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
+recorded=request('GET','genetics_center')
+assert 'ثبت‌شده با شناسه داخلی' in recorded
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    project_rows=check.execute("SELECT title,owner,state,budget FROM projects WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'").fetchall()
+    assert len(project_rows)==1,project_rows
+    assert project_rows[0][2:] == ('planned',0),project_rows
+    assert check.execute("SELECT COUNT(*) FROM audit_events WHERE subject='genetics-project'").fetchone()[0]==1
+request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
+with sqlite3.connect(str(private/'management.sqlite3')) as check:
+    assert check.execute("SELECT COUNT(*) FROM projects WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'").fetchone()[0]==1
+    assert check.execute("SELECT COUNT(*) FROM audit_events WHERE subject='genetics-project'").fetchone()[0]==1
+    financial_after=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('journal_entries','journal_lines','invoices','invoice_payments')]
+assert financial_before==financial_after,('Registration wrote accounting data',financial_before,financial_after)
+print('GENETICS_PROJECT_ADMIN_IDEMPOTENT_ZERO_BUDGET=PASS')
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
 request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18'})
@@ -115,9 +133,12 @@ with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
 blocked=request('POST','projects',{'csrf':csrf,'action':'project','title':'Must not be created','owner':'Synthetic','state':'planned','budget':'0'})
 assert 'درخواست انجام نشد' in blocked
-assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
 viewer_dossier=request('GET','genetics_center')
 assert 'ZM-AGRC-GEN-1405-001' in viewer_dossier
+viewer_forbidden=request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
+assert 'درخواست انجام نشد' in viewer_forbidden
+assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
 assert 'درخواست انجام نشد' in request('GET','users')
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
