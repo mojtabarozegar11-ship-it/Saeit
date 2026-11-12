@@ -20,6 +20,8 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from contextlib import contextmanager
+import fcntl
 
 # Neither this script nor its child ledger processes may leave untracked
 # Python bytecode in an otherwise clean authorized source checkout.
@@ -97,11 +99,39 @@ def check_markdown(content: str) -> None:
         raise ExecutionError("markdown requires at least two substantive sections")
 
 
-def validate_jobs(cycle: str, jobs: object) -> list[dict]:
+def previous_batch_commit(cycle: str, run_id: str, number: int) -> str | None:
+    """Read the exact prior local batch, never trust an arbitrary file."""
+    message = ("C06 " + cycle + " real deliverables " + run_id +
+               " batch " + str(number) + "/5")
+    matches = git("log", "--format=%H", "--fixed-strings",
+                  "--grep=" + message).decode().splitlines()
+    if len(matches) > 1:
+        raise ExecutionError("multiple commits claim the same batch identity")
+    return matches[0] if matches else None
+
+
+@contextmanager
+def checkout_lock():
+    """Serialize local writers; automatically release on crash/restart."""
+    raw = git("rev-parse", "--git-path", "c06-batch-executor.lock").decode().strip()
+    lock_path = Path(raw)
+    if not lock_path.is_absolute():
+        lock_path = ROOT / lock_path
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def validate_jobs(cycle: str, jobs: object, *, resume_run_id: str | None = None) -> list[dict]:
     if not isinstance(jobs, list) or not 1 <= len(jobs) <= TARGET:
         raise ExecutionError("1–50 distinct authored jobs required")
     actions = []
     seen_ids, seen_paths, seen_contents = set(), set(), set()
+    history = {}
     fields = {"action_id", "path", "content", "kind", "before", "change",
               "after", "expected_sha256", "source_paths"}
     for index, item in enumerate(jobs):
@@ -141,13 +171,32 @@ def validate_jobs(cycle: str, jobs: object) -> list[dict]:
         seen_contents.add(fingerprint)
         existing = dest.read_bytes() if dest.is_file() else None
         expected = item["expected_sha256"]
-        if existing is None:
-            if expected is not None:
-                raise ExecutionError("new artifact must have null baseline SHA")
-        elif (not isinstance(expected, str)
-              or sha(existing) != expected.lower()
-              or existing == produced):
-            raise ExecutionError("stale baseline or no meaningful change")
+        previously_committed = None
+        if resume_run_id is not None:
+            batch_number = 1 + index // BATCH_SIZE
+            if batch_number not in history:
+                history[batch_number] = previous_batch_commit(
+                    cycle, resume_run_id, batch_number
+                )
+            proposed_commit = history[batch_number]
+            if proposed_commit is not None:
+                proof = ["commit:" + proposed_commit, "path:" + relative,
+                         "sha256:" + fingerprint]
+                if (existing == produced
+                        and verified_git_artifact(item["kind"], proof)):
+                    previously_committed = proposed_commit
+                else:
+                    raise ExecutionError(
+                        "previous batch commit does not match this authored job"
+                    )
+        if previously_committed is None:
+            if existing is None:
+                if expected is not None:
+                    raise ExecutionError("new artifact must have null baseline SHA")
+            elif (not isinstance(expected, str)
+                  or sha(existing) != expected.lower()
+                  or existing == produced):
+                raise ExecutionError("stale baseline or no meaningful change")
         for field in ("before", "change", "after"):
             value = item[field]
             if not isinstance(value, str) or not 12 <= len(value.strip()) <= 2000:
@@ -165,6 +214,7 @@ def validate_jobs(cycle: str, jobs: object) -> list[dict]:
                 raise ExecutionError("source must be tracked")
         actions.append({
             **item, "digest": fingerprint, "bytes": produced,
+            "previous_commit": previously_committed,
         })
     return actions
 
@@ -236,11 +286,13 @@ def commit_batch(cycle: str, run_id: str, number: int,
     return commit, receipts
 
 
-def execute(cycle: str, run_id: str, candidates: list[dict],
-            *, commit_local: bool, expected_branch: str,
-            state_path: str) -> dict:
+def _execute_locked(cycle: str, run_id: str, candidates: list[dict],
+                    *, commit_local: bool, expected_branch: str,
+                    state_path: str, resume: bool) -> dict:
     verify_local_context(expected_branch)
-    actions = validate_jobs(cycle, candidates)
+    actions = validate_jobs(
+        cycle, candidates, resume_run_id=run_id if resume else None
+    )
     if not re.fullmatch(cycle + r"-[A-Za-z0-9_.-]{1,110}", run_id):
         raise ExecutionError("invalid new run ID")
     manifest_path = ("runtime/cycle_receipts/" + cycle +
@@ -251,12 +303,31 @@ def execute(cycle: str, run_id: str, candidates: list[dict],
         return {"cycle": cycle, "run_id": run_id, "mode": "validate_only",
                 "ready": len(actions), "target": TARGET, "committed": 0,
                 "complete": False}
-    all_receipts, commits = [], []
+    all_receipts, commits, resumed_batches = [], [], []
     for start in range(0, len(actions), BATCH_SIZE):
         chunk = actions[start:start + BATCH_SIZE]
-        commit, receipts = commit_batch(
-            cycle, run_id, 1 + start // BATCH_SIZE, chunk
-        )
+        prior = {item["previous_commit"] for item in chunk}
+        if len(prior) != 1:
+            raise ExecutionError(
+                "partially committed Git batch; manual reconciliation required"
+            )
+        existing_commit = next(iter(prior))
+        number = 1 + start // BATCH_SIZE
+        if existing_commit is None:
+            commit, receipts = commit_batch(cycle, run_id, number, chunk)
+        else:
+            commit = existing_commit
+            receipts = [
+                {
+                    "action_id": item["action_id"], "item": item["path"],
+                    "kind": item["kind"], "before": item["before"],
+                    "change": item["change"], "after": item["after"],
+                    "evidence": ["commit:" + commit, "path:" + item["path"],
+                                 "sha256:" + item["digest"]],
+                }
+                for item in chunk
+            ]
+            resumed_batches.append(number)
         commits.append(commit)
         all_receipts.extend(receipts)
     manifest = {
@@ -284,6 +355,8 @@ def execute(cycle: str, run_id: str, candidates: list[dict],
     return {
         "cycle": cycle, "run_id": run_id, "mode": "local_committed",
         "processed": len(actions), "artifact_commits": commits,
+        "resumed_batches": resumed_batches,
+        "newly_committed_batches": len(commits) - len(resumed_batches),
         "receipt_path": manifest_path,
         "accepted": accepted,
         "blocked": len(actions) - accepted,
@@ -291,6 +364,17 @@ def execute(cycle: str, run_id: str, candidates: list[dict],
         "receipt_bridge_exit": proc.returncode,
         "note": "Local branch only. No remote push, live deploy, sale or publication.",
     }
+
+
+def execute(cycle: str, run_id: str, candidates: list[dict],
+            *, commit_local: bool, expected_branch: str,
+            state_path: str, resume: bool = False) -> dict:
+    with checkout_lock():
+        return _execute_locked(
+            cycle, run_id, candidates, commit_local=commit_local,
+            expected_branch=expected_branch, state_path=state_path,
+            resume=resume,
+        )
 
 
 def main() -> int:
@@ -302,12 +386,16 @@ def main() -> int:
     parser.add_argument("--state", required=True)
     parser.add_argument("--commit-local", action="store_true",
                         help="write only to locally checked-out authorized work/ branch")
+    parser.add_argument("--resume", action="store_true",
+                        help="reconcile already committed, authenticated batches before continuing")
     args = parser.parse_args()
     try:
         payload = json.loads(Path(args.jobs).read_text(encoding="utf-8"))
+        os.chdir(ROOT)
         result = execute(
             args.cycle, args.run_id, payload, commit_local=args.commit_local,
             expected_branch=args.expected_branch, state_path=args.state,
+            resume=args.resume,
         )
     except (ExecutionError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         result = {"cycle": args.cycle, "complete": False,
