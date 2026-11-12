@@ -35,6 +35,10 @@ jobs:
   offline-observer-and-disposition:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    env:
+      SECRET_KEY: "audit-only-ci-ephemeral-not-production"
+      DEBUG: "true"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
     steps:
       - uses: actions/checkout@v4
         with:
