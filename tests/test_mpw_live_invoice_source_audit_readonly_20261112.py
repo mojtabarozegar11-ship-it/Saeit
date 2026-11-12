@@ -35,9 +35,7 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                 "def record_invoice(order):\n"
                 "    return order\n",
             "services/mpw_trx_guest_commerce.py":
-                "def _new_user(request):\n    return object()\n"
-                "def _identity(request):\n    return object()\n"
-                "def patch_commercial(namespace):\n    return namespace\n",
+                (ROOT / "services/mpw_trx_guest_commerce.py").read_text(encoding="utf-8"),
             AUDIT.TEMPLATE:
                 '<form>{% csrf_token %}<input name="mpw_guest"></form>',
         }
@@ -239,21 +237,27 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertEqual(report["status"], "DUPLICATE_SOURCE_FUNCTIONS")
         self.assertIn("_start_order", report["files"][0]["duplicate_functions"])
 
-    def test_guest_internal_email_schema_names_do_not_imply_buyer_capture(self):
+    def test_reviewed_guest_synthetic_email_schema_is_not_buyer_capture(self):
+        report = AUDIT.inspect(self.root)
+        self.assertTrue(report["guest_source_matches_reviewed_digest"])
+        self.assertEqual(report["status"],
+                         "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
+        self.assertEqual(report["email_hit_functions"], [])
+        self.assertIn("_new_user",
+                      report["guest_internal_email_indicators_review_required"])
+
+    def test_unreviewed_guest_email_lookups_block_even_if_invoice_code_clean(self):
         guest = self.root / AUDIT.SOURCE_PATHS[3]
         guest.write_text(
             "def _new_user(request):\n"
-            "    field = 'email'\n"
-            "    return '@guest.mojplaywin.com' if field == 'email' else None\n"
+            "    return request.POST.get('email')\n"
             "def _identity(request):\n    return None\n"
             "def patch_commercial(namespace):\n    return namespace\n"
         )
         report = AUDIT.inspect(self.root)
-        self.assertEqual(report["status"],
-                         "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
-        self.assertIn("_new_user",
-                      report["guest_identity_email_indicators_not_buyer_capture"])
-        self.assertEqual(report["email_hit_functions"], [])
+        self.assertEqual(report["status"], "UNREVIEWED_GUEST_SOURCE")
+        self.assertFalse(report["guest_source_matches_reviewed_digest"])
+        self.assertFalse(report["safe_to_deploy"])
 
     def test_a_truncated_helper_graph_never_returns_clean(self):
         web = self.root / AUDIT.SOURCE_PATHS[0]
