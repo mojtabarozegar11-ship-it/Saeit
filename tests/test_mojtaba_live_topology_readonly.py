@@ -284,3 +284,42 @@ def test_system_service_matches_are_not_live_execution_attestation(tmp_path):
     assert result["attestation"]["canonical_worker_executed"] is False
     assert result["attestation"]["handoff_verified"] is False
     assert result["attestation"]["external_schedulers_fully_enumerated"] is False
+
+
+def test_malformed_php_sqlite_statuses_are_redacted_and_counts_preserved(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)"
+        )
+        connection.execute("INSERT INTO agents VALUES ('master', 1)")
+        connection.execute("CREATE TABLE runs (status TEXT, detail TEXT)")
+        connection.execute(
+            "CREATE TABLE site_work_outputs (status TEXT, title TEXT)"
+        )
+        connection.executemany("INSERT INTO runs VALUES (?, '')", [
+            ("ok",), ("PRIVATE_KEY_ABC",), ("CLIENT_PHONE_123",),
+        ])
+        connection.executemany("INSERT INTO site_work_outputs VALUES (?, '')", [
+            ("review",), ("SECRET_WALLET_ADDRESS",), ("SECRET_PARTNER",),
+        ])
+    observed = observer.cpanel_php_registry_snapshot(tmp_path)
+    text = json.dumps(observed)
+    for secret in (
+        "PRIVATE_KEY_ABC", "CLIENT_PHONE_123",
+        "SECRET_WALLET_ADDRESS", "SECRET_PARTNER",
+    ):
+        assert secret not in text
+    assert observed["run_status_counts"] == {"ok": 1, "unexpected_status": 2}
+    assert observed["recent_worker_output_status_counts"] == {
+        "review": 1, "unexpected_status": 2,
+    }
+    assert observed["records"] == 1
+
+
+def test_sqlite_status_aggregation_refuses_unapproved_table_names():
+    with sqlite3.connect(":memory:") as connection:
+        with pytest.raises(ValueError, match="unknown aggregate status table"):
+            observer.safe_sqlite_status_counts(connection, "sqlite_master")
