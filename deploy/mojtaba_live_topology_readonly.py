@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import closing
 from datetime import datetime, timezone
 import os
 import pwd
@@ -242,7 +243,7 @@ def cpanel_php_registry_snapshot(home: Path) -> dict:
     # aggregate metadata leaves the host. A missing table is not zero rows.
     uri = "file:" + quote(str(db), safe="/") + "?mode=ro&immutable=1"
     try:
-        with sqlite3.connect(uri, uri=True, timeout=2) as conn:
+        with closing(sqlite3.connect(uri, uri=True, timeout=2)) as conn:
             conn.execute("PRAGMA query_only=ON")
             tables = set(
                 name for (name,) in conn.execute(
