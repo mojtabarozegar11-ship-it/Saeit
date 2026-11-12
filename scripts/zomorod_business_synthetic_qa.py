@@ -78,13 +78,23 @@ sid=signed_in_sid
 root=pathlib.Path(__file__).resolve().parents[1]
 deploy_workflow=(root/'.github/workflows/zomorod-business-update.yml').read_text(encoding='utf-8')
 guard_script=root/'scripts/zomorod_business_genetics_guarded_install.sh'
+preflight_script=root/'scripts/zomorod_business_genetics_readonly_preflight.sh'
+assert preflight_script.is_file()
 assert re.search(r'(?m)^  workflow_dispatch:$',deploy_workflow)
 assert not re.search(r'(?m)^  push:$',deploy_workflow)
 assert 'expected_current_app_sha256:' in deploy_workflow
 assert 'expected_current_dossier_sha256:' in deploy_workflow
 assert 'genetics-center.php' in deploy_workflow
 assert 'zomorod_business_genetics_guarded_install.sh' in deploy_workflow
+assert 'zomorod_business_genetics_readonly_preflight.sh' in deploy_workflow
+assert deploy_workflow.index('saeit-cpanel bash -s --') < deploy_workflow.index("install -d -m 700 '$stage'")
 assert subprocess.run(['bash','-n',str(guard_script)],capture_output=True).returncode==0
+assert subprocess.run(['bash','-n',str(preflight_script)],capture_output=True).returncode==0
+bad_preflight=subprocess.run(['bash',str(preflight_script),'INVALID','ABSENT'],capture_output=True,text=True)
+assert bad_preflight.returncode!=0
+preflight_source=preflight_script.read_text(encoding='utf-8')
+for clause in ('PREFLIGHT=PASS_READ_ONLY','PREFLIGHT=APP_DRIFT','PREFLIGHT=DISK_INSUFFICIENT','PREFLIGHT_DATABASE_WRITE=no'):
+    assert clause in preflight_source
 invalid=subprocess.run(['bash',str(guard_script),'INVALID','ABSENT','0'*64,'0'*64,'0'*40,'/tmp/not-real-stage'],capture_output=True,text=True)
 assert invalid.returncode!=0,('Malformed hash accepted',invalid.stdout,invalid.stderr)
 guard_source=guard_script.read_text(encoding='utf-8')
