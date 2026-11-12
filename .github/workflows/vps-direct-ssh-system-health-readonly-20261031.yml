@@ -63,8 +63,28 @@ jobs:
             echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
           done
           cron="$(crontab -l 2>/dev/null || true)"
-          count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          count="$(printf '%s\n' "$cron" | awk '!/^[[:space:]]*(#|$)/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          # Presence of an active tagged Cron row is not itself evidence of a
+          # paused scheduler. Retain the existing fail-closed count and label
+          # for backward compatibility; report safe categories for review.
+          echo "HEALTH_FACTORY_TAGGED_CRON_ENTRIES=$count"
           echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          echo "HEALTH_FACTORY_CRON_POLICY=tagged_schedulers_require_review"
+          # Safe numeric-only Cron tag categories (no commands or paths).
+          printf '%s\n' "$cron" | awk '
+            /^[[:space:]]*(#|$)/ {next}
+            /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/ {
+              if (/SAEIT_MASTER_AGENT_V1/) master++
+              if (/SAEIT_FACTORY_EVERY_MINUTE_V1/) minute++
+              if (/SAEIT_FACTORY_LIFECYCLE_12_V1/) lifecycle++
+              if (/SAEIT_AUTONOMOUS_PRODUCTS_V2/) products++
+              if (/SAEIT_PRODUCTION_WAREHOUSE_V1/) warehouse++
+              if (!/SAEIT_(MASTER_AGENT_V1|FACTORY_EVERY_MINUTE_V1|FACTORY_LIFECYCLE_12_V1|AUTONOMOUS_PRODUCTS_V2|PRODUCTION_WAREHOUSE_V1)/) other++
+            }
+            END {
+              printf "HEALTH_FACTORY_TAG_COUNTS=master:%d,minute:%d,lifecycle:%d,products:%d,warehouse:%d,other:%d\n", master+0, minute+0, lifecycle+0, products+0, warehouse+0, other+0
+            }
+          '
           if test -r /etc/os-release; then
             . /etc/os-release
             echo "HEALTH_OS_ID=${ID:-unknown}"
