@@ -10,6 +10,7 @@ from core.product_seo_views import approved_guest_checkout_route
 @override_settings(
     ALLOWED_HOSTS=("mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"),
     MPW_TRX_PUBLIC_PRODUCT_IDS=(72, 225, 879),
+    MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True,
 )
 class MPWGuestCheckoutBridgeTests(SimpleTestCase):
     PATH = "/store/product/72/checkout/"
@@ -25,6 +26,18 @@ class MPWGuestCheckoutBridgeTests(SimpleTestCase):
         self.assertIn(b"No invoice was created", response.content)
         self.assertIn("no-store", response["Cache-Control"])
         self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+
+    @override_settings(MPW_WALLETLESS_TRX_PUBLIC_ENABLED=False)
+    def test_public_gate_off_keeps_checkout_disabled_without_importing_backend(self):
+        with mock.patch("core.mpw_trx_checkout_bridge._reviewed_checkout") as backend:
+            response = self.client.get(
+                self.PATH, secure=True, HTTP_HOST="mojplaywin.com"
+            )
+            from core.mpw_trx_checkout_bridge import backend_ready
+            self.assertFalse(backend_ready())
+        self.assertEqual(response.status_code, 503)
+        self.assertIn(b"No invoice was created", response.content)
+        backend.assert_not_called()
 
     def test_non_mojplaywin_host_cannot_open_trx_checkout(self):
         with mock.patch("core.mpw_trx_checkout_bridge._reviewed_checkout") as backend:
