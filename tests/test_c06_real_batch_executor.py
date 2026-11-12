@@ -119,7 +119,7 @@ def test_fifty_real_git_changes_in_five_batches_and_one_manifest(tmp_path):
     assert len(manifest["actions"]) == 50
     assert len(set(x["evidence"][1] for x in manifest["actions"])) == 50
     assert len(json.loads(state.read_text())["runs"]["A-C06-FIFTY-ISOLATED-QA"]["actions"]) == 50
-    assert len(git(root, "rev-list", "--count", "HEAD")) == 7
+    assert int(git(root, "rev-list", "--count", "HEAD")) == 7
     assert not git(root, "status", "--porcelain")
     replay = command(root, jobs, "A", "A-C06-FIFTY-ISOLATED-QA", state, commit=True)
     assert replay.returncode == 2
