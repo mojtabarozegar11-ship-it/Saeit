@@ -88,10 +88,10 @@ def test_inactive_legacy_with_unpublished_story_requires_handoff(monkeypatch):
     assert story.agent_id == old.pk and story.status == "draft"
 
 
-def test_weather_api_key_alone_never_authorizes_paid_content(monkeypatch):
+def test_weather_api_key_and_legacy_environment_flags_do_not_authorize_payment(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
     monkeypatch.setenv("MOJ_PAID_LLM_ENABLED", "1")
-    monkeypatch.delenv("MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE", raising=False)
+    monkeypatch.setenv("MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE", "2026-11-12")
     generated = weather_agent.generate_research_contents("Weather report")
     assert generated == []
 
@@ -107,9 +107,11 @@ def test_weather_does_not_regenerate_existing_daily_content(monkeypatch):
             {"title": "Research item one", "body": "First original item"},
             {"title": "Research item two", "body": "Second original item"},
         ]
-    monkeypatch.setattr(weather_agent, "generate_research_contents", generate_once)
-    weather_agent.run_daily_cycle()
-    weather_agent.run_daily_cycle()
+    monkeypatch.setattr(weather_agent, "generate_research_contents", lambda summary, approval_grant_id=None: generate_once(summary))
+    # A separate grant preflight is asserted by the dedicated approval tests.
+    monkeypatch.setattr(weather_agent, "_validate_paid_weather_grant", lambda grant: ("test-model", {}))
+    weather_agent.run_daily_cycle(approval_grant_id=123)
+    weather_agent.run_daily_cycle(approval_grant_id=123)
     assert len(calls) == 1
     assert NewsletterStory.objects.filter(agent__code=BOT_CODE).count() == 3
 
