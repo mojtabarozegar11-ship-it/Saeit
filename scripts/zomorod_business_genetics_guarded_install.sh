@@ -123,7 +123,7 @@ if (( dossier_was_present == 1 )); then cp -p "$live_dossier" "$backup/genetics-
 python3 - "$db_file" "$backup/management.sqlite3" <<'PY'
 import os, sqlite3, sys
 src, dst = sys.argv[1:]
-if os.path.islink(src) or os.path.exists(dst):
+if os.path.islink(src) or os.path.lexists(dst):
     raise SystemExit('Unsafe backup target')
 with sqlite3.connect('file:' + src + '?mode=ro', uri=True, timeout=15) as source:
     with sqlite3.connect(dst, timeout=15) as target:
