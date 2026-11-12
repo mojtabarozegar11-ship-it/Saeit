@@ -62,6 +62,17 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
     assert "queued_task_not_supported_by_known_executor" in rows["economic-master-agent"]["findings"]
     assert "inactive_agent_has_pending_tasks" in rows["disabled-specialist"]["findings"]
     assert rows["duplicate-a"]["exact_role_duplicates"] == ["duplicate-b"]
+    assert report["summary"]["django_records_classified"] == report["summary"]["agents_total"]
+    assert report["summary"]["all_agents_live_disposition_verified"] is False
+    assert report["summary"]["live_runtime_coverage_percent"] is None
+    assert rows["economic-master-agent"]["disposition"]["state"] == "legacy_executor_migration_required"
+    assert rows["disabled-specialist"]["disposition"]["state"] == "inactive_with_pending_work"
+    assert all(
+        row["disposition"]["target_bot_id"] == "mojtaba.bot.ai"
+        and row["disposition"]["deactivation_or_deletion_authorized"] is False
+        and row["disposition"]["external_runtime_attested"] is False
+        for row in report["agents"]
+    )
     assert (AgentTask.objects.count(), AuditLog.objects.count()) == before
 
 
@@ -71,3 +82,33 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
 def test_fleet_audit_rejects_unbounded_options(kwargs):
     with pytest.raises(CommandError):
         call_command("audit_agent_fleet", **kwargs)
+
+
+@pytest.mark.parametrize("code,active,pending,legacy_decision,expected", [
+    ("mojtaba-bot-ai", True, 0, None, "canonical_owner_active"),
+    ("mojtaba-bot-ai", False, 0, None, "canonical_owner_inactive"),
+    ("economic-master-agent", True, 0, None, "legacy_executor_migration_required"),
+    ("moj_1ro_1", True, 1, None, "legacy_executor_migration_required"),
+    ("newsletter-specialist", True, 0, "retire_safe", "legacy_retirement_candidate_unverified"),
+    ("disabled-specialist", False, 1, None, "inactive_with_pending_work"),
+    ("disabled-specialist", False, 0, None, "inactive_record_external_runtime_unknown"),
+    ("unmapped-external-agent", True, 0, None, "component_dependency_inventory_required"),
+])
+def test_all_disposition_classes_are_fail_closed(code, active, pending, legacy_decision, expected):
+    from core.management.commands.audit_agent_fleet import plan_agent_disposition
+
+    row = {
+        "code": code, "active": active,
+        "legacy_consolidation_decision": legacy_decision,
+        "tasks": {"pending": pending, "stale_running": 0},
+        "capability_modules": {"outside": "unmapped_requires_adapter_review"},
+    }
+    decision = plan_agent_disposition(row)
+    assert decision["target_bot_id"] == "mojtaba.bot.ai"
+    assert decision["state"] == expected
+    assert decision["deactivation_or_deletion_authorized"] is False
+    assert decision["external_runtime_attested"] is False
+    if code not in ("mojtaba-bot-ai",):
+        assert "external_scheduler_and_process_topology_not_attested" in decision["blockers"]
+    if pending:
+        assert "pending_queued_running_or_blocked_tasks_need_reconciliation" in decision["blockers"]
