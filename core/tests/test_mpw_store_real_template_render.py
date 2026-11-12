@@ -50,6 +50,18 @@ class MojPlayWinStoreRealTemplateTests(SimpleTestCase):
         self.assertIn(b"How checkout and delivery work", response.content)
         self.assertNotIn(b"TRX checkout is temporarily unavailable", response.content)
 
+    def test_both_payment_states_render_exactly_one_purchases_link(self):
+        destination = b'href="/commerce/trx-easy/purchases/"'
+        for ids in ((), (72, 879)):
+            with self.subTest(ready_ids=ids):
+                response = self._render_store(ready_ids=ids)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content.count(destination), 1)
+                if ids:
+                    self.assertIn(b"How checkout and delivery work", response.content)
+                else:
+                    self.assertIn(b"TRX checkout is temporarily unavailable", response.content)
+
     @override_settings(
         STORAGES={
             "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
