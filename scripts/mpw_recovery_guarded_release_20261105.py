@@ -43,10 +43,10 @@ FILES = {
 }
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 SOURCE_DIGESTS = {
-    "guest": "ff13ecccceb9a260b1c08688d7f732b9f6e6abb9684becb46907ef5329809280",
+    "guest": "2bb8da6b1929b1337b3421b13c6cc6662c629f0ec76990b15fbeeb9cb6b10cd0",
     "recovery": "164db1b46bf454dc311502f993e6f9d06e2f20b020e9f8986fb81fcda81a23bf",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
-    "migration": "c1d209a97a4f3ab6e5f4fde9a9fa1904d7f8856ef38ba8e3afddabf89bb55240",
+    "migration": "9913e106dee36cefab78137fb54936339c65bd68fefd6d72e616c36011866572",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
 }
 # The live staging Passenger tree currently reports this exact reviewed
