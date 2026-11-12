@@ -18,6 +18,10 @@ on:
       - 'runtime/cycle_receipts/**'
       - games/arrow-escape/engine.js
       - games/arrow-escape/engine.test.cjs
+      - games/arrow-escape/cube-engine.js
+      - games/arrow-escape/cube-engine.test.cjs
+      - 'deliverables/books/ZM-BK-0001/**'
+      - 'deliverables/research/editorial-2/**'
       - product_recipes/water_budget_economics/calculator.py
       - product_recipes/water_budget_economics/test_calculator.py
       - 'deliverables/books/ZM-BK-0001/**'
@@ -49,6 +53,7 @@ jobs:
           set -euo pipefail
           python3 -m pytest --noconftest -q product_recipes/water_budget_economics/test_calculator.py
           node games/arrow-escape/engine.test.cjs
+          node games/arrow-escape/cube-engine.test.cjs
 
       - name: Read-only reconciliation of all A-E committed receipts
         run: |
