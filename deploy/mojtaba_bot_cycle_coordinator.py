@@ -92,6 +92,24 @@ def ensure_run(state: dict, cycle: str, requested: str | None) -> tuple[str, dic
 def evidence_ok(evidence: list[str]) -> bool:
     return bool(evidence) and all(x.strip() for x in evidence)
 
+def artifact_identity(evidence: list[str]) -> tuple[str, str] | None:
+    """Reject replay of identical path and content under a new commit."""
+    try:
+        fields = {}
+        for item in evidence:
+            key, value = item.split(":", 1)
+            if key in fields:
+                return None
+            fields[key] = value
+        if set(fields) != {"commit", "path", "sha256"}:
+            return None
+        path, digest = fields["path"], fields["sha256"]
+        if not path or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            return None
+        return (path, digest.lower())
+    except (ValueError, TypeError, AttributeError):
+        return None
+
 
 def verified_git_artifact(kind: str, evidence: list[str], *, max_age_seconds: int | None = None) -> bool:
     """A delivered source/file must exist in this checked-out Git commit.
@@ -199,9 +217,9 @@ def cmd_record(args: argparse.Namespace) -> None:
         ):
             raise SystemExit(f"previously completed action_id refused: {args.action_id}")
         if args.status == SUCCESS:
-            def artifact_identity(proof):
-                return tuple(sorted(proof))
             current_proof = artifact_identity(evidence)
+            if current_proof is None:
+                raise SystemExit("invalid artifact identity")
             if any(
                 artifact_identity(past_action.get("evidence", [])) == current_proof
                 for prior_run in state["runs"].values()
@@ -259,8 +277,8 @@ def cmd_summary(args: argparse.Namespace) -> None:
                 evidence = action.get("evidence")
                 if not isinstance(evidence, list):
                     continue
-                key = tuple(sorted(evidence))
-                if action_id in seen_ids or key in seen_proofs:
+                key = artifact_identity(evidence)
+                if key is None or action_id in seen_ids or key in seen_proofs:
                     continue
                 if key not in proof_cache:
                     proof_cache[key] = verified_git_artifact(
