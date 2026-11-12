@@ -201,6 +201,12 @@ class AvaCoreTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Ava(owner_id="owner" + control + "admin", brain=self.brain)
 
+    def test_unicode_line_separators_in_owner_id_are_rejected(self):
+        for separator in ("\u2028", "\u2029", "\u0085"):
+            with self.subTest(separator=repr(separator)):
+                with self.assertRaises(ValueError):
+                    Ava(owner_id="owner" + separator + "admin", brain=self.brain)
+
     def test_reply_and_validation(self):
         self.assertEqual(self.ava.converse("سلام").text, "درود مجتبی جان")
         with self.assertRaises(ValueError):
