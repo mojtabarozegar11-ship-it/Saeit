@@ -21,14 +21,14 @@ with tempfile.TemporaryDirectory(prefix='zm-ref-qa-') as td:
  for path in mod.PROTECTED:
   f=site/path;f.parent.mkdir(parents=True,exist_ok=True);f.write_text('Protected: '+path)
  backups=base/'.backups/zm';backups.parent.mkdir()
- with patch.multiple(mod,SITE=site,BACKUPS=backups,LOCK=base/'.backups/lock',HOME=site/'index.html',CSS=site/'assets/zm-reference-v3.css',JS=site/'assets/zm-reference-v3.js',ART=site/'assets/zm-vision-v3/art',OLD_ARCHIVE=old,EXPECTED_CURRENT_SHA=sha256(legacy).hexdigest(),EXPECTED_ARCHIVE_SHA=sha256(archive).hexdigest()),patch.object(mod,'identity',lambda:None):
+ with patch.multiple(mod,SITE=site,BACKUPS=backups,LOCK=base/'.backups/lock',HOME=site/'index.html',CSS=site/'assets/zm-reference-v3.css',JS=site/'assets/zm-reference-v3.js',OLD_ARCHIVE=old,EXPECTED_CURRENT_SHA=sha256(legacy).hexdigest(),EXPECTED_ARCHIVE_SHA=sha256(archive).hexdigest()),patch.object(mod,'identity',lambda:None):
   original_hashes=mod.protected_hashes()
   pre=mod.preflight()
   assert pre['candidate']==sha256((source/'index.html').read_bytes()).hexdigest()
   mod.apply('vision-1001')
   mod.verify('vision-1001')
   assert mod.protected_hashes()==original_hashes
-  assert len(list((site/'assets/zm-vision-v3/art').glob('*.webp')))==17
+  assert len(list((site/'assets').glob('zm-v3-*.webp')))==17
   try:mod.preflight()
   except RuntimeError:pass
   else:raise AssertionError('Duplicate publication was not blocked')
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='zm-ref-qa-') as td:
   assert site.joinpath('index.html').read_bytes()==legacy
   assert not site.joinpath('assets/zm-reference-v3.css').exists()
   assert not site.joinpath('assets/zm-reference-v3.js').exists()
-  assert not site.joinpath('assets/zm-vision-v3').exists()
+  assert not list((site/'assets').glob('zm-v3-*.webp'))
   assert mod.protected_hashes()==original_hashes
   assert old.read_bytes()==archive
   assert backups.joinpath('vision-1001/home.before.html').read_bytes()==legacy
