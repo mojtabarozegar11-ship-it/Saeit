@@ -15,7 +15,7 @@ on:
           - pause
         default: audit
       recovery_authorized:
-        description: Owner has authorized a one-time factory loop recovery
+        description: Owner authorizes this one-time recover or pause operation
         required: true
         type: boolean
         default: false
@@ -33,7 +33,7 @@ jobs:
   # A manual dispatch lacking both owner assertions must FAIL, not silently
   # turn green because the mutating recovery job was skipped.
   blocked-unapproved-recovery:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ((inputs.operation != 'audit' && inputs.operation != 'recover' && inputs.operation != 'pause') || (inputs.operation != 'audit' && (github.actor != 'mojtabarozegar11-ship-it' || inputs.recovery_authorized != true || inputs.offhost_backup_verified != true))) }}"
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ((inputs.operation != 'audit' && inputs.operation != 'recover' && inputs.operation != 'pause') || github.actor != 'mojtabarozegar11-ship-it' || (inputs.operation != 'audit' && (inputs.recovery_authorized != true || inputs.offhost_backup_verified != true))) }}"
     runs-on: ubuntu-24.04
     steps:
       - name: Refuse unapproved factory recovery
@@ -104,7 +104,7 @@ jobs:
           REMOTE
 
   audit-readonly:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.operation == 'audit' }}"
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && inputs.operation == 'audit' }}"
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 5
     steps:
