@@ -437,8 +437,8 @@ def test_incomplete_two_host_inventory_fails_closed_not_green():
     workflow = (
         ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
     ).read_text(encoding="utf-8")
-    assert "MOJTABA_READONLY_CPANEL=" in workflow
-    assert "MOJTABA_READONLY_VPS=" in workflow
+    assert '"vps": sys.argv[2] == "1", "cpanel": sys.argv[3] == "1"' in workflow
+    assert 'print("MOJTABA_READONLY_" + role.upper() + "="' in workflow
     assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" in workflow
     assert (
         'echo "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof"\n'
