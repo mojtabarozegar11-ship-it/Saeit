@@ -102,6 +102,7 @@ def audit_invoice_email_dependencies() -> dict:
     )
     inspected = []
     invoice_handlers = 0
+    invoice_recorders = 0
     inspected_functions = 0
 
     def folded_string(node):
@@ -176,6 +177,7 @@ def audit_invoice_email_dependencies() -> dict:
 
         if rel.endswith("mpw_trx_commercial_web.py"):
             invoice_handlers = len(functions.get("_start_order", []))
+        invoice_recorders += len(functions.get("record_invoice", []))
 
         roots = {"_start_order", "record_invoice"}
         queue = list(roots.intersection(functions))
@@ -217,7 +219,12 @@ def audit_invoice_email_dependencies() -> dict:
 
     if invoice_handlers != 1:
         abort("INVOICE_HANDLER_MISSING_OR_DUPLICATED")
+    # Do not certify an invoice path merely because the HTTP handler exists.
+    # Every recorder definition is analyzed above; zero or multiple are unknown.
+    if invoice_recorders != 1:
+        abort("INVOICE_RECORDER_MISSING_OR_DUPLICATED")
     return {"invoice_sources_examined": len(inspected),
+            "invoice_recorder_found": True,
             "invoice_functions_examined": inspected_functions,
             "invoice_handler_found": True,
             "email_dependency_in_examined_handlers": False,
