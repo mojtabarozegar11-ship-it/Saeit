@@ -17,6 +17,7 @@ import sys
 PUBLIC_ROOT = Path("/home/zomorod2/public_html")
 REQUIRED_FILES = (".htaccess", "index.html")
 ASSET_DIRS = ("assets", "static")
+ROOT_VISUAL_SUFFIXES = frozenset({".html",".htm",".css",".js",".svg",".ico",".png",".jpg",".jpeg",".gif",".webp",".avif",".woff",".woff2"})
 MAX_FILES = 2000
 MAX_TOTAL_BYTES = 512 * 1024 * 1024
 BLOCK_SIZE = 1024 * 1024
@@ -40,6 +41,16 @@ def compute_fingerprint(root: Path = PUBLIC_ROOT) -> tuple[str, int, int]:
         if p.is_symlink() or not p.is_file():
             raise ScopeError("REQUIRED_ENTRY_MISSING_OR_SYMLINK")
         paths.append(p)
+    # Include all first-level public visual assets, even if served outside
+    # /assets or /static (e.g. favicon.ico, logo.svg or root-level styles.css).
+    for p in root.iterdir():
+        if p.name in REQUIRED_FILES or p.suffix.lower() not in ROOT_VISUAL_SUFFIXES:
+            continue
+        if p.is_symlink() or not p.is_file():
+            raise ScopeError("ROOT_VISUAL_ASSET_UNSAFE")
+        paths.append(p)
+        if len(paths) > MAX_FILES:
+            raise ScopeError("ASSET_FILE_LIMIT")
     for dirname in ASSET_DIRS:
         directory = root / dirname
         if directory.is_symlink() or not directory.is_dir():
