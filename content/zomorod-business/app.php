@@ -278,6 +278,8 @@ try {
             }
         } elseif($action==='project'){
             $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
+            // Reserve the genetics dossier ID for its idempotent admin-only registration action.
+            if(str_starts_with(trim($title),'ZM-AGRC-GEN-1405-001'))bail('ثبت پروژه ژنتیک فقط از مسیر اختصاصی مدیر مجاز است.',409);
             $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
         } elseif($action==='mpw_check'){
             $stage=req('stage');$status=req('status','unknown');$certainty=req('certainty','unverified');
