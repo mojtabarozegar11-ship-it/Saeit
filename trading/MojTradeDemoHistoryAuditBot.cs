@@ -18,7 +18,7 @@ namespace MojTrade.OmegaX
         private static readonly CultureInfo Numeric = CultureInfo.InvariantCulture;
 
         [Parameter("Non-sensitive Demo Alias", DefaultValue = "LITE_DEMO_1")]
-        public string DemoAlias { get; set; }
+        public string DemoAlias { get; set; } = "LITE_DEMO_1";
 
         [Parameter("Maximum Complete Deal Rows", DefaultValue = 2000, MinValue = 1, MaxValue = 20000)]
         public int MaxCompleteDeals { get; set; }
