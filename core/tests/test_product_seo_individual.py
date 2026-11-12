@@ -55,10 +55,19 @@ class ProductSeoTests(TestCase):
         self.assertContains(response, 'name="description" content="Original verified course material"')
         self.assertNotContains(response, '"@type": "Offer"')
 
-    def test_other_mojplaywin_pages_retain_default_seo_title(self):
+    def test_other_mojplaywin_pages_retain_their_own_seo_title(self):
         response = self.client.get("/store/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<title>MojPlayWin | Research, Games &amp; Learning</title>", html=True)
+        # The store has a dedicated branded site_base.html and its own title;
+        # the global base.html fallback must never override that title.
+        self.assertContains(
+            response,
+            "<title>Chess Books, Children’s Story &amp; Website Kit | MojPlayWin</title>",
+            html=True,
+        )
+        self.assertNotContains(
+            response, "<title>Original English Chess Guide | MojPlayWin Digital Store</title>"
+        )
 
     @override_settings(MPW_TRX_PUBLIC_PRODUCT_IDS=(991,))
     def test_approved_new_mojplaywin_sku_has_separate_public_detail(self):
