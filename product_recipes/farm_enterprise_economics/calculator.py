@@ -237,8 +237,19 @@ def evaluate(data):
             raise ValueError("enterprise names must be unique")
         names.add(item["name"].casefold())
         results.append(item)
+    def exact_total(key):
+        return sum((Decimal(r[key]) for r in results), Decimal(0))
+
     def total(key):
-        return money(sum((Decimal(r[key]) for r in results), Decimal(0)))
+        return money(exact_total(key))
+
+    def portfolio_percent(numerator):
+        # Weight margins by real modeled revenue. Averaging per-enterprise
+        # percentages is incorrect whenever sales volumes differ.
+        revenue = exact_total("sales_revenue")
+        return (str((exact_total(numerator) / revenue * 100)
+                    .quantize(Decimal("0.01"))) if revenue > 0 else None)
+
     resource_coverage = {}
     for field in ("land_area_hectares", "irrigation_water_m3"):
         recorded = [Decimal(r[field]) for r in results if r[field] is not None]
@@ -289,6 +300,8 @@ def evaluate(data):
             "total_cost": total("total_cost"),
             "operating_profit": total("operating_profit"),
             "contribution_margin_total": total("contribution_margin_total"),
+            "contribution_margin_percent": portfolio_percent("contribution_margin_total"),
+            "operating_profit_margin_percent": portfolio_percent("operating_profit"),
         },
         "resource_coverage": resource_coverage,
         "scenario_results": scenarios,
