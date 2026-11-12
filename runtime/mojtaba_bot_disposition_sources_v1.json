@@ -78,12 +78,19 @@
       "declared_code": "company-activity-intelligence",
       "known_live_count": null,
       "proposed_route": "merge_under_canonical_content_module",
-      "execution_status": "not_yet_attested",
+      "execution_status": "code_guard_committed__not_deployed_or_runtime_verified",
       "prerequisites": [
-        "detect_ensure_agent_calls",
-        "scheduler_and_report_dependent_routes",
-        "pending_publication_review"
-      ]
+        "map_actual_cpanel_scheduler_and_source_revision",
+        "verify_canonical_agent_is_provisioned",
+        "reconcile_existing_active_legacy_or_pending_tasks",
+        "verify_report_generation_under_canonical_owner",
+        "inspect_live_publication_approval_and_receipts",
+        "disable_duplicate_legacy_entrypoints_after_verified_handoff"
+      ],
+      "evidence_command": "core/management/commands/company_activity_agent_cycle.py",
+      "scheduled_workflow": ".github/workflows/zomorod-site-agent-cycle.yml",
+      "repository_handoff_guard": "draft_branch_only__prevents_legacy_self_reactivation_and_blocks_on_pending_tasks",
+      "legacy_plan_code_preserved_for_existing_report_foreign_keys": true
     },
     {
       "id": "newsletter_legacy_roles",
@@ -121,6 +128,8 @@
     "handoffs_verified": false,
     "duplicated_executors_retired": false,
     "irreversible_deletion_authorized": false,
-    "live_consolidation_percentage": null
+    "live_consolidation_percentage": null,
+    "company_activity_legacy_guard_committed": true,
+    "company_activity_live_handoff_verified": false
   }
 }
