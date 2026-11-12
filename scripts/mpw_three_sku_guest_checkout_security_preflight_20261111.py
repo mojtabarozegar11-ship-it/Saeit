@@ -166,6 +166,11 @@ def audit_source(source: str) -> dict:
     email_recovery_wired = any(
         (isinstance(node, ast.ImportFrom)
          and node.module == 'services.mpw_trx_email_recovery')
+        or (isinstance(node, ast.Import)
+            and any(alias.name == 'services.mpw_trx_email_recovery'
+                    for alias in node.names))
+        or (isinstance(node, ast.Constant)
+            and node.value == 'services.mpw_trx_email_recovery')
         or (isinstance(node, ast.Name) and node.id == 'bound_checkout')
         for node in ast.walk(tree))
     # Missing email is now the *required* guest state, not a sales blocker.
@@ -198,6 +203,8 @@ def main() -> int:
     result = audit_source(raw.decode('utf8'))
     result['source_sha256'] = hashlib.sha256(raw).hexdigest()
     print('MPW_GUEST_CHECKOUT_SECURITY_PREFLIGHT=' + json.dumps(result, sort_keys=True))
+    if result['commercial_email_block']:
+        raise RuntimeError(result['commercial_email_block'])
     return 0
 
 
