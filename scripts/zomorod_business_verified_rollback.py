@@ -118,30 +118,36 @@ def restore(
 
     live_app = private / "app.php"
     live_dossier = private / "genetics-center.php"
+    known_dossier = {candidate_dossier} if old_dossier == "ABSENT" else {old_dossier, candidate_dossier}
+    # Validate BOTH live paths before producing any conflict archive or
+    # replacing any live file. A broken symlink must not strand app.php.
+    observed: dict[Path, str | None] = {}
+    for live in (live_app, live_dossier):
+        observed[live] = digest_file(live) if os.path.lexists(live) else None
+
     quarantined = []
-    def preserve_unexpected(live: Path, expected: set[str], label: str) -> None:
-        if not os.path.lexists(live):
-            return
-        actual = digest_file(live)
-        if actual in expected:
+    def preserve_unexpected(live: Path, known: set[str], label: str) -> None:
+        actual = observed[live]
+        if actual is None or actual in known:
             return
         target = backup / ("concurrent-" + label + "-" + release_sha + ".php")
         if os.path.lexists(target):
             raise RestoreError("CONFLICT_ARCHIVE_ALREADY_EXISTS")
-        # If another writer changed the live PHP, preserve those bytes in
-        # the private backup before restoring the previously verified version.
-        os.replace(live, target)
-        if digest_file(target) != actual:
-            raise RestoreError("CONFLICT_ARCHIVE_VERIFICATION_FAILED")
+        # COPY first. Moving the live file to the archive would remove it
+        # before the other live path is validated, risking a broken site.
+        backup_copy(live, target, actual)
+        if digest_file(target) != actual or digest_file(live) != actual:
+            raise RestoreError("CONFLICT_COPY_VERIFICATION_FAILED")
         quarantined.append(label)
 
     try:
         preserve_unexpected(live_app, {old_app, candidate_app}, "app")
-        preserve_unexpected(
-            live_dossier,
-            ({candidate_dossier} if old_dossier == "ABSENT" else {old_dossier, candidate_dossier}),
-            "dossier",
-        )
+        preserve_unexpected(live_dossier, known_dossier, "dossier")
+        # Revalidate BOTH live file states immediately before first rename.
+        for live, old_hash in observed.items():
+            now = digest_file(live) if os.path.lexists(live) else None
+            if now != old_hash:
+                raise RestoreError("LIVE_CHANGED_DURING_RECOVERY_PREP")
         os.replace(staged, live_app)
         if old_dossier == "ABSENT":
             if os.path.lexists(live_dossier):
