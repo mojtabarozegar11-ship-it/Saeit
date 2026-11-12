@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse, hashlib, json, os, subprocess, sys
 from pathlib import Path
 from datetime import datetime, timezone
-from mojtaba_bot_cycle_coordinator import verified_git_artifact
+from mojtaba_bot_cycle_coordinator import verified_git_artifact, artifact_identity
 
 ALLOWED_CPANEL = {"relay_preflight","cpanel_preflight","django_check","django_migrations"}
 DELIVERABLE_KINDS = {"deliverable_created", "source_change", "verified_order", "verified_publication"}
@@ -185,8 +185,8 @@ def main():
                     evidence=action.get("evidence") or []
                     if not isinstance(evidence,list):
                         continue
-                    proof=tuple(sorted(evidence))
-                    if proof in accepted_artifact_proofs:
+                    proof=artifact_identity(evidence)
+                    if proof is None or proof in accepted_artifact_proofs:
                         continue
                     if proof not in proof_cache:
                         proof_cache[proof]=verified_git_artifact(
