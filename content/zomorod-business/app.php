@@ -312,6 +312,10 @@ try {
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
         echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section><section><h2>مرکز ژنتیک و اصلاح نژاد جانوران</h2><p>پرونده مطالعاتی ۵۰۰ گونه پرنده و واحدهای دام و حیات‌وحش؛ برآورد سرمایه، جانمایی، ظرفیت و گیت‌های علمی و مجوزی. اطلاعات مالی فقط تخمینی است.</p><a href="?page=genetics_center">مشاهده پرونده پروژه</a></section>';
+        // Internal-navigation-only provider entry for the authenticated owner; no credentials stored.
+        if(role()==='admin'){
+            echo '<section><h2>دسترسی داخلی به هاست زمرد ملل</h2><p>ورود از صفحات رسمی شرکت میزبان: سایت پارس وب سرور ← «ورود | عضویت» ← «سرویس‌های من» ← سرویس هاست زمرد ملل ← «ورود به cPanel».</p><p class="muted">این پیوند فقط مسیر مرورگر را باز می‌کند. اتصال یا ورود حساب احراز نشده؛ هیچ پورت SSH، رمز، پرداخت یا دستوری ارسال نمی‌شود.</p><a href="https://parswebserver.com/" target="_blank" rel="noopener noreferrer">آغاز از صفحه داخلی سایت میزبان</a></section>';
+        }
     } elseif($page==='mojplaywin'){
         authorize('view');
         $stages=[
