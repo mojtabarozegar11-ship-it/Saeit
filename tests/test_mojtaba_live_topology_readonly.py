@@ -152,3 +152,30 @@ def test_crontab_returncode_one_is_not_mistaken_for_confirmed_empty():
     )):
         status, output = observer.call_readonly(["crontab", "-l"])
     assert status == "unavailable_or_empty" and output == ""
+
+
+def test_symlinked_intermediate_runtime_folder_not_trusted(tmp_path):
+    actual = tmp_path / "hidden-runtime"
+    (actual / "django-app/core").mkdir(parents=True)
+    (actual / "django-app/core/unified_bot_identity.py").write_text(
+        "secret", encoding="utf-8",
+    )
+    (tmp_path / "factory-runtime").symlink_to(actual, target_is_directory=True)
+    result = observer.safe_source_digests(tmp_path, "vps")
+    assert result["unified_bot_identity.py"]["state"] == "unavailable_or_unsafe"
+
+
+def test_manual_live_workflow_never_runs_on_pull_request_or_push():
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    event_block = workflow.split("on:", 1)[1].split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in event_block
+    assert "pull_request:" not in event_block
+    assert "push:" not in event_block
+    assert "ProxyJump saeit-vps" in workflow
+    assert "StrictHostKeyChecking yes" in workflow
+    assert "MOJTABA_TWO_HOST_OBSERVATION=" in workflow
+    assert "automatic_deactivation_authorized" in workflow
+    assert "ssh -F" in workflow
+    assert "rm -rf --" in workflow  # Only ephemeral CI-runner SSH key material.
