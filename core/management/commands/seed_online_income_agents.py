@@ -16,6 +16,8 @@ CAPABILITIES = [
     ("income_revenue_verify", "Revenue verification", "Verify revenue only from reconciled payment evidence and reject vanity or unverified revenue claims.", "medium"),
     ("income_profit_optimize", "Catalog profit baseline", "Inspect active catalog items. Do not claim profit optimization or verified margin without independent revenue and cost evidence.", "medium"),
     ("master_self_improvement", "Master self-improvement audit", "Run the bounded private source-upgrade engine, test allowlisted repairs, and record immutable before/after evidence. Never promote unreviewed code.", "medium"),
+    ("research-write-review", "Knowledge library draft generation", "Queue evidence-bound research drafts only. Paid model generation requires an explicit one-time owner grant; no automatic paid API call or publication.", "high"),
+    ("content-editorial-draft", "Owner newsletter draft processing", "Transform a real queued owner submission into an internal review draft with provenance. No public publish, external messages or autonomous spending.", "low"),
 ]
 
 MASTER_AGENT = (
