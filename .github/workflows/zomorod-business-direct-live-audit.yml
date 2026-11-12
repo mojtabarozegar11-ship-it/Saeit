@@ -8,6 +8,7 @@ on:
       - scripts/zomorod_business_live_semantic_readonly.py
       - scripts/zomorod_business_genetics_overlay_preview.py
       - scripts/zomorod_business_genetics_readonly_preflight.sh
+      - scripts/zomorod_business_homepage_invariant.sh
 permissions:
   contents: read
 concurrency:
@@ -112,3 +113,6 @@ jobs:
             bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63 ABSENT \
             < scripts/zomorod_business_genetics_readonly_preflight.sh
           echo 'LIVE_RELEASE_PREFLIGHT_VERIFICATION=READ_ONLY_COMPLETE'
+          # Public homepage GETs only; fail if its HTML is unstable or unavailable.
+          bash scripts/zomorod_business_homepage_invariant.sh capture >/dev/null
+          echo 'LIVE_PUBLIC_HOMEPAGE_BASELINE=STABLE_READ_ONLY'
