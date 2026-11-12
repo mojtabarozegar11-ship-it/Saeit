@@ -69,21 +69,29 @@ class CheckoutParser(HTMLParser):
                 if self._active_form is not None:
                     self._forms[self._active_form]["email"] = True
             if (tag == "input" and self._active_form is not None
-                    and name == "csrfmiddlewaretoken" and input_type == "hidden"):
+                    and name == "csrfmiddlewaretoken" and input_type == "hidden"
+                    and "disabled" not in attrs and "form" not in attrs):
                 token = attrs.get("value", "")
                 if 32 <= len(token) <= 128 and token.isascii() and token.isalnum():
                     self._forms[self._active_form]["csrf"] = True
             if tag == "input" and input_type == "submit":
                 self.submit_buttons += 1
-                if self._active_form is not None and self._is_cta(attrs.get("value", "")):
+                if (self._active_form is not None
+                        and not any(key in attrs for key in
+                                    ("disabled", "form", "formaction", "formmethod"))
+                        and self._is_cta(attrs.get("value", ""))):
                     self._forms[self._active_form]["cta"] = True
 
         if tag == "button":
             self.inside_button = True
             self._button_fragments = []
-            self._button_form = (self._active_form
-                                 if attrs.get("type", "submit").lower() == "submit"
-                                 else None)
+            self._button_form = (
+                self._active_form
+                if attrs.get("type", "submit").lower() == "submit"
+                and not any(key in attrs for key in
+                            ("disabled", "form", "formaction", "formmethod"))
+                else None
+            )
             if attrs.get("type", "submit").lower() == "submit":
                 self.submit_buttons += 1
 
@@ -108,7 +116,8 @@ class CheckoutParser(HTMLParser):
     def summary(self, sku: int | None = None):
         normalized = " ".join(" ".join(self.text_parts).split()).lower()
         expected_action = f"/commerce/trx-easy/start/{sku}/" if sku is not None else None
-        valid_invoice_form = not self._malformed_forms and any(
+        valid_invoice_form = (not self._malformed_forms and self._active_form is None
+                              and not self.inside_button) and any(
             form["method"] == "post"
             and (form["action"] == expected_action if expected_action is not None
                  else re.fullmatch(r"/commerce/trx-easy/start/[0-9]+/", form["action"]) is not None)
