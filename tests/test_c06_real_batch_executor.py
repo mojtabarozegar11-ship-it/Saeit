@@ -211,6 +211,9 @@ def test_interrupted_cycle_restarts_after_two_verified_ten_action_batches(
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Importlib may write its own bytecode before the module can disable it.
+    # Remove only this synthetic QA fixture's untracked cache.
+    shutil.rmtree(root / "deploy" / "__pycache__", ignore_errors=True)
     monkeypatch.chdir(root)
     first_commit = module.commit_batch
 
