@@ -51,6 +51,9 @@ assert not 'درخواست انجام نشد' in changed
 dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
 assert '?page=genetics_center' in dashboard
+assert 'آغاز از صفحه داخلی سایت میزبان' in dashboard
+assert 'https://parswebserver.com/' in dashboard
+assert 'rel="noopener noreferrer"' in dashboard
 # Authenticated management and project navigation must expose the dossier without creating projects or journals.
 with sqlite3.connect(str(private/'management.sqlite3')) as check:
     counts_before=[check.execute('SELECT COUNT(*) FROM '+t).fetchone()[0] for t in ('projects','journal_entries','invoices','audit_events')]
@@ -153,6 +156,7 @@ with sqlite3.connect(str(private/'management.sqlite3')) as synthetic:
     synthetic.execute("UPDATE projects SET state='planned',budget=0 WHERE title LIKE 'ZM-AGRC-GEN-1405-001%'")
 restored_dossier=request('GET','genetics_center')
 assert 'بودجه ثبت‌شده صفر (غیرمصوب)' in restored_dossier
+print('GENETICS_OWNER_ONLY_PROVIDER_INTERNAL_NAVIGATION=PASS')
 print('GENETICS_PROJECT_RECORDED_STATE_BUDGET_REFLECTED=PASS')
 print('GENETICS_PROJECT_ADMIN_IDEMPOTENT_ZERO_BUDGET=PASS')
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
@@ -181,6 +185,9 @@ assert 'درخواست انجام نشد' in blocked
 assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
 viewer_dossier=request('GET','genetics_center')
 assert 'ZM-AGRC-GEN-1405-001' in viewer_dossier
+viewer_dashboard=request('GET','dashboard')
+assert 'آغاز از صفحه داخلی سایت میزبان' not in viewer_dashboard
+assert 'https://parswebserver.com/' not in viewer_dashboard
 viewer_forbidden=request('POST','genetics_center',{'csrf':csrf,'action':'genetics_project_register'})
 assert 'درخواست انجام نشد' in viewer_forbidden
 assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==1
