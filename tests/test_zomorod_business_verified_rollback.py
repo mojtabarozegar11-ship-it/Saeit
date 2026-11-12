@@ -104,6 +104,34 @@ class VerifiedRollbackContract(unittest.TestCase):
         self.assertFalse((self.private / (".rollback-app-ready-" + self.release)).exists())
         self.assertFalse((self.private / (".rollback-dossier-ready-" + self.release)).exists())
 
+    def test_invalid_dossier_symlink_refuses_before_touching_concurrent_app(self):
+        concurrent = b"<?php echo 'CONCURRENT-APP-KEEP';"
+        (self.private / "app.php").write_bytes(concurrent)
+        dossier = self.private / "genetics-center.php"
+        dossier.unlink()
+        dossier.symlink_to(self.private / "missing-dossier.php")
+        with self.assertRaisesRegex(helper.RestoreError, "UNSAFE_FILE"):
+            self.run_restore()
+        self.assertEqual((self.private / "app.php").read_bytes(), concurrent)
+        self.assertTrue(dossier.is_symlink())
+        self.assertFalse((self.backup / ("concurrent-app-" + self.release + ".php")).exists())
+        self.assertFalse((self.private / (".rollback-app-ready-" + self.release)).exists())
+
+    def test_invalid_live_app_symlink_refuses_without_staging(self):
+        app = self.private / "app.php"
+        app.unlink()
+        app.symlink_to(self.backup / "app.php")
+        with self.assertRaisesRegex(helper.RestoreError, "UNSAFE_FILE"):
+            self.run_restore()
+        self.assertTrue(app.is_symlink())
+        self.assertFalse((self.private / (".rollback-app-ready-" + self.release)).exists())
+
+    def test_concurrent_file_archive_is_copy_not_move(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("backup_copy(live, target, actual)", source)
+        self.assertNotIn("os.replace(live, target)", source)
+        self.assertIn("LIVE_CHANGED_DURING_RECOVERY_PREP", source)
+
     def test_existing_recovery_stage_refuses_reuse(self):
         (self.private / (".rollback-app-ready-" + self.release)).write_bytes(b"DO_NOT_REPLACE")
         with self.assertRaisesRegex(helper.RestoreError, "RECOVERY_STAGE_ALREADY_EXISTS"):
