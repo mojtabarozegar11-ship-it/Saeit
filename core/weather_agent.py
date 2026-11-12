@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from .met_weather_adapter import SOURCE_MODEL, normalize_locationforecast
+from .canonical_agent_handoff import canonical_owner_for
 
 PROVINCES = [
  ('آذربایجان شرقی','تبریز',38.0962,46.2738),('آذربایجان غربی','ارومیه',37.5527,45.0761),('اردبیل','اردبیل',38.2498,48.2933),('اصفهان','اصفهان',32.6546,51.6680),('البرز','کرج',35.8400,50.9391),('ایلام','ایلام',33.6374,46.4227),('بوشهر','بوشهر',28.9234,50.8203),('تهران','تهران',35.6892,51.3890),('چهارمحال و بختیاری','شهرکرد',32.3256,50.8644),('خراسان جنوبی','بیرجند',32.8663,59.2211),('خراسان رضوی','مشهد',36.2605,59.6168),('خراسان شمالی','بجنورد',37.4750,57.3333),('خوزستان','اهواز',31.3183,48.6706),('زنجان','زنجان',36.6736,48.4787),('سمنان','سمنان',35.5729,53.3971),('سیستان و بلوچستان','زاهدان',29.4963,60.8629),('فارس','شیراز',29.5918,52.5837),('قزوین','قزوین',36.2688,50.0041),('قم','قم',34.6416,50.8746),('کردستان','سنندج',35.3219,46.9862),('کرمان','کرمان',30.2839,57.0834),('کرمانشاه','کرمانشاه',34.3142,47.0650),('کهگیلویه و بویراحمد','یاسوج',30.6682,51.5880),('گلستان','گرگان',36.8456,54.4393),('گیلان','رشت',37.2808,49.5832),('لرستان','خرم‌آباد',33.4878,48.3558),('مازندران','ساری',36.5633,53.0601),('مرکزی','اراک',34.0917,49.6892),('هرمزگان','بندرعباس',27.1832,56.2666),('همدان','همدان',34.7980,48.5146),('یزد','یزد',31.8974,54.3569),
@@ -107,19 +108,18 @@ def generate_research_contents(weather_summary):
 
 
 def run_daily_cycle():
-    from .models import Agent, NewsletterSource, NewsletterStory
+    from .models import NewsletterSource, NewsletterStory
+    # Guard before fetching 31 external forecasts or generating any content.
+    # Retained historical legacy records/receipts must be reconciled first.
+    agent = canonical_owner_for("content-director")
+    canonical_owner_for("content-research")
     data = province_forecast(7)
     if len(data) != len(PROVINCES) or any(len(item.get('forecast', [])) != 7 for item in data):
         raise RuntimeError('Incomplete seven-day weather forecast; publication withheld')
     report = build_public_report(data)
     day = timezone.localdate()
-    # Weather publication belongs to an explicitly designated content agent.
-    # Never attribute it to an arbitrary active agent (e.g. factory or trading).
-    agent = Agent.objects.filter(code='content-research', active=True).first()
-    if agent is None:
-        agent = Agent.objects.filter(code='content-director', active=True).first()
-    if not agent:
-        raise RuntimeError('No active content agent')
+    # The weather capability has no independent identity. New records belong
+    # to the canonical bot; existing fingerprints retain their historical FKs.
     src, _ = NewsletterSource.objects.get_or_create(url=SOURCE_URL, defaults={'publisher':'MET Norway','title':'MET Norway Locationforecast (CC BY 4.0)','kind':'research'})
     fp = f'weather-iran-{day.isoformat()}'
     story, created = NewsletterStory.objects.get_or_create(fingerprint=fp, defaults={
