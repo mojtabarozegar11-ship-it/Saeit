@@ -16,6 +16,14 @@ FACTORY_CAPABILITIES = frozenset({
     "factory_native_review", "factory_f41_private_build",
 })
 
+# Both roles are internal modules of the one canonical bot, not economic
+# handlers. In particular, paid knowledge generation remains approval-gated.
+EDITORIAL_CAPABILITIES = frozenset({
+    "research-write-review", "content-editorial-draft",
+})
+KNOWLEDGE_TASK = ("knowledge_content_generation", "research-write-review")
+
+
 
 def is_economic_capability(code):
     return str(code).startswith(ECONOMIC_CAPABILITY_PREFIX) or code in ECONOMIC_SPECIAL_CAPABILITIES
@@ -34,16 +42,28 @@ def economic_task_scope():
 
 
 def non_factory_task_scope():
-    """Known factory tasks are separate; unknown work must not vanish from audits."""
+    """Economic or unknown tasks; exclude only *known exact* specialist pairs.
+
+    An unexpected/mismatched task still reaches the economic review blocker,
+    rather than being silently hidden behind a broad editorial prefix.
+    """
     from django.db.models import F, Q
 
-    return ~(
+    factory = (
         Q(capability_code__in=FACTORY_CAPABILITIES)
         & Q(action_type=F("capability_code"))
     )
+    editorial = Q(
+        action_type=KNOWLEDGE_TASK[0], capability_code=KNOWLEDGE_TASK[1],
+    )
+    return ~(factory | editorial)
 
 
 def module_for_capability(code):
+    if code == "research-write-review":
+        return "knowledge_library"
+    if code == "content-editorial-draft":
+        return "content_editorial"
     if code in FACTORY_CAPABILITIES:
         return "private_factory"
     if is_economic_capability(code):
