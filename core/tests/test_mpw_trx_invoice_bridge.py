@@ -35,7 +35,7 @@ class MPWTrxInvoiceStartBridgeTests(SimpleTestCase):
 
     def test_route_exactly_resolves_to_guarded_bridge(self):
         match = resolve(self.PATH)
-        self.assertIs(match.func.__wrapped__.__wrapped__.__wrapped__, bridge.start_order.__wrapped__.__wrapped__.__wrapped__)
+        self.assertIs(match.func, bridge.start_order)
         self.assertEqual(match.kwargs, {"product_id": 72})
 
     def test_uninstalled_backend_returns_503_without_creating_invoice(self):
