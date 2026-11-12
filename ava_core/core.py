@@ -142,10 +142,23 @@ class ConversationEngine:
     def list_memories(self) -> Sequence[MemoryItem]:
         # Defense in depth: never trust a host-provided store to enforce
         # tenant scoping correctly. Fail closed for foreign-owner records.
-        return tuple(
-            item for item in self._memory.list_for_owner(self.owner_id)
-            if item.owner_id == self.owner_id
-        )
+        records = self._memory.list_for_owner(self.owner_id)
+        validated = []
+        for item in records:
+            # External persistence adapters are untrusted at the read boundary.
+            # Fail closed rather than forwarding malformed private data to a model.
+            if not isinstance(item, MemoryItem):
+                raise ValueError("Memory store returned an invalid record")
+            if item.owner_id != self.owner_id:
+                continue
+            if (not isinstance(item.id, str) or not item.id.strip()
+                    or not isinstance(item.text, str) or not item.text.strip()
+                    or len(item.text) > 10000
+                    or any((ord(ch) < 32 and ch not in "\\n\\r\\t") or ord(ch) == 127
+                           for ch in item.text)):
+                raise ValueError("Memory store returned an unsafe record")
+            validated.append(item)
+        return tuple(validated)
 
     def forget(self, memory_id: str) -> bool:
         return self._memory.delete(self.owner_id, memory_id)
