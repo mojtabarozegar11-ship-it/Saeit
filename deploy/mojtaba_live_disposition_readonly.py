@@ -101,15 +101,22 @@ def trusted_count(value) -> int:
 def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
     allowed = set(permitted)
     hit_counts = Counter()
-    for row in snapshot.get("cron", {}).get("entries", []):
-        for tag in set(row.get("known_route_flags", [])):
+    cron = snapshot.get("cron", {})
+    if cron.get("state") == "observed":
+        for row in cron.get("entries", []):
+            for tag in set(row.get("known_route_flags", [])):
+                if tag in allowed:
+                    hit_counts[("user_cron", tag)] += 1
+    processes = snapshot.get("processes", {})
+    if processes.get("state") == "observed":
+        for tag, n in processes.get("route_match_counts", {}).items():
             if tag in allowed:
-                hit_counts[("user_cron", tag)] += 1
-    for tag, n in snapshot.get("processes", {}).get("route_match_counts", {}).items():
-        if tag in allowed:
-            hit_counts[("process_argv_indicator", tag)] += trusted_count(n)
+                hit_counts[("process_argv_indicator", tag)] += trusted_count(n)
     for layer in ("user_services", "system_services"):
-        for unit in snapshot.get(layer, {}).get("candidate_units", []):
+        status = snapshot.get(layer, {})
+        if status.get("state") != "observed":
+            continue
+        for unit in status.get("candidate_units", []):
             for tag in set(unit.get("known_route_flags", [])):
                 if tag in allowed:
                     hit_counts[(layer + "_candidate", tag)] += 1
