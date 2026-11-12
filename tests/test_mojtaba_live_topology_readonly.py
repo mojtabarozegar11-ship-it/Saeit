@@ -386,3 +386,31 @@ def test_selfhost_summary_keeps_valid_host_when_other_is_unavailable(tmp_path):
     assert "MOJTABA_READONLY_VPS=unknown_no_snapshot" in result.stdout
     assert "MOJTABA_READONLY_CPANEL={" in result.stdout
     assert '"retirement_authorized": false' in result.stdout.lower()
+
+def test_factory_readonly_workflow_is_parseable_yaml():
+    import shutil
+    parser = shutil.which("ruby")
+    if parser is None:
+        pytest.skip("Ruby not installed")
+    path = ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    subprocess.run(
+        [parser, "-r", "yaml", "-e", "YAML.load_file(ARGV.fetch(0))", str(path)],
+        capture_output=True, check=True, timeout=10, text=True,
+    )
+
+
+def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive():
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert "    if: \"${{" in workflow
+    assert "    runs-on: [self-hosted, factory-vps]" in workflow
+    assert 'python3 deploy/mojtaba_live_topology_readonly.py --role vps' in workflow
+    assert 'secrets.SAEIT_HOST_SSH_PRIVATE_KEY' in workflow
+    assert 'secrets.VPS_SSH_PRIVATE_KEY' not in workflow
+    assert 'sudo ' not in workflow
+    assert 'systemctl restart' not in workflow
+    assert 'crontab -e' not in workflow
+    assert 'git push' not in workflow
+    assert 'MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof' in workflow
+
