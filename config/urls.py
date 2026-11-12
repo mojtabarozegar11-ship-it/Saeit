@@ -12,6 +12,7 @@ from core.crown_checkout import crown_cosmetic_checkout
 from core.product_seo_views import product_detail
 from core.mpw_trx_checkout_bridge import product_checkout as mpw_guest_checkout_bridge
 from core.mpw_trx_invoice_bridge import start_order as mpw_trx_invoice_start_bridge
+from core.mpw_trx_purchases_bridge import purchases as mpw_guest_purchases_bridge
 from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
 from core.academy_views import (
@@ -69,6 +70,8 @@ urlpatterns = [
          name="mpw_legacy_book_checkout"),
     path("commerce/trx-easy/start/<int:product_id>/", mpw_trx_invoice_start_bridge,
          name="mpw_trx_invoice_start"),
+    path("commerce/trx-easy/purchases/", mpw_guest_purchases_bridge,
+         name="mpw_guest_purchases"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
