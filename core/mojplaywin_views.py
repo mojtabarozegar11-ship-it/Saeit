@@ -73,17 +73,25 @@ def store(request):
   )
  # Catalog discovery must not take down featured cards when the optional
  # native product schema or its database is temporarily unavailable.
+ # Keyset navigation bounds each query while allowing every approved
+ # release to be reached in subsequent pages (no total-product ceiling).
+ raw_before = request.GET.get("before", "")
+ before = (int(raw_before)
+           if isinstance(raw_before, str) and raw_before.isascii()
+           and raw_before.isdigit() and 0 < len(raw_before) <= 18
+           and int(raw_before) > 0 else None)
  try:
   from .mojplaywin_catalog import verified_catalog_cards
-  verified = verified_catalog_cards()
+  verified, older_id = verified_catalog_cards(before_id=before)
  except Exception as exc:
   import logging
   logging.getLogger(__name__).warning(
    "MojPlayWin verified catalog unavailable: %s", type(exc).__name__
   )
-  verified = []
+  verified, older_id = [], None
  return render(request,"mojplaywin/store.html",{
-  "products":PRODUCTS, "verified_catalog":verified
+  "products":PRODUCTS, "verified_catalog":verified,
+  "catalog_next_id":older_id, "catalog_has_cursor":before is not None
  })
 
 def venture(request, slug):
