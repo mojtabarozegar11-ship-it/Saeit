@@ -8,9 +8,17 @@ class Command(BaseCommand):
         "legacy owner handoff before any forecast requests or publications."
     )
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--approval-grant-id", type=int, default=None,
+            help="Explicit, one-time owner-approved grant for up to two model articles.",
+        )
+
     def handle(self, *args, **options):
         try:
-            result = run_daily_cycle()
+            result = run_daily_cycle(
+                approval_grant_id=options.get("approval_grant_id")
+            )
         except RuntimeError as exc:
             if str(exc) == "MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED" or str(exc).startswith(
                 "MOJTABA_LEGACY_HANDOFF_REQUIRED:"
