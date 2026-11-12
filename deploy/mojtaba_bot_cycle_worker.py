@@ -125,8 +125,36 @@ def main():
             results.append({"action_id":aid,"status":status,"recorded":saved,
                             "record_error":error,"operation":item.get("operation"),
                             "evidence":evidence,"message":message})
+        elif kind in {"source_change", "deliverable_created"}:
+            # Acceptance-only adapter. Another authorized agent MUST have
+            # already produced a real Git-committed change. This worker
+            # never synthesizes code/content to fill a quota.
+            evidence = item.get("evidence", [])
+            if not isinstance(evidence, list):
+                evidence = []
+            valid = verified_git_artifact(kind, evidence)
+            if item.get("before", "").strip() == item.get("after", "").strip():
+                valid = False
+            if not valid:
+                saved, error = record_action(args, item, "blocked", evidence)
+                results.append({
+                    "action_id": aid, "kind": kind, "status": "blocked",
+                    "recorded": saved, "record_error": error,
+                    "reason": "missing exact committed source-change proof",
+                })
+                continue
+            saved, error = record_action(args, item, "success", evidence)
+            results.append({
+                "action_id": aid, "kind": kind,
+                "status": "success" if saved else "blocked",
+                "recorded": saved, "record_error": error,
+                "reason": "verified committed change" if saved else "proof already consumed",
+                "evidence": evidence,
+            })
         else:
             evidence = item.get("evidence", [])
+            if not isinstance(evidence, list):
+                evidence = []
             saved, error = record_action(args, item, "blocked", evidence)
             results.append({"action_id":aid,"status":"blocked","recorded":saved,
                             "record_error":error,
