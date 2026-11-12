@@ -663,8 +663,21 @@ def main(run_id: str) -> None:
     baseline = public_response(run_id + "-before")
     if MARKER not in baseline:
         raise RuntimeError("PUBLIC_FALLBACK_BASELINE_NOT_PROVEN")
-    if not verify_public_buyer_routes(run_id + "-before"):
-        raise RuntimeError("PUBLIC_BUYER_ROUTE_BASELINE_FAILED")
+    # Existing static-fallback pages may legitimately serve 404, legacy
+    # email forms or unusable checkout links. Requiring them to pass the NEW
+    # guest purchase contract before cutover creates an impossible dependency:
+    # the cutover intended to remove the fallback can never start.
+    #
+    # Observe this old state, but never accept it as proof of purchase. The
+    # staged URLconf, invoice source and no-email CSRF form are checked above.
+    # After cutover verify_dynamic_public MUST independently pass all nine
+    # public routes. Any failed post-cutover route triggers exact rollback.
+    baseline_passed = verify_public_buyer_routes(run_id + "-before")
+    print("MPW_STATIC_BUYER_BASELINE=" + json.dumps({
+        "passed": baseline_passed,
+        "legacy_routes_not_commercial_proof": True,
+        "after_cutover_nine_routes_mandatory": True,
+    }, sort_keys=True))
     if time.monotonic() - started > PREFLIGHT_BUDGET_SECONDS:
         raise RuntimeError("CUTOVER_PREPARATION_TIME_BUDGET_EXCEEDED")
     print("MPW_STATIC_FALLBACK_BASELINE=CONFIRMED")
