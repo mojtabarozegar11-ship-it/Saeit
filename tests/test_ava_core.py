@@ -204,6 +204,28 @@ class AvaCoreTests(unittest.TestCase):
         self.assertNotIn("private-owner-two", str(self.calls[-1]))
         self.assertIn("private-owner-one", str(self.calls[-1]))
 
+    def test_external_memory_adapter_rejects_unsafe_records_before_model(self):
+        class CorruptStore(AvaMemory):
+            def __init__(self, record):
+                super().__init__()
+                self.record = record
+
+            def list_for_owner(self, owner_id):
+                return (self.record,)
+
+        for record in (
+            None,
+            MemoryItem("bad", "owner-1", "injected\\x00control", "now"),
+            MemoryItem("bad", "owner-1", "x" * 10001, "now"),
+            MemoryItem("", "owner-1", "content", "now"),
+        ):
+            with self.subTest(record=repr(record)[:80]):
+                assistant = Ava(owner_id="owner-1", brain=self.brain,
+                                memory=CorruptStore(record))
+                with self.assertRaisesRegex(ValueError, "invalid record|unsafe record"):
+                    assistant.converse("سلام", use_memories=True)
+        self.assertEqual(self.calls, [])
+
     def test_brain_failure_does_not_create_memory_or_external_receipt(self):
         def failing_brain(messages):
             raise RuntimeError("provider unavailable")
