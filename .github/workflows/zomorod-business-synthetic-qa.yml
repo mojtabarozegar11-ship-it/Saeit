@@ -45,6 +45,38 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Refuse any PR change to public homepage or unrelated site files
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin refs/heads/main
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              .github/workflows/zomorod-business-direct-live-audit.yml|\
+              .github/workflows/zomorod-business-synthetic-qa.yml|\
+              .github/workflows/zomorod-business-update.yml|\
+              content/zomorod-business/app.php|\
+              content/zomorod-business/genetics-center.php|\
+              docs/zomorod-business-provider-portal-internal-entry-20261112.md|\
+              scripts/zomorod_business_genetics_guarded_install.sh|\
+              scripts/zomorod_business_genetics_overlay_preview.py|\
+              scripts/zomorod_business_genetics_readonly_preflight.sh|\
+              scripts/zomorod_business_homepage_invariant.sh|\
+              scripts/zomorod_business_live_semantic_readonly.py|\
+              scripts/zomorod_business_synthetic_qa.py|\
+              tests/test_zomorod_business_genetics_overlay_preview.py|\
+              tests/test_zomorod_business_homepage_invariant.py|\
+              tests/test_zomorod_business_quota_guards.py|\
+              tests/test_zomorod_business_sqlite_backup_restore.py)
+                ;;
+              *)
+                echo "::error::PUBLIC_HOMEPAGE_PROTECTION=BLOCKED_UNSCOPED_FILE"
+                exit 9
+                ;;
+            esac
+          done < <(git diff --name-only -z FETCH_HEAD HEAD)
+          echo 'PUBLIC_HOMEPAGE_PR_SCOPE=PRIVATE_BUSINESS_FILES_ONLY'
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
