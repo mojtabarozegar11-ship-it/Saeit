@@ -95,6 +95,11 @@ assert '--render-stage' in deploy_workflow
 assert "'$EXPECTED_MERGED' '$dossier_hash'" in deploy_workflow
 assert 'zomorod_business_genetics_overlay_preview.py' in deploy_workflow
 assert 'verified_cpanel_ssh_port:' in deploy_workflow
+assert "github.actor == 'mojtabarozegar11-ship-it'" in deploy_workflow
+assert "github.ref == 'refs/heads/main'" in deploy_workflow
+assert "github.event_name == 'workflow_dispatch'" in deploy_workflow
+assert "runs-on: [self-hosted, factory-vps]" in deploy_workflow
+assert 'runs-on: ubuntu-latest' not in deploy_workflow
 assert 'DIRECT_CPANEL=verified' in deploy_workflow
 assert 'DIRECT_CONFIG' in deploy_workflow
 assert 'ProxyJump' not in deploy_workflow
