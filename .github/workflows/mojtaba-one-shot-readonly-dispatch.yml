@@ -1,0 +1,23 @@
+name: Mojtaba.bot.ai one-shot VPS/cPanel read-only audit
+
+# One-time source-controlled trigger on protected main only.
+# This file is removed after the single reviewed observation attempt.
+# Do not add schedules or pull_request triggers: production SSH secrets are involved.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojtaba-one-shot-readonly-dispatch.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-one-shot-readonly-trigger
+  cancel-in-progress: false
+
+jobs:
+  exactly-scoped-readonly:
+    if: ${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'audit: run one-time read-only VPS and cPanel inventory') }}
+    uses: ./.github/workflows/mojtaba-live-topology-readonly.yml
+    secrets: inherit

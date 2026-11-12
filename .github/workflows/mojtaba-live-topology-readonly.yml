@@ -4,6 +4,9 @@ name: Mojtaba.bot.ai two-host read-only topology evidence
 # unreviewed pull-request code with production secrets.
 on:
   workflow_dispatch:
+  # May be called only by a separately reviewed, constrained main-branch
+  # workflow. A reusable entrypoint is not an automatic production trigger.
+  workflow_call:
 
 permissions:
   contents: read
