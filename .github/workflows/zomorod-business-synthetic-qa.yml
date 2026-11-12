@@ -19,6 +19,8 @@ on:
       - "tests/test_zomorod_business_public_surface_invariant.py"
       - "scripts/zomorod_business_public_reference_audit.py"
       - "tests/test_zomorod_business_public_reference_audit.py"
+      - "scripts/zomorod_business_pre_switch_drift_guard.py"
+      - "tests/test_zomorod_business_pre_switch_drift_guard.py"
       - ".github/workflows/zomorod-business-update.yml"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
@@ -41,6 +43,8 @@ on:
       - "tests/test_zomorod_business_public_surface_invariant.py"
       - "scripts/zomorod_business_public_reference_audit.py"
       - "tests/test_zomorod_business_public_reference_audit.py"
+      - "scripts/zomorod_business_pre_switch_drift_guard.py"
+      - "tests/test_zomorod_business_pre_switch_drift_guard.py"
       - ".github/workflows/zomorod-business-update.yml"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
@@ -73,12 +77,14 @@ jobs:
               scripts/zomorod_business_homepage_invariant.sh|\
               scripts/zomorod_business_public_surface_invariant.py|\
               scripts/zomorod_business_public_reference_audit.py|\
+              scripts/zomorod_business_pre_switch_drift_guard.py|\
               scripts/zomorod_business_live_semantic_readonly.py|\
               scripts/zomorod_business_synthetic_qa.py|\
               tests/test_zomorod_business_genetics_overlay_preview.py|\
               tests/test_zomorod_business_homepage_invariant.py|\
               tests/test_zomorod_business_public_surface_invariant.py|\
               tests/test_zomorod_business_public_reference_audit.py|\
+              tests/test_zomorod_business_pre_switch_drift_guard.py|\
               tests/test_zomorod_business_quota_guards.py|\
               tests/test_zomorod_business_sqlite_backup_restore.py)
                 ;;
@@ -113,6 +119,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_zomorod_business_homepage_invariant.py'
           python3 -m unittest discover -s tests -p 'test_zomorod_business_public_surface_invariant.py'
           python3 -m unittest discover -s tests -p 'test_zomorod_business_public_reference_audit.py'
+          python3 -m unittest discover -s tests -p 'test_zomorod_business_pre_switch_drift_guard.py'
           mkdir -p "$HOME/.private/zomorod-business" "$HOME/public_html/business"
           cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
           cp content/zomorod-business/genetics-center.php "$HOME/.private/zomorod-business/genetics-center.php"
