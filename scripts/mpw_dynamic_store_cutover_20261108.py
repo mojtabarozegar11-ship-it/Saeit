@@ -6,6 +6,7 @@ present Passenger restart marker. Never changes invoices, payments or mail.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -82,18 +83,77 @@ def inspect_owned_fallback(public: Path) -> tuple[bytes, bytes, int]:
     return conf, changed, stat.S_IMODE(ht.stat().st_mode)
 
 
+def validate_store_source(source: bytes) -> None:
+    """Validate actual store control flow, not a fragile source byte count.
+
+    The storefront may gain comments, improve formatting, or install optional
+    analytics without changing the reliable core response contract.
+    """
+    if not isinstance(source, bytes) or not 100 <= len(source) <= 200_000:
+        raise RuntimeError("STAGING_STORE_SOURCE_INVALID")
+    try:
+        tree = ast.parse(source.decode("utf-8"))
+    except (SyntaxError, UnicodeError) as exc:
+        raise RuntimeError("STAGING_STORE_SOURCE_UNREADABLE") from exc
+    stores = [
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "store"
+    ]
+    if len(stores) != 1:
+        raise RuntimeError("STAGING_STORE_VIEW_AMBIGUOUS")
+    view = stores[0]
+    if (len(view.args.args) != 1 or view.args.args[0].arg != "request"
+            or view.args.vararg is not None or view.args.kwarg is not None):
+        raise RuntimeError("STAGING_STORE_SIGNATURE_DRIFT")
+    guarded_analytics = False
+    for statement in view.body:
+        if not isinstance(statement, ast.Try):
+            continue
+        imported = any(
+            isinstance(node, ast.ImportFrom) and node.level == 1
+            and node.module == "commerce_funnel"
+            and any(alias.name == "record_funnel_event" for alias in node.names)
+            for body_statement in statement.body for node in ast.walk(body_statement)
+        )
+        invoked = any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "record_funnel_event"
+            for body_statement in statement.body for node in ast.walk(body_statement)
+        )
+        guarded = any(
+            isinstance(handler.type, ast.Name) and handler.type.id == "Exception"
+            for handler in statement.handlers
+        )
+        if imported and invoked and guarded:
+            guarded_analytics = True
+            break
+    if not guarded_analytics:
+        raise RuntimeError("STAGING_STORE_ANALYTICS_GUARD_ABSENT")
+    valid_return = any(
+        isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call)
+        and isinstance(stmt.value.func, ast.Name)
+        and stmt.value.func.id == "render" and len(stmt.value.args) >= 3
+        and isinstance(stmt.value.args[1], ast.Constant)
+        and stmt.value.args[1].value == "mojplaywin/store.html"
+        and isinstance(stmt.value.args[2], ast.Dict)
+        and any(isinstance(key, ast.Constant) and key.value == "products"
+                and isinstance(value, ast.Name) and value.id == "PRODUCTS"
+                for key, value in zip(stmt.value.args[2].keys, stmt.value.args[2].values))
+        for stmt in view.body
+    )
+    if not valid_return:
+        raise RuntimeError("STAGING_STORE_RENDER_CONTRACT_DRIFT")
+
+
 def check_actual_staging_store() -> None:
-    """Import and render the real store view; never supply a metrics stub."""
+    """Verify the actual server-side storefront before any irreversible cutover."""
     target = APP / "core/mojplaywin_views.py"
-    if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
-            not target.is_file() or (APP / "core/commerce_funnel.py").exists()):
+    analytics = APP / "core/commerce_funnel.py"
+    if (APP.is_symlink() or not APP.is_dir() or target.is_symlink()
+            or target.parent.is_symlink() or not target.is_file()
+            or analytics.is_symlink()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
-    source = target.read_bytes()
-    guard = b"def store(request):\n # Analytics must never make the public storefront unavailable."
-    if (len(source) != 16371 or source.count(guard) != 1 or
-            source.count(b"def store(request):") != 1 or
-            b"except Exception as exc:" not in source[source.index(guard):source.index(guard) + 800]):
-        raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
+    validate_store_source(target.read_bytes())
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
