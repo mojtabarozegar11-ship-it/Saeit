@@ -260,7 +260,7 @@ def verify_template(raw: bytes):
     # Named controls and type=email must be absent even when legacy aliases,
     # single quotes or optional/hidden fields bypass the original exact bytes.
     # This is a fail-closed source gate, not a replacement for runtime POST QA.
-    for tag in re.finditer(rb"<(?:input|textarea|select)\b[^>]*>", raw, re.I | re.S):
+    for tag in re.finditer(rb"<(?:input|textarea|select|button)\b[^>]*>", raw, re.I | re.S):
         opening = tag.group(0)
         for attribute in (b"name", b"id", b"type", b"autocomplete"):
             match = re.search(
