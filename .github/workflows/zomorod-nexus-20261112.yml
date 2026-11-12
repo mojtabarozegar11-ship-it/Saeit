@@ -215,6 +215,14 @@ jobs:
             await b.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
+      - name: Save live mobile tablet and desktop visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-nexus-browser-qa
+          path: ${{ runner.temp }}/nexus-*.png
+          if-no-files-found: ignore
+          retention-days: 7
   rollback-after-browser-failure:
     needs: [publish, verify-browser]
     if: ${{ always() && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' && needs.verify-browser.result != 'success' }}
