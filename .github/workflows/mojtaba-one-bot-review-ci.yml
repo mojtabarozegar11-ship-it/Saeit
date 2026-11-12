@@ -55,6 +55,15 @@ jobs:
           cache: pip
       - name: Install project dependencies
         run: python -m pip install -r requirements.txt
+      - name: Install real Linux isolation dependencies on disposable CI runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          test -x /usr/bin/bwrap
+          test -x /usr/bin/unshare
+          test -x /usr/bin/python3
+          # Do not disable sandboxing or adjust host security policies to pass.
+          unshare -Urn /usr/bin/true
       - name: Validate Django configuration and migrations
         run: |
           python manage.py check
