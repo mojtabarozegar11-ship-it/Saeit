@@ -19,6 +19,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from contextlib import contextmanager
 import fcntl
@@ -256,6 +257,49 @@ def static_quality_checks(batch: list[dict]) -> None:
             check_markdown(path.read_text(encoding="utf-8"))
 
 
+def preflight_all_syntax(actions: list[dict]) -> None:
+    """Validate the WHOLE authored run before the FIRST filesystem mutation.
+
+    A malformed file in batch five must not leave four earlier batches
+    committed while the checkout is stuck with an uncommitted broken file.
+    Running static syntax on supplied bytes avoids executing candidate code.
+    """
+    for item in actions:
+        path = item["path"]
+        suffix = Path(path).suffix
+        payload = item["bytes"]
+        if suffix == ".py":
+            try:
+                compile(payload, path, "exec")
+            except (SyntaxError, ValueError, TypeError) as exc:
+                raise ExecutionError("Python syntax invalid: " + path) from exc
+        elif suffix == ".js":
+            temporary = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                        prefix="c06-syntax-", suffix=".js", delete=False) as handle:
+                    handle.write(payload)
+                    temporary = handle.name
+                result = subprocess.run(
+                    ["node", "--check", temporary],
+                    cwd=ROOT, capture_output=True, timeout=15,
+                )
+                if result.returncode:
+                    raise ExecutionError("JavaScript syntax invalid: " + path)
+            except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                raise ExecutionError("Node syntax checker unavailable") from exc
+            finally:
+                if temporary is not None:
+                    Path(temporary).unlink(missing_ok=True)
+        elif suffix == ".json":
+            try:
+                json.loads(payload.decode("utf-8"))
+            except (UnicodeError, ValueError) as exc:
+                raise ExecutionError("JSON syntax invalid: " + path) from exc
+        elif suffix == ".md":
+            check_markdown(payload.decode("utf-8"))
+
+
 def commit_batch(cycle: str, run_id: str, number: int,
                  batch: list[dict]) -> tuple[str, list[dict]]:
     for item in batch:
@@ -299,6 +343,10 @@ def _execute_locked(cycle: str, run_id: str, candidates: list[dict],
                      "/" + run_id + ".json")
     if (ROOT / manifest_path).exists():
         raise ExecutionError("run manifest already exists; replay refused")
+    # Preflight is strictly read-only and happens before ANY of the five
+    # potential Git batches. Do not mutate a checkout with invalid authored
+    # source, even when the invalid file is the final queued job.
+    preflight_all_syntax(actions)
     if not commit_local:
         return {"cycle": cycle, "run_id": run_id, "mode": "validate_only",
                 "ready": len(actions), "target": TARGET, "committed": 0,
