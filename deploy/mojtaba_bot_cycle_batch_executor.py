@@ -21,6 +21,11 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
+# Neither this script nor its child ledger processes may leave untracked
+# Python bytecode in an otherwise clean authorized source checkout.
+os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
+sys.dont_write_bytecode = True
+
 # Both direct-script execution and package imports used by isolated QA work.
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
