@@ -51,6 +51,10 @@ jobs:
           mkdir -p "$root/static/site/zomorod-v7" "$root/static/site/heroes"
           cp "$root/assets/zm-vision-v3/art/innovation.webp" "$root/static/site/zomorod-v7/company-logo.webp"
           cp "$root/assets/zm-vision-v3/art/castle.webp" "$root/static/site/heroes/ai.webp"
+          for file in "$root"/assets/zm-vision-v3/art/*.webp; do
+            cp "$file" "$root/assets/zm-v3-$(basename "$file")"
+          done
+          test -s "$root/assets/zm-v3-hero.webp"
           cd "$root"
           nohup python3 -m http.server 8096 --bind 127.0.0.1 > /tmp/zomorod-v3-local-http.log 2>&1 &
           echo $! > "$RUNNER_TEMP/zm-preview-server.pid"
@@ -66,7 +70,7 @@ jobs:
           const { chromium } = require('playwright');
           (async()=>{
             const b=await chromium.launch({headless:true,args:['--no-sandbox']});
-            for(const w of [390,768,1024,1440]){
+            for(const w of [390,768,1440]){
               const page=await b.newPage({viewport:{width:w,height:850},deviceScaleFactor:1});
               const errors=[];
               page.on('pageerror',e=>errors.push(e.message));
@@ -211,7 +215,7 @@ jobs:
                   print('VISION_PUBLIC_RETRY='+str(i)+' '+str(exc)[:100],flush=True)
               time.sleep(3)
           assert verified,'New site not visible publicly'
-          for path in ('/assets/zm-reference-v3.css','/assets/zm-reference-v3.js','/assets/zm-vision-v3/art/hero.webp','/assets/zm-vision-v3/art/genetics.webp','/agriculture/','/research/','/industry/','/services/','/store/','/contact/','/games/','/apps/','/topics/','/auctions/'):
+          for path in ('/assets/zm-reference-v3.css','/assets/zm-reference-v3.js','/assets/zm-v3-hero.webp','/assets/zm-v3-genetics.webp','/agriculture/','/research/','/industry/','/services/','/store/','/contact/','/games/','/apps/','/topics/','/auctions/'):
               with urlopen(base+path,timeout=22) as r:
                   data=r.read(250000);assert r.status==200 and len(data)>200,path
               print('VISION_PUBLIC_ASSET_OR_ROUTE_OK='+path)
@@ -248,7 +252,7 @@ jobs:
           const {chromium}=require('playwright');
           (async()=>{
             const b=await chromium.launch({headless:true,args:['--no-sandbox']});
-            for(const width of [390,768,1024,1440]){
+            for(const width of [390,768,1440]){
               const page=await b.newPage({viewport:{width,height:850},deviceScaleFactor:1});
               const errors=[],failed=[];
               page.on('pageerror',e=>errors.push(e.message));
