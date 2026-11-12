@@ -34,6 +34,9 @@ class CheckoutParser(HTMLParser):
         self.button_texts: list[str] = []
         self._button_fragments: list[str] = []
         self._forms: list[dict] = []
+        # HTML form-associated elements can be outside the form, or appear
+        # before it. Resolve explicit form="id" references at summary time.
+        self._associated_emails: list[tuple[str, bool]] = []
         self._active_form: int | None = None
         self._button_form: int | None = None
         self._malformed_forms = False
@@ -52,6 +55,7 @@ class CheckoutParser(HTMLParser):
             self._forms.append({
                 "method": attrs.get("method", "get").lower(),
                 "action": attrs.get("action", ""),
+                "id": attrs.get("id", ""),
                 "csrf": False, "email": False, "cta": False,
             })
             self._active_form = len(self._forms) - 1
@@ -70,6 +74,10 @@ class CheckoutParser(HTMLParser):
                     self.required_email_inputs += 1
                 if self._active_form is not None:
                     self._forms[self._active_form]["email"] = True
+                if attrs.get("form"):
+                    self._associated_emails.append(
+                        (attrs["form"], "required" in attrs)
+                    )
             if (tag == "input" and self._active_form is not None
                     and name == "csrfmiddlewaretoken" and input_type == "hidden"
                     and "disabled" not in attrs and "form" not in attrs):
@@ -118,18 +126,35 @@ class CheckoutParser(HTMLParser):
     def summary(self, sku: int | None = None):
         normalized = " ".join(" ".join(self.text_parts).split()).lower()
         expected_action = f"/commerce/trx-easy/start/{sku}/" if sku is not None else None
-        valid_invoice_form = (not self._malformed_forms and self._active_form is None
-                              and not self.inside_button) and any(
-            form["method"] == "post"
-            and (form["action"] == expected_action if expected_action is not None
-                 else re.fullmatch(r"/commerce/trx-easy/start/[0-9]+/", form["action"]) is not None)
-            and form["csrf"] and form["cta"] and not form["email"]
-            for form in self._forms
+        ids = [form["id"] for form in self._forms if form["id"]]
+        duplicate_ids = len(ids) != len(set(ids))
+        for form_id, _required in self._associated_emails:
+            for form in self._forms:
+                if form["id"] == form_id:
+                    form["email"] = True
+        invoice_forms = [
+            form for form in self._forms
+            if (form["action"] == expected_action if expected_action is not None
+                else re.fullmatch(r"/commerce/trx-easy/start/[0-9]+/",
+                                  form["action"]) is not None)
+        ]
+        # An extra POST or GET form pointing at the same invoice action is
+        # ambiguous; a clean-looking duplicate must not mask an unsafe form.
+        valid_invoice_form = (
+            not self._malformed_forms and self._active_form is None
+            and not self.inside_button and not duplicate_ids
+            and len(invoice_forms) == 1 and invoice_forms[0]["method"] == "post"
+            and invoice_forms[0]["csrf"] and invoice_forms[0]["cta"]
+            and not invoice_forms[0]["email"]
         )
         return {
             "form_count": self.form_count,
             "named_email_inputs": self.email_inputs,
             "required_email_inputs": self.required_email_inputs,
+            "checkout_email_control_present": any(
+                form["email"] for form in invoice_forms
+            ),
+            "checkout_form_count": len(invoice_forms),
             "email_label_present": "email address for your order" in normalized,
             "trx_invoice_cta_present": any(self._is_cta(x) for x in self.button_texts),
             "submit_button_count": self.submit_buttons,
@@ -200,7 +225,7 @@ def live() -> int:
             parsed["http_200"] = status == 200
             parsed["email_free_form_evidence"] = (
                 status == 200 and parsed["form_count"] >= 1
-                and parsed["named_email_inputs"] == 0
+                and not parsed["checkout_email_control_present"]
                 and not parsed["email_label_present"]
                 and parsed["checkout_post_csrf_cta_valid"]
             )
