@@ -25,7 +25,7 @@ class MojPlayWinSiteTests(TestCase):
             'href="/store/product/72/"',
             'href="/store/product/225/"',
             'href="/store/product/879/"',
-            "How checkout and delivery work",
+            "TRX checkout is temporarily unavailable",
         ):
             self.assertIn(marker,html)
         self.assertNotIn("در حال حاضر محصول فعالی",html)
