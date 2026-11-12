@@ -28,7 +28,7 @@ TEMPLATE = "mpw_commerce/templates/mpw_commerce/product_checkout.html"
 MAX_FILE_BYTES = 400_000
 MAX_HELPERS = 64
 # The independently reviewed guest identity adapter used by the release guard.
-APPROVED_GUEST_SHA256 = "11b0aa037c31fbcd1198331444d88426d9b4722d13606a7fda846c8f7601d949"
+APPROVED_GUEST_SHA256 = "b9e0b9b210fa2d36db96b91f596af91ccbfc5923338fd2eb3fc87e800ca0f957"
 
 
 def source_bytes(root: Path, relative: str) -> bytes:
