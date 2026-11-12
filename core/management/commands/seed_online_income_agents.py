@@ -21,6 +21,7 @@ CAPABILITIES = [
     ("master_self_improvement", "Master self-improvement audit", "Run the bounded private source-upgrade engine, test allowlisted repairs, and record immutable before/after evidence. Never promote unreviewed code.", "medium"),
     ("research-write-review", "Knowledge library draft generation", "Queue evidence-bound research drafts only. Paid model generation requires an explicit one-time owner grant; no automatic paid API call or publication.", "high"),
     ("content-editorial-draft", "Owner newsletter draft processing", "Transform a real queued owner submission into an internal review draft with provenance. No public publish, external messages or autonomous spending.", "low"),
+    ("mojtrade_observation_ingest", "MojTrade private market research ingestion", "Read one existing private USD-market observation into the canonical bot task ledger, with idempotency and evidence. No broker, credential, order, signal publication or cash action.", "low"),
 ]
 
 MASTER_AGENT = (
