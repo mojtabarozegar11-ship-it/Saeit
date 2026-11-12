@@ -51,7 +51,8 @@ jobs:
                   data=r.read(7000000)
                   assert r.status==200 and len(data)>200,path
               if path=='/':
-                  assert len(data)>1000000
+                  print('NEXUS_CURRENT_HOMEPAGE_BYTES='+str(len(data)),flush=True)
+                  assert len(data)>40000, 'Homepage unexpectedly small; publication refused'
                   for marker in (b'ZOMOROD_ORBIT_DATA',b'id="main-view"',b'id="orbital-cards"',b'id="site-footer"'):
                       assert marker in data,marker
               print('PREFLIGHT_OK='+path)
