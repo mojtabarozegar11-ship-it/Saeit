@@ -15,6 +15,7 @@ import re
 import stat
 import sys
 from pathlib import Path
+from html.parser import HTMLParser
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 SOURCE_PATHS = (
@@ -83,19 +84,29 @@ def has_email_reference(node: ast.AST, constants: dict[str, str] | None = None) 
     return False
 
 
+class EmailControlParser(HTMLParser):
+    """Handle quoted '>' and arbitrary attribute order safely and read-only."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.found = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in ("input", "textarea", "select", "button"):
+            return
+        for name, value in attrs:
+            name = name.lower()
+            value = (value or "").strip().lower()
+            if ((name in ("name", "id") and "email" in value)
+                    or (name in ("type", "autocomplete") and value == "email")):
+                self.found = True
+
+
 def template_email_controls(raw: bytes) -> bool:
-    """Detect aliases and hidden email inputs, not just name='email'."""
-    for tag in re.finditer(rb"<(?:input|textarea|select|button)\b[^>]{0,4096}>", raw, re.I | re.S):
-        opening = tag.group(0)
-        for name in (b"name", b"id", b"type", b"autocomplete"):
-            pattern = (rb"(?<![\w:-])" + name
-                       + rb"""\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+))""")
-            for match in re.finditer(pattern, opening, re.I | re.S):
-                val = next((v for v in match.groups() if v is not None), b"").lower()
-                if (name in (b"name", b"id") and b"email" in val or
-                        name in (b"type", b"autocomplete") and val == b"email"):
-                    return True
-    return False
+    parser = EmailControlParser()
+    parser.feed(raw.decode("utf-8"))
+    parser.close()
+    return parser.found
 
 
 def module_report(relative: str, raw: bytes) -> dict:
