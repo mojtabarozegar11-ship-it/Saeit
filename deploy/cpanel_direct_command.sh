@@ -63,9 +63,8 @@ EOF
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; test -d "$root"; bash "$root/scripts/cpanel_preflight.sh" "$root"'
       ;;
     django_check)
-      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -u; root=; python=; for pair in "/home/zomorod2/Saeit|/home/zomorod2/virtualenv/Saeit/3.11/bin/python" "/home/zomorodm/repositories/Saeit|/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python"; do candidate_root="${pair%%|*}"; candidate_python="${pair#*|}"; if test -f "$candidate_root/manage.py" && test -x "$candidate_python"; then root="$candidate_root"; python="$candidate_python"; break; fi; done; test -n "$root"; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
-      ;;
-    django_migrations)
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'if test -f /home/zomorod2/Saeit/manage.py && test -x /home/zomorod2/virtualenv/Saeit/3.11/bin/python; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; elif test -f /home/zomorodm/repositories/Saeit/manage.py && test -x /home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; then root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; else echo DJANGO_PATH_NOT_FOUND; find /home -maxdepth 5 -name manage.py -print 2>/dev/null | head -20; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
+      ;;    django_migrations)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
       ;;
   esac
