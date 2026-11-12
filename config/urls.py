@@ -63,6 +63,10 @@ urlpatterns = [
     path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
     path("store/product/<int:product_id>/checkout/", mpw_guest_checkout_bridge,
          name="mpw_guest_product_checkout"),
+    # Backward-compatible buyer page alias used by the documented TRX funnel.
+    # It delegates to the same reviewed guest checkout; no second payment engine.
+    path("commerce/book/<int:product_id>/", mpw_guest_checkout_bridge,
+         name="mpw_legacy_book_checkout"),
     path("commerce/trx-easy/start/<int:product_id>/", mpw_trx_invoice_start_bridge,
          name="mpw_trx_invoice_start"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
