@@ -184,7 +184,11 @@ def live() -> int:
         code, html = fetch("/store/")
         store_status = "STATIC_FALLBACK" if "MPW_STATIC_STORE_FALLBACK_V1" in html else "OTHER"
         report["store_http_200"] = code == 200
-    except (OSError, ValueError, urllib.error.HTTPError) as exc:
+    except urllib.error.HTTPError as exc:
+        report["store_error_type"] = "HTTPError"
+        report["store_http_status"] = exc.code if 100 <= exc.code <= 599 else None
+        report["store_http_200"] = False
+    except (OSError, ValueError) as exc:
         report["store_error_type"] = type(exc).__name__
         report["store_http_200"] = False
     report["store_mode"] = store_status
@@ -201,7 +205,11 @@ def live() -> int:
                 and parsed["checkout_post_csrf_cta_valid"]
             )
             report["products"][str(sku)] = parsed
-        except (OSError, ValueError, urllib.error.HTTPError) as exc:
+        except urllib.error.HTTPError as exc:
+            report["products"][str(sku)] = {
+                "email_free_form_evidence": False, "error_type": "HTTPError",
+                "http_status": exc.code if 100 <= exc.code <= 599 else None}
+        except (OSError, ValueError) as exc:
             report["products"][str(sku)] = {
                 "email_free_form_evidence": False, "error_type": type(exc).__name__}
     report["all_email_free_forms"] = all(
