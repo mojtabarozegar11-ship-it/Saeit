@@ -99,14 +99,30 @@ def audit() -> dict:
         group["runs"] += 1
         group["historical_verified_actions"] += accepted
         group["latest_run_id"] = manifest["run_id"]
+        group["last_manifest_commit_timestamp"] = manifest_time
         group["latest_run_success"] = accepted
         group["latest_run_submitted"] = len(manifest["actions"])
         group["latest_run_rejected"] = rejected
         group["last_manifest"] = relative
+    current_time = datetime.now(timezone.utc).timestamp()
     for group in lanes.values():
+        stamp = group.get("last_manifest_commit_timestamp")
+        age_seconds = current_time - stamp if stamp is not None else None
+        fresh = age_seconds is not None and -300 <= age_seconds <= WINDOW_SECONDS
+        group["latest_run_is_current"] = fresh
+        group["last_seen_run_id"] = group["latest_run_id"]
+        group["last_seen_run_success"] = group["latest_run_success"]
+        group["last_seen_run_age_seconds"] = round(age_seconds) if age_seconds is not None else None
+        if not fresh:
+            # Previous-hour success is history, NEVER current-hour output.
+            # Preserve total verified historical actions separately.
+            group["latest_run_id"] = None
+            group["latest_run_success"] = 0
+            group["latest_run_submitted"] = 0
+            group["latest_run_rejected"] = 0
         group["latest_run_missing"] = 50 - group["latest_run_success"]
         group["latest_run_percent"] = 100 * group["latest_run_success"] / 50
-        group["complete"] = group["latest_run_success"] >= 50
+        group["complete"] = fresh and group["latest_run_success"] >= 50
     return {
         "engine": "mojtaba.bot.ai",
         "read_only": True,
