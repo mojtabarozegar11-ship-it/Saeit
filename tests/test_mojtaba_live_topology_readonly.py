@@ -408,10 +408,117 @@ def test_factory_runner_credential_use_and_local_vps_probe_remain_nondestructive
     assert "    runs-on: [self-hosted, factory-vps]" in workflow
     assert 'python3 deploy/mojtaba_live_topology_readonly.py --role vps' in workflow
     assert 'secrets.SAEIT_HOST_SSH_PRIVATE_KEY' in workflow
-    assert 'secrets.VPS_SSH_PRIVATE_KEY' not in workflow
+    assert 'secrets.VPS_SSH_PRIVATE_KEY' in workflow
     assert 'sudo ' not in workflow
     assert 'systemctl restart' not in workflow
     assert 'crontab -e' not in workflow
     assert 'git push' not in workflow
     assert 'MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof' in workflow
 
+
+def test_local_vps_runner_mismatch_has_existing_pinned_ssh22_fallback():
+    """Runner OS identity is not confused with VPS health or SSH port state."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert 'if [[ "$(id -un)" == "githubops" ]]; then' in workflow
+    assert "MOJTABA_VPS_LOCAL_OBSERVATION=runner_user_not_githubops" in workflow
+    assert 'if [[ "$vps_ok" != "1" ]]; then' in workflow
+    assert workflow.index('if [[ "$(id -un)" == "githubops" ]]') < workflow.index(
+        'if [[ "$vps_ok" != "1" ]]; then'
+    )
+    assert 'secrets.VPS_SSH_PRIVATE_KEY' in workflow
+    assert 'ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150' in workflow
+    assert 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' in workflow
+    assert '-p 22 githubops@178.239.147.150' in workflow
+    assert "'exec python3 - --role vps'" in workflow
+    assert "MOJTABA_VPS_ROUTE=pinned_ssh_22_githubops" in workflow
+    assert 'IdentitiesOnly=yes' in workflow
+    assert 'StrictHostKeyChecking=yes' in workflow
+    assert 'cat "$d/vps.err"' not in workflow
+    assert 'echo "$runner_user"' not in workflow
+    assert "sudo " not in workflow
+
+
+def test_incomplete_two_host_inventory_fails_closed_not_green():
+    """A green Actions job must not attest a partial cPanel-only observation."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert '"vps": sys.argv[2] == "1", "cpanel": sys.argv[3] == "1"' in workflow
+    assert 'print("MOJTABA_READONLY_" + role.upper() + "="' in workflow
+    assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" in workflow
+    assert (
+        'echo "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof"\n'
+        '            echo "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE"\n'
+        '            exit 1'
+    ) in workflow
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "secrets.VPS_SSH_PRIVATE_KEY" in workflow
+    assert "StrictHostKeyChecking=yes" in workflow
+
+
+
+def test_partial_dual_host_failure_exit_code_is_nonzero_offline():
+    """Exercise the actual fail-closed bash branch; never connect to either host."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    marker = '          if [[ "$vps_ok" == "1" && "$cpanel_ok" == "1" ]]; then'
+    assert workflow.count(marker) == 1
+    fragment = workflow.split(marker, 1)[1]
+    shell = (
+        "set -euo pipefail\n"
+        "vps_ok=0\n"
+        "cpanel_ok=1\n"
+        'if [[ "$vps_ok" == "1" && "$cpanel_ok" == "1" ]]; then\n'
+        + textwrap.dedent(fragment)
+    )
+    completed = subprocess.run(
+        ["bash", "-c", shell],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in completed.stdout
+    assert "MOJTABA_DISPOSITION_PREVIEW=partial_host_observation_not_retirement_proof" in completed.stdout
+    assert "MOJTABA_DUAL_HOST_GATE=PASS_OBSERVATIONS_ONLY" not in completed.stdout
+
+
+def test_secret_bearing_selfhosted_manual_workflows_require_main_ref():
+    """Every inventoried SSH-bearing factory runner job must reject non-main refs."""
+    paths = (
+        ".github/workflows/cpanel-direct-command-bridge.yml",
+        ".github/workflows/vps-to-cpanel-ssh-readonly-20261112.yml",
+        ".github/workflows/vps-direct-ssh-system-health-readonly-20261031.yml",
+        ".github/workflows/mojtaba-live-topology-readonly.yml",
+    )
+    for relative in paths:
+        workflow = (ROOT / relative).read_text(encoding="utf-8")
+        assert "runs-on: [self-hosted, factory-vps]" in workflow, relative
+        assert "github.ref == 'refs/heads/main'" in workflow, relative
+        assert "github.repository == 'mojtabarozegar11-ship-it/Saeit'" in workflow, relative
+        assert "pull_request:" not in workflow.split("on:", 1)[1].split("permissions:", 1)[0], relative
+        assert "StrictHostKeyChecking=no" not in workflow, relative
+
+
+def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
+    """No unpinned SSH, fake port switching, secret echo, or permission bypass."""
+    workflow = (
+        ROOT / ".github/workflows/mojtaba-live-topology-readonly.yml"
+    ).read_text(encoding="utf-8")
+    assert 'if [[ -z "${VPS_KEY:-}" ]]; then' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=missing_existing_key' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=host_fingerprint_mismatch_stop' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=host_key_unreachable' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=ssh_or_interpreter_failed' in workflow
+    assert 'MOJTABA_VPS_SSH_OBSERVATION=invalid_existing_key' in workflow
+    assert workflow.count('-p 22 githubops@178.239.147.150') == 1
+    assert 'StrictHostKeyChecking=no' not in workflow
+    assert 'UserKnownHostsFile=/dev/null' not in workflow
+    assert 'echo "$VPS_KEY"' not in workflow
+    assert 'sudo ' not in workflow
+    assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in workflow

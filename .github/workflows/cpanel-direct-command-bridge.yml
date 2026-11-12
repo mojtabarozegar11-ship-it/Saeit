@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   cpanel:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
