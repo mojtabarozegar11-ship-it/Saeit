@@ -1,0 +1,60 @@
+name: Diagnose actual robots physical path read only
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auction-robots-physical-audit-20261112.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Read only physical robot paths on cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/robot-physical"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          home=Path('/home/zomorod2')
+          for name in ('public_html/robots.txt','public_html/.htaccess','Saeit/robots.txt','Saeit/public/robots.txt','Saeit/public_html/robots.txt','public_html/zm-auctions-index/robots.txt'):
+              p=home/name
+              if not p.exists():print('MISSING='+name);continue
+              if not p.is_file() or p.is_symlink():print('INVALID='+name);continue
+              data=p.read_bytes()
+              print('FILE='+name+' SIZE='+str(len(data))+' SHA256='+hashlib.sha256(data).hexdigest())
+              if name.endswith('robots.txt'):
+                  print('ROBOTS_CONTENT='+data[:1500].decode('utf-8','replace').replace(chr(10),' / '))
+              if name.endswith('.htaccess'):
+                  for line in data.decode('utf-8','replace').splitlines():
+                      if 'robots' in line.lower() or 'sitemap-auctions' in line.lower() or 'auctions/?$' in line:
+                          print('HTACCESS_RULE='+line[:250])
+          PY
+          echo 'PRODUCTION_WRITES=NONE'
