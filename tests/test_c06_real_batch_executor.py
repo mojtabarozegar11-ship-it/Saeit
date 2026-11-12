@@ -76,13 +76,15 @@ def job(i, cycle="A", *, target=None, content=None):
     }
 
 
-def command(root, jobs_file, cycle, run_id, state, *, commit=False):
+def command(root, jobs_file, cycle, run_id, state, *, commit=False, resume=False):
     a = [sys.executable, "deploy/mojtaba_bot_cycle_batch_executor.py",
          "--cycle", cycle, "--jobs", str(jobs_file), "--run-id", run_id,
          "--expected-branch", "work/c06-isolated-qa",
          "--state", str(state)]
     if commit:
         a.append("--commit-local")
+    if resume:
+        a.append("--resume")
     return run(root, *a)
 
 
@@ -191,3 +193,55 @@ def test_no_write_if_unauthorized_branch_or_dirty_checkout(tmp_path):
     assert dirty.returncode == 2
     assert "dirty checkout" in json.loads(dirty.stdout)["error"]
     assert (root / "unexpected-private-note.txt").read_text() == "not to be changed"
+
+
+def test_interrupted_cycle_restarts_after_two_verified_ten_action_batches(
+        tmp_path, monkeypatch):
+    """A killed 50-job run must not abandon 20 already valid commits."""
+    import importlib.util
+
+    root = checkout(tmp_path)
+    jobs = [job(i) for i in range(50)]
+    job_file = tmp_path / "jobs.json"
+    job_file.write_text(json.dumps(jobs))
+    state = tmp_path / "ledger.json"
+
+    spec = importlib.util.spec_from_file_location(
+        "c06_crash_qa", root / "deploy" / "mojtaba_bot_cycle_batch_executor.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.chdir(root)
+    first_commit = module.commit_batch
+
+    def interrupt_after_20(cycle, run_id, number, items):
+        if number == 3:
+            raise module.ExecutionError("intentional QA interruption after 20")
+        return first_commit(cycle, run_id, number, items)
+
+    monkeypatch.setattr(module, "commit_batch", interrupt_after_20)
+    with pytest.raises(module.ExecutionError,
+                       match="intentional QA interruption"):
+        module.execute(
+            "A", "A-C06-RESUME-QA", jobs,
+            commit_local=True, expected_branch="work/c06-isolated-qa",
+            state_path=str(state), resume=False,
+        )
+
+    assert int(git(root, "rev-list", "--count", "HEAD")) == 3
+    assert not git(root, "status", "--porcelain")
+    assert not (root / "runtime/cycle_receipts/A/A-C06-RESUME-QA.json").exists()
+
+    resumed = command(
+        root, job_file, "A", "A-C06-RESUME-QA", state, commit=True,
+        resume=True,
+    )
+    assert resumed.returncode == 0, resumed.stderr + resumed.stdout[-900:]
+    response = json.loads(resumed.stdout)
+    assert response["processed"] == 50
+    assert response["accepted"] == 50
+    assert response["complete"] is True
+    assert response["resumed_batches"] == [1, 2]
+    assert response["newly_committed_batches"] == 3
+    assert int(git(root, "rev-list", "--count", "HEAD")) == 7
+    assert not git(root, "status", "--porcelain")
