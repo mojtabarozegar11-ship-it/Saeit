@@ -16,6 +16,7 @@ import django
 django.setup()
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
 from django.test import RequestFactory, override_settings, TransactionTestCase
