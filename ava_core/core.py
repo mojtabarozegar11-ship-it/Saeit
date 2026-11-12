@@ -234,6 +234,10 @@ class ConversationEngine:
             raise ValueError("Brain returned an empty response")
         if len(result) > 10000:
             raise ValueError("Brain response exceeds 10000 characters")
+        # A host-provided model may return terminal controls or NUL bytes.
+        # Reject them before the reply reaches a chat UI, log, or transcript.
+        if any((ord(ch) < 32 and ch not in "\n\r\t") or ord(ch) == 127 for ch in result):
+            raise ValueError("Brain response contains forbidden control characters")
         return AvaReply(text=result, memories_used=len(items))
 
 
