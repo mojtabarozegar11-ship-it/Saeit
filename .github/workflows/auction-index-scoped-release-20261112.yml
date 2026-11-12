@@ -1,0 +1,190 @@
+name: Publish auction index and secondary sitemap safely
+on:
+  push:
+    branches: [feature/zomorod-auctions-directory-20261112]
+    paths: [.github/workflows/auction-index-scoped-release-20261112.yml]
+permissions: {contents: read}
+concurrency: {group: auction-directory-20261112, cancel-in-progress: false}
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 1}
+      - name: Validate complete public index and sitemap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          from xml.etree import ElementTree as ET
+          s=Path('public/auctions/index.html').read_text(encoding='utf-8')
+          assert '<html lang="fa" dir="rtl">' in s and 'zomorodmelal@gmail.com' in s
+          assert '۵ تا ۱۰ هر ماه' in s and 'بدون تعهد خرید یا پیش‌پرداخت' in s
+          assert 'application/ld+json' in s and 'https://zomorodmelal.ir/auctions/' in s
+          assert s.count('</html>')==1 and '{%' not in s
+          class Links(HTMLParser):
+              def __init__(self):super().__init__();self.links=[]
+              def handle_starttag(self,t,a):
+                  if t=='a':self.links.append(dict(a).get('href',''))
+          x=Links();x.feed(s)
+          for n in (346,347,348,349):assert f'/auctions/{n}/' in x.links
+          assert '/sitemap-auctions.xml' in x.links
+          root=ET.parse('public/auctions/sitemap.xml')
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          urls={v.text for v in root.findall('.//s:loc',ns)}
+          expected={'https://zomorodmelal.ir/auctions/'}|{f'https://zomorodmelal.ir/auctions/{n}/' for n in (346,347,348,349)}
+          assert urls==expected
+          print('INDEX_QA=PASS FOUR_LINKS')
+          print('SITEMAP_QA=PASS FIVE_URLS')
+          PY
+      - name: Publish two new files and only two new rewrite rules via direct pinned cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/auctions-index-direct"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          for path in "/" "/auctions/" "/sitemap.xml" "/auctions/346/" "/auctions/347/" "/auctions/348/" "/auctions/349/"; do
+            key="$(printf '%s' "$path" | tr '/' '_' )"
+            test "$key" != "_" || key="root"
+            code="$(curl -sSL --max-time 18 -o "$d/before-$key" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            test "$code" = 200
+            echo "BASELINE_$key=HTTP200"
+          done
+          grep -Fq 'در حال حاضر مزایده منتشرشده‌ای برای نمایش وجود ندارد' "$d/before-_auctions_"
+          code="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/sitemap-auctions.xml || true)"
+          test "$code" = 404
+          index_sha="$(sha256sum public/auctions/index.html | cut -c1-64)"
+          sitemap_sha="$(sha256sum public/auctions/sitemap.xml | cut -c1-64)"
+          index_stage="/home/zomorod2/.auction-index-$GITHUB_RUN_ID.html"
+          sitemap_stage="/home/zomorod2/.auction-index-$GITHUB_RUN_ID.xml"
+          timeout 50s scp -q -F "$d/config" public/auctions/index.html "saeit-cpanel:$index_stage"
+          timeout 50s scp -q -F "$d/config" public/auctions/sitemap.xml "saeit-cpanel:$sitemap_stage"
+          remote_index_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$index_stage' | cut -c1-64")"
+          remote_sitemap_sha="$(timeout 40s ssh -T -F "$d/config" saeit-cpanel "sha256sum '$sitemap_stage' | cut -c1-64")"
+          test "$index_sha" = "$remote_index_sha" && test "$sitemap_sha" = "$remote_sitemap_sha"
+          echo 'TRANSFER_SHA256_BOTH=VERIFIED'
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$index_stage' '$sitemap_stage' '$GITHUB_RUN_ID' '$index_sha' '$sitemap_sha'" <<'PY'
+          import hashlib,os,pathlib,stat,sys
+          stage1,stage2,run,sha1,sha2=sys.argv[1:]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess'
+          directory=root/'zm-auctions-index'
+          assert os.getuid()==home.stat().st_uid and root.is_dir() and not root.is_symlink()
+          assert ht.is_file() and not ht.is_symlink()
+          assert not directory.exists() and not directory.is_symlink()
+          sources=[pathlib.Path(stage1),pathlib.Path(stage2)]
+          content=[]
+          for src,expected in zip(sources,(sha1,sha2)):
+              assert src.is_file() and not src.is_symlink()
+              raw=src.read_bytes();assert hashlib.sha256(raw).hexdigest()==expected
+              content.append(raw)
+          before=ht.read_bytes()
+          expected_sha='3006d8a696efc9b1acfc3118c834c02f7235b790e7f4828f9572675496c3ad6b'
+          assert hashlib.sha256(before).hexdigest()==expected_sha,'LIVE_HTACCESS_DRIFT'
+          anchor=b'RewriteRule ^auctions/349/?$ /zm-auction349/index.html [END,NC]'
+          assert before.count(anchor)==1
+          for n in ('346','347','348','349'):
+              assert b'RewriteRule ^auctions/'+n.encode()+b'/?$ /zm-auction'+n.encode()+b'/index.html [END,NC]' in before
+          assert b'^auctions/?$' not in before and b'^sitemap-auctions' not in before
+          prefix=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]\nRewriteRule ^sitemap-auctions[.]xml$ /zm-auctions-index/sitemap.xml [END,NC]\n'
+          updated=before.replace(anchor,prefix+anchor)
+          backups=home/'.backups'/'auction-index-scoped'/run
+          backups.mkdir(mode=0o700,parents=True,exist_ok=False)
+          (backups/'htaccess.original').write_bytes(before)
+          (backups/'htaccess.sha256').write_text(expected_sha+'\n')
+          (backups/'index.sha256').write_text(sha1+'\n')
+          (backups/'sitemap.sha256').write_text(sha2+'\n')
+          directory.mkdir(mode=0o755)
+          tmp=root/('.htaccess.auction-index.'+run)
+          try:
+              for filename,raw in zip(('index.html','sitemap.xml'),content):
+                  dst=directory/filename
+                  with open(dst,'xb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+                  dst.chmod(0o644)
+              with open(tmp,'xb') as f:f.write(updated);f.flush();os.fsync(f.fileno())
+              tmp.chmod(stat.S_IMODE(ht.stat().st_mode))
+              os.replace(tmp,ht)
+          except Exception:
+              if tmp.exists():tmp.unlink()
+              for filename in ('index.html','sitemap.xml'):
+                  p=directory/filename
+                  if p.is_file() and not p.is_symlink():p.unlink()
+              if directory.is_dir():directory.rmdir()
+              raise
+          for src in sources:src.unlink()
+          print('AUCTION_INDEX_INSTALL=COMPLETE')
+          PY
+          verified=yes
+          for path in "/auctions/" "/sitemap-auctions.xml"; do
+            name="$(printf '%s' "$path" | tr '/' '_')"
+            status="$(curl -sSL --max-time 18 -o "$d/result-$name" -w '%{http_code}' "https://zomorodmelal.ir$path?v=$GITHUB_RUN_ID" || true)"
+            test "$status" = 200 || verified=no
+          done
+          test "$(sha256sum "$d/result-_auctions_" | cut -c1-64)" = "$index_sha" || verified=no
+          test "$(sha256sum "$d/result-_sitemap-auctions.xml" | cut -c1-64)" = "$sitemap_sha" || verified=no
+          for n in 346 347 348 349; do
+            grep -Fq "href=\"/auctions/$n/\"" "$d/result-_auctions_" || verified=no
+            status="$(curl -sSL --max-time 18 -o "$d/after-$n" -w '%{http_code}' "https://zomorodmelal.ir/auctions/$n/" || true)"
+            test "$status" = 200 || verified=no
+            original="$(sha256sum "$d/before-_auctions_$n"'/')"; : "$original"
+          done
+          root_status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          sitemap_status="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/sitemap.xml || true)"
+          test "$root_status" = 200 && test "$sitemap_status" = 200 || verified=no
+          if test "$verified" != yes; then
+            echo 'PUBLIC_VERIFICATION=FAILED_ROLLBACK'
+            timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - '$GITHUB_RUN_ID' '$index_sha' '$sitemap_sha'" <<'ROLLBACK'
+          import hashlib,os,pathlib,stat,sys
+          run,sha1,sha2=sys.argv[1:]
+          home=pathlib.Path('/home/zomorod2');root=home/'public_html';ht=root/'.htaccess'
+          backup=home/'.backups'/'auction-index-scoped'/run/'htaccess.original'
+          assert backup.is_file() and not backup.is_symlink()
+          original=backup.read_bytes()
+          assert hashlib.sha256(original).hexdigest()=='3006d8a696efc9b1acfc3118c834c02f7235b790e7f4828f9572675496c3ad6b'
+          anchor=b'RewriteRule ^auctions/349/?$ /zm-auction349/index.html [END,NC]'
+          addition=b'RewriteRule ^auctions/?$ /zm-auctions-index/index.html [END,NC]\nRewriteRule ^sitemap-auctions[.]xml$ /zm-auctions-index/sitemap.xml [END,NC]\n'
+          assert ht.read_bytes()==original.replace(anchor,addition+anchor),'UNEXPECTED_HTACCESS_EDIT'
+          tmp=root/('.htaccess.auction-index-rollback.'+run)
+          with open(tmp,'xb') as f:f.write(original);f.flush();os.fsync(f.fileno())
+          tmp.chmod(stat.S_IMODE(ht.stat().st_mode));os.replace(tmp,ht)
+          directory=root/'zm-auctions-index'
+          for filename,expected in (('index.html',sha1),('sitemap.xml',sha2)):
+              p=directory/filename
+              assert p.is_file() and not p.is_symlink() and hashlib.sha256(p.read_bytes()).hexdigest()==expected
+              p.unlink()
+          directory.rmdir()
+          print('AUCTION_INDEX_ROLLBACK=COMPLETE')
+          ROLLBACK
+            exit 1
+          fi
+          echo 'AUCTIONS_INDEX=PUBLIC_200_FOUR_LINKS'
+          echo 'AUCTIONS_SITEMAP=PUBLIC_200_FIVE_URLS'
+          echo 'HOMEPAGE_AND_ORIGINAL_SITEMAP=200'
