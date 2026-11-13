@@ -74,12 +74,17 @@ def test_recovery_command_reports_blocked_once_and_is_idempotent(economic_agent)
     assert task.attempt_count == 1
 
 
-def test_exhausted_economic_retries_remain_terminal_failed(economic_agent):
+def test_exhausted_economic_stale_work_remains_blocked_for_receipt_review(economic_agent):
     agent, cap = economic_agent
     task = running_economic_task(agent, cap, attempts=3, max_attempts=3)
     result = TaskRuntime().recover_stale(task.pk, stale_after_seconds=900)
-    assert result.status == "failed"
+    assert result.status == "blocked"
     assert result.execution_id == "prior-identity"
+    assert result.output_data["requires_review"] is True
+    assert result.output_data["automatic_replay_allowed"] is False
+    assert result.output_data["retry_budget_exhausted"] is True
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
 
 
 def test_non_economic_stale_work_keeps_existing_requeue_policy(db):
@@ -144,3 +149,58 @@ def test_master_loop_does_not_replan_while_economic_work_runs(economic_agent):
         planner.assert_not_called()
         runner.assert_not_called()
     assert f"AUTO_WAIT_RUNNING task={running.pk}" in output.getvalue()
+
+
+
+@pytest.mark.parametrize("max_attempts", [1, 3])
+def test_canonical_worker_failure_never_requeues_unknown_effect(economic_agent, max_attempts):
+    agent, cap = economic_agent
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=max_attempts,
+    )
+    runtime = TaskRuntime()
+    running = runtime.claim(task.pk)
+    token = running.execution_id
+
+    blocked = runtime.fail(task.pk, "provider acknowledgement lost", execution_id=token)
+    assert blocked.status == "blocked"
+    assert blocked.execution_id == token
+    assert blocked.attempt_count == 1
+    assert blocked.output_data["requires_review"] is True
+    assert blocked.output_data["automatic_replay_allowed"] is False
+    assert blocked.output_data["previous_execution_id"] == token
+    assert blocked.output_data["retry_budget_exhausted"] is (max_attempts == 1)
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        runtime.claim(task.pk)
+    with pytest.raises(TaskExecutionError, match="not running"):
+        runtime.complete(task.pk, {"verified_effect": True}, execution_id=token)
+    receipt = AuditLog.objects.get(
+        action="task_failed", target_type="AgentTask", target_id=str(task.pk),
+    )
+    assert receipt.after_state["requires_review"] is True
+    assert receipt.after_state["automatic_replay_allowed"] is False
+
+
+def test_noncanonical_worker_failure_still_preserves_existing_retry_contract(db):
+    agent = Agent.objects.create(
+        code="ordinary-worker", name="Ordinary", mission="Legacy", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="ordinary-research", name="Ordinary research",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(agent)
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=2,
+    )
+    runtime = TaskRuntime()
+    first = runtime.claim(task.pk)
+    queued = runtime.fail(task.pk, "temporary error", execution_id=first.execution_id)
+    assert queued.status == "queued"
+    assert queued.execution_id == ""
+    second = runtime.claim(task.pk)
+    final = runtime.fail(task.pk, "final error", execution_id=second.execution_id)
+    assert final.status == "failed"
+    assert final.execution_id == second.execution_id
