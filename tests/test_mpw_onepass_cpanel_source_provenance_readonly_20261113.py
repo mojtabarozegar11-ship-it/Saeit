@@ -237,6 +237,73 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.store.unlink()
         self.assertEqual(self.inspect()["public_fallback"], "unknown")
 
+    def test_apache_source_exact_root_and_slash_are_only_disk_evidence(self):
+        self.ht.write_bytes(probe.FALLBACK_BLOCK +
+                            ("PassengerAppRoot " + str(self.public) +
+                             "\nPassengerBaseURI /\n").encode())
+        report = self.inspect()
+        self.assertEqual(report["apache_passenger_directive_source"],
+                         "public_root_slash_directives_on_disk")
+        self.assertFalse(report["effective_django_template_origin_verified"])
+        self.assertFalse(report["production_release_permitted_by_this_report"])
+
+    def test_apache_stage_root_is_not_public_root(self):
+        self.ht.write_bytes(("PassengerAppRoot '" + str(self.app) +
+                             "'\nPassengerBaseURI /\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "staging_root_slash_directives_on_disk")
+
+    def test_apache_subpath_and_missing_uri_are_not_root_proof(self):
+        self.ht.write_bytes(("PassengerAppRoot " + str(self.public) +
+                             "\nPassengerBaseURI /store\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "base_uri_not_slash")
+        self.ht.write_bytes(("PassengerAppRoot " + str(self.public) + "\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "base_uri_not_declared")
+
+    def test_apache_duplicate_and_malformed_directives_fail_closed(self):
+        values = (
+            ("PassengerAppRoot " + str(self.public) +
+             "\nPassengerBaseURI /\nPassengerBaseURI /store\n"),
+            ("PassengerAppRoot " + str(self.public) +
+             "\nPassengerAppRoot " + str(self.app) + "\nPassengerBaseURI /\n"),
+            ("PassengerAppRoot " + str(self.public) +
+             "\nPassengerBaseURI \"unterminated\n"),
+        )
+        for value in values:
+            with self.subTest(value=value):
+                self.ht.write_bytes(value.encode())
+                self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                                 "ambiguous_directives")
+
+    def test_apache_comment_spoofing_does_not_prove_registration(self):
+        self.ht.write_bytes(("# PassengerAppRoot " + str(self.public) +
+                             "\n# PassengerBaseURI /\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "app_root_not_declared")
+
+    def test_apache_disabled_and_unexpected_root_never_claim_authority(self):
+        self.ht.write_bytes(("PassengerAppRoot " + str(self.public) +
+                             "\nPassengerBaseURI /\nPassengerEnabled off\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "passenger_disabled_on_disk")
+        self.ht.write_bytes(("PassengerAppRoot " + str(self.public) +
+                             "-other\nPassengerBaseURI /\n").encode())
+        self.assertEqual(self.inspect()["apache_passenger_directive_source"],
+                         "other_root_slash_directives_on_disk")
+
+    def test_apache_source_classification_does_not_read_external_symlinks(self):
+        self.ht.unlink()
+        outside = self.base / "private-outside-apache"
+        outside.write_bytes(("PassengerAppRoot " + str(self.public) +
+                             "\nPassengerBaseURI /\n").encode())
+        self.ht.symlink_to(outside)
+        report = self.inspect()
+        self.assertEqual(report["apache_passenger_directive_source"],
+                         "htaccess_missing_or_unsafe")
+        self.assertFalse(report["production_release_permitted_by_this_report"])
+
     def test_passenger_root_drift_is_not_assumed_equivalent(self):
         self.wsgi.write_bytes(b"APP='/unexpected/runtime'\n")
         self.assertFalse(self.inspect()["passenger_stage_source_marker"])

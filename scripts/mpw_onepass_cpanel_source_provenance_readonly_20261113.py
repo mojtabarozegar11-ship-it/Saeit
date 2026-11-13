@@ -82,6 +82,63 @@ class StaticCheckoutControlInspector(HTMLParser):
                 self.email_controls += 1
 
 
+
+def classify_apache_passenger_directives(raw, public: Path, app: Path) -> str:
+    """Classify only on-disk Apache directives; never infer effective routing.
+
+    Returned values are fixed categories, not roots or host configuration.
+    Passenger UAPI, rewrite precedence and the live Django loader remain
+    separately unverified even for an exact public-root match.
+    """
+    if raw is None:
+        return "htaccess_missing_or_unsafe"
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeError:
+        return "htaccess_unreadable"
+    directives = {"passengerapproot": [], "passengerbaseuri": [],
+                  "passengerenabled": []}
+    pattern = re.compile(
+        r"""\s*(PassengerAppRoot|PassengerBaseURI|PassengerEnabled)\s+("[^"]+"|'[^']+'|[^\s#'"]+)\s*(?:#.*)?$""",
+        re.IGNORECASE,
+    )
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        if not re.match(r"\s*Passenger(?:AppRoot|BaseURI|Enabled)\b",
+                        line, re.IGNORECASE):
+            continue
+        match = pattern.fullmatch(line)
+        if match is None:
+            return "ambiguous_directives"
+        key = match.group(1).lower()
+        token = match.group(2)
+        value = token[1:-1] if token[:1] in ("'", '"') else token
+        directives[key].append(value.strip())
+        if len(directives[key]) > 1:
+            return "ambiguous_directives"
+    enabled = directives["passengerenabled"]
+    if enabled:
+        if enabled[0].lower() in ("off", "false", "0"):
+            return "passenger_disabled_on_disk"
+        if enabled[0].lower() not in ("on", "true", "1"):
+            return "ambiguous_directives"
+    roots = directives["passengerapproot"]
+    if not roots:
+        return "app_root_not_declared"
+    base = directives["passengerbaseuri"]
+    if not base:
+        return "base_uri_not_declared"
+    if base[0] != "/":
+        return "base_uri_not_slash"
+    root = roots[0].rstrip("/")
+    if root == str(public).rstrip("/"):
+        return "public_root_slash_directives_on_disk"
+    if root == str(app).rstrip("/"):
+        return "staging_root_slash_directives_on_disk"
+    return "other_root_slash_directives_on_disk"
+
 def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     """Use explicit roots in isolated tests; never expose raw file contents."""
     guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
@@ -150,6 +207,7 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
             checkout_view is not None and b"script-src" in checkout_view),
         "effective_checkout_view_import_verified": False,
         "public_fallback": fallback,
+        "apache_passenger_directive_source": classify_apache_passenger_directives(htaccess, public, app),
         "passenger_stage_source_marker": wsgi_staging,
         "private_checkout_source_readable": template is not None,
         "production_invoice_post_verified": False,
