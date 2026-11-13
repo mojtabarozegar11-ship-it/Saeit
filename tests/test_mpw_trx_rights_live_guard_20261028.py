@@ -1,7 +1,9 @@
 """No-payment, no-database regression for the guarded live TRX rights gate."""
 import importlib.util
+import hashlib
 import json
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -32,6 +34,24 @@ def fixture():
     return {"context":context,"web":web,"pages":pages}
 
 class GuardTests(unittest.TestCase):
+    def test_verify_current_accepts_existing_gate_without_release_snapshot(self):
+        """Existing rights code must be verifiable without a nonexistent run backup."""
+        old={key:src.encode('utf8') for key,src in fixture().items()}
+        with patch.object(guard,'guard'), patch.object(guard,'inspect',return_value=(old,old,False)),\
+             patch.object(guard,'runtime_validate') as runtime,\
+             patch.object(guard,'private_root') as backup:
+            guard.operation('verify-current')
+            runtime.assert_called_once_with()
+            backup.assert_not_called()
+
+    def test_verify_current_fails_when_gate_not_installed(self):
+        old={key:src.encode('utf8') for key,src in fixture().items()}
+        with patch.object(guard,'guard'), patch.object(guard,'inspect',return_value=(old,old,True)),\
+             patch.object(guard,'runtime_validate') as runtime:
+            with self.assertRaisesRegex(RuntimeError,'RIGHTS_GATE_NOT_INSTALLED'):
+                guard.operation('verify-current')
+            runtime.assert_not_called()
+
     def test_exact_edits_are_idempotent_and_compilable(self):
         patched={}
         for key,src in fixture().items():
@@ -50,31 +70,85 @@ class GuardTests(unittest.TestCase):
         namespace={}
         exec(context,namespace)
         approved=namespace["rights_cleared_for_sale"]
-        sha="a"*64
-        metadata={"rights_cleared":True,"publication_approved":True,
-                  "sha256":sha,"rights_asset_sha256":sha,
-                  "rights_document_sha256":"b"*64}
-        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
-        self.assertFalse(approved(SimpleNamespace(metadata=None)))
-        self.assertFalse(approved(SimpleNamespace(metadata="approved")))
-        self.assertFalse(approved(None))
-        for field,value in (
-            ("rights_cleared","true"),("rights_cleared",False),
-            ("publication_approved","true"),("publication_approved",False),
-            ("sha256","not-a-sha"),("rights_asset_sha256","c"*64),
-            ("rights_asset_sha256","a"*63),("rights_document_sha256",""),
-            ("rights_document_sha256","not-independent-proof")):
-            with self.subTest(field=field,value=value):
-                changed=dict(metadata,**{field:value})
-                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
-        for field in metadata:
-            with self.subTest(missing=field):
-                changed=dict(metadata)
-                del changed[field]
-                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
-        # Case-only hex normalization is legitimate and does not change digest.
-        metadata["sha256"]="A"*64
-        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+        with tempfile.TemporaryDirectory() as d:
+            asset=Path(d)/"private.bin"
+            asset.write_bytes(b"version-1-authorized-by-owner")
+            sha=hashlib.sha256(asset.read_bytes()).hexdigest()
+            metadata={"rights_cleared":True,"publication_approved":True,
+                      "sha256":sha,"rights_asset_sha256":sha,
+                      "rights_document_sha256":"b"*64}
+            module=ModuleType("mpw_commerce.downloads")
+            module._private_file=lambda order: asset
+            package=ModuleType("mpw_commerce")
+            package.__path__=[]
+            with patch.dict(sys.modules,{"mpw_commerce":package,
+                                         "mpw_commerce.downloads":module}):
+                self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+                self.assertFalse(approved(SimpleNamespace(metadata=None)))
+                self.assertFalse(approved(SimpleNamespace(metadata="approved")))
+                self.assertFalse(approved(None))
+                for field,value in (
+                    ("rights_cleared","true"),("rights_cleared",False),
+                    ("publication_approved","true"),("publication_approved",False),
+                    ("sha256","not-a-sha"),("rights_asset_sha256","c"*64),
+                    ("rights_asset_sha256","a"*63),("rights_document_sha256",""),
+                    ("rights_document_sha256","not-independent-proof")):
+                    with self.subTest(field=field,value=value):
+                        changed=dict(metadata,**{field:value})
+                        self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+                for field in metadata:
+                    with self.subTest(missing=field):
+                        changed=dict(metadata)
+                        del changed[field]
+                        self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+                # A changed buyer file must not inherit old metadata approval.
+                asset.write_bytes(b"new-undocumented-version")
+                self.assertFalse(approved(SimpleNamespace(metadata=metadata)))
+                asset.write_bytes(b"version-1-authorized-by-owner")
+                # Case-only hex normalization does not change the actual digest.
+                metadata["sha256"]=sha.upper()
+                self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+                link=Path(d)/"symlink.bin"
+                link.symlink_to(asset)
+                module._private_file=lambda order: link
+                self.assertFalse(approved(SimpleNamespace(metadata=metadata)))
+
+    def test_installed_v1_upgrades_in_place_without_duplicate_helper(self):
+        old=fixture()
+        legacy={key:guard.transform(key,src)[0] for key,src in old.items()}
+        legacy["context"]=old["context"].replace(
+            guard.CONTEXT_OLD,guard.CONTEXT_NEW,1)
+        patched,changed=guard.transform("context",legacy["context"])
+        self.assertTrue(changed)
+        self.assertEqual(patched.count("def rights_cleared_for_sale("),1)
+        self.assertEqual(guard.transform("context",patched),(patched,False))
+        with tempfile.TemporaryDirectory() as d:
+            paths={key:Path(d)/(key+".py") for key in legacy}
+            for key,path in paths.items():
+                path.write_text(legacy[key],encoding="utf8")
+            with patch.object(guard,"TARGETS",paths):
+                before,after,needed=guard.inspect()
+                self.assertTrue(needed)
+                self.assertNotEqual(before["context"],after["context"])
+                for key in ("web","pages"):
+                    self.assertEqual(before[key],after[key])
+                with patch.object(guard,"guard"), patch("builtins.print") as output:
+                    guard.operation("check")
+                    record=output.call_args[0][0]
+                    self.assertTrue(record.startswith("MPW_TRX_RIGHTS_PREFLIGHT="))
+                    state=json.loads(record.split("=",1)[1])
+                    self.assertTrue(state["needs_v1_to_v2_upgrade"])
+                    self.assertFalse(state["needs_fresh_install"])
+
+    def test_missing_download_module_denies_checkout_instead_of_500(self):
+        context,_=guard.transform("context",fixture()["context"])
+        namespace={}
+        exec(context,namespace)
+        product=SimpleNamespace(metadata={"rights_cleared":True,
+            "publication_approved":True,"sha256":"a"*64,
+            "rights_asset_sha256":"a"*64,"rights_document_sha256":"b"*64})
+        with patch.dict(sys.modules,{"mpw_commerce":None}):
+            self.assertFalse(namespace["rights_cleared_for_sale"](product))
 
     def test_weak_legacy_helper_is_rejected_by_structure_gate(self):
         context,_=guard.transform("context",fixture()["context"])
@@ -206,7 +280,8 @@ class GuardTests(unittest.TestCase):
 
     def test_runtime_receipt_rejects_missing_required_sku(self):
         def receipt(missing=None):
-            products={str(sku):{"exists":sku!=missing,"explicit_rights":False}
+            products={str(sku):{"exists":sku!=missing,"explicit_rights":False,
+                                "exact_asset_hash_verified":False}
                       for sku in (72,225,879)}
             return "MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\n"
         for missing in (72,225,879):
@@ -220,6 +295,16 @@ class GuardTests(unittest.TestCase):
                           return_value=SimpleNamespace(returncode=0,stdout=receipt(),
                                                        stderr="")):
             guard.runtime_validate()
+
+    def test_runtime_receipt_refuses_rights_for_changed_buyer_file(self):
+        products={str(sku):{"exists":True,"explicit_rights":True,
+                            "exact_asset_hash_verified":sku!=225}
+                  for sku in (72,225,879)}
+        output="MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\n"
+        with patch.object(guard.subprocess,"run",return_value=SimpleNamespace(
+                returncode=0,stdout=output,stderr="")):
+            with self.assertRaisesRegex(RuntimeError,"RIGHTS_RUNTIME_ASSET_HASH_MISMATCH"):
+                guard.runtime_validate()
 
     def test_directory_durability_failure_aborts_before_source_edits(self):
         with tempfile.TemporaryDirectory() as d:

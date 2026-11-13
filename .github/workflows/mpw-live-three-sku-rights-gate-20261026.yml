@@ -49,13 +49,32 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # The provider has reported different VPS SSH ports over time.
+          # Discover only on the owner's previously configured ports, and
+          # accept a candidate ONLY if the pinned RSA host key matches.
+          vps_port=""
+          for port in 22 423 1396; do
+            if timeout 8s ssh-keyscan -T 6 -p "$port" -t rsa 178.239.147.150 > "$d/vps.candidate" 2>/dev/null; then
+              fingerprint="$(ssh-keygen -lf "$d/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if [ "$fingerprint" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]; then
+                echo "::error::VPS_SSH_HOST_KEY_MISMATCH_ON_PORT_${port}"
+                exit 78
+              fi
+              vps_port="$port"
+              mv "$d/vps.candidate" "$d/vps.known"
+              break
+            fi
+          done
+          if [ -z "$vps_port" ]; then
+            echo "::error::VPS_SSH_UNREACHABLE_ON_PINNED_PORTS_22_423_1396"
+            exit 79
+          fi
+          echo "VPS_SSH_PINNED_PORT=${vps_port}"
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
             User githubops
-            Port 22
+            Port $vps_port
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
