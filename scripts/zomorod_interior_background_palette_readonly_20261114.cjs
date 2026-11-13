@@ -26,7 +26,10 @@ fs.mkdirSync(out,{recursive:true});
         const styles=await p.evaluate(()=>{
           const rgb=(s)=>{
             const a=(s||'').match(/^rgba?\(([^)]+)\)/);
-            return a?a[1].split(',').slice(0,3).map(v=>+parseFloat(v.trim())):null;
+            if(!a)return null;
+            const parts=a[1].split(',').map(x=>parseFloat(x.trim()));
+            if(parts.length>3 && parts[3]<0.99)return null; // transparent is not black
+            return parts.slice(0,3);
           };
           const info=(el)=>{
             const cs=getComputedStyle(el),box=el.getBoundingClientRect();
@@ -47,7 +50,7 @@ fs.mkdirSync(out,{recursive:true});
           const bands=structural.filter(x=>x.w>=innerWidth*.88&&x.h>=20);
           const blackBands=bands.filter(x=>{
             const c=rgb(x.bg);
-            return c && Math.max(...c)<44;
+            return c && Math.max(...c)<44 && Math.max(...c)-Math.min(...c)<=7;
           });
           return {
             viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,
