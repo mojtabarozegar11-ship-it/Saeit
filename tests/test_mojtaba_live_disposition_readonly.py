@@ -27,6 +27,8 @@ def snap(role, **overrides):
         "processes": {"state": "observed", "route_match_counts": {}},
         "user_services": {"state": "observed", "candidate_units": []},
         "system_services": {"state": "observed", "candidate_units": []},
+        "user_timers": {"state": "observed", "candidate_units": []},
+        "system_timers": {"state": "observed", "candidate_units": []},
         "installed_source_digests": {},
         "private_php_site_registry": {"state": "private_database_not_observed"},
         "attestation": {"automatic_deactivation_authorized": False,
@@ -233,6 +235,7 @@ def test_unavailable_surfaces_cannot_supply_fake_route_activity():
 
 @pytest.mark.parametrize("field", [
     "cron", "processes", "user_services", "system_services",
+    "user_timers", "system_timers",
     "installed_source_digests", "private_php_site_registry", "attestation",
 ])
 def test_malformed_snapshot_structures_fail_before_disposition(tmp_path, field):
@@ -436,3 +439,84 @@ def test_truncated_host_inventory_blocks_source_disposition(layer, blocker):
     assert blocker in canonical["blocking_evidence"]
     assert canonical["retirement_authorized"] is False
     assert report["evidence_progress"]["overall_operational_completion_percent"] is None
+
+
+
+def test_systemd_timer_routes_are_indicators_and_not_unique_live_workers():
+    vps = snap("vps")
+    vps["user_timers"]["candidate_units"] = [{
+        "known_route_flags": ["mojtrade_observer"],
+        "active": "active", "unit_name_digest": "a" * 16,
+    }]
+    vps["system_timers"]["candidate_units"] = [{
+        "known_route_flags": ["mojcoin"],
+        "active": "inactive", "unit_name_digest": "b" * 16,
+    }]
+    report = module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+    found = {row["source_group"]: row for row in report["groups"]}
+    trade = found["mojtrade_signal_and_broker_runtime"]
+    game = found["moj_coin_game_token_workers"]
+    assert trade["host_observations"][0]["by_observation_surface"][
+        "user_timers_candidate"
+    ] == 1
+    assert game["host_observations"][0]["by_observation_surface"][
+        "system_timers_candidate"
+    ] == 1
+    assert trade["status"] == "candidate_routes_seen_but_not_verified_live"
+    assert game["status"] == "candidate_routes_seen_but_not_verified_live"
+    assert trade["retirement_authorized"] is False
+    assert game["retirement_authorized"] is False
+    assert report["verified_live_agents"] is None
+
+
+@pytest.mark.parametrize("layer", ["user_timers", "system_timers"])
+def test_inaccessible_timer_inventory_is_explicitly_incomplete(layer):
+    cpanel = snap("cpanel")
+    cpanel[layer] = {"state": "unavailable", "candidate_units": []}
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    group = next(row for row in report["groups"]
+                 if row["source_group"] == "mojtrade_signal_and_broker_runtime")
+    assert "partial_host_topology_observation" in group["blocking_evidence"]
+    assert group["retirement_authorized"] is False
+    assert report["percent_fully_consolidated"] is None
+
+
+@pytest.mark.parametrize("layer", [
+    "user_services", "system_services", "user_timers", "system_timers",
+])
+def test_truncated_systemd_inventory_prevents_retirement_evidence(layer):
+    vps = snap("vps")
+    vps[layer]["enumeration_truncated"] = True
+    report = module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+    group = next(row for row in report["groups"]
+                 if row["source_group"] == "canonical_cycle_and_legacy_master_schedulers")
+    assert "host_systemd_unit_inventory_truncated" in group["blocking_evidence"]
+    assert group["retirement_authorized"] is False
+    assert report["evidence_progress"]["overall_operational_completion_percent"] is None
+
+
+def test_legacy_pre_timer_snapshot_fails_closed_instead_of_claiming_no_timers(tmp_path):
+    old = snap("vps")
+    del old["user_timers"]
+    p = save_snapshot(tmp_path, "vps", old)
+    with pytest.raises(ValueError, match="TOPOLOGY_SHAPE_INVALID"):
+        module.parse_snapshot(p, "vps", now=datetime.now(timezone.utc))
+
+
+def test_old_mock_indicator_counts_remain_distinct_from_systemd_timer_indicators():
+    cpanel = snap("cpanel")
+    cpanel["cron"]["entries"] = [{
+        "schedule": "@reboot", "known_route_flags": ["autonomous_master_loop"]
+    }]
+    cpanel["system_timers"]["candidate_units"] = [{
+        "known_route_flags": ["autonomous_master_loop"],
+        "unit_name_digest": "c" * 16,
+    }]
+    report = module.preview(snap("vps"), cpanel, MANIFEST, repository_root=ROOT)
+    item = next(x for x in report["groups"]
+                if x["source_group"] == "canonical_cycle_and_legacy_master_schedulers")
+    cpanel_obs = next(x for x in item["host_observations"] if x["host"] == "cpanel")
+    assert cpanel_obs["by_observation_surface"]["user_cron"] == 1
+    assert cpanel_obs["by_observation_surface"]["system_timers_candidate"] == 1
+    assert cpanel_obs["route_indicators_total_not_unique_workers"] == 2
+    assert item["retirement_authorized"] is False
