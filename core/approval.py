@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
+from .task_approval_scope import approval_covers_task
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -34,6 +35,11 @@ class ApprovalService:
         if approval.target_type == "AgentTask":
             task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
             if task:
+                # Approval must be bound to the task's current action and risk.
+                # This also prevents a mismatched rejection from cancelling a
+                # legitimate task. transaction.atomic rolls back the decision.
+                if not approval_covers_task(approval, task):
+                    raise ValueError("Approval action or risk does not match task")
                 if approved and task.status != "blocked":
                     raise ValueError("Only a blocked task can be released by approval")
                 if not approved and task.status not in {"blocked", "queued"}:

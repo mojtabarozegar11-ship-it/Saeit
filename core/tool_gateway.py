@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict
 from django.core.exceptions import ImproperlyConfigured
 
 from .agent_registry import AgentRegistry, RISK_ORDER
+from .task_approval_scope import has_approved_task_request
 from .canonical_bot_identity import is_master_only_action, resolve_single_active_agent
 from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
@@ -106,13 +107,7 @@ class ToolGateway:
             requires_owner_approval(spec.code, spec.risk)
             or requires_owner_approval(task.action_type, snapshot_risk)
         ):
-            approved = ApprovalRequest.objects.filter(
-                action_type=normalize_action(task.action_type),
-                target_type="AgentTask",
-                target_id=str(task.pk),
-                status="approved",
-            ).exists()
-            if not approved:
+            if not has_approved_task_request(task, required_risk=snapshot_risk):
                 raise ToolGatewayError(
                     "Owner approval is required before tool invocation"
                 )

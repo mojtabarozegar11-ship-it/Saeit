@@ -7,6 +7,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
+from .task_approval_scope import has_approved_task_request
 from .canonical_bot_identity import is_master_only_action, resolve_single_active_agent
 from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_risk, requires_owner_approval
@@ -67,10 +68,7 @@ class TaskRuntime:
         if effective_risk != snapshot_risk:
             raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
         if requires_owner_approval(task.action_type, effective_risk):
-            approved = ApprovalRequest.objects.filter(
-                target_type="AgentTask", target_id=str(task.pk), status="approved"
-            ).exists()
-            if not approved:
+            if not has_approved_task_request(task, required_risk=effective_risk):
                 raise TaskExecutionError("Owner approval is required before execution")
 
         if task.attempt_count >= task.max_attempts:
