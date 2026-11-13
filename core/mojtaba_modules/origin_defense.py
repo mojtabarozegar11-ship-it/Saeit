@@ -70,7 +70,7 @@ def plan_origin_defense(*, engagement: dict, traffic: dict,
         if hostname not in scope["allowed_assets"]:
             raise CyberModuleError("ASSET_OUT_OF_SCOPE")
         collector = item.get("collector")
-        if collector not in COLLECTORS:
+        if not isinstance(collector, str) or collector not in COLLECTORS:
             raise CyberModuleError("COLLECTOR_INVALID")
         observed_at = _timestamp(item.get("observed_at"))
         if not (reference - timedelta(hours=1) <= observed_at <= reference and
