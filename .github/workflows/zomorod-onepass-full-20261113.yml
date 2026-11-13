@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           # Verify exactly reviewed read-only sources before use with deployment credentials.
           test "$(git hash-object -- scripts/zomorod_fields_guard_20261113.py)" = "82f5ae3c339fecf7a29424424244af9f997c6f91"
-          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "a307024c2229238eda4a8aa9c3531aa70d283291"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "f3c2c2cd592cf01be4e0e85025ab8176c1e41706"
           if [[ -z "$HOST_KEY" ]]; then
             echo "ZOMOROD_READONLY_CREDENTIALS_UNAVAILABLE"
             exit 78

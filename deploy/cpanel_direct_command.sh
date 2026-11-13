@@ -28,7 +28,7 @@ zomorod_fields_audit_stream() {
     return 65
   fi
   timeout 90s ssh -T -F "$work/config" saeit-cpanel \
-    'if command -v python3.11 >/dev/null 2>&1; then exec python3.11 -B - audit-live; elif test -x /home/zomorod2/virtualenv/Saeit/3.11/bin/python; then exec /home/zomorod2/virtualenv/Saeit/3.11/bin/python -B - audit-live; else echo CPANEL_PY311_NOT_AVAILABLE >&2; exit 70; fi' \
+    'for py in python3.13 python3.12 python3.11 python3.10 python3.9 python3.8 python3 /opt/alt/python313/bin/python3.13 /opt/alt/python312/bin/python3.12 /opt/alt/python311/bin/python3.11 /opt/alt/python310/bin/python3.10 /opt/alt/python39/bin/python3.9 /opt/alt/python38/bin/python3.8 /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python; do if command -v "$py" >/dev/null 2>&1 && "$py" -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" 2>/dev/null; then exec "$py" -B - audit-live; fi; done; echo CPANEL_COMPATIBLE_PYTHON_NOT_FOUND >&2; exit 70' \
     < "$guard"
 }
 
