@@ -35,6 +35,20 @@ BRAND_LABELS = {
 }
 LOCALE_INDEX = {"fa": 0, "en": 1, "ar": 2}
 
+RELEASE_REVISION = "finance102-20261113-v2"
+LEGACY_STATUS_DISCLOSURES = {
+    "market-signals": {
+        "fa": "سیگنال زنده یا سابقهٔ عملکردِ راستی‌آزمایی‌شده",
+        "en": "No live signal or independently verified performance history",
+        "ar": "إشارات مباشرة أو نتائج أداء موثقة مستقلة",
+    },
+    "digital-products": {
+        "fa": "فهرست محصولات و پرداخت این زیردسته هنوز فعال نشده",
+        "en": "product listing and checkout are not active yet",
+        "ar": "قائمة المنتجات والدفع لهذا المتجر الفرعي غير مفعّلين",
+    },
+}
+
 TARGETS = [
     (host, lang, slug, kind, "/" + prefix + slug + "/" + kind + "/")
     for host, lang, prefix in [
@@ -85,7 +99,9 @@ def probe(target):
     url = "https://" + host + path
     result = {"host": host, "lang": lang, "slug": slug, "type": kind, "path": path,
               "http": None, "content_ok": False, "title": "",
-              "expected_shop_link_present": False, "error": None}
+              "expected_shop_link_present": False, "editorial_revision_live": False,
+              "canonical_header_correct": False, "content_language_header_correct": False,
+              "honest_legacy_disclosure_present": False, "error": None}
     try:
         opener = urllib.request.build_opener(LocalOnlyRedirect(host))
         req = urllib.request.Request(url, method="GET", headers={
@@ -95,12 +111,24 @@ def probe(target):
         with opener.open(req, timeout=9) as resp:
             data = resp.read(90_000)
             result["http"] = resp.status
+            result["editorial_revision_live"] = (
+                resp.headers.get("X-Finance102-Editorial-Revision") == RELEASE_REVISION
+            )
+            result["canonical_header_correct"] = (
+                "<" + url + '>; rel="canonical"' in resp.headers.get("Link", "")
+            )
+            result["content_language_header_correct"] = (
+                resp.headers.get("Content-Language") == lang
+            )
             if resp.status != 200 or "html" not in resp.headers.get("Content-Type","").lower():
                 result["error"] = "not_html_200"
             else:
                 html = data.decode("utf-8", errors="replace")
                 parsed = BasicHTML()
                 parsed.feed(html)
+                result["honest_legacy_disclosure_present"] = (
+                    LEGACY_STATUS_DISCLOSURES[kind][lang] in html
+                )
                 result["title"] = parsed.title[:130]
                 expected_shop_path = "/store/" if lang == "fa" else "/commerce/"
                 result["expected_shop_link_present"] = expected_shop_path in parsed.links
@@ -158,13 +186,33 @@ def main():
         }
     shops = [check_shop_link(host, path) for host, path in (
         ("zomorodmelal.ir", "/store/"), ("mojplaywin.com", "/commerce/"))]
+    release_ready = sum(
+        r["content_ok"] and r["editorial_revision_live"]
+        and r["canonical_header_correct"] and r["content_language_header_correct"]
+        for r in results
+    )
     report = {"classification": "PUBLIC_READ_ONLY_NO_DEPLOY",
+              "editorial_revision": RELEASE_REVISION,
+              "new_editorial_release_verified": release_ready,
+              "canonical_headers_verified": sum(r["canonical_header_correct"] for r in results),
+              "language_headers_verified": sum(r["content_language_header_correct"] for r in results),
+              "noncommercial_status_disclosures": {
+                  "signal_pages_declaring_no_live_signal": sum(
+                      r["honest_legacy_disclosure_present"]
+                      for r in results if r["type"] == "market-signals"),
+                  "substores_declaring_no_active_checkout": sum(
+                      r["honest_legacy_disclosure_present"]
+                      for r in results if r["type"] == "digital-products"),
+              },
               "shop_destinations": shops,
               "cta_links_present": sum(r["expected_shop_link_present"] for r in results),
               "target_count": len(results), "verified": sum(r["content_ok"] for r in results),
               "groups": by_group, "failures": [r for r in results if not r["content_ok"]]}
     print("FINANCE102_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True))
-    return 0 if report["verified"] == 102 and all(x["valid"] for x in shops) else 2
+    import sys
+    strict_release_check = "--require-release" in sys.argv[1:]
+    return 0 if (report["verified"] == 102 and all(x["valid"] for x in shops)
+                 and (not strict_release_check or release_ready == 102)) else 2
 
 if __name__ == "__main__":
     raise SystemExit(main())
