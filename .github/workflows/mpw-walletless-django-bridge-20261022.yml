@@ -1,0 +1,26 @@
+name: MojPlayWin TRX Django financial bridge guard tests
+on:
+  push:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_walletless_django_test_bridge.py
+      - tests/test_mpw_walletless_django_test_bridge.py
+      - .github/workflows/mpw-walletless-django-bridge-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  fail-closed-finance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Syntax-check financial test bridge
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_walletless_django_test_bridge.py tests/test_mpw_walletless_django_test_bridge.py
+      - name: Verify only isolated test DB can be credited
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_walletless_django_test_bridge.py' -v
+          echo "MPW_WALLETLESS_REAL_DJANGO_BRIDGE_PRODUCTION_WRITE_GUARD=PASS"

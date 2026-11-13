@@ -1,0 +1,27 @@
+name: MojPlayWin TRON two independent SolidityNode proof contract tests
+on:
+  push:
+    branches: [feature/mpw-walletless-trx-e2e-20261022]
+    paths:
+      - services/mpw_tron_independent_solidified_rpc.py
+      - tests/test_mpw_tron_independent_solidified_rpc.py
+      - .github/workflows/mpw-tron-dual-solidified-proof-20261022.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  independent-mainnet-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile independently parsed solidity node responses
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_tron_independent_solidified_rpc.py tests/test_mpw_tron_independent_solidified_rpc.py
+      - name: Verify canonical body, solidified receipt, provider independence, native TRX, duplicate replay
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_tron_independent_solidified_rpc.py' -v
+          echo "MPW_TRON_DUAL_SOLIDIFIED_NODE_PARSER=PASS; NO_LIVE_MONEY_MOVED=TRUE"
