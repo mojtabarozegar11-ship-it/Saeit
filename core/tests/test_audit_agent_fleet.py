@@ -122,3 +122,80 @@ def test_fleet_audit_flags_unknown_canonical_master_tool_without_dispatch():
     task.refresh_from_db()
     assert task.status == "queued"
     assert (AgentTask.objects.count(), task.attempt_count, AuditLog.objects.count()) == before
+
+
+@pytest.mark.django_db
+def test_handoff_audit_distinguishes_source_checks_from_live_cutover():
+    from core.management.commands.seed_online_income_agents import ASSIGNMENTS
+    from core.canonical_bot_identity import RUNTIME_CODES
+
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="canonical", active=True,
+    )
+    call_command("seed_online_income_agents")
+    before = (AgentTask.objects.count(), AuditLog.objects.count())
+    out = StringIO()
+    call_command("audit_agent_fleet", stdout=out)
+    report = json.loads(out.getvalue())
+    handoff = report["canonical_handoff"]
+    assert handoff["runtime_identity_status"] == "canonical_runtime_active"
+    assert handoff["runtime_active_codes"] == ["mojtaba-bot-ai"]
+    assert handoff["canonical_missing_registered_tools"] == []
+    assert handoff["legacy_unfinished_tasks"] == {
+        "queued": 0, "running": 0, "blocked": 0,
+    }
+    assert handoff["source_and_registry_checks_passed"] is True
+    assert handoff["live_cutover_authorized"] is False
+    assert "live_scheduler_topology_not_attested" in handoff["blockers"]
+    assert "vps_evolution_state_handoff_not_attested" in handoff["blockers"]
+    assert (AgentTask.objects.count(), AuditLog.objects.count()) == before
+
+
+@pytest.mark.django_db
+def test_handoff_audit_blocks_legacy_queued_and_unregistered_canonical_tasks():
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="history", active=False,
+    )
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Current", mission="canonical", active=True,
+    )
+    pending = AgentTask.objects.create(
+        agent=old, action_type="income_market_research", status="queued",
+    )
+    unknown = AgentTask.objects.create(
+        agent=canonical, action_type="income_unregistered_execute",
+        capability_code="income_unregistered_execute", status="queued",
+    )
+    before = (AgentTask.objects.count(), AuditLog.objects.count())
+    out = StringIO()
+    call_command("audit_agent_fleet", stdout=out)
+    handoff = json.loads(out.getvalue())["canonical_handoff"]
+    assert handoff["runtime_identity_status"] == "canonical_runtime_active"
+    assert handoff["legacy_unfinished_tasks"]["queued"] == 1
+    assert handoff["canonical_unsupported_queued_tasks"] == 1
+    assert handoff["source_and_registry_checks_passed"] is False
+    assert "unfinished_legacy_master_tasks_require_disposition" in handoff["blockers"]
+    assert "canonical_queued_task_without_registered_handler" in handoff["blockers"]
+    pending.refresh_from_db()
+    unknown.refresh_from_db()
+    assert pending.status == unknown.status == "queued"
+    assert pending.attempt_count == unknown.attempt_count == 0
+    assert (AgentTask.objects.count(), AuditLog.objects.count()) == before
+
+
+@pytest.mark.django_db
+def test_handoff_audit_blocks_both_master_runtimes_active():
+    Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="legacy", active=True,
+    )
+    Agent.objects.create(
+        code="mojtaba-bot-ai", name="Current", mission="canonical", active=True,
+    )
+    out = StringIO()
+    call_command("audit_agent_fleet", stdout=out)
+    handoff = json.loads(out.getvalue())["canonical_handoff"]
+    assert handoff["runtime_identity_status"] == "multiple_active_runtime_identities_blocked"
+    assert "multiple_active_master_runtimes" in handoff["blockers"]
+    assert handoff["live_cutover_authorized"] is False

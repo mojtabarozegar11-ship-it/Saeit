@@ -43,6 +43,17 @@ def audit_identity_rows(agent_model):
         agent_model.objects.filter(code__in=AUDIT_CODES).order_by("code")
     )
     active = [row.code for row in rows if row.active]
+    # Fleet consolidation includes content/factory roles; runtime singleton
+    # safety includes ONLY the canonical economic master and its alias.
+    active_runtime = [code for code in active if code in RUNTIME_CODES]
+    if len(active_runtime) > 1:
+        runtime_status = "multiple_active_runtime_identities_blocked"
+    elif not active_runtime:
+        runtime_status = "no_active_master_runtime"
+    elif active_runtime[0] == CANONICAL_BOT_CODE:
+        runtime_status = "canonical_runtime_active"
+    else:
+        runtime_status = "legacy_runtime_active"
     if len(active) == 0:
         status = "no_known_active_runtime_identity"
     elif active == [CANONICAL_BOT_CODE]:
@@ -60,7 +71,10 @@ def audit_identity_rows(agent_model):
         ],
         "active_codes": active,
         "active_count": len(active),
-        "status": status,
+        "status": status,  # Fleet-wide disposition, not the worker singleton.
+        "runtime_active_codes": active_runtime,
+        "runtime_active_count": len(active_runtime),
+        "runtime_status": runtime_status,
         "live_scheduler_attested": False,
         "retirement_authorized": False,
     }

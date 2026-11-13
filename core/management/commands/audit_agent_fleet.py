@@ -13,7 +13,9 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.economic_tool_pack import build_economic_gateway
-from core.canonical_bot_identity import CANONICAL_BOT_CODE, audit_identity_rows
+from core.canonical_bot_identity import (
+    CANONICAL_BOT_CODE, LEGACY_RUNTIME_ALIASES, audit_identity_rows,
+)
 from core.management.commands.consolidate_legacy_agents import (
     LEGACY_AGENT_CODES, assess_agent,
 )
@@ -126,9 +128,75 @@ class Command(BaseCommand):
                 )
                 row["findings"].append("exact_mission_and_capabilities_overlap_review_only")
 
+        # Repo/DB evidence only: never infer a live scheduler, safe rollback,
+        # or permission to replace an existing runtime from a Django row.
+        identity_audit = audit_identity_rows(Agent)
+        canonical = Agent.objects.filter(
+            code=CANONICAL_BOT_CODE, active=True,
+        ).prefetch_related("capabilities").first()
+        required_master_tools = {
+            code for code in registered
+            if code.startswith("income_") or code == "master_self_improvement"
+        }
+        enabled_canonical_tools = {
+            cap.code for cap in canonical.capabilities.all() if cap.active
+        } if canonical else set()
+        missing_tools = sorted(required_master_tools - enabled_canonical_tools) if canonical else []
+        legacy_unfinished = {
+            status: AgentTask.objects.filter(
+                agent__code__in=LEGACY_RUNTIME_ALIASES, status=status,
+            ).count()
+            for status in ("queued", "running", "blocked")
+        }
+        canonical_unsupported_queued = (
+            AgentTask.objects.filter(agent=canonical, status="queued")
+            .exclude(
+                capability_code__in=enabled_canonical_tools & required_master_tools,
+                action_type=F("capability_code"),
+            ).count()
+            if canonical is not None else 0
+        )
+        blockers = []
+        if identity_audit["runtime_status"] == "multiple_active_runtime_identities_blocked":
+            blockers.append("multiple_active_master_runtimes")
+        if identity_audit["runtime_status"] == "no_active_master_runtime":
+            blockers.append("no_active_master_runtime")
+        if canonical is None:
+            blockers.append("canonical_master_not_active")
+        if any(legacy_unfinished.values()):
+            blockers.append("unfinished_legacy_master_tasks_require_disposition")
+        if missing_tools:
+            blockers.append("canonical_master_missing_registered_tools")
+        if canonical_unsupported_queued:
+            blockers.append("canonical_queued_task_without_registered_handler")
+        source_checks_passed = not blockers
+        # Absence of host evidence is always a release blocker, even when
+        # the source/DB check happens to pass.
+        blockers.extend([
+            "live_scheduler_topology_not_attested",
+            "vps_evolution_state_handoff_not_attested",
+            "rollback_and_recovery_not_attested",
+        ])
+        canonical_handoff = {
+            "mode": "read_only",
+            "runtime_identity_status": identity_audit["runtime_status"],
+            "runtime_active_codes": identity_audit["runtime_active_codes"],
+            "legacy_unfinished_tasks": legacy_unfinished,
+            "canonical_missing_registered_tools": missing_tools,
+            "canonical_unsupported_queued_tasks": canonical_unsupported_queued,
+            "source_and_registry_checks_passed": source_checks_passed,
+            "live_scheduler_attested": False,
+            "vps_evolution_state_handoff_attested": False,
+            "rollback_and_recovery_attested": False,
+            "live_cutover_authorized": False,
+            "blockers": blockers,
+            "note": "Passing repository/registry checks never authorizes migration or deployment.",
+        }
+
         result = {
             "mode": "read_only",
-            "canonical_identity_audit": audit_identity_rows(Agent),
+            "canonical_identity_audit": identity_audit,
+            "canonical_handoff": canonical_handoff,
             "days": days,
             "live_scheduler_attested": False,
             "external_delivery_attested": False,
