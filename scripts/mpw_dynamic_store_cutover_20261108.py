@@ -500,6 +500,12 @@ class _InvoiceFormScanner(HTMLParser):
         self.invalid_structure = False
 
     def handle_starttag(self, tag, attrs):
+        # Duplicate HTML attributes are browser-dependent. In particular,
+        # dict(attrs) discards an earlier name="email" or type="email"
+        # when a later duplicate overwrites it. Fail closed on ambiguity.
+        names = [key.casefold() for key, _ in attrs]
+        if len(names) != len(set(names)):
+            self.invalid_structure = True
         attributes = dict(attrs)
         if tag == "form":
             if self.active is not None:
