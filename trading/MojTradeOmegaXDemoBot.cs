@@ -153,7 +153,12 @@ namespace MojTrade.OmegaX
                     var breakEven = position.TradeType == TradeType.Buy
                         ? position.EntryPrice + Symbol.PipSize
                         : position.EntryPrice - Symbol.PipSize;
-                    ModifyPosition(position, breakEven, position.TakeProfit);
+                    // Prices from Position.EntryPrice and Position.TakeProfit are absolute.
+                    // Never treat them as pip distances during protection updates.
+                    var protectionResult = ModifyPosition(position, breakEven,
+                        position.TakeProfit, ProtectionType.Absolute);
+                    if (!protectionResult.IsSuccessful)
+                        Print("OMEGA X protection update rejected: {0}", protectionResult.Error);
                 }
             }
         }
