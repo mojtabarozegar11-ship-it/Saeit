@@ -1,0 +1,42 @@
+name: MojTrade .NET 8 prerequisite install
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "trading/MojTradeOmegaXDemoBot.cs"
+      - "trading/MojTrade_OMEGA_X_Deploy_Guide.md"
+      - ".github/workflows/mojtrade-dotnet8-install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtrade-dotnet8-install
+  cancel-in-progress: true
+
+jobs:
+  install-dotnet:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 15
+    steps:
+      - name: Install official .NET 8 prerequisite without privileged access
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_dir="${HOME}/.dotnet"
+          mkdir -p "$install_dir"
+          if [ -x "$install_dir/dotnet" ] && "$install_dir/dotnet" --list-sdks 2>/dev/null | grep -q '^8\.0\.'; then
+            echo "dotnet8=already-present"
+          else
+            tmp_script="$(mktemp)"
+            trap 'rm -f "$tmp_script"' EXIT
+            curl --fail --silent --show-error --location https://dot.net/v1/dotnet-install.sh -o "$tmp_script"
+            bash "$tmp_script" --channel 8.0 --install-dir "$install_dir" --no-path
+            test -x "$install_dir/dotnet"
+            "$install_dir/dotnet" --list-sdks | grep '^8\.0\.'
+            echo "dotnet8=installed"
+          fi
+          echo "dotnet_path=$install_dir/dotnet"
+          echo "No cTrader credentials, account login, cBot run, backtest, deployment or order is performed."

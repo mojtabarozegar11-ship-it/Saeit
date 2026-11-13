@@ -44,6 +44,7 @@ jobs:
           # Each host is independent: an unreachable cPanel does not erase a
           # successfully collected VPS snapshot, or vice versa.
           vps_ok=0
+          vps_failure_stage="not_attempted"
           # The factory runner process account need not be the VPS service user.
           # Never treat that mismatch as a server/port failure or use sudo.
           if [[ "$(id -un)" == "githubops" ]]; then
@@ -51,9 +52,11 @@ jobs:
               vps_ok=1
               echo "MOJTABA_VPS_ROUTE=local_githubops"
             else
+              vps_failure_stage="local_observer_failed"
               echo "MOJTABA_VPS_LOCAL_OBSERVATION=failed"
             fi
           else
+            vps_failure_stage="runner_user_not_githubops"
             echo "MOJTABA_VPS_LOCAL_OBSERVATION=runner_user_not_githubops"
           fi
 
@@ -62,6 +65,7 @@ jobs:
           # host firewall, remote accounts, keys, or services in this workflow.
           if [[ "$vps_ok" != "1" ]]; then
             if [[ -z "${VPS_KEY:-}" ]]; then
+              vps_failure_stage="missing_existing_key"
               echo "MOJTABA_VPS_SSH_OBSERVATION=missing_existing_key"
             else
               printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
@@ -74,6 +78,9 @@ jobs:
                       vps_ok=1
                       echo "MOJTABA_VPS_ROUTE=pinned_ssh_22_githubops"
                     else
+                      vps_failure_stage="ssh_or_interpreter_failed"
+                      ssh_status=$?
+                      echo "MOJTABA_VPS_SSH_EXIT_CODE=$ssh_status"
                       echo "MOJTABA_VPS_SSH_OBSERVATION=ssh_or_interpreter_failed"
                     fi
                   else
@@ -88,6 +95,7 @@ jobs:
             fi
           fi
 
+          echo "MOJTABA_VPS_FAILURE_STAGE=$vps_failure_stage"
           cpanel_ok=0
           if [[ -z "${HOST_KEY:-}" ]]; then
             echo "MOJTABA_CPANEL_OBSERVATION=blocked_missing_existing_key"
