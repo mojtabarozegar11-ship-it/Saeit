@@ -13,6 +13,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.economic_tool_pack import build_economic_gateway
+from core.canonical_bot_identity import audit_identity_rows
 from core.management.commands.consolidate_legacy_agents import (
     LEGACY_AGENT_CODES, assess_agent,
 )
@@ -126,6 +127,7 @@ class Command(BaseCommand):
 
         result = {
             "mode": "read_only",
+            "canonical_identity_audit": audit_identity_rows(Agent),
             "days": days,
             "live_scheduler_attested": False,
             "external_delivery_attested": False,
