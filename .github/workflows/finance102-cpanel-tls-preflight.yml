@@ -1,0 +1,24 @@
+name: Finance102 one-shot unauthenticated TLS identity check
+on:
+  pull_request:
+    paths:
+      - 'scripts/finance102_cpanel_tls_preflight.py'
+      - 'tests/test_finance102_cpanel_tls_preflight.py'
+      - '.github/workflows/finance102-cpanel-tls-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  tls-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Mock-only TLS identity and no-authentication tests
+        run: python3 -B -m unittest discover -s tests -p 'test_finance102_cpanel_tls_preflight.py' -v
+      - name: One fixed target DNS and verified TLS handshake (no HTTP or token)
+        run: python3 -B scripts/finance102_cpanel_tls_preflight.py
