@@ -23,7 +23,7 @@ This document describes the canonical trading core of mojtaba.bot.ai. QuantumSca
 - Maximum three independent positions per symbol by default
 - Per-entry cooldown
 - Maximum spread filter
-- Daily loss circuit breaker
+- Daily loss circuit breaker blocks new entries; it does not forcibly close existing positions
 - Consecutive-loss circuit breaker
 - Automatic break-even protection
 - Automatic trailing stop
