@@ -24,7 +24,7 @@ jobs:
           bash -n deploy/activate_vps_master_agent.sh
           python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
           python3 -B -m unittest discover -s tests -p 'test_isolated_upgrade_proof.py' -v
-          python3 -m py_compile scripts/vps_master_evolution_cycle.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+          python3 -m py_compile scripts/vps_master_evolution_cycle.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py core/canonical_bot_identity.py
   activate:
     needs: verify
     if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -58,7 +58,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=24)
-          tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/worker_runner.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/canonical_bot_identity.py core/canonical_bot_identity.py
+          tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/worker_runner.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/canonical_bot_identity.py
           digest="$(sha256sum "$d/bundle.tar" | awk '{print $1}')"
           ssh "${opts[@]}" githubops@178.239.147.150 'install -d -m 700 "$HOME/factory-runtime/operations/master-activation-source"'
           scp "${opts[@]}" "$d/bundle.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/master-activation-source/bundle.tar
