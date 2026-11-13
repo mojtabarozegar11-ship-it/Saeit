@@ -395,8 +395,11 @@ def verify_email_free_invoice_sources(app: Path) -> None:
     # Attribute values may use single quotes, double quotes or no quotes.
     # The previous double-quote-only scan silently accepted email fields in
     # valid Django templates, permitting an email-dependent cutover.
+    # A name such as buyer_email, contact-email or emailAddress is still an
+    # email-collection control. Exact name=email matching misses these fields.
+    # Restrict the scan to actual HTML attributes, not prose mentioning email.
     email_attribute = re.search(
-        rb"""\b(?:name|type)\s*=\s*(?:["']\s*email\s*["']|email(?=[\s/>]))""",
+        rb"""\b(?:name|type|id|autocomplete)\s*=\s*(?:"[^"]*email[^"]*"|'[^']*email[^']*'|[^\s>]*email[^\s>]*)""",
         markup,
     )
     if (email_attribute is not None or b"mpw-buy-email" in markup or
