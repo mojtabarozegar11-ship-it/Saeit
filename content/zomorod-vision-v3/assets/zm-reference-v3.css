@@ -128,3 +128,60 @@
  .zm-vision-v3 .globe-trade{min-height:100px}
  .zm-vision-v3 .book-spines{min-height:100px}
 }
+
+/* 2026-11-13 audit: scoped corrections; approved artwork remains unchanged. */
+.zm-vision-v3 .skip-link{position:absolute!important;top:auto!important;left:auto;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.zm-vision-v3 .skip-link:focus,.zm-vision-v3 .skip-link:focus-visible{position:fixed!important;z-index:9999;top:8px!important;right:10px;width:auto;height:auto;margin:0;padding:11px 17px;clip-path:none;overflow:visible;border:2px solid #fff7c0;border-radius:12px;background:#efca73;color:#001a12;box-shadow:0 4px 20px #0008}
+.zm-vision-v3 .search-found{outline:3px solid #fff1a3!important;outline-offset:3px;box-shadow:0 0 0 4px #0a5941,0 0 22px #f6d78aa1!important;position:relative;z-index:3}
+.zm-vision-v3 .search-form{flex-wrap:wrap}
+.zm-vision-v3 #search-feedback:not(:empty){flex:1 0 100%;padding:5px 10px;font-size:12px;color:#fff1b3;line-height:1.55}
+.zm-vision-v3 [hidden]{display:none!important}
+.zm-vision-v3 .strip-controls button{width:34px;height:34px;display:grid;place-items:center;border:1px solid #e8cb7977;background:#00271edb}
+.zm-vision-v3 .strip-controls button:disabled{opacity:.28;box-shadow:none;cursor:default;pointer-events:none}
+.zm-vision-v3 .lang-switch button[aria-pressed="true"]{background:#008e65;color:white}
+.zm-vision-v3 .lang-switch button[aria-pressed="false"]{background:transparent;color:#e0ede7}
+.zm-vision-v3 .side-dock a:focus-visible,.zm-vision-v3 .metric:focus-visible{outline:3px solid #f6cf82;outline-offset:2px}
+.zm-vision-v3 .panel-head a{font-size:11px;padding:5px 9px}
+.zm-vision-v3 .hero-photo{object-position:center;image-rendering:auto}
+@media(max-width:900px){
+ .zm-vision-v3 .mobile-menu-btn{min-width:40px;min-height:40px}
+ .zm-vision-v3 .mobile-nav a{min-height:43px;display:flex;align-items:center;font-size:14px}
+ .zm-vision-v3 .service-ribbon a{font-size:11px;line-height:1.45}
+ .zm-vision-v3 .hero-sub{font-size:13px}
+ .zm-vision-v3 .field-overlay small{font-size:11px}
+ .zm-vision-v3 .metric{font-size:11px}
+ .zm-vision-v3 .pulse-card small{font-size:10px}
+}
+@media(max-width:640px){
+ .zm-vision-v3 .topbar-shell{gap:4px}
+ .zm-vision-v3 .top-utilities{gap:3px}
+ .zm-vision-v3 .icon-btn,.zm-vision-v3 .ai-chip{min-width:39px;width:39px;min-height:39px;height:39px}
+ .zm-vision-v3 .mobile-menu-btn{width:40px;height:40px}
+ .zm-vision-v3 .lang-switch button{font-size:10px;min-height:33px;min-width:23px;padding:7px 3px}
+ .zm-vision-v3 .search-form{gap:6px}
+ .zm-vision-v3 .search-form label{font-size:13px}
+ .zm-vision-v3 .search-form input{flex-basis:65%;min-height:42px;font-size:14px}
+ .zm-vision-v3 .search-form>button{min-height:42px;font-size:13px}
+ .zm-vision-v3 .hero{min-height:565px}
+ .zm-vision-v3 .hero-message{top:306px}
+ .zm-vision-v3 .hero-overline{font-size:10px;letter-spacing:.05em}
+ .zm-vision-v3 .hero-sub{font-size:13px;line-height:1.65;max-width:340px}
+ .zm-vision-v3 .hero-desc{font-size:14px}
+ .zm-vision-v3 .action{min-height:43px;font-size:12px;padding:9px 13px}
+ .zm-vision-v3 .field-overlay small{font-size:12px}
+ .zm-vision-v3 .service-ribbon a{min-height:62px;font-size:11px;padding:8px 3px}
+ .zm-vision-v3 .mini-card span{font-size:11px;line-height:1.4}
+ .zm-vision-v3 .strip-controls button{width:38px;height:38px}
+ .zm-vision-v3 .editorial-banner p,.zm-vision-v3 .feature-banner p{font-size:12px;line-height:1.5}
+ .zm-vision-v3 .pill-action{font-size:12px;min-height:39px;line-height:1.4}
+ .zm-vision-v3 .footer-assistant p,.zm-vision-v3 .footer-company p{font-size:12px}
+ .zm-vision-v3 .footer-col{font-size:12px}
+ .zm-vision-v3 .footer-col a{min-height:30px}
+ .zm-vision-v3 .small-banner small{font-size:11px}
+}
+@media(max-width:370px){
+ .zm-vision-v3 .identity small,.zm-vision-v3 .identity em{font-size:8px;letter-spacing:0}
+ .zm-vision-v3 .top-utilities{gap:2px}
+ .zm-vision-v3 .lang-switch button{min-width:21px;padding-inline:2px}
+ .zm-vision-v3 .hero-sub{font-size:12px}
+}
