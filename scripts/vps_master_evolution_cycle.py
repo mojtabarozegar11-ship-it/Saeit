@@ -41,7 +41,7 @@ def _contains_symlink(path):
     return any(part.is_symlink() for part in (path, *path.parents))
 
 
-def evaluate(db_path: Path, state_path: Path):
+def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     db_path = db_path.expanduser()
     state_path = state_path.expanduser()
     if _contains_symlink(db_path) or not db_path.is_file():
@@ -326,20 +326,23 @@ def evaluate(db_path: Path, state_path: Path):
         "commercial_publication_enabled": False,
         "financial_actions_enabled": False,
     }
-    handle, temp = tempfile.mkstemp(prefix=".evolution-", dir=str(state_path.parent))
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as output:
-            json.dump(report, output, indent=2, ensure_ascii=False, sort_keys=True)
-            output.write("\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.chmod(temp, 0o600)
-        os.replace(temp, state_path)
-    finally:
-        if os.path.exists(temp):
-            os.unlink(temp)
+    if not check_only:
+        handle, temp = tempfile.mkstemp(prefix=".evolution-", dir=str(state_path.parent))
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as output:
+                json.dump(report, output, indent=2, ensure_ascii=False, sort_keys=True)
+                output.write("\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.chmod(temp, 0o600)
+            os.replace(temp, state_path)
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
     print("MASTER_EVOLUTION_EVALUATED")
     print("MASTER_EVOLUTION_MAX_STEPS=" + str(steps))
+    print("MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=" + str(old_steps))
+    print("MASTER_EVOLUTION_CHECK_ONLY=" + str(bool(check_only)).lower())
     print("MASTER_EVOLUTION_DECISION=" + decision)
     print("MASTER_EVOLUTION_REVISION=" + str(report["revision"]))
     print("MASTER_EVOLUTION_CODE_SELF_EDITING=false")
@@ -349,5 +352,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", required=True, type=Path)
     parser.add_argument("--state", required=True, type=Path)
+    parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
-    evaluate(args.db, args.state)
+    evaluate(args.db, args.state, check_only=args.check_only)
