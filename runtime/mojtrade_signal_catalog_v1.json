@@ -1,0 +1,58 @@
+{
+  "schema": "mojtaba.bot.ai.signal-catalog.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "product_family": "MojTrade research signals",
+  "commercial_status": "configured_not_live_attested",
+  "market_scope": [
+    "BTC/USD",
+    "ETH/USD"
+  ],
+  "execution_policy": {
+    "signal_mode": "research_only",
+    "live_orders": false,
+    "broker_execution": false,
+    "financial_actions_enabled": false,
+    "profitability_claim": false
+  },
+  "delivery": {
+    "primary": "authenticated_user_panel",
+    "backup": "buyer_email",
+    "access_days": 15,
+    "maximum_verified_signals_per_purchase": 10
+  },
+  "payment": {
+    "network": "tron-mainnet",
+    "asset": "TRX",
+    "receiver": "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+    "settlement": "server_verified_finality_required",
+    "manual_receipt_is_not_payment_proof": true
+  },
+  "tiers": [
+    {
+      "code": "signal-basic-15d",
+      "price_trx": 5,
+      "validity_days": 15,
+      "max_verified_signals": 10
+    },
+    {
+      "code": "signal-pro-15d",
+      "price_trx": 10,
+      "validity_days": 15,
+      "max_verified_signals": 10
+    },
+    {
+      "code": "signal-premium-15d",
+      "price_trx": 15,
+      "validity_days": 15,
+      "max_verified_signals": 10
+    }
+  ],
+  "release_gates": [
+    "active_product_record",
+    "rights_and_content_review",
+    "checkout_roundtrip_test",
+    "server_verified_tron_settlement",
+    "private_delivery_receipt",
+    "rollback_and_support_path"
+  ]
+}
