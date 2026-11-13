@@ -202,6 +202,33 @@ remains **0/14 = 0% independently verified**, and the total operational
 completion percentage is **unknown**. Unit test success does not update
 either the proof coverage or any customer's paid/settled revenue.
 
+## Canonical-first task routing — prevents legacy shadow execution
+
+The generic `AgentRegistry.resolve()` previously picked an active agent
+using risk-level/row-ID sorting. While the old economic/factory identities
+remain present during safe retirement, an old `economic-master-agent` with
+lower risk or earlier row ID could capture **new** work even when the
+`mojtaba-bot-ai` owner had the same capability.
+
+For any registered capability explicitly classified as a Mojtaba.bot.ai
+internal module (`module_for_capability != unmapped_requires_adapter_review`),
+routing is now **canonical-first and fail-closed**:
+
+- When the canonical owner is active and has that capability, it wins even
+  if an old agent is lower-risk or was created first.
+- If the canonical owner is absent, disabled or lacks the reviewed
+  capability, do **not** redirect fresh canonical work to a legacy bot.
+  The planner fails before inserting an `AgentTask`.
+- An unclassified specialist may retain its original route until a
+  safe, independently verified handoff. This avoids breaking an unknown
+  business process or pretending it was already migrated.
+
+This is an actual source-level prevention of new legacy task ownership, not
+proof of shutting down existing processes. Existing scheduled legacy jobs,
+in-flight tasks, private server executors and database records still need
+read-only inventory, receipt reconciliation and separately approved cutover.
+Neither this change nor its unit tests proves live production enforcement.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
