@@ -3,6 +3,7 @@
 No remote execution, GitHub dispatch, production changes, or secret accesses.
 """
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -160,3 +161,69 @@ def test_replay_blocker_is_on_hosted_runner_without_private_credentials():
     assert "VPS_SSH_PRIVATE_KEY" not in blocker
     assert "ssh " not in blocker
     assert "sudo " not in blocker
+
+
+def _cron_block() -> str:
+    """Extract the exact production Bash Cron audit without any SSH wrapper."""
+    source = WORKFLOW.read_text(encoding="utf-8")
+    marker = "          # Report only active lines from this verified githubops user's"
+    end = '          ops="$root/operations"'
+    assert source.count(marker) == 1
+    assert source.count(end) == 3
+    return source.split(marker, 1)[1].split(end, 1)[0]
+
+
+def _exercise_cron_audit(cron_shell_function: str) -> subprocess.CompletedProcess:
+    shell = "set -euo pipefail\n" + cron_shell_function + "\n" + _cron_block()
+    return subprocess.run(
+        ["bash", "-c", shell], capture_output=True, text=True,
+        timeout=5, check=False,
+    )
+
+
+def test_manual_cron_audit_classifies_active_only_and_hides_commands():
+    mock = (
+        'crontab() { printf "%s\n" '
+        '"* * * * * /secret/master --token NEVER_PRINT # SAEIT_MASTER_AGENT_V1" '
+        '"# * * * * * /secret/disabled # SAEIT_FACTORY_EVERY_MINUTE_V1" '
+        '"  # * * * * * /secret/disabled # SAEIT_MASTER_AGENT_V1" '
+        '"1 * * * * /secret/worker # leech" '
+        '"0 1 * * * /secret/other"; }'
+    )
+    result = _exercise_cron_audit(mock)
+    assert result.returncode == 0, result.stderr
+    assert "FACTORY_AUDIT_CRON_READ=observed" in result.stdout
+    assert "FACTORY_AUDIT_CRON_ACTIVE_LINES=3" in result.stdout
+    assert "FACTORY_AUDIT_CRON_MASTER_TAGS=1" in result.stdout
+    assert "FACTORY_AUDIT_CRON_LEECH_TAGS=1" in result.stdout
+    assert "FACTORY_AUDIT_CRON_OTHER_LINES=2" in result.stdout
+    assert "/secret/" not in result.stdout
+    assert "NEVER_PRINT" not in result.stdout
+
+
+def test_manual_cron_audit_accepts_only_expected_no_crontab():
+    empty = _exercise_cron_audit('crontab() { printf ""; return 0; }')
+    assert empty.returncode == 0
+    assert "FACTORY_AUDIT_CRON_READ=observed" in empty.stdout
+    assert "FACTORY_AUDIT_CRON_ACTIVE_LINES=0" in empty.stdout
+
+    missing = _exercise_cron_audit(
+        'crontab() { printf "no crontab for githubops\n" >&2; return 1; }'
+    )
+    assert missing.returncode == 0, missing.stderr
+    assert "FACTORY_AUDIT_CRON_READ=none_installed" in missing.stdout
+    assert "FACTORY_AUDIT_CRON_MASTER_TAGS=0" in missing.stdout
+
+
+def test_manual_cron_audit_fails_closed_on_denial_or_ambiguous_stderr():
+    for stub in (
+        'crontab() { printf "permission denied\n" >&2; return 1; }',
+        'crontab() { printf "no crontab for githubops\nextra warning\n" >&2; return 1; }',
+        'crontab() { printf "no crontab for githubops\n" >&2; return 2; }',
+    ):
+        result = _exercise_cron_audit(stub)
+        assert result.returncode != 0
+        assert "FACTORY_AUDIT_CRON_READ=unavailable_fail_closed" in result.stdout
+        assert "permission denied" not in result.stdout
+        assert "extra warning" not in result.stdout
+        assert "/secret/" not in result.stdout
