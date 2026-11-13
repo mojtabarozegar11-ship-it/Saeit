@@ -35,7 +35,7 @@ def test_master_self_improvement_rejects_invalid_dossier_in_primary_runtime(monk
     monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    def reject_tampered_candidate(_path):
+    def reject_tampered_candidate(_path, *, source_root=None):
         raise ValueError("ISOLATED_UPGRADE_PROOF_CANDIDATE_HASH_MISMATCH")
 
     monkeypatch.setattr(isolated_upgrade_proof, "inspect_isolated_proof",
