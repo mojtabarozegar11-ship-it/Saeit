@@ -538,7 +538,17 @@
       "backtest_check": "ctrader-cli backtest <canonical.algo> with explicit symbol, period, dates and data mode",
       "demo_gate": "EnableDemoTrading=true only after compile, backtest and risk evidence",
       "live_gate": "permanently_locked",
-      "current_status": "blocked_missing_algo_and_cli_runtime_evidence"
+      "current_status": "blocked_missing_algo_and_cli_runtime_evidence",
+      "preflight_evidence": {
+        "workflow": "MojTrade cTrader CLI read-only preflight",
+        "run_id": 43408570603,
+        "runner": "factory.zomorodmelal.ir",
+        "ctrader_cli": "absent",
+        "dotnet": "absent",
+        "docker": "absent",
+        "credentials_or_account_access": "not_used",
+        "orders_or_backtest": "not_run"
+      }
     },
     "deletion_candidates": [
       {
