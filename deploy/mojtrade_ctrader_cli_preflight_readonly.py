@@ -131,7 +131,8 @@ def _response(stdout: str, *, kind: str):
     elif isinstance(doc, dict):
         # Some versions wrap a list with metadata. An explicit failure
         # marker always overrides that list, regardless of exit code.
-        if (doc.get("success") is False or doc.get("ok") is False
+        if (("success" in doc and doc["success"] is not True)
+                or ("ok" in doc and doc["ok"] is not True)
                 or doc.get("error") not in (None, "")
                 or doc.get("errors") not in (None, "", [])):
             raise PreflightError(kind + "_cli_reported_failure")
