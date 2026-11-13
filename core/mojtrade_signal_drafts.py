@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
-from .mojtrade_strategy_risk import MODEL_VERSION
+from .mojtrade_strategy_risk import MODEL_VERSION, CANDIDATE_STANCES
 
 
 SCHEMA = "mojtaba.bot.ai.mojtrade-market-watch-draft.v1"
@@ -93,6 +93,8 @@ def build_market_watch_drafts(
     ).encode("utf-8")).hexdigest()
     if review.get("decision_digest_sha256") != digest:
         raise MarketWatchDraftError("review_digest_mismatch")
+    if len({s.get("id") for s in signals if isinstance(s, dict)}) != len(signals):
+        raise MarketWatchDraftError("duplicate_source_signal_id")
     items = []
     for index, (source, decision) in enumerate(zip(signals, decisions)):
         if not isinstance(source, dict) or not isinstance(decision, dict):
@@ -105,6 +107,8 @@ def build_market_watch_drafts(
                 or decision.get("source_observed_at") != source.get("observed_at")
                 or decision.get("source_method") != source.get("method")
                 or classification not in CLASSIFICATIONS
+                or classification != CANDIDATE_STANCES.get(source.get("stance"), "no_setup")
+                or source.get("stance") not in ("watch_buy", "watch_sell", "neutral")
                 or decision.get("risk_gate") != "blocked_missing_broker_verified_inputs"
                 or decision.get("execution_authorized") is not False
                 or decision.get("order_intent") is not None):
