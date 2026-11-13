@@ -2,7 +2,7 @@
 import unittest
 from pathlib import Path
 from hashlib import sha1
-from core.finance102_guides import BRAND_TOPICS, BRAND_CASES, LOCALES, KINDS, guide_for, compose_page_copy, canonical_url
+from core.finance102_guides import BRAND_TOPICS, BRAND_CASES, LOCALES, KINDS, guide_for, compose_page_copy, canonical_url, locale_from_public_host
 
 
 class Finance102GuidesTest(unittest.TestCase):
@@ -98,6 +98,25 @@ class Finance102GuidesTest(unittest.TestCase):
         view = Path("core/financial_brand_pages.py").read_text("utf-8")
         self.assertIn('response["Link"]', view)
         self.assertIn('response["Content-Language"] = locale', view)
+
+    def test_host_language_detection_denies_forwarded_and_substring_spoofing(self):
+        for host in (
+            "zomorodmelal.ir", "www.zomorodmelal.ir",
+            "zomorodmelal.ir:443", "ZOMORODMELAL.IR",
+            "zomorodmelal.ir.",
+        ):
+            self.assertEqual(locale_from_public_host(host), "fa")
+        for host in (
+            "mojplaywin.com", "www.mojplaywin.com",
+            "fakezomorodmelal.ir", "zomorodmelal.ir.attacker.tld",
+            "zomorodmelal.ir,mojplaywin.com",
+            "evil-zomorodmelal.ir", "", None, 123,
+        ):
+            self.assertEqual(locale_from_public_host(host), "en")
+        view = Path("core/financial_brand_pages.py").read_text("utf-8")
+        self.assertNotIn("HTTP_X_FORWARDED_HOST", view)
+        self.assertIn("locale_from_public_host(host)", view)
+        self.assertIn('request.META.get("HTTP_HOST")', view)
 
     def test_existing_finance_routes_preserved(self):
         urls = Path("config/urls.py").read_text("utf-8")
