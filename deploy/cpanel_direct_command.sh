@@ -96,7 +96,7 @@ EOF
       test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "796712531491d7ca79d6d009ec27bc3fba5d4dc3" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
       PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
         < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
-      ;;
+    ;;
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'
       ;;
@@ -165,7 +165,7 @@ case "$operation" in
       test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "796712531491d7ca79d6d009ec27bc3fba5d4dc3" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
       PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
         < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
-      ;;
+    ;;
   cpanel_preflight)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'
     ;;
