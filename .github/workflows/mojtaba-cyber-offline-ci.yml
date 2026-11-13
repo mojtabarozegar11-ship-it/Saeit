@@ -7,6 +7,7 @@ on:
       - "core/mojtaba_modules/**"
       - "tests/test_mojtaba_cyber_security.py"
       - "tests/test_mojtaba_origin_defense.py"
+      - "tests/test_mojtaba_incident_response.py"
       - "docs/MOJTABA_BOT_CYBER_SECURITY_MODULE.md"
       - ".github/workflows/mojtaba-cyber-offline-ci.yml"
 
@@ -29,8 +30,13 @@ jobs:
         with:
           python-version: "3.11"
       - name: Syntax check (no dependencies)
-        run: python -m compileall -q core/mojtaba_modules tests/test_mojtaba_cyber_security.py tests/test_mojtaba_origin_defense.py
+        run: |
+          python -m compileall -q core/mojtaba_modules \
+            tests/test_mojtaba_cyber_security.py \
+            tests/test_mojtaba_origin_defense.py \
+            tests/test_mojtaba_incident_response.py
       - name: Isolated security module regression tests (offline only)
         run: |
           python -m unittest discover -s tests -p 'test_mojtaba_cyber_security.py' -v
           python -m unittest discover -s tests -p 'test_mojtaba_origin_defense.py' -v
+          python -m unittest discover -s tests -p 'test_mojtaba_incident_response.py' -v
