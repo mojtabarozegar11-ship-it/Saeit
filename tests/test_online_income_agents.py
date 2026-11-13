@@ -1,6 +1,7 @@
 import pytest
 
 from core.agent_registry import AgentRegistry
+from core.management.commands.seed_online_income_agents import CAPABILITIES
 from core.models import Agent, AgentCapability, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
 from django.core.management import call_command
@@ -13,8 +14,22 @@ def test_seed_online_income_agents_is_idempotent_and_single_agent():
     master = Agent.objects.get(code="economic-master-agent")
     assert master.active is True
     assert Agent.objects.filter(code__startswith="income-", active=True).count() == 0
-    assert AgentCapability.objects.filter(code__startswith="income_").count() == 7
-    assert master.capabilities.filter(code__startswith="income_", active=True).count() == 7
+    expected_income_codes = {
+        code for code, *_ in CAPABILITIES if code.startswith("income_")
+    }
+    # The allowlist is authoritative; a new safe master module must not be
+    # mistaken for a second independent bot or an unregistered capability.
+    assert expected_income_codes
+    assert set(AgentCapability.objects.filter(
+        code__startswith="income_",
+    ).values_list("code", flat=True)) == expected_income_codes
+    assert set(master.capabilities.filter(
+        code__startswith="income_", active=True,
+    ).values_list("code", flat=True)) == expected_income_codes
+    assert "income_mojtrade_research_review" in expected_income_codes
+    assert list(Agent.objects.filter(
+        capabilities__code="income_mojtrade_research_review"
+    ).values_list("code", flat=True)) == ["economic-master-agent"]
 
 
 @pytest.mark.django_db
