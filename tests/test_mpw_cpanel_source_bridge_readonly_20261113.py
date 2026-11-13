@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SHELL = ROOT / "deploy/cpanel_direct_command.sh"
 WORKFLOW = ROOT / ".github/workflows/cpanel-direct-command-bridge.yml"
+PASSENGER_WORKFLOW = ROOT / ".github/workflows/mpw-public-passenger-runtime-readonly-20261102.yml"
 SCRIPT = "scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py"
 
 
@@ -53,6 +54,32 @@ class SourceBridgeContractTests(unittest.TestCase):
         self.assertNotIn(".write_text(", content)
         self.assertNotIn(".unlink(", content)
         self.assertIn('"files_modified": False', content)
+
+    def test_cpanel_bridge_uses_verified_dns_hostname_not_stale_ip(self):
+        source = SHELL.read_text()
+        self.assertNotIn("178.239.147.125", source)
+        self.assertEqual(source.count("HostName zohal.pws-dns.net"), 2)
+        self.assertEqual(source.count("ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net"), 2)
+        self.assertEqual(source.count("SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"), 2)
+
+    def test_passenger_diagnostic_uses_same_dns_host_and_pinned_key(self):
+        workflow = PASSENGER_WORKFLOW.read_text()
+        self.assertNotIn("178.239.147.125", workflow)
+        self.assertEqual(workflow.count("HostName zohal.pws-dns.net"), 2)
+        self.assertIn("[zohal.pws-dns.net]:1396 ssh-ed25519", workflow)
+        self.assertIn("SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04", workflow)
+        self.assertIn("StrictHostKeyChecking yes", workflow)
+        self.assertIn("MPW-PASSENGER-READONLY-20261102", workflow)
+
+    def test_no_unreviewed_permission_escalation_from_dns_change(self):
+        direct = SHELL.read_text()
+        passenger = PASSENGER_WORKFLOW.read_text()
+        self.assertIn("ForwardAgent no", direct)
+        self.assertIn("BatchMode yes", direct)
+        self.assertIn("ForwardAgent no", passenger)
+        self.assertIn("BatchMode yes", passenger)
+        self.assertNotIn("StrictHostKeyChecking no", direct + passenger)
+        self.assertNotIn("UserKnownHostsFile=/dev/null", direct + passenger)
 
     def test_existing_unknown_operations_still_denied(self):
         src = SHELL.read_text()
