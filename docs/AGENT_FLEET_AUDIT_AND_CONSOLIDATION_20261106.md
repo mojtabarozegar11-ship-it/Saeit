@@ -68,3 +68,57 @@ Focused Django tests cover cross-capability denials, revoked/inactive agent
 checks, explicit adapter aliases, risk-policy drift, stale execution identity,
 worker lifecycle and audit read-only behavior. Tests exercise isolated
 databases only. They do not establish production readiness or authorize deploy.
+
+
+## 2026-11-13: only one operational bot — no fallback to old task owners
+
+The owner has required the complete end-state: **`mojtaba.bot.ai` is
+the only operational bot**. All other agent identities must become
+internal, non-executable modules under `mojtaba-bot-ai` or be retired
+after all dependencies and external process ownership are verified.
+Historical Agent rows with foreign-key references are retained as
+**inactive provenance**, not treated as running robots. Destructive SQL
+deletions are NOT an acceptable shortcut for FK preservation.
+
+**Source-side enforcement introduced on the review branch:**
+
+1. `AgentRegistry.resolve` has **no noncanonical fallback whatsoever**.
+   Newly planned tasks for any registered capability — including unknown or
+   otherwise unmapped specialist actions — must be owned by the active
+   canonical Agent row with the exact capability association. When that
+   association is missing, planning is denied; old agents cannot win by ID,
+   lower risk or mission. Existing historical tasks are not relabelled.
+2. `newsletter_engine.create_draft` refuses any
+   `agent_code != mojtaba-bot-ai`, including direct calls from an old
+   newsletter cron. This does not delete, retire or silently reassign
+   pre-existing scheduled/publication records.
+3. `consolidate_legacy_agents` now explicitly inventories **nine known
+   retireable identities**, including content-director, content-research,
+   knowledge-content-director and company-activity-intelligence.
+   The content/report successors require actual recent canonical
+   published content with editorial-quality receipt. Knowledge
+   retirement instead requires a recent canonical completed matching
+   `AgentTask` + `KnowledgeAgentRun` + nonempty book, **and** an
+   independently reviewed live handoff. All nine continue to require an
+   exact scoped owner approval grant per identity and a fresh live receipt.
+4. The two former *economic/factory* executor identities follow the existing
+   separate approved `seed_online_income_agents --apply-legacy-merge`
+   route. The currently protected economic/factory identities must **not**
+   be declared deleted or consolidated merely because canonical ownership
+   exists in source.
+
+**Completion gates, all required simultaneously:** no active alternative
+Agent identity in the live database; no unreconciled pending tasks or
+newsletter distributions; all specialist capabilities mapped to the
+canonical owner; every VPS/cPanel/systemd/cron/PHP/remote scheduler and
+mobile/connector-triggered legacy process accounted for and stopped or
+rerouted; one verified canonical running executor; exact owner-approved
+cutover and rollback evidence; historical ledgers preserved; no duplicate
+orders/publications across the cutover.
+
+**Current limitation:** this branch implements source policy and guarded
+retirement routes only. It does not itself run a live database migration,
+stop VPS/cPanel processes, edit remote cron jobs, disable external accounts,
+or delete files on live hosts. A successful offline test does NOT mean the
+completion gates above have been met. Live consolidation percentage remains
+**unknown**, never 100% by inference.
