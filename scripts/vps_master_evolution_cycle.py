@@ -53,7 +53,12 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     parent = state_path.parent
     if _contains_symlink(parent):
         raise RuntimeError("MASTER_EVOLUTION_STATE_PARENT_SYMLINK")
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if check_only:
+        # A read-only preflight must not create even its destination folder.
+        if not parent.is_dir():
+            raise RuntimeError("MASTER_EVOLUTION_CHECK_PARENT_NOT_FOUND")
+    else:
+        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     parent_mode = parent.stat().st_mode
     if not stat.S_ISDIR(parent_mode) or stat.S_IMODE(parent_mode) & 0o077:
         raise RuntimeError("MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE")
