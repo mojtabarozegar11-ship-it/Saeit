@@ -39,7 +39,7 @@
      for(const original of originals){
        const duplicate=original.cloneNode(true);
        duplicate.setAttribute('aria-hidden','true');
-       duplicate.setAttribute('inert','');
+       // Duplicates are removed from keyboard/tab order but remain mouse-clickable.
        duplicate.tabIndex=-1;
        duplicate.classList.add('carousel-copy');
        for(const image of $$('img',duplicate)){image.alt='';image.loading='lazy';}
