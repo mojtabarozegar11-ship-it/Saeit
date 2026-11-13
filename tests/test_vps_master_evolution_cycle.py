@@ -349,13 +349,17 @@ class EvolutionTests(unittest.TestCase):
             self.assertEqual(result["late_verified_completed_tasks"], 0)
             self.assertEqual(result["delta"]["verified_completed_tasks"], 0)
             self.assertEqual(result["pending_prior_ids"], [])
+            before = state.read_bytes()
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET output_data=? WHERE id=2",
                     (json.dumps({"verified_effect": True}),)
                 )
-            mod.evaluate(db, state)
-            self.assertEqual(json.loads(state.read_text())["delta"]["verified_completed_tasks"], 0)
+            # A completed task's outcome cannot be upgraded retroactively:
+            # the previously stored snapshot fingerprint must catch tampering.
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
 
     def test_legacy_state_does_not_credit_unproven_old_pending_tasks(self):
         with tempfile.TemporaryDirectory() as temp:
