@@ -22,8 +22,8 @@ MAX_STATE_BYTES = 200_000
 MAX_NEW_TASKS_PER_AUDIT = 128
 MAX_TRACKED_PENDING_TASKS = 4096
 MAX_COMPLETED_GUARD_TASKS = 128
-COMPLETED_GUARD_ID = re.compile(r"[1-9][0-9]{0,18}\\Z")
-COMPLETED_GUARD_HASH = re.compile(r"[a-f0-9]{64}\\Z")
+COMPLETED_GUARD_ID = re.compile(r"[1-9][0-9]{0,18}\Z")
+COMPLETED_GUARD_HASH = re.compile(r"[a-f0-9]{64}\Z")
 
 
 def _completed_fingerprint(action, raw_output, execution_id, attempt_count):
