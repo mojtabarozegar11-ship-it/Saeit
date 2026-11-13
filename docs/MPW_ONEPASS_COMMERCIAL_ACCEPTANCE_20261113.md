@@ -63,3 +63,22 @@ and classifications, never buyer e-mail, PII or transaction hashes.
 Source evidence: GitHub Actions run 43413348378 failed before cPanel
 query execution; previous documented GET inspection showed static
 fallback. These historical observations are not real-time site status.
+
+## Independently observed public-blocker evidence — GitHub Actions 43429609528
+
+- Source: [GitHub-hosted, public GET-only execution](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43429609528). Sanitized immutable evidence copy: `runtime/mpw_public_live_get_evidence_20261113.json`.
+- **10/10 GET responses were categorized** without network failure: all three individual product pages exposed the expected product-specific checkout CTA; the central `/store/` remained the owned **static fallback** rather than dynamic catalog.
+- All **six** canonical/alias checkout pages for product IDs 72, 225, 879 **still rendered email-requesting forms**, contrary to the expected email-free guest checkout policy.
+- All six failed the strict `script-src 'none'` CSP check (category `checkout_csp_scripts_unverified`). This is a **security-header release blocker**, not a proof that the payment processor is inoperable. No raw header values, customer information or tokens were logged.
+- The preliminary run [43429288934](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43429288934) already identified the fallback and header failures; the refined observer separated header and form evidence.
+- **Never** label the three good GET product pages as completed sales or 10/10 commercially ready. The present public storefront fails the acceptance gate.
+
+### Exact next release preconditions, in order
+
+1. **Source equivalence**: establish a fresh, pinned read-only snapshot of the actual cPanel Passenger/Django app, database schema and static fallback state through the preexisting factory VPS runner; GitHub main/PR code alone is insufficient.
+2. **Guest transaction policy**: integrate and run server-side invoice POST without email with a valid anonymous signed ownership claim and original session access; reconcile historical email recovery separately with owner-approved alternative recovery. Never expose receipts by public tx hash alone.
+3. **CSP**: enforce the exact narrow script policy and no-store on both canonical and alias checkout responses; verify presence on live server, avoiding changes to the design of any site or subsite.
+4. **Dynamic catalog**: remove only the exact owned static fallback after preflight, backups, rights-hash inventory, rollback and independently verified three-SKU checkout; never overwrite unrelated templates.
+5. **Financial acceptance**: independently confirm one owner-approved TRX mainnet settlement for a nontrial SKU, match DB ledgers and private entitlement, verify a genuine authorized download, then measure net revenue only from independently proven sales. No transfer initiated by this audit.
+
+Current release verdict: **BLOCKED / NOT DEPLOYED / REVENUE UNKNOWN**. The public GET probe independently verifies the blockers, not their remediation.
