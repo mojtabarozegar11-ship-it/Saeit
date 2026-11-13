@@ -86,6 +86,15 @@ class RecoveryIsolationTests(TransactionTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Order.objects.count(), 0)
 
+    def test_reserved_internal_guest_alias_is_never_recovery_email(self):
+        internal = "mpwguest_" + secrets.token_hex(20) + "@guest.mojplaywin.invalid"
+        with self.assertRaisesRegex(ValueError, "not a contact address"):
+            module._email(internal)
+        with self.assertRaisesRegex(ValueError, "not a contact address"):
+            module._email(internal.upper())
+        # Legitimate historical customer email recovery remains unaffected.
+        self.assertEqual(module._email(" BUYER@EXAMPLE.COM "), "buyer@example.com")
+
     def test_new_guest_has_no_email_requirement_or_collection(self):
         for fields in ({}, {"email": "Buyer@Example.com"},
                        {"buyer_email": "invalid-address"}):

@@ -64,6 +64,12 @@ def _email(value):
     if not isinstance(value, str) or len(value) > 254 or "\n" in value or "\r" in value:
         raise ValueError("Invalid email")
     value = value.strip().casefold()
+    # The no-buyer-email checkout adapter creates a private, non-routable
+    # placeholder for the legacy invoice ledger. It can NEVER serve as a
+    # deliverable email recovery address, even if Django considers its
+    # syntax valid. This does not affect historical real-address claims.
+    if value.endswith("@guest.mojplaywin.invalid"):
+        raise ValueError("Internal guest identifier is not a contact address")
     try:
         validate_email(value)
     except ValidationError as exc:

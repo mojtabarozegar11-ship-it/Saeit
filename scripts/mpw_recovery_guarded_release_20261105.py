@@ -46,7 +46,7 @@ SOURCE_DIGESTS = {
     # Reviewed no-buyer-email guest principal, with reserved .invalid internal alias.
     # This pins only candidate code; it does not authorize email recovery for new sales.
     "guest": "41d86a1985288c3db1097b66aae5a17f8fe0faaaa5d9dfa25b1d0cdfc154eaf0",
-    "recovery": "164db1b46bf454dc311502f993e6f9d06e2f20b020e9f8986fb81fcda81a23bf",
+    "recovery": "56b517eb66c14f69edd4b9ff11ee2a840e0de40302d56a0edf36628e6432945b",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "9913e106dee36cefab78137fb54936339c65bd68fefd6d72e616c36011866572",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
