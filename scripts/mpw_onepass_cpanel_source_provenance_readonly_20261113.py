@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Bounded, source-only cPanel release provenance. NEVER edits or imports the app.
+
+Run via the *existing authorized cPanel read-only SSH route*, using Python -B.
+This script does not query SQL, render Django, access orders, or contact payment
+networks. Its result CANNOT certify commercial readiness or a live template
+origin: it only identifies source-drift and safe next reconciliation steps.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import pwd
+import re
+import stat
+from pathlib import Path
+
+HOME = Path("/home/zomorod2")
+APP = HOME / "Saeit-staging"
+PUBLIC = HOME / "mojplaywin.com"
+APPROVED_GUEST_SHA256 = "38765d8d248f4520242f4e1ead5a44c939795ca2e35b05aa3899971a152fe543"
+REVIEWED_LEGACY_SHA256 = frozenset({
+    "ef74a3ed84686e0c171f628932c2015338328ef93213e106834c2add7cdb1b2e",
+    "6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4",
+})
+FALLBACK_BLOCK = (
+    b"# MPW_STATIC_STORE_FALLBACK_V1\n"
+    b"RewriteEngine On\n"
+    b"RewriteCond %{REQUEST_METHOD} ^GET$\n"
+    b"RewriteCond %{REQUEST_URI} ^/store/?$\n"
+    b"RewriteRule ^store/?$ store/index.html [END]\n\n"
+)
+
+
+def _safe_read(root: Path, relative: str, limit: int = 240_000):
+    """Allow only regular bounded files below a non-symlink root."""
+    if not root.is_dir() or root.is_symlink():
+        return None
+    dest = root / relative
+    part = dest
+    while part != root:
+        if part.is_symlink():
+            return None
+        part = part.parent
+    try:
+        st = dest.stat()
+        if not stat.S_ISREG(st.st_mode) or not 0 < st.st_size <= limit:
+            return None
+        raw = dest.read_bytes()
+        if len(raw) != st.st_size:
+            return None
+        return raw
+    except (OSError, ValueError):
+        return None
+
+
+def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
+    """Use explicit roots in isolated tests; never expose raw file contents."""
+    guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
+    template = _safe_read(app, "mpw_commerce/templates/mpw_commerce/product_checkout.html")
+    htaccess = _safe_read(public, ".htaccess")
+    wsgi = _safe_read(public, "passenger_wsgi.py")
+    store_html = _safe_read(public, "store/index.html")
+    guest_hash = hashlib.sha256(guest).hexdigest() if guest else ""
+    guest_class = ("approved_email_free_source" if guest_hash == APPROVED_GUEST_SHA256
+                   else "reviewed_legacy_source" if guest_hash in REVIEWED_LEGACY_SHA256
+                   else "source_unknown" if guest is not None else "source_missing_or_unsafe")
+    # These are disk-source observations, not proof of Django's effective
+    # template selection (which needs a separate owner-gated loader probe).
+    template_state = "missing_or_unsafe"
+    if template is not None:
+        raw = template.lower()
+        email_control = bool(re.search(
+            rb'\b(?:name|id|type|autocomplete)\s*=\s*["\x27]?[^\s>"\x27]*email',
+            raw))
+        known_label = b"mpw-buy-email" in raw
+        template_state = ("email_field_present" if email_control or known_label
+                          else "email_not_found_static_source")
+    fallback = "unknown"
+    if htaccess is not None and store_html is not None:
+        fallback = ("owned_static_fallback_present" if
+                    htaccess.count(FALLBACK_BLOCK) == 1 and
+                    b"MPW_STATIC_STORE_FALLBACK_V1" in store_html
+                    else "fallback_not_exactly_proven")
+    wsgi_staging = (wsgi is not None and
+                    b"APP='/home/zomorod2/Saeit-staging'" in wsgi)
+    result = {
+        "schema": "mpw.cpanel.source_provenance.readonly.v1",
+        "guest_source": guest_class,
+        "guest_sha256_prefix": guest_hash[:16] if guest else None,
+        "template_disk_source": template_state,
+        "effective_django_template_origin_verified": False,
+        "public_fallback": fallback,
+        "passenger_stage_source_marker": wsgi_staging,
+        "private_checkout_source_readable": template is not None,
+        "production_invoice_post_verified": False,
+        "independent_chain_finality_verified": False,
+        "authenticated_delivery_verified": False,
+        "confirmed_revenue": None,
+        "customer_data_read": False,
+        "database_accessed": False,
+        "external_network_requests": False,
+        "files_modified": False,
+        "production_release_permitted_by_this_report": False,
+    }
+    return result
+
+
+def main():
+    if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+        raise SystemExit("MPW_CPANEL_SOURCE_PROVENANCE=WRONG_ACCOUNT")
+    report = inspect()
+    print("MPW_CPANEL_SOURCE_PROVENANCE=" + json.dumps(report, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
