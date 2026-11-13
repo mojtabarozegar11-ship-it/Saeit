@@ -320,6 +320,47 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                        if m["file"] == AUDIT.SOURCE_PATHS[0])
         self.assertNotIn("normalize_email", by_file["invoice_function_contracts"])
 
+    def test_live_normalizer_static_structure_never_claims_alias_accepted(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "def normalize_email(value):\n"
+            "    email = str(value).strip().lower()\n"
+            "    if email.endswith('@guest.mojplaywin.invalid'):\n"
+            "        raise ValueError('PRIVATE_ANTISPAM_RULE_DO_NOT_PRINT')\n"
+            "    return email\n"
+            "def record_invoice(invoice_id, user):\n"
+            "    return normalize_email(user.email)\n"
+        )
+        report = AUDIT.inspect(self.root)
+        entry = next(f for f in report["files"]
+                     if f["file"] == AUDIT.SOURCE_PATHS[4])
+        profile = entry["normalizer_static_profile"]
+        self.assertEqual(profile["synthetic_alias_acceptance"], "UNKNOWN")
+        self.assertTrue(profile["literal_reserved_alias_reference"])
+        self.assertIn("strip", profile["normalization_operations"])
+        self.assertIn("lower", profile["normalization_operations"])
+        _, out = self._remote_gate_result(report)
+        self.assertNotIn("PRIVATE_ANTISPAM_RULE_DO_NOT_PRINT", out)
+        evidence = json.loads(next(line.split("=", 1)[1]
+                                   for line in out.splitlines()
+                                   if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        record = next(f for f in evidence["modules"]
+                      if f["file"] == AUDIT.SOURCE_PATHS[4])
+        public = record["normalizer_static_profile"]
+        self.assertEqual(public["synthetic_alias_acceptance"], "UNKNOWN")
+        self.assertTrue(public["literal_reserved_alias_reference"])
+        self.assertFalse(evidence["paid_order_verified"])
+
+    def test_missing_normalizer_never_claims_alias_accepted(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text("def record_invoice(invoice_id, user):\n    return invoice_id\n")
+        report = AUDIT.inspect(self.root)
+        profile = next(f for f in report["files"]
+                       if f["file"] == AUDIT.SOURCE_PATHS[4])[
+                           "normalizer_static_profile"]
+        self.assertEqual(profile["status"], "MISSING")
+        self.assertEqual(profile["synthetic_alias_acceptance"], "UNKNOWN")
+
     def test_static_invoice_signature_reports_required_and_optional_arguments(self):
         p = self.root / AUDIT.SOURCE_PATHS[4]
         p.write_text(

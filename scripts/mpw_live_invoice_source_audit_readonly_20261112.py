@@ -185,6 +185,54 @@ def safe_function_contract(fn: ast.AST) -> dict:
             "user_attribute_names": sorted(user_attributes)[:16]}
 
 
+def email_normalizer_static_profile(fn: ast.AST | None) -> dict:
+    """Bounded AST-only profile: NEVER executes or dumps private normalizer.
+
+    Syntax patterns cannot prove a real accepted value under dynamic imports,
+    model validation, regexes, or other runtime checks. The acceptance answer
+    intentionally stays UNKNOWN even when no obvious blocker is observed.
+    """
+    if fn is None:
+        return {"status": "MISSING", "synthetic_alias_acceptance": "UNKNOWN"}
+    operations = set()
+    calls = set()
+    try_guards = 0
+    conditional_guards = 0
+    literal_reserved_alias_reference = False
+    possible_dynamic_dispatch = False
+    for node in ast.walk(fn):
+        if isinstance(node, ast.If):
+            conditional_guards += 1
+        if isinstance(node, (ast.Try, ast.Raise, ast.Assert)):
+            try_guards += 1
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                if node.func.id in ("validate_email", "EmailValidator",
+                                    "fullmatch", "match", "search", "compile",
+                                    "str", "len", "isinstance", "ValueError"):
+                    calls.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                if node.func.attr in ("strip", "lower", "casefold",
+                                      "fullmatch", "match", "search",
+                                      "endswith", "split", "replace"):
+                    operations.add(node.func.attr)
+            else:
+                possible_dynamic_dispatch = True
+        if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and "@guest.mojplaywin.invalid" in node.value.lower()):
+            literal_reserved_alias_reference = True
+    return {
+        "status": "STRUCTURE_READ_ONLY",
+        "synthetic_alias_acceptance": "UNKNOWN",
+        "normalization_operations": sorted(operations),
+        "validator_calls": sorted(calls),
+        "conditional_guards": min(conditional_guards, 99),
+        "exception_related_nodes": min(try_guards, 99),
+        "literal_reserved_alias_reference": literal_reserved_alias_reference,
+        "dynamic_dispatch_observed": possible_dynamic_dispatch,
+    }
+
+
 def module_report(relative: str, raw: bytes) -> dict:
     tree = ast.parse(raw.decode("utf-8"), filename=relative)
     definitions = [
@@ -317,6 +365,9 @@ def module_report(relative: str, raw: bytes) -> dict:
         # Identifiers only, not function bodies, request fields, buyer data or secrets.
         "checkout_call_targets": sorted(checkout_call_targets)[:48],
         "orm_model_import_origins": model_import_origins[:12],
+        "normalizer_static_profile": (
+            email_normalizer_static_profile(functions.get("normalize_email"))
+            if relative == SOURCE_PATHS[4] else None),
         "invoice_contracts": {
             key: safe_function_contract(functions[key])
             for key in ("_start_order", "record_invoice", "normalize_email")
@@ -634,7 +685,38 @@ def validate_remote_report(output: str) -> int:
                 continue
             safe_origins.append({"model": model, "import_name": imported,
                                  "module": module, "relative_level": level})
+        profile = item.get("normalizer_static_profile", {})
+        if not isinstance(profile, dict):
+            profile = {}
+        safe_profile = None
+        if item["file"] == SOURCE_PATHS[4]:
+            allowed_ops = {"strip", "lower", "casefold", "fullmatch", "match",
+                           "search", "endswith", "split", "replace"}
+            allowed_calls = {"validate_email", "EmailValidator", "fullmatch",
+                             "match", "search", "compile", "str", "len",
+                             "isinstance", "ValueError"}
+            safe_profile = {
+                "status": profile.get("status") if profile.get("status") in (
+                    "MISSING", "STRUCTURE_READ_ONLY") else "UNKNOWN",
+                "synthetic_alias_acceptance": "UNKNOWN",
+                "normalization_operations": sorted(
+                    set(profile.get("normalization_operations", [])) &
+                    allowed_ops),
+                "validator_calls": sorted(
+                    set(profile.get("validator_calls", [])) & allowed_calls),
+                "conditional_guards": min(max(
+                    profile.get("conditional_guards", 0), 0), 99)
+                    if type(profile.get("conditional_guards")) is int else None,
+                "exception_related_nodes": min(max(
+                    profile.get("exception_related_nodes", 0), 0), 99)
+                    if type(profile.get("exception_related_nodes")) is int else None,
+                "literal_reserved_alias_reference":
+                    profile.get("literal_reserved_alias_reference") is True,
+                "dynamic_dispatch_observed":
+                    profile.get("dynamic_dispatch_observed") is True,
+            }
         safe_modules.append({"file": item["file"], "sha16": digest,
+                             "normalizer_static_profile": safe_profile,
                              "orm_model_import_origins": safe_origins,
                              "invoice_function_contracts": safe_contracts,
                              "email_referencing_functions": safe_email_functions,
