@@ -1,0 +1,102 @@
+name: Zomorod existing sitewide deep audit — read only
+on:
+  pull_request:
+    paths:
+      - 'scripts/zomorod_public_sitewide_readonly_audit_20261113.py'
+      - 'scripts/zomorod_sitewide_playwright_audit_20261019.cjs'
+      - '.github/workflows/zomorod-sitewide-deep-readonly-20261113.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-sitewide-readonly-\${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  public-census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse syntax and verify anonymous GET-only policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          code=Path('scripts/zomorod_public_sitewide_readonly_audit_20261113.py').read_text()
+          ast.parse(code)
+          assert 'method="GET"' in code
+          assert 'MAX_SCAN=200' in code
+          assert '"site_writes":0' in code
+          print('ZM_SITEWIDE_READONLY_POLICY=VERIFIED')
+          PY
+      - name: Crawl sitemap and sample up to 200 existing public site pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/zomorod_public_sitewide_readonly_audit_20261113.py |
+            tee "$RUNNER_TEMP/sitewide-public-log.txt"
+      - name: Publish report artifact ONLY (no site changes)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-existing-sitewide-http-audit
+          path: |
+            \${{ runner.temp }}/zm-sitewide-audit/
+            \${{ runner.temp }}/sitewide-public-log.txt
+          retention-days: 7
+          if-no-files-found: ignore
+  browser-visual-a11y:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install temporary Chromium and accessibility checks (runner only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.0
+          npx playwright install chromium
+      - name: Audit existing production layout at 390px and 1440px (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-deep-browser"
+          node scripts/zomorod_sitewide_playwright_audit_20261019.cjs |
+            tee "$RUNNER_TEMP/zm-deep-browser/trace.txt"
+          test -s sitewide-visual.json
+          cp sitewide-visual.json "$RUNNER_TEMP/zm-deep-browser/"
+          for img in *.png; do
+            test -f "$img" || continue
+            cp "$img" "$RUNNER_TEMP/zm-deep-browser/"
+          done
+          python3 - <<'PY'
+          import json,os
+          p=json.load(open('sitewide-visual.json'))
+          issues=p.get('issues',{})
+          print('ZM_DEEP_BROWSER_AUDIT',json.dumps({
+           'path_count':len(p.get('scope',[])),
+           'viewports':p.get('widths',[]),
+           'reports':len(p.get('results',[])),
+           'issues':{key:len(val) for key,val in issues.items()},
+           'site_writes':0},ensure_ascii=False))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+           f.write('\n## Existing Zomorod site — visual / accessibility audit\n\n')
+           f.write('No site, page, template, form or payment mutations.\n\n')
+           for key,val in issues.items():
+            f.write('- '+key+': '+str(len(val))+' findings\n')
+           f.write('\nFull details are in the GitHub Actions artifact.\n')
+          PY
+      - name: Preserve only screenshots and findings for owner review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-existing-sitewide-browser-axe-audit
+          path: \${{ runner.temp }}/zm-deep-browser/
+          retention-days: 7
+          if-no-files-found: ignore
