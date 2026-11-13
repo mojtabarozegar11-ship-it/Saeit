@@ -11,8 +11,13 @@ class StoreInvoiceNavigationTests(unittest.TestCase):
         cls.page = TEMPLATE.read_text(encoding="utf-8")
 
     def test_customer_has_single_purchases_and_invoices_link(self):
-        self.assertEqual(self.page.count('href="/commerce/trx-easy/purchases/"'), 1)
+        # The two links are in mutually exclusive Django template branches.
+        # Assert their source contract here; Django rendering proves the page
+        # exposes exactly one actionable destination to any given buyer.
+        self.assertEqual(self.page.count('href="/commerce/trx-easy/purchases/"'), 2)
+        self.assertIn("{% if featured_checkout_ids %}", self.page)
         self.assertIn("View your purchases and invoices</a>", self.page)
+        self.assertIn("review your purchase status</a>", self.page)
 
     def test_existing_product_destinations_remain_intact(self):
         for sku in (72, 225, 879):

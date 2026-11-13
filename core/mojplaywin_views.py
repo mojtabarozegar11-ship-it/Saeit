@@ -58,6 +58,50 @@ def branded_store_dispatch(request):
  from .brand_views import branded_store
  return branded_store(request)
 
+def _featured_checkout_ids():
+ # A public TRX switch is necessary, never sufficient, for a buy CTA.
+ # Use the same source-verified guest route and owner-rights metadata as the
+ # product detail page; individual checkout handlers recheck private files.
+ try:
+  from django.conf import settings
+  from .mpw_trx_checkout_bridge import backend_ready
+  if not backend_ready():
+   return frozenset()
+  from .models import Product
+  from .product_seo_views import approved_guest_checkout_route
+  allowed = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+  if not isinstance(allowed, (tuple, list, set, frozenset)):
+   return frozenset()
+  ids = frozenset(x for x in allowed if type(x) is int and x in (72, 225, 879))
+  if not ids:
+   return frozenset()
+  available = set()
+  products = Product.objects.filter(pk__in=ids, active=True, currency="USD")
+  for product in products:
+   meta = product.metadata if type(product.metadata) is dict else {}
+   asset_sha = meta.get("sha256")
+   owner_sha = meta.get("rights_asset_sha256")
+   document_sha = meta.get("rights_document_sha256")
+   valid = lambda s: type(s) is str and len(s) == 64 and all(
+    c in "0123456789abcdef" for c in s.lower())
+   if (product.price > 0 and meta.get("rights_cleared") is True
+       and meta.get("publication_approved") is True
+       and valid(asset_sha) and valid(owner_sha) and valid(document_sha)
+       and asset_sha.lower() == owner_sha.lower()
+       and approved_guest_checkout_route(product.pk)):
+    available.add(product.pk)
+  return frozenset(available)
+ except Exception as exc:
+  # Checkout readiness may be unavailable before optional cPanel services
+  # are deployed. Never replace the storefront with an HTTP 500.
+  import logging
+  logging.getLogger(__name__).warning(
+   "MojPlayWin featured checkout readiness unavailable: %s",
+   type(exc).__name__
+  )
+  return frozenset()
+
+
 def store(request):
  # Analytics must never make the public storefront unavailable. The cPanel
  # main-site deploy may publish this view before the optional funnel module
@@ -71,7 +115,29 @@ def store(request):
   logging.getLogger(__name__).warning(
    "MojPlayWin store telemetry unavailable: %s", type(exc).__name__
   )
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ # Catalog discovery must not take down featured cards when the optional
+ # native product schema or its database is temporarily unavailable.
+ # Keyset navigation bounds each query while allowing every approved
+ # release to be reached in subsequent pages (no total-product ceiling).
+ raw_before = request.GET.get("before", "")
+ before = (int(raw_before)
+           if isinstance(raw_before, str) and raw_before.isascii()
+           and raw_before.isdigit() and 0 < len(raw_before) <= 18
+           and int(raw_before) > 0 else None)
+ try:
+  from .mojplaywin_catalog import verified_catalog_cards
+  verified, older_id = verified_catalog_cards(before_id=before)
+ except Exception as exc:
+  import logging
+  logging.getLogger(__name__).warning(
+   "MojPlayWin verified catalog unavailable: %s", type(exc).__name__
+  )
+  verified, older_id = [], None
+ return render(request,"mojplaywin/store.html",{
+  "products":PRODUCTS, "verified_catalog":verified,
+  "catalog_next_id":older_id, "catalog_has_cursor":before is not None,
+  "featured_checkout_ids":_featured_checkout_ids(),
+ })
 
 def venture(request, slug):
  if not _is_mojplaywin(request):

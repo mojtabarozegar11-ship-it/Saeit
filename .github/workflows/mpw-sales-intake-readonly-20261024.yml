@@ -11,13 +11,43 @@ on:
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
+    inputs:
+      audit_scope:
+        description: "Read-only audit scope"
+        required: true
+        default: recovery
+        type: choice
+        options:
+          - recovery
+          - baseline
+      release_operation:
+        description: "Additive recovery release operation"
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - preflight
+          - publish_additive
+          - verify
+      scoped_store_operation:
+        description: "Private 16-table store backup: none, read-only preflight, or isolated restore"
+        required: true
+        default: none
+        type: choice
+        options: [none, preflight_only, create_and_restore]
+      scoped_store_confirmation:
+        description: "Owner-only approval phrase for real scoped data export"
+        required: false
+        default: ""
+        type: string
 permissions: {contents: read}
 concurrency:
   group: mpw-intake-read-only-audit
   cancel-in-progress: false
 jobs:
   audit-live:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.audit_scope == 'recovery' && inputs.scoped_store_operation == 'none'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -152,6 +182,18 @@ jobs:
           PY
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_paid_provenance_readonly_20261105.py
+      - name: Verify paid private assets and per-order email claims (read only)
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_paid_private_assets_readonly_20261105.py").read_text("utf8"))
+          print("MPW_PAID_PRIVATE_ASSET_AUDIT_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_paid_private_assets_readonly_20261105.py
       - name: One-time support body triage inside cPanel, no message data logged
         if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-onetime-body-triage')
         env:
@@ -166,7 +208,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_support_body_triage_onetime_readonly_20261105.py
       - name: One-time live recovery metadata inventory, no customer data
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-recovery-capability-readonly')
+        if: (github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery') || (github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-recovery-capability-readonly'))
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -179,7 +221,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_email_recovery_capability_readonly_20261105.py
       - name: One-time live guest email capture and aggregate linkage audit
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-guest-email-linkage')
+        if: (github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery') || (github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-guest-email-linkage'))
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -191,6 +233,131 @@ jobs:
           PY
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_guest_email_linkage_readonly_20261105.py
+      - name: Inventory live MariaDB table allocation without customer data (read only)
+        if: github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_live_mariadb_table_capacity_readonly_20261105.py").read_text("utf8"))
+          print("MPW_MARIADB_CAPACITY_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_mariadb_table_capacity_readonly_20261105.py
+      - name: Probe existing encrypted VPS backup size and restore capacity (read only)
+        if: github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_vps_restore_capacity_readonly_20261105.py").read_text("utf8"))
+          print("MPW_VPS_RESTORE_CAPACITY_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B -" < scripts/mpw_vps_restore_capacity_readonly_20261105.py
       - name: Remove local SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-sales-audit-ssh"
+
+
+  scoped-store-recovery:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' &&
+      inputs.scoped_store_operation != 'none'
+    uses: ./.github/workflows/mpw-scoped-store-backup-restore-20261105.yml
+    with:
+      operation: ${{ inputs.scoped_store_operation }}
+      confirmation: ${{ inputs.scoped_store_confirmation }}
+    secrets: inherit
+
+  guarded-additive-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.release_operation != 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate additive release source
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0049_mpw_guest_email_recovery.py
+          grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
+          echo MPW_ADDITIVE_RELEASE_SOURCE_VALID=PASS
+      - name: Establish pinned SSH relay for guarded release
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-additive-release-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Transfer reviewed release bundle to private temporary staging
+        env:
+          OPERATION: ${{ inputs.release_operation }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-additive-release-ssh"
+          stage="/home/zomorod2/.local/share/mpw-recovery-01-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0049_mpw_guest_email_recovery.py core/management/commands/mpw_purge_recovery_ephemeral.py | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          case "$OPERATION" in
+            preflight)
+              timeout 120s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' preflight '$stage'"
+              ;;
+            publish_additive)
+              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' publish_additive '$stage' '$GITHUB_RUN_ID'"
+              ;;
+            verify)
+              timeout 120s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' verify"
+              ;;
+          esac
+      - name: Remove temporary release bundle only
+        if: always()
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-additive-release-ssh"
+          stage="/home/zomorod2/.local/share/mpw-recovery-01-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
+          rm -rf -- "$d"

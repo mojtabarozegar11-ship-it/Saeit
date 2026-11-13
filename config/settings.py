@@ -108,6 +108,44 @@ EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default=COMPANY_TRADE_EMAIL)
 
+# Independent, opt-in gates: deploy/migrate code before opening customer routes.
+# Never authorize outbound recovery email implicitly from deployment alone.
+# The public TRX offer requires an explicit operator-enabled commercial gate.
+# Keeping the three reviewed flagship IDs visible in configuration is NOT
+# permission to charge buyers: the public flag defaults off, and the private
+# checkout additionally verifies rights, receiver, database and chain state.
+MPW_WALLETLESS_TRX_PUBLIC_ENABLED = env.bool(
+    "MPW_WALLETLESS_TRX_PUBLIC_ENABLED", default=False
+)
+
+# Before this definition the repository had no public SKU setting, causing
+# every feature-branch checkout bridge to reject all SKU IDs. Allow an
+# explicit comma-separated override without widening the default catalogue.
+_mpw_sku_tokens = env.list(
+    "MPW_TRX_PUBLIC_PRODUCT_IDS", default=["72", "225", "879"]
+)
+if (_mpw_sku_tokens and all(
+        type(value) is str and value.isascii() and value.isdecimal()
+        and 0 < int(value) <= 2_147_483_647
+        and value == str(int(value))  # Reject alias IDs such as 072.
+        for value in _mpw_sku_tokens
+    ) and len(set(_mpw_sku_tokens)) == len(_mpw_sku_tokens)):
+    MPW_TRX_PUBLIC_PRODUCT_IDS = tuple(int(value) for value in _mpw_sku_tokens)
+    MPW_TRX_PUBLIC_SKU_CONFIG_VALID = True
+elif not _mpw_sku_tokens:
+    MPW_TRX_PUBLIC_PRODUCT_IDS = ()
+    MPW_TRX_PUBLIC_SKU_CONFIG_VALID = True  # Explicitly empty disables all paid SKUs.
+else:
+    # Invalid input must never fall back to opening arbitrary products,
+    # and must not take down the rest of the corporate Django application.
+    MPW_TRX_PUBLIC_PRODUCT_IDS = ()
+    MPW_TRX_PUBLIC_SKU_CONFIG_VALID = False
+
+MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool(
+    "MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False
+)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",

@@ -1,16 +1,39 @@
 {% extends "base.html" %}
-{% block title %}{{ product.title }} | فروشگاه زمرد ملل{% endblock %}
+{% block title %}{{ product.title }} | {% if mojplaywin_store %}MojPlayWin Digital Store{% else %}فروشگاه زمرد ملل{% endif %}{% endblock %}
 {% block meta_description %}{{ description }}{% endblock %}
 {% block page_head %}<script type="application/ld+json">{{ schema_json|safe }}</script>{% endblock %}
 {% block content %}
 <main class="commerce-page store-page" style="max-width:1100px;margin:auto;padding:3rem 1.5rem">
+{% if mojplaywin_store %}
+<nav aria-label="Breadcrumb"><a href="/store/">Digital store</a> / <span>{{ product.title }}</span></nav>
+<article itemscope itemtype="https://schema.org/Product" lang="en">
+<h1 itemprop="name">{{ product.title }}</h1>
+{% if image %}<img src="{{ image }}" alt="{{ product.title }}" width="550" loading="lazy" style="max-width:100%;height:auto">{% endif %}
+<p itemprop="description">{{ description }}</p>
+<p>Category: {{ product.product_type }}</p>
+{% if can_list_offer %}
+<p>Listed price: {{ product.price }} {{ product.currency }}</p>
+{% if checkout_url %}
+<p><a href="{{ checkout_url }}">Continue to secure TRX checkout</a></p>
+<p>Only pay the amount and address shown on your verified invoice. No email or account signup is required.</p>
+{% else %}
+<p>The secure TRX checkout is not yet verified for this product. Please do not send any funds.</p>
+{% endif %}
+{% else %}
+<p>Product information only. A verified checkout is not yet available for this listing.</p>
+{% endif %}
+<a href="/store/">Return to the digital store</a>
+</article>
+{% else %}
 <nav aria-label="مسیر صفحه"><a href="/store/">فروشگاه</a> / <span>{{ product.title }}</span></nav>
 <article itemscope itemtype="https://schema.org/Product">
 <h1 itemprop="name">{{ product.title }}</h1>
 {% if image %}<img src="{{ image }}" alt="تصویر {{ product.title }}" width="550" loading="lazy" style="max-width:100%;height:auto">{% endif %}
 <p itemprop="description">{{ description }}</p>
 <p>دسته‌بندی: {{ product.product_type }}</p>
-{% if product.metadata.sales_enabled %}<p>قیمت اعلام‌شده: {{ product.price }} {{ product.currency }}</p>{% else %}<p>محصول برای معرفی ارائه شده است؛ وضعیت خرید از فروشگاه بررسی شود.</p>{% endif %}
+{% if can_list_offer %}<p>قیمت اعلام‌شده: {{ product.price }} {{ product.currency }}</p>{% else %}<p>محصول برای معرفی ارائه شده است؛ وضعیت خرید از فروشگاه بررسی شود.</p>{% endif %}
 <a href="/store/">بازگشت به فهرست محصولات</a>
-</article></main>
+</article>
+{% endif %}
+</main>
 {% endblock %}

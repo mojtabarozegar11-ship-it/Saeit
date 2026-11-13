@@ -1,0 +1,38 @@
+name: MPW three-SKU public checkout form evidence (GET-only)
+
+on:
+  push:
+    branches:
+      - feature/mpw-recovery-01-20261105
+    paths:
+      - 'scripts/mpw_three_sku_public_form_evidence_20261112.py'
+      - 'tests/test_mpw_three_sku_public_form_evidence_20261112.py'
+      - '.github/workflows/mpw-public-checkout-form-readonly-20261112.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-get-audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify parser contract without network
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -v tests.test_mpw_three_sku_public_form_evidence_20261112
+      - name: Read live product checkout forms with public GET only
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_three_sku_public_form_evidence_20261112.py --live
+      - name: No transactions and no release authorization
+        run: echo 'MPW_FORM_OBSERVATION_ONLY=TRUE;LIVE_DEPLOY=NO;EMAIL_SENT=NO;ORDERS_CREATED=0'

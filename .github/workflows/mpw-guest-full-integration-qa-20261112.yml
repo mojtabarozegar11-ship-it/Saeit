@@ -1,0 +1,74 @@
+name: MPW guest three-SKU full integration QA (branch-only)
+
+# This never deploys and never accesses production credentials.
+# Its only purpose is to verify the draft guest TRX release against the
+# same whole-repository Django/pytest and migration gates used by main.
+on:
+  push:
+    branches:
+      - feature/mpw-recovery-01-20261105
+    paths:
+      - '.github/workflows/mpw-guest-full-integration-qa-20261112.yml'
+      - 'services/mpw_trx_guest_commerce.py'
+      - 'scripts/mpw_recovery_guarded_release_20261105.py'
+      - 'scripts/mpw_guest_no_email_release.py'
+      - 'scripts/test_mpw_guest_route_patching.py'
+      - 'tests/test_mpw_email_recovery_20261105.py'
+      - 'tests/test_mpw_guest_telemetry_isolation_20261108.py'
+      - 'tests/test_mpw_recovery_guarded_release_20261105.py'
+      - 'tests/test_mpw_guest_no_email_release.py'
+      - 'core/models.py'
+      - 'core/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-draft-full-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-integration:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      SECRET_KEY: 'mpw-draft-integration-ci-only-secret-not-production'
+      DEBUG: 'False'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1'
+    steps:
+      - name: Checkout release candidate (no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Install isolated pinned PDF parser required by shared tests
+        run: |
+          set -euo pipefail
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+      - name: Check Django and migration consistency (local CI database only)
+        run: |
+          set -euo pipefail
+          python manage.py check --deploy
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+      - name: Run entire regression suite (no production IO)
+        env:
+          PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser
+        run: pytest -q
+      - name: Verify production readiness command against CI environment only
+        run: python manage.py production_gate
+      - name: Confirm this run never deploys or moves funds
+        run: echo 'MPW_FULL_INTEGRATION=PASS;DEPLOYED=NO;LIVE_ORDERS=0;EMAIL_SENT=NO'

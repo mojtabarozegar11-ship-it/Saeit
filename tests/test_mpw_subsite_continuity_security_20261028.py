@@ -56,7 +56,6 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
     def test_login_redirect_and_known_child_are_allowed(self):
         for url in (
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
@@ -94,21 +93,46 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                         guard.get(url, attempts=1)
                     opener.assert_not_called()
 
-    def test_checkout_login_return_path_is_exact_and_product_specific(self):
+    def test_guest_checkout_requires_exact_page_and_csrf_without_email(self):
+        body = (b'<html><body><form method="post">'
+                b'<input type="hidden" name="csrfmiddlewaretoken" value="synthetic">'
+                b'<button type="submit">Create my TRX payment invoice</button>'
+                b'</form></body></html>')
         for pk in guard.PROTECTED_PRODUCT_IDS:
-            expected = f"/store/product/{pk}/checkout/"
-            correct = guard.Check(guard.ORIGIN + expected,
-                guard.ORIGIN + "/accounts/login/?next=" +
-                guard.urllib.parse.quote(expected, safe=""), 200, 0.01)
-            with patch.object(guard, "get", return_value=(correct, b"")):
-                self.assertEqual(guard.check_authentication_gate(pk), correct)
-            for wrong_query in ("", "?next=%2Fstore%2Fproduct%2F999%2Fcheckout%2F",
-                                "?next=https%3A%2F%2Fevil.example%2F"):
-                wrong = guard.Check(guard.ORIGIN + expected,
-                    guard.ORIGIN + "/accounts/login/" + wrong_query, 200, 0.01)
-                with patch.object(guard, "get", return_value=(wrong, b"")):
-                    with self.assertRaisesRegex(RuntimeError, "return path"):
-                        guard.check_authentication_gate(pk)
+            path = f"/store/product/{pk}/checkout/"
+            url = guard.ORIGIN + path
+            check = guard.Check(url, url, 200, 0.01)
+            with self.subTest(product=pk):
+                with patch.object(guard, "get", return_value=(check, body)):
+                    self.assertEqual(guard.check_guest_checkout(pk), check)
+            unsafe_variants = (
+                (check, body.replace(b'csrfmiddlewaretoken', b'foo')),
+                (check, body.replace(b'<form', b'<div').replace(b'</form>', b'</div>')),
+                (check, body.replace(b'Create my TRX payment invoice', b'Return to store')),
+                (check, body.replace(b'</form>', b'<input name="buyer_email" type="hidden"></form>')),
+                (check, body.replace(b'</form>', b'<input type="email" name="contact"></form>')),
+                (check, body.replace(b'</form>', b'<label>Email address for your order</label></form>')),
+                (guard.Check(url, guard.ORIGIN + "/accounts/login/?next=" +
+                             guard.urllib.parse.quote(path, safe=""), 200, 0.01), body),
+                (guard.Check(url, guard.ORIGIN + "/store/product/999/checkout/", 200, 0.01), body),
+            )
+            for candidate, document in unsafe_variants:
+                with self.subTest(product=pk, candidate=candidate.effective, body=document):
+                    with patch.object(guard, "get", return_value=(candidate, document)):
+                        with self.assertRaisesRegex(RuntimeError, "Guest checkout"):
+                            guard.check_guest_checkout(pk)
+
+    def test_outside_product_scope_rejected_before_network(self):
+        with patch.object(guard, "get") as network:
+            with self.assertRaisesRegex(RuntimeError, "outside approved scope"):
+                guard.check_guest_checkout(999)
+            network.assert_not_called()
+
+    def test_retired_picm_is_not_monitored_or_redirected(self):
+        self.assertNotIn("/picm/", guard.REQUIRED_PATHS)
+        self.assertNotIn("/picm/login/", guard.REDIRECT_PATHS)
+        self.assertNotIn("/picm/", guard.PROTECTED_CHILDREN)
+
 
     def test_redirect_hops_are_bounded(self):
         handler = guard.ScopedRedirect()
@@ -132,6 +156,7 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
         ))
         self.assertEqual(len(guard.REQUIRED_PATHS), len(set(guard.REQUIRED_PATHS)))
         self.assertEqual(len(guard.PERSONAL_PATHS), 11)
+        self.assertEqual(len(guard.PROTECTED_CHILDREN), 5)
 
     def test_get_uses_scoped_opener_and_anonymous_get(self):
         calls = []

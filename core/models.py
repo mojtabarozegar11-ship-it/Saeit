@@ -339,6 +339,9 @@ from .company_inquiry_models import CompanyInquiry
 from .company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
 from .economic_trade_models import TradeMailbox, TradeEmailOutbox, TradeEmailAudit
 
+# Explicit per-order buyer-email binding; legacy orders are never backfilled.
+from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate
+
 
 class EducationTrack(T):
     key = models.SlugField(max_length=80, unique=True)
