@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from core.models import Agent, AgentCapability, AgentTask, ResearchProject
-from core.task_runtime import TaskRuntime
+from core.task_runtime import TaskExecutionError, TaskRuntime
 
 
 @pytest.mark.django_db
@@ -33,10 +33,13 @@ def test_retry_invalidates_previous_execution_identity():
     assert task.status == "queued"
     assert task.execution_id == ""
 
-    claimed = TaskRuntime().claim(task.pk)
-    assert claimed.status == "running"
-    assert claimed.execution_id
-    assert claimed.execution_id != "old-execution"
+    # A historical failed attempt cannot start a second legacy execution.
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_TASK_EXECUTION_FORBIDDEN"):
+        TaskRuntime().claim(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.execution_id == ""
+    assert task.attempt_count == 1
 
 
 @pytest.mark.django_db
