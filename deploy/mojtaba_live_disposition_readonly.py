@@ -69,6 +69,39 @@ GROUPS = {
         "routes": ("mojtaba_bot", "mojtaba-bot-ai", "mojtaba.bot.ai"),
         "files": ("unified_bot_identity.py",),
     },
+    # The host probe already recognizes these routes. The earlier nine-group
+    # preview silently omitted them, giving a misleadingly narrow disposition.
+    # Indicators remain observations, never proof of live bots or safe removal.
+    "mojtrade_signal_and_broker_runtime": {
+        "hosts": ("vps", "cpanel"),
+        "routes": ("mojtrade_observer", "SAEIT_MOJTRADE_OBSERVER_V1"),
+        "files": (),
+    },
+    "moj_coin_game_token_workers": {
+        "hosts": ("vps", "cpanel"),
+        "routes": ("mojcoin",),
+        "files": (),
+    },
+    "canonical_cycle_and_legacy_master_schedulers": {
+        "hosts": ("vps", "cpanel"),
+        "routes": (
+            "mojtaba_bot_cycle_worker.py", "mojtaba_bot_cycle_coordinator.py",
+            "autonomous_master_loop",
+        ),
+        "files": (),
+    },
+    # Neither the Android handset nor linked third-party apps can be attested
+    # by a VPS/cPanel snapshot. They must remain visible unresolved scopes.
+    "mobile_sms_termux_automate_runtime": {
+        "hosts": (),
+        "routes": (),
+        "files": (),
+    },
+    "external_connected_app_agents": {
+        "hosts": (),
+        "routes": (),
+        "files": (),
+    },
 }
 
 
@@ -213,9 +246,25 @@ def identity_dispositions(cpanel: dict) -> list[dict]:
 
 
 def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -> dict:
-    if manifest.get("schema") != MANIFEST_SCHEMA or manifest.get("canonical_bot_id") != "mojtaba.bot.ai":
+    if (not isinstance(manifest, dict)
+            or manifest.get("schema") != MANIFEST_SCHEMA
+            or manifest.get("canonical_bot_id") != "mojtaba.bot.ai"):
         raise ValueError("DISPOSITION_MANIFEST_INVALID")
-    declared = {x["id"] for x in manifest["sources"] if isinstance(x, dict) and x.get("id") in GROUPS}
+    sources = manifest.get("sources")
+    if not isinstance(sources, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("id"), str)
+        for item in sources
+    ):
+        raise ValueError("DISPOSITION_MANIFEST_SOURCES_INVALID")
+    identifiers = [item["id"] for item in sources]
+    # Unknown or duplicate source groups must not disappear silently from the
+    # audit. A missing known group is kept visible with a blocking finding.
+    if len(identifiers) != len(set(identifiers)) or set(identifiers) - GROUPS.keys():
+        raise ValueError("DISPOSITION_MANIFEST_GROUPS_UNRECONCILED")
+    declared = set(identifiers)
+    unresolved = manifest.get("not_yet_enumerated_runtime_scopes", [])
+    if not isinstance(unresolved, list) or any(not isinstance(s, str) for s in unresolved):
+        raise ValueError("DISPOSITION_UNSCOPED_RUNTIME_INVALID")
     groups = []
     for group_id, policy in GROUPS.items():
         observed = []
@@ -252,6 +301,8 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
             observed.append(obs)
         if group_id not in declared:
             blockers.append("group_missing_from_checked_in_manifest")
+        if not policy["hosts"]:
+            blockers.append("external_runtime_outside_vps_cpanel_observation")
         groups.append({
             "source_group": group_id,
             "source_defined_not_live_count": True,
@@ -267,6 +318,12 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
         "schema": SCHEMA, "canonical_bot": "mojtaba.bot.ai",
         "sources_in_manifest": len(declared),
         "sources_evaluated": len(groups), "groups": groups,
+        "unscoped_runtime_scopes_not_attested": sorted(set(unresolved)),
+        "unscoped_runtime_scope_count": len(set(unresolved)),
+        "all_source_families_accounted_for": (
+            len(declared) == len(GROUPS) and not unresolved
+        ),
+        "all_independent_runtimes_retired_verified": False,
         "source_defined_identity_count_not_live_bots": len(PHP_ROLE_CODES) + len(DJANGO_ROLE_CODES),
         "identity_dispositions": identity_dispositions(cpanel),
         "verified_live_agents": None,
