@@ -141,7 +141,7 @@ def review_offline_evidence(*, engagement: dict, evidence: dict, verify_key: byt
         if not isinstance(identifier, str) or not 1 <= len(identifier) <= 100 or identifier in ids:
             raise CyberModuleError("FINDING_ID_INVALID")
         ids.add(identifier)
-        if severity not in SEVERITIES:
+        if not isinstance(severity, str) or severity not in SEVERITIES:
             raise CyberModuleError("SEVERITY_INVALID")
         findings.append({
             "finding_id": identifier, "asset_hostname": host,
