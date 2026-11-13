@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
+import hashlib
+import json
 
 from django.db import transaction
 
 from .agent_registry import AgentRegistry, RISK_ORDER
 from .models import AgentTask, ApprovalGrant, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
+from .unified_bot_identity import BOT_CODE
 
 
 class ToolGatewayError(ValueError):
@@ -111,7 +114,7 @@ class ToolGateway:
         return task
 
     @transaction.atomic
-    def _reserve_invocation(self, spec, task_id, execution_id):
+    def _reserve_invocation(self, spec, task_id, execution_id, payload):
         """Reserve one external-capable tool call per execution before dispatch.
 
         Lock the AgentTask, recheck its policy and persist the invocation start
@@ -154,7 +157,7 @@ class ToolGateway:
             requires_owner_approval(spec.code, spec.risk)
             or requires_owner_approval(task.action_type, task.risk_snapshot)
         )
-        if task.agent.code == "mojtaba-bot-ai" and sensitive:
+        if task.agent.code == BOT_CODE and sensitive:
             payload = task.input_data
             grant_id = (
                 payload.get("owner_approval_grant_id")
@@ -180,6 +183,30 @@ class ToolGateway:
                 raise ToolGatewayError(
                     "Canonical sensitive operation grant has no matching owner approval"
                 )
+            # The grant also binds the exact planned parameters. The internal
+            # grant id is never handed to the registered tool handler.
+            if not isinstance(task.input_data, dict):
+                raise ToolGatewayError(
+                    "Canonical sensitive task input must be an object"
+                )
+            planned_payload = {
+                key: value for key, value in task.input_data.items()
+                if key != "owner_approval_grant_id"
+            }
+            if payload != planned_payload:
+                raise ToolGatewayError(
+                    "Canonical sensitive invocation differs from reviewed task payload"
+                )
+            try:
+                packed = json.dumps(
+                    planned_payload, sort_keys=True, separators=(",", ":"),
+                    ensure_ascii=True, allow_nan=False,
+                ).encode("utf-8")
+            except (TypeError, ValueError) as exc:
+                raise ToolGatewayError(
+                    "Canonical sensitive task payload is not canonical JSON"
+                ) from exc
+
             from .approval import ApprovalService
 
             required_scope = {
@@ -187,6 +214,7 @@ class ToolGateway:
                 "agent_task_id": task.pk,
                 "execution_id": task.execution_id,
                 "tool_code": spec.code,
+                "payload_sha256": hashlib.sha256(packed).hexdigest(),
             }
             try:
                 ApprovalService().authorize_grant(grant_id, required_scope)
@@ -225,10 +253,18 @@ class ToolGateway:
         if not isinstance(data, dict):
             raise ToolGatewayError("Tool payload must be an object")
 
-        task, trace_id = self._reserve_invocation(spec, task_id, execution_id)
+        # Do not forward the database authorization reference to any provider.
+        # All other parameters remain unchanged for compatibility.
+        dispatch_data = {
+            key: value for key, value in data.items()
+            if key != "owner_approval_grant_id"
+        }
+        task, trace_id = self._reserve_invocation(
+            spec, task_id, execution_id, dispatch_data
+        )
 
         try:
-            result = spec.handler(data)
+            result = spec.handler(dispatch_data)
         except Exception as exc:
             AuditLog.objects.create(
                 actor_type="agent",
