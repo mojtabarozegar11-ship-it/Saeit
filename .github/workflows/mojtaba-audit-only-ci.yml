@@ -11,6 +11,7 @@ on:
       - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "tests/test_mojtaba_live_disposition_readonly.py"
+      - "tests/test_mojtaba_bot_consolidation_policy.py"
       - ".github/workflows/mojtaba-live-topology-readonly.yml"
       - ".github/workflows/mojtaba-audit-only-ci.yml"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
       - "tests/test_mojtaba_live_topology_readonly.py"
       - "tests/test_mojtaba_live_disposition_readonly.py"
+      - "tests/test_mojtaba_bot_consolidation_policy.py"
       - ".github/workflows/mojtaba-live-topology-readonly.yml"
       - ".github/workflows/mojtaba-audit-only-ci.yml"
 
