@@ -174,7 +174,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
-          npx playwright install firefox webkit
+          npx playwright install firefox
+          npx playwright install --with-deps webkit
           python3 -m http.server 8101 --directory "$RUNNER_TEMP/zm-onepass-preview" > "$RUNNER_TEMP/zm-crossbrowser.log" 2>&1 &
           server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
