@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""One-pass public MojPlayWin buyer journey audit, GET only.
+
+Safe for unprivileged observers. Never makes a POST, invoice, order, blockchain
+transfer, recovery attempt, user login, or read of customer/merchant secrets.
+A successful public page is not evidence of a paid commercial sale.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from html.parser import HTMLParser
+
+HOST = "mojplaywin.com"
+SKUS = (72, 225, 879)
+MAX_BODY = 512_000
+UA = "MojPlayWin-readonly-sales-evidence/20261113"
+
+
+class PageParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.forms = []
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "form":
+            self.forms.append({"action": values.get("action", ""),
+                               "method": values.get("method", "get").lower(),
+                               "inputs": []})
+        elif tag == "input" and self.forms:
+            self.forms[-1]["inputs"].append(
+                (values.get("name", ""), values.get("value", ""),
+                 values.get("type", "text").lower()))
+        elif tag == "a":
+            self.links.append(values.get("href", ""))
+
+
+def _local_path(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    item = urllib.parse.urlsplit(value)
+    if item.scheme or item.netloc or item.fragment:
+        return ""
+    return item.path
+
+
+def classify_html(kind: str, sku: int | None, html: str) -> str:
+    """Categorize evidence only; never return page content or customer data."""
+    if not isinstance(html, str) or len(html) < 150:
+        return "unexpected_short_page"
+    if "MojPlayWin" not in html and "mojplaywin" not in html.lower():
+        return "brand_not_found"
+    parser = PageParser()
+    parser.feed(html)
+    if kind == "store":
+        if "MPW_STATIC_STORE_FALLBACK_V1" in html:
+            return "static_fallback_not_dynamic"
+        required = ("/store/product/72/checkout/",
+                    "/store/product/225/checkout/",
+                    "/store/product/879/")
+        if not all(any(_local_path(h) == route for h in parser.links)
+                   or route in html for route in required):
+            return "catalog_ctas_unverified"
+        return "store_public_get_ok_not_sale"
+    if sku not in SKUS:
+        return "invalid_sku"
+    if kind == "detail":
+        return ("detail_public_get_ok_not_sale"
+                if str(sku) in html else "detail_product_identity_unverified")
+    if kind == "checkout":
+        action = f"/commerce/trx-easy/start/{sku}/"
+        forms = [form for form in parser.forms
+                 if form["method"] == "post"
+                 and _local_path(form["action"]) == action]
+        if not forms:
+            return "checkout_post_action_unverified"
+        valid = any(any(name == "csrfmiddlewaretoken" and bool(value)
+                            for name, value, _ in form["inputs"])
+                    for form in forms)
+        if not valid:
+            return "checkout_csrf_unverified"
+        emails = any(name.lower() in {"email", "buyer_email", "customer_email",
+                                      "purchase_email", "purchaser_email"}
+                     or type_ == "email"
+                     for form in forms for name, _, type_ in form["inputs"])
+        return ("legacy_email_requested" if emails
+                else "no_email_checkout_get_ok_not_paid")
+    return "unknown_route_kind"
+
+
+class RejectRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        return None
+
+
+def observe(path: str, kind: str, sku: int | None, timeout: int, opener):
+    url = "https://" + HOST + path
+    req = urllib.request.Request(
+        url, headers={"User-Agent": UA, "Cache-Control": "no-cache",
+                      "Accept": "text/html"}, method="GET")
+    try:
+        with opener.open(req, timeout=timeout) as response:
+            final = urllib.parse.urlsplit(response.geturl())
+            if final.scheme != "https" or final.hostname != HOST:
+                return "unexpected_destination"
+            code = response.status
+            if code != 200:
+                return "http_other"
+            data = response.read(MAX_BODY + 1)
+            if len(data) > MAX_BODY:
+                return "body_over_limit"
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "text/html" not in content_type:
+                return "unexpected_content_type"
+            return classify_html(kind, sku, data.decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        if 300 <= exc.code < 400:
+            return "redirect_not_followed"
+        return ("http_" + str(exc.code)
+                if exc.code in (403, 404, 405, 429, 500, 502, 503, 504)
+                else "http_other")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return "network_unavailable_not_outage_proof"
+
+
+def audit(timeout: int = 6, opener=None) -> dict:
+    if type(timeout) is not int or not 1 <= timeout <= 15:
+        raise ValueError("timeout must be a bounded integer")
+    if opener is None:
+        opener = urllib.request.build_opener(RejectRedirect())
+    routes = [("store", None, "/store/")]
+    for sku in SKUS:
+        routes.extend((
+            ("detail", sku, f"/store/product/{sku}/"),
+            ("checkout", sku, f"/store/product/{sku}/checkout/"),
+            ("checkout", sku, f"/commerce/book/{sku}/"),
+        ))
+    result = {}
+    for kind, sku, path in routes:
+        result[path] = observe(path, kind, sku, timeout, opener)
+    return {
+        "schema": "mpw.public_buyer_journey.readonly.v1",
+        "observed_routes": result,
+        "pages_checked": len(result),
+        "required_skus": list(SKUS),
+        "guest_email_policy_expected": "email_not_collected",
+        "payment_or_invoice_posts_performed": False,
+        "payments_sent": False,
+        "customer_data_read": False,
+        "independent_chain_finality_verified": False,
+        "customer_download_verified": False,
+        "commercial_sales_verified": None,
+        "notes": "GET/HTML checks only; failures may reflect network limits, not merchant outage.",
+    }
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--timeout", type=int, default=6)
+    args = parser.parse_args(argv)
+    result = audit(args.timeout)
+    print("MPW_ONEPASS_PUBLIC_READONLY=" + json.dumps(
+        result, sort_keys=True, separators=(",", ":")))
+    statuses = result["observed_routes"].values()
+    return 2 if any(s in (
+        "static_fallback_not_dynamic", "http_500", "http_502", "http_503",
+        "checkout_post_action_unverified", "checkout_csrf_unverified",
+        "legacy_email_requested"
+    ) for s in statuses) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
