@@ -10,7 +10,7 @@
 
 ## پیش‌نیاز
 
-- .NET 8 SDK
+- .NET 6 SDK (مطابق نسخهٔ فعلی cTrader.Automate 1.0.21)
 - cTrader Automate package
 - cTrader CLI نسخهٔ نصب‌شده
 - بدون نیاز به credential برای مرحلهٔ build
@@ -32,7 +32,7 @@ Mojtaba.Bot.Ai.algo
 
 ## ترتیب کنترل
 
-1. Restore و build بدون credential.
+1. Restore و build بدون credential، با Target Framework برابر net6.0.
 2. بررسی وجود فایل خروجی و نام canonical.
 3. اجرای `ctrader-cli metadata` فقط روی فایل محلی.
 4. بک‌تست فقط با دادهٔ تاریخی یا حساب demo.
