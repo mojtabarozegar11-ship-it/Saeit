@@ -11,6 +11,10 @@ from django.utils import timezone
 
 from core.models import Agent, AgentTask, AuditLog
 from core.mojtrade_bridge import MojTradeBridgeError, ingest_private_observation
+from core.management.commands.mojtrade_market_watch_export import (
+    PRIVATE_NAME, fresh_canonical_drafts, write_private_feed,
+)
+from core.mojtrade_signal_drafts import MarketWatchDraftError
 from core.unified_bot_identity import (
     BOT_CODE, MOJTRADE_RESEARCH_CAPABILITY, module_for_capability,
 )
@@ -197,3 +201,84 @@ def test_unseeded_bot_does_not_autocreate_agents_or_approve_trade(canonical_mark
     with pytest.raises(MojTradeBridgeError, match="canonical_bot_is_not_active"):
         ingest_private_observation()
     assert not AgentTask.objects.exists()
+
+
+
+@pytest.mark.django_db
+def test_private_trilingual_signal_feed_exports_one_canonical_receipt(canonical_market):
+    root, source, _ = canonical_market
+    task, created = ingest_private_observation()
+    assert created is True
+    out = StringIO()
+    call_command("mojtrade_market_watch_export", stdout=out)
+    feed = root / PRIVATE_NAME
+    assert feed.is_file()
+    assert os.stat(feed).st_mode & 0o077 == 0
+    document = json.loads(feed.read_text(encoding="utf-8"))
+    assert document == task.output_data["market_watch_drafts"]
+    assert document["canonical_owner"] == BOT_CODE
+    assert document["status"] == "private_owner_review_only"
+    assert document["languages"] == ["fa", "en", "ar"]
+    assert document["publication_authorized"] is False
+    assert document["trade_execution_authorized"] is False
+    assert document["executed_orders"] == 0
+    assert all(row["entry_price"] is None for row in document["alerts"])
+    assert "publications=0 orders=0" in out.getvalue()
+    assert source.is_file()
+    before = feed.read_bytes()
+    call_command("mojtrade_market_watch_export", stdout=StringIO())
+    assert feed.read_bytes() == before
+    assert AgentTask.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_private_signal_feed_refuses_expired_canonical_receipt(canonical_market):
+    task, _ = ingest_private_observation()
+    with pytest.raises(MarketWatchDraftError, match="expired"):
+        fresh_canonical_drafts(now=timezone.now() + timedelta(days=2))
+
+
+@pytest.mark.django_db
+def test_private_signal_feed_refuses_modified_or_unfinished_receipt(canonical_market):
+    task, _ = ingest_private_observation()
+    output = dict(task.output_data)
+    changed = dict(output["market_watch_drafts"])
+    changed["publication_authorized"] = True
+    output["market_watch_drafts"] = changed
+    task.output_data = output
+    task.save(update_fields=["output_data"])
+    with pytest.raises(MarketWatchDraftError, match="stored_draft_differs"):
+        fresh_canonical_drafts()
+    task.status = "blocked"
+    task.save(update_fields=["status"])
+    with pytest.raises(MarketWatchDraftError, match="no_completed"):
+        fresh_canonical_drafts()
+
+
+@pytest.mark.django_db
+def test_private_export_does_not_create_feed_without_source_task(canonical_market):
+    root, _, _ = canonical_market
+    with pytest.raises(CommandError, match="no_completed"):
+        call_command("mojtrade_market_watch_export")
+    assert not (root / PRIVATE_NAME).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("condition", ["symlink_file", "public_directory", "symlink_directory"])
+def test_signal_feed_export_refuses_unsafe_target(canonical_market, tmp_path, settings, condition):
+    root, _, _ = canonical_market
+    ingest_private_observation()
+    if condition == "symlink_file":
+        outside = tmp_path / "unmodified.txt"
+        outside.write_text("private original", encoding="utf-8")
+        (root / PRIVATE_NAME).symlink_to(outside)
+    elif condition == "public_directory":
+        os.chmod(root, 0o755)
+    else:
+        replacement = tmp_path / "linked"
+        replacement.symlink_to(root, target_is_directory=True)
+        settings.MOJTRADE_PRIVATE_DIR = str(replacement)
+    with pytest.raises(CommandError, match="PRIVATE_WATCH_EXPORT_REJECTED"):
+        call_command("mojtrade_market_watch_export")
+    if condition == "symlink_file":
+        assert outside.read_text(encoding="utf-8") == "private original"
