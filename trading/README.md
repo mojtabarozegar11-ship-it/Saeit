@@ -27,6 +27,7 @@ This document describes the canonical trading core of mojtaba.bot.ai. QuantumSca
 - Consecutive-loss circuit breaker
 - Automatic break-even protection
 - Automatic trailing stop
+- Unhandled runtime exceptions stop the canonical cBot fail-closed; existing positions are not forcibly closed
 - Separate labels and accounting for each strategy
 - No external HTTP calls, plugins or file dependencies; designed for cTrader Cloud
 
