@@ -1,14 +1,11 @@
 name: Finance102 one-off owner network diagnostic (read-only)
 on:
-  pull_request:
-    paths:
-      - 'scripts/finance102_network_preflight.py'
-      - 'tests/test_finance102_network_preflight.py'
-      - '.github/workflows/finance102-network-diagnostic.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   connectivity:
+    if: github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
