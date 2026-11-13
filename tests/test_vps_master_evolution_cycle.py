@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import stat
 from pathlib import Path
 import sqlite3
@@ -1140,6 +1141,81 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db, state)
             second = json.loads(state.read_text())
             self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
+
+    def test_database_identity_survives_in_place_task_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            original = json.loads(state.read_text())["database_identity"]
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_profit_optimize',?)",
+                    (json.dumps(self.proof()),),
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["database_identity"], original)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+
+    def test_restored_identical_database_with_new_inode_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            replacement = Path(temp) / "restored.sqlite3"
+            shutil.copyfile(db, replacement)
+            os.replace(replacement, db)
+            self.assertNotEqual(db.stat().st_ino, json.loads(before)["database_identity"]["inode"])
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_DATABASE_REPLACED"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_DATABASE_REPLACED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_private_state_database_identity_cannot_be_forged_by_type(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            good = json.loads(state.read_text())
+            for bad in (True, "123", -1):
+                candidate = json.loads(json.dumps(good))
+                candidate["database_identity"]["inode"] = bad
+                state.write_text(json.dumps(candidate))
+                before = state.read_bytes()
+                with self.assertRaisesRegex(
+                    RuntimeError, "MASTER_EVOLUTION_DATABASE_IDENTITY_INVALID"
+                ):
+                    mod.evaluate(db, state, check_only=True)
+                self.assertEqual(state.read_bytes(), before)
+
+    def test_agent_identity_change_in_same_database_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agent SET active=0 WHERE id=1")
+                conn.execute(
+                    "INSERT INTO core_agent(id,code,active) "
+                    "VALUES (2,'economic-master-agent',1)"
+                )
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_DATABASE_REPLACED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_check_only_requires_database_identity_in_saved_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            data = json.loads(state.read_text())
+            data.pop("database_identity")
+            state.write_text(json.dumps(data))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_CHECK_BASELINE_INCOMPLETE"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
