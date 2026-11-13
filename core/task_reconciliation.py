@@ -152,7 +152,7 @@ def record_reconciliation_observation(
         raise ValueError("RECONCILIATION_DUPLICATE_OBSERVATION")
 
     event = AuditLog.objects.create(
-        actor_type="owner_reconciliation_observation",
+        actor_type="owner_review",
         actor_id=str(actor.pk),
         action="task_reconciliation_observation_recorded",
         target_type="AgentTask",

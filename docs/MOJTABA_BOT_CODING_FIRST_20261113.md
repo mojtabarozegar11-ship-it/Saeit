@@ -149,3 +149,7 @@ The existing `AgentTaskViewSet` now has owner-only `GET /.../{id}/reconciliation
 ## Cycle 11 — append-only owner reconciliation observation without unlocking
 
 The existing `AgentTaskViewSet` also exposes owner-only `POST /.../{id}/record-reconciliation/`. It accepts an exact 64-char evidence SHA256, one allowlisted external evidence *type*, and an explicit owner-observed disposition. A task-row lock and execution-ID binding prevent duplicate entries for the same digest in this code path. Only a minimal `AuditLog` event is created: **no secrets, raw source records, provider calls, task release, status transition, replay or new ApprovalRequest**. The evidence hash is owner-supplied and **not independently verified**. Even an owner claim of no effect cannot defeat the global reconciliation barrier. Independent verifier and appropriate terminal closure remain uncoded/unauthorized. No live API request or test was executed in this cycle.
+
+## Cycle 11 — AuditLog schema-width correction
+
+The owner observation audit actor label was shortened to `owner_review` (12 characters) because `AuditLog.actor_type` is a 30-character Django field; the earlier 32-character label exceeded that limit. The code no longer attempts an oversized value. No database migration or existing audit row was changed, and runtime acceptance remains untested.
