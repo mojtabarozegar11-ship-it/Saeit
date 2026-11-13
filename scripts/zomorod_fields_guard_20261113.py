@@ -244,6 +244,38 @@ def created_destination(name: str, create_parents: bool = False) -> Path:
     return path
 
 
+def audit_live_baseline() -> dict:
+    """Zero-write baseline inspection. No staged upload, backup or release approval."""
+    identity()
+    for name in FILES:
+        if git_blob(read_regular(ROOT / name)) != OLD_BLOBS[name]:
+            raise RuntimeError('Live source differs from approved baseline: ' + name)
+    photos = validate_legacy_images()
+    for name in CREATED:
+        target = created_destination(name)
+        if target.exists() or target.is_symlink():
+            raise RuntimeError('New destination already exists; refuse overwrite: ' + name)
+    protected = protected_fingerprints()
+    if BACKUP_ROOT.is_symlink() or BACKUP_ROOT.parent.is_symlink() or not BACKUP_ROOT.parent.is_dir():
+        raise RuntimeError('Private backup location is not ready')
+    # This is a conservative MINIMUM; full 15-file free-space calculation
+    # is intentionally deferred to preflight(stage) once stage exists.
+    free = min(shutil.disk_usage(path).free for path in (ROOT, BACKUP_ROOT.parent))
+    if free < 32 * 1024 * 1024:
+        raise RuntimeError('Insufficient free disk for release readiness')
+    return {
+        'status': 'READ_ONLY_BASELINE_READY',
+        'source_files_matching': len(FILES),
+        'legacy_photos_healthy': len(photos),
+        'new_destinations_available': len(CREATED),
+        'protected_existing_files': len(protected),
+        'minimum_disk_free_bytes': free,
+        'stage_hashes_verified': False,
+        'deployment_authorized': False,
+        'deployment_performed': False,
+    }
+
+
 def preflight(stage: Path):
     identity()
     old, new = candidates(stage)
@@ -438,7 +470,9 @@ def apply(stage: Path, release_id: str) -> None:
 
 def main(argv=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) == 2 and args[0] == 'check':
+    if len(args) == 1 and args[0] == 'audit-live':
+        print(json.dumps(audit_live_baseline(), sort_keys=True))
+    elif len(args) == 2 and args[0] == 'check':
         result = preflight(Path(args[1]))
         print(json.dumps(result, sort_keys=True))
     elif len(args) == 4 and args[0] == 'apply' and args[3] == '--owner-approved':
@@ -450,7 +484,7 @@ def main(argv=None) -> int:
     elif len(args) == 2 and args[0] == 'verify':
         verify(args[1])
     else:
-        raise SystemExit('Read-only: check STAGE | verify RELEASE; owner-only: apply STAGE RELEASE --owner-approved | rollback RELEASE --owner-approved')
+        raise SystemExit('Read-only: audit-live | check STAGE | verify RELEASE; owner-only: apply STAGE RELEASE --owner-approved | rollback RELEASE --owner-approved')
     return 0
 
 

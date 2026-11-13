@@ -402,3 +402,59 @@ def test_verify_detects_concurrent_change_to_original_photo(sandbox):
     mod.restore('fields-1234599')
     assert original.read_bytes().endswith(b'owner updated photo')
     assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_audit_live_requires_no_staged_files(sandbox, capsys):
+    import json
+    root, stage, old, new = sandbox
+    result = mod.audit_live_baseline()
+    assert result['status'] == 'READ_ONLY_BASELINE_READY'
+    assert result['source_files_matching'] == 3
+    assert result['legacy_photos_healthy'] == 4
+    assert result['new_destinations_available'] == 12
+    assert result['deployment_authorized'] is False
+    assert result['deployment_performed'] is False
+    assert not mod.BACKUP_ROOT.exists()
+    assert mod.main(['audit-live']) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed['stage_hashes_verified'] is False
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_audit_live_rejects_mismatched_original_source(sandbox):
+    root, stage, old, new = sandbox
+    homepage = root / 'index.html'
+    homepage.write_bytes(b'owner modified live homepage')
+    with pytest.raises(RuntimeError, match='Live source differs from approved baseline'):
+        mod.audit_live_baseline()
+    assert homepage.read_bytes() == b'owner modified live homepage'
+    assert not mod.BACKUP_ROOT.exists()
+
+
+def test_audit_live_rejects_any_occupied_new_destination(sandbox):
+    root, stage, old, new = sandbox
+    created = root / mod.CREATED[-1]
+    created.parent.mkdir(parents=True, exist_ok=True)
+    created.write_bytes(b'preexisting page')
+    with pytest.raises(RuntimeError, match='New destination already exists'):
+        mod.audit_live_baseline()
+    assert created.read_bytes() == b'preexisting page'
+    assert not mod.BACKUP_ROOT.exists()
+
+
+def test_audit_live_rejects_insufficient_free_space_without_writes(sandbox, monkeypatch):
+    from types import SimpleNamespace
+    root, stage, old, new = sandbox
+    monkeypatch.setattr(mod.shutil, 'disk_usage', lambda _: SimpleNamespace(free=31 * 1024 * 1024))
+    with pytest.raises(RuntimeError, match='Insufficient free disk'):
+        mod.audit_live_baseline()
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_audit_live_cannot_use_owner_approval_flag(sandbox):
+    root, stage, old, new = sandbox
+    with pytest.raises(SystemExit, match='Read-only: audit-live'):
+        mod.main(['audit-live', '--owner-approved'])
+    assert not mod.BACKUP_ROOT.exists()
