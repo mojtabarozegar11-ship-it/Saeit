@@ -22,6 +22,13 @@ def reconcile(data):
         ids = [r["id"] for r in records]
         if any(not isinstance(i, str) or not i.strip() for i in ids) or len(set(ids)) != len(ids):
             raise ValueError("duplicate or missing ids")
+    # Reject any explicit per-record currency that disagrees with the report currency.
+    # Legacy records without currency remain unverified claims, not bank evidence.
+    for records in (orders, settlements, refunds):
+        for record in records:
+            record_currency = record.get("currency")
+            if record_currency is not None and (not isinstance(record_currency, str) or record_currency.upper() != currency.upper()):
+                raise ValueError("record currency differs from report currency")
     # Validate every order, including unpaid orders, before calculating any totals.
     for order in orders:
         if "amount" not in order:
