@@ -84,6 +84,29 @@ capabilities in this branch still do not include a live deployment or broker
 order adapter. Real owner sign-off, MariaDB concurrency tests, verified
 rollback and host-specific runtime receipts remain mandatory.
 
+## Approval decision and claim boundaries (review branch)
+
+An approved request for an `AgentTask` is not interchangeable with an
+approval for another action, task or project. Both **approval** and **rejection**
+of an existing task now verify its normalized action and, when the task
+belongs to a project, the designated project owner. A sensitive task claim
+requires an approved request scoped to that exact action and project owner.
+Mismatched requests fail atomically without consuming an attempt or
+changing task status.
+
+A normal owner approval may release a **clean, not-yet-executed** blocked
+task. It must never requeue a `mojtaba-bot-ai` task marked
+`requires_review=true` or `automatic_replay_allowed=false`. Such a
+task might have already made an external change. Rejecting a new approval
+also preserves the unresolved incident's blocked state and evidence, rather
+than silently hiding it as cancelled. This is fail-closed until a separate,
+verified reconciliation procedure is designed, approved and tested.
+
+Synthetic regression tests assert no unauthorized dispatch or task claim.
+They are not proof of MariaDB production concurrency, external delivery,
+broker transactions, or revenue. Production merge/deploy is separately
+gated and remains unapproved.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
