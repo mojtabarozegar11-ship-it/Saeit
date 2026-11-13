@@ -43,6 +43,7 @@ ECONOMIC_SPECIAL_CAPABILITIES = frozenset({"master_self_improvement"})
 FACTORY_CAPABILITIES = frozenset({
     "factory_native_review", "factory_f41_private_build",
 })
+PORTFOLIO_CAPABILITIES = frozenset({"business_portfolio_review"})
 CYBER_CAPABILITIES = frozenset({
     "cyber_evidence_review", "cyber_origin_defense", "cyber_incident_response",
 })
@@ -75,6 +76,8 @@ def non_factory_task_scope():
 
 
 def module_for_capability(code):
+    if code in PORTFOLIO_CAPABILITIES:
+        return "business_portfolio"
     if code in CYBER_CAPABILITIES:
         return "cyber_security"
     if code in FACTORY_CAPABILITIES:

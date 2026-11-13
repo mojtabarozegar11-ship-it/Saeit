@@ -17,6 +17,8 @@ from .factory_f41_gateway import build_verified_order
 from .models import AgentTask, Product
 from .production_gate import ProductionGate
 from .tool_gateway import ToolGateway, ToolSpec
+from .unified_bot_identity import BOT_CODE
+from .business_portfolio_gateway import inspect_business_portfolio
 
 
 def _evidence(kind, value):
@@ -433,6 +435,8 @@ def build_economic_gateway(*, cyber_verify_key=None, enable_cyber_offline=False)
     if enable_cyber_offline and cyber_verify_key is None:
         raise ValueError("CYBER_VERIFY_KEY_REQUIRED")
     tools = [
+        ToolSpec(code="business_portfolio_review", handler=inspect_business_portfolio,
+                 risk="low", required_agent_code=BOT_CODE),
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),

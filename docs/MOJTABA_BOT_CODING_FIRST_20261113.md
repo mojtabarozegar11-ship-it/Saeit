@@ -121,3 +121,7 @@ The existing ChatOperation intent does **not** authorize `cpanel.deploy_release`
 ## Cycle 8: Fail-closed autonomous task replanning
 
 The existing autonomous loop previously created new inferred prerequisite AgentTask rows following a handler failure, including cases where the previous task could have applied a side effect. The speculative-replan branch is now removed, all blocked canonical tasks pause the loop, and max-steps is constrained to 1..20. On failure the original task remains under TaskRuntime reconciliation and no new task is auto-created. Source only: no worker started, no tests or deployment.
+
+## Cycle 8: Multi-domain portfolio source adapter
+
+The internal `business_portfolio_review` operation is now wired to the existing unified `ToolGateway`, task seed registry, canonical module map, fleet audit and economic worker. It reads aggregate rows from eight existing Django domain groups (research, knowledge, catalog, commerce, content/SEO, newsletters, MojPlayWin local records and canonical factory task receipts). For games and trading it reports missing independent runtime evidence, not invented zero counts or certified profitability. No customer data, private email, wallet addresses, site publication, or revenue sums are emitted. All domains are read-only and approval gates for other operations remain unchanged. This is *source staged*, not acceptance-tested, deployed or verified against real Django tables in this cycle.

@@ -20,12 +20,16 @@ from core.models import Agent, AgentTask
 from core.bot_identity import BOT_ID, summarize_internal_agent_registry
 from core.unified_bot_identity import (
     BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES,
-    is_economic_capability, FACTORY_CAPABILITIES, module_for_capability,
+    is_economic_capability, FACTORY_CAPABILITIES, PORTFOLIO_CAPABILITIES,
+    module_for_capability,
 )
 
 
 EXECUTOR_SCOPES = {
-    BOT_CODE: lambda code: is_economic_capability(code) or code in FACTORY_CAPABILITIES,
+    BOT_CODE: lambda code: (
+        is_economic_capability(code) or code in FACTORY_CAPABILITIES
+        or code in PORTFOLIO_CAPABILITIES
+    ),
     "economic-master-agent": is_economic_capability,
     "moj_1ro_1": lambda code: code in FACTORY_CAPABILITIES,
 }

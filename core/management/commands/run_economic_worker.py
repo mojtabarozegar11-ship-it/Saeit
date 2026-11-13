@@ -34,7 +34,9 @@ class Command(BaseCommand):
         supported = frozenset(
             code for code, spec in gateway.describe().items()
             if spec.get("enabled", True)
-            and (code.startswith("income_") or code == "master_self_improvement")
+            and (code.startswith("income_") or code in {
+                "master_self_improvement", "business_portfolio_review",
+            })
         )
         runner = None
         for _ in range(limit):
