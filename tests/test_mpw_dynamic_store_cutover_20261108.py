@@ -607,7 +607,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                 '<input name="e&#109;ail" required>',
                 '<input type="em&#97;il" name="buyer">',
                 '<input name="&#x65;mail" required>',
-                '<input type="e&mail;" name="buyer">',
+                '<input type="&#101;mail" name="buyer">',
             ):
                 with self.subTest(email_markup=email_markup):
                     template.write_text("{% csrf_token %}\n" + email_markup +
