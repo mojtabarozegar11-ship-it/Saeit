@@ -392,10 +392,13 @@ class SpecialistLegacyMergeCoverageTests(TestCase):
             "company-activity-intelligence": ["company"],
             "knowledge-content-director": ["accepted_knowledge_delivery"],
         }
+        preexisting_active = Agent.objects.exclude(
+            code=BOT_CODE
+        ).filter(active=True).count()
         for code in expected:
-            Agent.objects.create(
-                code=code, name="Historical role", mission="No live proof",
-                active=True,
+            Agent.objects.update_or_create(
+                code=code,
+                defaults={"name": "Historical role", "mission": "No live proof", "active": True},
             )
         rows = self.inventory()
         for code, required in expected.items():
@@ -405,8 +408,12 @@ class SpecialistLegacyMergeCoverageTests(TestCase):
             )
             self.assertEqual(rows[code]["missing_successor_coverage"], required)
             self.assertTrue(rows[code]["active"])
+        self.assertGreaterEqual(
+            Agent.objects.exclude(code=BOT_CODE).filter(active=True).count(),
+            preexisting_active,
+        )
         self.assertEqual(
-            Agent.objects.exclude(code=BOT_CODE).filter(active=True).count(), 4
+            sum(bool(rows[code]["active"]) for code in expected), 4
         )
         self.assertFalse(AuditLog.objects.filter(action="legacy_agent_retired").exists())
 
