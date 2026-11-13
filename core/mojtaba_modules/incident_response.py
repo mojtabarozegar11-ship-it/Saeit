@@ -116,7 +116,8 @@ def plan_incident_response(*, engagement: dict, incident: dict,
             raise CyberModuleError("INDICATOR_ID_DUPLICATED")
         seen.add(identifier)
         kind, confidence = row.get("kind"), row.get("confidence")
-        if kind not in INDICATORS or confidence not in CONFIDENCE:
+        if (not isinstance(kind, str) or not isinstance(confidence, str) or
+                kind not in INDICATORS or confidence not in CONFIDENCE):
             raise CyberModuleError("INDICATOR_CLASS_INVALID")
         observed = _timestamp(row.get("observed_at"))
         if not (max(clock - timedelta(days=7), _timestamp(scope["issued_at"])) <= observed <= clock):
@@ -141,7 +142,7 @@ def plan_incident_response(*, engagement: dict, incident: dict,
         integrity = row.get("integrity_status")
         immutable = row.get("immutable")
         sha256 = row.get("sha256")
-        if integrity not in INTEGRITY or type(immutable) is not bool or (
+        if not isinstance(integrity, str) or integrity not in INTEGRITY or type(immutable) is not bool or (
             not isinstance(sha256, str) or not DIGEST_RE.fullmatch(sha256)
         ):
             raise CyberModuleError("BACKUP_ATTESTATION_INVALID")
