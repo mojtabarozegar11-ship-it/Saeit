@@ -1,14 +1,6 @@
 name: Zomorod VISION owner-approved reference design guarded release
 on:
-  pull_request:
-    paths:
-      - 'content/zomorod-vision-v3/**'
-      - '.github/workflows/zomorod-vision-approved-release.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'content/zomorod-vision-v3/**'
-      - '.github/workflows/zomorod-vision-approved-release.yml'
+  workflow_dispatch: # retired one-off release, superseded by audited one-pass workflow
 permissions:
   contents: read
 concurrency:
