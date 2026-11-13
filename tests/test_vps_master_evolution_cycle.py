@@ -1227,5 +1227,47 @@ class EvolutionTests(unittest.TestCase):
             self.assertEqual(out["decision"],"limit_serial_steps_after_regression")
 
 
+
+
+class EvolutionCanonicalRuntimeBoundaryTests(unittest.TestCase):
+    """Private evolution stays pinned to the old row until audited migration."""
+
+    def test_parallel_active_master_rows_fail_without_touching_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = EvolutionTests().fixture(temp, ["income_market_research"])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agent(id,code,active) VALUES (2,'mojtaba-bot-ai',1)"
+                )
+            original = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError,
+                                        "MASTER_EVOLUTION_MULTIPLE_ACTIVE_RUNTIMES"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), original)
+
+    def test_canonical_only_requires_explicit_state_handoff(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = EvolutionTests().fixture(temp, ["income_market_research"])
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agent SET active=0 WHERE id=1")
+                conn.execute(
+                    "INSERT INTO core_agent(id,code,active) VALUES (2,'mojtaba-bot-ai',1)"
+                )
+            original = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError,
+                                        "MASTER_EVOLUTION_CANONICAL_HANDOFF_NOT_SUPPORTED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), original)
+
+    def test_disabled_master_does_not_modify_policy_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = EvolutionTests().fixture(temp, [])
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agent SET active=0 WHERE id=1")
+            original = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_AGENT_NOT_ACTIVE"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), original)
+
 if __name__ == "__main__":
     unittest.main()

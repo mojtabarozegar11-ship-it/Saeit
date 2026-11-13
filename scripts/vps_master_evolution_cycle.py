@@ -189,12 +189,21 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     )) as db:
         db.execute("PRAGMA query_only=ON")
         db.execute("BEGIN")
-        row = db.execute(
-            "SELECT id FROM core_agent WHERE code=? AND active=1 LIMIT 1",
-            ("economic-master-agent",)
-        ).fetchone()
-        if not row:
+        # This older private evolution state is bound to the legacy row ID.
+        # Never silently operate on a newly created canonical row, and never
+        # overlook a second active runtime during an incomplete handoff.
+        runtimes = db.execute(
+            "SELECT id,code FROM core_agent "
+            "WHERE code IN (?,?) AND active=1 ORDER BY code",
+            ("economic-master-agent", "mojtaba-bot-ai"),
+        ).fetchall()
+        if len(runtimes) > 1:
+            raise RuntimeError("MASTER_EVOLUTION_MULTIPLE_ACTIVE_RUNTIMES")
+        if not runtimes:
             raise RuntimeError("MASTER_AGENT_NOT_ACTIVE")
+        row = runtimes[0]
+        if row[1] != "economic-master-agent":
+            raise RuntimeError("MASTER_EVOLUTION_CANONICAL_HANDOFF_NOT_SUPPORTED")
         db_identity = {
             "path": db_canonical,
             "device": db_stat.st_dev,

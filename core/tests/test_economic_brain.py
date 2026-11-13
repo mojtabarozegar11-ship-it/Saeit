@@ -336,3 +336,122 @@ def test_new_payment_evidence_takes_priority_over_internal_research():
         "financial_event_needs_reconcile": True,
     }
     assert AutonomousBrain().candidates(state)[0].action == "income_revenue_verify"
+
+
+class CanonicalBrainHandoffTests(TestCase):
+    """Read old receipts, but only the active master owns executable work."""
+
+    def setUp(self):
+        from core.canonical_bot_identity import RUNTIME_CODES
+        Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+
+    def test_new_canonical_master_is_not_hidden_by_legacy_filter(self):
+        master = Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Single", active=True,
+        )
+        AgentTask.objects.create(
+            agent=master, capability_code="master_self_improvement", status="completed",
+            output_data={"verified_effect": True},
+        )
+        AgentTask.objects.create(
+            agent=master, capability_code="income_market_research", status="completed",
+            output_data={"verified_effect": True,
+                         "evidence": {"kind": "database_measurement"}},
+        )
+        state = AutonomousBrain().observe()
+        self.assertTrue(state["self_improvement_complete"])
+        self.assertTrue(state["market_inventory_measured"])
+        self.assertFalse(state["market_research_complete"])
+        self.assertEqual(AutonomousBrain().candidates(state)[0].action,
+                         "await_external_market_evidence")
+
+    def test_completed_legacy_evidence_is_preserved_without_requeuing_work(self):
+        old = Agent.objects.create(
+            code="economic-master-agent", name="Legacy", mission="History", active=False,
+        )
+        current = Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Single", active=True,
+        )
+        AgentTask.objects.create(
+            agent=old, capability_code="master_self_improvement", status="completed",
+            output_data={"verified_effect": True},
+        )
+        AgentTask.objects.create(
+            agent=old, capability_code="income_market_research", status="completed",
+            output_data={"verified_effect": True,
+                         "evidence": {"kind": "database_measurement"}},
+        )
+        old_queued = AgentTask.objects.create(
+            agent=old, action_type="income_opportunity_score", status="queued",
+        )
+        state = AutonomousBrain().observe()
+        self.assertTrue(state["self_improvement_complete"])
+        self.assertTrue(state["market_inventory_measured"])
+        self.assertEqual(state["unfinished_tasks"], 0)
+        self.assertEqual(AutonomousBrain().candidates(state)[0].action,
+                         "await_external_market_evidence")
+        old_queued.refresh_from_db()
+        self.assertEqual(old_queued.status, "queued")
+        self.assertTrue(current.active)
+
+    def test_only_active_runtime_pending_or_failed_tasks_count(self):
+        old = Agent.objects.create(
+            code="economic-master-agent", name="Legacy", mission="Old", active=False,
+        )
+        current = Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Current", active=True,
+        )
+        AgentTask.objects.create(
+            agent=old, action_type="master_self_improvement", status="failed",
+            capability_code="master_self_improvement",
+        )
+        AgentTask.objects.create(agent=old, action_type="income_market_research",
+                                 status="running")
+        active = AgentTask.objects.create(
+            agent=current, action_type="income_market_research", status="queued",
+        )
+        state = AutonomousBrain().observe()
+        self.assertEqual(state["unfinished_tasks"], 1)
+        self.assertEqual(state["failed_tasks"], 0)
+        self.assertFalse(state["self_improvement_failed"])
+        self.assertEqual(AutonomousBrain().candidates(state)[0].action,
+                         "continue_existing_work")
+        active.status = "completed"
+        active.save(update_fields=["status"])
+        state = AutonomousBrain().observe()
+        self.assertEqual(state["unfinished_tasks"], 0)
+
+    def test_completed_unverified_legacy_research_cannot_unlock_sales(self):
+        old = Agent.objects.create(
+            code="economic-master-agent", name="Legacy", mission="Historical", active=False,
+        )
+        Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Current", active=True,
+        )
+        AgentTask.objects.create(
+            agent=old, capability_code="income_market_research", status="completed",
+            output_data={"verified_effect": False,
+                         "market_validation": {
+                             "status": "independently_verified",
+                             "source_type": "external_customer_demand",
+                             "validated_by": "independent_market_evidence_adapter",
+                             "source_id": "unverified",
+                         }},
+        )
+        state = AutonomousBrain().observe()
+        self.assertFalse(state["market_research_complete"])
+        self.assertFalse(state["opportunity_scored"])
+
+    def test_no_active_master_abstains_from_economic_decisions(self):
+        from django.core.exceptions import ImproperlyConfigured
+        with self.assertRaisesRegex(ImproperlyConfigured, "MASTER_BRAIN_NO_ACTIVE_RUNTIME"):
+            AutonomousBrain().observe()
+
+    def test_parallel_active_runtime_rows_fail_closed(self):
+        from django.core.exceptions import ImproperlyConfigured
+        Agent.objects.create(code="economic-master-agent", name="Legacy",
+                             mission="Old", active=True)
+        Agent.objects.create(code="mojtaba-bot-ai", name="Canonical",
+                             mission="Current", active=True)
+        with self.assertRaisesRegex(ImproperlyConfigured, "CANONICAL_BOT_MULTIPLE_ACTIVE"):
+            AutonomousBrain().observe()
