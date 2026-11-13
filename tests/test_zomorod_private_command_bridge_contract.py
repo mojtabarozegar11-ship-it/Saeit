@@ -104,7 +104,7 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
 def test_ssh_is_pinned_to_current_relay_and_new_host():
     source = _source()
     assert "HostName 178.239.147.150" in source
-    assert "HostName 178.239.147.125" in source
+    assert source.count("HostName zohal.pws-dns.net") == 2
     assert "Port 1396" in source
     assert "ProxyJump saeit-vps" in source
     assert "StrictHostKeyChecking yes" in source
@@ -113,7 +113,8 @@ def test_ssh_is_pinned_to_current_relay_and_new_host():
     assert "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" in source
     assert "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" in source
     assert "178.239.147.124" not in source
-    assert "zohal.pws-dns.net" not in source
+    assert "178.239.147.125" not in source
+    assert "[zohal.pws-dns.net]:1396 ssh-ed25519" in source
 
 
 def _run_gate(event, event_name, tmp_path, actor="mojtabarozegar11-ship-it"):
@@ -314,12 +315,26 @@ def test_action_actor_identity_is_checked_for_manual_and_app_comments(tmp_path):
         assert (result.returncode == 0) is permitted, (event_name, actor, result.stderr)
 
 
+def test_pinned_dns_target_does_not_weaken_owner_mutation_gates():
+    source = _source()
+    assert source.count("HostName zohal.pws-dns.net") == 2
+    assert "178.239.147.125" not in source
+    assert "[zohal.pws-dns.net]:1396 ssh-ed25519" in source
+    assert "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" in source
+    assert "github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'" in source
+    assert "github.ref == 'refs/heads/main'" in source
+    assert "StrictHostKeyChecking yes" in source
+    assert "ForwardAgent no" in source
+    assert "UserKnownHostsFile /dev/null" not in source
+    assert "StrictHostKeyChecking no" not in source
+
+
 def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     source = _source()
     assert "Host saeit-cpanel-direct" in source
     direct = source.split("Host saeit-cpanel-direct", 1)[1].split("Host *", 1)[0]
     for line in (
-        "HostName 178.239.147.125",
+        "HostName zohal.pws-dns.net",
         "User zomorod2",
         "Port 1396",
         "IdentityFile $d/host.key",
