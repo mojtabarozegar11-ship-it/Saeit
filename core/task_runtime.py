@@ -82,13 +82,14 @@ class TaskRuntime:
 
     @transaction.atomic
     def heartbeat(self, task_id, execution_id=None):
-        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError(
                 "Execution identity does not match the active task execution"
             )
+        assert_single_executor(Agent, task.agent.code)
         task.save(update_fields=["updated_at"])
         return task
 
@@ -157,6 +158,8 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError("Execution identity does not match the active task execution")
+        # A second runtime may have become active after claim/handler invocation.
+        assert_single_executor(Agent, task.agent.code)
         if not isinstance(output_data or {}, dict):
             raise TaskExecutionError("Task output must be an object")
         try:
@@ -200,7 +203,7 @@ class TaskRuntime:
 
     @transaction.atomic
     def fail(self, task_id, error, execution_id=None):
-        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
@@ -211,8 +214,19 @@ class TaskRuntime:
         task.output_data = {"error": str(error)[:5000]}
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
+        elif task.agent.code in EXECUTOR_RUNTIME_CODES:
+            # A handler can fail AFTER its external/private effect occurred.
+            # Never automatically retry the one master/factory executor.
+            task.status = "blocked"
+            task.execution_id = ""
+            task.output_data = {
+                "error": str(error)[:5000],
+                "requires_review": True,
+                "automatic_replay_allowed": False,
+                "previous_execution_id": previous_execution_id,
+            }
         else:
-            # Invalidate the previous worker identity before the retry is claimable.
+            # Non-master specialist recovery follows its existing policy.
             task.execution_id = ""
             task.status = "queued"
         task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])

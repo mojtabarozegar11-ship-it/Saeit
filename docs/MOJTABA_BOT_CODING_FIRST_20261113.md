@@ -72,3 +72,7 @@ The existing `core.unified_bot_identity` now exposes a single-executor assertion
 ## Precise owner approvals — coding phase
 
 Existing task acceptance now checks the original request's action, target task id and approved risk against the active task snapshot. The approval service denies a missing/deleted task, a mismatched action or insufficient risk and a forged/absent owner identity. The same validation is applied again when TaskRuntime claims work and when ToolGateway invokes the capability, including higher-risk tool adapters. This is source-only and has not been executed against live data; commercial/external action gates remain closed by default.
+
+## Retried execution is never assumed safe
+
+For all three recognized executor IDs, errors during an active task no longer place it back into a runnable queue automatically; they leave a blocked task and preserve the previous execution identity for manual reconciliation. This includes errors after a tool reported a side effect but before `TaskRuntime.complete` persisted the result. Both heartbeat and completion now recheck the canonical/legacy singleton before confirming a running task. A stopped execution is not proof of rollback, and approval of a retry must be narrowly scoped.
