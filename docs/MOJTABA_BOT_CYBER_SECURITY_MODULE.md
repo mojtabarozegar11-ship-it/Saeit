@@ -2,7 +2,7 @@
 
 ## One bot rule
 **Canonical bot:** `mojtaba.bot.ai`. **Single capability:** `cyber_security`.
-**Nested security function:** `origin_defense` (not an independent bot or agent).
+**Nested security functions:** `origin_defense`, `incident_response` (neither is an independent bot or agent).
 
 Files:
 
@@ -11,9 +11,11 @@ core/mojtaba_modules/
   __init__.py           # one-bot capability catalogue
   cyber_security.py     # signed scope gate + offline security findings
   origin_defense.py     # source-side / upstream mitigation review
+  incident_response.py  # incident triage, evidence-preserving containment/recovery plans
 tests/
   test_mojtaba_cyber_security.py
   test_mojtaba_origin_defense.py
+  test_mojtaba_incident_response.py
 ```
 
 No new Agent model row, independent worker, scheduler, daemon, website, login, account, trading entity or payment gateway is allowed. All work must be dispatched by the existing **verified** canonical bot runtime. This repository change alone does not prove that runtime exists or that it is already wired to these functions.
@@ -30,6 +32,7 @@ No new Agent model row, independent worker, scheduler, daemon, website, login, a
 
 - `review_offline_evidence(engagement=..., evidence=..., verify_key=...)`
 - `plan_origin_defense(engagement=..., traffic=..., verify_key=...)`
+- `plan_incident_response(engagement=..., incident=..., verify_key=...)`
 
 Both operate in memory without network I/O or writes. They require the *same* signed, expiring tenant/asset authorization. The canonical control plane must issue keys from its trusted secret store **only after verifying written authority**; signing a statement does not prove that authority was granted.
 
@@ -64,8 +67,22 @@ For large volumetric DDoS, filtering purely on the origin host may be insufficie
 ```bash
 python -m unittest discover -s tests -p 'test_mojtaba_cyber_security.py' -v
 python -m unittest discover -s tests -p 'test_mojtaba_origin_defense.py' -v
+python -m unittest discover -s tests -p 'test_mojtaba_incident_response.py' -v
 ```
 
 These unit tests have to pass before acceptance. CI-wide failures elsewhere are not evidence of this module passing or failing. The resulting offline module is **not** a live DDoS appliance, intrusion prevention system, autonomous attack mitigation deployment or proof of commercial readiness.
 
 **Status:** Draft PR for code review. No new bot, no external scan, no live firewall/DNS/WAF changes, no deployment, no spending or customer billing.
+
+## Incident response and safe destructive-attack simulations
+
+`incident_response` is exclusively an offline analysis module. It accepts abstract incident categories (suspected destructive activity, suspected data exposure, suspected ransomware, compromised accounts, integrity anomalies, service disruption), severity confidence and backup attestation metadata **within the same signed tenant and asset scope**. It produces risk triage, non-executing containment recommendations, evidence-preservation requirements and backup integrity review. It never ingests original stolen content, executes deletion, performs data export or counterattack, or restores a production backup.
+
+- Treat reports of compromised data as **allegations or evidence indications**, not proof of theft or identity attribution.
+- Never assume an incoming `verified_claim` backup is independently verified: actual checksum, immutable snapshot access and a separately approved restore drill remain required.
+- Destructive-activity scenarios are **conceptual/tabletop** risk indicators, not scripts to destroy anything or disable security controls.
+- Require human approval and reversible infrastructure-specific procedures before any host isolation, credential revocation, firewall change or restore.
+- The NIST SP 800-61 Rev. 3 incident-response framework (April 2025) informs the Detect / Respond / Recover / Improve approach.
+
+The static catalogue still has only **one** key: `cyber_security`, owned by `mojtaba.bot.ai`; `incident_response` is nested under it. This PR has no second bot, new daemon, extra scheduler or money-spending activation. Successful unit tests only attest specific offline behavior, not operational containment.
+
