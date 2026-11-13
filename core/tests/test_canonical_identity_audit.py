@@ -5,6 +5,9 @@ from core.models import Agent
 
 
 class CanonicalIdentityAuditTests(TestCase):
+    def setUp(self):
+        Agent.objects.all().delete()
+
     def test_audit_reports_parallel_identities_without_mutation(self):
         Agent.objects.create(
             code="economic-master-agent",
