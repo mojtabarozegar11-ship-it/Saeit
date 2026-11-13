@@ -45,6 +45,7 @@ class PageParser(HTMLParser):
                 "inputs": [],
                 "submit_controls": 0,
                 "email_control": False,
+                "email_inputs": [],
                 "malformed": nested or keys.count("action") != 1
                              or keys.count("method") != 1,
             }
@@ -72,13 +73,19 @@ class PageParser(HTMLParser):
                 form["inputs"].append(
                     (name, values.get("value") or "", input_type,
                      "disabled" in values))
-            email_terms = {"email", "buyer_email", "customer_email",
-                           "purchase_email", "purchaser_email"}
-            form["email_control"] |= (
+            looks_like_email = (
                 "email" in name or "email" in (values.get("id") or "").lower()
                 or input_type == "email"
                 or (values.get("autocomplete") or "").lower() == "email"
             )
+            form["email_control"] |= looks_like_email
+            if looks_like_email:
+                # Presence alone is not proof of a required, usable buyer
+                # contact. Record only field structure, never its value.
+                form["email_inputs"].append((
+                    tag, name, input_type, "required" in values,
+                    "disabled" in values or "readonly" in values,
+                ))
             if (tag == "input" and input_type == "submit"
                     and "disabled" not in values and "hidden" not in values):
                 form["submit_controls"] += 1
@@ -169,9 +176,19 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
             return "checkout_csrf_unverified"
         if forms[0]["submit_controls"] < 1:
             return "checkout_submit_control_unverified"
-        if forms[0]["email_control"]:
-            return "legacy_email_requested"
-        return "no_email_checkout_get_ok_not_paid"
+        email_inputs = forms[0]["email_inputs"]
+        # Owner policy: a guest order must collect a valid buyer email.
+        # GET can only attest a usable required field, not server validation,
+        # delivery, ownership, or cross-browser recovery.
+        email_names = {"email", "buyer_email", "customer_email",
+                       "purchase_email", "purchaser_email"}
+        if (len(email_inputs) != 1
+                or email_inputs[0][0] != "input"
+                or email_inputs[0][1] not in email_names
+                or email_inputs[0][2] != "email"
+                or not email_inputs[0][3] or email_inputs[0][4]):
+            return "buyer_email_input_unverified"
+        return "buyer_email_input_get_ok_not_paid"
     return "unknown_route_kind"
 
 
@@ -303,7 +320,7 @@ def audit(timeout: int = 6, opener=None) -> dict:
         "checkout_script_policy_categories": checkout_script_policies,
         "pages_checked": len(result),
         "required_skus": list(SKUS),
-        "guest_email_policy_expected": "email_not_collected",
+        "guest_email_policy_expected": "valid_buyer_email_required",
         "payment_or_invoice_posts_performed": False,
         "payments_sent": False,
         "customer_data_read": False,
@@ -322,11 +339,11 @@ def main(argv=None) -> int:
     print("MPW_ONEPASS_PUBLIC_READONLY=" + json.dumps(
         result, sort_keys=True, separators=(",", ":")))
     statuses = tuple(result["observed_routes"].values())
-    # Any missing observation, bad form, legacy email gate, timeout or
-    # static fallback is an INCOMPLETE public preflight. Do not let network
-    # isolation (or an HTTP 200 alone) produce a green commercial gate.
+    # A missing/optional/disabled/spoofed email field, timeout or static
+    # fallback is an INCOMPLETE preflight. Browser GET does not prove that
+    # invoice POST validates or stores the email, nor any settled sale.
     allowed = {"store_public_get_ok_not_sale", "detail_public_get_ok_not_sale",
-               "no_email_checkout_get_ok_not_paid"}
+               "buyer_email_input_get_ok_not_paid"}
     return 0 if statuses and all(status in allowed for status in statuses) else 2
 
 

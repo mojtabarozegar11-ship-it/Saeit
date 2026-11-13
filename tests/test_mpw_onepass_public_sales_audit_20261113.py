@@ -23,13 +23,28 @@ class AuditTests(unittest.TestCase):
     def test_no_email_checkout_get_not_payment(self):
         self.assertEqual(
             MOD.classify_html("checkout", 72, checkout(72)),
-            "no_email_checkout_get_ok_not_paid")
+            "buyer_email_input_unverified")
 
-    def test_email_form_is_explicit_mismatch(self):
+    def test_required_buyer_email_field_is_seen_but_not_server_verified(self):
         self.assertEqual(
             MOD.classify_html("checkout", 72,
                 checkout(72, '<input type="email" name="email" required>')),
-            "legacy_email_requested")
+            "buyer_email_input_get_ok_not_paid")
+
+    def test_optional_disabled_and_spoofed_buyer_email_fields_are_rejected(self):
+        for html_field in (
+            '<input type="email" name="email">',
+            '<input type="email" name="email" required disabled>',
+            '<input type="email" name="email" required readonly>',
+            '<input type="text" name="email" required>',
+            '<input type="email" name="contact" required>',
+            '<input type="email" name="email" required>'
+            '<input type="email" name="buyer_email" required>',
+        ):
+            with self.subTest(field=html_field):
+                self.assertEqual(
+                    MOD.classify_html("checkout", 72, checkout(72, html_field)),
+                    "buyer_email_input_unverified")
 
     def test_wrong_product_post_action_fails(self):
         self.assertEqual(
@@ -200,7 +215,7 @@ class AuditTests(unittest.TestCase):
     def test_unrelated_get_search_form_is_not_checkout_post(self):
         html = checkout(72) + '<form method="GET" action="/search/">Search</form>'
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_wrong_sku_rejected_before_form_lookup(self):
         self.assertEqual(MOD.classify_html("checkout", 779, checkout(72)),
@@ -253,7 +268,7 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(client.last_method, "GET")
         self.assertEqual(status, "checkout_csp_missing")
         self.assertEqual(forms["/store/product/72/checkout/"],
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_weak_csrf_rejected(self):
         html = checkout(72).replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "tiny")
@@ -268,7 +283,7 @@ class AuditTests(unittest.TestCase):
     def test_valid_32_character_csrf_token(self):
         html = checkout(72).replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Z" * 32)
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_disabled_csrf_rejected(self):
         html = checkout(72).replace('name="csrfmiddlewaretoken"',
@@ -300,27 +315,27 @@ class AuditTests(unittest.TestCase):
         html = checkout(72).replace('<button type="submit">Create TRX invoice</button>',
                                     '<input type="submit" value="Start order">')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_button_default_type_submit_accepted(self):
         html = checkout(72).replace('type="submit">', '>')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_email_alias_id_detected(self):
         html = checkout(72, '<input id="mpw-buy-email" name="contact">')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "legacy_email_requested")
+                         "buyer_email_input_unverified")
 
     def test_email_autocomplete_detected(self):
         html = checkout(72, '<input name="contact" autocomplete="email">')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "legacy_email_requested")
+                         "buyer_email_input_unverified")
 
     def test_email_textarea_detected(self):
         html = checkout(72, '<textarea name="buyer_email"></textarea>')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "legacy_email_requested")
+                         "buyer_email_input_unverified")
 
     def test_duplicate_form_method_rejected(self):
         html = checkout(72).replace('method="post"', 'method="post" method="get"')
@@ -432,9 +447,9 @@ class AuditTests(unittest.TestCase):
             "Content-Security-Policy":
                 "script-src 'none'; form-action 'self'; frame-ancestors 'none'",
             "Cache-Control": "no-store"})
-        self.assertEqual(status, "no_email_checkout_get_ok_not_paid")
+        self.assertEqual(status, "buyer_email_input_unverified")
         self.assertEqual(forms["/store/product/72/checkout/"],
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
 
     def test_large_html_body_fails_without_parsing(self):
         status, forms = self._fake_observe(b"x" * (MOD.MAX_BODY + 1))
@@ -514,7 +529,7 @@ class AuditTests(unittest.TestCase):
                             5, FakeOpener(), form, policies)
         self.assertEqual(state, "checkout_csp_scripts_unverified")
         self.assertEqual(form["/store/product/72/checkout/"],
-                         "no_email_checkout_get_ok_not_paid")
+                         "buyer_email_input_unverified")
         self.assertEqual(policies["/store/product/72/checkout/"],
                          "script_self_only")
 
