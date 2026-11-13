@@ -64,3 +64,7 @@ The three signed cyber actions now map to the internal `cyber_security` lane in 
 - حضور هم‌زمان شناسهٔ canonical و شناسه‌های اقتصادی/کارخانه‌ای قدیمی در انتخاب runtime متوقف می‌شود.
 - افزایش عمق اجرای ترتیبی از ۱ به ۲۰ فقط با دست‌کم دو اقدام جدید، مستند و دارای تنوع پذیرفته می‌شود؛ این تغییر خودبه‌خود مجوز هزینه، استقرار یا معامله نیست.
 - **این فقط Commit کد است:** هنوز آزمون، اجرا روی VPS، مهاجرت وضعیت و استقرار انجام نشده است.
+
+## Identity and replay execution guards
+
+The existing `core.unified_bot_identity` now exposes a single-executor assertion across `mojtaba-bot-ai`, `economic-master-agent` and `moj_1ro_1`. It is called before a task is claimed and again before an authorized tool executes, so overlapping active Django executor rows refuse work rather than operating in parallel. Stale-running legacy executor tasks no longer auto-requeue without reconciliation, preventing accidental duplicate side effects. This is an in-process/DB-row gate, **not** evidence of a singleton across unknown VPS cron/systemd or PHP workers.

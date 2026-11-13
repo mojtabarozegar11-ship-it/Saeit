@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from .agent_registry import AgentRegistry, RISK_ORDER
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import Agent, AgentTask, ApprovalRequest, AuditLog
+from .unified_bot_identity import assert_single_executor
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
 
@@ -80,6 +81,9 @@ class ToolGateway:
 
         if not task.agent.active:
             raise ToolGatewayError("Task agent is inactive")
+        # The task may have been claimed before a legacy scheduler appeared.
+        # Re-read identities before any handler can produce side effects.
+        assert_single_executor(Agent, task.agent.code)
         if spec.required_agent_code and task.agent.code != spec.required_agent_code:
             raise ToolGatewayError("Tool requires canonical agent identity")
         registry = AgentRegistry()

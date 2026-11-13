@@ -6,9 +6,11 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_risk, requires_owner_approval
-from .unified_bot_identity import BOT_CODE
+from .unified_bot_identity import (
+    BOT_CODE, EXECUTOR_RUNTIME_CODES, assert_single_executor,
+)
 
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -30,6 +32,9 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+        # Reject duplicate canonical/legacy executors before claiming a task.
+        # No remote process is started or stopped by this guard.
+        assert_single_executor(Agent, task.agent.code)
 
         # One execution owner across economic and factory lanes of Mojtaba.bot.ai.
         # On row-locking databases select_for_update also locks the joined
@@ -112,7 +117,7 @@ class TaskRuntime:
             task.output_data = {
                 "error": "Execution became stale and retry budget was exhausted"
             }
-        elif task.agent.code == BOT_CODE:
+        elif task.agent.code in EXECUTOR_RUNTIME_CODES:
             # Staleness is not proof of failure: a previous economic action
             # might already have made a private or external change.  Never
             # replay such work until the previous effect has been reconciled.

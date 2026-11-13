@@ -10,6 +10,34 @@ from core.bot_identity import BOT_NAME
 
 LEGACY_EXECUTOR_CODES = ("economic-master-agent", "moj_1ro_1")
 
+# Historical Agent rows must not become simultaneous executable runtimes.
+# Inventorying a row is not authorization to execute it.
+EXECUTOR_RUNTIME_CODES = (BOT_CODE, *LEGACY_EXECUTOR_CODES)
+
+
+def assert_single_executor(agent_model, expected_code):
+    """Refuse a parallel or mismatched canonical/legacy worker identity.
+
+    Called both before a task is claimed and immediately before a handler.
+    This is a database-level safety gate, NOT proof that all host schedulers,
+    cron jobs and external services have been consolidated.
+    """
+    if expected_code not in EXECUTOR_RUNTIME_CODES:
+        return
+    from django.core.exceptions import ImproperlyConfigured
+    active = list(agent_model.objects.filter(
+        active=True, code__in=EXECUTOR_RUNTIME_CODES
+    ).values_list("code", flat=True).order_by("code"))
+    if len(active) != 1:
+        raise ImproperlyConfigured(
+            "MOJTABA_RUNTIME_SINGLETON_REQUIRED"
+        )
+    if active[0] != expected_code:
+        raise ImproperlyConfigured(
+            "MOJTABA_RUNTIME_IDENTITY_MISMATCH"
+        )
+
+
 ECONOMIC_CAPABILITY_PREFIX = "income_"
 ECONOMIC_SPECIAL_CAPABILITIES = frozenset({"master_self_improvement"})
 FACTORY_CAPABILITIES = frozenset({
