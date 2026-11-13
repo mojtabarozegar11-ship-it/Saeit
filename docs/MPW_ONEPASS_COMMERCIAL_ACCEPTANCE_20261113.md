@@ -250,3 +250,53 @@ Passing isolated code tests is not a substitute for these observations.
 **257/257 passing** across public observer, provenance, guest source,
 telemetry, dynamic cutover, source-only cPanel and bridge safety. Two
 additional independent identity/route scripts passed.
+
+## Cycle 8 — verified transport diagnosis and safe host-name remediation
+
+A real, owner-triggered **read-only** Passenger diagnosis was launched by
+the exact known Issue #1600 command. [GitHub-hosted run 43454715777](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43454715777)
+verified the *pinned host keys*, but 5 VPS-proxied SSH attempts failed at
+banner exchange and a direct cPanel attempt to the hardcoded
+`178.239.147.125:1396` timed out. **It did not execute the remote source
+inspector or touch the site.** Do not interpret this transport failure as
+a payment, Django or data corruption finding.
+
+The existing, previously successful *self-hosted factory-VPS* cPanel
+authentication job was safely re-run without any write operations:
+[run 43157969516, rerun job 131988664973](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43157969516).
+It returned `CPANEL_SSH_AUTH_OK=1`, reported the expected cPanel host name
+`zohal.pws-dns.net` and a connection address of
+`178.239.147.124:1396`. The prior hardcoded `178.239.147.125`
+address is therefore an evidence-backed **likely transport mismatch**,
+not an authoritative current destination. The host key fingerprint is
+still independently pinned and is not disabled or replaced.
+
+PR #2263 now updates the cPanel SSH bridge in
+`deploy/cpanel_direct_command.sh` (both pinned hop configurations) and
+the existing issue-comment Passenger read-only workflow to use the
+**verified DNS hostname** instead of the stale fixed IP. The same
+ED25519 fingerprint, batch mode, strict known-host verification, original
+VPS identity and no-forward-agent configuration remain in place.
+The changes are only in the Draft branch, **not on main or cPanel**.
+
+A separate control of cPanel template source now parses **real HTML
+form fields**, rather than matching the word `email` in CSS or comments.
+It also counts forms safely and distinguishes unreadable templates and
+orphaned old labels. Seven new tests cover this behavior. Three
+additional transport tests verify the authenticated hostname and pinning
+are preserved. Combined [PR run 43456056199](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43456056199)
+confirmed **267/267 isolated tests pass** and both standalone guest
+identity/route checks pass.
+
+### Remaining release blockers
+
+The **actual cPanel source hash and effective Django template were not
+read** in this cycle. The new source-provenance bridge option still
+requires reviewed owner-approved availability on main and a separate
+explicit manual read-only invocation. The public checkout still
+collects email, the fallback is static and the strict CSP release target
+is unverified. Real TRX settlement, buyer entitlement, authenticated
+download and collected revenue are **unknown**.
+
+Release remains **NO-GO**. No live merge, cPanel deployment/restart,
+customer invoice, payment, email or paid tool invocation occurred.
