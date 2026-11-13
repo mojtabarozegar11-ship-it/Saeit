@@ -42,6 +42,15 @@ class TestSettlement(unittest.TestCase):
     def test_missing_unpaid_order_amount_rejected(self):
         self.data["orders"].append({"id":"unpaid","status":"pending","delivery_confirmed":False})
         self.assertRaises(ValueError,reconcile,self.data)
+    def test_mismatched_currency_rejected_in_all_record_types(self):
+        for key in ("orders", "settlements", "refunds"):
+            with self.subTest(key=key):
+                self.data[key][0]["currency"] = "EUR"
+                self.assertRaises(ValueError, reconcile, self.data)
+                self.data[key][0].pop("currency")
+    def test_matching_currency_case_insensitive(self):
+        self.data["settlements"][0]["currency"] = "usd"
+        self.assertEqual(reconcile(self.data)["net_settled_unverified"], "25.00")
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
