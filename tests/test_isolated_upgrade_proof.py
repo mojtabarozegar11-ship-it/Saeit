@@ -130,6 +130,71 @@ class IsolatedProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "PERMISSIONS_UNSAFE"):
             inspect_isolated_proof(self.path)
 
+    def _stage_sources_from_manifest(self):
+        root = self.path.parent / "staged-source"
+        for entry in valid_dossier()["module_sha256_inventory"]:
+            source = root / entry["path"]
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(entry["path"], encoding="utf-8")
+        return root
+
+    def test_verified_source_snapshot_hashes_match_manifest(self):
+        root = self._stage_sources_from_manifest()
+        result = inspect_isolated_proof(self.path, source_root=root)
+        self.assertEqual(result["source_files_hash_verified"], 4)
+        self.assertEqual(result["source_manifest_entries_checked"], 4)
+        self.assertEqual(result["source_verification_scope"],
+                         "staged_source_snapshot_hashes_only")
+
+    def test_rejects_source_modified_after_proof_was_generated(self):
+        root = self._stage_sources_from_manifest()
+        source = root / valid_dossier()["module_sha256_inventory"][0]["path"]
+        contents = source.read_text(encoding="utf-8")
+        source.write_text("x" * len(contents), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "SOURCE_HASH_MISMATCH"):
+            inspect_isolated_proof(self.path, source_root=root)
+
+    def test_rejects_missing_staged_source(self):
+        root = self._stage_sources_from_manifest()
+        source = root / valid_dossier()["module_sha256_inventory"][0]["path"]
+        source.unlink()
+        with self.assertRaisesRegex(ValueError, "SOURCE_FILE_MISSING"):
+            inspect_isolated_proof(self.path, source_root=root)
+
+    def test_rejects_staged_source_path_symlink(self):
+        root = self._stage_sources_from_manifest()
+        alias = self.path.parent / "source-alias"
+        alias.symlink_to(root, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "SOURCE_ROOT_UNSAFE"):
+            inspect_isolated_proof(self.path, source_root=alias)
+
+    def test_rejects_non_allowlisted_repair_even_if_manifest_is_consistent(self):
+        proof = valid_dossier()
+        unexpected = "scripts/factory_unreviewed_module.py"
+        old = proof["already_protected_source_modules"][0]["path"]
+        proof["already_protected_source_modules"][0]["path"] = unexpected
+        for item in proof["module_sha256_inventory"]:
+            if item["path"] == old:
+                item["path"] = unexpected
+        self._write(proof)
+        with self.assertRaisesRegex(ValueError, "REPAIR_ALLOWLIST_MISMATCH"):
+            inspect_isolated_proof(self.path)
+
+    def test_rejects_zero_repair_false_success_dossier(self):
+        proof = valid_dossier()
+        proof.update({
+            "factory_python_files_scanned": 0,
+            "module_sha256_inventory": [],
+            "candidate_count": 0,
+            "preexisting_verified_repairs": 0,
+            "validated_repair_rule_coverage": 0,
+            "modules_without_proven_repair": 0,
+            "already_protected_source_modules": [],
+        })
+        self._write(proof)
+        with self.assertRaisesRegex(ValueError, "REPAIR_ALLOWLIST_MISMATCH"):
+            inspect_isolated_proof(self.path)
+
     def test_rejects_stale_dossier(self):
         expired = time.time() - 49 * 3600
         os.utime(self.path, (expired, expired))
