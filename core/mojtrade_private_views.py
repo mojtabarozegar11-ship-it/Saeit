@@ -3,15 +3,19 @@
 No broker operations, scheduler, trading, email, SMS, payment or public signal
 publication. This endpoint never upgrades a watch classification to an order.
 """
+import json
+
 from django.db import DatabaseError
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_vary_headers
 
 from core.chat_operation_security import is_authorized_chat_operator
 from core.management.commands.mojtrade_market_watch_export import fresh_canonical_drafts
 from core.mojtrade_signal_drafts import MarketWatchDraftError
+from core.mojtrade_demo_signal import DemoSignalPlanError, plan_private_demo_signal
 from core.mojtrade_readiness import trading_readiness_report
 from core.financial_brand_pages import BRANDS
 
@@ -135,3 +139,48 @@ def owner_private_mojtrade_brand_preview(request, brand, locale):
         "orders": 0,
         "revenue_verified": False,
     }, status=200)
+
+
+
+def _reject_duplicate_json_keys(pairs):
+    parsed = {}
+    for key, value in pairs:
+        if key in parsed:
+            raise DemoSignalPlanError("duplicate_input_field")
+        parsed[key] = value
+    return parsed
+
+
+@never_cache
+@csrf_protect
+@require_POST
+def owner_private_mojtrade_gold_signal_plan(request):
+    """Read-only calculation for one XAUUSD H1 DEMO candidate, not a trade.
+
+    This endpoint does not store an order, create AgentTask work, access a
+    broker, publish a signal, charge a client or authorize execution. Supplied
+    prices are UNVERIFIED; the output must never enter the execution adapter.
+    """
+    if not is_authorized_chat_operator(request.user):
+        return private_response({"detail": "owner_access_required"}, status=403)
+    if request.content_type != "application/json":
+        return private_response({"detail": "json_only"}, status=415)
+    try:
+        raw = request.body
+        if not 0 < len(raw) <= 128_000:
+            return private_response({"detail": "request_size_invalid"}, status=413)
+        source = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+            parse_constant=lambda _: (_ for _ in ()).throw(
+                DemoSignalPlanError("nonfinite_json_number")
+            ),
+        )
+        proposal = plan_private_demo_signal(source)
+    except (UnicodeError, json.JSONDecodeError, DemoSignalPlanError, ValueError, TypeError):
+        return private_response({
+            "detail": "private_demo_signal_input_rejected",
+            "publication_authorized": False,
+            "trade_execution_authorized": False,
+        }, status=422)
+    return private_response(proposal, status=200)
