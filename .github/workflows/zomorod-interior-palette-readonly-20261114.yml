@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'scripts/zomorod_interior_background_palette_readonly_20261114.cjs'
+      - 'scripts/zomorod_interior_olive_rehearsal_20261114.cjs'
+      - 'tests/test_zomorod_interior_olive_source_20261114.py'
+      - 'public/tala/index.html'
+      - 'public/amozeshgah/index.html'
       - '.github/workflows/zomorod-interior-palette-readonly-20261114.yml'
 permissions:
   contents: read
@@ -20,6 +24,16 @@ jobs:
           set -euo pipefail
           npm --silent install --no-save playwright@1.55.0
           npx playwright install chromium
+      - name: Regression tests for existing page structures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_interior_olive_source_20261114.py' -v
+      - name: Simulate uniform olive CSS in browser ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/zomorod_interior_olive_rehearsal_20261114.cjs
       - name: Measure existing live secondary-page background and full-width bands
         shell: bash
         run: |
@@ -30,6 +44,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zm-live-interior-olive-palette-readonly
-          path: ${{ runner.temp }}/zm-interior-olive-palette-readonly/
+          path: |
+            ${{ runner.temp }}/zm-interior-olive-palette-readonly/
+            ${{ runner.temp }}/zm-interior-palette-rehearsal/
           retention-days: 7
           if-no-files-found: warn
