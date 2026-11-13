@@ -73,5 +73,21 @@ class ExistingInteriorOliveBackground(unittest.TestCase):
         self.assertNotIn('zm-interior-olive-palette-readonly', homepage)
 
 
+    def test_existing_v7_inner_shell_does_not_override_homepage(self):
+        s = (ROOT / "content/zomorod-v7/inner-v7.css").read_text(encoding="utf8")
+        for marker in (
+            ":root{--zm7-bg:#252b19;",
+            "body.zm-unified-v7{background:var(--zm7-bg)!important;",
+            ".zm-v7-header{isolation:isolate;position:sticky;top:0;z-index:500;background:var(--zm7-bg);",
+            "body.zm-unified-v7 :is(.zm-hero,.zm-narrative,.zm-next,.hero,.section,.frame){background:var(--zm7-bg)!important;",
+            ".zm-v7-footer{background:var(--zm7-bg);",
+        ):
+            with self.subTest(selector=marker):
+                self.assertIn(marker, s)
+        self.assertNotIn('body.zm-vision-v3{background:', s)
+        self.assertIn('border-bottom:3px double #e5c374', s)
+        self.assertIn('border-top:4px solid #d7b767', s)
+
+
 if __name__ == "__main__":
     unittest.main()
