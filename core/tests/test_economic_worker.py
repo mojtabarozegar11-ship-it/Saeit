@@ -27,6 +27,35 @@ def test_worker_executes_first_self_improvement_task_with_verified_evidence(monk
     assert task.output_data["production_promotion"] is False
 
 
+def test_master_self_improvement_rejects_invalid_dossier_in_primary_runtime(monkeypatch, tmp_path):
+    """No task can claim verified effect if the candidate dossier fails inspection."""
+    from core import isolated_upgrade_proof
+    from core.economic_tool_pack import master_self_improvement
+
+    monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    def reject_tampered_candidate(_path):
+        raise ValueError("ISOLATED_UPGRADE_PROOF_CANDIDATE_HASH_MISMATCH")
+
+    monkeypatch.setattr(isolated_upgrade_proof, "inspect_isolated_proof",
+                        reject_tampered_candidate)
+    with pytest.raises(ValueError, match="CANDIDATE_HASH_MISMATCH"):
+        master_self_improvement({})
+
+
+def test_master_self_improvement_has_verified_manifest_but_no_live_promotion(monkeypatch, tmp_path):
+    from core.economic_tool_pack import master_self_improvement
+
+    monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = master_self_improvement({})
+    assert result["verified_effect"] is True
+    assert result["production_promotion"] is False
+    assert "proof_sha256" in result["evidence"]["value"]
+    assert "candidate_artifacts_hash_verified" in result["evidence"]["value"]
+
+
 @pytest.mark.django_db
 def test_cycle_advances_from_self_improvement_to_verified_market_research(monkeypatch):
     monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
