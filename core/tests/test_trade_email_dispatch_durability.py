@@ -88,7 +88,7 @@ def test_provider_exception_does_not_roll_back_one_shot_reservation(ready_email)
     smtp_again.assert_not_called()
 
 
-@override_settings(TRADE_EMAIL_ENABLED=True)
+@override_settings(TRADE_EMAIL_ENABLED=True, COMPANY_TRADE_EMAIL="company@example.test")
 def test_zero_provider_confirmation_is_not_reported_as_sent(ready_email):
     outbox, grant = ready_email
     with patch("core.economic_trade_email.EmailMessage.send", return_value=0):
@@ -144,3 +144,30 @@ def test_provider_ambiguous_return_stays_unknown_and_never_requeues(ready_email)
     assert result.status == "delivery_unknown"
     assert ApprovalGrant.objects.get(pk=grant.pk).used_at is not None
     assert TradeEmailOutbox.objects.get(pk=outbox.pk).status == "delivery_unknown"
+
+@override_settings(TRADE_EMAIL_ENABLED=True, COMPANY_TRADE_EMAIL="")
+def test_bridge_requires_configured_sender_and_preserves_one_shot_grant(ready_email):
+    outbox, grant = ready_email
+    with patch("core.economic_trade_email.EmailMessage.send") as smtp:
+        with pytest.raises(RuntimeError, match="not configured"):
+            execute_one_authorized_outbox(grant_id=grant.pk)
+    smtp.assert_not_called()
+    grant.refresh_from_db()
+    outbox.refresh_from_db()
+    assert grant.used_at is None
+    assert outbox.status == "queued"
+
+
+@override_settings(TRADE_EMAIL_ENABLED=True, COMPANY_TRADE_EMAIL="company@example.test")
+def test_bridge_requires_active_mailbox_and_does_not_consume_grant(ready_email):
+    outbox, grant = ready_email
+    outbox.mailbox.allow_outbound = False
+    outbox.mailbox.save(update_fields=["allow_outbound"])
+    with patch("core.economic_trade_email.EmailMessage.send") as smtp:
+        with pytest.raises(RuntimeError, match="outbound policy is disabled"):
+            execute_one_authorized_outbox(grant_id=grant.pk)
+    smtp.assert_not_called()
+    grant.refresh_from_db()
+    outbox.refresh_from_db()
+    assert grant.used_at is None
+    assert outbox.status == "queued"

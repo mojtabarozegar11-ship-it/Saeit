@@ -38,7 +38,7 @@ class EconomicTradeEmailTests(TestCase):
         with self.assertRaisesRegex(RuntimeError, "requires an exact owner grant"):
             send_queued_trade_email(outbox.pk)
 
-    def test_non_queued_item_cannot_be_sent_again(self):
+    def test_terminal_item_without_grant_cannot_be_sent_again(self):
         outbox = queue_trade_email(
             recipient="supplier@example.cn",
             subject="Already handled",
@@ -46,9 +46,14 @@ class EconomicTradeEmailTests(TestCase):
         )
         outbox.status = "sent"
         outbox.save(update_fields=["status"])
+        # The mandatory grant check deliberately precedes reading message
+        # state. This test checks the direct, unauthorised entrypoint; the
+        # transactional sender tests cover terminal status with a valid grant.
         with override_settings(TRADE_EMAIL_ENABLED=True):
-            with self.assertRaisesRegex(RuntimeError, "not queued"):
+            with self.assertRaisesRegex(RuntimeError, "requires an exact owner grant"):
                 send_queued_trade_email(outbox.pk)
+        outbox.refresh_from_db()
+        self.assertEqual(outbox.status, "sent")
 
     def test_status_does_not_expose_credentials(self):
         status = mailbox_status()
