@@ -390,3 +390,65 @@ def test_invalid_signed_scope_fails_without_completed_task(cyber_planning):
     assert not AuditLog.objects.filter(
         target_id=str(task.pk), action="tool_invocation_completed",
     ).exists()
+
+
+def test_cyber_core_alias_cannot_route_to_other_agent(cyber_planning):
+    project, _ = cyber_planning
+    outsider = Agent.objects.create(
+        code="parallel-cyber-agent", name="Unapproved identity",
+        mission="Should not receive any cyber task", risk_level="low", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="core_cyber_evidence_review", name="Forbidden alias",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(outsider)
+    assert AgentRegistry().resolve("core_cyber_evidence_review") is None
+    assert AgentRegistry().capability_for(outsider, "core_cyber_evidence_review") is None
+    with pytest.raises(RuntimeError, match="No active agent"):
+        _plan_cyber(project, "core_cyber_evidence_review")
+    assert AgentTask.objects.count() == 0
+
+
+def test_unknown_cyber_namespace_cannot_be_self_registered(cyber_planning):
+    project, canonical = cyber_planning
+    cap = AgentCapability.objects.create(
+        code="cyber_unreviewed_new_action", name="Unreviewed cyber action",
+        risk_level="medium", active=True,
+    )
+    cap.agents.add(canonical)
+    assert AgentRegistry().resolve("cyber_unreviewed_new_action") is None
+    assert AgentRegistry().capability_for(canonical, "cyber_unreviewed_new_action") is None
+    with pytest.raises(RuntimeError, match="No active agent"):
+        _plan_cyber(project, "cyber_unreviewed_new_action")
+    assert AgentTask.objects.count() == 0
+
+
+def test_cyber_noncanonical_claim_using_core_alias_is_denied(cyber_planning):
+    project, _ = cyber_planning
+    outsider = Agent.objects.create(
+        code="parallel-cyber-agent", name="Unapproved identity",
+        mission="Must not claim", risk_level="low", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="core_cyber_evidence_review", name="Unapproved alias",
+        risk_level="medium", active=True,
+    )
+    cap.agents.add(outsider)
+    task = AgentTask.objects.create(
+        agent=outsider, project=project,
+        action_type="core_cyber_evidence_review",
+        capability_code="core_cyber_evidence_review", risk_snapshot="medium",
+        status="queued",
+    )
+    with pytest.raises(TaskExecutionError, match="no longer has"):
+        TaskRuntime().claim(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+
+
+def test_cyber_canonical_original_actions_still_route(cyber_planning):
+    _, canonical = cyber_planning
+    for action in TOOL_ACTIONS:
+        assert AgentRegistry().resolve(action).pk == canonical.pk
+        assert AgentRegistry().capability_for(canonical, action).code == action
