@@ -229,3 +229,164 @@ def test_no_unneeded_authorization_details_leak_to_audit(canonical_task):
     logs = list(AuditLog.objects.filter(target_id=str(canonical_task.pk)))
     assert logs
     assert not any(grant["signature"] in json.dumps(log.after_state) for log in logs)
+
+
+# Full, database-backed lifecycle proves the cyber module can reuse the
+# EXISTING MasterAgent/TaskRuntime/WorkerRunner and doesn't need a second worker.
+from django.contrib.auth import get_user_model
+from core.models import ResearchProject
+from core.orchestrator import MasterAgent
+from core.agent_registry import AgentRegistry
+from core.task_runtime import TaskExecutionError, TaskRuntime
+from core.worker_runner import WorkerRunner
+
+
+@pytest.fixture
+def cyber_planning(db):
+    owner = get_user_model().objects.create_user(
+        username="cyber-planning-owner", password="unused-local-test-only",
+    )
+    project = ResearchProject.objects.create(
+        title="Cyber review fixture", objective="Authorized offline evidence",
+        owner=owner,
+    )
+    canonical = Agent.objects.create(
+        code=CANONICAL_AGENT_CODE,
+        name="Mojtaba.bot.ai", mission="One canonical runtime",
+        active=True, risk_level="medium",
+    )
+    for action in TOOL_ACTIONS:
+        AgentCapability.objects.create(
+            code=action, name=action, risk_level="medium", active=True,
+        ).agents.add(canonical)
+    return project, canonical
+
+
+def _plan_cyber(project, action="cyber_evidence_review", payload=None):
+    if payload is None:
+        payload = {"engagement": signed_manifest(), "evidence": cyber_evidence()}
+    return MasterAgent().plan(project, action, payload, risk="medium")
+
+
+def test_full_canonical_lifecycle_from_planning_to_audit(cyber_planning):
+    project, canonical = cyber_planning
+    initial_agents = Agent.objects.count()
+    task = _plan_cyber(project)
+    assert task.status == "queued"
+    assert task.agent_id == canonical.pk
+    assert task.risk_snapshot == "medium"
+    gateway = ToolGateway(build_cyber_gateway_tools(KEY, enable_offline=True))
+    result = WorkerRunner(gateway).run(task.pk)
+    assert result.status == "completed"
+    assert result.output_data["bot_id"] == "mojtaba.bot.ai"
+    assert result.output_data["counts"]["medium"] == 1
+    assert str(result.cost) == "0.0000"
+    assert Agent.objects.count() == initial_agents
+    events = set(AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(task.pk),
+    ).values_list("action", flat=True))
+    assert {"task_claimed", "tool_invocation_started",
+            "tool_invocation_completed", "task_completed"}.issubset(events)
+
+
+@pytest.mark.parametrize("action,field,fixture,expected", [
+    ("cyber_origin_defense", "traffic", origin_evidence, "origin_defense"),
+    ("cyber_incident_response", "incident", incident_evidence, "incident_response"),
+])
+def test_nested_cyber_workflows_use_same_worker(
+    cyber_planning, action, field, fixture, expected,
+):
+    project, canonical = cyber_planning
+    task = _plan_cyber(project, action, {
+        "engagement": signed_manifest(), field: fixture(),
+    })
+    output = WorkerRunner(
+        ToolGateway(build_cyber_gateway_tools(KEY, enable_offline=True))
+    ).run(task.pk).output_data
+    assert task.agent_id == canonical.pk
+    assert output["submodule_id"] == expected
+    assert output["bot_id"] == "mojtaba.bot.ai"
+
+
+def test_agent_selection_ignores_noncanonical_lower_risk_peer(cyber_planning):
+    project, canonical = cyber_planning
+    peer = Agent.objects.create(
+        code="independent-security-bot", name="Forbidden parallel agent",
+        mission="Must not receive cyber task", active=True, risk_level="low",
+    )
+    for action in TOOL_ACTIONS:
+        AgentCapability.objects.get(code=action).agents.add(peer)
+    task = _plan_cyber(project)
+    assert task.agent_id == canonical.pk
+    assert AgentRegistry().capability_for(peer, "cyber_evidence_review") is None
+
+
+def test_no_canonical_agent_means_no_task_instead_of_rogue_dispatch(
+    cyber_planning,
+):
+    project, canonical = cyber_planning
+    peer = Agent.objects.create(
+        code="independent-security-bot", name="Forbidden parallel agent",
+        mission="Do not dispatch", active=True, risk_level="low",
+    )
+    AgentCapability.objects.get(
+        code="cyber_evidence_review"
+    ).agents.add(peer)
+    canonical.active = False
+    canonical.save(update_fields=["active"])
+    with pytest.raises(RuntimeError, match="No active agent"):
+        _plan_cyber(project)
+    assert AgentTask.objects.count() == 0
+
+
+def test_noncanonical_queued_task_cannot_be_claimed(cyber_planning):
+    project, _ = cyber_planning
+    peer = Agent.objects.create(
+        code="independent-security-bot", name="Peer fixture",
+        mission="Wrong actor", active=True, risk_level="low",
+    )
+    AgentCapability.objects.get(
+        code="cyber_evidence_review"
+    ).agents.add(peer)
+    forged = AgentTask.objects.create(
+        agent=peer, project=project, action_type="cyber_evidence_review",
+        capability_code="cyber_evidence_review", risk_snapshot="medium",
+        status="queued", input_data={
+            "engagement": signed_manifest(), "evidence": cyber_evidence(),
+        },
+    )
+    with pytest.raises(TaskExecutionError, match="no longer has"):
+        TaskRuntime().claim(forged.pk)
+    forged.refresh_from_db()
+    assert forged.status == "queued"
+
+
+def test_automated_worker_remains_off_when_not_approved(cyber_planning):
+    project, _ = cyber_planning
+    task = _plan_cyber(project)
+    disabled = ToolGateway(build_cyber_gateway_tools(KEY))
+    with pytest.raises(ToolGatewayError, match="disabled"):
+        WorkerRunner(disabled).run(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert not AuditLog.objects.filter(
+        target_id=str(task.pk), action="tool_invocation_completed",
+    ).exists()
+
+
+def test_invalid_signed_scope_fails_without_completed_task(cyber_planning):
+    project, _ = cyber_planning
+    forged = signed_manifest()
+    forged["allowed_assets"] = ["wrong.example.com"]
+    task = _plan_cyber(project, payload={
+        "engagement": forged, "evidence": cyber_evidence(),
+    })
+    with pytest.raises(CyberModuleError, match="SIGNATURE_INVALID"):
+        WorkerRunner(
+            ToolGateway(build_cyber_gateway_tools(KEY, enable_offline=True))
+        ).run(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert not AuditLog.objects.filter(
+        target_id=str(task.pk), action="tool_invocation_completed",
+    ).exists()
