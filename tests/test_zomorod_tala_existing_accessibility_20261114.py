@@ -58,7 +58,7 @@ class TalaSourceAccessibility(unittest.TestCase):
         self.assertEqual(self.dom.headers.count("h4"), 0)
         for heading in ("اکتشاف", "خدمات", "شبکه‌ها"):
             self.assertEqual(self.source.count("<h3>" + heading + "</h3>"), 1)
-        self.assertIn(".footgrid h3{font-size:12px;font-weight:500;color:var(--gold)}",
+        self.assertIn(".footgrid h3{font-size:12px;font-weight:500;color:var(--gold);margin-block:1.33em}",
                       self.source)
 
     def test_top_info_and_daily_note_are_semantically_not_nested_landmarks(self):
