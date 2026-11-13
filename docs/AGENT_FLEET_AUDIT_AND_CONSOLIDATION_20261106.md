@@ -122,3 +122,42 @@ stop VPS/cPanel processes, edit remote cron jobs, disable external accounts,
 or delete files on live hosts. A successful offline test does NOT mean the
 completion gates above have been met. Live consolidation percentage remains
 **unknown**, never 100% by inference.
+
+
+## 2026-11-13: legacy running-task and recovery lifecycle containment
+
+The earlier source change stopped **new** task claims by noncanonical
+agents and blocked their ToolGateway calls, but a previously running task
+could still be heartbeated or directly marked complete, and a failed or
+stale legacy task could automatically return to the queue. Those paths
+undermine the "one bot" requirement and risk duplicate external effects.
+
+**The source runtime now fails closed at all four lifecycle boundaries:**
+
+- `claim()`: noncanonical queued tasks cannot receive an execution token.
+- `heartbeat()`: old execution tokens cannot prolong an independent
+  runtime; task status/timestamp are left unchanged.
+- `complete()`: old worker callbacks cannot mark work complete after
+  cutover, even with a matching old token. No cost or success receipt is
+  recorded through this path.
+- `fail()` and `recover_stale()`: **all** tasks, including old-agent
+  work, become `blocked`, not `queued` or automatically `failed`.
+  Original owner, prior execution token, attempt budget and audit history
+  are retained. Old-agent outputs explicitly identify
+  `legacy_agent_code`, `migration_target=mojtaba-bot-ai`,
+  `requires_review=true` and `automatic_replay_allowed=false`.
+
+The general recovery scheduler may now safely inventory historical stale
+tasks because recovering them quarantines rather than re-dispatches.
+Repeated stale recovery is rejected after the first transition to
+`blocked`; nothing is duplicated. The CI now exercises the management
+command and direct TaskRuntime callback paths.
+
+**This deliberately DOES NOT** stop old systemd processes, cron entries,
+cPanel jobs or broker terminals on VPS, change already published external
+effects, or migrate old pending work without a verified receipt. It is a
+source-level cutover barrier; real runtime closure requires inspecting and
+disabling every external launcher, then reconciling queued, running and
+blocked tasks to the sole canonical Agent. The PR remains Draft until
+those facts are confirmed. No file, historic task, approval or financial
+record should be deleted to fake a zero-legacy count.
