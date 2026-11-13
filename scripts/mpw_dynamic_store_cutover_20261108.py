@@ -377,7 +377,19 @@ def verify_email_free_invoice_sources(app: Path) -> None:
     # name="e&#109;ail" and type="em&#97;il" are browser-equivalent to email.
     # Reject undecodable templates rather than silently accepting a bypass.
     try:
-        markup = unescape(template.read_text("utf-8")).casefold().encode("utf-8")
+        # Decode nested HTML references to a fixed point. A single pass misses
+        # browser-visible fields such as name="e&amp;#109;ail" after entity
+        # decoding in a surrounding template or frontend transformation.
+        markup_text = template.read_text("utf-8")
+        for _ in range(8):
+            decoded = unescape(markup_text)
+            if decoded == markup_text:
+                break
+            markup_text = decoded
+        else:
+            # An adversarially nested encoding must not pass preflight.
+            raise RuntimeError("STAGING_INVOICE_TEMPLATE_ENTITY_DEPTH_REFUSED")
+        markup = markup_text.casefold().encode("utf-8")
     except (UnicodeError, OSError) as exc:
         raise RuntimeError("STAGING_INVOICE_TEMPLATE_UNREADABLE") from exc
     # Attribute values may use single quotes, double quotes or no quotes.
