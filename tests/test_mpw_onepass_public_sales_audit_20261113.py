@@ -71,7 +71,7 @@ class AuditTests(unittest.TestCase):
         html += ('<form method="post" action="/different/">'
                  '<input name="csrfmiddlewaretoken" value="forged"></form>')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
-                         "checkout_csrf_unverified")
+                         "checkout_form_ambiguous")
 
     def test_nested_forms_rejected_before_checkout(self):
         html = ('<html><title>MojPlayWin</title>' + " " * 160
