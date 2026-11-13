@@ -51,3 +51,20 @@ def test_github_csharp_compilation_is_not_removed_or_silently_skipped():
     assert "-p:AlgoPublish=false" in workflow
     assert "-p:AlgoBuild=false" in workflow
     assert "continue-on-error: true" not in workflow
+
+
+
+def test_demo_execution_adapter_enforces_warmup_accountwide_cap_and_utc_loss():
+    code = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+    assert "Math.Max(SlowEmaPeriod + 5, 22)" in code
+    assert "Math.Max(AtrPeriod + 2, RsiPeriod + 2)" in code
+    assert "for (var candle = index - 20; candle < index; candle++)" in code
+    assert code.count("Positions.FindAll(Label)") >= 2
+    assert "Positions.FindAll(Label, SymbolName)" in code
+    assert "position.StopLoss.HasValue || !position.TakeProfit.HasValue" in code
+    assert "Server.Time.Date" in code
+    assert "_dayStartEquity" in code
+    assert "_sessionStartEquity" not in code
+    assert "if (Account.IsLive)" in code
+    assert "Enable Demo Trading\", DefaultValue = false" in code
+    assert "AccessRights = AccessRights.None" in code
