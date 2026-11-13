@@ -798,6 +798,18 @@ class EvolutionTests(unittest.TestCase):
                 mod.evaluate(db, state, check_only=True)
             self.assertFalse(state.exists())
 
+    def test_check_only_never_creates_missing_private_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, _ = self.fixture(temp, ["income_market_research"])
+            nested = Path(temp) / "private" / "missing" / "evolution.json"
+            self.assertFalse(nested.parent.exists())
+            with self.assertRaisesRegex(
+                RuntimeError, "MASTER_EVOLUTION_CHECK_PARENT_NOT_FOUND"
+            ):
+                mod.evaluate(db, nested, check_only=True)
+            self.assertFalse(nested.parent.exists())
+            self.assertFalse(nested.exists())
+
     def test_check_only_refuses_tampered_prior_completion_without_mutation(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
