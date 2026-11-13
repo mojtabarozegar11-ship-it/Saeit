@@ -253,7 +253,7 @@ def inspect(root: Path = ROOT) -> dict:
     # An imported recorder is not a missing invoice implementation: it is
     # outside this limited read-only source scope until inspected separately.
     inspected_recorders = {
-        name.removesuffix(".py").replace("/", ".") + ".record_invoice"
+        name[:-3].replace("/", ".") + ".record_invoice"
         for name in SOURCE_PATHS[:3]
     }
     external_recorder = any(
