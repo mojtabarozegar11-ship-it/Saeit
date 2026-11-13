@@ -34,7 +34,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.template.write_bytes(
             b'<form method="post" action="/commerce/trx-easy/start/72/">'
             b'<input id="mpw-buy-email" name="email" type="email"></form>')
-        self.ht.write_bytes(b"Owner original directives\n" + probe.FALLBACK_BLOCK)
+        self.ht.write_bytes(probe.FALLBACK_BLOCK + b"Owner original directives\n")
         self.wsgi.write_bytes(b"APP='/home/zomorod2/Saeit-staging'\n")
         self.store.write_bytes(b"<html>MPW_STATIC_STORE_FALLBACK_V1</html>\n")
 
@@ -52,7 +52,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
     def test_private_email_field_and_fallback_both_visible(self):
         r = self.inspect()
         self.assertEqual(r["template_disk_source"], "email_field_present")
-        self.assertEqual(r["public_fallback"], "owned_static_fallback_present")
+        self.assertEqual(r["public_fallback"], "owned_static_fallback_rule_on_disk")
         self.assertTrue(r["passenger_stage_source_marker"])
         self.assertFalse(r["effective_django_template_origin_verified"])
 
@@ -114,6 +114,24 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
     def test_duplicate_fallback_is_not_cleared(self):
         self.ht.write_bytes(probe.FALLBACK_BLOCK * 2)
         self.assertEqual(self.inspect()["public_fallback"], "fallback_not_exactly_proven")
+
+    def test_owned_fallback_rule_not_at_start_is_not_sufficient(self):
+        self.ht.write_bytes(b"RewriteRule ^ /another/ [END]\n" +
+                            probe.FALLBACK_BLOCK)
+        self.assertEqual(self.inspect()["public_fallback"],
+                         "fallback_not_exactly_proven")
+
+    def test_missing_fallback_marker_in_index_refuses_exact_source_claim(self):
+        self.store.write_bytes(b"<html>Ordinary static page</html>")
+        self.assertEqual(self.inspect()["public_fallback"],
+                         "fallback_not_exactly_proven")
+
+    def test_fallback_source_claim_does_not_prove_effective_routing(self):
+        report = self.inspect()
+        self.assertEqual(report["public_fallback"],
+                         "owned_static_fallback_rule_on_disk")
+        self.assertFalse(report["production_release_permitted_by_this_report"])
+        self.assertFalse(report["effective_django_template_origin_verified"])
 
     def test_missing_fallback_index_stays_unknown(self):
         self.store.unlink()
