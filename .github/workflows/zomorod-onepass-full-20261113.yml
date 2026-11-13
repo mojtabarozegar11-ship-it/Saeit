@@ -56,7 +56,7 @@ jobs:
           js=Path('content/zomorod-vision-v3/assets/zm-reference-v3.js').read_text()
           css=Path('content/zomorod-vision-v3/assets/zm-reference-v3.css').read_text()
           ar=Path('content/zomorod-vision-v3/ar/index.html').read_text()
-          for s in ('آبان ۱۳۹۸','کلیه حقوق مادی و معنوی محفوظ است','href="/search/"','hreflang="en"','hreflang="ar"','zm-logo-transparent-v1.webp'):
+          for s in ('آبان ۱۳۹۸','کلیه حقوق مادی و معنوی محفوظ است','action="/search/"','hreflang="en"','hreflang="ar"','zm-logo-transparent-v1.webp'):
               assert s in h,s
           assert h.count('data-auto-strip=')==3
           assert h.count('data-rotator-toggle=')==3
