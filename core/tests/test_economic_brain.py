@@ -157,7 +157,7 @@ class VerifiedEconomicCycleTests(TestCase):
             worker.assert_not_called()
         task.refresh_from_db()
         self.assertEqual(task.status, "queued")
-        self.assertIn("AUTONOMOUS_IDLE", output.getvalue())
+        self.assertIn("AUTO_BLOCKED_NO_ACTIVE_CANONICAL_BOT", output.getvalue())
 
     def test_master_loop_reports_unregistered_queued_capability_without_dispatch(self):
         task = AgentTask.objects.create(

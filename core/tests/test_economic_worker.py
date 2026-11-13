@@ -176,7 +176,7 @@ def test_legacy_worker_is_a_single_controlled_dispatcher_and_requires_active_age
     ])
     output = StringIO()
     call_command("economic_worker", limit=3, stdout=output)
-    assert "IDLE: no queued economic task." in output.getvalue()
+    assert "IDLE: no active canonical bot runtime." in output.getvalue()
     assert AgentTask.objects.filter(agent=agent, status="queued").count() == 3
 
     agent.active = True
