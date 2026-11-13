@@ -86,6 +86,8 @@ class ExistingInteriorOliveBackground(unittest.TestCase):
                 self.assertIn(marker, s)
         self.assertNotIn('body.zm-vision-v3{background:', s)
         self.assertIn('border-bottom:3px double #e5c374', s)
+        self.assertIn('box-shadow:none', s)
+        self.assertNotIn('box-shadow:0 12px 30px #08170b77', s)
         self.assertIn('border-top:4px solid #d7b767', s)
 
 
