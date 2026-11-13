@@ -2,7 +2,8 @@
 """Read-only, redacted cTrader CLI account and running-cBot preflight.
 
 This program NEVER launches, stops, modifies, or trades. It only calls the
-documented 'accounts' (batch) and 'cbots' (quick interactive) commands.
+documented 'accounts' (batch), then 'cbots', 'positions' and
+'orders' (quick read-only interactive) commands.
 Production use requires a manually provisioned, owner-approved *DEMO*
 account config. No personal identifiers or CLI raw output are printed.
 """
@@ -169,12 +170,14 @@ def run_readonly(config_path: Path, *, cli_binary: str = "ctrader-cli",
     commands = (
         ("accounts", [binary, "accounts", *base]),
         ("cbots", [binary, "cbots", *base, "-q"]),
+        ("positions", [binary, "positions", *base, "-q"]),
+        ("orders", [binary, "orders", *base, "-q"]),
     )
     output = {}
     digests = {}
     for kind, argv in commands:
         # NEVER allow caller-controlled verbs or trading commands.
-        if argv[1] not in ("accounts", "cbots"):
+        if argv[1] not in ("accounts", "cbots", "positions", "orders"):
             raise PreflightError("disallowed_cli_verb")
         try:
             completed = runner(
@@ -186,10 +189,14 @@ def run_readonly(config_path: Path, *, cli_binary: str = "ctrader-cli",
         if completed.returncode != 0:
             raise PreflightError(kind + "_cli_rejected")
         rows = _response(completed.stdout, kind=kind)
+        # Never inspect positions or orders on an unverified or LIVE
+        # account. Reject immediately after the first identity response.
+        if kind == "accounts" and not _demo_bound(
+            rows, cfg["demo_account"], cfg["broker"]
+        ):
+            raise PreflightError("demo_account_binding_absent_or_ambiguous")
         output[kind] = rows
         digests[kind] = hashlib.sha256(completed.stdout.encode("utf-8")).hexdigest()
-    if not _demo_bound(output["accounts"], cfg["demo_account"], cfg["broker"]):
-        raise PreflightError("demo_account_binding_absent_or_ambiguous")
     count = _running_cbots(output["cbots"])
     return {
         "schema": SCHEMA,
@@ -198,6 +205,9 @@ def run_readonly(config_path: Path, *, cli_binary: str = "ctrader-cli",
         "account_alias": cfg["account_alias"],
         "cli_demo_account_identity_confirmed": True,
         "observed_running_cbot_count": count,
+        "observed_open_position_count": len(output["positions"]),
+        "observed_pending_order_count": len(output["orders"]),
+        "account_exposure_reconciled_for_new_order": False,
         "multiple_cli_cbot_instances_detected": count > 1,
         "single_runtime_instance_independently_attested": False,
         "cloud_and_external_process_census_verified": False,
