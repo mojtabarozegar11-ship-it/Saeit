@@ -58,5 +58,41 @@
     "Presence of an email field conflicts with the intended no-email policy, but it does not prove an invoice POST succeeded or failed.",
     "The three product detail pages pass GET/CTA checks only; this is not a valid sale.",
     "No personal data, payment identifiers, wallet addresses, or secrets were accessed or copied."
-  ]
+  ],
+  "follow_up_readonly_observation": {
+    "run_id": 43434626462,
+    "job_id": 131916548353,
+    "url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43434626462",
+    "checked_route_count": 10,
+    "source": "Github hosted runner with public unauthenticated HTTPS GET only",
+    "result": "release_gate_blocked_public_storefront_and_checkout",
+    "checkout_form_observations": {
+      "/commerce/book/72/": "legacy_email_requested",
+      "/commerce/book/225/": "legacy_email_requested",
+      "/commerce/book/879/": "legacy_email_requested",
+      "/store/product/72/checkout/": "legacy_email_requested",
+      "/store/product/225/checkout/": "legacy_email_requested",
+      "/store/product/879/checkout/": "legacy_email_requested"
+    },
+    "storefront": "static_fallback_not_dynamic",
+    "detail_product_routes_confirmed": [
+      72,
+      225,
+      879
+    ],
+    "checkout_strict_csp_script_src_passed": 0,
+    "checkout_strict_csp_script_src_evaluated": 6,
+    "changed_from_prior_public_observation": false,
+    "source_integration_github_ci": {
+      "run_id": 43434626462,
+      "isolated_checks": "passed",
+      "unit_tests_passed": 146,
+      "independent_route_patch_test": "passed",
+      "concurrent_first_order_identity_test": "passed"
+    },
+    "production_deployed": false,
+    "independent_real_payment_verified": false,
+    "purchase_download_verified": false,
+    "confirmed_revenue_usd": null
+  }
 }
