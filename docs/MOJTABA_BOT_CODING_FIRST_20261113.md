@@ -68,3 +68,7 @@ The three signed cyber actions now map to the internal `cyber_security` lane in 
 ## Identity and replay execution guards
 
 The existing `core.unified_bot_identity` now exposes a single-executor assertion across `mojtaba-bot-ai`, `economic-master-agent` and `moj_1ro_1`. It is called before a task is claimed and again before an authorized tool executes, so overlapping active Django executor rows refuse work rather than operating in parallel. Stale-running legacy executor tasks no longer auto-requeue without reconciliation, preventing accidental duplicate side effects. This is an in-process/DB-row gate, **not** evidence of a singleton across unknown VPS cron/systemd or PHP workers.
+
+## Precise owner approvals — coding phase
+
+Existing task acceptance now checks the original request's action, target task id and approved risk against the active task snapshot. The approval service denies a missing/deleted task, a mismatched action or insufficient risk and a forged/absent owner identity. The same validation is applied again when TaskRuntime claims work and when ToolGateway invokes the capability, including higher-risk tool adapters. This is source-only and has not been executed against live data; commercial/external action gates remain closed by default.

@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
+from .task_approval_scope import approval_covers_task
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -18,8 +19,10 @@ class ApprovalService:
             raise ValueError("Approval is no longer pending")
         if not isinstance(approved, bool):
             raise ValueError("Approval decision must be a boolean")
-        if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
+        if actor_type != "owner" or actor_id is None or approval.requested_by_id != actor_id:
             raise ValueError("Only the designated owner can make this approval decision")
+        if not get_user_model().objects.filter(pk=actor_id, is_active=True).exists():
+            raise ValueError("Only an active designated owner can decide an approval")
         if approval.target_type == "ChatOperation":
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
             if not is_authorized_chat_operator(operator) or approval.requested_by_id != actor_id:
@@ -33,6 +36,10 @@ class ApprovalService:
         article = None
         if approval.target_type == "AgentTask":
             task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
+            if task is None:
+                raise ValueError("Approval target task does not exist")
+            if not approval_covers_task(approval, task):
+                raise ValueError("Approval does not match target task action or risk")
             if task:
                 if approved and task.status != "blocked":
                     raise ValueError("Only a blocked task can be released by approval")

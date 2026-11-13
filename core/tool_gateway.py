@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from .agent_registry import AgentRegistry, RISK_ORDER
+from .task_approval_scope import has_approved_task_request
 from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .unified_bot_identity import assert_single_executor
 from .services import normalize_action, normalize_risk, requires_owner_approval
@@ -109,15 +110,13 @@ class ToolGateway:
             requires_owner_approval(spec.code, spec.risk)
             or requires_owner_approval(task.action_type, snapshot_risk)
         ):
-            approved = ApprovalRequest.objects.filter(
-                action_type=normalize_action(task.action_type),
-                target_type="AgentTask",
-                target_id=str(task.pk),
-                status="approved",
-            ).exists()
-            if not approved:
+            required_risk = (
+                spec.risk if RISK_ORDER[spec.risk] > RISK_ORDER[snapshot_risk]
+                else snapshot_risk
+            )
+            if not has_approved_task_request(task, required_risk=required_risk):
                 raise ToolGatewayError(
-                    "Owner approval is required before tool invocation"
+                    "Exact action-and-risk approval required before tool invocation"
                 )
 
         return task
