@@ -1,4 +1,4 @@
-"""No-network regression for pinned three-file carousel release and rollback."""
+"""No-network regression for pinned fifteen-file WebP carousel release and rollback."""
 from __future__ import annotations
 
 import importlib.util
@@ -10,6 +10,20 @@ SOURCE = Path(__file__).resolve().parents[1] / 'scripts/zomorod_fields_guard_202
 spec = importlib.util.spec_from_file_location('zm_fields_guard', SOURCE)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
+
+
+def sample_webp(width=320, height=200, padding=b''):
+    """A WebP VP8X header with reliable dimensions for release-gate unit tests.
+
+    Real production photos are separately decoded by actual browser CI.
+    """
+    chunk = (
+        b'VP8X' + (10).to_bytes(4, 'little') + b'\x00' * 4 +
+        (width - 1).to_bytes(3, 'little') +
+        (height - 1).to_bytes(3, 'little')
+    )
+    body = b'WEBP' + chunk + padding
+    return b'RIFF' + len(body).to_bytes(4, 'little') + body
 
 
 @pytest.fixture
@@ -31,7 +45,7 @@ def sandbox(tmp_path, monkeypatch):
          ('/research/', '/assets/zm-v3-genetics.webp'),
          ('/industry/', '/assets/zm-v3-industry.webp'),
          ('/economy/', '/assets/zm-v3-economy.webp')]
-        + [(f'/fields/{slug}/', f'/assets/zm-field-{slug}.svg') for slug in slugs]
+        + [(f'/fields/{slug}/', f'/assets/zm-field-{slug}.webp') for slug in slugs]
     )
     field_html = (
         b'data-auto-strip=\n' * 3 +
@@ -50,11 +64,9 @@ def sandbox(tmp_path, monkeypatch):
         'assets/zm-reference-v3.js': b'const strips=Array.from(document.querySelectorAll(\nprefers-reduced-motion',
     }
     for slug in slugs:
-        new[f'assets/zm-field-{slug}.svg'] = (
-            b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="1200" height="750"></svg>'
-        )
+        new[f'assets/zm-field-{slug}.webp'] = sample_webp(padding=slug.encode())
         new[f'fields/{slug}/index.html'] = (
-            f'<html><h1 id="hero-title">{slug}</h1><img src="/assets/zm-field-{slug}.svg">'
+            f'<html><h1 id="hero-title">{slug}</h1><img src="/assets/zm-field-{slug}.webp">'
             f'<link rel="canonical" href="https://zomorodmelal.ir/fields/{slug}/"></html>'
         ).encode()
     for name in mod.FILES:
@@ -227,7 +239,7 @@ def test_rejects_four_originals_even_if_js_would_clone(sandbox):
 def test_rejects_ten_cards_with_repeated_images(sandbox):
     root, stage, old, new = sandbox
     source = (stage / 'new' / 'index.html').read_bytes()
-    repeated = source.replace(b'zm-field-games-simulation.svg', b'zm-field-smart-tools.svg')
+    repeated = source.replace(b'zm-field-games-simulation.webp', b'zm-field-smart-tools.webp')
     (stage / 'new' / 'index.html').write_bytes(repeated)
     mod.NEW_BLOBS['index.html'] = mod.git_blob(repeated)
     with pytest.raises(RuntimeError, match='distinct first-party photos'):
@@ -287,12 +299,8 @@ def test_disk_budget_includes_all_twelve_created_files(sandbox, monkeypatch):
     root, stage, old, new = sandbox
     # Artificially inflate just one of the created assets. The preflight should
     # reject under its larger 4x total-size safety budget.
-    # Keep XML valid so the test reaches the disk-space check, not ET.ParseError.
-    large = (
-        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750"'
-        b' width="1200" height="750"><!--' +
-        b'Z' * (11 * 1024 * 1024) + b'--></svg>'
-    )
+    # Keep WebP RIFF dimensions valid so the assertion reaches disk budgeting.
+    large = sample_webp(padding=b'Z' * (11 * 1024 * 1024))
     name = mod.CREATED[0]
     (stage / 'new' / name).write_bytes(large)
     monkeypatch.setitem(mod.NEW_BLOBS, name, mod.git_blob(large))
@@ -322,3 +330,23 @@ def test_atomic_create_safely_writes_new_file(sandbox):
     with pytest.raises(FileExistsError):
         mod.atomic_create(target, b'second write must fail', 0o644)
     assert target.read_bytes() == b'new released image bytes'
+
+
+def test_rejects_fake_webp_even_with_approved_sha(sandbox):
+    root, stage, old, new = sandbox
+    asset = mod.CREATED[0]
+    corrupt = b'not really an image'
+    (stage / 'new' / asset).write_bytes(corrupt)
+    mod.NEW_BLOBS[asset] = mod.git_blob(corrupt)
+    with pytest.raises(RuntimeError, match='Invalid WebP RIFF'):
+        mod.preflight(stage)
+
+
+def test_rejects_wrong_dimensions_even_with_approved_sha(sandbox):
+    root, stage, old, new = sandbox
+    asset = mod.CREATED[0]
+    wrong = sample_webp(width=200, height=100, padding=b'wrong dimensions')
+    (stage / 'new' / asset).write_bytes(wrong)
+    mod.NEW_BLOBS[asset] = mod.git_blob(wrong)
+    with pytest.raises(RuntimeError, match='Unapproved WebP image'):
+        mod.preflight(stage)

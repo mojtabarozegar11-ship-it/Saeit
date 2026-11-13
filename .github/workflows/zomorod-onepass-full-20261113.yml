@@ -53,7 +53,7 @@ jobs:
           for slug in innovation laboratory greenhouse livestock smart-tools games-simulation; do
             mkdir -p "$stage/new/fields/$slug"
             cp "content/zomorod-vision-v3/fields/$slug/index.html" "$stage/new/fields/$slug/index.html"
-            cp "content/zomorod-vision-v3/assets/zm-field-$slug.svg" "$stage/new/assets/zm-field-$slug.svg"
+            cp "content/zomorod-vision-v3/assets/zm-field-$slug.webp" "$stage/new/assets/zm-field-$slug.webp"
           done
           python3 -m py_compile scripts/zomorod_fields_guard_20261113.py
           python3 - <<'PY'
@@ -79,7 +79,6 @@ jobs:
           from pathlib import Path
           from html.parser import HTMLParser
           import re
-          import xml.etree.ElementTree as ET
           h=Path('content/zomorod-vision-v3/index.html').read_text()
           js=Path('content/zomorod-vision-v3/assets/zm-reference-v3.js').read_text()
           css=Path('content/zomorod-vision-v3/assets/zm-reference-v3.css').read_text()
@@ -94,22 +93,24 @@ jobs:
           photos=re.findall(r'<img\b[^>]*\bsrc="([^"]+)"',photo_region)
           assert len(photos)==len(set(photos))==10,'Ten distinct first-party images required'
           assert sum(x.startswith('/assets/zm-v3-') and x.endswith('.webp') for x in photos)==4
-          assert sum(x.startswith('/assets/zm-field-') and x.endswith('.svg') for x in photos)==6
+          assert sum(x.startswith('/assets/zm-field-') and x.endswith('.webp') for x in photos)==6
           routes=re.findall(r'class="field-card neon-panel" href="([^"]+)"',photo_region)
           assert len(routes)==len(set(routes))==10,'Every card must have its own destination'
           slugs=('innovation','laboratory','greenhouse','livestock','smart-tools','games-simulation')
           for slug in slugs:
               page=Path('content/zomorod-vision-v3/fields')/slug/'index.html'
-              art=Path('content/zomorod-vision-v3/assets')/f'zm-field-{slug}.svg'
+              art=Path('content/zomorod-vision-v3/assets')/f'zm-field-{slug}.webp'
               assert page.is_file() and art.is_file(),slug
               text=page.read_text()
-              assert f'<h1 id="hero-title">' in text and f'/assets/zm-field-{slug}.svg' in text
+              assert f'<h1 id="hero-title">' in text and f'/assets/zm-field-{slug}.webp' in text
               assert f'https://zomorodmelal.ir/fields/{slug}/' in text
               assert routes.count(f'/fields/{slug}/')==1
-              svg=ET.parse(art).getroot()
-              assert svg.attrib.get('viewBox')=='0 0 1200 750'
-              assert svg.attrib.get('width')=='1200' and svg.attrib.get('height')=='750'
-              assert not list(svg.iter('{http://www.w3.org/2000/svg}script'))
+              data=art.read_bytes()
+              assert data[:4]==b'RIFF' and data[8:12]==b'WEBP' and data[12:16]==b'VP8 '
+              assert len(data)==8+int.from_bytes(data[4:8],'little')
+              assert data[23:26]==b'\x9d\x01\x2a'
+              assert (int.from_bytes(data[26:28],'little') & 0x3fff)==320
+              assert (int.from_bytes(data[28:30],'little') & 0x3fff)==200
           assert photo_region.count('<strong>')==10,'Each card must have a readable title'
           assert 'چرخش خودکار ده کارت تصویری' in h
           assert h.count('fetchpriority="high"')<=2
@@ -129,7 +130,7 @@ jobs:
           mkdir -p "$root/assets"
           cp "$ZOMOROD_STAGE/new/index.html" "$root/index.html"
           cp "$ZOMOROD_STAGE/new/assets/"* "$root/assets/"
-          cp content/zomorod-vision-v3/assets/zm-field-*.svg "$root/assets/"
+          cp content/zomorod-vision-v3/assets/zm-field-*.webp "$root/assets/"
           cp -R content/zomorod-vision-v3/fields "$root/fields"
           python3 - <<'PY'
           from pathlib import Path
@@ -231,7 +232,7 @@ jobs:
                   if(await landing.locator('h1').count()!==1||
                      await landing.locator('link[rel="canonical"]').getAttribute('href')!=='https://zomorodmelal.ir/fields/'+slug+'/')
                     throw Error('TOPIC_PAGE_META_FAIL_'+slug);
-                  const image=landing.locator('main img[src*="/assets/zm-field-'+slug+'.svg"]');
+                  const image=landing.locator('main img[src*="/assets/zm-field-'+slug+'.webp"]');
                   if(await image.count()!==1||!(await image.evaluate(el=>el.complete&&el.naturalWidth>0)))
                     throw Error('TOPIC_IMAGE_BROKEN_'+slug);
                   await landing.close();

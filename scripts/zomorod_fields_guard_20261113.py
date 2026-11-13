@@ -16,7 +16,6 @@ import shutil
 import stat
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -24,7 +23,7 @@ ROOT = Path('/home/zomorod2/public_html')
 BACKUP_ROOT = Path('/home/zomorod2/.backups/zomorod-fields-20261113')
 FILES = ('index.html', 'assets/zm-reference-v3.css', 'assets/zm-reference-v3.js')
 SLUGS = ('innovation', 'laboratory', 'greenhouse', 'livestock', 'smart-tools', 'games-simulation')
-CREATED = tuple(f'assets/zm-field-{slug}.svg' for slug in SLUGS) + tuple(
+CREATED = tuple(f'assets/zm-field-{slug}.webp' for slug in SLUGS) + tuple(
     f'fields/{slug}/index.html' for slug in SLUGS
 )
 # Exact Git blobs of the successfully verified #2251 live-release source.
@@ -35,23 +34,23 @@ OLD_BLOBS = dict(zip(FILES, (
 )))
 # Exact Git blobs from PR #2254 after its 4th carousel browser tests passed.
 NEW_BLOBS = dict(zip(FILES, (
-    'ceaa5c79e267fa095c1ce71f1f1007fd1cfe179a',
+    'dae8ec6e93ab6890977285a42ebb077d91314dbc',
     '63559875709de300ffabbd148bfa76c22e88abfc',
     'b5f99cf18ad8b74a2854a837bcd252bf98a1a30e',
 )))
 NEW_BLOBS.update({
-    'fields/innovation/index.html': '80a59d1c7583a731ef56c880ffcc6b401996b3af',
-    'assets/zm-field-innovation.svg': '9b03f1dca6acb4f4f68056374b1345e96442f395',
-    'fields/laboratory/index.html': '2ddb2f86ad5c0bdbb60b63265028e75ca161ad03',
-    'assets/zm-field-laboratory.svg': '7d2a86ab46ed6b7b673983a2de860ff3318d70d0',
-    'fields/greenhouse/index.html': '66b6a520b0a4fba403f27a254d7ae002101b8c8f',
-    'assets/zm-field-greenhouse.svg': 'b0fbd9f50b95eec21c77995855252c81ad33b502',
-    'fields/livestock/index.html': 'b200895e3e4d6f303b782d7cc28c399c10a98679',
-    'assets/zm-field-livestock.svg': '7760d102b51cd9ebb4ea236dffc2054a8da4d263',
-    'fields/smart-tools/index.html': '391c250c0e44b68bb1a11dbc3d98f34b08b2b5aa',
-    'assets/zm-field-smart-tools.svg': '75589d89b3d5a28097274896a767ae3420fecd8e',
-    'fields/games-simulation/index.html': 'a553b715e0e224c8ec321ddae226f9d102627d01',
-    'assets/zm-field-games-simulation.svg': '387dae7b7a91ed91f2df254a762f1b76da423940',
+    'fields/innovation/index.html': '52de8fba32d62415370c025d07e24a86858802c3',
+    'assets/zm-field-innovation.webp': '7eab3af59d0b0b0ca62dc523d5764b65e758dadf',
+    'fields/laboratory/index.html': '7b0f17d9e4aa274d8aa26e498ac3c9180385478e',
+    'assets/zm-field-laboratory.webp': 'b4badc5a131fef8969438f572fdf7586c4abb885',
+    'fields/greenhouse/index.html': '4c84519d45cfca323a2a32f75be8adb9837f501f',
+    'assets/zm-field-greenhouse.webp': 'cc80a74e2b257f81cd6ae7af3c1c293e4bd114fb',
+    'fields/livestock/index.html': '75e7efd60182fa161c8b773293ca677740a96b37',
+    'assets/zm-field-livestock.webp': 'efe17aefb32524ba65ca97d07970c8dd31e209cb',
+    'fields/smart-tools/index.html': '1462f5c6329f306fb9119bc6b3847ee703ca3aa1',
+    'assets/zm-field-smart-tools.webp': '5b76694a87654a79c6ffa5e36546726fcdb2020e',
+    'fields/games-simulation/index.html': '71114c9598348324cda26330649eddf9974ccccb',
+    'assets/zm-field-games-simulation.webp': '5ed594881064288ace29973ee3100a89b9af9e3e',
 })
 PROTECTED = (
     '.htaccess', 'sitemap.xml', 'agriculture/index.html',
@@ -102,6 +101,31 @@ def safe_stage(stage: Path) -> Path:
     return stage
 
 
+def webp_dimensions(data: bytes) -> tuple[int, int]:
+    """Inspect RIFF WebP dimensions without installing packages on the cPanel host.
+
+    Immutable Git blob SHA pins complete bytes. CI browser tests also decode them.
+    """
+    if (len(data) < 30 or data[:4] != b'RIFF' or data[8:12] != b'WEBP' or
+            int.from_bytes(data[4:8], 'little') + 8 != len(data)):
+        raise RuntimeError('Invalid WebP RIFF file')
+    kind = data[12:16]
+    if kind == b'VP8 ' and data[23:26] == b'\x9d\x01\x2a':
+        width = int.from_bytes(data[26:28], 'little') & 0x3fff
+        height = int.from_bytes(data[28:30], 'little') & 0x3fff
+    elif kind == b'VP8L' and len(data) >= 25:
+        if data[20] != 0x2f:
+            raise RuntimeError('Invalid WebP lossless header')
+        width = 1 + (data[21] | ((data[22] & 0x3f) << 8))
+        height = 1 + ((data[22] >> 6) | (data[23] << 2) | ((data[24] & 0x0f) << 10))
+    elif kind == b'VP8X':
+        width = 1 + int.from_bytes(data[24:27], 'little')
+        height = 1 + int.from_bytes(data[27:30], 'little')
+    else:
+        raise RuntimeError('Unsupported WebP encoding')
+    return (width, height)
+
+
 def candidates(stage: Path):
     safe_stage(stage)
     old = {name: read_regular(stage / 'old' / name) for name in FILES}
@@ -138,25 +162,21 @@ def candidates(stage: Path):
         b'/assets/zm-v3-farming.webp', b'/assets/zm-v3-genetics.webp',
         b'/assets/zm-v3-industry.webp', b'/assets/zm-v3-economy.webp',
     )
-    required_svg = tuple(f'/assets/zm-field-{slug}.svg'.encode() for slug in SLUGS)
+    required_new_webp = tuple(f'/assets/zm-field-{slug}.webp'.encode() for slug in SLUGS)
     required_routes = (
         b'/agriculture/', b'/research/', b'/industry/', b'/economy/',
     ) + tuple(f'/fields/{slug}/'.encode() for slug in SLUGS)
     if (card_count != 10 or len(sources) != 10 or len(set(sources)) != 10 or
-            tuple(sources) != required_webp + required_svg or
+            tuple(sources) != required_webp + required_new_webp or
             tuple(routes) != required_routes):
         raise RuntimeError('Release must contain ten original cards, ten unique routes and distinct first-party photos')
     for slug in SLUGS:
-        art = new[f'assets/zm-field-{slug}.svg']
-        svg = ET.fromstring(art)
-        if (svg.attrib.get('viewBox') != '0 0 1200 750' or
-                svg.attrib.get('width') != '1200' or
-                svg.attrib.get('height') != '750' or
-                list(svg.iter('{http://www.w3.org/2000/svg}script'))):
-            raise RuntimeError('Unapproved illustration: ' + slug)
+        art = new[f'assets/zm-field-{slug}.webp']
+        if webp_dimensions(art) != (320, 200):
+            raise RuntimeError('Unapproved WebP image or dimension: ' + slug)
         page_html = new[f'fields/{slug}/index.html']
         if (b'<h1 id="hero-title">' not in page_html or
-                f'/assets/zm-field-{slug}.svg'.encode() not in page_html or
+                f'/assets/zm-field-{slug}.webp'.encode() not in page_html or
                 f'https://zomorodmelal.ir/fields/{slug}/'.encode() not in page_html):
             raise RuntimeError('Dedicated topic page missing: ' + slug)
     return old, new
