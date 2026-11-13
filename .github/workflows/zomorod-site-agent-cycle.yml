@@ -217,7 +217,19 @@ jobs:
           echo "SITE_AGENT_RUN_INTERPRETER=verified"
           cd "$app"
           if "$python_path" manage.py migrate --check >/dev/null 2>&1; then
-            activity_output="$("$python_path" manage.py company_activity_agent_cycle)"
+            # The company report module must not resurrect a retired legacy
+            # Agent. A known handoff blocker is not a reason to starve the
+            # separately-owned, approval-gated knowledge cycle.
+            if activity_output="$("$python_path" manage.py company_activity_agent_cycle 2>&1)"; then
+              echo "SITE_AGENT_COMPANY_MODULE=invoked"
+            elif [[ "$activity_output" == *"MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED"* ||
+                    "$activity_output" == *"COMPANY_ACTIVITY_LEGACY_HANDOFF_REQUIRED"* ]]; then
+              echo "SITE_AGENT_COMPANY_MODULE=blocked_pending_single_bot_handoff"
+              activity_output="COMPANY_ACTIVITY_AGENT=BLOCKED pending_single_bot_handoff"
+            else
+              printf 'SITE_AGENT_COMPANY_MODULE=unexpected_error\n' >&2
+              exit 1
+            fi
             queue_output="$("$python_path" manage.py knowledge_agent_cycle)"
             printf '%s\n' "$activity_output" "$queue_output"
             # A zero-exit Django command may have only reported WAIT. Count

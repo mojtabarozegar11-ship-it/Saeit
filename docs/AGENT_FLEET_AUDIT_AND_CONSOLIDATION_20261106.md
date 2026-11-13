@@ -68,3 +68,96 @@ Focused Django tests cover cross-capability denials, revoked/inactive agent
 checks, explicit adapter aliases, risk-policy drift, stale execution identity,
 worker lifecycle and audit read-only behavior. Tests exercise isolated
 databases only. They do not establish production readiness or authorize deploy.
+
+
+## 2026-11-13: only one operational bot — no fallback to old task owners
+
+The owner has required the complete end-state: **`mojtaba.bot.ai` is
+the only operational bot**. All other agent identities must become
+internal, non-executable modules under `mojtaba-bot-ai` or be retired
+after all dependencies and external process ownership are verified.
+Historical Agent rows with foreign-key references are retained as
+**inactive provenance**, not treated as running robots. Destructive SQL
+deletions are NOT an acceptable shortcut for FK preservation.
+
+**Source-side enforcement introduced on the review branch:**
+
+1. `AgentRegistry.resolve` has **no noncanonical fallback whatsoever**.
+   Newly planned tasks for any registered capability — including unknown or
+   otherwise unmapped specialist actions — must be owned by the active
+   canonical Agent row with the exact capability association. When that
+   association is missing, planning is denied; old agents cannot win by ID,
+   lower risk or mission. Existing historical tasks are not relabelled.
+2. `newsletter_engine.create_draft` refuses any
+   `agent_code != mojtaba-bot-ai`, including direct calls from an old
+   newsletter cron. This does not delete, retire or silently reassign
+   pre-existing scheduled/publication records.
+3. `consolidate_legacy_agents` now explicitly inventories **nine known
+   retireable identities**, including content-director, content-research,
+   knowledge-content-director and company-activity-intelligence.
+   The content/report successors require actual recent canonical
+   published content with editorial-quality receipt. Knowledge
+   retirement instead requires a recent canonical completed matching
+   `AgentTask` + `KnowledgeAgentRun` + nonempty book, **and** an
+   independently reviewed live handoff. All nine continue to require an
+   exact scoped owner approval grant per identity and a fresh live receipt.
+4. The two former *economic/factory* executor identities follow the existing
+   separate approved `seed_online_income_agents --apply-legacy-merge`
+   route. The currently protected economic/factory identities must **not**
+   be declared deleted or consolidated merely because canonical ownership
+   exists in source.
+
+**Completion gates, all required simultaneously:** no active alternative
+Agent identity in the live database; no unreconciled pending tasks or
+newsletter distributions; all specialist capabilities mapped to the
+canonical owner; every VPS/cPanel/systemd/cron/PHP/remote scheduler and
+mobile/connector-triggered legacy process accounted for and stopped or
+rerouted; one verified canonical running executor; exact owner-approved
+cutover and rollback evidence; historical ledgers preserved; no duplicate
+orders/publications across the cutover.
+
+**Current limitation:** this branch implements source policy and guarded
+retirement routes only. It does not itself run a live database migration,
+stop VPS/cPanel processes, edit remote cron jobs, disable external accounts,
+or delete files on live hosts. A successful offline test does NOT mean the
+completion gates above have been met. Live consolidation percentage remains
+**unknown**, never 100% by inference.
+
+
+## 2026-11-13: legacy running-task and recovery lifecycle containment
+
+The earlier source change stopped **new** task claims by noncanonical
+agents and blocked their ToolGateway calls, but a previously running task
+could still be heartbeated or directly marked complete, and a failed or
+stale legacy task could automatically return to the queue. Those paths
+undermine the "one bot" requirement and risk duplicate external effects.
+
+**The source runtime now fails closed at all four lifecycle boundaries:**
+
+- `claim()`: noncanonical queued tasks cannot receive an execution token.
+- `heartbeat()`: old execution tokens cannot prolong an independent
+  runtime; task status/timestamp are left unchanged.
+- `complete()`: old worker callbacks cannot mark work complete after
+  cutover, even with a matching old token. No cost or success receipt is
+  recorded through this path.
+- `fail()` and `recover_stale()`: **all** tasks, including old-agent
+  work, become `blocked`, not `queued` or automatically `failed`.
+  Original owner, prior execution token, attempt budget and audit history
+  are retained. Old-agent outputs explicitly identify
+  `legacy_agent_code`, `migration_target=mojtaba-bot-ai`,
+  `requires_review=true` and `automatic_replay_allowed=false`.
+
+The general recovery scheduler may now safely inventory historical stale
+tasks because recovering them quarantines rather than re-dispatches.
+Repeated stale recovery is rejected after the first transition to
+`blocked`; nothing is duplicated. The CI now exercises the management
+command and direct TaskRuntime callback paths.
+
+**This deliberately DOES NOT** stop old systemd processes, cron entries,
+cPanel jobs or broker terminals on VPS, change already published external
+effects, or migrate old pending work without a verified receipt. It is a
+source-level cutover barrier; real runtime closure requires inspecting and
+disabling every external launcher, then reconciling queued, running and
+blocked tasks to the sole canonical Agent. The PR remains Draft until
+those facts are confirmed. No file, historic task, approval or financial
+record should be deleted to fake a zero-legacy count.

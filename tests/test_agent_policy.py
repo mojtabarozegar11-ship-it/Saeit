@@ -11,7 +11,7 @@ pytestmark = pytest.mark.django_db
 def setup_capability(risk="low"):
     user = get_user_model().objects.create_user(username="policy-owner")
     project = ResearchProject.objects.create(title="Policy", objective="Test", owner=user)
-    agent = Agent.objects.create(code="policy-agent", name="Policy Agent", mission="", active=True)
+    agent = Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="", active=True)
     capability = AgentCapability.objects.create(code="collect_source", name="Collect", risk_level=risk)
     capability.agents.add(agent)
     return project, agent, capability

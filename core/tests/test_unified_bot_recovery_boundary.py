@@ -74,15 +74,20 @@ def test_recovery_command_reports_blocked_once_and_is_idempotent(economic_agent)
     assert task.attempt_count == 1
 
 
-def test_exhausted_economic_retries_remain_terminal_failed(economic_agent):
+def test_exhausted_economic_stale_work_remains_blocked_for_receipt_review(economic_agent):
     agent, cap = economic_agent
     task = running_economic_task(agent, cap, attempts=3, max_attempts=3)
     result = TaskRuntime().recover_stale(task.pk, stale_after_seconds=900)
-    assert result.status == "failed"
+    assert result.status == "blocked"
     assert result.execution_id == "prior-identity"
+    assert result.output_data["requires_review"] is True
+    assert result.output_data["automatic_replay_allowed"] is False
+    assert result.output_data["retry_budget_exhausted"] is True
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
 
 
-def test_non_economic_stale_work_keeps_existing_requeue_policy(db):
+def test_legacy_stale_work_is_quarantined_without_requeue(db):
     agent = Agent.objects.create(code="ordinary-research", name="Research", mission="Research", active=True)
     task = AgentTask.objects.create(
         agent=agent, action_type="research", capability_code="research", status="running",
@@ -92,8 +97,14 @@ def test_non_economic_stale_work_keeps_existing_requeue_policy(db):
         updated_at=timezone.now() - timedelta(minutes=45)
     )
     result = TaskRuntime().recover_stale(task.pk, stale_after_seconds=900)
-    assert result.status == "queued"
-    assert result.execution_id == ""
+    assert result.status == "blocked"
+    assert result.execution_id == "research-identity"
+    assert result.output_data["migration_target"] == "mojtaba-bot-ai"
+    assert result.output_data["legacy_agent_code"] == "ordinary-research"
+    assert result.output_data["automatic_replay_allowed"] is False
+    assert result.output_data["previous_execution_id"] == "research-identity"
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
 
 
 def test_two_economic_tasks_cannot_be_running_together(economic_agent):
@@ -144,3 +155,185 @@ def test_master_loop_does_not_replan_while_economic_work_runs(economic_agent):
         planner.assert_not_called()
         runner.assert_not_called()
     assert f"AUTO_WAIT_RUNNING task={running.pk}" in output.getvalue()
+
+
+
+@pytest.mark.parametrize("max_attempts", [1, 3])
+def test_canonical_worker_failure_never_requeues_unknown_effect(economic_agent, max_attempts):
+    agent, cap = economic_agent
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=max_attempts,
+    )
+    runtime = TaskRuntime()
+    running = runtime.claim(task.pk)
+    token = running.execution_id
+
+    blocked = runtime.fail(task.pk, "provider acknowledgement lost", execution_id=token)
+    assert blocked.status == "blocked"
+    assert blocked.execution_id == token
+    assert blocked.attempt_count == 1
+    assert blocked.output_data["requires_review"] is True
+    assert blocked.output_data["automatic_replay_allowed"] is False
+    assert blocked.output_data["previous_execution_id"] == token
+    assert blocked.output_data["retry_budget_exhausted"] is (max_attempts == 1)
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        runtime.claim(task.pk)
+    with pytest.raises(TaskExecutionError, match="not running"):
+        runtime.complete(task.pk, {"verified_effect": True}, execution_id=token)
+    receipt = AuditLog.objects.get(
+        action="task_failed", target_type="AgentTask", target_id=str(task.pk),
+    )
+    assert receipt.after_state["requires_review"] is True
+    assert receipt.after_state["automatic_replay_allowed"] is False
+
+
+def test_noncanonical_worker_cannot_claim_pre_cutover_queued_task(db):
+    agent = Agent.objects.create(
+        code="ordinary-worker", name="Ordinary", mission="Legacy", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="research", name="Ordinary research",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(agent)
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=2,
+    )
+    runtime = TaskRuntime()
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_TASK_EXECUTION_FORBIDDEN"):
+        runtime.claim(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.attempt_count == 0
+    assert task.execution_id == ""
+    assert not AuditLog.objects.filter(
+        action="task_claimed", target_id=str(task.pk),
+    ).exists()
+
+def test_failed_gateway_with_unknown_external_effect_is_not_dispatched_twice(economic_agent):
+    """An acknowledgement failure after a side effect cannot trigger replay."""
+    from core.worker_runner import WorkerRunner
+
+    agent, cap = economic_agent
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=5,
+    )
+    effects = []
+
+    class AcknowledgementLostGateway:
+        def invoke(self, code, payload, *, task_id, execution_id):
+            effects.append((code, task_id, execution_id))
+            raise RuntimeError("effect receipt unavailable after dispatch")
+
+    worker = WorkerRunner(AcknowledgementLostGateway())
+    with pytest.raises(RuntimeError, match="receipt unavailable"):
+        worker.run(task.pk)
+    task.refresh_from_db()
+    assert task.status == "blocked"
+    assert task.output_data["automatic_replay_allowed"] is False
+    assert len(effects) == 1
+
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        worker.run(task.pk)
+    assert len(effects) == 1
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(task.pk), action="task_failed",
+    ).count() == 1
+
+
+
+
+@pytest.mark.django_db
+def test_legacy_running_cannot_heartbeat_or_complete_even_with_valid_old_token():
+    old = Agent.objects.create(
+        code="retired-content-worker", name="Historical Content",
+        mission="Archive only", active=True,
+    )
+    task = AgentTask.objects.create(
+        agent=old, action_type="publish", capability_code="publish",
+        status="running", execution_id="old-session-token",
+        attempt_count=1, output_data={"previous": "retain"},
+    )
+    before = task.updated_at
+    runtime = TaskRuntime()
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_HEARTBEAT_FORBIDDEN"):
+        runtime.heartbeat(task.pk, execution_id="old-session-token")
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_COMPLETION_FORBIDDEN"):
+        runtime.complete(
+            task.pk, output_data={"published": True}, cost=1,
+            execution_id="old-session-token",
+        )
+    task.refresh_from_db()
+    assert task.status == "running"
+    assert task.execution_id == "old-session-token"
+    assert task.updated_at == before
+    assert task.cost == 0
+    assert task.output_data == {"previous": "retain"}
+    assert not AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(task.pk),
+        action="task_completed",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_failed_legacy_execution_is_blocked_with_old_token_and_auditable_handoff():
+    old = Agent.objects.create(
+        code="former-factory-runner", name="Historical Factory",
+        mission="Archive only", active=True,
+    )
+    task = AgentTask.objects.create(
+        agent=old, action_type="factory_export",
+        capability_code="factory_export", status="running",
+        execution_id="factory-old-01", attempt_count=1,
+        max_attempts=3,
+    )
+    failed = TaskRuntime().fail(
+        task.pk, "broker or publication acknowledgement not verified",
+        execution_id="factory-old-01",
+    )
+    assert failed.status == "blocked"
+    assert failed.execution_id == "factory-old-01"
+    assert failed.agent_id == old.pk
+    assert failed.output_data["legacy_agent_code"] == old.code
+    assert failed.output_data["migration_target"] == "mojtaba-bot-ai"
+    assert failed.output_data["previous_execution_id"] == "factory-old-01"
+    assert failed.output_data["automatic_replay_allowed"] is False
+    assert failed.output_data["legacy_work_replayed"] is False
+    assert AuditLog.objects.filter(
+        action="task_failed", target_type="AgentTask",
+        target_id=str(task.pk),
+        after_state__automatic_replay_allowed=False,
+    ).count() == 1
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
+
+
+@pytest.mark.django_db
+def test_legacy_stale_recovery_is_idempotent_and_preserves_queued_migration_evidence():
+    old = Agent.objects.create(
+        code="retired-notification-worker", name="Historical News",
+        mission="Retired independent scheduler", active=True,
+    )
+    task = AgentTask.objects.create(
+        agent=old, action_type="newsletter",
+        capability_code="newsletter", status="running",
+        execution_id="legacy-news-run-1", attempt_count=2,
+        max_attempts=2,
+    )
+    AgentTask.objects.filter(pk=task.pk).update(
+        updated_at=timezone.now() - timedelta(hours=1),
+    )
+    once = TaskRuntime().recover_stale(task.pk, stale_after_seconds=60)
+    assert once.status == "blocked"
+    assert once.execution_id == "legacy-news-run-1"
+    assert once.output_data["retry_budget_exhausted"] is True
+    assert once.output_data["automatic_replay_allowed"] is False
+    with pytest.raises(TaskExecutionError, match="not running"):
+        TaskRuntime().recover_stale(task.pk, stale_after_seconds=60)
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(task.pk),
+        action="task_recovered_stale",
+    ).count() == 1

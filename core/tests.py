@@ -30,8 +30,8 @@ class FoundationTests(TestCase):
         self.owner = User.objects.create_user(username="owner", password="safe-pass-123")
         self.other = User.objects.create_user(username="other", password="safe-pass-123")
         self.agent = Agent.objects.create(
-            code="researcher",
-            name="Researcher",
+            code="mojtaba-bot-ai",
+            name="Mojtaba.bot.ai",
             mission="research and analysis",
             risk_level="low",
             active=True,
@@ -98,17 +98,17 @@ class FoundationTests(TestCase):
         self.assertEqual(completed.cost, Decimal("0.1000"))
         self.assertTrue(AuditLog.objects.filter(action="task_completed").exists())
 
-    def test_failure_requeues_until_retry_budget_is_exhausted(self):
+    def test_canonical_failures_block_without_automatic_retry(self):
         task = MasterAgent().plan(self.project, "research", {}, risk="low")
         task.max_attempts = 2
         task.save(update_fields=["max_attempts"])
         running = TaskRuntime().claim(task.pk)
         failed = TaskRuntime().fail(task.pk, "temporary", execution_id=running.execution_id)
-        self.assertEqual(failed.status, "queued")
-        self.assertEqual(failed.execution_id, "")
-        running = TaskRuntime().claim(task.pk)
-        failed = TaskRuntime().fail(task.pk, "permanent", execution_id=running.execution_id)
-        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.status, "blocked")
+        self.assertEqual(failed.execution_id, running.execution_id)
+        self.assertIs(failed.output_data["automatic_replay_allowed"], False)
+        with self.assertRaises(TaskExecutionError):
+            TaskRuntime().claim(task.pk)
 
     def test_stale_execution_is_recovered(self):
         task = MasterAgent().plan(self.project, "research", {}, risk="low")
@@ -117,8 +117,9 @@ class FoundationTests(TestCase):
             updated_at=timezone.now() - timedelta(hours=1)
         )
         recovered = TaskRuntime().recover_stale(task.pk, stale_after_seconds=60)
-        self.assertEqual(recovered.status, "queued")
-        self.assertEqual(recovered.execution_id, "")
+        self.assertEqual(recovered.status, "blocked")
+        self.assertEqual(recovered.execution_id, running.execution_id)
+        self.assertIs(recovered.output_data["automatic_replay_allowed"], False)
         self.assertTrue(AuditLog.objects.filter(action="task_recovered_stale").exists())
 
     def test_evidence_source_must_belong_to_project(self):
@@ -179,6 +180,10 @@ class ContentDirectorSubmissionTests(TestCase):
 
     def setUp(self):
         self.publisher = User.objects.create_user(username="editor", password="safe-pass-123")
+        self.bot = Agent.objects.create(
+            code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="Single bot",
+            active=True,
+        )
 
     def _submission(self):
         from .newsletter_models import NewsletterSubmission
@@ -190,7 +195,7 @@ class ContentDirectorSubmissionTests(TestCase):
             requested_publish_at=timezone.now() + timedelta(days=1),
         )
 
-    def test_first_real_submission_bootstraps_successor_and_stays_draft(self):
+    def test_first_real_submission_uses_canonical_bot_and_stays_draft(self):
         from .newsletter_engine import process_submission
         from .newsletter_models import NewsletterSchedule, NewsletterStory
 
@@ -199,7 +204,8 @@ class ContentDirectorSubmissionTests(TestCase):
         self.assertFalse(Agent.objects.filter(code="content-director").exists())
         story = process_submission(submission)
         self.assertIsNotNone(story)
-        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        self.assertEqual(story.agent_id, self.bot.pk)
         submission.refresh_from_db()
         self.assertEqual(submission.status, "drafted")
         self.assertEqual(submission.generated_story_id, story.pk)
@@ -215,6 +221,9 @@ class ContentDirectorSubmissionTests(TestCase):
         agent = Agent.objects.create(
             code="content-director", name="Content Director",
             mission="Owner content drafts", active=False,
+        )
+        AgentTask.objects.create(
+            agent=agent, action_type="legacy_submission", status="queued",
         )
         submission = self._submission()
         self.assertIsNone(process_submission(submission))

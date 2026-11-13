@@ -13,7 +13,13 @@ def test_registry_resolves_exact_capability():
     agent = Agent.objects.create(code="researcher", name="Researcher", mission="research", active=True)
     capability = AgentCapability.objects.create(code="collect_source", name="Collect source")
     capability.agents.add(agent)
-    assert AgentRegistry().resolve("collect_source") == agent
+    assert AgentRegistry().resolve("collect_source") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Sole new-task owner", active=True,
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("collect_source") == canonical
 
 
 def test_registry_rejects_inactive_capability():
@@ -32,8 +38,16 @@ def test_master_agent_uses_capability_registry_before_mission_fallback():
     specialist = Agent.objects.create(code="specialist", name="Specialist", mission="research", active=True)
     capability = AgentCapability.objects.create(code="publish", name="Publish")
     capability.agents.add(specialist)
+    with pytest.raises(RuntimeError, match="No active agent"):
+        MasterAgent().plan(project, "publish", {})
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central publication owner", active=True,
+    )
+    capability.agents.add(canonical)
     task = MasterAgent().plan(project, "publish", {})
-    assert task.agent_id == specialist.id
+    assert task.agent_id == canonical.id
+    assert task.agent_id != specialist.id
 
 
 def test_registry_does_not_route_compound_action_to_unrelated_token_capability():
@@ -60,8 +74,14 @@ def test_registry_supports_core_prefixed_capability_accepted_by_runtime():
     capability = AgentCapability.objects.create(code="core_collect_source", name="Collect")
     capability.agents.add(agent)
 
-    assert AgentRegistry().resolve("collect_source") == agent
-    assert AgentRegistry().capability_for(agent, "collect_source") == capability
+    assert AgentRegistry().resolve("collect_source") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central core capability owner", active=True,
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("collect_source") == canonical
+    assert AgentRegistry().capability_for(canonical, "collect_source") == capability
 
 
 def test_registry_prefers_low_risk_agent_before_critical_risk_agent():
@@ -74,4 +94,138 @@ def test_registry_prefers_low_risk_agent_before_critical_risk_agent():
     capability = AgentCapability.objects.create(code="publish", name="Publish")
     capability.agents.add(critical, low)
 
-    assert AgentRegistry().resolve("publish") == low
+    assert AgentRegistry().resolve("publish") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central owner", active=True, risk_level="high",
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("publish") == canonical
+
+
+
+@pytest.mark.parametrize("code", [
+    "income_market_research",
+    "factory_native_review",
+    "mojtrade_observation_ingest",
+    "mojtrade_demo_audit_ingest",
+    "master_self_improvement",
+])
+def test_canonical_module_owner_beats_legacy_lower_risk(code):
+    """Old row ID and cheaper risk must not route new work to old bots."""
+    from core.unified_bot_identity import BOT_CODE
+
+    legacy = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="Old executor",
+        risk_level="low", active=True,
+    )
+    canonical = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", mission="Single bot",
+        risk_level="high", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code=code, name=code, risk_level="low", active=True,
+    )
+    cap.agents.add(legacy, canonical)
+    assert AgentRegistry().resolve(code).pk == canonical.pk
+
+
+@pytest.mark.parametrize("state", ["missing", "inactive", "capability_missing"])
+def test_canonical_module_cannot_fall_back_to_old_executor(state):
+    from core.models import AgentTask
+    from core.unified_bot_identity import BOT_CODE
+
+    owner = get_user_model().objects.create_user(username=f"single-owner-{state}")
+    project = ResearchProject.objects.create(
+        title="Canonical routing", objective="No legacy fallback", owner=owner,
+    )
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old income master", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="income_market_research", name="Revenue research", active=True,
+        risk_level="low",
+    )
+    cap.agents.add(old)
+    if state != "missing":
+        canonical = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai",
+            active=state != "inactive",
+        )
+        if state != "capability_missing":
+            cap.agents.add(canonical)
+    assert AgentRegistry().resolve("income_market_research") is None
+    before = AgentTask.objects.count()
+    with pytest.raises(RuntimeError, match="No active agent"):
+        MasterAgent().plan(project, "income_market_research", {"private": True})
+    assert AgentTask.objects.count() == before
+
+
+def test_master_agent_plans_economic_work_only_for_canonical_owner():
+    from core.models import AgentTask
+    from core.unified_bot_identity import BOT_CODE
+
+    owner = get_user_model().objects.create_user(username="canonical-plan-owner")
+    project = ResearchProject.objects.create(
+        title="Single worker", objective="Canonical only", owner=owner,
+    )
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old", active=True, risk_level="low",
+    )
+    canonical = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", active=True, risk_level="high",
+    )
+    cap = AgentCapability.objects.create(
+        code="income_market_research", name="Research", active=True, risk_level="low",
+    )
+    cap.agents.add(old, canonical)
+    task = MasterAgent().plan(project, "income_market_research", {"private": True})
+    assert task.agent_id == canonical.pk
+    assert task.status == "queued"
+    assert AgentTask.objects.filter(agent=old).count() == 0
+
+
+def test_noncanonical_unmapped_specialist_is_blocked_until_canonical_handoff():
+    old = Agent.objects.create(
+        code="independent-legacy-specialist", name="Unmapped specialist",
+        active=True, risk_level="low",
+    )
+    cap = AgentCapability.objects.create(
+        code="unknown_legacy_private_job", name="Not yet mapped", active=True,
+    )
+    cap.agents.add(old)
+    assert AgentRegistry().resolve("unknown_legacy_private_job") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central handoff owner", active=True,
+    )
+    # A handoff must assign the exact capability; renaming is insufficient.
+    assert AgentRegistry().resolve("unknown_legacy_private_job") is None
+    cap.agents.add(canonical)
+    assert AgentRegistry().resolve("unknown_legacy_private_job") == canonical
+
+
+
+def test_historical_capability_association_is_not_permission_to_execute():
+    legacy = Agent.objects.create(
+        code="retired-research-runtime", name="Historical Research",
+        mission="Record retained for audit", active=True,
+    )
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="One owner", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="legacy_research_module", name="Research",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(legacy, canonical)
+    registry = AgentRegistry()
+    # Audit may inspect historical assignments without authorizing the bot.
+    assert registry.capability_for(legacy, cap.code) == cap
+    assert registry.can_execute(legacy, cap.code) is False
+    assert registry.can_execute(canonical, cap.code) is True
+    canonical.active = False
+    canonical.save(update_fields=["active"])
+    assert registry.can_execute(canonical, cap.code) is False
+    assert registry.resolve(cap.code) is None

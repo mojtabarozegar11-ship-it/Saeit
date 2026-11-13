@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
+from .services import normalize_action
+from .unified_bot_identity import BOT_CODE
 
 
 class ApprovalService:
@@ -18,7 +20,8 @@ class ApprovalService:
             raise ValueError("Approval is no longer pending")
         if not isinstance(approved, bool):
             raise ValueError("Approval decision must be a boolean")
-        if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
+        # Every decision requires the designated owner, including direct service calls.
+        if actor_type != "owner" or actor_id is None or approval.requested_by_id != actor_id:
             raise ValueError("Only the designated owner can make this approval decision")
         if approval.target_type == "ChatOperation":
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
@@ -32,14 +35,40 @@ class ApprovalService:
         task = None
         article = None
         if approval.target_type == "AgentTask":
-            task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
+            task = AgentTask.objects.select_for_update().select_related(
+                "agent", "project"
+            ).filter(pk=approval.target_id).first()
             if task:
-                if approved and task.status != "blocked":
-                    raise ValueError("Only a blocked task can be released by approval")
-                if not approved and task.status not in {"blocked", "queued"}:
+                # Both approval and rejection must match the actual task.
+                # Otherwise a different action/owner could cancel it or
+                # release it using a recycled target primary key.
+                if normalize_action(approval.action_type) != normalize_action(task.action_type):
+                    raise ValueError("Approval action does not match task action")
+                if task.project_id and approval.requested_by_id != task.project.owner_id:
+                    raise ValueError("Approval owner does not match task project owner")
+                reconciliation_hold = task.agent.code == BOT_CODE and (
+                    (task.output_data or {}).get("requires_review") is True
+                    or (task.output_data or {}).get("automatic_replay_allowed") is False
+                )
+                if approved:
+                    if task.status != "blocked":
+                        raise ValueError("Only a blocked task can be released by approval")
+                    if reconciliation_hold:
+                        # A previous canonical execution may already have
+                        # changed an external system. A normal approval cannot
+                        # establish that no effect occurred or authorize replay.
+                        raise ValueError(
+                            "Canonical task requires external-effect reconciliation before release"
+                        )
+                elif task.status not in {"blocked", "queued"}:
                     raise ValueError("Rejected approval cannot alter an executing or terminal task")
-                task.status = "queued" if approved else "cancelled"
-                task.save(update_fields=["status", "updated_at"])
+                if not approved and reconciliation_hold:
+                    # Reject the new authorization but preserve the incident
+                    # for explicit receipt reconciliation, not silent closure.
+                    pass
+                else:
+                    task.status = "queued" if approved else "cancelled"
+                    task.save(update_fields=["status", "updated_at"])
         elif approval.target_type == "KnowledgeArticle":
             article = KnowledgeArticle.objects.select_for_update().filter(pk=approval.target_id).first()
             if article is None:

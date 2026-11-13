@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
-from .services import normalize_risk, requires_owner_approval
+from .services import normalize_action, normalize_risk, requires_owner_approval
 from .unified_bot_identity import BOT_CODE
 
 
@@ -23,13 +23,23 @@ class TaskRuntime:
 
     @transaction.atomic
     def claim(self, task_id):
-        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent", "project").get(pk=task_id)
         if task.status != "queued":
             if task.status == "failed" and task.attempt_count >= task.max_attempts:
                 raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+        # Planning exclusively under the canonical bot is not sufficient:
+        # historical queued tasks, stale API clients and old cron workers
+        # can call claim() by primary key. No noncanonical row may acquire
+        # a NEW execution identity after the source cutover. Do not mutate
+        # the old task here: its pending work requires an audited handoff.
+        if task.agent.code != BOT_CODE:
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_TASK_EXECUTION_FORBIDDEN; "
+                "legacy task requires verified handoff"
+            )
 
         # One execution owner across economic and factory lanes of Mojtaba.bot.ai.
         # On row-locking databases select_for_update also locks the joined
@@ -56,11 +66,20 @@ class TaskRuntime:
         if effective_risk != snapshot_risk:
             raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
         if requires_owner_approval(task.action_type, effective_risk):
-            approved = ApprovalRequest.objects.filter(
-                target_type="AgentTask", target_id=str(task.pk), status="approved"
-            ).exists()
-            if not approved:
-                raise TaskExecutionError("Owner approval is required before execution")
+            # A same-PK approval for another action (or another project's
+            # owner) is not an execution authorization.
+            approvals = ApprovalRequest.objects.filter(
+                target_type="AgentTask",
+                target_id=str(task.pk),
+                action_type=normalize_action(task.action_type),
+                status="approved",
+            )
+            if task.project_id:
+                approvals = approvals.filter(requested_by_id=task.project.owner_id)
+            if not approvals.exists():
+                raise TaskExecutionError(
+                    "Matching owner approval is required before execution"
+                )
 
         if task.attempt_count >= task.max_attempts:
             raise TaskExecutionError("Task retry budget exhausted")
@@ -86,6 +105,12 @@ class TaskRuntime:
             raise TaskExecutionError(
                 "Execution identity does not match the active task execution"
             )
+        if task.agent_id and not task.agent.code == BOT_CODE:
+            # A task started before cutover is not a continuing licence for
+            # an independent worker. Preserve the original execution state.
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_HEARTBEAT_FORBIDDEN"
+            )
         task.save(update_fields=["updated_at"])
         return task
 
@@ -107,28 +132,27 @@ class TaskRuntime:
             raise TaskExecutionError("Task execution is not stale")
 
         previous_execution_id = task.execution_id
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
-            task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
-            }
-        elif task.agent.code == BOT_CODE:
-            # Staleness is not proof of failure: a previous economic action
-            # might already have made a private or external change.  Never
-            # replay such work until the previous effect has been reconciled.
-            task.status = "blocked"
-            task.output_data = {
-                "error": "Stale economic execution requires reconciliation before any retry",
-                "requires_review": True,
-                "automatic_replay_allowed": False,
-                "previous_execution_id": previous_execution_id,
-            }
-        else:
-            task.status = "queued"
-            task.execution_id = ""
-            task.output_data = {
-                "error": "Execution became stale and was re-queued for recovery"
-            }
+        # No stale task is automatically requeued. A legacy executor might
+        # already have produced an unacknowledged external effect. Retain its
+        # execution token, task owner and audit trail for canonical migration.
+        task.status = "blocked"
+        task.output_data = {
+            "error": (
+                "Stale canonical execution requires effect reconciliation"
+                if task.agent.code == BOT_CODE
+                else "Stale legacy execution requires canonical handoff reconciliation"
+            ),
+            "requires_review": True,
+            "automatic_replay_allowed": False,
+            "previous_execution_id": previous_execution_id,
+            "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+        }
+        if task.agent.code != BOT_CODE:
+            task.output_data.update({
+                "legacy_agent_code": task.agent.code,
+                "migration_target": BOT_CODE,
+                "legacy_work_replayed": False,
+            })
 
         task.save(
             update_fields=["status", "execution_id", "output_data", "updated_at"]
@@ -154,6 +178,12 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError("Execution identity does not match the active task execution")
+        if task.agent.code != BOT_CODE:
+            # Do not let old worker callbacks claim post-cutover successful
+            # completion, obscure pending effects or silently close the case.
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_COMPLETION_FORBIDDEN"
+            )
         if not isinstance(output_data or {}, dict):
             raise TaskExecutionError("Task output must be an object")
         try:
@@ -205,13 +235,23 @@ class TaskRuntime:
         if not str(error or "").strip():
             raise TaskExecutionError("Task failure reason is required")
         previous_execution_id = task.execution_id
-        task.output_data = {"error": str(error)[:5000]}
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
-        else:
-            # Invalidate the previous worker identity before the retry is claimable.
-            task.execution_id = ""
-            task.status = "queued"
+        # Neither canonical nor historical workers can automatically retry
+        # after an external-capable execution. Unknown delivery or side effects
+        # require a human-verifiable receipt before any canonical replan.
+        task.status = "blocked"
+        task.output_data = {
+            "error": str(error)[:5000],
+            "requires_review": True,
+            "automatic_replay_allowed": False,
+            "previous_execution_id": previous_execution_id,
+            "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+        }
+        if task.agent.code != BOT_CODE:
+            task.output_data.update({
+                "legacy_agent_code": task.agent.code,
+                "migration_target": BOT_CODE,
+                "legacy_work_replayed": False,
+            })
         task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
         self._audit(
             task,
@@ -222,6 +262,8 @@ class TaskRuntime:
                 "execution_id": task.execution_id,
                 "previous_execution_id": previous_execution_id,
                 "attempt": task.attempt_count,
+                "requires_review": task.status == "blocked",
+                "automatic_replay_allowed": task.status == "queued",
             },
             trace_execution_id=previous_execution_id,
         )

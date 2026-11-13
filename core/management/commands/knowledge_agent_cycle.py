@@ -8,7 +8,18 @@ class Command(BaseCommand):
     help = "Queue the next planned Knowledge Content Director cycle."
 
     def handle(self, *args, **options):
-        run = queue_cycle()
+        try:
+            run = queue_cycle()
+        except RuntimeError as exc:
+            if str(exc) == "MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED" or str(exc).startswith(
+                "MOJTABA_LEGACY_HANDOFF_REQUIRED:"
+            ):
+                self.stdout.write(
+                    "KNOWLEDGE_AGENT: blocked_pending_single_bot_handoff; "
+                    "no_new_run_or_paid_task=true"
+                )
+                return
+            raise
         if run is None:
             plan = KnowledgeAgentPlan.objects.get(code="knowledge-content-director")
             queued = plan.runs.filter(status="queued").count()

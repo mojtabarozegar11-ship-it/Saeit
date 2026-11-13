@@ -10,14 +10,19 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Agent
-from core.newsletter_engine import process_submission
+from core.models import Agent, AgentTask
+from core.unified_bot_identity import BOT_CODE
+from core.newsletter_engine import process_submission, create_draft
 from core.newsletter_models import NewsletterSchedule, NewsletterStory, NewsletterSubmission
 
 
 class NewsletterQueueWorkerTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_user(username="newsletter_queue_owner")
+        self.bot = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai", mission="Canonical owner",
+            active=True,
+        )
 
     def submission(self, suffix):
         return NewsletterSubmission.objects.create(
@@ -46,7 +51,8 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual({a.status, b.status}, {"drafted"})
         self.assertEqual(NewsletterStory.objects.filter(status="draft").count(), 2)
         self.assertEqual(NewsletterStory.objects.filter(status="published").count(), 0)
-        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        self.assertEqual(set(NewsletterStory.objects.values_list("agent_id", flat=True)), {self.bot.pk})
 
     def test_batch_limit_never_claims_unselected_submissions(self):
         first = self.submission("first")
@@ -78,6 +84,7 @@ class NewsletterQueueWorkerTests(TestCase):
         agent = Agent.objects.create(
             code="content-director", name="Content Director", mission="Review", active=False
         )
+        AgentTask.objects.create(agent=agent, action_type="legacy_draft", status="queued")
         item = self.submission("disabled")
         receipt = self.run_queue()
         agent.refresh_from_db()
@@ -95,6 +102,64 @@ class NewsletterQueueWorkerTests(TestCase):
         self.assertEqual(item.status, "queued")
         self.assertEqual(receipt["result"]["errors"], 1)
         self.assertEqual(receipt["error_types"], {"RuntimeError": 1})
+        self.assertFalse(NewsletterStory.objects.exists())
+
+    def test_inactive_legacy_without_pending_work_is_not_resurrected(self):
+        old = Agent.objects.create(
+            code="content-director", name="Old Content Director",
+            mission="Historical story evidence", active=False,
+        )
+        item = self.submission("historical")
+        receipt = self.run_queue("--limit", "1")
+        old.refresh_from_db()
+        item.refresh_from_db()
+        self.assertFalse(old.active)
+        self.assertEqual(item.status, "drafted")
+        self.assertEqual(receipt["result"]["drafted"], 1)
+        self.assertEqual(item.generated_story.agent_id, self.bot.pk)
+
+    def test_active_legacy_holds_submission_for_verified_handoff(self):
+        old = Agent.objects.create(
+            code="content-director", name="Legacy worker",
+            mission="Still active", active=True,
+        )
+        item = self.submission("active-legacy")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        old.refresh_from_db()
+        self.assertTrue(old.active)
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
+        self.assertEqual(NewsletterStory.objects.count(), 0)
+
+    def test_inactive_legacy_with_unpublished_draft_requires_handoff(self):
+        old = Agent.objects.create(
+            code="content-director", name="Old Content Director",
+            mission="Review owned draft", active=False,
+        )
+        historical_story = NewsletterStory.objects.create(
+            agent=old, story_type="company", title="Unfinished draft",
+            slug="historical-unfinished-draft", summary="Previously drafted",
+            body="Preserve historical text", fingerprint="historical-undelivered",
+            status="draft",
+        )
+        item = self.submission("unpublished-legacy")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        historical_story.refresh_from_db()
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
+        self.assertEqual(historical_story.agent_id, old.pk)
+        self.assertEqual(NewsletterStory.objects.count(), 1)
+
+    def test_missing_canonical_holds_owner_submission(self):
+        self.bot.active = False
+        self.bot.save(update_fields=["active"])
+        item = self.submission("missing-owner")
+        receipt = self.run_queue("--limit", "1")
+        item.refresh_from_db()
+        self.assertEqual(item.status, "queued")
+        self.assertEqual(receipt["result"]["held"], 1)
         self.assertFalse(NewsletterStory.objects.exists())
 
 
@@ -128,3 +193,50 @@ class NewsletterDefaultDenyPublicationTests(TestCase):
         call_command("publish_scheduled_news", stdout=io.StringIO())
         self.story.refresh_from_db()
         self.assertEqual(self.story.status, "published")
+
+
+
+class NewsletterSingleBotAuthorshipTests(TestCase):
+    def setUp(self):
+        self.bot = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai",
+            mission="Only canonical newsletter owner", active=True,
+        )
+
+    def test_legacy_newsletter_cannot_create_new_story_even_if_database_identity_active(self):
+        # A legacy launcher may remain in a cron on another host. It must not
+        # produce new artifacts as an independent bot after source migration.
+        legacy, _ = Agent.objects.update_or_create(
+            code="newsletter-world-watch",
+            defaults={
+                "name": "Old watcher", "mission": "Historical watcher",
+                "active": True,
+            },
+        )
+        original_count = Agent.objects.count()
+        for code in ("newsletter-world-watch", "content-director", "economic-master-agent"):
+            with self.assertRaisesRegex(
+                RuntimeError, "MOJTABA_NONCANONICAL_NEWSLETTER_OWNER_FORBIDDEN"
+            ):
+                create_draft(
+                    agent_code=code, story_type="world",
+                    title="A retired bot must never publish a new report",
+                    summary="Not authorized", body="Not authorized",
+                )
+        self.assertTrue(legacy.active)  # No disguised live scheduler cleanup.
+        self.assertEqual(Agent.objects.count(), original_count)
+        self.assertFalse(NewsletterStory.objects.exists())
+
+    def test_canonical_newsletter_still_creates_private_draft_without_splitting_bot(self):
+        story, disposition = create_draft(
+            agent_code=BOT_CODE, story_type="company",
+            title="A single verified internal draft",
+            summary="Draft only, not published or delivered",
+            body="Source-bound internal note",
+        )
+        self.assertEqual(disposition, "created")
+        self.assertEqual(story.agent_id, self.bot.pk)
+        self.assertEqual(story.status, "draft")
+        # Old rows may be seeded by historical migrations; this code path
+        # must never activate another identity or claim they disappeared.
+        self.assertFalse(Agent.objects.filter(code="new-independent-bot").exists())

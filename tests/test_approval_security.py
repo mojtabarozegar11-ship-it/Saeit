@@ -46,3 +46,25 @@ def test_approved_task_cannot_be_released_twice():
     ApprovalService().decide(approval.pk, True, actor_id=owner.pk, actor_type="owner")
     with pytest.raises(ValueError, match="no longer pending"):
         ApprovalService().decide(approval.pk, True, actor_id=owner.pk, actor_type="owner")
+
+@pytest.mark.parametrize(
+    ("actor_type", "identified", "approved"),
+    [
+        ("owner", False, True),
+        ("owner", False, False),
+        ("system", False, True),
+        ("system", True, True),
+        ("scheduler", True, False),
+    ],
+)
+def test_approval_decision_rejects_missing_or_impersonated_owner(actor_type, identified, approved):
+    owner, _, task, approval = setup_blocked_task()
+    actor_id = owner.pk if identified else None
+    with pytest.raises(ValueError, match="designated owner"):
+        ApprovalService().decide(
+            approval.pk, approved, actor_id=actor_id, actor_type=actor_type
+        )
+    approval.refresh_from_db()
+    task.refresh_from_db()
+    assert approval.status == "pending"
+    assert task.status == "blocked"

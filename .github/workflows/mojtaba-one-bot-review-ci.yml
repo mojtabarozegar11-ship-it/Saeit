@@ -1,0 +1,184 @@
+name: Mojtaba.bot.ai one-bot review CI
+
+on:
+  pull_request:
+    branches:
+      - integration/mojtaba-bot-ai-20261112
+    paths:
+      - "core/**"
+      - "trading/mojtrade_costed_oos.py"
+      - "trading/mojtrade_walk_forward.py"
+      - "trading/mojtrade_market_sessions.py"
+      - "trading/mojtrade_demo_receipt_reconcile.py"
+      - "trading/mojtrade_broker_statement_check.py"
+      - "trading/MojTradeDemoHistoryAuditBot.cs"
+      - "trading/MojTradeGoldSnapshotAuditBot.cs"
+      - "trading/MojTradeOmegaXDemoBot.cs"
+      - "trading/ctrader-build/**"
+      - "tests/test_mojtrade_costed_oos.py"
+      - "tests/test_mojtrade_demo_signal.py"
+      - "tests/test_mojtrade_gold_capture.py"
+      - "tests/test_mojtrade_ctrader_cli_preflight_readonly.py"
+      - "deploy/mojtrade_ctrader_cli_preflight_readonly.py"
+      - "tests/test_mojtrade_walk_forward.py"
+      - "tests/test_mojtrade_market_sessions.py"
+      - "tests/test_mojtrade_demo_receipts.py"
+      - "tests/test_mojtrade_broker_statement_check.py"
+      - "tests/test_company_activity_workflow_handoff.py"
+      - "tests/test_mojtaba_live_topology_readonly.py"
+      - "deploy/mojtaba_live_topology_readonly.py"
+      - "deploy/mojtaba_live_disposition_readonly.py"
+      - "runtime/mojtaba_bot_disposition_sources_v1.json"
+      - ".github/workflows/mojtaba-one-bot-review-ci.yml"
+      - ".github/workflows/mojtaba-live-topology-readonly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-one-bot-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  single-bot-regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "mojtaba-ci-only-not-for-production"
+      DEBUG: "true"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - name: Check out exact proposed commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Install real Linux isolation dependencies on disposable CI runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          test -x /usr/bin/bwrap
+          test -x /usr/bin/unshare
+          test -x /usr/bin/python3
+          # Do not disable sandboxing or adjust host security policies to pass.
+          unshare -Urn /usr/bin/true
+      - name: Validate Django configuration and migrations
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Validate all known agent migration regression cases
+        run: |
+          python -m pytest -q \
+            core/tests/test_audit_agent_fleet.py \
+            core/tests/test_company_activity_agent.py \
+            core/tests/test_knowledge_agent_scheduler.py \
+            core/tests/test_newsletter_queue_worker.py \
+            core/tests/test_weather_agent_assignment.py \
+            core/tests/test_weather_paid_grants.py \
+            core/tests/test_unified_bot_merge.py \
+            core/tests/test_mojtrade_canonical_bridge.py \
+            core/tests/test_mojtrade_strategy_risk.py \
+            tests/test_mojtrade_demo_signal.py \
+            tests/test_mojtrade_gold_capture.py \
+            core/tests/test_mojtrade_demo_evidence_bridge.py \
+            core/tests/test_mojtrade_statement_bridge.py \
+            tests/test_mojtrade_consume_observation.py \
+            tests/test_mojtrade_costed_oos.py \
+            tests/test_mojtrade_walk_forward.py \
+            tests/test_mojtrade_market_sessions.py \
+            tests/test_mojtrade_demo_receipts.py \
+            tests/test_mojtrade_broker_statement_check.py \
+            tests/test_mojtrade_csharp_build_contracts.py \
+            tests/test_mojtrade_ctrader_cli_preflight_readonly.py \
+            tests/test_mojtrade_signal_drafts.py \
+            tests/test_approval_security.py \
+            tests/test_runtime.py \
+            tests/test_agent_registry.py \
+            tests/test_online_income_agents.py \
+            core/tests/test_approval_lifecycle.py \
+            core/tests/test_approval_audit.py \
+            core/tests/test_approval_api.py \
+            core/tests/test_approval_grants.py \
+            core/tests/test_canonical_approval_scope.py \
+            core/tests/test_knowledge_agent_generate.py \
+            core/tests/test_consolidate_legacy_agents.py \
+            core/tests.py \
+            tests/test_company_activity_workflow_handoff.py \
+            tests/test_mojtaba_live_topology_readonly.py \
+            tests/test_mojtaba_live_disposition_readonly.py \
+            core/test_bot_identity.py \
+            core/test_cyber_defense.py \
+            core/tests/test_economic_brain.py \
+            core/tests/test_economic_worker.py \
+            core/tests/test_factory_f41_master_bridge.py \
+            core/tests/test_factory_native_master_bridge.py \
+            core/tests/test_unified_bot_recovery_boundary.py \
+            core/tests/test_tool_gateway.py \
+            core/tests/test_canonical_sensitive_tool_grants.py \
+            core/tests/test_risk_policy.py \
+            core/tests/test_worker_runner.py \
+            core/tests/test_queue_dispatcher.py \
+            core/tests/test_task_runtime_lifecycle.py \
+            core/tests/test_task_runtime_identity.py \
+            core/tests/test_task_recovery.py \
+            core/tests/test_recovery_command.py \
+            core/tests/test_recovery_scheduler.py \
+            tests/test_task_runtime.py \
+            tests/test_task_retry.py \
+            tests/test_task_policy_snapshot.py \
+            tests/test_agent_policy.py \
+            core/tests/test_task_retry_identity.py \
+            tests/test_action_policy.py \
+            tests/test_ava_affect.py \
+            tests/test_ava_audit.py \
+            tests/test_ava_core.py \
+            tests/test_ava_embodiment.py \
+            tests/test_ava_evolution.py \
+            tests/test_ava_goals.py \
+            tests/test_ava_rollback.py \
+            tests/test_ava_runtime.py \
+            tests/test_ava_sandbox.py \
+            tests/test_ava_storage.py \
+            tests/test_mojtaba_bot.py \
+            tests/test_mojtaba_central_cycle_accounting.py \
+            tests/test_operation_policy.py \
+            tests/test_single_canonical_identity.py \
+            tests/test_unified_approvals.py
+
+  ctrader-csharp-compile:
+    name: Compile cTrader DEMO cBots against official API (no deployment)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout proposed source without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup .NET SDK 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Verify DEMO execution cBot compiles with cTrader.Automate 1.0.21
+        run: |
+          dotnet build trading/ctrader-build/MojTradeOmegaXDemoBot/MojTradeOmegaXDemoBot.csproj \
+            -c Release --nologo -p:AlgoBuild=false -p:AlgoPublish=false
+      - name: Verify read-only cTrader History audit cBot compiles
+        run: |
+          dotnet build trading/ctrader-build/MojTradeDemoHistoryAuditBot/MojTradeDemoHistoryAuditBot.csproj \
+            -c Release --nologo -p:AlgoBuild=false -p:AlgoPublish=false
+      - name: Verify read-only cTrader XAUUSD H1 market and account snapshot cBot compiles
+        run: |
+          dotnet build trading/ctrader-build/MojTradeGoldSnapshotAuditBot/MojTradeGoldSnapshotAuditBot.csproj \
+            -c Release --nologo -p:AlgoBuild=false -p:AlgoPublish=false
+      - name: No live release artifacts
+        run: |
+          test ! -d trading/ctrader-build/publish

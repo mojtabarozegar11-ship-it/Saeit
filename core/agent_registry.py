@@ -1,7 +1,6 @@
-from django.db.models import Case, IntegerField, Value, When
-
 from .models import Agent, AgentCapability
 from .services import normalize_risk
+from .unified_bot_identity import BOT_CODE
 
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -20,18 +19,15 @@ class AgentRegistry:
         capability = self._capability(normalized) or self._capability(f"core_{normalized}")
         if not capability:
             return None
-        # String ordering puts "critical" before "low". Use policy risk order.
-        risk_priority = Case(
-            *(When(risk_level=name, then=Value(priority)) for name, priority in RISK_ORDER.items()),
-            default=Value(len(RISK_ORDER)),
-            output_field=IntegerField(),
-        )
-        return (
-            capability.agents.filter(active=True)
-            .annotate(_risk_priority=risk_priority)
-            .order_by("_risk_priority", "id")
-            .first()
-        )
+
+        # One bot, with many modules: EVERY newly planned task has exactly
+        # one eligible execution owner, even when a capability has not yet
+        # been mapped to a reviewed module. Never fall back to a legacy row
+        # because of a low risk score, earlier PK or matching mission.
+        #
+        # Absence of a canonical capability assignment is a migration
+        # blocker, not permission to dispatch work to a second bot.
+        return capability.agents.filter(code=BOT_CODE, active=True).first()
 
     def capability_for(self, agent, action):
         normalized = self._normalize(action)
@@ -43,6 +39,10 @@ class AgentRegistry:
         return agent.capabilities.filter(active=True, code=f"core_{normalized}").first()
 
     def can_execute(self, agent, action):
+        # Historical Agent.capabilities are needed for audit/disposition.
+        # They are NOT an authorization to execute a new or old task.
+        if not agent or agent.code != BOT_CODE or not agent.active:
+            return False
         return self.capability_for(agent, action) is not None
 
     def effective_risk(self, capability, requested_risk="low"):

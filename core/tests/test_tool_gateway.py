@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 
 from core.models import Agent, AgentCapability, AgentTask, ApprovalRequest, ResearchProject
 from core.tool_gateway import ToolGateway, ToolGatewayError, ToolSpec
+from core.unified_bot_identity import BOT_CODE
 
 
 @pytest.fixture
@@ -14,7 +15,7 @@ def running_task(db):
         title="Tool test", objective="Validate gateway", owner=user
     )
     agent = Agent.objects.create(
-        code="research-agent",
+        code=BOT_CODE,
         name="Research Agent",
         mission="Execute research",
         risk_level="low",
@@ -85,9 +86,12 @@ def test_gateway_requires_approval_for_sensitive_tool(running_task):
         requested_by=running_task.project.owner,
     )
 
-    assert gateway.invoke(
-        "deploy", {}, task_id=running_task.pk, execution_id="exec-123"
-    ) == {"ok": True}
+    # A plain approved row is no longer sufficient: the only bot requires
+    # a separately scoped, single-use owner approval grant.
+    with pytest.raises(ToolGatewayError, match="one-time owner grant"):
+        gateway.invoke(
+            "deploy", {}, task_id=running_task.pk, execution_id="exec-123"
+        )
 
 
 def test_gateway_denies_cross_capability_tool_even_with_an_approval(running_task):
@@ -216,3 +220,117 @@ def test_gateway_audits_failed_invocation(running_task):
         target_id=str(running_task.pk),
         action="tool_invocation_failed",
     ).exists()
+
+
+
+def test_gateway_reserves_one_call_even_while_task_remains_running(running_task):
+    """One execution token authorizes one dispatch, not repeated provider calls."""
+    from core.models import AuditLog
+
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(code="research", handler=lambda p: calls.append(p) or {"ok": True}),
+    ])
+    assert gateway.invoke(
+        "research", {"request": "first"},
+        task_id=running_task.pk, execution_id="exec-123",
+    ) == {"ok": True}
+    with pytest.raises(ToolGatewayError, match="already reserved"):
+        gateway.invoke(
+            "research", {"request": "duplicate"},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert calls == [{"request": "first"}]
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(running_task.pk),
+        action="tool_invocation_started",
+    ).count() == 1
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(running_task.pk),
+        action="tool_invocation_completed",
+    ).count() == 1
+
+
+def test_gateway_lost_acknowledgement_reservation_survives_handler_error(running_task):
+    from core.models import AuditLog
+
+    calls = []
+
+    def no_receipt(payload):
+        calls.append(payload)
+        raise RuntimeError("provider acknowledgement lost")
+
+    gateway = ToolGateway([ToolSpec(code="research", handler=no_receipt)])
+    with pytest.raises(RuntimeError, match="acknowledgement lost"):
+        gateway.invoke(
+            "research", {"request": 1},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    with pytest.raises(ToolGatewayError, match="receipt reconciliation"):
+        gateway.invoke(
+            "research", {"request": 2},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert len(calls) == 1
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_started",
+    ).count() == 1
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_failed",
+    ).count() == 1
+
+
+def test_gateway_second_alias_cannot_bypass_single_dispatch_reservation(running_task):
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(
+            code="research_lookup", allowed_actions=("research",),
+            handler=lambda p: calls.append("alias") or {"ok": True},
+        ),
+        ToolSpec(
+            code="research", handler=lambda p: calls.append("direct") or {"ok": True},
+        ),
+    ])
+    gateway.invoke(
+        "research_lookup", {}, task_id=running_task.pk,
+        execution_id="exec-123",
+    )
+    with pytest.raises(ToolGatewayError, match="already reserved"):
+        gateway.invoke(
+            "research", {}, task_id=running_task.pk,
+            execution_id="exec-123",
+        )
+    assert calls == ["alias"]
+
+
+def test_canonical_failure_holds_execution_until_receipt_reconciliation(running_task):
+    """The sole bot never repeats a side effect after acknowledgement loss."""
+    from core.models import AuditLog
+    from core.task_runtime import TaskExecutionError, TaskRuntime
+
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(code="research", handler=lambda p: calls.append(p) or {"ok": True}),
+    ])
+    gateway.invoke(
+        "research", {"attempt": 1},
+        task_id=running_task.pk, execution_id="exec-123",
+    )
+    runtime = TaskRuntime()
+    held = runtime.fail(
+        running_task.pk, "external receipt not independently reconciled",
+        execution_id="exec-123",
+    )
+    assert held.status == "blocked"
+    assert held.execution_id == "exec-123"
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        runtime.claim(running_task.pk)
+    with pytest.raises(ToolGatewayError, match="running"):
+        gateway.invoke(
+            "research", {"attempt": 2},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert calls == [{"attempt": 1}]
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_started",
+    ).count() == 1

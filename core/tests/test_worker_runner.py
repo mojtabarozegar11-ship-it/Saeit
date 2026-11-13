@@ -5,6 +5,7 @@ from core.models import Agent, AgentCapability, AgentTask, ResearchProject
 from core.task_runtime import TaskExecutionError
 from core.tool_gateway import ToolGateway, ToolSpec
 from core.worker_runner import WorkerRunner, WorkerRunnerError
+from core.unified_bot_identity import BOT_CODE
 
 
 @pytest.fixture
@@ -16,7 +17,7 @@ def queued_task(db):
         title="Worker test", objective="Validate runner", owner=user
     )
     agent = Agent.objects.create(
-        code="worker-agent",
+        code=BOT_CODE,
         name="Worker Agent",
         mission="Execute queued work",
         risk_level="low",
@@ -67,8 +68,9 @@ def test_runner_requeues_after_tool_failure(queued_task):
         WorkerRunner(gateway).run(queued_task.pk)
 
     queued_task.refresh_from_db()
-    assert queued_task.status == "queued"
-    assert queued_task.execution_id == ""
+    assert queued_task.status == "blocked"
+    assert queued_task.execution_id
+    assert queued_task.output_data["automatic_replay_allowed"] is False
     assert queued_task.attempt_count == 1
     assert "tool exploded" in queued_task.output_data["error"]
 
@@ -87,8 +89,9 @@ def test_runner_fails_when_retry_budget_is_exhausted(queued_task):
         WorkerRunner(gateway).run(queued_task.pk)
 
     queued_task.refresh_from_db()
-    assert queued_task.status == "failed"
+    assert queued_task.status == "blocked"
     assert queued_task.execution_id
+    assert queued_task.output_data["retry_budget_exhausted"] is True
 
 
 def test_runner_supports_explicit_tool_mapping(queued_task):
@@ -115,7 +118,7 @@ def test_runner_rejects_non_object_input(queued_task):
         WorkerRunner(gateway).run(queued_task.pk)
 
     queued_task.refresh_from_db()
-    assert queued_task.status == "queued"
+    assert queued_task.status == "blocked"
 
 
 def test_runner_rejects_invalid_tool_cost(queued_task):
@@ -127,7 +130,7 @@ def test_runner_rejects_invalid_tool_cost(queued_task):
         WorkerRunner(gateway).run(queued_task.pk)
 
     queued_task.refresh_from_db()
-    assert queued_task.status == "queued"
+    assert queued_task.status == "blocked"
 
 
 def test_runner_propagates_lifecycle_errors(queued_task):

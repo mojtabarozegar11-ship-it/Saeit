@@ -96,6 +96,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# Private research observation directory; absent by default: no market ingestion.
+# This grants NO broker access or public signal publication.
+MOJTRADE_PRIVATE_DIR = env("MOJTRADE_PRIVATE_DIR", default="")
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)

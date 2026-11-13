@@ -2,11 +2,11 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from core.models import Agent, AgentCapability, AgentTask, ResearchProject
-from core.task_runtime import TaskRuntime
+from core.task_runtime import TaskExecutionError, TaskRuntime
 
 
 @pytest.mark.django_db
-def test_retry_invalidates_previous_execution_identity():
+def test_legacy_failed_execution_is_held_for_handoff_without_replay():
     user = get_user_model().objects.create_user(
         username="retry-owner", password="pass", is_staff=True
     )
@@ -30,13 +30,17 @@ def test_retry_invalidates_previous_execution_identity():
     TaskRuntime().fail(task.pk, "temporary worker failure", execution_id="old-execution")
 
     task.refresh_from_db()
-    assert task.status == "queued"
-    assert task.execution_id == ""
-
-    claimed = TaskRuntime().claim(task.pk)
-    assert claimed.status == "running"
-    assert claimed.execution_id
-    assert claimed.execution_id != "old-execution"
+    assert task.status == "blocked"
+    assert task.execution_id == "old-execution"
+    assert task.output_data["automatic_replay_allowed"] is False
+    assert task.output_data["migration_target"] == "mojtaba-bot-ai"
+    assert task.output_data["legacy_agent_code"] == "retry-agent"
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
+    task.refresh_from_db()
+    assert task.status == "blocked"
+    assert task.execution_id == "old-execution"
+    assert task.attempt_count == 1
 
 
 @pytest.mark.django_db
@@ -64,5 +68,7 @@ def test_final_failure_keeps_execution_identity_for_audit():
     TaskRuntime().fail(task.pk, "terminal failure", execution_id="final-execution")
 
     task.refresh_from_db()
-    assert task.status == "failed"
+    assert task.status == "blocked"
     assert task.execution_id == "final-execution"
+    assert task.output_data["retry_budget_exhausted"] is True
+    assert task.output_data["automatic_replay_allowed"] is False

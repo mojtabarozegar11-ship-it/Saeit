@@ -41,16 +41,20 @@ def test_recover_stale_tasks_command_reports_summary(capsys):
         risk_snapshot="low",
         status="queued",
     )
-    TaskRuntime().claim(task.pk)
+    # Historical running work is never claimed again after cutover.
     AgentTask.objects.filter(pk=task.pk).update(
-        updated_at=task.updated_at.replace(year=2000)
+        status="running", execution_id="old-recovery-token",
+        attempt_count=1, updated_at=task.updated_at.replace(year=2000),
     )
 
     call_command("recover_stale_tasks", "--stale-after", "60")
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["scanned"] == 1
-    assert payload["recovered"] == 1
+    assert payload["recovered"] == 0
+    assert payload["blocked"] == 1
     task.refresh_from_db()
-    assert task.status == "queued"
-    assert task.execution_id == ""
+    assert task.status == "blocked"
+    assert task.execution_id == "old-recovery-token"
+    assert task.output_data["migration_target"] == "mojtaba-bot-ai"
+    assert task.output_data["automatic_replay_allowed"] is False

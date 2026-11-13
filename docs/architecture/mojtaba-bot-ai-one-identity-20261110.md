@@ -28,6 +28,207 @@ lanes**, not separately marketed bots.
    capability mappings and `full_consolidation_attested=false` to avoid false
    100% claims.
 
+## Canonical worker failure / retry contract (review branch)
+
+Every failed or stale **running** `mojtaba-bot-ai` task is placed in
+`blocked`, even if the normal retry budget is exhausted. A gateway may have
+made a real-world change before returning an exception or losing its
+acknowledgement. Therefore:
+
+- Preserve the original `execution_id` and `attempt_count` for forensics.
+- Mark `requires_review=true` and `automatic_replay_allowed=false`.
+- Do not treat a blocked task as failed/no-effect or completed/revenue.
+- Reconcile external receipts, payment/order IDs and the original effect before
+  a separately authorized and idempotent retry or replacement.
+- Retain the previous retry policy of noncanonical agents while their source
+  processes are inventoried; this does not approve their continued execution.
+
+Unit tests and the isolated PR runner prove the source-level rule only. It is
+**not deployed** and requires MariaDB locking, VPS scheduler, and real delivery
+verification before any production cutover. No automatic deactivation,
+database deletion, paid action or external order is authorized.
+
+## Sensitive tool execution: one-shot, payload-bound owner grants (review branch)
+
+On the canonical `mojtaba-bot-ai` owner only, an approved task request is
+**necessary but not sufficient** for a tool requiring owner approval. After
+the selected `AgentTask` has a real execution token, the designated owner
+must issue a short-lived `ApprovalGrant` with an exact scope:
+
+- `action`: normalized task action
+- `agent_task_id`: actual database task primary key (integer)
+- `execution_id`: current TaskRuntime claim token
+- `tool_code`: actual registered adapter code (not just an alias)
+- `payload_sha256`: SHA-256 of the reviewed task input **excluding**
+  `owner_approval_grant_id`, encoded as canonical JSON with sorted keys,
+  compact separators, `ensure_ascii=True`, and no nonfinite numbers.
+
+Store the resulting integer grant id in the task's private
+`input_data.owner_approval_grant_id`. Before any handler dispatch,
+`ToolGateway` locks the task, verifies that the grant's issuing approval
+belongs to the exact task/action and designated owner, checks the unchanged
+payload, consumes the one-time grant, and reserves the invocation in one
+database transaction. Invalid/expired/used/cross-task grants **fail closed**;
+the grant ID is stripped from the adapter payload.
+
+The agent policy also treats named broker trades, withdrawals, transfers,
+funding, outbound SMS/email/messages, destructive changes and legal commitments
+as sensitive **regardless of an adapter's claimed low risk**. General-manager
+approval names and tool-gateway approval names use one shared policy list.
+Unknown external integrations must still be audited: no exact-name allowlist
+can substitute for adapter-level threat modeling and genuine host-side gates.
+
+This is a *code-review contract*, not approval to deploy, pay, withdraw, trade,
+publish, rotate credentials or edit production. The registered canonical
+capabilities in this branch still do not include a live deployment or broker
+order adapter. Real owner sign-off, MariaDB concurrency tests, verified
+rollback and host-specific runtime receipts remain mandatory.
+
+## Approval decision and claim boundaries (review branch)
+
+An approved request for an `AgentTask` is not interchangeable with an
+approval for another action, task or project. Both **approval** and **rejection**
+of an existing task now verify its normalized action and, when the task
+belongs to a project, the designated project owner. A sensitive task claim
+requires an approved request scoped to that exact action and project owner.
+Mismatched requests fail atomically without consuming an attempt or
+changing task status.
+
+A normal owner approval may release a **clean, not-yet-executed** blocked
+task. It must never requeue a `mojtaba-bot-ai` task marked
+`requires_review=true` or `automatic_replay_allowed=false`. Such a
+task might have already made an external change. Rejecting a new approval
+also preserves the unresolved incident's blocked state and evidence, rather
+than silently hiding it as cancelled. This is fail-closed until a separate,
+verified reconciliation procedure is designed, approved and tested.
+
+Synthetic regression tests assert no unauthorized dispatch or task claim.
+They are not proof of MariaDB production concurrency, external delivery,
+broker transactions, or revenue. Production merge/deploy is separately
+gated and remains unapproved.
+
+## Expanded root / scheduler disposition coverage (review branch)
+
+The earlier read-only, two-host preview only classified **nine** source groups,
+even though the VPS/cPanel route collector could already recognize MojTrade,
+MojCoin and the separate canonical/legacy cycle coordinator entrypoints.
+Absence from the nine-group report was **not** evidence of retirement.
+
+The source ledger and read-only disposition preview now enumerate **14 logical
+source groups**. The five additions cover MojTrade observer/broker integration,
+MojCoin/game/token schedulers, master/coordinator cycle entrypoints, Android
+Termux/Automate/SMS, and independent third-party/connected-app automations.
+The first three reuse *existing* pinned host route tags. The latter two are
+explicitly marked **outside VPS/cPanel observation**, not silently counted as
+absent or disabled. The report retains six outstanding external inventory
+scopes, rejects unknown/duplicate manifest groups, and records incomplete
+coverage instead of a fictitious 100% score.
+
+These 14 groups are logical audit categories, **not 14 confirmed live bots**.
+The known Django and private PHP code roster is also not a census of all
+running services. No independent scheduler has been stopped, no real agent
+identity retired, no root code deleted, and no new live host attestation was
+produced by this source-only change. To prove cleanup, reconcile each site,
+phone, broker, game server and connector schedule against an execution receipt
+and a verified canonical successor, then perform an owner-approved cutover.
+Retain historical database identities and audit evidence.
+
+## Cron root census and evidence-weighted progress metrics (review branch)
+
+An older VPS or cPanel bot can start from `@reboot`, `@hourly` or
+another standard cron alias without a five-field schedule. The original
+read-only collector skipped every `@` entry, including agent startup
+commands. The collector now accepts the eight recognized aliases and emits
+only allowlisted route flags, normalized schedule and a short command digest;
+it never emits command arguments, tokens or private URLs.
+
+A source read containing more than 500 cron lines or 20,000 process rows,
+or reaching the fixed 512,000-character capture ceiling, now produces a
+redacted `enumeration_truncated=true` flag. The per-source preview adds
+`host_cron_inventory_truncated` or `host_process_inventory_truncated` as
+applicable. Incomplete scans cannot justify a no-agent or safe-retirement
+finding. Aliases and limited scans are covered by offline regressions;
+live host observation has **not** run in this review cycle.
+
+The preview exposes **separate quantitative gates** in `evidence_progress`:
+
+- `known_source_group_registration`: checked-in known source-group coverage
+  (14 registered of 14 tracked groups = **100% of the current checklist**).
+  This is not a census of every actual running bot.
+- `verified_live_retirement`: zero of 14 groups has verified receipts
+  showing independent schedules retired. **0% proof coverage** reflects
+  absence of accepted evidence; it is not a claim of zero work or real
+  operational progress.
+- `overall_operational_completion_percent`: **null/unknown** until a full
+  process inventory, handoff receipts and live test evidence justify a valid
+  denominator and percentage.
+- The additional six unsurveyed external/device/runtime scopes stay visible
+  and prevent claiming overall 100%, even when the checked-in group manifest
+  itself is complete.
+
+Neither the safe-cron parsing nor evidence percentages authorize stopping
+cron, deleting a historical bot identity, publishing, deploying, sending
+messages or spending funds. They help determine exactly which roots still
+need genuine runtime verification before any approved cutover.
+
+## systemd timer roots — read-only census expansion (review branch)
+
+A `.timer` can start a bot even when its associated `.service` is not
+running at the instant of a `ps` snapshot. The previous host observer
+queried only active/inactive service units. It now also runs fixed,
+read-only `systemctl [--user] list-units --type=timer --all` commands on
+each authorized host (VPS and cPanel). No systemd units, jobs, cron entries,
+processes, accounts or deployed code are changed.
+
+The collector reports matched *candidate* timer unit names as short SHA-256
+digests plus allowlisted route flags and coarse active states. It does not
+emit private unit names, activation targets, service contents or command
+arguments. A timer matching MojTrade, MojCoin or a canonical/legacy cycle
+route is surfaced separately from Cron and services as an **indicator**, not
+a unique bot or delivery receipt. An unavailable user/system timer interface
+is an explicit partial-inventory blocker. Truncated timer/service lists
+emit `host_systemd_unit_inventory_truncated`; old pre-timer snapshots are
+rejected instead of being mistaken for a clean system.
+
+A generic `.timer` may activate a service under a different name using
+`Unit=`, and the local user's `systemctl` is not an audit of *every*
+user's units or every system-wide startup mechanism. Confirm such mappings
+and rights using separately authorized host evidence before accepting a
+complete scheduler census or turning off any previous runtime.
+
+The 14 known logical source groups are **100% present in the current
+checked-in manifest**, the latest source-only retirement receipt coverage
+remains **0/14 = 0% independently verified**, and the total operational
+completion percentage is **unknown**. Unit test success does not update
+either the proof coverage or any customer's paid/settled revenue.
+
+## Canonical-first task routing — prevents legacy shadow execution
+
+The generic `AgentRegistry.resolve()` previously picked an active agent
+using risk-level/row-ID sorting. While the old economic/factory identities
+remain present during safe retirement, an old `economic-master-agent` with
+lower risk or earlier row ID could capture **new** work even when the
+`mojtaba-bot-ai` owner had the same capability.
+
+For any registered capability explicitly classified as a Mojtaba.bot.ai
+internal module (`module_for_capability != unmapped_requires_adapter_review`),
+routing is now **canonical-first and fail-closed**:
+
+- When the canonical owner is active and has that capability, it wins even
+  if an old agent is lower-risk or was created first.
+- If the canonical owner is absent, disabled or lacks the reviewed
+  capability, do **not** redirect fresh canonical work to a legacy bot.
+  The planner fails before inserting an `AgentTask`.
+- An unclassified specialist may retain its original route until a
+  safe, independently verified handoff. This avoids breaking an unknown
+  business process or pretending it was already migrated.
+
+This is an actual source-level prevention of new legacy task ownership, not
+proof of shutting down existing processes. Existing scheduled legacy jobs,
+in-flight tasks, private server executors and database records still need
+read-only inventory, receipt reconciliation and separately approved cutover.
+Neither this change nor its unit tests proves live production enforcement.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge

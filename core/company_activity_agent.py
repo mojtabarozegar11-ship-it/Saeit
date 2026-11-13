@@ -5,7 +5,8 @@ No fabricated activities, projects, outcomes or financial claims.
 """
 from datetime import timedelta
 from django.utils import timezone
-from .models import Agent, NewsletterStory
+from core.unified_bot_identity import BOT_CODE
+from .models import Agent, AgentTask, NewsletterStory
 
 AGENT_CODE = "company-activity-intelligence"
 REPORT_TYPES = ("DAILY_DIGEST", "ACTIVITY_ANALYSIS", "TREND_ANALYSIS", "UNIT_ANALYSIS", "PROJECT_ANALYSIS", "EXECUTIVE_BRIEF")
@@ -37,15 +38,27 @@ def activity_snapshot(days=1):
 
 
 def report_contract():
-    return {"agent": AGENT_CODE, "mission": "تحلیل روزانه فعالیت‌های واقعی ثبت‌شده شرکت", "report_types": list(REPORT_TYPES), "pipeline": list(PIPELINE), "source_of_truth": "NewsletterStory.company_activity_*", "fabrication_forbidden": True, "publication_requires_owner_approval": True, "public_numeric_financial_claims": False}
+    return {"agent": AGENT_CODE, "module_code": AGENT_CODE, "owner_bot_code": BOT_CODE, "owner_bot_id": "mojtaba.bot.ai", "mission": "تحلیل روزانه فعالیت‌های واقعی ثبت‌شده شرکت", "report_types": list(REPORT_TYPES), "pipeline": list(PIPELINE), "source_of_truth": "NewsletterStory.company_activity_*", "fabrication_forbidden": True, "publication_requires_owner_approval": True, "public_numeric_financial_claims": False}
 
 
 def ensure_agent():
-    agent, _ = Agent.objects.get_or_create(code=AGENT_CODE, defaults={"name": "Company Activity Intelligence Agent", "mission": "تولید گزارش و تحلیل روزانه از فعالیت‌های واقعی صفحه شرکت؛ بدون جعل فعالیت.", "risk_level": "low", "active": True})
-    if not agent.active:
-        agent.active = True
-        agent.save(update_fields=["active", "updated_at"])
-    return agent
+    """Return the one already-provisioned canonical owner, never reanimate a legacy bot.
+
+    Retiring a legacy worker without its scheduler and task inventory is unsafe.
+    This gate intentionally refuses to migrate tasks or deactivate the legacy row.
+    A verified, separately approved handoff must happen before the cycle resumes.
+    """
+    master = Agent.objects.filter(code=BOT_CODE, active=True).first()
+    if master is None:
+        raise RuntimeError("MOJTABA_CANONICAL_AGENT_NOT_PROVISIONED")
+    legacy = Agent.objects.filter(code=AGENT_CODE).first()
+    if legacy is not None:
+        pending = AgentTask.objects.filter(
+            agent=legacy, status__in=("queued", "running", "blocked")
+        ).exists()
+        if legacy.active or pending:
+            raise RuntimeError("COMPANY_ACTIVITY_LEGACY_HANDOFF_REQUIRED")
+    return master
 
 
 def build_report_inputs(days=1):

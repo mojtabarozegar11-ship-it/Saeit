@@ -1,0 +1,543 @@
+{
+  "schema": "mojtaba.bot.ai.disposition-sources.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "purpose": "Track non-Django autonomous/agent surfaces pending merge or safe retirement. No deployment or deletion is authorized.",
+  "evidence_scope": "verified_repository_source_not_live_runtime",
+  "snapshot_from": "Saeit integration/mojtaba-bot-ai-20261112",
+  "sources": [
+    {
+      "id": "django_agent_registry",
+      "kind": "django_database",
+      "evidence_file": "core/management/commands/audit_agent_fleet.py",
+      "discovery": "requires_read_only_database_command",
+      "known_live_count": null,
+      "proposed_route": "merge_or_retire_per_row",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "read_only_agent_fleet_snapshot",
+        "pending_tasks_and_receipts",
+        "live_scheduler_mapping"
+      ]
+    },
+    {
+      "id": "zomorod_php_site_agent_runtime",
+      "kind": "php_sqlite_site_agent_system",
+      "evidence_file": "content/zomorod-v11/site_agents.php",
+      "evidence_worker": "content/zomorod-v11/site_agent_workforce.php",
+      "source_defined_seed_codes": [
+        "master",
+        "content",
+        "seo",
+        "commerce",
+        "agriculture",
+        "research",
+        "economic",
+        "weather",
+        "quality",
+        "media",
+        "security"
+      ],
+      "source_defined_seed_count": 11,
+      "known_live_count": null,
+      "proposed_route": "merge_all_as_canonical_internal_site_observability_adapters",
+      "execution_status": "source_php_sqlite_immutable_and_status_redaction_tests_passed_no_live_cpanel_read",
+      "prerequisites": [
+        "read_only_private_sqlite_inventory",
+        "cron_and_entrypoint_inventory",
+        "evidence_receipt_mapping",
+        "replacement_adapter_tests",
+        "single_scheduler_cutover"
+      ],
+      "caution": "Seed codes are not proof of live, independently running agents. Keep site evidence/history.",
+      "repository_only_private_db_collector": "deploy/mojtaba_live_topology_readonly.py::cpanel_php_registry_snapshot",
+      "collector_sqlite_open_mode": "mode=ro&immutable=1_and_query_only",
+      "collector_wal_policy": "fail_closed_unknown_when_wal_sidecar_exists",
+      "collector_aggregates": [
+        "agent_code_for_11_known_roles",
+        "enabled_count",
+        "unknown_code_count",
+        "run_status_counts",
+        "site_work_output_status_counts"
+      ],
+      "collector_excludes": [
+        "private_titles",
+        "details",
+        "findings_json",
+        "secret_process_args",
+        "raw_cron_commands"
+      ],
+      "collector_status_whitelist": {
+        "runs": [
+          "ok",
+          "warning",
+          "error"
+        ],
+        "site_work_outputs": [
+          "review",
+          "blocked",
+          "failed"
+        ]
+      },
+      "collector_status_unexpected_values": "redacted_as_unexpected_status_preserving_aggregate_count",
+      "collector_connection_lifetime": "closed_after_read"
+    },
+    {
+      "id": "factory_site_federation",
+      "kind": "private_factory_site_bridge",
+      "evidence_file": "scripts/factory_site_federation.py",
+      "source_declared_module_slots": 77,
+      "source_declared_watch_groups": {
+        "five": 5,
+        "six": 6
+      },
+      "known_live_count": null,
+      "proposed_route": "consolidate_verified_executors_under_canonical_worker",
+      "execution_status": "not_yet_attested",
+      "prerequisites": [
+        "private_site_source_snapshot",
+        "VPS_process_inventory",
+        "real_receipts_not_import_only",
+        "worker_deduplication",
+        "rollback_and_handoff"
+      ],
+      "caution": "77 slots and 5+6 named roles are source-defined registry concepts, not verified active distinct bots."
+    },
+    {
+      "id": "company_activity_intelligence",
+      "kind": "django_agent_constructor",
+      "evidence_file": "core/company_activity_agent.py",
+      "declared_code": "company-activity-intelligence",
+      "known_live_count": null,
+      "proposed_route": "merge_under_canonical_content_module",
+      "execution_status": "code_guard_committed__not_deployed_or_runtime_verified",
+      "prerequisites": [
+        "map_actual_cpanel_scheduler_and_source_revision",
+        "verify_canonical_agent_is_provisioned",
+        "reconcile_existing_active_legacy_or_pending_tasks",
+        "verify_report_generation_under_canonical_owner",
+        "inspect_live_publication_approval_and_receipts",
+        "disable_duplicate_legacy_entrypoints_after_verified_handoff"
+      ],
+      "evidence_command": "core/management/commands/company_activity_agent_cycle.py",
+      "scheduled_workflow": ".github/workflows/zomorod-site-agent-cycle.yml",
+      "repository_handoff_guard": "draft_branch_only__prevents_legacy_self_reactivation_and_blocks_on_pending_tasks",
+      "legacy_plan_code_preserved_for_existing_report_foreign_keys": true,
+      "knowledge_cycle_isolation": "draft_workflow_handles_only_known_canonical_handoff_errors_and_keeps_knowledge_cycle_running",
+      "repository_regression_tests": [
+        "core/tests/test_company_activity_agent.py",
+        "tests/test_company_activity_workflow_handoff.py"
+      ]
+    },
+    {
+      "id": "newsletter_legacy_roles",
+      "kind": "django_agent_migration_and_content_workers",
+      "evidence_file": "core/management/commands/consolidate_legacy_agents.py",
+      "source_declared_codes": [
+        "core_research",
+        "newsletter-specialist",
+        "newsletter-company-news",
+        "newsletter-world-watch",
+        "newsletter-unit-reports"
+      ],
+      "known_live_count": null,
+      "proposed_route": "merge_tasks_then_retire_only_with_successor_delivery_evidence",
+      "execution_status": "source_route_and_approval_gates_committed_tests_in_progress",
+      "prerequisites": [
+        "subscriber_and_story_receipts",
+        "pending_distribution_handoff",
+        "replacement_output_quality",
+        "live_schedulers_stopped"
+      ],
+      "canonical_successor_code": "mojtaba-bot-ai",
+      "canonical_successor_id": "mojtaba.bot.ai",
+      "legacy_successor_aliases_rejected": [
+        "content-director",
+        "knowledge-content-director"
+      ],
+      "deactivation_gate": "single_legacy_agent_only_with_exact_owner_approval_grant_and_recent_live_handoff_receipt",
+      "handoff_receipt_required_fields": [
+        "canonical_successor_runtime_verified",
+        "external_legacy_schedulers_stopped",
+        "all_pending_tasks_reconciled",
+        "historical_data_preserved",
+        "rollback_ready",
+        "live_inventory_receipt_id",
+        "canonical_successor_receipt_id"
+      ],
+      "source_only_successor_receipts_requirement": "published_with_newsroom_quality_audit_metadata_for_each_required_story_type",
+      "application_authorization_source": "core/management/commands/consolidate_legacy_agents.py",
+      "operational_retirement_status": "not_performed"
+    },
+    {
+      "id": "content_director_newsletter",
+      "kind": "django_newsletter_draft_scheduler",
+      "evidence_file": "core/newsletter_engine.py",
+      "known_live_count": null,
+      "execution_status": "source_guard_committed_not_live_verified",
+      "proposed_route": "merge_under_canonical_bot_after_handoff",
+      "legacy_agent_code": "content-director",
+      "target_bot_code": "mojtaba-bot-ai",
+      "source_guard_status": "canonical_new_drafts_after_verified_legacy_handoff",
+      "dependents": [
+        "core/management/commands/newsletter_process_queue.py",
+        "core/weather_agent.py",
+        "core/management/commands/consolidate_legacy_agents.py"
+      ],
+      "unverified_dependencies": [
+        "old_newsletter_schedulers",
+        "existing_NewsletterStory_agent_foreign_keys",
+        "pending_NewsletterSubmission_and_AgentTask_rows",
+        "weather_publication_handoff_not_live_verified"
+      ],
+      "historical_data_action": "keep_original_story_and_task_FKs",
+      "code_merge_committed": true,
+      "live_cutover_verified": false,
+      "independent_scheduler_retired": false,
+      "handoff_blockers_in_code": [
+        "legacy_agent_row_still_active",
+        "legacy_queued_running_blocked_AgentTask",
+        "legacy_open_newsletter_draft_or_scheduled_story",
+        "legacy_queued_or_blocked_publication"
+      ],
+      "next_required_step": "reconcile_legacy_schedulers_weather_newsletter_distributions_and_actual_database_before_cutover",
+      "code_and_regression_files": [
+        "core/canonical_agent_handoff.py",
+        "core/newsletter_engine.py",
+        "core/tests/test_newsletter_queue_worker.py",
+        "core/tests.py"
+      ]
+    },
+    {
+      "id": "knowledge_content_director",
+      "kind": "django_knowledge_library_scheduler",
+      "evidence_file": "core/knowledge_agent.py",
+      "known_live_count": null,
+      "execution_status": "source_guard_committed_not_live_verified",
+      "proposed_route": "merge_under_canonical_bot_after_handoff",
+      "legacy_agent_code": "knowledge-content-director",
+      "target_bot_code": "mojtaba-bot-ai",
+      "source_guard_status": "canonical_new_knowledge_tasks_after_verified_legacy_handoff",
+      "dependents": [
+        "core/management/commands/knowledge_agent_cycle.py",
+        "core/management/commands/knowledge_agent_generate.py",
+        "core/management/commands/consolidate_legacy_agents.py"
+      ],
+      "unverified_dependencies": [
+        "old_knowledge_schedulers",
+        "pending_KnowledgeAgentRun_and_AgentTask",
+        "paid_model_approval_grant_for_legacy_tasks"
+      ],
+      "historical_data_action": "keep_existing_KnowledgeAgentPlan_and_KnowledgeBook_slugs",
+      "code_merge_committed": true,
+      "live_cutover_verified": false,
+      "independent_scheduler_retired": false,
+      "handoff_blockers_in_code": [
+        "legacy_agent_row_still_active",
+        "legacy_queued_running_blocked_AgentTask"
+      ],
+      "next_required_step": "map_pending_knowledge_runs_and_paid_model_grants_to_canonical_owner_with_live_receipt",
+      "code_and_regression_files": [
+        "core/canonical_agent_handoff.py",
+        "core/knowledge_agent.py",
+        "core/management/commands/knowledge_agent_cycle.py",
+        "core/tests/test_knowledge_agent_scheduler.py"
+      ]
+    },
+    {
+      "id": "weather_publication_module",
+      "kind": "django_weather_report_and_content_publication",
+      "evidence_file": "core/weather_agent.py",
+      "evidence_command": "core/management/commands/weather_agent_cycle.py",
+      "historical_legacy_owner_codes": [
+        "content-research",
+        "content-director"
+      ],
+      "target_bot_id": "mojtaba.bot.ai",
+      "target_bot_code": "mojtaba-bot-ai",
+      "proposed_route": "canonical_weather_capability_after_both_legacy_handoffs",
+      "source_guard_status": "implemented_on_draft_branch_only",
+      "code_and_tests": [
+        "core/weather_agent.py",
+        "core/management/commands/weather_agent_cycle.py",
+        "core/tests/test_weather_agent_assignment.py"
+      ],
+      "source_side_effects": [
+        "31_external_forecast_requests_or_cached_responses",
+        "create_or_update_daily_weather_story_with_existing_publication_semantics",
+        "paid_generation_only_with_one_time_scoped_owner_approval_grant"
+      ],
+      "migration_safeguards": [
+        "canonical_owner_resolved_before_forecast_network",
+        "both_legacy_content_codes_must_be_inactive_without_pending_tasks_or_stories",
+        "do_not_reassign_historical_NewsletterStory_FK",
+        "management_command_reports_blocker_as_error",
+        "no_live_cutover_authorized"
+      ],
+      "live_schedulers_discovered": false,
+      "legacy_processes_retired": false,
+      "live_replacement_tested": false,
+      "paid_model_approval_gate_end_to_end_attested": false,
+      "actual_weather_publication_attested": false,
+      "known_live_count": null,
+      "execution_status": "proposed_code_and_tests_committed_ci_result_unverified",
+      "prerequisites": [
+        "inventory_live_weather_scheduler_and_source_commit",
+        "read_only_agent_and_newsletter_publication_inventory",
+        "verify_weather_output_quality_and_provenance",
+        "require_explicit_owner_payment_grant_for_any_paid_generation",
+        "prove_no_duplicate_weather_schedulers",
+        "owner_approved_cutover_and_rollback"
+      ],
+      "paid_model_authorization_source": "core/weather_agent.py::_validate_paid_weather_grant",
+      "paid_model_scope_required": {
+        "action": "weather_research_generation",
+        "owner_bot_id": "mojtaba.bot.ai",
+        "date": "current_local_date",
+        "model": "selected_model_name",
+        "max_model_calls": 1,
+        "max_articles": 2
+      },
+      "paid_model_grant_contract": "Approved ApprovalRequest target=MojtabaWeatherCycle/date; ApprovalGrant consumed once before a model invocation. Environment flags alone grant no authority.",
+      "paid_model_default": "no grant means no paid weather model invocation",
+      "paid_generated_articles_publication_policy": "draft_only_pending_owner_review",
+      "review_ci_workflow": ".github/workflows/mojtaba-one-bot-review-ci.yml",
+      "review_ci_test_file": "core/tests/test_weather_paid_grants.py",
+      "paid_approval_multiplicity_policy": "first_grant_per_approved_request_only; a new payable model call needs a new owner approval request",
+      "research_publication_mode": "draft_not_published_until_separate_review",
+      "review_ci_last_proven_run_id": 43214757203,
+      "review_ci_last_proven_result": "95_passing_after_test_baseline_fix",
+      "ci_latest_head_result": "pending_further_approval_multiplicity_regression"
+    },
+    {
+      "id": "two_host_live_topology_observation",
+      "kind": "vps_and_cpanel_read_only_runtime_probe",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "workflow_file": ".github/workflows/mojtaba-live-topology-readonly.yml",
+      "offline_regression_tests": "tests/test_mojtaba_live_topology_readonly.py",
+      "host_roles": [
+        "vps:githubops",
+        "cpanel:zomorod2"
+      ],
+      "observation_fields": [
+        "sanitized_user_cron_entries",
+        "process_route_match_counts_not_unique_workers",
+        "candidate_user_systemd_service_units",
+        "candidate_system_systemd_service_units",
+        "installed_source_sha256",
+        "cpanel_private_php_sqlite_known_roles_and_aggregate_run_counts",
+        "fixed_allowlist_source_revision_comparison",
+        "user_systemd_timer_route_match_counts",
+        "system_systemd_timer_route_match_counts",
+        "redacted_systemd_timer_unit_digests",
+        "timer_inventory_truncated_flags"
+      ],
+      "credentialed_workflow_trigger": "workflow_dispatch_only_after_review",
+      "source_revision_state": "PR_draft_not_merged_or_deployed",
+      "live_vps_observation_received": false,
+      "live_cpanel_observation_received": false,
+      "full_system_service_inventory_attested": false,
+      "php_sqlite_agent_inventory_attested": false,
+      "django_agent_task_inventory_attested": false,
+      "cpanel_known_app_process_inventory_attested": false,
+      "actual_schedulers_inactive_verified": false,
+      "agent_deactivation_authorized": false,
+      "code_tests_status": "126_review_tests_passed_GitHub_Actions_43222214585",
+      "completion_state": "host_probes_not_executed_no_live_disposition_claim",
+      "blockers": [
+        "workflow_only_manual_and_currently_in_draft_branch",
+        "authenticated_pinned_SSH_sessions_not_executed_in_current_turn",
+        "source_only_process_markers_do_not_prove_worker_effects",
+        "cpanel_PHP_and_Django_database_rows_still_need_read_only_inventory",
+        "live_handoff_receipts_and_rollback_not_attested",
+        "systemd_timer_unit_inventory_not_fully_attested",
+        "timer_to_service_activation_target_not_verified"
+      ],
+      "host_probe_execution": "not_dispatched",
+      "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts",
+      "source_revision_comparison": "fixed_allowlist_file_sha256_vs_reviewed_PR_checkout_match_different_or_unknown_not_execution_proof",
+      "source_revision_comparison_test": "tests/test_mojtaba_live_topology_readonly.py::test_manual_two_host_summary_compares_only_allowlisted_source_digests",
+      "systemd_timer_census": "source_collector_reads_user_and_system_list_units_type_timer_as_redacted_indicators_not_complete_proof"
+    },
+    {
+      "id": "mojtrade_signal_and_broker_runtime",
+      "kind": "independent_trading_observer_and_broker_integration",
+      "evidence_file": "deploy/install_mojtrade_observer_vps.sh",
+      "probe_route_tags": [
+        "mojtrade_observer",
+        "SAEIT_MOJTRADE_OBSERVER_V1"
+      ],
+      "known_live_count": null,
+      "proposed_route": "reconcile_signal_observer_and_broker_execution_under_canonical_module",
+      "execution_status": "source_routes_known_live_orders_and_workers_unverified",
+      "prerequisites": [
+        "read_only_VPS_and_cPanel_cron_process_service_inventory",
+        "broker_authority_and_adapter_inventory_no_live_trades",
+        "independent_trade_order_receipt_reconciliation",
+        "canonical_risk_and_owner_gate_tested_before_any_cutover"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "moj_coin_game_token_workers",
+      "kind": "game_token_and_reward_worker_runtime",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [
+        "mojcoin"
+      ],
+      "known_live_count": null,
+      "proposed_route": "map_game_token_rewards_and_chain_adapters_as_canonical_internal_modules",
+      "execution_status": "source_route_known_runtime_and_chain_receipts_unverified",
+      "prerequisites": [
+        "game_server_and_token_scheduler_inventory",
+        "wallet_chain_execution_authority_review",
+        "reward_receipts_and_gameplay_consistency_audit",
+        "single_scheduler_and_rollback_plan"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "canonical_cycle_and_legacy_master_schedulers",
+      "kind": "cross_host_cycle_coordinator_worker_entrypoints",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [
+        "mojtaba_bot_cycle_worker.py",
+        "mojtaba_bot_cycle_coordinator.py",
+        "autonomous_master_loop"
+      ],
+      "known_live_count": null,
+      "proposed_route": "retain_one_canonical_cycle_owner_and_reconcile_preexisting_duplicate_processes",
+      "execution_status": "source_route_known_live_schedule_ownership_unverified",
+      "prerequisites": [
+        "verify_all_cron_systemd_and_GitHub_schedules",
+        "associate_each_scheduler_to_task_receipt",
+        "identify_and_retire_only_proven_duplicate_entrypoints",
+        "verify_recovery_and_locking_in_production_database"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "mobile_sms_termux_automate_runtime",
+      "kind": "android_mobile_external_runtime",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [],
+      "known_live_count": null,
+      "proposed_route": "audit_owner_authorized_mobile_SMS_gateway_before_connecting_to_canonical_bot",
+      "execution_status": "outside_VPS_cPanel_probe_no_device_execution_receipt",
+      "prerequisites": [
+        "authorized_mobile_device_inventory",
+        "Automate_Termux_flow_and_scheduled_jobs_inventory",
+        "explicit_owner_approval_for_any_SMS_send",
+        "message_delivery_receipts_and_recovery_test"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "external_connected_app_agents",
+      "kind": "third_party_connected_app_automations",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [],
+      "known_live_count": null,
+      "proposed_route": "enumerate_independent_connected_app_schedulers_and_govern_as_internal_or_retired",
+      "execution_status": "outside_VPS_cPanel_probe_connected_app_inventory_missing",
+      "prerequisites": [
+        "authorized_connector_and_external_automation_inventory",
+        "external_event_triggers_and_credentials_scopes",
+        "unique_canonical_job_ownership",
+        "verified_handoff_receipts_without_data_deletion"
+      ],
+      "live_retirement_attested": false
+    }
+  ],
+  "not_yet_enumerated_runtime_scopes": [
+    "all_VPS_systemd_cron_supervisor_processes",
+    "all_cPanel_Passenger_cron_and_site_php_workers",
+    "mobile_Termux_Automate_SMS_device_schedulers",
+    "external_automation_and_connected_app_agents",
+    "broker_remote_accounts_and_marketplace_webhooks",
+    "Moj_Coin_public_chain_and_game_server_workers"
+  ],
+  "completion_gates": {
+    "unique_public_bot_identity": "mojtaba.bot.ai",
+    "all_source_records_mapped": false,
+    "external_process_inventory_attested": false,
+    "handoffs_verified": false,
+    "duplicated_executors_retired": false,
+    "irreversible_deletion_authorized": false,
+    "live_consolidation_percentage": null,
+    "company_activity_legacy_guard_committed": true,
+    "company_activity_live_handoff_verified": false,
+    "company_activity_known_blocker_isolation_committed": true,
+    "newsletter_and_knowledge_owner_guards_committed": true,
+    "newsletter_and_knowledge_live_handoffs_verified": false,
+    "editorial_and_knowledge_new_task_canonical_routing_committed": true,
+    "editorial_and_knowledge_live_handoffs_verified": false,
+    "current_branch_tests_executed": false,
+    "weather_content_owner_code_guard_committed": true,
+    "weather_live_handoff_verified": false,
+    "weather_paid_approval_scoped_verified": false,
+    "weather_paid_grant_source_guard_committed": true,
+    "weather_ai_publication_default_draft_committed": true,
+    "one_bot_review_ci_workflow_committed": true,
+    "one_bot_review_ci_passed": true,
+    "one_bot_review_ci_last_verified_sha": "8b0349ef9a34c7c9112624a03048c6078d2b16f0",
+    "weather_one_grant_per_approval_source_guard_committed": true,
+    "all_integrated_runtime_tests_passed": false,
+    "legacy_retirement_canonical_successor_mapping_committed": true,
+    "legacy_single_agent_owner_grant_gate_committed": true,
+    "legacy_live_handoff_receipts_attested": false,
+    "legacy_retirement_performed": false,
+    "legacy_deletion_performed": false,
+    "two_host_topology_probe_code_committed": true,
+    "two_host_probe_nonleaking_tests_passed": true,
+    "two_host_live_inventory_attested": false,
+    "cross_host_full_agent_inventory_attested": false,
+    "actual_agent_retirements_this_cycle": 0,
+    "cpanel_php_sqlite_read_only_collector_committed": true,
+    "cpanel_php_sqlite_read_only_collector_tested": true,
+    "cpanel_php_sqlite_live_inventory_attested": false,
+    "system_and_user_service_candidate_scan_committed": true,
+    "system_service_live_inventory_attested": false,
+    "two_host_source_revision_comparison_code_committed": true,
+    "two_host_source_revision_comparison_live_proven": false,
+    "cpanel_php_sqlite_status_redaction_tests_passed": true,
+    "per_source_disposition_preview_implemented": true,
+    "per_identity_disposition_preview_implemented": true,
+    "disposition_preview_all_outputs_non_destructive": true,
+    "live_host_disposition_decisions_verified": false,
+    "additional_source_groups_now_tracked_not_attested": 5,
+    "per_group_live_retirement_verification_complete": false,
+    "two_host_systemd_timer_route_collector_committed": true,
+    "two_host_systemd_timer_collector_live_attested": false,
+    "systemd_timer_successor_handoff_proven": false
+  },
+  "readonly_disposition_contract": {
+    "schema": "mojtaba.bot.ai.live-disposition-preview.v1",
+    "evaluator": "deploy/mojtaba_live_disposition_readonly.py",
+    "linked_manual_workflow": ".github/workflows/mojtaba-live-topology-readonly.yml",
+    "generated_from": "two_fresh_pinned_read_only_host_snapshots_and_checked_in_source_ledger",
+    "logical_source_groups": 14,
+    "source_defined_identity_roster": {
+      "php_private_site_codes": 11,
+      "django_known_codes": 10,
+      "total_not_live_bot_count": 21
+    },
+    "outputs": [
+      "individual_identity_registration_state_not_live_status",
+      "route_indicator_counts_not_unique_processes",
+      "installed_code_revision_status",
+      "nine_group_dependency_blockers",
+      "explicit_no_retirement_permission"
+    ],
+    "no_host_evidence_state": "no_live_agents_claimed_no_retirement_permitted",
+    "evidence_state": "expanded_to_14_source_groups_source_only_no_production_probe_or_deactivation",
+    "latest_proven_focused_ci": {
+      "run_id": 43226389997,
+      "reviewed_commit": "35f4173fa548d7dc770d81c97478c709a0caac0c",
+      "tests_passed": 153,
+      "tests_failed": 0
+    },
+    "deployment_proven": false,
+    "live_host_evidence_attested": false,
+    "actual_legacy_deactivations": 0
+  }
+}

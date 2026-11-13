@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from .met_weather_adapter import SOURCE_MODEL, normalize_locationforecast
+from .canonical_agent_handoff import canonical_owner_for
 
 PROVINCES = [
  ('آذربایجان شرقی','تبریز',38.0962,46.2738),('آذربایجان غربی','ارومیه',37.5527,45.0761),('اردبیل','اردبیل',38.2498,48.2933),('اصفهان','اصفهان',32.6546,51.6680),('البرز','کرج',35.8400,50.9391),('ایلام','ایلام',33.6374,46.4227),('بوشهر','بوشهر',28.9234,50.8203),('تهران','تهران',35.6892,51.3890),('چهارمحال و بختیاری','شهرکرد',32.3256,50.8644),('خراسان جنوبی','بیرجند',32.8663,59.2211),('خراسان رضوی','مشهد',36.2605,59.6168),('خراسان شمالی','بجنورد',37.4750,57.3333),('خوزستان','اهواز',31.3183,48.6706),('زنجان','زنجان',36.6736,48.4787),('سمنان','سمنان',35.5729,53.3971),('سیستان و بلوچستان','زاهدان',29.4963,60.8629),('فارس','شیراز',29.5918,52.5837),('قزوین','قزوین',36.2688,50.0041),('قم','قم',34.6416,50.8746),('کردستان','سنندج',35.3219,46.9862),('کرمان','کرمان',30.2839,57.0834),('کرمانشاه','کرمانشاه',34.3142,47.0650),('کهگیلویه و بویراحمد','یاسوج',30.6682,51.5880),('گلستان','گرگان',36.8456,54.4393),('گیلان','رشت',37.2808,49.5832),('لرستان','خرم‌آباد',33.4878,48.3558),('مازندران','ساری',36.5633,53.0601),('مرکزی','اراک',34.0917,49.6892),('هرمزگان','بندرعباس',27.1832,56.2666),('همدان','همدان',34.7980,48.5146),('یزد','یزد',31.8974,54.3569),
@@ -78,24 +79,73 @@ def build_public_report(data):
     return '\n'.join(lines)
 
 
-def generate_research_contents(weather_summary):
-    # An installed API key is not approval for a recurring paid agent call.
-    # The owner must explicitly enable paid content for the current date.
-    paid_approved_today = (
-        os.getenv('MOJ_PAID_LLM_ENABLED') == '1'
-        and os.getenv('MOJ_WEATHER_PAID_CONTENT_APPROVAL_DATE') == timezone.localdate().isoformat()
-    )
-    key = os.getenv('OPENAI_API_KEY') if paid_approved_today else None
-    if not key:
-        # Reposting the same two generic articles every day was duplicate SEO
-        # content, not new research. No paid generation and no fake output.
+def _validate_paid_weather_grant(approval_grant_id):
+    """Read-only preflight before forecast I/O; atomic consumption happens later."""
+    if type(approval_grant_id) is not int or approval_grant_id <= 0:
+        raise ValueError("WEATHER_INVALID_ONE_TIME_GRANT")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("WEATHER_PAID_MODEL_KEY_UNAVAILABLE")
+    from .models import ApprovalGrant
+
+    today = timezone.localdate().isoformat()
+    model_id = os.getenv("OPENAI_WEATHER_CONTENT_MODEL", os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6"))
+    grant = ApprovalGrant.objects.select_related("approval").filter(pk=approval_grant_id).first()
+    if (
+        grant is None
+        or grant.approval.status != "approved"
+        or grant.approval.action_type != "weather_research_generation"
+        or grant.approval.target_type != "MojtabaWeatherCycle"
+        or grant.approval.target_id != today
+        or grant.actor_id != grant.approval.requested_by_id
+    ):
+        raise RuntimeError("WEATHER_PAID_GRANT_TARGET_NOT_APPROVED")
+    required_scope = {
+        "action": "weather_research_generation",
+        "owner_bot_id": "mojtaba.bot.ai",
+        "date": today,
+        "model": model_id,
+        "max_model_calls": 1,
+        "max_articles": 2,
+    }
+    if (
+        not isinstance(grant.scope, dict)
+        or any(grant.scope.get(k) != v for k, v in required_scope.items())
+        or grant.used_at is not None
+        or grant.expires_at <= timezone.now()
+        # A single approved request must not mint multiple usable paid grants.
+        # Only its first grant can be consumed; a fresh model call needs a
+        # separate case-by-case owner approval request.
+        or ApprovalGrant.objects.filter(
+            approval_id=grant.approval_id, pk__lt=grant.pk
+        ).exists()
+    ):
+        raise RuntimeError("WEATHER_PAID_GRANT_INVALID_OR_CONSUMED")
+    return model_id, required_scope
+
+
+def generate_research_contents(weather_summary, *, approval_grant_id=None):
+    """Make at most one explicit, owner-approved and once-only paid model call.
+
+    No environment toggle, API key, or previous-day approval enables a charge.
+    The scope is rechecked then atomically consumed before the model request.
+    """
+    if approval_grant_id is None:
         return []
+    model_id, required_scope = _validate_paid_weather_grant(approval_grant_id)
+    from .approval import ApprovalService
+    key = os.getenv("OPENAI_API_KEY")
+    try:
+        ApprovalService().authorize_grant(approval_grant_id, required_scope)
+    except ValueError as exc:
+        raise RuntimeError("WEATHER_PAID_GRANT_INVALID_OR_CONSUMED") from exc
+
     from openai import OpenAI
 
     client = OpenAI(api_key=key)
     prompt = f'''دو محتوای فارسی مستقل و حرفه‌ای برای وب‌سایت Zomorodmelal تولید کن؛ نویسنده هر دو «مجتبی روزگار، محقق و پژوهشگر» باشد. یکی درباره «تحقیقات، فناوری و نوآوری کاربردی» و دیگری درباره «آموزش و تحلیل کاربردی برای تصمیم‌گیری». محتواها علمی، قابل بررسی، غیرتبلیغاتی، کاربردی و مناسب SEO باشند. برای هر محتوا JSON با title, summary, body, meta_description, keywords, sources بده. از ادعا یا منبع ساختگی خودداری کن. اگر داده‌ای نیازمند منبع است، فقط از منابع رسمی و معتبر استفاده کن. زمینه امروز: {weather_summary[:4000]}'''
     response = client.chat.completions.create(
-        model=os.getenv('OPENAI_WEATHER_CONTENT_MODEL', os.getenv('OPENAI_CHAT_MODEL','gpt-5.6')),
+        model=model_id,
+        max_completion_tokens=5000,
         response_format={'type':'json_object'},
         messages=[
             {'role':'system','content':'تو سردبیر علمی و SEO هستی. جعل منبع و ادعای تأییدنشده ممنوع است.'},
@@ -106,20 +156,23 @@ def generate_research_contents(weather_summary):
     return obj.get('contents', obj if isinstance(obj, list) else [])
 
 
-def run_daily_cycle():
-    from .models import Agent, NewsletterSource, NewsletterStory
+def run_daily_cycle(*, approval_grant_id=None):
+    from .models import NewsletterSource, NewsletterStory
+    if approval_grant_id is not None:
+        # A missing, wrong-date, wrong-model or previously used paid grant must
+        # fail BEFORE network I/O, posting new weather stories or any other write.
+        _validate_paid_weather_grant(approval_grant_id)
+    # Guard before fetching 31 external forecasts or generating any content.
+    # Retained historical legacy records/receipts must be reconciled first.
+    agent = canonical_owner_for("content-director")
+    canonical_owner_for("content-research")
     data = province_forecast(7)
     if len(data) != len(PROVINCES) or any(len(item.get('forecast', [])) != 7 for item in data):
         raise RuntimeError('Incomplete seven-day weather forecast; publication withheld')
     report = build_public_report(data)
     day = timezone.localdate()
-    # Weather publication belongs to an explicitly designated content agent.
-    # Never attribute it to an arbitrary active agent (e.g. factory or trading).
-    agent = Agent.objects.filter(code='content-research', active=True).first()
-    if agent is None:
-        agent = Agent.objects.filter(code='content-director', active=True).first()
-    if not agent:
-        raise RuntimeError('No active content agent')
+    # The weather capability has no independent identity. New records belong
+    # to the canonical bot; existing fingerprints retain their historical FKs.
     src, _ = NewsletterSource.objects.get_or_create(url=SOURCE_URL, defaults={'publisher':'MET Norway','title':'MET Norway Locationforecast (CC BY 4.0)','kind':'research'})
     fp = f'weather-iran-{day.isoformat()}'
     story, created = NewsletterStory.objects.get_or_create(fingerprint=fp, defaults={
@@ -143,7 +196,10 @@ def run_daily_cycle():
             f'weather-daily-content-{day.isoformat()}-2',
         ]
     ).count()
-    generated = generate_research_contents(report) if existing_daily_contents < 2 else []
+    generated = (
+        generate_research_contents(report, approval_grant_id=approval_grant_id)
+        if approval_grant_id is not None and existing_daily_contents < 2 else []
+    )
     content_created = 0
     for idx, item in enumerate(generated[:2],1):
         if not isinstance(item, dict) or not item.get('title'): continue
@@ -154,7 +210,7 @@ def run_daily_cycle():
             'slug':f'weather-research-{day.isoformat()}-{idx}','summary':item.get('summary','')[:3000],
             'body':item.get('body',''),'author_name':'مجتبی روزگار','event_date':day,
             'seo_keywords':item.get('keywords',[]) if isinstance(item.get('keywords',[]),list) else [],
-            'status':'published','published_at':timezone.now(),
+            'status':'draft','published_at':None,
         })
         content_created += int(was_created)
     return {'date':str(day),'provinces':len(data),'weather_story_id':story.id,'weather_created':created,'research_contents_created':content_created}

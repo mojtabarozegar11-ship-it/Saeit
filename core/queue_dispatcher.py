@@ -3,6 +3,7 @@ from typing import List
 
 from .models import AgentTask
 from .task_runtime import TaskExecutionError, TaskRuntime
+from .unified_bot_identity import BOT_CODE
 
 
 @dataclass
@@ -34,8 +35,13 @@ class QueueDispatcher:
         if limit <= 0:
             raise ValueError("limit must be positive")
 
+        # A caller can supply an alternative runner, so don't rely solely
+        # on TaskRuntime.claim() to keep old queued work out of dispatch.
+        # Historical tasks are left untouched for verified migration.
         task_ids = list(
-            AgentTask.objects.filter(status="queued")
+            AgentTask.objects.filter(
+                status="queued", agent__code=BOT_CODE, agent__active=True,
+            )
             .order_by("created_at", "id")
             .values_list("id", flat=True)[:limit]
         )

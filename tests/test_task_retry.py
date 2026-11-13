@@ -10,7 +10,7 @@ pytestmark = pytest.mark.django_db
 def setup_retry_task(max_attempts=3):
     owner = get_user_model().objects.create_user(username="retry-owner")
     project = ResearchProject.objects.create(title="Retry", objective="Test", owner=owner)
-    agent = Agent.objects.create(code="retry-agent", name="Retry Agent", active=True)
+    agent = Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai", active=True)
     capability = AgentCapability.objects.create(code="retry_action", name="Retry", risk_level="low")
     capability.agents.add(agent)
     task = MasterAgent().plan(project, "retry_action", {})
@@ -27,15 +27,15 @@ def test_claim_creates_execution_identity_and_attempt():
     assert claimed.status == "running"
 
 
-def test_failure_requeues_until_retry_budget_is_exhausted():
+def test_failed_canonical_execution_never_retries_without_receipt_reconciliation():
     task = setup_retry_task(max_attempts=2)
     runtime = TaskRuntime()
     running = runtime.claim(task.pk)
     failed = runtime.fail(task.pk, "temporary error", execution_id=running.execution_id)
-    assert failed.status == "queued"
-    running = runtime.claim(task.pk)
-    failed = runtime.fail(task.pk, "final error", execution_id=running.execution_id)
-    assert failed.status == "failed"
+    assert failed.status == "blocked"
+    assert failed.output_data["automatic_replay_allowed"] is False
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        runtime.claim(task.pk)
 
 
 def test_exhausted_retry_budget_cannot_be_claimed():
@@ -43,5 +43,5 @@ def test_exhausted_retry_budget_cannot_be_claimed():
     runtime = TaskRuntime()
     running = runtime.claim(task.pk)
     runtime.fail(task.pk, "final error", execution_id=running.execution_id)
-    with pytest.raises(TaskExecutionError, match="retry budget"):
+    with pytest.raises(TaskExecutionError, match="blocked"):
         runtime.claim(task.pk)

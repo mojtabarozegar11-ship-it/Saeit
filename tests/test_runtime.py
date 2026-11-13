@@ -12,7 +12,10 @@ pytestmark = pytest.mark.django_db
 def setup_project():
     user = get_user_model().objects.create_user(username="owner")
     project = ResearchProject.objects.create(title="Research", objective="Test", owner=user)
-    agent = Agent.objects.create(code="master", name="Master", mission="orchestration", active=True)
+    agent, _ = Agent.objects.update_or_create(
+        code="mojtaba-bot-ai",
+        defaults={"name": "Mojtaba.bot.ai", "mission": "Sole orchestrator", "active": True},
+    )
     for code in ("publish", "collect_source", "production_change"):
         capability = AgentCapability.objects.create(code=code, name=code, active=True, risk_level="low")
         capability.agents.add(agent)

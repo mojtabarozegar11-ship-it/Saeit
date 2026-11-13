@@ -10,7 +10,7 @@ pytestmark = pytest.mark.django_db
 def setup_snapshot_task():
     owner = get_user_model().objects.create_user(username="snapshot-owner")
     project = ResearchProject.objects.create(title="Snapshot", objective="Test", owner=owner)
-    agent = Agent.objects.create(code="snapshot-agent", name="Snapshot Agent", active=True)
+    agent = Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai", active=True)
     capability = AgentCapability.objects.create(
         code="snapshot_action", name="Snapshot Action", risk_level="low"
     )
