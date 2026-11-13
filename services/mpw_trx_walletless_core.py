@@ -142,7 +142,7 @@ def verify_two_source_transfer(
     """
     if not isinstance(invoice, InvoiceIntent):
         raise PaymentHold("Untrusted invoice")
-    if invoice.network != NETWORK or not ADDRESS.fullmatch(invoice.recipient):
+    if invoice.network != NETWORK or not isinstance(invoice.recipient, str) or ADDRESS.fullmatch(invoice.recipient) is None:
         raise PaymentHold("Wrong invoice network or destination")
     if not isinstance(invoice.amount_sun, int) or type(invoice.amount_sun) is not int or invoice.amount_sun <= 0:
         raise PaymentHold("Invalid invoice atomic amount")
