@@ -283,6 +283,12 @@ def cpanel_php_registry_snapshot(home: Path) -> dict:
                 "records": len(roles),
                 "known_roles_found": len(known),
                 "enabled_count": sum(enabled == 1 for _, enabled in roles),
+                # Separate allowlisted roles from unknown enabled identities:
+                # the aggregate above must never be interpreted as 11 known bots.
+                "known_enabled_count": sum(row["enabled"] for row in known),
+                "unknown_enabled_count": sum(
+                    enabled == 1 for code, enabled in roles if code not in PHP_SITE_CODES
+                ),
                 "unknown_code_records": unknown_rows,
                 "agent_roles": known,
             }
