@@ -8,8 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def _run_cli():
-    """Execute the staged regression only when invoked as a CLI script."""
+def main():
     repo=Path(__file__).resolve().parents[1]
     source=repo/'scripts/zomorod_vision_ux_guarded_20261113.py'
     spec=importlib.util.spec_from_file_location('zm_ux_guard',source)
@@ -67,4 +66,4 @@ def _run_cli():
 
 
 if __name__ == "__main__":
-    _run_cli()
+    main()
