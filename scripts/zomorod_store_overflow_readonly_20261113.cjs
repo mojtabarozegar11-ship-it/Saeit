@@ -50,6 +50,30 @@ fs.mkdirSync(artifact,{recursive:true});
       await page.screenshot({path:path.join(artifact,'store-'+width+'.png'),
         fullPage:true,animations:'disabled',timeout:20000});
    }
+   if(width<=390){
+      // Preview the exact proposed single-selector CSS rule only inside this isolated
+      // Chromium page. It is NOT written to the hosting account or persisted.
+      const before=detail.documentWidth;
+      await page.addStyleTag({content:
+        '.grid article small.muted{overflow-wrap:anywhere;word-break:break-word}'});
+      await page.waitForTimeout(120);
+      const after=await page.evaluate(()=>({
+        doc:document.documentElement.scrollWidth,
+        body:document.body.scrollWidth,
+        target:[...document.querySelectorAll('.grid article small.muted')]
+          .map(e=>({width:Math.round(e.getBoundingClientRect().width),
+                    left:Math.round(e.getBoundingClientRect().left),
+                    right:Math.round(e.getBoundingClientRect().right),
+                    computedBreak:getComputedStyle(e).overflowWrap})).slice(0,5),
+        nav:[...document.querySelectorAll('nav')]
+          .map(e=>({html:e.outerHTML.slice(0,550),
+                    width:Math.round(e.getBoundingClientRect().width),
+                    left:Math.round(e.getBoundingClientRect().left)})).slice(0,3)
+      }));
+      console.log('ZM_STORE_LOCAL_CSS_REHEARSAL '+JSON.stringify({
+        viewport:width,before,after:after.doc,overflowAfter:Math.max(0,after.doc-width),
+        localOnly:true,...after}));
+   }
    await page.close();
   }
  }finally{await browser.close()}
