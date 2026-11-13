@@ -253,7 +253,7 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 0)
         self.assertIn("BRAIN_", output.getvalue() + errors.getvalue())
 
-    def test_exhausted_stale_task_fails_without_infinite_retry(self):
+    def test_exhausted_stale_task_blocks_without_infinite_retry(self):
         task = AgentTask.objects.create(
             agent=self.agent, action_type="income_market_research",
             capability_code="income_market_research", status="running",
@@ -265,9 +265,14 @@ class VerifiedEconomicCycleTests(TestCase):
         output = StringIO()
         call_command("online_income_cycle", stdout=output)
         task.refresh_from_db()
-        self.assertEqual(task.status, "failed")
+        self.assertEqual(task.status, "blocked")
+        self.assertEqual(task.execution_id, "expired-worker")
+        self.assertTrue(task.output_data["requires_review"])
+        self.assertFalse(task.output_data["automatic_replay_allowed"])
+        self.assertTrue(task.output_data["retry_budget_exhausted"])
         self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
-        self.assertIn("status=failed", output.getvalue())
+        self.assertIn("BRAIN_RECONCILIATION_REQUIRED", output.getvalue())
+        self.assertIn("automatic_replay_allowed=false", output.getvalue())
 
     def test_recent_running_task_is_not_reclaimed(self):
         task = AgentTask.objects.create(
