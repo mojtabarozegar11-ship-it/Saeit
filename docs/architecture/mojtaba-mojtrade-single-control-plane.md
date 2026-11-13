@@ -260,6 +260,77 @@ mandatory before production approval.
 Official API reference:
 https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/Symbol/
 
+## Read-only cTrader CLI demo-account preflight (new review-cycle source)
+
+Spotware's official documentation confirms a material architectural
+difference:
+
+- **cTrader Cloud:** Algo `Http` does not send requests and the response
+  is 403; Cloud `LocalStorage` is volatile between runs. A Cloud cBot
+  cannot be treated as an authenticated HTTP client for the one-bot
+  command ledger.
+- **cTrader CLI:** A free terminal tool can run on **Linux/VPS** and
+  exposes documented read-only `accounts`, `cbots`, `positions`,
+  `deals` commands. It is distinct from cTrader Cloud, requires a
+  cTID and private credential file, and does NOT confer authority for
+  real orders. cTrader supports account- and broker-scoped CLI queries.
+
+The new `deploy/mojtrade_ctrader_cli_preflight_readonly.py` implements
+the **first no-order CLI connection gate**. Its only invocations
+are `ctrader-cli accounts` and `ctrader-cli cbots -q`; it cannot
+launch/stop cBots or create/modify/close orders. Both CLI outputs remain
+inside the process and are represented by SHA-256 digests in a small
+redacted JSON report. Owner's cTID, raw account number, password, broker
+JSON and raw instance identifiers are **never printed**.
+
+A local operator must provision **two private files** in one existing
+mode-0700 directory, with both files mode 0600:
+
+```json
+{
+  "schema_version": 1,
+  "ctid": "YOUR_CTRADER_ID",
+  "demo_account": "YOUR_DEMO_ACCOUNT_NUMBER",
+  "account_alias": "LITE_DEMO_1",
+  "broker": "LiteFinance",
+  "password_file": "ctrader-cli.pwd"
+}
+```
+
+The example is a template; it is **not a credential request** and
+must not be committed or pasted into chat. The password file is
+plaintext for the CLI itself, and must remain on the operator-approved
+private host; do not use GitHub Secrets, Actions, logs or web requests
+for this gate. An owner-authorized, already-configured host can then
+execute:
+
+```bash
+python3 deploy/mojtrade_ctrader_cli_preflight_readonly.py \
+  --config /ABSOLUTE/PRIVATE/DIRECTORY/config.json
+```
+
+It fails closed on missing/unsafe credentials, unexpected response
+schema, non-demo account, wrong broker, ambiguous account, duplicate
+instance IDs or CLI failure. A completed check reports only that this
+one CLI saw the selected DEMO account and some instance count; it
+**cannot establish** that a Cloud instance, another machine or another
+broker session is absent. Therefore
+`single_runtime_instance_independently_attested=false` and
+`trading_release_authorized=false` remain **fixed**. No real credential
+is available in the CI tests, which use synthetic data and a fake CLI.
+
+Important: this probe is a **staging prerequisite** and does not yet
+bind the cTrader CLI to a signed, per-order canonical task, account-wide
+atomic reservation or broker-verified execution receipt. Real
+capital and public signal publication remain disallowed.
+
+Official sources:
+
+- https://help.ctrader.com/ctrader-cli/
+- https://help.ctrader.com/ctrader-cli/use-commands/
+- https://help.ctrader.com/ctrader-algo/references/HTTP/Http/
+- https://help.ctrader.com/ctrader-algo/references/Localstorage/LocalStorage/
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
