@@ -260,6 +260,44 @@ mandatory before production approval.
 Official API reference:
 https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/Symbol/
 
+## 2026-11-13 official CLI command verification and JSON trust boundary
+
+Spotware's official `CLI-references` documents all four preflight verbs
+(`accounts`, `cbots`, `positions`, `orders`) and their expected
+authentication mode. `accounts` uses batch `--ctid --pwd-file`;
+`cbots`, `positions`, `orders` support interactive quick mode `-q`
+with `--pwd-file`, and `--account` and `--broker` are supported global
+selectors. This verifies command syntax **only**, not installed binary,
+broker authorization or the actual response payload schema.
+
+**Critical unresolved dependency:** the public CLI command reference
+does not provide a version-pinned field-by-field JSON schema for these
+four responses. The offline regression tests use intentionally synthetic
+JSON structures. The real CLI may emit different field names or wrapper
+objects; an unrecognized format MUST produce a blocked preflight, not a
+coerced approval. Exact output contracts and account demo markers
+must be reconciled from the owner-authorized installed CLI on a trusted
+host before accepting the preflight as an authenticated broker connection.
+
+The preflight now explicitly refuses:
+
+- Duplicate JSON keys, even when hidden within account rows.
+- A wrapper with `success=false`, `ok=false`, nonempty `error` or
+  `errors`, including when a valid-looking account list is present.
+- Non-finite numeric JSON constants.
+- Conflicting displayed trader logins, account IDs, broker names or
+  `isLive` values. cTrader Open API distinguishes the internal
+  `ctidTraderAccountId` from the displayed `traderLogin`; accepting
+  one ambiguous number as both may bind the wrong account.
+- Real-account, duplicate-account and missing-demo-marker cases before
+  querying cBots or positions.
+
+Official primary sources:
+
+- https://help.ctrader.com/ctrader-cli/use-commands/
+- https://github.com/spotware/CLI-references
+- https://help.ctrader.com/open-api/model-messages/
+
 ## Read-only cTrader CLI demo-account preflight (new review-cycle source)
 
 Spotware's official documentation confirms a material architectural
