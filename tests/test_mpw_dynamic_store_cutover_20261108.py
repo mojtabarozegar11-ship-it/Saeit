@@ -606,8 +606,8 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                 "<input NAME = 'EMAIL' required>",
             ):
                 with self.subTest(email_markup=email_markup):
-                    template.write_text("{% csrf_token %}\\n" + email_markup +
-                                        "\\n" + "# original styled template\\n" * 9)
+                    template.write_text("{% csrf_token %}\n" + email_markup +
+                                        "\n" + "# original styled template\n" * 9)
                     with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL"):
                         verify_email_free_invoice_sources(app)
             template.write_text("{% csrf_token %}\n" + "# original styled template\n" * 9)
