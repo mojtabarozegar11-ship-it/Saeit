@@ -1,0 +1,35 @@
+name: MojPlayWin one-pass public sales audit (read only)
+# Manually run on reviewed main only. No production login, payment, mail,
+# mutation, network transfer of buyer data or external task subscription.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-onepass-public-readonly
+  cancel-in-progress: false
+
+jobs:
+  public-buyer-journey:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Checkout reviewed source with no persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source and isolated security contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+      - name: Bounded public HTML observations; never POST or create invoice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_onepass_public_sales_audit_20261113.py --timeout 6
