@@ -86,6 +86,38 @@ instances are still not atomically account-locked; their actions must be
 reconciled against broker history. No real trade is enabled and this cBot is
 not yet controlled by a signed order instruction from the canonical bot.
 
+## Demo restart, order idempotency and protective-fill gate (review branch)
+
+Official cTrader Algo APIs expose `History.FindAll(label)`,
+`HistoricalTrade.ClosingTime` / `NetProfit` / `Comment`, and
+`TradeResult.Position` plus position-side `StopLoss` / `TakeProfit`.
+The DEMO-only Omega X source now uses these to close three gaps:
+
+1. **Risk cannot be reset merely by restarting a cBot.** Each
+   `DailyLossReached` call sums the account's **historical same-UTC-day**
+   closed P&L to derive a baseline from `Account.Balance`; the consecutive
+   loss count is rebuilt in closing-time order from *all symbols* sharing
+   the Omega X label. If history or numeric inputs cannot be read, new
+   orders are blocked. This is still a DEMO approximation: incomplete
+   broker history and same-day deposits/withdrawals must be reconciled.
+2. **One closed candle, one attempted order per instance.** A stable candle
+   identity is passed in the supported cTrader market-order `comment`
+   argument and checked against labelled open positions and closed history
+   before another attempt. Local attempts are reserved BEFORE dispatch.
+   A rejected/ambiguous response locks the instance pending reconciliation.
+   Broker comment retention and concurrent instance races remain
+   unresolved release blockers; this is NOT distributed exactly-once.
+3. **Reject missing protective fills.** After a successful DEMO order
+   response, a missing position receipt or missing broker-confirmed SL/TP
+   sets a reconciliation hold. A position without protection triggers one
+   DEMO-only closing attempt; a failed close is never presented as success.
+
+These edits do NOT execute trades now. The source must compile against
+the pinned official cTrader API and pass existing regressions before
+a broker-connected DEMO forward test is considered. Any real account
+remains permanently rejected and owner authorization, reconciled demo
+fills, single-commander execution and costed OOS evidence remain required.
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
