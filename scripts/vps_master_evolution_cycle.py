@@ -18,6 +18,7 @@ from contextlib import closing
 
 MAX_STATE_BYTES = 200_000
 MAX_NEW_TASKS_PER_AUDIT = 128
+MAX_TRACKED_PENDING_TASKS = 4096
 
 
 def _contains_symlink(path):
@@ -40,8 +41,29 @@ def evaluate(db_path: Path, state_path: Path):
     parent_mode = parent.stat().st_mode
     if not stat.S_ISDIR(parent_mode) or stat.S_IMODE(parent_mode) & 0o077:
         raise RuntimeError("MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE")
-    # Keep counts and completed-task IDs on one consistent read-only SQLite
-    # snapshot. Separate connections can see different concurrent task states.
+    # Load the previous watermark before opening the database snapshot so
+    # late-completing older tasks can be checked in that same snapshot.
+    previous = {}
+    if state_path.exists():
+        if not state_path.is_file() or state_path.stat().st_size > MAX_STATE_BYTES:
+            raise RuntimeError("MASTER_EVOLUTION_STATE_UNSAFE")
+        try:
+            previous = json.loads(state_path.read_text(encoding="utf-8"))
+        except (ValueError, UnicodeError) as exc:
+            raise RuntimeError("MASTER_EVOLUTION_STATE_INVALID_JSON") from exc
+        if not isinstance(previous, dict) or previous.get("schema") != "saeit.master.evolution.v1":
+            raise RuntimeError("UNKNOWN_PREVIOUS_EVOLUTION_STATE")
+    prior_pending = previous.get("pending_prior_ids")
+    if prior_pending is not None:
+        if (not isinstance(prior_pending, list)
+                or len(prior_pending) > MAX_TRACKED_PENDING_TASKS
+                or any(type(item) is not int or item <= 0 for item in prior_pending)
+                or prior_pending != sorted(set(prior_pending))
+                or type(previous.get("last_completed_task_id")) is not int):
+            raise RuntimeError("MASTER_EVOLUTION_PENDING_IDS_INVALID")
+
+    # Keep counts, completed tasks and pending-task transitions on one
+    # consistent read-only SQLite snapshot (no production DB mutations).
     with closing(sqlite3.connect(
             db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12
     )) as db:
@@ -60,24 +82,34 @@ def evaluate(db_path: Path, state_path: Path):
         rows = db.execute(
             "SELECT id,action_type,output_data FROM core_agenttask "
             "WHERE agent_id=? AND status='completed' "
-            "ORDER BY id DESC LIMIT ?", (row[0], MAX_NEW_TASKS_PER_AUDIT)
+            "ORDER BY id DESC LIMIT ?", (row[0], MAX_NEW_TASKS_PER_AUDIT + 1)
         ).fetchall()
         latest_completed_id = db.execute(
             "SELECT COALESCE(MAX(id),0) FROM core_agenttask "
             "WHERE agent_id=? AND status='completed'", (row[0],)
         ).fetchone()[0]
+        pending_ids = [
+            item[0] for item in db.execute(
+                "SELECT id FROM core_agenttask WHERE agent_id=? "
+                "AND status!='completed' AND id<=? ORDER BY id LIMIT ?",
+                (row[0], latest_completed_id, MAX_TRACKED_PENDING_TASKS + 1)
+            ).fetchall()
+        ]
+        if len(pending_ids) > MAX_TRACKED_PENDING_TASKS:
+            raise RuntimeError("MASTER_EVOLUTION_PENDING_TRACKING_LIMIT_EXCEEDED")
+        prior_pending_rows = []
+        for offset in range(0, len(prior_pending or []), 128):
+            batch = prior_pending[offset:offset + 128]
+            placeholders = ",".join("?" for _ in batch)
+            prior_pending_rows.extend(db.execute(
+                "SELECT id,status,action_type,output_data FROM core_agenttask "
+                "WHERE agent_id=? AND id IN (" + placeholders + ")",
+                (row[0], *batch)
+            ).fetchall())
+        if len(prior_pending_rows) != len(prior_pending or []):
+            raise RuntimeError("MASTER_EVOLUTION_PREVIOUS_PENDING_TASK_DISAPPEARED")
     allowed = ("completed", "failed", "blocked", "queued", "running")
     counts = {key: int(counts.get(key, 0)) for key in allowed}
-    previous = {}
-    if state_path.exists():
-        if not state_path.is_file() or state_path.stat().st_size > MAX_STATE_BYTES:
-            raise RuntimeError("MASTER_EVOLUTION_STATE_UNSAFE")
-        try:
-            previous = json.loads(state_path.read_text(encoding="utf-8"))
-        except (ValueError, UnicodeError) as exc:
-            raise RuntimeError("MASTER_EVOLUTION_STATE_INVALID_JSON") from exc
-        if not isinstance(previous, dict) or previous.get("schema") != "saeit.master.evolution.v1":
-            raise RuntimeError("UNKNOWN_PREVIOUS_EVOLUTION_STATE")
     prev_count = previous.get("task_counts", {})
     if not isinstance(prev_count, dict) or any(
             type(prev_count.get(key, counts[key])) is not int
@@ -108,21 +140,12 @@ def evaluate(db_path: Path, state_path: Path):
     else:
         previous_cursor = latest_completed_id
         cursor_trusted = False
-    if previous_cursor < latest_completed_id:
-        newest_ids = [task_id for task_id, _, _ in rows]
-        if len(newest_ids) == MAX_NEW_TASKS_PER_AUDIT and min(newest_ids) > previous_cursor + 1:
-            # Count records, not contiguous IDs: task IDs may contain gaps.
-            with closing(sqlite3.connect(
-                    db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12
-            )) as db:
-                db.execute("PRAGMA query_only=ON")
-                new_total = db.execute(
-                    "SELECT COUNT(*) FROM core_agenttask WHERE agent_id=? "
-                    "AND status='completed' AND id>?",
-                    (row[0], previous_cursor)
-                ).fetchone()[0]
-            if new_total > len(rows):
-                raise RuntimeError("MASTER_EVOLUTION_NEW_TASKS_EXCEED_AUDIT_WINDOW")
+    # Querying one extra row makes the audit-window limit exact, even when
+    # task IDs are contiguous; the old gap-based detection missed that case.
+    if sum(task_id > previous_cursor for task_id, _, _ in rows) > MAX_NEW_TASKS_PER_AUDIT:
+        raise RuntimeError("MASTER_EVOLUTION_NEW_TASKS_EXCEED_AUDIT_WINDOW")
+    if prior_pending is not None and any(item > previous_cursor for item in prior_pending):
+        raise RuntimeError("MASTER_EVOLUTION_PENDING_IDS_EXCEED_CURSOR")
     recent_new = []
     for task_id, action, raw in rows:
         if task_id <= previous_cursor:
@@ -133,6 +156,21 @@ def evaluate(db_path: Path, state_path: Path):
             continue
         if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
             recent_new.append(str(action))
+    # A task can finish AFTER a newer-ID task. Only count those older IDs if
+    # they were recorded as unfinished during the previous verified snapshot.
+    late_completed = 0
+    late_verified = 0
+    for task_id, status, action, raw in prior_pending_rows:
+        if status != "completed":
+            continue
+        late_completed += 1
+        try:
+            evidence = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
+            recent_new.append(str(action))
+            late_verified += 1
     diversity = len(set(recent_new))
     # Serial task depth is distinct from factory product volume. Never run
     # parallel master tasks or remove financial/owner approval gates.
@@ -160,6 +198,10 @@ def evaluate(db_path: Path, state_path: Path):
                   "completed_tasks_net_change": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
         "last_completed_task_id": latest_completed_id,
+        "pending_prior_ids": pending_ids,
+        "previous_pending_tracking_available": prior_pending is not None,
+        "late_completed_tasks": late_completed,
+        "late_verified_completed_tasks": late_verified,
         "previous_completed_cursor_trusted": cursor_trusted,
         "recent_new_verified_action_types": diversity,
         "repeat_completion_is_not_diverse_progress": True,
