@@ -30,8 +30,8 @@ class FoundationTests(TestCase):
         self.owner = User.objects.create_user(username="owner", password="safe-pass-123")
         self.other = User.objects.create_user(username="other", password="safe-pass-123")
         self.agent = Agent.objects.create(
-            code="researcher",
-            name="Researcher",
+            code="mojtaba-bot-ai",
+            name="Mojtaba.bot.ai",
             mission="research and analysis",
             risk_level="low",
             active=True,
@@ -98,17 +98,17 @@ class FoundationTests(TestCase):
         self.assertEqual(completed.cost, Decimal("0.1000"))
         self.assertTrue(AuditLog.objects.filter(action="task_completed").exists())
 
-    def test_failure_requeues_until_retry_budget_is_exhausted(self):
+    def test_canonical_failures_block_without_automatic_retry(self):
         task = MasterAgent().plan(self.project, "research", {}, risk="low")
         task.max_attempts = 2
         task.save(update_fields=["max_attempts"])
         running = TaskRuntime().claim(task.pk)
         failed = TaskRuntime().fail(task.pk, "temporary", execution_id=running.execution_id)
-        self.assertEqual(failed.status, "queued")
-        self.assertEqual(failed.execution_id, "")
-        running = TaskRuntime().claim(task.pk)
-        failed = TaskRuntime().fail(task.pk, "permanent", execution_id=running.execution_id)
-        self.assertEqual(failed.status, "failed")
+        self.assertEqual(failed.status, "blocked")
+        self.assertEqual(failed.execution_id, running.execution_id)
+        self.assertIs(failed.output_data["automatic_replay_allowed"], False)
+        with self.assertRaises(TaskExecutionError):
+            TaskRuntime().claim(task.pk)
 
     def test_stale_execution_is_recovered(self):
         task = MasterAgent().plan(self.project, "research", {}, risk="low")
@@ -117,8 +117,9 @@ class FoundationTests(TestCase):
             updated_at=timezone.now() - timedelta(hours=1)
         )
         recovered = TaskRuntime().recover_stale(task.pk, stale_after_seconds=60)
-        self.assertEqual(recovered.status, "queued")
-        self.assertEqual(recovered.execution_id, "")
+        self.assertEqual(recovered.status, "blocked")
+        self.assertEqual(recovered.execution_id, running.execution_id)
+        self.assertIs(recovered.output_data["automatic_replay_allowed"], False)
         self.assertTrue(AuditLog.objects.filter(action="task_recovered_stale").exists())
 
     def test_evidence_source_must_belong_to_project(self):
