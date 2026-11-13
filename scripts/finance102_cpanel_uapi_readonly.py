@@ -25,12 +25,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def classify(result):
     """Do not leak server metadata; accept at most one exact mapping per site."""
-    if not isinstance(result, dict) or set(result) != {"data", "errors", "messages", "metadata", "status"}:
-        # cPanel UAPI returns a dictionary with these keys on supported versions.
-        # Never classify an unexpected shape as authenticated proof.
+    required = {"data", "errors", "messages", "metadata", "status"}
+    # UAPI can add "warnings" and minor metadata in legitimate releases.
+    if not isinstance(result, dict) or not required.issubset(result):
         raise ValueError("CPANEL_RESPONSE_SHAPE_UNVERIFIED")
-    if result["status"] not in (1, True) or result["errors"]:
+    if result["status"] not in (1, True) or result["errors"] not in (None, []):
         raise ValueError("CPANEL_UAPI_NOT_AUTHENTICATED_OR_DENIED")
+    if not isinstance(result["data"], (list, dict)):
+        raise ValueError("CPANEL_APPLICATION_DATA_UNVERIFIED")
     stack = [result["data"]]
     found = []
     while stack:
@@ -42,6 +44,24 @@ def classify(result):
         elif isinstance(item, list):
             stack.extend(item)
     return {d: found.count((d, uri, p)) == 1 for d, uri, p in EXPECTED}
+
+
+def parse_uapi_response(data):
+    """Support exactly the two documented UAPI JSON wire envelopes.
+
+    Direct /execute/ replies expose data/status at the root. Some versions
+    document the API-v3 module/function envelope; accept that only when the
+    operation identity is explicitly verified. Never trust a bare result key.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("CPANEL_UAPI_JSON_SHAPE_UNVERIFIED")
+    if "result" not in data:
+        return classify(data)
+    if not (data.get("apiversion") == 3
+            and data.get("module") == "PassengerApps"
+            and data.get("func") == "list_applications"):
+        raise ValueError("CPANEL_UAPI_OPERATION_IDENTITY_UNVERIFIED")
+    return classify(data["result"])
 
 def run(token, opener=None):
     if not isinstance(token, str) or not 18 <= len(token) <= 300 or "\n" in token or "\r" in token:
@@ -63,11 +83,11 @@ def run(token, opener=None):
             if len(raw) > 500_000:
                 raise ValueError("CPANEL_RESPONSE_TOO_LARGE")
             data = json.loads(raw.decode("utf8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("CPANEL_INVALID_JSON_RESPONSE") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ValueError("CPANEL_HTTPS_UNAVAILABLE_OR_DENIED") from exc
-    if not isinstance(data, dict) or "result" not in data:
-        raise ValueError("CPANEL_UAPI_NO_RESULT")
-    return classify(data["result"])
+    return parse_uapi_response(data)
 
 def main():
     try:
