@@ -1,0 +1,66 @@
+# Mojtaba.Bot.Ai — Build Gate
+
+## هدف و مرز شواهد
+
+تنها بستهٔ مورد قبول، `Mojtaba.Bot.Ai.algo` است. کلاس
+`MojTradeOmegaXDemoBot` صرفاً ماژول داخلی همین بسته است؛ محصول یا
+ربات مستقلی ایجاد نمی‌کند. موفقیت کامپایل به معنی سوددهی، آمادگی اجرای
+Demo، اعتبارسنجی در cTrader CLI یا اجازهٔ معاملهٔ واقعی نیست.
+
+## نسخه‌های تثبیت‌شده
+
+- .NET 6 SDK (محدودیت cTrader.Automate نسخهٔ 1.0.21).
+- نسخهٔ دقیق `cTrader.Automate=1.0.21` در پروژه pin شده است؛
+  به‌روزرسانی وابستگی نیازمند بررسی جداگانه است.
+- محیط GitHub-hosted صرفاً برای Restore، Build و بررسی آفلاین فایل است.
+- بدون حساب کارگزاری، credential، سفارش، انتقال وجه یا VPS.
+
+## علت گیت پیشین و راه‌حل
+
+در اجرای قبلی، کامپایل موفق بود اما `Saeit.algo` در مسیر
+`net6.0` ساخته شد، درحالی‌که CI مسیر قدیمی
+`net8.0/Mojtaba.Bot.Ai.algo` را جست‌وجو می‌کرد.
+در برخی نسخه‌های بستهٔ cTrader نام فایل از نام پوشهٔ بالادستیِ محل پروژه
+گرفته می‌شود (طبق شواهد عملی CI برای نسخهٔ 1.0.21)؛ تغییر نام فایل پس از Build اثبات هویت نیست.
+بنابراین Workflow پروژه و کد مورد بررسی را داخل پوشهٔ موقت و
+ایزولهٔ `Mojtaba.Bot.Ai/source` کپی و همان‌جا Build می‌کند.
+گیت نخست پس از ساخت موفق DLL، فایل `_temp.algo` را پیدا کرد:
+این مشاهده تأیید کرد که محل پروژه باید یک پوشه پایین‌تر از
+`Mojtaba.Bot.Ai` قرار گیرد.
+
+## اجرای همان Build در محیط Linux/macOS
+
+از ریشهٔ مخزن:
+
+```bash
+set -euo pipefail
+bot_root="$(mktemp -d)/Mojtaba.Bot.Ai/source"
+mkdir -p "$bot_root"
+cp trading/Mojtaba.Bot.Ai.csproj "$bot_root/"
+cp trading/MojTradeOmegaXDemoBot.cs "$bot_root/"
+dotnet restore "$bot_root/Mojtaba.Bot.Ai.csproj"
+dotnet build "$bot_root/Mojtaba.Bot.Ai.csproj" --configuration Release --no-restore
+output="$bot_root/bin/Release/net6.0"
+test -s "$output/Mojtaba.Bot.Ai.algo"
+test ! -e "$output/Saeit.algo"
+test ! -e "$output/MojTradeOmegaXDemoBot.algo"
+sha256sum "$output/Mojtaba.Bot.Ai.algo"
+```
+
+## گیت‌های مستقل بعد از Build
+
+1. موفقیت تمام مراحل CI و وجود دقیقاً یک خروجی canonical.
+2. بررسی metadata واقعی با cTrader CLI رسمی در محیط سازگار.
+3. اجرای Backtest روی دادهٔ تاریخی واقعی با اسپرد و هزینهٔ معامله.
+4. آزمون Demo با کنترل ریسک و ثبت رسید.
+5. هرگونه استقرار و معاملهٔ واقعی فقط پس از تأیید مجزای مالک.
+
+تا تحقق این موارد، PR در حالت Draft باقی می‌ماند.
+
+## چرخهٔ ۳ — قرارداد صحیح تغییر حدضرر و حدسود
+
+- overload جدید `ModifyPosition(position, stopLoss, takeProfit, ProtectionType.Absolute)` استفاده می‌شود.
+- حدضرر و حدسود در این مسیر «قیمت مطلق» هستند، نه فاصله به پیپ.
+- در صورت رد شدن اصلاح حدضرر توسط کارگزار، پیام خطا ثبت می‌شود و هیچ retry یا سفارش مجدد خودکاری انجام نمی‌شود.
+- هشدار `CS0618` در پروژه به خطای Build تبدیل شد تا استفادهٔ دوباره از overload قدیمی مسدود شود.
+- این تغییر تنها در PR بازبینی و همراه با کنترل بیلد بدون حساب/معامله انجام می‌شود.

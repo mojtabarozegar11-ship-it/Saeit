@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <!-- Keep deprecated cTrader overloads from silently returning to production candidates. -->
+    <WarningsAsErrors>CS0618</WarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Mojtaba.Bot.Ai</AssemblyName>
+    <RootNamespace>Mojtaba.Bot.Ai</RootNamespace>
+    <AlgoName>Mojtaba.Bot.Ai</AlgoName>
+    <AlgoBuild>true</AlgoBuild>
+    <AlgoPublish>false</AlgoPublish>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>false</IncludeSymbols>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="cTrader.Automate" Version="1.0.21" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="MojTradeOmegaXDemoBot.cs" />
+  </ItemGroup>
+</Project>
