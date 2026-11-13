@@ -2,7 +2,7 @@
 import unittest
 from pathlib import Path
 from hashlib import sha1
-from core.finance102_guides import BRAND_TOPICS, LOCALES, KINDS, guide_for, compose_page_copy
+from core.finance102_guides import BRAND_TOPICS, BRAND_CASES, LOCALES, KINDS, guide_for, compose_page_copy, canonical_url
 
 
 class Finance102GuidesTest(unittest.TestCase):
@@ -61,6 +61,43 @@ class Finance102GuidesTest(unittest.TestCase):
         view = Path("core/financial_brand_pages.py").read_text("utf-8")
         self.assertIn("intro, notice = compose_page_copy(slug, locale, page_type, notice)", view)
         self.assertNotIn('"finance_guide":', view)
+
+    def test_51_distinct_localized_numeric_case_studies(self):
+        self.assertEqual(set(BRAND_CASES), set(BRAND_TOPICS))
+        self.assertEqual(len({case for row in BRAND_CASES.values() for case in row}), 51)
+        for slug in BRAND_TOPICS:
+            for locale in LOCALES:
+                case = BRAND_CASES[slug][LOCALES[locale]]
+                self.assertGreaterEqual(len(case), 60)
+                self.assertIn(case, guide_for(slug, locale, "signals")["example"])
+                self.assertIn(case, guide_for(slug, locale, "store")["example"])
+        variants = {
+            guide_for(slug, locale, kind)["example"]
+            for slug in BRAND_TOPICS for locale in LOCALES for kind in KINDS
+        }
+        self.assertEqual(len(variants), 102)
+
+    def test_102_unique_canonical_urls_and_safe_host_policy(self):
+        urls = {canonical_url(slug, locale, kind)
+                for slug in BRAND_TOPICS for locale in LOCALES for kind in KINDS}
+        self.assertEqual(len(urls), 102)
+        for slug in BRAND_TOPICS:
+            for kind, path in (("signals", "market-signals"), ("store", "digital-products")):
+                self.assertEqual(canonical_url(slug, "fa", kind),
+                                 f"https://zomorodmelal.ir/{slug}/{path}/")
+                self.assertEqual(canonical_url(slug, "en", kind),
+                                 f"https://mojplaywin.com/{slug}/{path}/")
+                self.assertEqual(canonical_url(slug, "ar", kind),
+                                 f"https://mojplaywin.com/ar/{slug}/{path}/")
+        for slug, locale, kind in [
+            ("http://attacker.com", "en", "store"),
+            ("saman", "xx", "store"), ("saman", "fa", "game")
+        ]:
+            with self.assertRaises(ValueError):
+                canonical_url(slug, locale, kind)
+        view = Path("core/financial_brand_pages.py").read_text("utf-8")
+        self.assertIn('response["Link"]', view)
+        self.assertIn('response["Content-Language"] = locale', view)
 
     def test_existing_finance_routes_preserved(self):
         urls = Path("config/urls.py").read_text("utf-8")
