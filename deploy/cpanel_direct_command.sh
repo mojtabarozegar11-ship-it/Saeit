@@ -27,11 +27,11 @@ normalize_key() {
 }
 if [[ "${FACTORY_VPS_RUNNER:-0}" == "1" ]]; then
   normalize_key "$HOST_KEY" "$work/host.key"
-  ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+  ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net > "$work/host.known" 2>/dev/null
   test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
   cat > "$work/config" <<EOF
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -79,7 +79,7 @@ normalize_key "$HOST_KEY" "$work/host.key"
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
-ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
+ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
 cat > "$work/config" <<EOF
@@ -89,7 +89,7 @@ Host saeit-vps
   IdentityFile $work/vps.key
   UserKnownHostsFile $work/vps.known
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
