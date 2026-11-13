@@ -1,5 +1,9 @@
 name: Finance 102 public read-only audit 20261113
 on:
+  pull_request:
+    paths:
+      - .github/workflows/finance-102-public-audit-20261113.yml
+      - scripts/finance_102_public_audit_20261113.py
   push:
     branches:
       - audit/finance102-live-20261113
