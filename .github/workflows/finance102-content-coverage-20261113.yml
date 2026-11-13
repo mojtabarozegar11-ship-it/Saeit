@@ -1,0 +1,26 @@
+name: Finance 102 specialized content coverage 20261113
+on:
+  pull_request:
+    paths:
+      - 'core/finance102_guides.py'
+      - 'core/financial_brand_pages.py'
+      - 'core/templates/core/financial_brand_page.html'
+      - 'tests/test_finance102_guides.py'
+      - '.github/workflows/finance102-content-coverage-20261113.yml'
+permissions:
+  contents: read
+jobs:
+  exact-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile sources and validate all 102 brand-locale-kind copy combinations
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile core/finance102_guides.py core/financial_brand_pages.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_finance102_guides.py' -v
