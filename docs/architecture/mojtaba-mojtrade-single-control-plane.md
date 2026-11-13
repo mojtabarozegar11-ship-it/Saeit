@@ -164,6 +164,60 @@ site delivery and per-channel permission, tested production deployment,
 and externally reconciled economics. No live trade or paid publication
 is authorized by a successful offline test.
 
+## Owner-only previews for 17 finance brand routes
+
+The existing brand registry contains **17** distinct brand slugs.
+A new canonical Django read-only endpoint provides exactly one
+**private** market-watch preview per brand and language:
+
+`GET /api/mojtrade/brand-preview/<brand>/<locale>/`
+
+The `brand` segment is validated against the existing registry and
+`locale` is restricted to `fa`, `en`, or `ar`. All 17 × 3 = **51**
+brand/language combinations use one revalidated `mojtaba-bot-ai`
+market research receipt (no independent 17-brand bots). The response
+includes a language-specific watch text, content-addressed hash,
+source timestamp and expiry, and canonical source identifier.
+Access requires an active superuser (not just staff). Responses are
+`no-store`, `noindex`, `X-Frame-Options: DENY`. Expired or altered
+source tasks never fall back to an earlier cached signal.
+
+**Not publication:** these are owner previews, not the existing
+public `/<brand>/market-signals/` pages or paid subscribers.
+No account state, charge, order, signal delivery or commercial
+entitlement changes. Opening the page without active owner login
+reveals no private preview. A future authorized site publisher
+would need its own real subscriber access, consent, copy review,
+trusted market data, external delivery receipt and no stale replay.
+
+## cTrader Cloud execution facts and release blocker
+
+From cTrader's official Cloud execution documentation (read in
+November 2026), a DEMO account normally allows **one concurrent
+cloud cBot instance** (broker limits may differ); a DEMO cloud
+instance runs for **up to seven days** before stopping. The official
+cTrader LocalStorage reference expressly states that Cloud LocalStorage
+values are **in-memory for the current run only**, not persisted to
+disk. Consequently:
+
+- Three independent demo-cloud cBots per account are NOT a feasible
+  default plan. Do not assert that desktop Type/Device LocalStorage
+  is an atomic, persistent or Cloud-compatible lock.
+- Existing per-candle broker-history comments provide only
+  **best-effort** replay detection; they cannot guarantee exactly-once
+  execution when two instances race or when the broker loses comments.
+- To pursue uninterrupted one-bot demo execution, a single multi-symbol
+  execution adapter or a demonstrably unique supported host must
+  be implemented and broker-validated, with separately verified
+  external scheduling/failover and a durable server-side command ledger.
+  No such evidence has been gathered by these offline code changes.
+- Broker-managed SL/TP and externally reconciled position accounting
+  remain necessary even if the cBot/cloud process stops after seven days.
+
+Official sources:
+https://help.ctrader.com/ctrader-algo/synchronisation/
+https://help.ctrader.com/ctrader-algo/references/Localstorage/LocalStorage/
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
