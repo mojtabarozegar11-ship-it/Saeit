@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from .approval import ApprovalService
 from .chat_operation_security import is_authorized_chat_operator
 from .task_runtime import TaskExecutionError, TaskRuntime
+from .task_reconciliation import build_reconciliation_dossier
 
 
 from .orchestrator import MasterAgent
@@ -478,6 +479,26 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = AgentTask.objects.all()
     serializer_class = AgentTaskSerializer
     permission_classes = [InternalStaffWritePermission]
+
+    @action(detail=True, methods=["get"], url_path="reconciliation")
+    def reconciliation(self, request, pk=None):
+        """Owner-only local audit synopsis; never a retrigger endpoint."""
+        if not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Active owner permission required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        task = self.get_object()
+        if task.project_id and task.project.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Task belongs to another project owner."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            report = build_reconciliation_dossier(task)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(report)
 
     @action(detail=True, methods=["post"], url_path="claim")
     def claim(self, request, pk=None):
