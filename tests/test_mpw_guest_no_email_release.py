@@ -1008,6 +1008,88 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                     release.plan(GUEST_FILE)
 
 
+    def _fake_passenger_uapi(self, apps, *, status=1, code=0):
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            returncode=code,
+            stdout=__import__("json").dumps(
+                {"result": {"status": status, "data": {"applications": apps}}}
+            ).encode())
+
+    def test_passenger_exact_public_root_allows_preflight(self):
+        obj = self._fake_passenger_uapi([{
+            "domain": "mojplaywin.com", "base_uri": "/",
+            "app_root": str(release.PUBLIC)
+        }])
+        with patch("subprocess.run", return_value=obj) as call:
+            release.confirm_registered_public_passenger_root()
+        self.assertEqual(call.call_args.args[0],
+                         ["uapi", "--output=json", "PassengerApps", "list_applications"])
+        self.assertEqual(call.call_args.kwargs["timeout"], 15)
+
+    def test_passenger_unrelated_subpath_refuses_release(self):
+        obj = self._fake_passenger_uapi([{
+            "domain": "mojplaywin.com", "base_uri": "/unrelated/",
+            "app_root": "/home/zomorod2/other-app"
+        }])
+        with patch("subprocess.run", return_value=obj):
+            with self.assertRaisesRegex(RuntimeError, "PUBLIC_PASSENGER_ROOT_NOT_PROVEN"):
+                release.confirm_registered_public_passenger_root()
+
+    def test_passenger_wrong_public_root_refuses_release(self):
+        obj = self._fake_passenger_uapi([{
+            "domain": "mojplaywin.com", "base_uri": "/",
+            "app_root": "/home/zomorod2/Saeit-staging"
+        }])
+        with patch("subprocess.run", return_value=obj):
+            with self.assertRaisesRegex(RuntimeError, "PUBLIC_PASSENGER_ROOT_NOT_PROVEN"):
+                release.confirm_registered_public_passenger_root()
+
+    def test_passenger_unmapped_domain_refuses_release(self):
+        obj = self._fake_passenger_uapi([{
+            "domain": "irrelevant.example", "base_uri": "/",
+            "app_root": "/home/zomorod2/other-app"
+        }])
+        with patch("subprocess.run", return_value=obj):
+            with self.assertRaisesRegex(RuntimeError, "PUBLIC_PASSENGER_MAPPING_UNKNOWN"):
+                release.confirm_registered_public_passenger_root()
+
+    def test_passenger_duplicate_public_root_is_ambiguous(self):
+        obj = self._fake_passenger_uapi([
+            {"domain": domain, "base_uri": "/", "app_root": str(release.PUBLIC)}
+            for domain in ("mojplaywin.com", "www.mojplaywin.com")])
+        with patch("subprocess.run", return_value=obj):
+            with self.assertRaisesRegex(RuntimeError, "PUBLIC_PASSENGER_ROOT_NOT_PROVEN"):
+                release.confirm_registered_public_passenger_root()
+
+    def test_passenger_malformed_failed_and_oversize_responses_rejected(self):
+        from types import SimpleNamespace
+        cases = [
+            self._fake_passenger_uapi([], status=0),
+            self._fake_passenger_uapi([], code=1),
+            SimpleNamespace(returncode=0, stdout=b"{not-json"),
+            SimpleNamespace(returncode=0, stdout=b"X" * 300001),
+        ]
+        for response in cases:
+            with self.subTest(code=response.returncode):
+                with patch("subprocess.run", return_value=response):
+                    with self.assertRaisesRegex(RuntimeError, "PASSENGER_UAPI_"):
+                        release.confirm_registered_public_passenger_root()
+
+    def test_passenger_uapi_timeout_fails_closed(self):
+        import subprocess
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("uapi", 15)):
+            with self.assertRaisesRegex(RuntimeError, "PASSENGER_UAPI_UNAVAILABLE"):
+                release.confirm_registered_public_passenger_root()
+
+    def test_release_guard_not_required_for_rollback(self):
+        import inspect
+        self.assertIn("guard()", inspect.getsource(release.rollback))
+        self.assertIn("guard(confirm_public_binding=True)",
+                      inspect.getsource(release.publish))
+        self.assertNotIn("confirm_public_binding=True",
+                         inspect.getsource(release.rollback))
+
     def _exercise_guarded_publish(self, public_probe, *, idempotent=False,
                                   fail_after_replace=False, concurrent_drift=False):
         """Isolated files only: never cPanel, wallet, mail, or public HTTPS."""
@@ -1050,7 +1132,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             sink = io.StringIO()
             with patch.multiple(
                 release, GUEST=guest, TEMPLATE=checkout,
-                guard=lambda: None,
+                guard=lambda **kwargs: None,
                 audit_invoice_email_dependencies=lambda: {"invoice_handler_found": True},
                 plan=plan,
                 _backup_dir=private_backup,
