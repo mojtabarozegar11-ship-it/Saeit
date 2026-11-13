@@ -156,8 +156,10 @@ def integrated_ledger_api(request):
         return response
     try:
         payload = json.loads(request.body or "{}")
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
         return JsonResponse({"error": "بدنهٔ درخواست معتبر نیست."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "بدنهٔ درخواست باید یک شیء JSON باشد."}, status=400)
     kind = _text(payload.get("kind"))
     if kind == "command":
         domain, command_text = _text(payload.get("domain")) or "command", _text(payload.get("command"))
