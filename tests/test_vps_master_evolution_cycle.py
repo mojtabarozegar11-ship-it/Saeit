@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/vps_master_evolution_cycle.py"
 spec = importlib.util.spec_from_file_location("master_evolution", SCRIPT)
@@ -259,6 +260,205 @@ class EvolutionTests(unittest.TestCase):
             self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
             self.assertFalse(result["commercial_publication_enabled"])
             self.assertFalse(result["financial_actions_enabled"])
+
+    def test_late_older_task_completion_is_counted_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            first = json.loads(state.read_text())
+            self.assertEqual(first["pending_prior_ids"], [2])
+            self.assertEqual(first["last_completed_task_id"], 3)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            second = json.loads(state.read_text())
+            self.assertEqual(second["delta"]["verified_completed_tasks"], 1)
+            self.assertEqual(second["late_verified_completed_tasks"], 1)
+            self.assertEqual(second["late_completed_tasks"], 1)
+            self.assertEqual(second["pending_prior_ids"], [])
+            self.assertEqual(second["last_completed_task_id"], 3)
+            mod.evaluate(db, state)
+            third = json.loads(state.read_text())
+            self.assertEqual(third["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(third["late_verified_completed_tasks"], 0)
+
+    def test_two_distinct_late_tasks_count_as_verified_diverse_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                for action in ("income_profit_optimize", "income_opportunity_score"):
+                    conn.execute(
+                        "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                        "VALUES (1,'queued',?,'{}')", (action,)
+                    )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_market_research',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2, 3])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? "
+                    "WHERE id IN (2,3)", (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 2)
+            self.assertEqual(result["late_verified_completed_tasks"], 2)
+            self.assertEqual(result["recent_new_verified_action_types"], 2)
+            self.assertEqual(result["decision"], "hold_serial_chain_after_verified_progress")
+            self.assertFalse(result["financial_actions_enabled"])
+
+    def test_late_unverified_completion_never_creates_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_market_research',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": False}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["late_completed_tasks"], 1)
+            self.assertEqual(result["late_verified_completed_tasks"], 0)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(result["pending_prior_ids"], [])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["delta"]["verified_completed_tasks"], 0)
+
+    def test_legacy_state_migrates_pending_ids_without_replaying_old_completed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            previous = json.loads(state.read_text())
+            previous["last_completed_task_id"] = 3
+            previous["task_counts"]["completed"] = 2
+            state.write_text(json.dumps(previous))
+            mod.evaluate(db, state)
+            first = json.loads(state.read_text())
+            self.assertFalse(first["previous_pending_tracking_available"])
+            self.assertEqual(first["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(first["pending_prior_ids"], [2])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            second = json.loads(state.read_text())
+            self.assertTrue(second["previous_pending_tracking_available"])
+            self.assertEqual(second["late_verified_completed_tasks"], 1)
+
+    def test_contiguous_129_new_completions_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"] * 129, previous_steps=20)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_NEW_TASKS_EXCEED_AUDIT_WINDOW"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_exactly_128_contiguous_new_completions_are_accounted_for(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"] * 128, previous_steps=20)
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 128)
+            self.assertEqual(result["last_completed_task_id"], 128)
+            self.assertEqual(result["recent_new_verified_action_types"], 1)
+
+    def test_invalid_or_duplicate_pending_ids_are_rejected_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            original = json.loads(state.read_text())
+            original["last_completed_task_id"] = 1
+            for bad in (True, "1", [True], [0], [1, 1], [3, 2]):
+                data = dict(original, pending_prior_ids=bad)
+                state.write_text(json.dumps(data))
+                before = state.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_PENDING_IDS_INVALID"):
+                    mod.evaluate(db, state)
+                self.assertEqual(state.read_bytes(), before)
+
+    def test_missing_previously_tracked_pending_task_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("DELETE FROM core_agenttask WHERE id=2")
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_PREVIOUS_PENDING_TASK_DISAPPEARED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_pending_tracking_capacity_failure_preserves_previous_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                for _ in range(3):
+                    conn.execute(
+                        "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                        "VALUES (1,'queued','income_profit_optimize','{}')"
+                    )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_market_research',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            before = state.read_bytes()
+            with mock.patch.object(mod, "MAX_TRACKED_PENDING_TASKS", 2):
+                with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_PENDING_TRACKING_LIMIT_EXCEEDED"):
+                    mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
