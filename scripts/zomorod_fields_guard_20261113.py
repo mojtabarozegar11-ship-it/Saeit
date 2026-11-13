@@ -175,8 +175,11 @@ def protected_fingerprints():
 
 
 def ensure_disk_space(old, new):
-    # Account for private backup, three atomic temporary files, and rollback headroom.
-    copy_bytes = sum(len(old[name]) + len(new[name]) for name in FILES)
+    # Account for all fifteen files, including the 12 newly created SVGs/pages.
+    # The size formula includes a private copy of old files, temporary writes,
+    # filesystem overhead, and enough headroom for exact rollback.
+    copy_bytes = sum(len(old[name]) for name in FILES)
+    copy_bytes += sum(len(new[name]) for name in FILES + CREATED)
     required = max(32 * 1024 * 1024, 4 * copy_bytes + 8 * 1024 * 1024)
     if BACKUP_ROOT.parent.is_symlink() or not BACKUP_ROOT.parent.is_dir():
         raise RuntimeError('Untrusted or missing backup parent directory')
@@ -242,6 +245,32 @@ def atomic(path: Path, data: bytes, mode: int):
         if temp is not None and temp.exists():
             temp.unlink()
 
+
+
+def atomic_create(path: Path, data: bytes, mode: int) -> None:
+    """Create-only publication. Refuse a concurrent owner file, never replace it.
+
+    Hardlinking a completed same-directory temporary file to the final name is
+    an atomic no-overwrite operation on the same filesystem. Any collision fails
+    with FileExistsError, instead of the os.replace overwrite race.
+    """
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.zm-fields-new-', delete=False) as stream:
+            temp = Path(stream.name)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temp, mode)
+        os.link(temp, path)
+        directory = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if temp is not None and temp.exists():
+            temp.unlink()
 
 def release_dir(release_id: str) -> Path:
     if not re.fullmatch(r'fields-[0-9]{7,22}', release_id):
@@ -351,7 +380,7 @@ def apply(stage: Path, release_id: str) -> None:
                 target = created_destination(name, create_parents=True)
                 if target.exists() or target.is_symlink():
                     raise RuntimeError('Create destination already claimed: ' + name)
-                atomic(target, new[name], 0o644)
+                atomic_create(target, new[name], 0o644)
             for name in ('assets/zm-reference-v3.js', 'assets/zm-reference-v3.css', 'index.html'):
                 if sha256(read_regular(ROOT / name)) != manifest['files'][name]['old']:
                     raise RuntimeError('Changed since audit: ' + name)
