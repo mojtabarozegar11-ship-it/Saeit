@@ -134,3 +134,40 @@ six email-collecting forms and strict CSP mismatch.
 sales, finality and authenticated download remain unverified. No
 positive revenue figure or production readiness percentage is inferred
 from the passing offline suite.
+
+## Cycle 6 — actionable cPanel source reconciliation, without production changes
+
+A new command-line probe, `scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py`,
+can classify the installed guest adapter, locally present private checkout
+template, Passenger staging source marker and owned static-store fallback.
+It does NOT import Django, query MariaDB, access customer data, make HTTP
+requests or change files. It must be executed **only through the already
+authorized fingerprint-pinned read-only cPanel route** on the actual
+`zomorod2` account. Do not interpret its GitHub-hosted synthetic tests as
+an actual cPanel inspection.
+
+The report deliberately sets
+`effective_django_template_origin_verified=false`: file presence alone
+does not prove which template Django selects. It also sets commercial
+settlement, download and revenue to unverified or unknown. The source probe
+must be followed by separate authorized effective-template and financial
+proof before any production release.
+
+An independent public observer now also records
+`checkout_script_policy_categories`: bounded categories such as
+`script_self_only`, `script_nonce_or_hash`, `script_unsafe_inline_or_eval`,
+`script_none`, `script_src_missing` and `csp_missing`.
+No raw CSP value, nonce, customer value or secret is recorded. A category
+different from the target `script_none` is a **target-policy mismatch**;
+it must not automatically be described as exploitable security weakness
+or as a failed TRX processor.
+
+Source validation: [GitHub Actions 43450196370](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43450196370)
+passed **243/243 isolated unit tests** (66 public observer, 9
+paid provenance, 104 email-free release, 3 telemetry, 45 dynamic cutover,
+16 cPanel provenance). Independent guest-route and identity scripts passed.
+These tests involve synthetic cPanel fixtures and no real cPanel login.
+
+**Go/no-go remains NO-GO** until actual cPanel source equivalence,
+dynamic storefront, six email-free buyer forms and authorized independent
+settlement and delivery are proven. The changes remain a draft PR.
