@@ -26,6 +26,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile content/zomorod-v11/search_build.py
           for file in content/zomorod-v11/*.php content/zomorod-business/app.php; do php -l "$file"; done
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_existing_store_mobile_source_20261113.py' -v
           export D="$RUNNER_TEMP/private"
           mkdir -m 700 "$D"
           php -r 'require "content/zomorod-v11/site_agents.php"; $d=zmAgentDb(getenv("D"));if($d->query("SELECT COUNT(*) FROM agents")->fetchColumn()!=11)exit(3);$d->exec("INSERT INTO runs(agent_code,status,http_code,duration_ms,detail) VALUES('"'master'"','"'ok'"',200,24,'"'test'"')");$rows=$d->query("SELECT * FROM runs")->fetchAll();if(!str_contains(zmAgentChart($rows),"<svg"))exit(4);echo "AGENT_CHART_REAL_ROWS=1\n";'
