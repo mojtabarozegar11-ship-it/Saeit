@@ -233,6 +233,9 @@ def _signal(product: str, rows: list, now: datetime, data_source: str = SOURCE) 
         "id": signal_id, "market": "crypto", "symbol": product.replace("-", "/"),
         "timeframe": "1h", "stance": stance, "observed_at": observed_at.isoformat(),
         "method": METHOD, "data_source": data_source,
+        # Exactly the finished USD-quoted candle close used to determine
+        # stance. Existing signed-feed schema accepts this optional evidence.
+        "reference_close_usd": last,
     }
 
 

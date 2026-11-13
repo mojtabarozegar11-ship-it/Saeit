@@ -41,6 +41,36 @@ A real performance score requires independently sourced future market closes,
 a clearly defined entry/exit and fee/slippage model, sample-size tracking,
 and separate trade-execution approvals.
 
+## Forward research outcomes — after real future observations only
+
+The USD-quoted observer now records the actual `reference_close_usd` of its
+last **finished** 1-hour candle, alongside source, timestamp and watch stance.
+The reader and private-product packager accept that optional, strictly positive
+finite field; **legacy snapshots without it remain readable but cannot be
+included in return calculations**.
+
+The existing master gains only the manually queued
+`income_mojtrade_forward_audit` low-risk capability, not a second bot,
+scheduled trading loop or broker adapter. It reads previously completed
+`income_mojtrade_research_review` task evidence from the same Django audit
+database; there is no network call, order, fee payment, file write or public
+feed. Repeated snapshot hashes are counted once; only the earliest reviewed
+observation per closed candle is eligible. The model compares an issued
+`watch_buy` or `watch_sell` with a **later** completed hourly candle; neutral
+stances do not count as trades. The fixed, disclosed model subtracts
+10 basis points in **fees** and 5 basis points **slippage** per side (30 bp
+round trip). These are assumptions, **not observed costs or executable fills**.
+
+Samples are explicitly `hypothetical_one_hour_pairs`, never executed orders,
+verified net P&L, actual cash income, or independent market attestation.
+A modeled win-rate estimate remains **null until at least 30 eligible pairs**
+exist. The maximum history is bounded, with duplicates, future/old invalid
+timestamps, unsupported USD source provenance and forged prices rejected.
+The closed-candle reference close and observation IDs are local model evidence,
+not independently signed exchange receipts. Actual viability still requires
+an outside data audit, documented slippage/fees, walk-forward outcomes,
+out-of-sample stress tests, broker-safe execution approvals and reconciliation.
+
 ## Independent VPS execution path
 
 1. Provision a dedicated unprivileged service account and a *private* directory (permissions 0700) outside any site document root, e.g. `/var/lib/mojtrade/private`.

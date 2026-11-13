@@ -89,14 +89,19 @@ def inspect_private_observation(path: Path, now: datetime | None = None) -> dict
         observed = datetime.fromisoformat(item["observed_at"]).astimezone(timezone.utc)
         if observed > generated or current - observed > MAX_CANDLE_AGE:
             raise ResearchReviewError("MOJTRADE_PRIVATE_RESEARCH_CANDLE_STALE")
-        sources.append({
+        snapshot = {
             "symbol": item["symbol"],
             "stance": item["stance"],
             "data_source": item["data_source"],
             "observed_at": item["observed_at"],
             "signal_id": item["id"],
             "method": item["method"],
-        })
+        }
+        # Preserve only genuinely observed numeric USD closes, never a
+        # missing value substituted with a backtest estimate.
+        if "reference_close_usd" in item:
+            snapshot["reference_close_usd"] = item["reference_close_usd"]
+        sources.append(snapshot)
 
     digest = hashlib.sha256(original).hexdigest()
     return {

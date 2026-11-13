@@ -174,5 +174,13 @@ class ObserverTests(unittest.TestCase):
 
 
 
+    def test_finished_usd_close_is_captured_as_reference_price(self):
+        payload = observer.observe(self.now, lambda product: sample(self.now))
+        for signal in payload["signals"]:
+            self.assertEqual(signal["reference_close_usd"], 179.0)
+            self.assertEqual(signal["timeframe"], "1h")
+            self.assertIn(signal["data_source"], observer.SOURCE)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import stat
 import tempfile
@@ -89,13 +90,21 @@ def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
         method = signal.get("method")
         if not isinstance(method, str) or not method.strip():
             raise ProductArtifactError("report_method_missing")
-        normalized.append({
+        item = {
             "symbol": expected_symbol,
             "stance": stance,
             "observed_at": observed_at.isoformat(),
             "data_source": source,
             "method": method.strip(),
-        })
+        }
+        if "reference_close_usd" in signal:
+            price = signal["reference_close_usd"]
+            if (type(price) not in (int, float)
+                    or not math.isfinite(price)
+                    or not 0 < price <= 1_000_000_000):
+                raise ProductArtifactError("report_close_usd_invalid")
+            item["reference_close_usd"] = float(price)
+        normalized.append(item)
     report_hash = hashlib.sha256(raw).hexdigest()
     return {
         "schema": "mojtrade.research-product-artifact.v1",

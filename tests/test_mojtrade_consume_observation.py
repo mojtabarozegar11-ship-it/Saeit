@@ -136,5 +136,30 @@ class ObservationConsumerTests(unittest.TestCase):
 
 
 
+    def test_preserves_legitimate_reference_close_without_forging_legacy_price(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / "private.json"
+            report = payload(self.now)
+            report["signals"][0]["reference_close_usd"] = 123.5
+            source.write_text(json.dumps(report))
+            os.chmod(source, 0o600)
+            normalized = consumer.read_observation(source, self.now)
+            self.assertEqual(normalized["signals"][0]["reference_close_usd"], 123.5)
+            self.assertNotIn("reference_close_usd", normalized["signals"][1])
+
+    def test_rejects_nonfinite_fake_and_nonpositive_reference_close(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root) / "private.json"
+            for bad in (True, 0, -1, "123", float("nan"), float("inf"), 1e20):
+                report = payload(self.now)
+                report["signals"][0]["reference_close_usd"] = bad
+                source.write_text(json.dumps(report))
+                os.chmod(source, 0o600)
+                with self.subTest(price=str(bad)), self.assertRaisesRegex(
+                    consumer.ObservationError, "close_usd_invalid"
+                ):
+                    consumer.read_observation(source, self.now)
+
+
 if __name__ == "__main__":
     unittest.main()
