@@ -19,6 +19,16 @@ spec.loader.exec_module(mod)
 
 
 class EvolutionTests(unittest.TestCase):
+    @staticmethod
+    def proof():
+        # Match economic TaskRuntime's internal completion gate. This is
+        # fixture evidence, NOT a claim of independent external verification.
+        return {
+            "verified_effect": True,
+            "action_performed": "Inspected and recorded an internal task result.",
+            "evidence": {"kind": "fixture_measurement", "value": "test row"},
+        }
+
     def fixture(self, temp, actions, *, previous_steps=1, failures=0):
         root = Path(temp)
         db = root / "master.sqlite3"
@@ -275,7 +285,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             first = json.loads(state.read_text())
@@ -284,7 +294,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             second = json.loads(state.read_text())
@@ -310,14 +320,14 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_market_research',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2, 3])
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? "
-                    "WHERE id IN (2,3)", (json.dumps({"verified_effect": True}),)
+                    "WHERE id IN (2,3)", (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             result = json.loads(state.read_text())
@@ -338,7 +348,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_market_research',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             with sqlite3.connect(db) as conn:
@@ -356,7 +366,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             # A completed task's outcome cannot be upgraded retroactively:
             # the previously stored snapshot fingerprint must catch tampering.
@@ -375,7 +385,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             previous = json.loads(state.read_text())
             previous["last_completed_task_id"] = 3
@@ -390,7 +400,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             second = json.loads(state.read_text())
@@ -439,7 +449,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             before = state.read_bytes()
@@ -461,7 +471,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_market_research',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             before = state.read_bytes()
             with mock.patch.object(mod, "MAX_TRACKED_PENDING_TASKS", 2):
@@ -489,7 +499,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=1",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             final = json.loads(state.read_text())
@@ -516,7 +526,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             result = json.loads(state.read_text())
@@ -535,14 +545,14 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2])
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["late_verified_completed_tasks"], 1)
@@ -553,7 +563,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["delta"]["verified_completed_tasks"], 0)
@@ -570,7 +580,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             mid = json.loads(state.read_text())
@@ -579,7 +589,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["late_verified_completed_tasks"], 1)
@@ -595,7 +605,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_opportunity_score',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2])
@@ -611,7 +621,7 @@ class EvolutionTests(unittest.TestCase):
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             result = json.loads(state.read_text())
@@ -678,7 +688,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_profit_optimize',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             result = json.loads(state.read_text())
@@ -701,7 +711,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_profit_optimize',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             mod.evaluate(db, state)
             result = json.loads(state.read_text())
@@ -724,7 +734,7 @@ class EvolutionTests(unittest.TestCase):
                 conn.execute(
                     "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
                     "VALUES (1,'completed','income_profit_optimize',?)",
-                    (json.dumps({"verified_effect": True}),)
+                    (json.dumps(self.proof()),)
                 )
             with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_GUARD_TASK_MISSING"):
                 mod.evaluate(db, state)
@@ -1028,6 +1038,108 @@ class EvolutionTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertIn("MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=1", output)
         self.assertIn("autonomous_master_loop --max-steps 1", calls)
+
+    def test_bare_verified_flag_cannot_claim_internal_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET output_data=? WHERE id=1",
+                    (json.dumps({"verified_effect": True}),),
+                )
+            before = state.read_bytes()
+            with self.assertRaisesRegex(
+                RuntimeError, "MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE"
+            ):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_verified_claim_requires_action_and_nonempty_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            for bad in (
+                {"verified_effect": True, "evidence": {"kind": "test"}},
+                {"verified_effect": True, "action_performed": " ", "evidence": {"kind": "test"}},
+                {"verified_effect": True, "action_performed": "done", "evidence": {}},
+                {"verified_effect": True, "action_performed": "done", "evidence": {"kind": ""}},
+                {"verified_effect": True, "action_performed": "done", "evidence": []},
+            ):
+                with sqlite3.connect(db) as conn:
+                    conn.execute(
+                        "UPDATE core_agenttask SET output_data=? WHERE id=1",
+                        (json.dumps(bad),),
+                    )
+                before = state.read_bytes()
+                with self.assertRaisesRegex(
+                    RuntimeError, "MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE"
+                ):
+                    mod.evaluate(db, state)
+                self.assertEqual(state.read_bytes(), before)
+
+    def test_verified_claim_requires_nonempty_execution_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET execution_id='' WHERE id=1")
+            before = state.read_bytes()
+            with self.assertRaisesRegex(
+                RuntimeError, "MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE"
+            ):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_verified_claim_requires_positive_execution_attempt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            for attempt in (0, -1, None):
+                with sqlite3.connect(db) as conn:
+                    conn.execute(
+                        "UPDATE core_agenttask SET attempt_count=? WHERE id=1",
+                        (attempt,),
+                    )
+                before = state.read_bytes()
+                with self.assertRaisesRegex(
+                    RuntimeError, "MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE"
+                ):
+                    mod.evaluate(db, state)
+                self.assertEqual(state.read_bytes(), before)
+
+    def test_late_task_with_fake_verified_claim_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps(self.proof()),),
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),),
+                )
+            before = state.read_bytes()
+            with self.assertRaisesRegex(
+                RuntimeError, "MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE"
+            ):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_fully_evidenced_task_remains_creditable_only_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            first = json.loads(state.read_text())
+            self.assertEqual(first["delta"]["verified_completed_tasks"], 1)
+            mod.evaluate(db, state)
+            second = json.loads(state.read_text())
+            self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
