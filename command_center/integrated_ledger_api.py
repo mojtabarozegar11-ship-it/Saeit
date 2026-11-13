@@ -207,14 +207,19 @@ def integrated_ledger_api(request):
         _audit("create", "issue", row.id, f"مانع {cycle} برای {PROJECTS[project]} ثبت شد.", request.user, source)
         return JsonResponse({"issue": _issue(row)}, status=201)
     if kind == "issue_update":
-        try: row = CycleIssue.objects.get(pk=int(payload.get("id")))
+        action = _text(payload.get("action"))
+        if action not in {"resolve", "verify"}:
+            return JsonResponse({"error": "عملیات مانع باید صریحاً verify یا resolve باشد."}, status=400)
+        try: row = CycleIssue.objects.select_for_update().get(pk=int(payload.get("id")))
         except (CycleIssue.DoesNotExist, TypeError, ValueError): return JsonResponse({"error": "مانع پیدا نشد."}, status=404)
+        if row.status != "open":
+            return JsonResponse({"error": "مانع قبلاً بسته شده است."}, status=409)
         evidence = _text(payload.get("evidence"))
         if not evidence: return JsonResponse({"error": "مدرک الزامی است."}, status=400)
-        if _text(payload.get("action")) == "resolve": row.status, row.resolution_evidence, row.resolved_at = "resolved", evidence, timezone.now()
+        if action == "resolve": row.status, row.resolution_evidence, row.resolved_at = "resolved", evidence, timezone.now()
         else: row.certainty, row.source = "verified", evidence
         row.save(update_fields=["status", "resolution_evidence", "resolved_at", "certainty", "source"])
-        event_action = "resolve" if _text(payload.get("action")) == "resolve" else "verify"
+        event_action = action
         _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
     if kind == "approval_request":
