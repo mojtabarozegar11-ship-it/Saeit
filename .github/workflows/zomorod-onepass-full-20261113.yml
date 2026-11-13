@@ -32,14 +32,14 @@ jobs:
         run: |
           set -euo pipefail
           stage="$RUNNER_TEMP/zm-onepass-stage"
-          mkdir -p "$stage/old/assets" "$stage/new/assets" "$stage/new/ar"
+          mkdir -p "$stage/old/assets" "$stage/new/assets"
           for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
             git show "6b4e460f65b556dcdb95fda8f9beaeaab996b3a8:content/zomorod-vision-v3/$rel" > "$stage/old/$rel"
             cp "content/zomorod-vision-v3/$rel" "$stage/new/$rel"
             test -s "$stage/old/$rel" && test -s "$stage/new/$rel"
           done
           cp content/zomorod-vision-v3/assets/zm-logo-transparent-v1.webp "$stage/new/assets/"
-          cp content/zomorod-vision-v3/ar/index.html "$stage/new/ar/index.html"
+          cp content/zomorod-vision-v3/ar/index.html "$stage/new/assets/zm-ar-v1.html"
           cp scripts/zomorod_onepass_guarded_20261113.py "$stage/guard.py"
           echo "ZOMOROD_STAGE=$stage" >> "$GITHUB_ENV"
       - name: Verify code syntax, release rollback and full feature contract
@@ -62,7 +62,7 @@ jobs:
           assert h.count('data-rotator-toggle=')==3
           assert h.count('fetchpriority="high"')<=2
           assert h.count('<h1')==1
-          assert '/en/' in h and '/ar/' in h and '<html lang="ar" dir="rtl">' in ar
+          assert '/en/' in h and '/assets/zm-ar-v1.html' in h and '<html lang="ar" dir="rtl">' in ar
           assert 'setInterval' in js and 'prefers-reduced-motion' in js
           assert 'auto-scroll-row' in css and 'auto-rotator-toggle' in css
           assert all(n not in h for n in ('Vancouver','ونکوور','ISO 9001','ISO 14001'))
@@ -73,10 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/zm-onepass-preview"
-          mkdir -p "$root/assets" "$root/ar"
+          mkdir -p "$root/assets"
           cp "$ZOMOROD_STAGE/new/index.html" "$root/index.html"
           cp "$ZOMOROD_STAGE/new/assets/"* "$root/assets/"
-          cp "$ZOMOROD_STAGE/new/ar/index.html" "$root/ar/index.html"
           python3 - <<'PY'
           from pathlib import Path
           import os,zipfile
@@ -117,7 +116,7 @@ jobs:
                 controls:document.querySelectorAll('[data-rotator-toggle]').length,
                 footer:document.querySelector('.footer-bottom')?.textContent.includes('آبان ۱۳۹۸'),
                 logo:document.querySelector('.identity img')?.naturalWidth,
-                ar:document.querySelector('.lang-switch a[href="/ar/"]')!==null,
+                ar:document.querySelector('.lang-switch a[href="/assets/zm-ar-v1.html"]')!==null,
                 search:document.querySelector('.search-form')?.getAttribute('action')}));
               if(evidence.scroll>width+3||evidence.h1!==1||evidence.rows!==3||evidence.controls!==3||!evidence.footer||evidence.logo!==512||!evidence.ar||evidence.search!=='/search/'||errors.length)throw Error('ZM_LAYOUT_BASE_FAIL '+JSON.stringify({width,evidence,errors,failed}));
               const transparent=await page.evaluate(async()=>{
@@ -164,7 +163,7 @@ jobs:
             const button=reduced.locator('[data-rotator-toggle="products-strip"]');
             if(await button.getAttribute('aria-pressed')!=='false')throw Error('REDUCED_MOTION_NOT_PAUSED');
             await reduced.close();
-            const ar=await browser.newPage();await ar.goto('http://127.0.0.1:8099/ar/',{waitUntil:'load'});
+            const ar=await browser.newPage();await ar.goto('http://127.0.0.1:8099/assets/zm-ar-v1.html',{waitUntil:'load'});
             if(!await ar.locator('html[lang="ar"][dir="rtl"] h1').count())throw Error('ARABIC_LANDING_NOT_FUNCTIONAL');
             await ar.close();await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
@@ -232,13 +231,13 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-onepass-private"
           install -d -m 700 "$d"
-          mkdir -p "$d/old/assets" "$d/new/assets" "$d/new/ar"
+          mkdir -p "$d/old/assets" "$d/new/assets"
           for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
             git show "6b4e460f65b556dcdb95fda8f9beaeaab996b3a8:content/zomorod-vision-v3/$rel" > "$d/old/$rel"
             cp "content/zomorod-vision-v3/$rel" "$d/new/$rel"
           done
           cp content/zomorod-vision-v3/assets/zm-logo-transparent-v1.webp "$d/new/assets/"
-          cp content/zomorod-vision-v3/ar/index.html "$d/new/ar/"
+          cp content/zomorod-vision-v3/ar/index.html "$d/new/assets/zm-ar-v1.html"
           cp scripts/zomorod_onepass_guarded_20261113.py "$d/guard.py"
       - name: Validate cPanel identity with pinned ED25519 fingerprint
         shell: bash
@@ -325,7 +324,7 @@ jobs:
               time.sleep(2)
           assert ok,'Live homepage still not displaying new bundle'
           for path in ('/assets/zm-reference-v3.css?v=20261113-all1','/assets/zm-reference-v3.js?v=20261113-all1',
-                       '/assets/zm-logo-transparent-v1.webp','/ar/','/en/','/search/?q=%D8%B2%D9%85%D8%B1%D8%AF',
+                       '/assets/zm-logo-transparent-v1.webp','/assets/zm-ar-v1.html','/en/','/search/?q=%D8%B2%D9%85%D8%B1%D8%AF',
                        '/agriculture/','/industry/','/research/','/services/','/store/','/contact/','/auctions/'):
               with urlopen(base+path,timeout=24) as r:
                   assert r.status==200 and len(r.read(1500))>80,path
@@ -393,7 +392,7 @@ jobs:
               await page.screenshot({path:'zomorod-onepass-live-'+width+'.png',fullPage:true,animations:'disabled'});
               console.log('ZM_ONEPASS_LIVE_BROWSER_PASS='+width);await page.close();
             }
-            const ar=await browser.newPage();await ar.goto('https://zomorodmelal.ir/ar/',{waitUntil:'load'});
+            const ar=await browser.newPage();await ar.goto('https://zomorodmelal.ir/assets/zm-ar-v1.html',{waitUntil:'load'});
             if(!await ar.locator('html[lang="ar"][dir="rtl"] h1').count())throw Error('LIVE_ARABIC_PAGE');
             await ar.close();await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});

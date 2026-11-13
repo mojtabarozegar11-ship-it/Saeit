@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe, exactly-scoped Zomorod one-pass homepage, three rotators, official alpha logo & /ar/ release.
+"""Safe, exactly-scoped Zomorod one-pass homepage, three rotators, official alpha logo & stable static Arabic HTML release.
 
 Existing website internals, domain settings, .htaccess, orders and databases are read-only.
 Requires explicit old Git revision to match live before any writes.
@@ -14,7 +14,7 @@ STAGE=Path(__file__).resolve().parent
 BACKUP_ROOT=Path('/home/zomorod2/.backups/zomorod-vision-onepass-20261113')
 LOCK=BACKUP_ROOT.parent/'.zomorod-homepage-deploy.lock'
 REPLACE=("index.html","assets/zm-reference-v3.css","assets/zm-reference-v3.js")
-CREATE=("assets/zm-logo-transparent-v1.webp","ar/index.html")
+CREATE=("assets/zm-logo-transparent-v1.webp","assets/zm-ar-v1.html")
 PROTECTED=(
  '.htaccess','sitemap.xml','agriculture/index.html','research/index.html',
  'industry/index.html','services/index.html','company/index.html','contact/index.html',
@@ -32,7 +32,7 @@ def root_guard():
  if pwd.getpwuid(os.geteuid()).pw_name!='zomorod2':raise RuntimeError('Wrong hosting identity')
  for p in (ROOT,ROOT/'assets',STAGE,BACKUP_ROOT.parent):
   if not p.is_dir() or p.is_symlink():raise RuntimeError('Unsafe base directory: '+str(p))
- for p in (ROOT/'ar',BACKUP_ROOT,LOCK):
+ for p in (BACKUP_ROOT,LOCK):
   if p.is_symlink():raise RuntimeError('Unsafe symbolic link: '+str(p))
 def key(run):
  if not re.fullmatch(r'vision-[0-9]{7,22}',run):raise RuntimeError('Bad release ID')
@@ -54,7 +54,7 @@ def candidates():
  if not all(s in source['index.html'] for s in (
    b'zm-reference-v3.css?v=20261113-all1',b'zm-reference-v3.js?v=20261113-all1',
    b'data-auto-strip="services-strip"',b'data-auto-strip="products-strip"',
-   b'data-auto-strip="projects-strip"',b'action="/search/"',b'href="/en/"',b'href="/ar/"',
+   b'data-auto-strip="projects-strip"',b'action="/search/"',b'href="/en/"',b'href="/assets/zm-ar-v1.html"',
    b'assets/zm-logo-transparent-v1.webp',b'lang="fa"')):
   raise RuntimeError('Homepage feature contract incomplete')
  if source['index.html'].count(b'data-auto-strip=')!=3:raise RuntimeError('Wrong rotating row count')
@@ -63,7 +63,7 @@ def candidates():
   raise RuntimeError('Real row controller absent')
  img=source['assets/zm-logo-transparent-v1.webp']
  if len(img)<25000 or img[:4]!=b'RIFF' or img[8:12]!=b'WEBP':raise RuntimeError('Transparent official logo file missing')
- if b'<html lang="ar" dir="rtl">' not in source['ar/index.html'] or b'/contact/' not in source['ar/index.html']:
+ if b'<html lang="ar" dir="rtl">' not in source['assets/zm-ar-v1.html'] or b'/contact/' not in source['assets/zm-ar-v1.html']:
   raise RuntimeError('Arabic landing does not contain genuine Arabic site content')
  for forbidden in ('Vancouver','ونکوور','ISO 9001','ISO 14001','+650','+600'):
   if forbidden.encode() in source['index.html']:raise RuntimeError('Unverified statement: '+forbidden)
@@ -92,7 +92,6 @@ def preflight():
  for rel in CREATE:
   p=ROOT/rel
   if p.exists() or p.is_symlink():raise RuntimeError('Create-only file already present: '+rel)
- if (ROOT/'ar').exists():raise RuntimeError('Arabic directory already occupied, never overwrite')
  if BACKUP_ROOT.exists() and not BACKUP_ROOT.is_dir():raise RuntimeError('Unsafe backup root')
  return {'replace':{rel:{'before':digest(previous[rel]),'after':digest(new[rel]),'mode':stat.S_IMODE((ROOT/rel).stat().st_mode)} for rel in REPLACE},
          'create':{rel:digest(new[rel]) for rel in CREATE},'protected':fingerprint_protected()}
@@ -130,8 +129,6 @@ def restore(dir,manifest,old):
    if path.is_symlink() or digest(safe(path))!=manifest['create'][rel]:
     raise RuntimeError('Concurrent create edit, refuse removal '+rel)
    path.unlink()
- ar=ROOT/'ar'
- if ar.is_dir() and not ar.is_symlink() and not any(ar.iterdir()):ar.rmdir()
  ensure_unchanged(manifest)
 
 def apply(run):
@@ -148,7 +145,6 @@ def apply(run):
   for rel in REPLACE:
    if digest(safe(ROOT/rel))!=manifest['replace'][rel]['before']:raise RuntimeError('Live revision changed during backup')
   try:
-   (ROOT/'ar').mkdir(mode=0o755,parents=False,exist_ok=False)
    for rel in CREATE:atomic(ROOT/rel,new[rel],0o644)
    for rel in ('assets/zm-reference-v3.js','assets/zm-reference-v3.css','index.html'):
     if digest(safe(ROOT/rel))!=manifest['replace'][rel]['before']:raise RuntimeError('Concurrent modification '+rel)
