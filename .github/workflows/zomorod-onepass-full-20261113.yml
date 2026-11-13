@@ -169,6 +169,43 @@ jobs:
             await ar.close();await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
+      - name: Cross-browser RTL motion safety in Firefox and WebKit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npx playwright install firefox webkit
+          python3 -m http.server 8101 --directory "$RUNNER_TEMP/zm-onepass-preview" > "$RUNNER_TEMP/zm-crossbrowser.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          node - <<'JS'
+          const {firefox,webkit}=require('playwright');
+          (async()=>{
+            for(const [name,engine] of [['firefox',firefox],['webkit',webkit]]){
+              const browser=await engine.launch({headless:true});
+              for(const width of [390,1024]){
+                const page=await browser.newPage({viewport:{width,height:850}});
+                const errors=[];page.on('pageerror',e=>errors.push(e.message));
+                await page.goto('http://127.0.0.1:8101/',{waitUntil:'load',timeout:45000});
+                await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3');
+                for(const id of ['services-strip','products-strip','projects-strip']){
+                  const row=page.locator('#'+id);
+                  await row.scrollIntoViewIfNeeded();await page.waitForTimeout(350);
+                  const before=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(850);
+                  const after=await row.evaluate(x=>x.scrollLeft);
+                  if(!(after<before-3))throw Error(name+' '+id+' motion not confirmed: '+before+' -> '+after);
+                  const pause=page.locator('[data-rotator-toggle="'+id+'"]');
+                  await pause.click();
+                  if(await pause.getAttribute('aria-pressed')!=='false')throw Error(name+' '+id+' pause');
+                }
+                if(errors.length)throw Error(name+' js errors: '+JSON.stringify(errors));
+                console.log('ZM_ONEPASS_CROSS_BROWSER_RTL_PASS='+name+'-'+width);
+                await page.close();
+              }
+              await browser.close();
+            }
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
       - name: Preserve browser screenshots as inspection evidence only
         if: always()
         uses: actions/upload-artifact@v4
