@@ -12,14 +12,19 @@ def amount(value):
     return n
 
 def reconcile(data):
+    if not isinstance(data, dict):
+        raise ValueError("reconciliation input must be a JSON object")
+    for key in ("orders", "settlements", "refunds"):
+        if key not in data:
+            raise ValueError(f"missing required collection: {key}")
     currency = data.get("currency")
-    if not isinstance(currency, str) or len(currency) != 3 or not currency.isalpha():
+    if not isinstance(currency, str) or len(currency) != 3 or not currency.isascii() or not currency.isalpha():
         raise ValueError("explicit ISO-style currency required")
     orders, settlements, refunds = (data.get(k, []) for k in ("orders", "settlements", "refunds"))
     for records in (orders, settlements, refunds):
         if not isinstance(records, list) or any(not isinstance(r, dict) for r in records):
             raise ValueError("records must be objects")
-        ids = [r["id"] for r in records]
+        ids = [r.get("id") for r in records]
         if any(not isinstance(i, str) or not i.strip() for i in ids) or len(set(ids)) != len(ids):
             raise ValueError("duplicate or missing ids")
     # Reject any explicit per-record currency that disagrees with the report currency.
