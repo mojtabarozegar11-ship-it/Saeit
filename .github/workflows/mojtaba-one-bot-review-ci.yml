@@ -15,6 +15,8 @@ on:
       - "trading/MojTradeOmegaXDemoBot.cs"
       - "trading/ctrader-build/**"
       - "tests/test_mojtrade_costed_oos.py"
+      - "tests/test_mojtrade_ctrader_cli_preflight_readonly.py"
+      - "deploy/mojtrade_ctrader_cli_preflight_readonly.py"
       - "tests/test_mojtrade_walk_forward.py"
       - "tests/test_mojtrade_market_sessions.py"
       - "tests/test_mojtrade_demo_receipts.py"
@@ -89,6 +91,7 @@ jobs:
             tests/test_mojtrade_demo_receipts.py \
             tests/test_mojtrade_broker_statement_check.py \
             tests/test_mojtrade_csharp_build_contracts.py \
+            tests/test_mojtrade_ctrader_cli_preflight_readonly.py \
             tests/test_mojtrade_signal_drafts.py \
             tests/test_approval_security.py \
             tests/test_runtime.py \
