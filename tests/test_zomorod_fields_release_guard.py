@@ -31,6 +31,8 @@ def sandbox(tmp_path, monkeypatch):
     root = tmp_path / 'public_html'
     root.mkdir()
     (root / 'assets').mkdir()
+    for name in mod.LEGACY_IMAGES:
+        (root / name).write_bytes(sample_webp(width=160, height=100, padding=name.encode()))
     stage = tmp_path / 'staged'
     for sub in ('old', 'new'):
         (stage / sub / 'assets').mkdir(parents=True)
@@ -94,6 +96,7 @@ def test_exact_staging_read_only_then_verify_and_restore(sandbox):
     root, stage, old, new = sandbox
     manifest = mod.preflight(stage)
     assert len(manifest['files']) == 3 and len(manifest['created']) == 12 and len(manifest['protected']) >= 9
+    assert len(manifest['legacy']) == 4
     assert not mod.BACKUP_ROOT.exists(), 'Read-only check must not make backups'
     mod.apply(stage, 'fields-1234567')
     mod.verify('fields-1234567')
@@ -350,3 +353,52 @@ def test_rejects_wrong_dimensions_even_with_approved_sha(sandbox):
     mod.NEW_BLOBS[asset] = mod.git_blob(wrong)
     with pytest.raises(RuntimeError, match='Unapproved WebP image'):
         mod.preflight(stage)
+
+
+def test_missing_legacy_photo_prevents_publishing(sandbox):
+    root, stage, old, new = sandbox
+    photo = root / 'assets/zm-v3-economy.webp'
+    photo.unlink()
+    with pytest.raises(RuntimeError, match='Missing or symlinked file'):
+        mod.preflight(stage)
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_corrupt_or_undersized_legacy_photo_prevents_publishing(sandbox):
+    root, stage, old, new = sandbox
+    photo = root / 'assets/zm-v3-farming.webp'
+    previous = photo.read_bytes()
+    photo.write_bytes(b'broken-image')
+    with pytest.raises(RuntimeError, match='Invalid WebP RIFF'):
+        mod.preflight(stage)
+    photo.write_bytes(sample_webp(width=96, height=64))
+    with pytest.raises(RuntimeError, match='Legacy card image is too small'):
+        mod.preflight(stage)
+    photo.write_bytes(previous)
+    assert len(mod.preflight(stage)['legacy']) == 4
+
+
+def test_symlinked_original_card_image_is_not_followed(sandbox):
+    root, stage, old, new = sandbox
+    target = root / 'assets/zm-v3-genetics.webp'
+    original = target.read_bytes()
+    target.unlink()
+    target.symlink_to(root / 'assets/zm-v3-farming.webp')
+    with pytest.raises(RuntimeError, match='Missing or symlinked file'):
+        mod.preflight(stage)
+    target.unlink()
+    target.write_bytes(original)
+
+
+def test_verify_detects_concurrent_change_to_original_photo(sandbox):
+    root, stage, old, new = sandbox
+    mod.apply(stage, 'fields-1234599')
+    original = root / 'assets/zm-v3-genetics.webp'
+    original.write_bytes(sample_webp(width=200, height=110, padding=b'owner updated photo'))
+    with pytest.raises(RuntimeError, match='Legacy card photos changed'):
+        mod.verify('fields-1234599')
+    assert original.read_bytes().endswith(b'owner updated photo')
+    mod.restore('fields-1234599')
+    assert original.read_bytes().endswith(b'owner updated photo')
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
