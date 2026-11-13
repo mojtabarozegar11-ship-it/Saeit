@@ -10,7 +10,7 @@ def setup_task(active=True, status="queued"):
     user = get_user_model().objects.create_user(username="task-owner")
     project = ResearchProject.objects.create(title="Task Project", objective="Test", owner=user)
     agent = Agent.objects.create(
-        code="worker", name="Worker", mission="research", active=active
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="research", active=active
     )
     capability = AgentCapability.objects.create(code="research", name="Research", active=True, risk_level="low")
     capability.agents.add(agent)
@@ -59,5 +59,6 @@ def test_running_task_can_fail_and_records_error():
     runtime = TaskRuntime()
     running = runtime.claim(task.pk)
     failed = runtime.fail(task.pk, "provider timeout", execution_id=running.execution_id)
-    assert failed.status == "failed"
+    assert failed.status == "blocked"
     assert failed.output_data["error"] == "provider timeout"
+    assert failed.output_data["automatic_replay_allowed"] is False
