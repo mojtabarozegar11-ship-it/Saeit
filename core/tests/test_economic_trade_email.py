@@ -28,14 +28,14 @@ class EconomicTradeEmailTests(TestCase):
         self.assertEqual(TradeEmailAudit.objects.count(), 2)
         self.assertEqual(first.status, "queued")
 
-    @override_settings(TRADE_EMAIL_ENABLED=False)
-    def test_real_send_is_disabled_by_default(self):
+    @override_settings(TRADE_EMAIL_ENABLED=True)
+    def test_direct_send_requires_owner_grant_even_if_mail_is_enabled(self):
         outbox = queue_trade_email(
             recipient="supplier@example.cn",
             subject="Trade inquiry",
             body="Draft only",
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "requires an exact owner grant"):
             send_queued_trade_email(outbox.pk)
 
     def test_non_queued_item_cannot_be_sent_again(self):

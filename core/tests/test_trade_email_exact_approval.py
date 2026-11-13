@@ -13,7 +13,7 @@ from core.approval import ApprovalService
 from core.autonomous_external_trade import (
     authorize_external_trade, execute_one_authorized_outbox,
 )
-from core.economic_trade_email import queue_trade_email
+from core.economic_trade_email import queue_trade_email, send_queued_trade_email
 from core.models import ApprovalGrant, ApprovalRequest, AuditLog
 from core.trade_approval_scope import trade_email_fingerprint
 
@@ -168,25 +168,48 @@ def test_valid_owner_grant_selects_only_approved_message(queued_trade):
     owner, first, second = queued_trade
     approval = _review(owner, second)
     grant = _grant(owner, second, approval)
-    # Sending is mocked: this test proves routing only, not live delivery.
-    def fake_send(outbox_id):
-        assert outbox_id == second.pk
-        return second
+    # Patch Django SMTP only: exercise the real approval consumption, row
+    # locking and outbox status update without sending a real message.
     with override_settings(
         COMPANY_TRADE_EMAIL="company@example.test",
         TRADE_EMAIL_ENABLED=True,
-    ), patch(
-        "core.autonomous_external_trade.send_queued_trade_email",
-        side_effect=fake_send,
-    ) as sender:
+    ), patch("core.economic_trade_email.EmailMessage.send", return_value=1) as smtp:
         result = execute_one_authorized_outbox(grant_id=grant.pk)
     assert result.pk == second.pk
-    sender.assert_called_once_with(second.pk)
+    assert result.status == "sent"
+    smtp.assert_called_once()
     grant.refresh_from_db()
     assert grant.used_at is not None
     first.refresh_from_db()
     assert first.status == "queued"
 
+
+def test_direct_sender_cannot_bypass_owner_approval(queued_trade):
+    _, first, _ = queued_trade
+    with override_settings(TRADE_EMAIL_ENABLED=True), patch(
+        "core.economic_trade_email.EmailMessage.send", return_value=1,
+    ) as smtp:
+        with pytest.raises(RuntimeError, match="requires an exact owner grant"):
+            send_queued_trade_email(first.pk)
+    smtp.assert_not_called()
+    first.refresh_from_db()
+    assert first.status == "queued"
+
+
+def test_direct_sender_rejects_grant_issued_for_a_different_message(queued_trade):
+    owner, first, second = queued_trade
+    approval = _review(owner, second)
+    grant = _grant(owner, second, approval)
+    with override_settings(TRADE_EMAIL_ENABLED=True), patch(
+        "core.economic_trade_email.EmailMessage.send", return_value=1,
+    ) as smtp:
+        with pytest.raises(RuntimeError, match="EXACT_OUTBOX_APPROVAL_REQUIRED"):
+            send_queued_trade_email(first.pk, grant_id=grant.pk)
+    smtp.assert_not_called()
+    grant.refresh_from_db()
+    assert grant.used_at is None
+    first.refresh_from_db()
+    assert first.status == "queued"
 
 def test_nonqueued_message_cannot_be_sent_with_old_grant(queued_trade):
     owner, first, _ = queued_trade

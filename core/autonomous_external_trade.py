@@ -71,10 +71,9 @@ def execute_one_authorized_outbox(*, grant_id):
     if not outbox.mailbox.active or not outbox.mailbox.allow_outbound:
         raise RuntimeError("Trade mailbox outbound policy is disabled.")
 
-    # The grant validates the approval's live state, reviewed digest and exact
-    # outbox before it can be consumed. Real SMTP stays disabled by default.
-    ApprovalService().authorize_grant(grant_id, scope)
-    sent = send_queued_trade_email(outbox.pk)
+    # The locked sender itself consumes the one-time grant; no direct caller
+    # can bypass it merely by enabling email in the environment.
+    sent = send_queued_trade_email(outbox.pk, grant_id=grant_id)
     AuditLog.objects.create(
         actor_type="economic-agent",
         actor_id="mojtaba.bot.ai",
