@@ -368,6 +368,129 @@ class ConsolidateLegacyAgentsTests(TestCase):
         assert row["unique_active_capabilities"] == [cap.code]
 
 
+class SpecialistLegacyMergeCoverageTests(TestCase):
+    """No former content or research bot may retire on a rename alone."""
+
+    def setUp(self):
+        self.canonical = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai",
+            mission="Sole canonical owner", active=True,
+        )
+
+    def inventory(self):
+        output = io.StringIO()
+        call_command("consolidate_legacy_agents", stdout=output)
+        return {
+            row["code"]: row
+            for row in json.loads(output.getvalue())["agents"]
+        }
+
+    def test_all_four_former_specialist_bots_have_explicit_retirement_routes(self):
+        expected = {
+            "content-director": ["company"],
+            "content-research": ["report"],
+            "company-activity-intelligence": ["company"],
+            "knowledge-content-director": ["accepted_knowledge_delivery"],
+        }
+        for code in expected:
+            Agent.objects.create(
+                code=code, name="Historical role", mission="No live proof",
+                active=True,
+            )
+        rows = self.inventory()
+        for code, required in expected.items():
+            self.assertEqual(rows[code]["replacement_agent"], BOT_CODE)
+            self.assertEqual(
+                rows[code]["decision"], "hold_unproven_successor_coverage"
+            )
+            self.assertEqual(rows[code]["missing_successor_coverage"], required)
+            self.assertTrue(rows[code]["active"])
+        self.assertEqual(
+            Agent.objects.exclude(code=BOT_CODE).filter(active=True).count(), 4
+        )
+        self.assertFalse(AuditLog.objects.filter(action="legacy_agent_retired").exists())
+
+    def test_canonical_published_company_successor_is_a_candidate_not_auto_retirement(self):
+        legacy = Agent.objects.create(
+            code="content-director", name="Old content agent",
+            mission="Former separate bot", active=True,
+        )
+        NewsletterStory.objects.create(
+            agent=self.canonical, story_type="company",
+            title="Verified canonical content", slug="canonical-newspaper",
+            summary="Evidence-bound canonical release",
+            body="An existing source-specific story",
+            fingerprint="canonical-newspaper-proof",
+            status="published", published_at=timezone.now(),
+            manager_action="NEWSROOM_QUALITY=97/100; checks=source",
+        )
+        status = self.inventory()["content-director"]
+        self.assertEqual(status["decision"], "retire_safe")
+        self.assertEqual(status["missing_successor_coverage"], [])
+        self.assertEqual(status["retirement_readiness_scope"], "source_only_not_live_verified")
+        with self.assertRaisesRegex(CommandError, "EXACT_AGENT_AND_GRANT_REQUIRED"):
+            call_command(
+                "consolidate_legacy_agents", "--apply",
+                "--agent-code", legacy.code, stdout=io.StringIO(),
+            )
+        legacy.refresh_from_db()
+        self.assertTrue(legacy.active)
+
+    def test_knowledge_successor_requires_completed_matching_task_run_and_book(self):
+        from core.knowledge_agent_models import (
+            KnowledgeAgentPlan, KnowledgeBook, KnowledgeAgentRun,
+        )
+        legacy = Agent.objects.create(
+            code="knowledge-content-director", name="Old book director",
+            mission="Historical", active=True,
+        )
+        plan = KnowledgeAgentPlan.objects.create(
+            code="knowledge-content-director", title="Canonical study",
+            mission="research", goal="preserve studies",
+        )
+        book = KnowledgeBook.objects.create(
+            plan=plan, code="single-bot-book", title="Source-bound result",
+            domain="research", objective="test handoff",
+            generated_sections=1, content="Reviewed full section",
+            status="review",
+        )
+        run = KnowledgeAgentRun.objects.create(
+            plan=plan, book=book, status="completed",
+            objective="Generate one section", finished_at=timezone.now(),
+        )
+        task = AgentTask.objects.create(
+            agent=self.canonical,
+            action_type="knowledge_content_generation",
+            capability_code="research-write-review",
+            status="completed",
+            output_data={"run_id": run.pk, "book_id": book.pk},
+        )
+        self.assertEqual(self.inventory()[legacy.code]["decision"], "retire_safe")
+        task.output_data = {"run_id": run.pk, "book_id": -1}
+        task.save(update_fields=["output_data"])
+        status = self.inventory()[legacy.code]
+        self.assertEqual(status["decision"], "hold_unproven_successor_coverage")
+        self.assertEqual(
+            status["missing_successor_coverage"], ["accepted_knowledge_delivery"]
+        )
+
+    def test_pending_legacy_specialist_keeps_unfinished_work(self):
+        old = Agent.objects.create(
+            code="company-activity-intelligence", name="Old company bot",
+            mission="Pending export", active=True,
+        )
+        pending = AgentTask.objects.create(
+            agent=old, action_type="independent_export",
+            capability_code="legacy_export", status="running",
+        )
+        before = self.inventory()[old.code]
+        self.assertEqual(before["decision"], "hold_for_dependency")
+        pending.refresh_from_db()
+        self.assertEqual(pending.agent_id, old.pk)
+        self.assertEqual(pending.status, "running")
+        self.assertTrue(old.active)
+
+
 class RevenueEvidenceTests(TestCase):
     def test_payment_and_settlement_rows_cannot_be_mistaken_for_proven_cash(self):
         user = get_user_model().objects.create_user(username="agent_revenue_audit")
