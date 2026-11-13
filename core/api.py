@@ -641,6 +641,13 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="plan", permission_classes=[InternalStaffWritePermission])
     def plan(self, request, *args, **kwargs):
+        # Planning is a durable operation: staff status alone is insufficient
+        # to schedule tasks or nominate their authorizing owner.
+        if not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Only the active owner can plan master tasks."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         project_id = request.data.get("project_id")
         action_type = str(request.data.get("action_type", "")).strip()
         payload = request.data.get("payload") or {}
@@ -649,10 +656,13 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
             return Response({"detail": "project_id and action_type are required."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             project = ResearchProject.objects.get(pk=project_id)
-            task = MasterAgent().plan(project, action_type, payload, risk=risk)
+            task = MasterAgent().plan(
+                project, action_type, payload,
+                risk=risk, requester=request.user,
+            )
         except ResearchProject.DoesNotExist:
             return Response({"detail": "Research project not found."}, status=status.HTTP_404_NOT_FOUND)
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError, PermissionError) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data, status=status.HTTP_201_CREATED)
 

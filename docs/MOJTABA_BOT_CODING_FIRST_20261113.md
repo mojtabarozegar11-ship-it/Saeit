@@ -109,3 +109,7 @@ The existing Django `MasterAgentChat` now invokes `core.canonical_chat_bridge.re
 ## Conversation tenant isolation and usage bounds
 
 The request-scoped canonical bridge now re-verifies the ChatSession ownership in Django before any model usage and refuses external model calls for non-superusers. Historical context is bounded to 12 prior chat messages and a response token ceiling. External-provider use remains disabled by default, and any future billing policy must be reviewed before turning it on; no actual provider call was initiated in this coding cycle.
+
+## Cycle 7 — canonical owner for new managed tasks
+
+New tasks planned through the existing `master-chat/plan` endpoint require an authenticated active superuser. `MasterAgent` chooses only the single active `mojtaba-bot-ai` Agent row with the explicitly registered capability, not a lowest-risk legacy Agent from the global registry; it refuses simultaneous canonical/legacy runtime rows. High-risk task approval requests bind to the authenticated requester (or the validated active designated project owner for internal uses). Non-dictionary payloads are rejected. This is code only; no tasks were queued on a live server, and no tests or model/provider calls were run for this commit.
