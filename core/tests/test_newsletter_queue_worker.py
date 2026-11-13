@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from core.models import Agent, AgentTask
 from core.unified_bot_identity import BOT_CODE
-from core.newsletter_engine import process_submission
+from core.newsletter_engine import process_submission, create_draft
 from core.newsletter_models import NewsletterSchedule, NewsletterStory, NewsletterSubmission
 
 
@@ -193,3 +193,40 @@ class NewsletterDefaultDenyPublicationTests(TestCase):
         call_command("publish_scheduled_news", stdout=io.StringIO())
         self.story.refresh_from_db()
         self.assertEqual(self.story.status, "published")
+
+
+
+    def test_legacy_newsletter_cannot_create_new_story_even_if_database_identity_active(self):
+        # A legacy launcher may remain in a cron on another host. It must not
+        # produce new artifacts as an independent bot after source migration.
+        legacy = Agent.objects.create(
+            code="newsletter-world-watch", name="Old watcher",
+            mission="Historical watcher", active=True,
+        )
+        original_count = Agent.objects.count()
+        for code in ("newsletter-world-watch", "content-director", "economic-master-agent"):
+            with self.assertRaisesRegex(
+                RuntimeError, "MOJTABA_NONCANONICAL_NEWSLETTER_OWNER_FORBIDDEN"
+            ):
+                create_draft(
+                    agent_code=code, story_type="world",
+                    title="A retired bot must never publish a new report",
+                    summary="Not authorized", body="Not authorized",
+                )
+        self.assertTrue(legacy.active)  # No disguised live scheduler cleanup.
+        self.assertEqual(Agent.objects.count(), original_count)
+        self.assertFalse(NewsletterStory.objects.exists())
+
+    def test_canonical_newsletter_still_creates_private_draft_without_splitting_bot(self):
+        story, disposition = create_draft(
+            agent_code=BOT_CODE, story_type="company",
+            title="A single verified internal draft",
+            summary="Draft only, not published or delivered",
+            body="Source-bound internal note",
+        )
+        self.assertEqual(disposition, "created")
+        self.assertEqual(story.agent_id, self.bot.pk)
+        self.assertEqual(story.status, "draft")
+        self.assertFalse(
+            Agent.objects.exclude(code=BOT_CODE).filter(active=True).exists()
+        )
