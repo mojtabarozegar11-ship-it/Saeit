@@ -6,6 +6,10 @@ on:
       - 'core/financial_brand_pages.py'
       - 'core/templates/core/financial_brand_page.html'
       - 'tests/test_finance102_guides.py'
+      - 'scripts/finance102_network_preflight.py'
+      - 'tests/test_finance102_network_preflight.py'
+      - 'scripts/finance102_cpanel_uapi_readonly.py'
+      - 'tests/test_finance102_cpanel_uapi_readonly.py'
       - '.github/workflows/finance102-content-coverage-20261113.yml'
 permissions:
   contents: read
@@ -24,3 +28,5 @@ jobs:
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile core/finance102_guides.py core/financial_brand_pages.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_finance102_guides.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_finance102_network_preflight.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_finance102_cpanel_uapi_readonly.py' -v
