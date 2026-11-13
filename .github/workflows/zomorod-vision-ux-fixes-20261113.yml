@@ -140,7 +140,7 @@ jobs:
           if-no-files-found: ignore
   publish:
     needs: validate
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ false }} # Superseded one-time UX release: avoid stale-baseline redeployment after footer-only patch
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
     steps:
