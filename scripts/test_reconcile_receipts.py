@@ -28,6 +28,14 @@ class TestSettlement(unittest.TestCase):
         self.assertEqual(result["net_settled_unverified"], "0")
         self.assertIn("unmatched_settlement", str(result["issues"]))
         self.assertFalse(result["revenue_certified"])
+    def test_duplicate_external_reference_not_counted_twice(self):
+        self.data["orders"].append({"id":"o2","amount":"30.00","status":"paid","delivery_confirmed":False})
+        self.data["settlements"].append({"id":"s2","order_id":"o2","amount":"30.00","status":"settled","reference":"bank-ref"})
+        result = reconcile(self.data)
+        self.assertEqual(result["gross_settled_unverified"],"30.00")
+        self.assertEqual(result["net_settled_unverified"],"25.00")
+        self.assertIn("duplicate_external_reference",str(result["issues"]))
+        self.assertIn("paid_claim_not_fully_settled",str(result["issues"]))
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
