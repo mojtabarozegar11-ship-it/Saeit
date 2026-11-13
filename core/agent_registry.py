@@ -6,6 +6,15 @@ from .services import normalize_risk
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
+# The sole cybersecurity execution owner; these remain internal capabilities
+# of Mojtaba.bot.ai, never independently routable bots.
+CANONICAL_CYBER_AGENT = "mojtaba-bot-ai"
+CANONICAL_CYBER_ACTIONS = frozenset({
+    "cyber_evidence_review",
+    "cyber_origin_defense",
+    "cyber_incident_response",
+})
+
 
 class AgentRegistry:
     """Capability-aware registry and execution-policy boundary."""
@@ -26,9 +35,12 @@ class AgentRegistry:
             default=Value(len(RISK_ORDER)),
             output_field=IntegerField(),
         )
+        agents = capability.agents.filter(active=True)
+        if normalized in CANONICAL_CYBER_ACTIONS:
+            # Fail closed rather than selecting a lower-risk, noncanonical Agent.
+            agents = agents.filter(code=CANONICAL_CYBER_AGENT)
         return (
-            capability.agents.filter(active=True)
-            .annotate(_risk_priority=risk_priority)
+            agents.annotate(_risk_priority=risk_priority)
             .order_by("_risk_priority", "id")
             .first()
         )
@@ -36,6 +48,8 @@ class AgentRegistry:
     def capability_for(self, agent, action):
         normalized = self._normalize(action)
         if not agent or not normalized:
+            return None
+        if normalized in CANONICAL_CYBER_ACTIONS and agent.code != CANONICAL_CYBER_AGENT:
             return None
         capability = agent.capabilities.filter(active=True, code=normalized).first()
         if capability:
