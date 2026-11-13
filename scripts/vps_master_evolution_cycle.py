@@ -47,18 +47,14 @@ def evaluate(db_path: Path, state_path: Path):
     with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12) as db:
         db.execute("PRAGMA query_only=ON")
         rows = db.execute(
-            "SELECT action_type,output_data FROM core_agenttask "
+            "SELECT id,action_type,output_data FROM core_agenttask "
             "WHERE agent_id=? AND status='completed' "
             "ORDER BY id DESC LIMIT 128", (row[0],)
         ).fetchall()
-    recent_verified_actions = []
-    for action, raw in rows:
-        try:
-            evidence = json.loads(raw) if isinstance(raw, str) else raw
-        except (TypeError, ValueError):
-            continue
-        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
-            recent_verified_actions.append(str(action))
+        latest_completed_id = db.execute(
+            "SELECT COALESCE(MAX(id),0) FROM core_agenttask "
+            "WHERE agent_id=? AND status='completed'", (row[0],)
+        ).fetchone()[0]
     allowed = ("completed", "failed", "blocked", "queued", "running")
     counts = {key: int(counts.get(key, 0)) for key in allowed}
     previous = {}
@@ -73,8 +69,31 @@ def evaluate(db_path: Path, state_path: Path):
     old_steps = int(previous.get("max_steps", 1))
     if old_steps not in (1, 2, 3, 20):
         raise RuntimeError("INVALID_PREVIOUS_EVOLUTION_POLICY")
-    # Compare only newly completed tasks; do not count historical successes.
-    recent_new = recent_verified_actions[:min(max(delta_completed, 0), len(recent_verified_actions))]
+    # A count delta cannot identify which completed tasks are newly verified.
+    # Persist a stable task-ID watermark. Legacy states without a cursor can
+    # credit events only when the previous completed count was genuinely zero;
+    # otherwise abstain from claiming any historical actions as new progress.
+    previous_cursor = previous.get("last_completed_task_id")
+    if previous_cursor is not None:
+        if type(previous_cursor) is not int or previous_cursor < 0:
+            raise RuntimeError("INVALID_PREVIOUS_EVOLUTION_TASK_CURSOR")
+        cursor_trusted = True
+    elif previous and prev_count.get("completed") == 0:
+        previous_cursor = 0
+        cursor_trusted = True
+    else:
+        previous_cursor = latest_completed_id
+        cursor_trusted = False
+    recent_new = []
+    for task_id, action, raw in rows:
+        if task_id <= previous_cursor:
+            continue
+        try:
+            evidence = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            continue
+        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
+            recent_new.append(str(action))
     diversity = len(set(recent_new))
     # Serial task depth is distinct from factory product volume. Never run
     # parallel master tasks or remove financial/owner approval gates.
@@ -84,9 +103,9 @@ def evaluate(db_path: Path, state_path: Path):
         decision = "limit_serial_steps_after_regression"
     elif old_steps != 20:
         decision = "enable_serial_chain_up_to_20"
-    elif delta_completed >= 2 and diversity >= 2:
+    elif len(recent_new) >= 2 and diversity >= 2:
         decision = "hold_serial_chain_after_verified_progress"
-    elif delta_completed >= 2:
+    elif len(recent_new) >= 2:
         decision = "hold_serial_chain_no_verified_diversity"
     else:
         decision = "hold_serial_chain_until_verified_progress"
@@ -96,8 +115,11 @@ def evaluate(db_path: Path, state_path: Path):
         "agent_code": "economic-master-agent",
         "operating_mode": "private_vps_serial_tasks_controlled",
         "task_counts": counts,
-        "delta": {"verified_completed_tasks": delta_completed,
+        "delta": {"verified_completed_tasks": len(recent_new),
+                  "completed_tasks_net_change": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
+        "last_completed_task_id": latest_completed_id,
+        "previous_completed_cursor_trusted": cursor_trusted,
         "recent_new_verified_action_types": diversity,
         "repeat_completion_is_not_diverse_progress": True,
         "max_steps": steps,
