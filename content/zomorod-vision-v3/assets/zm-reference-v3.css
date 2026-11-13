@@ -185,3 +185,16 @@
  .zm-vision-v3 .lang-switch button{min-width:21px;padding-inline:2px}
  .zm-vision-v3 .hero-sub{font-size:12px}
 }
+
+/* Prevent decorative imagery in newsletter/report and assistant cards covering live text. */
+.zm-vision-v3 .triple-banners .small-banner:first-child,.zm-vision-v3 .triple-banners .small-banner:last-child{padding-left:113px}
+.zm-vision-v3 .triple-banners .small-banner>span{position:relative;z-index:2;min-width:0;overflow-wrap:break-word}
+.zm-vision-v3 .footer-assistant>div:last-child{min-width:0;flex:1;overflow-wrap:break-word}
+@media(min-width:1100px){
+ .zm-vision-v3 .footer-grid{grid-template-columns:minmax(340px,2.2fr) repeat(3,minmax(105px,1fr)) minmax(140px,1.25fr);gap:15px}
+ .zm-vision-v3 .footer-assistant .robot-figure{width:126px;height:135px;flex:0 0 126px}
+}
+@media(max-width:640px){
+ .zm-vision-v3 .triple-banners .small-banner:first-child,.zm-vision-v3 .triple-banners .small-banner:last-child{padding-left:89px}
+ .zm-vision-v3 .triple-banners .small-banner>span{overflow-wrap:break-word}
+}
