@@ -34,8 +34,9 @@ class Field:
 
 class Meta:
     def get_field(self, name):
-        assert name == "username"
-        return Field()
+        assert name in ("username", "email")
+        return types.SimpleNamespace(unique=name == "username", concrete=True,
+                                     is_relation=False)
 
 
 USERS = {}
@@ -139,7 +140,7 @@ def run():
     functions = load_real_functions()
     request = lambda secret: types.SimpleNamespace(
         META={"CSRF_COOKIE": secret},
-        POST={"email": "buyer@example.com"},
+        POST={},
     )
     one, _ = functions["_new_user"](request("A" * 32))
     # Force a stale initial lookup to exercise the concurrent insert conflict.
@@ -148,6 +149,14 @@ def run():
     other, _ = functions["_new_user"](request("B" * 32))
     assert one.pk == same.pk and one.pk != other.pk
     assert len(USERS) == 2
+    assert all(u.email == u.username + "@guest.mojplaywin.invalid"
+               for u in USERS.values())
+    # A malicious/legacy posted email is never used as the internal principal.
+    injected = types.SimpleNamespace(META={"CSRF_COOKIE": "C" * 32},
+                                     POST={"email": "buyer@external.example"})
+    fake, _ = functions["_new_user"](injected)
+    assert fake.email.endswith("@guest.mojplaywin.invalid")
+    assert fake.email != injected.POST["email"]
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
     assert all(not v.is_staff and not v.is_superuser for v in USERS.values())
@@ -173,6 +182,16 @@ def run():
         raise AssertionError("privileged superuser collision accepted")
     one.is_superuser = False
     assert functions["_read_user"](cookie_req) is one
+    # Reusing a legacy/altered identity must fail closed, not rewrite data.
+    original_email = one.email
+    one.email = ""
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("Empty legacy identity silently accepted")
+    one.email = original_email
     try:
         functions["_new_user"](request(""))
     except Http404:

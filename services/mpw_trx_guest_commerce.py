@@ -96,8 +96,21 @@ def _new_user(request):
     Model = get_user_model()
     field = Model.USERNAME_FIELD
     value = _guest_username(request)
-    if field.lower() in ("email", "email_address"):
-        value += "@guest.mojplaywin.com"
+    # This is a private, deterministic NON-CONTACTABLE identifier, not buyer
+    # email collection. The .invalid top-level domain is reserved for nonmail
+    # use. It must never be used for customer notices or real recovery.
+    internal_email = value + "@guest.mojplaywin.invalid"
+    username_is_email = field.lower() in ("email", "email_address")
+    if username_is_email:
+        value = internal_email
+    else:
+        try:
+            email_field = Model._meta.get_field("email")
+        except Exception as exc:
+            raise Http404("Guest model cannot support the existing invoice ledger") from exc
+        if (not getattr(email_field, "concrete", False) or
+                getattr(email_field, "is_relation", True)):
+            raise Http404("Guest model has an incompatible email field")
     if not Model._meta.get_field(field).unique:
         raise Http404("Guest identity field must be unique")
     query = {field: value}
@@ -108,6 +121,8 @@ def _new_user(request):
             # If another request wins this insert, its committed user is reused.
             with transaction.atomic():
                 user = Model(**query)
+                if not username_is_email:
+                    user.email = internal_email
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
@@ -125,6 +140,11 @@ def _new_user(request):
             or getattr(user, "is_staff", False)
             or getattr(user, "is_superuser", False)):
         raise Http404("Guest identity conflict")
+    # Never silently modify older guest principals or bind a real address.
+    # A legacy guest with an empty/mismatched email requires explicit source
+    # and migration reconciliation instead of creating a broken invoice.
+    if getattr(user, "email", None) != internal_email:
+        raise Http404("Unverified guest internal invoice identifier")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
         raise Http404("Guest receipt could not be issued")

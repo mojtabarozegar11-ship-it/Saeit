@@ -32,7 +32,7 @@ MODEL_SOURCE = "mpw_commerce/models.py"  # Static definition only; no SQL or Dja
 MAX_FILE_BYTES = 400_000
 MAX_HELPERS = 64
 # The independently reviewed guest identity adapter used by the release guard.
-APPROVED_GUEST_SHA256 = "b9e0b9b210fa2d36db96b91f596af91ccbfc5923338fd2eb3fc87e800ca0f957"
+APPROVED_GUEST_SHA256 = "41d86a1985288c3db1097b66aae5a17f8fe0faaaa5d9dfa25b1d0cdfc154eaf0"
 
 
 def source_bytes(root: Path, relative: str) -> bytes:
