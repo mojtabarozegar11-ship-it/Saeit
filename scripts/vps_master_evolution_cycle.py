@@ -62,6 +62,11 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     parent_mode = parent.stat().st_mode
     if not stat.S_ISDIR(parent_mode) or stat.S_IMODE(parent_mode) & 0o077:
         raise RuntimeError("MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE")
+    # A live per-cycle preflight must never silently treat a missing or
+    # uninitialized policy as an authorized baseline, even at one step.
+    # Regular scheduled evaluation may create the first state as before.
+    if check_only and not state_path.is_file():
+        raise RuntimeError("MASTER_EVOLUTION_CHECK_STATE_NOT_FOUND")
     # Load the previous watermark before opening the database snapshot so
     # late-completing older tasks can be checked in that same snapshot.
     previous = {}
