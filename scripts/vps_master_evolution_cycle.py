@@ -88,6 +88,17 @@ def evaluate(db_path: Path, state_path: Path):
             "SELECT COALESCE(MAX(id),0) FROM core_agenttask "
             "WHERE agent_id=? AND status='completed'", (row[0],)
         ).fetchone()[0]
+        # A previously completed high-watermark task can be reopened. Keep
+        # that cursor monotone if its row still exists, without re-crediting it.
+        prior_cursor_value = previous.get("last_completed_task_id")
+        cursor_row = (
+            db.execute(
+                "SELECT status FROM core_agenttask WHERE agent_id=? AND id=?",
+                (row[0], prior_cursor_value),
+            ).fetchone()
+            if type(prior_cursor_value) is int and prior_cursor_value > 0
+            else None
+        )
         pending_ids = [
             item[0] for item in db.execute(
                 "SELECT id FROM core_agenttask WHERE agent_id=? "
@@ -132,7 +143,15 @@ def evaluate(db_path: Path, state_path: Path):
         if type(previous_cursor) is not int or previous_cursor < 0:
             raise RuntimeError("INVALID_PREVIOUS_EVOLUTION_TASK_CURSOR")
         if previous_cursor > latest_completed_id:
-            raise RuntimeError("MASTER_EVOLUTION_TASK_CURSOR_AHEAD_OF_DATABASE")
+            if cursor_row is None or cursor_row[0] == "completed":
+                # Missing anchor indicates a restored/truncated database or
+                # forged state; it is not safe to reset the cursor downward.
+                raise RuntimeError("MASTER_EVOLUTION_TASK_CURSOR_AHEAD_OF_DATABASE")
+            # A high-watermark task was reopened, so preserve the previous
+            # cursor and reduce serial execution depth for this regression.
+            watermark_reopened = True
+        else:
+            watermark_reopened = False
         cursor_trusted = True
     elif previous and prev_count.get("completed") == 0:
         previous_cursor = 0
@@ -140,12 +159,24 @@ def evaluate(db_path: Path, state_path: Path):
     else:
         previous_cursor = latest_completed_id
         cursor_trusted = False
+    if "watermark_reopened" not in locals():
+        watermark_reopened = False
     # Querying one extra row makes the audit-window limit exact, even when
     # task IDs are contiguous; the old gap-based detection missed that case.
     if sum(task_id > previous_cursor for task_id, _, _ in rows) > MAX_NEW_TASKS_PER_AUDIT:
         raise RuntimeError("MASTER_EVOLUTION_NEW_TASKS_EXCEED_AUDIT_WINDOW")
     if prior_pending is not None and any(item > previous_cursor for item in prior_pending):
         raise RuntimeError("MASTER_EVOLUTION_PENDING_IDS_EXCEED_CURSOR")
+    # Only pending tasks first seen ABOVE the previous high-watermark or
+    # already tracked as pending are eligible to be credited later. An old
+    # completed task that is reset to queued is otherwise indistinguishable
+    # from a genuinely unfinished old task and could be double counted.
+    previously_tracked = set(prior_pending or ())
+    eligible_pending_ids = [
+        task_id for task_id in pending_ids
+        if task_id > previous_cursor or task_id in previously_tracked
+    ]
+    suppressed_reopened_or_unproven = len(pending_ids) - len(eligible_pending_ids)
     recent_new = []
     for task_id, action, raw in rows:
         if task_id <= previous_cursor:
@@ -174,7 +205,9 @@ def evaluate(db_path: Path, state_path: Path):
     diversity = len(set(recent_new))
     # Serial task depth is distinct from factory product volume. Never run
     # parallel master tasks or remove financial/owner approval gates.
-    regressed = delta_failed > 0 or delta_blocked > 0 or counts["blocked"] > 0
+    regressed = (delta_failed > 0 or delta_blocked > 0
+                 or counts["blocked"] > 0 or delta_completed < 0
+                 or watermark_reopened)
     steps = 1 if regressed else 20
     if regressed:
         decision = "limit_serial_steps_after_regression"
@@ -197,8 +230,10 @@ def evaluate(db_path: Path, state_path: Path):
         "delta": {"verified_completed_tasks": len(recent_new),
                   "completed_tasks_net_change": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
-        "last_completed_task_id": latest_completed_id,
-        "pending_prior_ids": pending_ids,
+        "last_completed_task_id": max(previous_cursor, latest_completed_id),
+        "pending_prior_ids": eligible_pending_ids,
+        "suppressed_unproven_prior_pending_count": suppressed_reopened_or_unproven,
+        "watermark_task_reopened": watermark_reopened,
         "previous_pending_tracking_available": prior_pending is not None,
         "late_completed_tasks": late_completed,
         "late_verified_completed_tasks": late_verified,
