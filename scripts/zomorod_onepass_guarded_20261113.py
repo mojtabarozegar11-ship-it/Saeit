@@ -52,7 +52,7 @@ def candidates():
  if not all(source[x]!=previous[x] for x in REPLACE):raise RuntimeError('Unexpected unchanged replacement')
  if source['index.html'].count(RIGHTS)!=1:raise RuntimeError('Footer rights lost')
  if not all(s in source['index.html'] for s in (
-   b'zm-reference-v3.css?v=20261113-all1',b'zm-reference-v3.js?v=20261113-all1',
+   b'zm-reference-v3.css?v=20261113-fields1',b'zm-reference-v3.js?v=20261113-fields1',
    b'data-auto-strip="services-strip"',b'data-auto-strip="products-strip"',
    b'data-auto-strip="projects-strip"',b'action="/search/"',b'href="/en/"',b'href="/assets/zm-ar-v1.html"',
    b'assets/zm-logo-transparent-v1.webp',b'lang="fa"')):
