@@ -101,3 +101,7 @@ assertion that code runs correctly; owner requested acceptance testing later.
 ## Canonical chat approval flow (coding-only)
 
 A chat command is now **pending** even when entered by a Django superuser. The durable approval binds the existing ChatSession ID, requester, operation ID, action, exact risk tier and an allowlisted target/parameters contract. The existing Approvals API requires a separate owner decision, followed by an explicit `execute-chat` call. No duplicate scheduler or dashboard was added. The existing one-shot executor rejects ambiguous outcomes and prevents automatic replay. Source is not acceptance-tested or deployed.
+
+## Authenticated conversation composition root — source only
+
+The existing Django `MasterAgentChat` now invokes `core.canonical_chat_bridge.respond_with_mojtaba_runtime` for non-operational conversation. The bridge instantiates `ava_core.MojtabaBot` for this authenticated request, injects the existing host-owned model provider, and reads **only** the current user's bounded ChatSession history. Persistence remains in the existing Django ChatMessage table. Operational commands remain separately approved ChatOperations; no new Django agent/worker/queue or additional public bot identity is created. External model use requires `MOJTABA_CHAT_EXTERNAL_MODEL_ENABLED=1`; a key alone is not authorization. This code is untested, unmerged and undeployed. This is request-scoped composition, NOT proof of one globally running VPS process.

@@ -1,7 +1,3 @@
-import os
-
-from openai import OpenAI
-
 from .models import ChatMessage
 from .master_agent_capability_pack import MASTER_AGENT_CAPABILITY_PACK, capability_pack_prompt
 from .chat_operation_security import is_authorized_chat_operator
@@ -116,28 +112,12 @@ class MasterAgentChat:
             )
             return reply
 
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            reply = (
-                "پیام دریافت شد. اتصال مدل هوش مصنوعی هنوز در محیط سرور "
-                "پیکربندی نشده است؛ بنابراین هیچ اقدامی اجرا نشد."
-            )
-        else:
-            client = OpenAI(api_key=api_key)
-            history = list(session.messages.order_by("-created_at")[:20])
-            messages = [
-                {"role": "system", "content": master_system_prompt()},
-                *[
-                    {"role": item.role, "content": item.content}
-                    for item in reversed(history)
-                    if item.role in {"user", "assistant"}
-                ],
-            ]
-            response = client.chat.completions.create(
-                model=os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6"),
-                messages=messages,
-            )
-            reply = response.choices[0].message.content or ""
+        # The only canonical in-process conversation engine. Operational
+        # commands are already routed to the durable owner approval flow.
+        from .canonical_chat_bridge import respond_with_mojtaba_runtime
+        reply = respond_with_mojtaba_runtime(
+            session, text, system_prompt=master_system_prompt(),
+        )
 
         ChatMessage.objects.create(
             session=session,
