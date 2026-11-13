@@ -62,7 +62,7 @@ class SensitiveApprovalPermissionTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.post(
             self.url,
-            data=json.dumps({"kind": "approval", "status": "approved",
+            data=json.dumps({"kind": "approval", "approval_kind": "deploy", "status": "approved",
                              "approver": self.owner_admin.get_username(),
                              "evidence": "forged example only"}),
             content_type="application/json",
@@ -76,7 +76,7 @@ class SensitiveApprovalPermissionTests(TestCase):
             with self.subTest(approver=approver, evidence=evidence):
                 response = self.client.post(
                     self.url,
-                    data=json.dumps({"kind": "approval", "status": "approved",
+                    data=json.dumps({"kind": "approval", "approval_kind": "deploy", "status": "approved",
                                      "approver": approver, "evidence": evidence}),
                     content_type="application/json",
                 )
@@ -87,7 +87,7 @@ class SensitiveApprovalPermissionTests(TestCase):
         self.client.force_login(self.owner_admin)
         response = self.client.post(
             self.url,
-            data=json.dumps({"kind": "approval", "status": "rejected",
+            data=json.dumps({"kind": "approval", "approval_kind": "deploy", "status": "rejected",
                              "approver": self.owner_admin.get_username(),
                              "evidence": "fixture only: owner consent not asserted"}),
             content_type="application/json",
@@ -96,3 +96,4 @@ class SensitiveApprovalPermissionTests(TestCase):
         entry = ApprovalDecision.objects.get()
         self.assertEqual(entry.created_by_id, self.owner_admin.pk)
         self.assertEqual(entry.approver, self.owner_admin.get_username())
+        self.assertEqual(entry.kind, "deploy")
