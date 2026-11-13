@@ -143,5 +143,34 @@
     "source_conclusion": "SSH from VPS worked on DNS hostname, but app source and effective Passenger/Django runtime remain unverified",
     "commercial_sale_verification": null,
     "real_buyer_delivery_verified": false
+  },
+  "cycle_9_actual_cpanel_readonly": {
+    "source": "Existing main-branch read-only cPanel SSH/UAPI workflows; no deployment or customer access",
+    "github_hosted_legacy_private_relay": {
+      "run": 43457001017,
+      "job": 131993652010,
+      "status": "failed_before_remote_source_read",
+      "host_fingerprints": "verified",
+      "vps_jump_ssh_retries": 5,
+      "vps_jump_result": "ssh_banner_timeout",
+      "direct_fallback_ip_connection": "timeout",
+      "raw_cpanel_source_obtained": false
+    },
+    "self_hosted_factory_vps_passenger_inventory": {
+      "run": 43162619527,
+      "rerun_job": 131997282584,
+      "status": "success",
+      "method": "fingerprint-pinned self-hosted SSH to cPanel, UAPI PassengerApps list_applications, read-only",
+      "uapi_records_discovered": 2,
+      "mojplaywin_registered_mapping_count": 1,
+      "mojplaywin_references_shared_saeit_staging": false,
+      "production_isolation_proven": false,
+      "effective_django_template_origin_proven": false,
+      "customer_data_or_secrets_exposed": false,
+      "release_permitted": false
+    },
+    "transport_interpretation": "One VPS-hosted read-only probe succeeded using a main workflow with the existing target while a cloud runner failed; a fixed IP is NOT proven globally dead. Different runner egress and DNS resolution may affect reachability.",
+    "commercial_sales_verified": null,
+    "authenticated_download_verified": false
   }
 }
