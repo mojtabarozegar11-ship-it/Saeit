@@ -59,7 +59,7 @@ def candidates():
   raise RuntimeError('Homepage feature contract incomplete')
  if source['index.html'].count(b'data-auto-strip=')!=3:raise RuntimeError('Wrong rotating row count')
  if source['index.html'].count(b'data-rotator-toggle=')!=3:raise RuntimeError('Missing motion control')
- if not all(x in source['assets/zm-reference-v3.js'] for x in (b'requestAnimationFrame',b'prefers-reduced-motion',b'carousel-copy',b'paused')):
+ if not all(x in source['assets/zm-reference-v3.js'] for x in (b'setInterval',b'prefers-reduced-motion',b'carousel-copy',b'paused')):
   raise RuntimeError('Real row controller absent')
  img=source['assets/zm-logo-transparent-v1.webp']
  if len(img)<25000 or img[:4]!=b'RIFF' or img[8:12]!=b'WEBP':raise RuntimeError('Transparent official logo file missing')
