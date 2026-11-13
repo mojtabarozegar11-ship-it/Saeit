@@ -1,0 +1,47 @@
+name: G-01 studio game rotation R14 QA
+on:
+  push:
+    branches:
+      - games/g01-studios-rotation-20261029-r14
+    paths:
+      - templates/studio_raha/index.html
+      - templates/taniya_studio/index.html
+      - tests/game/g01-studios-r14-smoke.cjs
+      - tests/site/g01-s01-checkout-controls-triage.cjs
+      - .github/workflows/g01-studios-r14-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser
+        run: |
+          mkdir -p "$RUNNER_TEMP/g01-studios-playwright"
+          npm install --prefix "$RUNNER_TEMP/g01-studios-playwright" --no-save --ignore-scripts playwright@1.56.1
+          "$RUNNER_TEMP/g01-studios-playwright/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Browser smoke (no checkout, no payments)
+        run: |
+          python3 -m http.server 8771 --bind 127.0.0.1 --directory . > "$RUNNER_TEMP/g01-studios-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8771/templates/studio_raha/index.html >/dev/null; then break; fi
+            sleep 1
+          done
+          NODE_PATH="$RUNNER_TEMP/g01-studios-playwright/node_modules" node tests/game/g01-studios-r14-smoke.cjs
+      - name: S-01 public checkout controls audit (GET only)
+        run: NODE_PATH="$RUNNER_TEMP/g01-studios-playwright/node_modules" node tests/site/g01-s01-checkout-controls-triage.cjs
+      - name: Upload non-sensitive S-01 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g01-s01-public-checkout-controls
+          path: g01-s01-audit-output/
+          retention-days: 7
