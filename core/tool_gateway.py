@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from django.db import transaction
+
 from .agent_registry import AgentRegistry, RISK_ORDER
 from .models import AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
@@ -108,6 +110,58 @@ class ToolGateway:
 
         return task
 
+    @transaction.atomic
+    def _reserve_invocation(self, spec, task_id, execution_id):
+        """Reserve one external-capable tool call per execution before dispatch.
+
+        Lock the AgentTask, recheck its policy and persist the invocation start
+        in a short transaction. Never hold a DB lock across a tool handler: a
+        handler might call an external provider or block indefinitely. A lost
+        acknowledgement leaves the reservation in place, fail-closed.
+        """
+        if task_id is None or not str(execution_id or "").strip():
+            raise ToolGatewayError(
+                "A running task and execution identity are required for tool invocation"
+            )
+        try:
+            AgentTask.objects.select_for_update().get(pk=task_id)
+        except AgentTask.DoesNotExist as exc:
+            raise ToolGatewayError("Agent task was not found") from exc
+
+        task = self._authorize_execution(spec, task_id, execution_id)
+        # Every entry from this gateway records execution_id in after_state.
+        # Checking the execution, rather than just the tool name, also blocks
+        # a second alias/adapter call under the same task execution.
+        previous = AuditLog.objects.filter(
+            action="tool_invocation_started",
+            target_type="AgentTask",
+            target_id=str(task.pk),
+            after_state__execution_id=task.execution_id,
+        ).exists()
+        if previous:
+            raise ToolGatewayError(
+                "Tool invocation already reserved for this execution; "
+                "receipt reconciliation is required before any retry"
+            )
+
+        trace_id = f"tool-{task.pk}-{task.execution_id}-{spec.code}"
+        AuditLog.objects.create(
+            actor_type="agent",
+            actor_id=str(task.agent_id),
+            action="tool_invocation_started",
+            target_type="AgentTask",
+            target_id=str(task.pk),
+            before_state={},
+            after_state={
+                "tool_code": spec.code,
+                "risk": spec.risk,
+                "execution_id": task.execution_id,
+                "trace_id": trace_id,
+            },
+            trace_id=trace_id,
+        )
+        return task, trace_id
+
     def invoke(self, tool_code, payload=None, *, task_id=None, execution_id=None):
         code = normalize_action(tool_code)
         spec = self._tools.get(code)
@@ -120,23 +174,7 @@ class ToolGateway:
         if not isinstance(data, dict):
             raise ToolGatewayError("Tool payload must be an object")
 
-        task = self._authorize_execution(spec, task_id, execution_id)
-        trace_id = f"tool-{task.pk}-{task.execution_id}-{code}"
-        AuditLog.objects.create(
-            actor_type="agent",
-            actor_id=str(task.agent_id),
-            action="tool_invocation_started",
-            target_type="AgentTask",
-            target_id=str(task.pk),
-            before_state={},
-            after_state={
-                "tool_code": code,
-                "risk": spec.risk,
-                "execution_id": task.execution_id,
-                "trace_id": trace_id,
-            },
-            trace_id=trace_id,
-        )
+        task, trace_id = self._reserve_invocation(spec, task_id, execution_id)
 
         try:
             result = spec.handler(data)
