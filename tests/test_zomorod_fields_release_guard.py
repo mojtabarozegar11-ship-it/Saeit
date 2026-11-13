@@ -458,3 +458,30 @@ def test_audit_live_cannot_use_owner_approval_flag(sandbox):
     with pytest.raises(SystemExit, match='Read-only: audit-live'):
         mod.main(['audit-live', '--owner-approved'])
     assert not mod.BACKUP_ROOT.exists()
+
+
+def test_audit_live_rejects_legacy_webp_forged_chunk_length(sandbox):
+    root, stage, old, new = sandbox
+    photo = root / 'assets/zm-v3-economy.webp'
+    malformed = bytearray(photo.read_bytes())
+    malformed[16:20] = (len(malformed) + 100).to_bytes(4, 'little')
+    photo.write_bytes(malformed)
+    with pytest.raises(RuntimeError, match='Invalid WebP RIFF chunk'):
+        mod.audit_live_baseline()
+    assert photo.read_bytes() == malformed
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_rejects_candidate_webp_bad_chunk_length_even_when_blob_pinned(sandbox):
+    root, stage, old, new = sandbox
+    asset = mod.CREATED[0]
+    filename = stage / 'new' / asset
+    malformed = bytearray(filename.read_bytes())
+    malformed[16:20] = (9).to_bytes(4, 'little')  # VP8X must be exactly 10
+    filename.write_bytes(malformed)
+    mod.NEW_BLOBS[asset] = mod.git_blob(malformed)
+    with pytest.raises(RuntimeError, match='Invalid WebP RIFF chunk'):
+        mod.preflight(stage)
+    assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+    assert not mod.BACKUP_ROOT.exists()
