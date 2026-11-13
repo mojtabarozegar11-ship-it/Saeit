@@ -388,3 +388,51 @@ def test_untracked_external_scope_does_not_disappear_from_completion_report():
     assert "external_automation_and_connected_app_agents" in report["unscoped_runtime_scopes_not_attested"]
     assert "broker_remote_accounts_and_marketplace_webhooks" in report["unscoped_runtime_scopes_not_attested"]
     assert report["percent_fully_consolidated"] is None
+
+
+
+def test_report_percentages_measure_source_registry_not_live_cleanup():
+    report = module.preview(snap("vps"), snap("cpanel"), MANIFEST, repository_root=ROOT)
+    p = report["evidence_progress"]
+    assert p["known_source_group_registration"] == {
+        "registered": 14,
+        "expected_known_source_groups": 14,
+        "percent": 100.0,
+        "scope": "checked_in_known_groups_only_not_a_complete_live_bot_census",
+    }
+    assert p["verified_live_retirement"]["groups_with_verified_handoff_and_retirement"] == 0
+    assert p["verified_live_retirement"]["proof_coverage_percent"] == 0.0
+    assert p["overall_operational_completion_percent"] is None
+    assert report["percent_fully_consolidated"] is None
+    assert report["all_legacy_agents_retired"] is False
+
+
+def test_missing_source_group_reduces_only_registration_coverage():
+    altered = json.loads(json.dumps(MANIFEST))
+    altered["sources"] = [
+        x for x in altered["sources"]
+        if x["id"] != "external_connected_app_agents"
+    ]
+    report = module.preview(snap("vps"), snap("cpanel"), altered, repository_root=ROOT)
+    progress = report["evidence_progress"]
+    assert progress["known_source_group_registration"]["registered"] == 13
+    assert progress["known_source_group_registration"]["expected_known_source_groups"] == 14
+    assert progress["known_source_group_registration"]["percent"] == 92.9
+    assert progress["overall_operational_completion_percent"] is None
+    assert report["production_cutover_authorized"] is False
+
+
+@pytest.mark.parametrize("layer,blocker", [
+    ("cron", "host_cron_inventory_truncated"),
+    ("processes", "host_process_inventory_truncated"),
+])
+def test_truncated_host_inventory_blocks_source_disposition(layer, blocker):
+    vps = snap("vps")
+    vps[layer]["enumeration_truncated"] = True
+    vps[layer]["state"] = "observed"
+    report = module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+    canonical = next(x for x in report["groups"]
+                     if x["source_group"] == "canonical_cycle_and_legacy_master_schedulers")
+    assert blocker in canonical["blocking_evidence"]
+    assert canonical["retirement_authorized"] is False
+    assert report["evidence_progress"]["overall_operational_completion_percent"] is None
