@@ -333,6 +333,133 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(MOD.classify_html("checkout", 72, html),
                          "checkout_post_action_unverified")
 
+    def _fake_observe(self, page, *, final_url=None, content_type="text/html",
+                      status=200, headers=None):
+        path = "/store/product/72/checkout/"
+        class FakeResponse:
+            def __init__(self):
+                self.status = status
+                self.headers = headers or {
+                    "Content-Type": content_type,
+                    "Content-Security-Policy":
+                        "script-src 'none'; form-action 'self'; frame-ancestors 'none'",
+                    "Cache-Control": "no-store"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return final_url or "https://mojplaywin.com" + path
+            def read(self, size):
+                return page.encode("utf-8")[:size] if isinstance(page, str) else page[:size]
+        class FakeOpener:
+            def open(self, req, timeout):
+                return FakeResponse()
+        forms = {}
+        result = MOD.observe(path, "checkout", 72, 4, FakeOpener(), forms)
+        return result, forms
+
+    def test_external_base_redirects_form_and_is_rejected(self):
+        html = checkout(72).replace("<main>",
+                                    '<main><base href="https://evil.example/">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_base_href_unverified")
+
+    def test_self_base_is_rejected_pending_source_review(self):
+        html = checkout(72).replace("<main>", '<main><base href="/store/">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_base_href_unverified")
+
+    def test_duplicated_name_on_csrf_is_rejected(self):
+        html = checkout(72).replace('name="csrfmiddlewaretoken"',
+                                    'name="bogus" name="csrfmiddlewaretoken"')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_duplicate_button_type_is_rejected(self):
+        html = checkout(72).replace('type="submit">', 'type="button" type="submit">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_invoice_action_query_string_is_rejected(self):
+        html = checkout(72).replace('action="/commerce/trx-easy/start/72/"',
+                                    'action="/commerce/trx-easy/start/72/?next=evil"')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_catalog_cta_query_is_not_verified(self):
+        paths = ('/store/product/72/checkout/',
+                 '/store/product/225/checkout/', '/store/product/879/')
+        html = '<html><title>MojPlayWin</title>' + ' ' * 170
+        html += ''.join('<a href="' + p + '?next=evil">View product</a>' for p in paths)
+        self.assertEqual(MOD.classify_html("store", None, html),
+                         "catalog_ctas_unverified")
+
+    def test_product_detail_cta_query_is_not_verified(self):
+        html = ('<html><title>MojPlayWin</title>'
+                '<a href="/store/product/72/checkout/?next=evil">Buy</a>'
+                + ' ' * 170)
+        self.assertEqual(MOD.classify_html("detail", 72, html),
+                         "detail_product_identity_unverified")
+
+    def test_relative_or_external_paths_fail_same_origin_gate(self):
+        for raw in ("store/product/72/checkout/", "//evil.example/checkout/",
+                    "https://evil.example/store/product/72/checkout/"):
+            with self.subTest(path=raw):
+                self.assertEqual(MOD._local_path(raw), "")
+
+    def test_public_observer_rejects_wrong_https_port(self):
+        status, forms = self._fake_observe(checkout(72),
+            final_url="https://mojplaywin.com:444/store/product/72/checkout/")
+        self.assertEqual(status, "unexpected_destination")
+        self.assertEqual(forms, {})
+
+    def test_public_observer_rejects_http_downgrade(self):
+        status, forms = self._fake_observe(checkout(72),
+            final_url="http://mojplaywin.com/store/product/72/checkout/")
+        self.assertEqual(status, "unexpected_destination")
+        self.assertEqual(forms, {})
+
+    def test_public_observer_requires_actual_html_content_type(self):
+        status, forms = self._fake_observe(checkout(72),
+            content_type="application/x-text/html-diff")
+        self.assertEqual(status, "unexpected_content_type")
+        self.assertEqual(forms, {})
+
+    def test_public_observer_accepts_standard_html_charset(self):
+        status, forms = self._fake_observe(checkout(72), headers={
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Security-Policy":
+                "script-src 'none'; form-action 'self'; frame-ancestors 'none'",
+            "Cache-Control": "no-store"})
+        self.assertEqual(status, "no_email_checkout_get_ok_not_paid")
+        self.assertEqual(forms["/store/product/72/checkout/"],
+                         "no_email_checkout_get_ok_not_paid")
+
+    def test_large_html_body_fails_without_parsing(self):
+        status, forms = self._fake_observe(b"x" * (MOD.MAX_BODY + 1))
+        self.assertEqual(status, "body_over_limit")
+        self.assertEqual(forms, {})
+
+    def test_http_503_is_not_misreported_as_zero_sales(self):
+        from urllib.error import HTTPError
+        class Offline:
+            def open(self, req, timeout=None):
+                raise HTTPError(req.full_url, 503, "unavailable", {}, None)
+        result = MOD.audit(opener=Offline())
+        self.assertEqual(set(result["observed_routes"].values()), {"http_503"})
+        self.assertIsNone(result["commercial_sales_verified"])
+
+    def test_http_307_redirect_is_not_followed(self):
+        from urllib.error import HTTPError
+        class Redirect:
+            def open(self, req, timeout=None):
+                raise HTTPError(req.full_url, 307, "temporary", {}, None)
+        result = MOD.audit(opener=Redirect())
+        self.assertEqual(set(result["observed_routes"].values()),
+                         {"redirect_not_followed"})
+        self.assertFalse(result["payments_sent"])
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
