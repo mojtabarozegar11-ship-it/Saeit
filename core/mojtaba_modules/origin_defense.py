@@ -34,7 +34,7 @@ def _identity(source_ip: str, *, key: bytes, engagement_id: str) -> tuple[str, b
         raise CyberModuleError("SOURCE_IP_INVALID") from exc
     if str(ip) != source_ip:
         raise CyberModuleError("SOURCE_IP_NOT_CANONICAL")
-    opaque = hmac.new(key, (engagement_id + "|" + str(ip)).encode("ascii"),
+    opaque = hmac.new(key, (engagement_id + "|" + str(ip)).encode("utf-8"),
                       hashlib.sha256).hexdigest()[:24]
     return opaque, ip.is_global
 
