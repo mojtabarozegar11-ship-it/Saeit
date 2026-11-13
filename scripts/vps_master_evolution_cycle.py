@@ -43,6 +43,7 @@ MASTER_CHECK_BASELINE_REQUIRED = frozenset(MASTER_POLICY_INVARIANTS) | {
     "last_completed_task_id",
     "completed_guard",
     "pending_prior_ids",
+    "database_identity",
 }
 
 
@@ -94,6 +95,8 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     state_path = state_path.expanduser()
     if _contains_symlink(db_path) or not db_path.is_file():
         raise RuntimeError("MASTER_PRIVATE_DB_NOT_FOUND")
+    db_stat = db_path.stat()
+    db_canonical = str(db_path.resolve())
     if state_path.is_symlink():
         raise RuntimeError("MASTER_EVOLUTION_STATE_SYMLINK")
     # Never chmod an existing shared directory: a failed policy check must not
@@ -141,6 +144,16 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
             # Check-only does not elevate partially initialized legacy state.
             # Scheduled non-check-only evaluation may migrate it first.
             raise RuntimeError("MASTER_EVOLUTION_CHECK_BASELINE_INCOMPLETE")
+    previous_db_identity = previous.get("database_identity")
+    if previous_db_identity is not None and (
+            not isinstance(previous_db_identity, dict)
+            or set(previous_db_identity) != {"path", "device", "inode", "agent_id"}
+            or not isinstance(previous_db_identity["path"], str)
+            or not previous_db_identity["path"]
+            or any(type(previous_db_identity[k]) is not int
+                   or previous_db_identity[k] < 0
+                   for k in ("device", "inode", "agent_id"))):
+        raise RuntimeError("MASTER_EVOLUTION_DATABASE_IDENTITY_INVALID")
     prior_guard = previous.get("completed_guard", {})
     if (
         not isinstance(prior_guard, dict)
@@ -182,6 +195,14 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
         ).fetchone()
         if not row:
             raise RuntimeError("MASTER_AGENT_NOT_ACTIVE")
+        db_identity = {
+            "path": db_canonical,
+            "device": db_stat.st_dev,
+            "inode": db_stat.st_ino,
+            "agent_id": row[0],
+        }
+        if previous_db_identity is not None and db_identity != previous_db_identity:
+            raise RuntimeError("MASTER_EVOLUTION_DATABASE_REPLACED")
         counts = dict(db.execute(
             "SELECT status,COUNT(*) FROM core_agenttask "
             "WHERE agent_id=? GROUP BY status", (row[0],)
@@ -245,6 +266,13 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
             ).fetchall())
         if len(guard_rows) != len(guard_ids):
             raise RuntimeError("MASTER_EVOLUTION_COMPLETED_GUARD_TASK_MISSING")
+    # Detect a swap of the pathname between the original stat and SQLite's
+    # consistent read-only snapshot. An atomic DB restoration must be
+    # reconciled explicitly, never credited as the same task history.
+    after_db_stat = db_path.stat()
+    if (db_stat.st_dev, db_stat.st_ino) != (
+            after_db_stat.st_dev, after_db_stat.st_ino):
+        raise RuntimeError("MASTER_EVOLUTION_DATABASE_REPLACED_DURING_SNAPSHOT")
     guarded_reopened_ids = []
     for task_id, status, action, raw, execution_id, attempt_count in guard_rows:
         if status != "completed":
@@ -359,6 +387,7 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "agent_code": "economic-master-agent",
         "operating_mode": "private_vps_serial_tasks_controlled",
+        "database_identity": db_identity,
         "task_counts": counts,
         "delta": {"verified_completed_tasks": len(recent_new),
                   "completed_tasks_net_change": delta_completed,
