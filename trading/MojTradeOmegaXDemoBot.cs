@@ -55,7 +55,6 @@ namespace MojTrade.OmegaX
         private RelativeStrengthIndex _rsi = null!;
         private AverageTrueRange _atr = null!;
         private double _dayStartEquity;
-        private DateTime _riskDayUtc;
         private int _consecutiveLosses;
         private string _lastAttemptedSignalKey = "";
         private bool _orderReconciliationHold;
@@ -88,7 +87,6 @@ namespace MojTrade.OmegaX
             // Reconstruct prior same-day risk from broker history. Starting
             // the cBot must NOT erase a loss streak or refresh the loss
             // baseline halfway through the UTC trading day.
-            _riskDayUtc = DateTime.MinValue;
             if (DailyLossReached())
                 Print("OMEGA X HOLD: historical account risk limit or reconciliation gate.");
             Positions.Closed += OnPositionClosed;
@@ -329,7 +327,6 @@ namespace MojTrade.OmegaX
                 }
                 _consecutiveLosses = losses;
                 _dayStartEquity = Account.Balance - accountNetToday;
-                _riskDayUtc = today;
                 if (!IsFinite(_dayStartEquity) || _dayStartEquity <= 0 ||
                     !IsFinite(Account.Equity) || Account.Equity <= 0)
                     return true;
