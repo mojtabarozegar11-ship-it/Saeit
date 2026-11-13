@@ -425,6 +425,13 @@ def verify_template(raw: bytes):
 # Only actual public anonymous HTML proves every released SKU is usable.
 # These checks never POST, authenticate, read buyer records, or log CSRF values.
 PUBLIC_CHECKOUT_PRODUCTS = (72, 225, 879)
+PUBLIC_CHECKOUT_ROUTES = tuple(
+    (product_id, route.format(product_id=product_id))
+    for product_id in PUBLIC_CHECKOUT_PRODUCTS
+    for route in ("/store/product/{product_id}/checkout/",
+                  "/commerce/book/{product_id}/")
+)
+
 
 
 def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
@@ -458,34 +465,55 @@ def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
 
 
 def audit_live_public_checkout_forms() -> list:
-    """Three bounded anonymous GETs; no order creation or sensitive output."""
+    """Six bounded anonymous GETs for canonical and alias public buyer forms.
+
+    Headers and HTML are checked, but never logged. No checkout POST,
+    invoice, payment, customer cookie or private download is performed.
+    """
     import urllib.request
     from urllib.parse import urlsplit
     passed = []
-    for product_id in PUBLIC_CHECKOUT_PRODUCTS:
-        url = ("https://mojplaywin.com/store/product/" + str(product_id)
-               + "/checkout/")
+    for product_id, route in PUBLIC_CHECKOUT_ROUTES:
+        url = "https://mojplaywin.com" + route
         req = urllib.request.Request(
             url, method="GET", headers={
                 "Cache-Control": "no-cache, no-store", "Pragma": "no-cache",
-                "Cookie": "", "User-Agent": "MPWReadOnlyBuyerContract/1.0",
+                "Cookie": "", "User-Agent": "MPWReadOnlyBuyerContract/1.1",
             }
         )
         try:
-            with urllib.request.urlopen(req, timeout=16) as response:
+            with urllib.request.urlopen(req, timeout=12) as response:
                 final = urlsplit(response.geturl())
                 if (response.status != 200 or final.scheme != "https"
                         or final.netloc != "mojplaywin.com"
-                        or final.path != "/store/product/" + str(product_id) + "/checkout/"
-                        or final.query or final.fragment):
+                        or final.path != route or final.query or final.fragment):
                     abort("LIVE_CHECKOUT_REDIRECT_OR_HTTP:" + str(product_id))
+                kind = (response.headers.get("Content-Type", "") or "").lower()
+                if kind.split(";", 1)[0].strip() != "text/html":
+                    abort("LIVE_CHECKOUT_WRONG_CONTENT_TYPE:" + str(product_id))
+                csp = (response.headers.get("Content-Security-Policy", "") or "").lower()
+                rules = [line.strip().split() for line in csp.split(";") if line.strip()]
+                required = {"script-src": ["'none'"],
+                            "form-action": ["'self'"],
+                            "frame-ancestors": ["'none'"]}
+                for directive, allowed in required.items():
+                    values = [rule[1:] for rule in rules
+                              if rule and rule[0] == directive]
+                    if values != [allowed]:
+                        abort("LIVE_CHECKOUT_CSP_UNSAFE:" + str(product_id))
+                cache = (response.headers.get("Cache-Control", "") or "").lower()
+                if "no-store" not in {
+                        item.strip().split("=", 1)[0] for item in cache.split(",")}:
+                    abort("LIVE_CHECKOUT_CACHE_UNSAFE:" + str(product_id))
                 content = response.read(500_001)
         except RuntimeError:
             raise
         except Exception as exc:
             raise RuntimeError("MPW_EMAIL_FREE_ABORT:LIVE_CHECKOUT_UNREACHABLE:"
                                + str(product_id)) from exc
-        passed.append(verify_live_checkout_markup(content, product_id))
+        proof = verify_live_checkout_markup(content, product_id)
+        proof["route_group"] = "alias" if route.startswith("/commerce/") else "canonical"
+        passed.append(proof)
     return passed
 
 
@@ -586,7 +614,7 @@ def publish(run: str, source: Path):
         # Idempotence is source-only; a stale public Passenger response must
         # never be reported as a completed commercial installation.
         public_proof = audit_live_public_checkout_forms()
-        if len(public_proof) != len(PUBLIC_CHECKOUT_PRODUCTS):
+        if len(public_proof) != len(PUBLIC_CHECKOUT_ROUTES):
             abort("PUBLIC_BUYER_FORMS_UNVERIFIED")
         print("MPW_EMAIL_FREE=ALREADY_INSTALLED;PUBLIC_BUYER_FORMS_VERIFIED=YES")
         return
@@ -609,7 +637,7 @@ def publish(run: str, source: Path):
         # owner-safe checkout form before success is reported. Failure
         # automatically restores the exact saved source and template.
         public_proof = audit_live_public_checkout_forms()
-        if len(public_proof) != len(PUBLIC_CHECKOUT_PRODUCTS):
+        if len(public_proof) != len(PUBLIC_CHECKOUT_ROUTES):
             abort("PUBLIC_BUYER_FORMS_UNVERIFIED")
     except BaseException as publish_error:
         # A write may have replaced a file and then failed on directory fsync,
