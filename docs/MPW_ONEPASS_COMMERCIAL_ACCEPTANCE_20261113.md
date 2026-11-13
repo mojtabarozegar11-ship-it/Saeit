@@ -171,3 +171,41 @@ These tests involve synthetic cPanel fixtures and no real cPanel login.
 **Go/no-go remains NO-GO** until actual cPanel source equivalence,
 dynamic storefront, six email-free buyer forms and authorized independent
 settlement and delivery are proven. The changes remain a draft PR.
+
+## Cycle 6 — existing cPanel read-only bridge is wired, NOT dispatched
+
+The existing `deploy/cpanel_direct_command.sh` and
+`.github/workflows/cpanel-direct-command-bridge.yml` now explicitly
+allow one extra **manual, read-only** choice:
+`mpw_source_provenance`. It runs
+`scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py`
+over the existing fingerprint-pinned factory-VPS-to-cPanel SSH connection
+with `python3 -B` (stdin, no remote installation, no site edits).
+
+The operation is restricted to the main-branch, owner-controlled
+`workflow_dispatch` and has not been invoked in this cycle.
+The reporting script refuses a non-`zomorod2` account. Its output
+contains only bounded classifications and a prefix of the source digest,
+not any template body, private values or customer records.
+A green local test does NOT prove SSH access or the effective Django template.
+
+The bridge and report passed 22 synthetic safety tests (16 provenance and
+6 operation-wiring tests). Together with previous tests, **249/249**
+isolated unit tests passed in
+[GitHub Actions 43450899114](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43450899114).
+Two independent guest identity/route scripts also passed.
+
+Latest GET-only public observation in the same run:
+10/10 routes categorized, 3 product detail GETs actionable,
+static `/store/` fallback still present, all six checkout forms
+collect email and **lack explicit `script-src`**. Missing
+`script-src` is a target-CSP mismatch; it does not, by itself,
+demonstrate exploitability because another CSP directive may provide
+a fallback. No independent TRON settlement, buyer delivery or
+collected commercial revenue has been verified.
+
+Next production action remains a separately authorized read-only
+execution of `mpw_source_provenance` against the real cPanel account,
+followed by actual effective Django template resolution and rights
+proof. No merge or production deployment is authorized by this
+document.
