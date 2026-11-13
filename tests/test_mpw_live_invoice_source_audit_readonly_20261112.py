@@ -245,6 +245,38 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
 
+    def test_recorder_class_import_origin_is_sanitized(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "from mpw_commerce.models import GuestTrxDelivery as Delivery\n"
+            "def record_invoice(invoice_id, user):\n"
+            "    return Delivery.objects.get_or_create(order=invoice_id)\n"
+        )
+        _, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        report = json.loads(next(line.split("=", 1)[1]
+                                 for line in printed.splitlines()
+                                 if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        entry = next(x for x in report["modules"]
+                     if x["file"] == AUDIT.SOURCE_PATHS[4])
+        self.assertEqual(entry["orm_model_import_origins"], [{
+            "model": "Delivery", "import_name": "GuestTrxDelivery",
+            "module": "mpw_commerce.models", "relative_level": 0
+        }])
+
+    def test_recorder_relative_import_origin_is_not_guessed_absolute(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "from .delivery_models import GuestTrxDelivery\n"
+            "def record_invoice(invoice_id, user):\n"
+            "    return GuestTrxDelivery.objects.get_or_create(order=invoice_id)\n"
+        )
+        result = AUDIT.inspect(self.root)
+        entry = next(x for x in result["files"]
+                     if x["file"] == AUDIT.SOURCE_PATHS[4])
+        self.assertEqual(entry["orm_model_import_origins"][0]["module"],
+                         "delivery_models")
+        self.assertEqual(entry["orm_model_import_origins"][0]["relative_level"], 1)
+
     def test_live_recorder_model_field_names_without_values(self):
         p = self.root / AUDIT.SOURCE_PATHS[4]
         p.write_text(

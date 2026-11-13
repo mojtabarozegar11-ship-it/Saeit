@@ -193,6 +193,24 @@ def module_report(relative: str, raw: bytes) -> dict:
     functions = {node.name: node for node in definitions}
     names = [node.name for node in definitions]
     duplicate_functions = sorted(name for name in set(names) if names.count(name) > 1)
+    # Identify only the ORM class import *origin*, never model source or data.
+    # Keep aliases explicit: from X import GuestTrxDelivery as Delivery.
+    recorder = functions.get("record_invoice") if relative == SOURCE_PATHS[4] else None
+    model_names = set()
+    if recorder is not None:
+        model_names = {operation.get("model") for operation in
+                       safe_function_contract(recorder)["orm_operations"]}
+    model_import_origins = []
+    for statement in tree.body:
+        if isinstance(statement, ast.ImportFrom):
+            for name in statement.names:
+                local = name.asname or name.name
+                if local in model_names:
+                    model_import_origins.append({
+                        "model": local, "import_name": name.name,
+                        "module": statement.module or "",
+                        "relative_level": statement.level
+                    })
     aliases = {}
     for node in tree.body:
         if isinstance(node, ast.ImportFrom):
@@ -297,6 +315,7 @@ def module_report(relative: str, raw: bytes) -> dict:
         "helper_limit_hit": len(explored) >= MAX_HELPERS,
         # Identifiers only, not function bodies, request fields, buyer data or secrets.
         "checkout_call_targets": sorted(checkout_call_targets)[:48],
+        "orm_model_import_origins": model_import_origins[:12],
         "invoice_contracts": {
             key: safe_function_contract(functions[key])
             for key in ("_start_order", "record_invoice", "normalize_email")
@@ -520,7 +539,28 @@ def validate_remote_report(output: str) -> int:
                     re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,6}", value)
                 })[:16],
             }
+        origins = item.get("orm_model_import_origins", [])
+        safe_origins = []
+        for origin in origins[:12] if isinstance(origins, list) else []:
+            if not isinstance(origin, dict):
+                continue
+            model = origin.get("model")
+            imported = origin.get("import_name")
+            module = origin.get("module")
+            level = origin.get("relative_level")
+            if (not all(isinstance(v, str) and
+                        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", v)
+                        for v in (model, imported)) or
+                    not isinstance(module, str) or len(module) > 130 or
+                    (module and re.fullmatch(
+                        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,7}",
+                        module) is None) or
+                    type(level) is not int or not 0 <= level <= 4):
+                continue
+            safe_origins.append({"model": model, "import_name": imported,
+                                 "module": module, "relative_level": level})
         safe_modules.append({"file": item["file"], "sha16": digest,
+                             "orm_model_import_origins": safe_origins,
                              "invoice_function_contracts": safe_contracts,
                              "email_referencing_functions": safe_email_functions,
                              "invoice_imports": safe_imports,
