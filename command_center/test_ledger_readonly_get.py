@@ -22,6 +22,8 @@ class ManagementLedgerGetReadOnlyTests(TestCase):
         for _ in range(2):
             response = self.client.get(self.url)
             self.assertEqual(response.status_code, 200)
+            self.assertIn("no-store", response["Cache-Control"])
+            self.assertIn("private", response["Cache-Control"])
             self.assertEqual(response.json()["commands"][0]["status"], "pending")
         self.pending.refresh_from_db()
         self.assertEqual(self.pending.status, "pending")
