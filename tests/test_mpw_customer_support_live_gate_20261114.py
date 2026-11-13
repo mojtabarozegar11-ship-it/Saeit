@@ -2,13 +2,15 @@
 import pytest
 
 from scripts.mpw_customer_support_live_gate_20261114 import (
-    INBOX, LEGACY, ORIGIN, ROUTES, _same_public_url, assess, fetch_public
+    INBOX, LEGACY, ORIGIN, ROUTES, ROUTE_IDENTITY, _same_public_url, assess, fetch_public
 )
 
 
 def test_all_seven_routes_must_expose_new_mailto_without_legacy():
-    pages = {ORIGIN + path: '<a href="mailto:' + INBOX + '">' + INBOX + '</a>'
-             for path in ROUTES}
+    pages = {ORIGIN + path: (
+        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
+        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
+    ) for path in ROUTES}
     report = assess(lambda url: pages[url])
     assert report["support_ready"] is True
     assert report["live_release_confirmed"] is True
@@ -18,8 +20,10 @@ def test_all_seven_routes_must_expose_new_mailto_without_legacy():
 
 
 def test_current_static_fallback_and_legacy_inbox_are_not_misreported_as_ready():
-    pages = {ORIGIN + p: '<a href="mailto:' + INBOX + '">' + INBOX + '</a>'
-             for p in ROUTES}
+    pages = {ORIGIN + p: (
+        '<html><body>' + ' '.join(ROUTE_IDENTITY[p]) +
+        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
+    ) for p in ROUTES}
     pages[ORIGIN + "/store/"] = "MPW_STATIC_STORE_FALLBACK_V1"
     pages[ORIGIN + "/contact/"] = '<p>' + LEGACY + '</p>'
     pages[ORIGIN + "/support/"] = '<p>' + LEGACY + '</p>'
@@ -65,3 +69,27 @@ def test_report_is_non_sensitive_and_read_only():
     assert not result["support_ready"]
     assert "mailto:" not in str(result)
     assert "customer_password" not in str(result)
+
+
+def test_generic_support_placeholder_does_not_fake_functional_pages():
+    html = '<html><body><a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
+    result = assess(lambda _: html)
+    assert result["ready_routes"] == 0
+    assert result["support_ready"] is False
+    assert all(not entry["page_identity_verified"] for entry in result["observations"])
+    assert all(entry["status"] == "UNRECOGNIZED_PAGE" for entry in result["observations"])
+
+
+def test_store_catalog_must_still_have_original_buyer_path_after_release():
+    pages = {ORIGIN + path: (
+        '<body>' + ' '.join(ROUTE_IDENTITY[path]) +
+        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body>'
+    ) for path in ROUTES}
+    target = ORIGIN + "/store/"
+    pages[target] = pages[target].replace("/store/product/72/", "/broken-product-route/")
+    result = assess(lambda url: pages[url])
+    assert result["ready_routes"] == 6
+    assert result["support_ready"] is False
+    store = next(x for x in result["observations"] if x["route"] == "/store/")
+    assert store["status"] == "UNRECOGNIZED_PAGE"
+    assert store["page_identity_verified"] is False

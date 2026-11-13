@@ -27,6 +27,21 @@ ROUTES = (
 )
 MAX_BYTES = 2_000_000
 
+# Reject generic 200-OK placeholders that happen to contain the support email.
+# These route markers reflect the existing public pages.
+ROUTE_IDENTITY = {
+    "/": ("MojPlayWin", "digital"),
+    "/store/": ("The Science and Practice of Chess Improvement",
+                "/store/product/72/", "Guest checkout with TRX"),
+    "/contact/": ("MojPlayWin", "business"),
+    "/support/": ("support", "order"),
+    "/about/": ("MojPlayWin", "research"),
+    "/company/": ("MojPlayWin", "company"),
+    "/mpw-editorial/revenue/inquiry.php?service=general":
+        ("General MojPlayWin Business Inquiry", "No payment"),
+}
+
+
 
 def _same_public_url(expected: str, actual: str) -> bool:
     a, b = urllib.parse.urlsplit(expected), urllib.parse.urlsplit(actual)
@@ -67,7 +82,11 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
             new = INBOX in html
             old = LEGACY in html
             mailto = "mailto:" + INBOX in html
-            label = "READY" if new and mailto and not old else "MISSING_NEW_CONTACT"
+            page_identity = all(marker.lower() in html.lower()
+                                for marker in ROUTE_IDENTITY[path])
+            label = "READY" if new and mailto and not old and page_identity else "MISSING_NEW_CONTACT"
+            if new and mailto and not page_identity:
+                label = "UNRECOGNIZED_PAGE"
             if old:
                 label = "LEGACY_CONTACT_VISIBLE"
             if path == "/store/" and "MPW_STATIC_STORE_FALLBACK_V1" in html:
@@ -78,12 +97,14 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
                 source = "NOT_APPLICABLE"
             results.append({"route": path, "status": label, "email_visible": new,
                             "mailto_visible": mailto, "legacy_visible": old,
+                            "page_identity_verified": page_identity,
                             "store_source_indicator": source})
         except (OSError, RuntimeError, ValueError, TypeError, UnicodeError) as exc:
             results.append({"route": path, "status": "FETCH_FAILED",
                             "error_class": type(exc).__name__,
                             "email_visible": False, "mailto_visible": False,
                             "legacy_visible": False,
+                            "page_identity_verified": False,
                             "store_source_indicator": "UNKNOWN"})
     passed = sum(x["status"] == "READY" for x in results)
     return {
