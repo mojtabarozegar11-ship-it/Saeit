@@ -6,6 +6,7 @@ import os
 import stat
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -794,7 +795,7 @@ class EvolutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research"])
             state.unlink()
-            with redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_CHECK_STATE_NOT_FOUND"):
                 mod.evaluate(db, state, check_only=True)
             self.assertFalse(state.exists())
 
@@ -834,9 +835,118 @@ class EvolutionTests(unittest.TestCase):
         self.assertLess(wrapper.index('--check-only'), wrapper.index('recover_stale_tasks'))
         self.assertLess(wrapper.index('recover_stale_tasks'), wrapper.index('autonomous_master_loop'))
         self.assertIn('steps=1', wrapper)
-        self.assertIn('MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED', wrapper)
+        self.assertIn('MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION', wrapper)
+        self.assertIn('exit 75', wrapper)
         self.assertIn('if (( proposed < approved_before ))', wrapper)
         self.assertIn('MASTER_EVOLUTION_PREVIOUS_MAX_STEPS', wrapper)
+
+    def _run_cycle_wrapper_with_fake_runtime(self, mode, *, proposed="20", previous="20"):
+        """Execute the generated wrapper in a disposable HOME with a fake Python.
+
+        The wrapper exercises real bash branching, flock, timeout and argument
+        wiring. Neither Django nor a production runtime is touched.
+        """
+        source = (SCRIPT.parent.parent / "deploy" / "activate_vps_master_agent.sh").read_text(
+            encoding="utf-8"
+        )
+        script = source.split('cat > "$master/run-cycle.sh.tmp" <<\'SH\'\n', 1)[1].split(
+            "\nSH\n", 1
+        )[0]
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp) / "factory-runtime"
+            master = base / "operations" / "master-agent"
+            master.mkdir(parents=True)
+            app = base / "django-app"
+            app.mkdir(parents=True)
+            (app / "manage.py").write_text("# test-only placeholder\n")
+            binary = base / ".venv" / "bin" / "python"
+            binary.parent.mkdir(parents=True)
+            binary.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, sys\n"
+                "from pathlib import Path\n"
+                "args = sys.argv[1:]\n"
+                "mode = os.environ['FAKE_POLICY_MODE']\n"
+                "if args == ['-']:\n"
+                "    if mode == 'db_fail': sys.exit(11)\n"
+                "    print('/fake/private.sqlite3')\n"
+                "elif '--check-only' in args:\n"
+                "    if mode == 'evaluate_fail': sys.exit(12)\n"
+                "    if mode == 'malformed': print('MASTER_EVOLUTION_MAX_STEPS=999')\n"
+                "    else: print('MASTER_EVOLUTION_MAX_STEPS='+os.environ['FAKE_PROPOSED'])\n"
+                "    print('MASTER_EVOLUTION_PREVIOUS_MAX_STEPS='+os.environ['FAKE_PREVIOUS'])\n"
+                "    print('MASTER_EVOLUTION_CHECK_ONLY='+('false' if mode == 'non_readonly' else 'true'))\n"
+                "elif args and args[0] == 'manage.py':\n"
+                "    with Path(os.environ['FAKE_CALL_LOG']).open('a') as out:\n"
+                "        out.write(' '.join(args)+'\\n')\n"
+                "else:\n"
+                "    sys.exit(13)\n",
+                encoding="utf-8",
+            )
+            binary.chmod(0o700)
+            wrapper = Path(temp) / "run-cycle.sh"
+            wrapper.write_text(script + "\n", encoding="utf-8")
+            record = Path(temp) / "calls.log"
+            env = dict(os.environ, HOME=temp, FAKE_POLICY_MODE=mode,
+                       FAKE_PROPOSED=proposed, FAKE_PREVIOUS=previous,
+                       FAKE_CALL_LOG=str(record))
+            proc = subprocess.run(
+                ["bash", str(wrapper)], cwd=temp, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                universal_newlines=True, timeout=10,
+            )
+            calls = record.read_text(encoding="utf-8") if record.exists() else ""
+            return proc.returncode, proc.stdout + proc.stderr, calls
+
+    def test_generated_wrapper_blocks_tasks_if_integrity_check_fails(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime("evaluate_fail")
+        self.assertEqual(code, 75, output)
+        self.assertIn("MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION", output)
+        self.assertEqual(calls, "")
+
+    def test_generated_wrapper_blocks_tasks_if_database_configuration_fails(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime("db_fail")
+        self.assertEqual(code, 75, output)
+        self.assertIn("MASTER_EVOLUTION_DB_SETTINGS_FAILED", output)
+        self.assertEqual(calls, "")
+
+    def test_generated_wrapper_rejects_malformed_policy_result(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime("malformed")
+        self.assertEqual(code, 75, output)
+        self.assertIn("MASTER_EVOLUTION_PREFLIGHT_INVALID_RESULT", output)
+        self.assertEqual(calls, "")
+
+    def test_generated_wrapper_rejects_nonreadonly_policy_response(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime("non_readonly")
+        self.assertEqual(code, 75, output)
+        self.assertIn("MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION", output)
+        self.assertEqual(calls, "")
+
+    def test_generated_wrapper_runs_only_after_valid_fresh_policy(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime(
+            "valid", proposed="20", previous="20"
+        )
+        self.assertEqual(code, 0, output)
+        self.assertIn("MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=20", output)
+        self.assertIn("recover_stale_tasks", calls)
+        self.assertIn("autonomous_master_loop --max-steps 20", calls)
+        self.assertLess(calls.index("recover_stale_tasks"), calls.index("autonomous_master_loop"))
+
+    def test_generated_wrapper_never_expands_uncommitted_adaptive_budget(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime(
+            "valid", proposed="20", previous="1"
+        )
+        self.assertEqual(code, 0, output)
+        self.assertIn("MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=1", output)
+        self.assertIn("autonomous_master_loop --max-steps 1", calls)
+
+    def test_generated_wrapper_immediately_reduces_regressed_budget(self):
+        code, output, calls = self._run_cycle_wrapper_with_fake_runtime(
+            "valid", proposed="1", previous="20"
+        )
+        self.assertEqual(code, 0, output)
+        self.assertIn("MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=1", output)
+        self.assertIn("autonomous_master_loop --max-steps 1", calls)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
