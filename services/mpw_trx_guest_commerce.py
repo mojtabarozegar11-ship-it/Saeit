@@ -363,9 +363,13 @@ def patch_commercial(namespace):
     route_names = {
         "commerce/trx-easy/start/<int:product_id>/": "start_order",
         "commerce/trx-easy/invoice/<int:invoice_id>/": "show_invoice",
+        "commerce/trx-easy/invoice/<str:invoice_id>/": "show_invoice",
         "commerce/trx-easy/invoice/<int:invoice_id>/status/": "invoice_status",
+        "commerce/trx-easy/invoice/<str:invoice_id>/status/": "invoice_status",
         "commerce/trx-easy/invoice/<int:invoice_id>/reconcile/": "reconcile_invoice",
+        "commerce/trx-easy/invoice/<str:invoice_id>/reconcile/": "reconcile_invoice",
         "commerce/trx-easy/download/<int:invoice_id>/": "download_paid",
+        "commerce/trx-easy/download/<str:receipt_id>/": "download_paid",
     }
     seen = {name: 0 for name in targets}
     for entry in patterns:
@@ -374,8 +378,14 @@ def patch_commercial(namespace):
         route, view = entry
         if not isinstance(route, str) or not callable(view):
             raise RuntimeError("Unsupported guest commercial route entry")
-        route_name = route_names.get(route)
+        # Source route tables may have one leading slash; preserve that exact
+        # syntax in the rewritten table.  A double slash is never normalized.
+        canonical = route[1:] if route.startswith("/") else route
+        route_name = route_names.get(canonical)
         if route_name is None:
+            if canonical == "commerce/trx-easy/catalogue/":
+                rebuilt.append(entry)  # Public read-only catalogue is not a buyer endpoint.
+                continue
             if route.lstrip("/").startswith("commerce/trx-easy/"):
                 raise RuntimeError("Unrecognized guest commercial route: " + route)
             rebuilt.append(entry)
