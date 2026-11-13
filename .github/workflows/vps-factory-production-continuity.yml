@@ -195,12 +195,37 @@ jobs:
           else:
               print("FACTORY_AUDIT_FILESYSTEM_TOP_SCAN_COMPLETE=not_authorized")
           ' "$root"
-          current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
-          trap 'rm -f -- "$current"' EXIT
-          crontab -l > "$current" 2>/dev/null || : > "$current"
-          echo FACTORY_AUDIT_CRON_MASTER_TAGS="$(grep -Ec 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
-          echo FACTORY_AUDIT_CRON_LEECH_TAGS="$(grep -Ec 'LEECH|leech' "$current" || true)"
-          echo FACTORY_AUDIT_CRON_OTHER_LINES="$(grep -Ec -v 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
+          # Report only active lines from this verified githubops user's
+          # crontab. A failed read must never be interpreted as an empty file.
+          cron_source=""
+          if cron_source="$(LC_ALL=C crontab -l 2>&1)"; then
+            echo FACTORY_AUDIT_CRON_READ=observed
+          else
+            cron_rc=$?
+            if (( cron_rc == 1 )) && [[ "$cron_source" == "no crontab for githubops" ]]; then
+              cron_source=""
+              echo FACTORY_AUDIT_CRON_READ=none_installed
+            else
+              echo FACTORY_AUDIT_CRON_READ=unavailable_fail_closed
+              exit 1
+            fi
+          fi
+          # Never print crontab commands, paths, arguments or raw stderr.
+          printf '%s\n' "$cron_source" | awk '
+            /^[[:space:]]*(#|$)/ {next}
+            {
+              active++
+              if (/SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1/) master++
+              else other++
+              if (tolower($0) ~ /leech/) leech++
+            }
+            END {
+              printf "FACTORY_AUDIT_CRON_ACTIVE_LINES=%d\n", active+0
+              printf "FACTORY_AUDIT_CRON_MASTER_TAGS=%d\n", master+0
+              printf "FACTORY_AUDIT_CRON_LEECH_TAGS=%d\n", leech+0
+              printf "FACTORY_AUDIT_CRON_OTHER_LINES=%d\n", other+0
+            }
+          '
           ops="$root/operations"
           script="$ops/vps-only-loop.sh"
           pidfile="$ops/vps-only-loop.pid"
