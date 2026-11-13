@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import json
 from datetime import datetime, timedelta, timezone
 
 from .cyber_security import (
@@ -36,8 +37,9 @@ def _identity(source_ip: str, *, key: bytes, tenant_id: str,
     if str(ip) != source_ip:
         raise CyberModuleError("SOURCE_IP_NOT_CANONICAL")
     # Include BOTH tenant and engagement to prevent cross-customer linkability.
-    opaque = hmac.new(key, (tenant_id + "|" + engagement_id + "|" + str(ip)).encode("utf-8"),
-                      hashlib.sha256).hexdigest()[:24]
+    context = json.dumps([tenant_id, engagement_id, str(ip)],
+                         ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    opaque = hmac.new(key, context, hashlib.sha256).hexdigest()[:24]
     return opaque, ip.is_global
 
 
