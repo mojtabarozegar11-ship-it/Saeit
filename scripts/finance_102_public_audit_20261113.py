@@ -14,6 +14,27 @@ SLUGS = (
     "farnaz", "taniya", "raham", "mojtaba", "mohammad", "mostafa",
     "17", "21", "206", "108",
 )
+BRAND_LABELS = {
+    "saman": ("سمن", "SAMAN", "سمن"),
+    "zahra": ("زهرا", "ZAHRA", "زهرة"),
+    "zhila": ("ژیلا", "ZHILA", "جيلا"),
+    "marzieh": ("مرضیه", "MARZIEH", "مرضية"),
+    "maryam": ("مریم", "MARYAM", "مريم"),
+    "marjan": ("مرجان", "MARJAN", "مرجان"),
+    "faremah": ("فریماه", "FAREMAH", "فريماه"),
+    "farnaz": ("فرناز", "FARNAZ", "فرناز"),
+    "taniya": ("تانیا", "TANIYA", "تانيا"),
+    "raham": ("رهام", "RAHAM", "رهام"),
+    "mojtaba": ("مجتبی", "MOJTABA", "مجتبى"),
+    "mohammad": ("محمد", "MOHAMMAD", "محمد"),
+    "mostafa": ("مصطفی", "MOSTAFA", "مصطفى"),
+    "17": ("۱۷", "17", "١٧"),
+    "21": ("۲۱", "21", "٢١"),
+    "206": ("۲۰۶", "206", "٢٠٦"),
+    "108": ("۱۰۸", "108", "١٠٨"),
+}
+LOCALE_INDEX = {"fa": 0, "en": 1, "ar": 2}
+
 TARGETS = [
     (host, lang, slug, kind, "/" + prefix + slug + "/" + kind + "/")
     for host, lang, prefix in [
@@ -78,7 +99,7 @@ def probe(target):
                 result["content_ok"] = (
                     parsed.lang == lang
                     and "MojPlayWin / Zomorod Melal" in html
-                    and slug.lower() in html.lower()
+                    and parsed.title.startswith(BRAND_LABELS[slug][LOCALE_INDEX[lang]] + " | ")
                     and (("market" in html.lower() or "بازار" in html or "الأسواق" in html)
                          if kind == "market-signals"
                          else ("digital" in html.lower() or "دیجیتال" in html or "رقمية" in html))
