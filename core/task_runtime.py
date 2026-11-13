@@ -22,6 +22,24 @@ class TaskExecutionError(ValueError):
 class TaskRuntime:
     """Controlled AgentTask lifecycle with final policy, identity, and retry gates."""
 
+    @staticmethod
+    def _require_active_master_owner(task):
+        """Recheck singleton ownership at every master-task lifecycle boundary.
+
+        A task can outlive a handoff or acquire a second active runtime
+        after claim. Heartbeat and completion must never certify that work
+        without fresh authority; unrelated specialist tasks are unaffected.
+        """
+        if not (is_master_only_action(task.action_type)
+                or is_master_only_action(task.capability_code)):
+            return
+        try:
+            master = resolve_single_active_agent(Agent)
+        except ImproperlyConfigured as exc:
+            raise TaskExecutionError("MASTER_TASK_MULTIPLE_ACTIVE_RUNTIMES") from exc
+        if master is None or task.agent_id != master.pk or not task.agent.active:
+            raise TaskExecutionError("MASTER_TASK_NOT_OWNED_BY_ACTIVE_RUNTIME")
+
     @transaction.atomic
     def claim(self, task_id):
         task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
@@ -31,14 +49,8 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
-        if is_master_only_action(task.action_type) or is_master_only_action(task.capability_code):
-            try:
-                master = resolve_single_active_agent(Agent)
-            except ImproperlyConfigured as exc:
-                raise TaskExecutionError("MASTER_TASK_MULTIPLE_ACTIVE_RUNTIMES") from exc
-            if master is None or task.agent_id != master.pk:
-                # Fail before consuming an attempt or creating an audit row.
-                raise TaskExecutionError("MASTER_TASK_NOT_OWNED_BY_ACTIVE_RUNTIME")
+        # Fail before consuming an attempt or creating an audit row.
+        self._require_active_master_owner(task)
 
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)
@@ -78,13 +90,14 @@ class TaskRuntime:
 
     @transaction.atomic
     def heartbeat(self, task_id, execution_id=None):
-        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError(
                 "Execution identity does not match the active task execution"
             )
+        self._require_active_master_owner(task)
         task.save(update_fields=["updated_at"])
         return task
 
@@ -136,11 +149,14 @@ class TaskRuntime:
 
     @transaction.atomic
     def complete(self, task_id, output_data=None, cost=0, execution_id=None):
-        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError("Execution identity does not match the active task execution")
+        # A handoff or parallel master appearing after claim must not turn
+        # stale in-flight work into a new verified completion or cost.
+        self._require_active_master_owner(task)
         if not isinstance(output_data or {}, dict):
             raise TaskExecutionError("Task output must be an object")
         try:
