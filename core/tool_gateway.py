@@ -158,10 +158,10 @@ class ToolGateway:
             or requires_owner_approval(task.action_type, task.risk_snapshot)
         )
         if task.agent.code == BOT_CODE and sensitive:
-            payload = task.input_data
+            task_input = task.input_data
             grant_id = (
-                payload.get("owner_approval_grant_id")
-                if isinstance(payload, dict) else None
+                task_input.get("owner_approval_grant_id")
+                if isinstance(task_input, dict) else None
             )
             if type(grant_id) is not int or grant_id <= 0:
                 raise ToolGatewayError(
