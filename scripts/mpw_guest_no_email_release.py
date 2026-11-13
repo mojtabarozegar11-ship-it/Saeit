@@ -315,10 +315,14 @@ class CheckoutEmailControlParser(HTMLParser):
         self.current_form = None
         self.current_button = None
         self.malformed_forms = False
+        self.base_element_seen = False
 
     def handle_starttag(self, tag, attrs):
         attributes = {name.lower(): (value or "").strip()
                       for name, value in attrs}
+        if tag == "base":
+            # A base element can change the browser submission destination.
+            self.base_element_seen = True
         if tag == "form":
             # Duplicate browser attributes and nested forms are ambiguous.
             field_names = [name.lower() for name, _ in attrs]
@@ -330,11 +334,20 @@ class CheckoutEmailControlParser(HTMLParser):
                 "method": attributes.get("method", "").lower(),
                 "action": attributes.get("action", ""),
                 "csrf": False,
+                "csrf_fields": 0,
                 "csrf_hidden": False,
                 "csrf_strong": False,
                 "cta": False,
             }
         if self.current_form is not None:
+            # Browser submitter attributes override the containing form's
+            # destination/method. Reject them regardless of their value.
+            if tag in ("button", "input"):
+                keys = [key.lower() for key, _ in attrs if key]
+                if ("formaction" in keys or "formmethod" in keys or
+                        keys.count("name") > 1 or keys.count("type") > 1 or
+                        keys.count("value") > 1):
+                    self.malformed_forms = True
             if tag == "button":
                 if self.current_button is not None:
                     self.malformed_forms = True
@@ -343,6 +356,8 @@ class CheckoutEmailControlParser(HTMLParser):
                                and "disabled" not in attributes),
                 }
             if tag == "input":
+                if attributes.get("name", "").lower() == "csrfmiddlewaretoken":
+                    self.current_form["csrf_fields"] += 1
                 if (attributes.get("name", "").lower() == "csrfmiddlewaretoken"
                         and attributes.get("type", "hidden").lower() == "hidden"
                         and "disabled" not in attributes
@@ -354,7 +369,7 @@ class CheckoutEmailControlParser(HTMLParser):
                     self.current_form["csrf"] = True
                     self.current_form["csrf_hidden"] = True
                     self.current_form["csrf_strong"] = (
-                        32 <= len(token) <= 128 and token.isascii()
+                        len(token) in (32, 64) and token.isascii()
                         and token.isalnum()
                     )
                 if (attributes.get("type", "").lower() == "submit"
@@ -404,7 +419,8 @@ def verify_template(raw: bytes):
         abort("UNREADABLE_CHECKOUT_TEMPLATE")
     if inspector.has_email_control:
         abort("EMAIL_FIELD_REMAINS")
-    if inspector.malformed_forms or inspector.current_form is not None or raw.count(CTA) != 1:
+    if (inspector.malformed_forms or inspector.base_element_seen
+            or inspector.current_form is not None or raw.count(CTA) != 1):
         abort("FORM_CONTRACT_LOST")
     invoice_forms = [form for form in inspector.forms if form["cta"]]
     if len(invoice_forms) != 1:
@@ -417,7 +433,9 @@ def verify_template(raw: bytes):
         r"/commerce/trx-easy/start/(?:[1-9][0-9]*|{{\s*product\.(?:id|pk)\s*}})/",
         action,
     ) is not None
-    if form["method"] != "post" or not allowed_action or not form["csrf"]:
+    if (form["method"] != "post" or not allowed_action or not form["csrf"]
+            or form["csrf_fields"] > 1
+            or sum(item["method"] == "post" for item in inspector.forms) != 1):
         abort("FORM_CONTRACT_LOST")
 
 
@@ -448,15 +466,19 @@ def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
         abort("LIVE_CHECKOUT_UNREADABLE:" + str(product_id))
     if inspector.has_email_control:
         abort("LIVE_EMAIL_FIELD_PRESENT:" + str(product_id))
-    if inspector.malformed_forms or inspector.current_form is not None:
+    if (inspector.malformed_forms or inspector.base_element_seen
+            or inspector.current_form is not None):
         abort("LIVE_FORM_MALFORMED:" + str(product_id))
     exact = "/commerce/trx-easy/start/" + str(product_id) + "/"
     forms = [form for form in inspector.forms if form["action"] == exact]
     if len(forms) != 1:
         abort("LIVE_INVOICE_ACTION_MISSING:" + str(product_id))
+    if sum(item["method"] == "post" for item in inspector.forms) != 1:
+        abort("LIVE_FORM_AMBIGUOUS:" + str(product_id))
     form = forms[0]
     # {% csrf_token %} in unrendered source is NOT a rendered CSRF control.
     if (form["method"] != "post" or not form["cta"]
+            or form["csrf_fields"] != 1
             or not form["csrf_hidden"] or not form["csrf_strong"]):
         abort("LIVE_INVOICE_CONTRACT_INVALID:" + str(product_id))
     return {"product_id": product_id, "http_method": "POST",
