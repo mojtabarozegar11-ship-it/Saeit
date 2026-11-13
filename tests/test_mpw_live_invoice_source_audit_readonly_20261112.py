@@ -245,6 +245,44 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
 
+    def test_live_recorder_model_field_names_without_values(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "def record_invoice(invoice_id, user):\n"
+            "    return GuestOrderEmail.objects.get_or_create(\n"
+            "       invoice_id=invoice_id, defaults={\n"
+            "          'buyer_email': user.email,\n"
+            "          'private_note': 'CUSTOMER_PII_DO_NOT_PRINT'})\n"
+        )
+        report = AUDIT.inspect(self.root)
+        code, printed = self._remote_gate_result(report)
+        self.assertEqual(code, 21)
+        self.assertNotIn("CUSTOMER_PII_DO_NOT_PRINT", printed)
+        payload = json.loads(next(line.split("=", 1)[1]
+                                  for line in printed.splitlines()
+                                  if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        delivery = next(m for m in payload["modules"]
+                        if m["file"] == AUDIT.SOURCE_PATHS[4])
+        contract = delivery["invoice_function_contracts"]["record_invoice"]
+        self.assertIn("email", contract["user_attribute_names"])
+        self.assertEqual(contract["orm_operations"][0]["model"], "GuestOrderEmail")
+        self.assertEqual(contract["orm_operations"][0]["operation"], "get_or_create")
+        self.assertEqual(contract["orm_operations"][0]["default_field_names"],
+                         ["buyer_email", "private_note"])
+
+    def test_absent_function_is_not_reported_as_empty_ghost_contract(self):
+        report = AUDIT.inspect(self.root)
+        web = next(m for m in report["files"]
+                   if m["file"] == AUDIT.SOURCE_PATHS[0])
+        self.assertNotIn("normalize_email", web["invoice_contracts"])
+        _, printed = self._remote_gate_result(report)
+        payload = json.loads(next(line.split("=", 1)[1]
+                                  for line in printed.splitlines()
+                                  if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        by_file = next(m for m in payload["modules"]
+                       if m["file"] == AUDIT.SOURCE_PATHS[0])
+        self.assertNotIn("normalize_email", by_file["invoice_function_contracts"])
+
     def test_static_invoice_signature_reports_required_and_optional_arguments(self):
         p = self.root / AUDIT.SOURCE_PATHS[4]
         p.write_text(

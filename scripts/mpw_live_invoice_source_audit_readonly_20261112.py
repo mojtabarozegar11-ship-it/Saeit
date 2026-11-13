@@ -133,7 +133,34 @@ def safe_function_contract(fn: ast.AST) -> dict:
                          "kind": "keyword_only"})
     imports = set()
     calls = set()
+    orm_operations = []
+    user_attributes = set()
     for node in ast.walk(fn):
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id == "user"):
+            user_attributes.add(node.attr)
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("get_or_create", "create",
+                                       "update_or_create", "filter")):
+            manager = node.func.value
+            model = "UNRESOLVED"
+            if (isinstance(manager, ast.Attribute) and
+                    manager.attr == "objects" and
+                    isinstance(manager.value, ast.Name)):
+                model = manager.value.id
+            keyword_names = [item.arg for item in node.keywords if item.arg]
+            default_names = []
+            for item in node.keywords:
+                if item.arg == "defaults" and isinstance(item.value, ast.Dict):
+                    for key in item.value.keys:
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                            default_names.append(key.value)
+            orm_operations.append({
+                "model": model, "operation": node.func.attr,
+                "keyword_names": sorted(set(keyword_names))[:20],
+                "default_field_names": sorted(set(default_names))[:20],
+            })
+
         if isinstance(node, ast.ImportFrom) and not node.level and node.module:
             if node.module.startswith(("mpw_commerce.", "services.")):
                 imports.add(node.module)
@@ -152,7 +179,9 @@ def safe_function_contract(fn: ast.AST) -> dict:
             "calls_reserve_commercial_intent": "reserve_commercial_intent" in calls,
             "raises_exception": any(isinstance(node, ast.Raise)
                                     for node in ast.walk(fn)),
-            "local_import_modules": sorted(imports)[:16]}
+            "local_import_modules": sorted(imports)[:16],
+            "orm_operations": orm_operations[:12],
+            "user_attribute_names": sorted(user_attributes)[:16]}
 
 
 def module_report(relative: str, raw: bytes) -> dict:
@@ -433,7 +462,9 @@ def validate_remote_report(output: str) -> int:
         candidate_contracts = candidate_contracts if isinstance(candidate_contracts, dict) else {}
         safe_contracts = {}
         for fn_name in ("_start_order", "record_invoice", "normalize_email"):
-            contract = candidate_contracts.get(fn_name, {})
+            if fn_name not in candidate_contracts:
+                continue
+            contract = candidate_contracts[fn_name]
             if not isinstance(contract, dict):
                 continue
             args = contract.get("parameters", [])
@@ -449,7 +480,38 @@ def validate_remote_report(output: str) -> int:
             flag_names = ("has_varargs", "has_varkw", "calls_normalize_email",
                           "calls_create", "calls_get_or_create", "calls_atomic",
                           "calls_reserve_commercial_intent", "raises_exception")
+            orm_ops = contract.get("orm_operations", [])
+            safe_orm_ops = []
+            for op in orm_ops[:12] if isinstance(orm_ops, list) else []:
+                if not isinstance(op, dict) or op.get("operation") not in (
+                        "create", "filter", "get_or_create", "update_or_create"):
+                    continue
+                model = op.get("model")
+                if not isinstance(model, str) or re.fullmatch(
+                        r"[A-Za-z_][A-Za-z0-9_]{0,79}", model) is None:
+                    continue
+                safe_orm_ops.append({
+                    "model": model, "operation": op["operation"],
+                    "keyword_names": sorted({
+                        x for x in (op.get("keyword_names") or [])[:20]
+                        if isinstance(x, str) and re.fullmatch(
+                            r"[A-Za-z_][A-Za-z0-9_]{0,79}", x)
+                    }),
+                    "default_field_names": sorted({
+                        x for x in (op.get("default_field_names") or [])[:20]
+                        if isinstance(x, str) and re.fullmatch(
+                            r"[A-Za-z_][A-Za-z0-9_]{0,79}", x)
+                    }),
+                })
+            attributes = contract.get("user_attribute_names", [])
+            safe_attributes = sorted({
+                x for x in (attributes or [])[:16]
+                if isinstance(x, str) and re.fullmatch(
+                    r"[A-Za-z_][A-Za-z0-9_]{0,79}", x)
+            })
             safe_contracts[fn_name] = {
+                "orm_operations": safe_orm_ops,
+                "user_attribute_names": safe_attributes,
                 "parameters": safe_args,
                 "flags": {key: contract.get(key) is True for key in flag_names},
                 "local_import_modules": sorted({
