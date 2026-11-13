@@ -162,3 +162,17 @@ def test_disk_space_guard_allows_sufficient_space(sandbox, monkeypatch):
     manifest = mod.preflight(stage)
     assert len(manifest['files']) == 3
     assert not mod.BACKUP_ROOT.exists()
+
+
+def test_carousel_workflow_has_no_production_job():
+    workflow = (SOURCE.parents[1] / '.github/workflows/zomorod-onepass-full-20261113.yml').read_text()
+    assert '\n  pull_request:\n' in workflow
+    assert '\n  push:\n' not in workflow
+    assert '\n  workflow_dispatch:\n' not in workflow
+    assert '\n  publish:\n' not in workflow
+    assert '\n  public-browser:\n' not in workflow
+    assert '\n  rollback-after-browser-failure:\n' not in workflow
+    assert workflow.count('\n  validate-and-visual:\n') == 1
+    assert "      - 'scripts/zomorod_fields_guard_20261113.py'" in workflow
+    assert "      - 'tests/test_zomorod_fields_release_guard.py'" in workflow
+    assert '  contents: read' in workflow
