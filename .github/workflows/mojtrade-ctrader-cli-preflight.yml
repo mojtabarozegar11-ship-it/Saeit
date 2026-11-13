@@ -34,4 +34,4 @@ jobs:
               echo "$tool=absent"
             fi
           done
-          echo "No credentials, account login, installation, network call, cBot run, backtest, deployment or order is performed."
+          for tool in brew apt-get sudo curl; do\n            if command -v "$tool" >/dev/null 2>&1; then echo "$tool=present"; else echo "$tool=absent"; fi\n          done\n          echo "No credentials, account login, installation, network call, cBot run, backtest, deployment or order is performed."
