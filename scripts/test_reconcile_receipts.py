@@ -63,6 +63,18 @@ class TestSettlement(unittest.TestCase):
     def test_matching_currency_case_insensitive(self):
         self.data["settlements"][0]["currency"] = "usd"
         self.assertEqual(reconcile(self.data)["net_settled_unverified"], "25.00")
+    def test_pending_and_failed_monetary_claims_are_validated(self):
+        for kind, status in (("settlements", "pending"), ("refunds", "failed")):
+            with self.subTest(kind=kind):
+                self.data[kind][0]["status"] = status
+                self.data[kind][0]["amount"] = "NaN"
+                self.assertRaises(ValueError, reconcile, self.data)
+                self.data[kind][0]["amount"] = "5.00" if kind == "refunds" else "30.00"
+                self.data[kind][0]["status"] = "completed" if kind == "refunds" else "settled"
+    def test_missing_pending_settlement_amount_rejected(self):
+        self.data["settlements"][0]["status"] = "pending"
+        self.data["settlements"][0].pop("amount")
+        self.assertRaises(ValueError, reconcile, self.data)
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
