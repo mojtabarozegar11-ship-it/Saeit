@@ -2,11 +2,13 @@ from decimal import Decimal, InvalidOperation
 import uuid
 
 from django.db import transaction
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .canonical_bot_identity import is_master_only_action, resolve_single_active_agent
+from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -29,6 +31,14 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+        if is_master_only_action(task.action_type) or is_master_only_action(task.capability_code):
+            try:
+                master = resolve_single_active_agent(Agent)
+            except ImproperlyConfigured as exc:
+                raise TaskExecutionError("MASTER_TASK_MULTIPLE_ACTIVE_RUNTIMES") from exc
+            if master is None or task.agent_id != master.pk:
+                # Fail before consuming an attempt or creating an audit row.
+                raise TaskExecutionError("MASTER_TASK_NOT_OWNED_BY_ACTIVE_RUNTIME")
 
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)

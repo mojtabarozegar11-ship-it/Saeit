@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .agent_registry import AgentRegistry, RISK_ORDER
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .canonical_bot_identity import is_master_only_action, resolve_single_active_agent
+from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
 
@@ -80,6 +83,14 @@ class ToolGateway:
             raise ToolGatewayError("Task capability has been revoked or changed")
         if normalize_action(task.action_type) not in spec.allowed_actions:
             raise ToolGatewayError("Tool is not authorized for this task action")
+        if is_master_only_action(spec.code) or is_master_only_action(task.action_type):
+            try:
+                master = resolve_single_active_agent(Agent)
+            except ImproperlyConfigured as exc:
+                raise ToolGatewayError("MASTER_GATEWAY_MULTIPLE_ACTIVE_RUNTIMES") from exc
+            if master is None or task.agent_id != master.pk:
+                # A direct gateway invocation must not bypass worker identity.
+                raise ToolGatewayError("MASTER_GATEWAY_NONCANONICAL_AGENT_BLOCKED")
         snapshot_risk = normalize_risk(task.risk_snapshot)
         if registry.effective_risk(capability, snapshot_risk) != snapshot_risk:
             raise ToolGatewayError("Task risk policy changed after planning")

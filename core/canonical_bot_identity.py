@@ -25,6 +25,13 @@ RUNTIME_CODES = (CANONICAL_BOT_CODE, *LEGACY_RUNTIME_ALIASES)
 AUDIT_CODES = (CANONICAL_BOT_CODE, *KNOWN_NONCANONICAL_CODES)
 
 
+def is_master_only_action(action):
+    """Economic execution belongs exclusively to the one active master row."""
+    return isinstance(action, str) and (
+        action.startswith("income_") or action == "master_self_improvement"
+    )
+
+
 def resolve_single_active_agent(agent_model):
     """Return the sole active canonical/legacy runtime row, or fail closed."""
     rows = list(
