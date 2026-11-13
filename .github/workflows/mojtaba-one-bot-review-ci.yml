@@ -91,6 +91,8 @@ jobs:
             tests/test_mojtrade_csharp_build_contracts.py \
             tests/test_approval_security.py \
             tests/test_runtime.py \
+            tests/test_agent_registry.py \
+            tests/test_online_income_agents.py \
             core/tests/test_approval_lifecycle.py \
             core/tests/test_approval_audit.py \
             core/tests/test_approval_api.py \
