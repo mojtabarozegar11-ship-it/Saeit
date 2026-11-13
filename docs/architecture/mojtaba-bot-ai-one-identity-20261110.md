@@ -28,6 +28,26 @@ lanes**, not separately marketed bots.
    capability mappings and `full_consolidation_attested=false` to avoid false
    100% claims.
 
+## Canonical worker failure / retry contract (review branch)
+
+Every failed or stale **running** `mojtaba-bot-ai` task is placed in
+`blocked`, even if the normal retry budget is exhausted. A gateway may have
+made a real-world change before returning an exception or losing its
+acknowledgement. Therefore:
+
+- Preserve the original `execution_id` and `attempt_count` for forensics.
+- Mark `requires_review=true` and `automatic_replay_allowed=false`.
+- Do not treat a blocked task as failed/no-effect or completed/revenue.
+- Reconcile external receipts, payment/order IDs and the original effect before
+  a separately authorized and idempotent retry or replacement.
+- Retain the previous retry policy of noncanonical agents while their source
+  processes are inventoried; this does not approve their continued execution.
+
+Unit tests and the isolated PR runner prove the source-level rule only. It is
+**not deployed** and requires MariaDB locking, VPS scheduler, and real delivery
+verification before any production cutover. No automatic deactivation,
+database deletion, paid action or external order is authorized.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
