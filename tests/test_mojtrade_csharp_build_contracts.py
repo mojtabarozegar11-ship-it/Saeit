@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECTS = {
     "MojTradeOmegaXDemoBot": "MojTradeOmegaXDemoBot.cs",
     "MojTradeDemoHistoryAuditBot": "MojTradeDemoHistoryAuditBot.cs",
+    "MojTradeGoldSnapshotAuditBot": "MojTradeGoldSnapshotAuditBot.cs",
 }
 
 
@@ -33,7 +34,8 @@ def test_both_native_ctrader_cbot_projects_are_pinned_to_official_api():
 def test_both_ctrader_bots_are_demo_only_with_no_external_access():
     for source in PROJECTS.values():
         code = (ROOT / "trading" / source).read_text(encoding="utf-8")
-        assert "if (Account.IsLive)" in code
+        assert ("if (Account.IsLive)" in code
+                or "Require(!Account.IsLive" in code)
         assert "AccessRights = AccessRights.None" in code
     history_code = (ROOT / "trading" / PROJECTS["MojTradeDemoHistoryAuditBot"]).read_text()
     for forbidden in (
@@ -47,7 +49,8 @@ def test_github_csharp_compilation_is_not_removed_or_silently_skipped():
     workflow = (ROOT / ".github/workflows/mojtaba-one-bot-review-ci.yml").read_text()
     assert "ctrader-csharp-compile:" in workflow
     assert "actions/setup-dotnet@v4" in workflow
-    assert workflow.count("dotnet build trading/ctrader-build/") == 2
+    assert workflow.count("dotnet build trading/ctrader-build/") == len(PROJECTS)
+    assert "MojTradeGoldSnapshotAuditBot/MojTradeGoldSnapshotAuditBot.csproj" in workflow
     assert "-p:AlgoPublish=false" in workflow
     assert "-p:AlgoBuild=false" in workflow
     assert "continue-on-error: true" not in workflow
@@ -138,3 +141,26 @@ def test_portfolio_risk_checks_precede_any_demo_execution_attempt():
     assert order.index("PortfolioRiskAllows(tradeType, volume, stopPips)") < order.index("ExecuteMarketOrder(")
     assert "Enable Demo Trading\", DefaultValue = false" in source
     assert "AccessRights = AccessRights.None" in source
+
+
+
+def test_new_gold_snapshot_cbot_is_one_shot_read_only_not_a_second_trader():
+    code = (ROOT / "trading/MojTradeGoldSnapshotAuditBot.cs").read_text(
+        encoding="utf-8"
+    )
+    assert "MOJTABA_GOLD_H1_CAPTURE_V1" in code
+    assert "Require(!Account.IsLive" in code
+    assert "TimeFrame.Hour" in code
+    assert "MarketData.GetBars(" in code
+    assert "finally" in code and "Stop();" in code
+    assert "SHA256.Create()" in code
+    assert 'Account.Asset.Name == "USD"' in code
+    assert "MaxHistoryDeals = 5000" in code
+    assert "Positions.Count" in code and "PendingOrders.Count" in code
+    assert "AccessRights = AccessRights.None" in code
+    for forbidden in (
+        "ExecuteMarketOrder(", "ExecuteMarketOrderAsync(", "PlaceLimitOrder(",
+        "PlaceStopOrder(", "ClosePosition(", "ModifyPosition(",
+        "CancelPendingOrder(", "HttpClient(", "File.WriteAll",
+    ):
+        assert forbidden not in code
