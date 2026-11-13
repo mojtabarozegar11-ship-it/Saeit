@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    # Register schema without enabling payment or recovery endpoints.
+    "mpw_commerce.apps.MpwCommerceConfig",
     "farnaz.apps.FarnazConfig",
     "command_center",
     # Accounting ledger is part of the production management desk.
@@ -130,3 +132,41 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+
+# Email recovery remains disabled until owner-approved activation.
+MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
+
+
+def _mpw_explicit_public_product_ids(raw):
+    """Strict CSV of owner-reviewed DB product IDs; malformed means no sales.
+
+    No default product IDs are implied by the source or an empty environment.
+    The only numeric limit is the database's signed BIGINT primary-key range.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return ()
+    tokens = [piece.strip() for piece in raw.split(",")]
+    if any(not piece or not piece.isascii() or not piece.isdecimal()
+           or len(piece) > 19 for piece in tokens):
+        return ()
+    ids = [int(piece) for piece in tokens]
+    if any(not 0 < product_id <= 2**63 - 1 for product_id in ids):
+        return ()
+    return tuple(sorted(set(ids)))
+
+
+# Native TRX guest sales require explicit environment configuration AND real
+# per-artifact rights/quality evidence in the DB. All commercial flags default
+# to disabled; providing them does not establish legal ownership or a canary.
+MPW_COMMERCE_RELEASE_READY = env.bool("MPW_COMMERCE_RELEASE_READY", default=False)
+MPW_COMMERCE_DOWNLOADS_ENABLED = env.bool("MPW_COMMERCE_DOWNLOADS_ENABLED", default=False)
+MPW_COMMERCE_PRIVATE_ASSET_ROOT = env("MPW_COMMERCE_PRIVATE_ASSET_ROOT", default="")
+MPW_WALLETLESS_TRX_PUBLIC_ENABLED = env.bool("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", default=False)
+MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED = env.bool(
+    "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED", default=False)
+MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED = env.bool(
+    "MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED", default=False)
+MPW_TRX_PUBLIC_PRODUCT_IDS = _mpw_explicit_public_product_ids(
+    env("MPW_TRX_PUBLIC_PRODUCT_IDS", default=""))

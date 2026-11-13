@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import time
 
@@ -90,6 +91,7 @@ def _new_user(request):
     """Resolve both simultaneous first orders to one unique password-disabled user."""
     from django.contrib.auth import get_user_model
     from django.db import IntegrityError, transaction
+
     _rate_limit(request)
     Model = get_user_model()
     field = Model.USERNAME_FIELD
@@ -152,6 +154,25 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False):
+    if create:
+        # Never collect buyer email. The guest principal owns the order and a
+        # signed invoice-specific receipt key permits recovery after cookie loss.
+        from core.models import PaymentIntent
+        from django.db import transaction
+        from services.mpw_walletless_commercial_intent import PROVIDER
+        with transaction.atomic():
+            user, token = _identity(request, create=True)
+            request.user = user
+            response = view(request, *args, **kwargs)
+            match = (re.fullmatch(r"/commerce/trx-easy/invoice/([1-9][0-9]*)/",
+                                  response.get("Location", ""))
+                     if response.status_code in (302, 303) else None)
+            if match is None or not PaymentIntent.objects.filter(
+                pk=int(match.group(1)), order__customer_id=user.pk,
+                provider=PROVIDER,
+            ).exists():
+                raise Http404("Checkout did not create an owned invoice")
+        return _install_cookie(response, token)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -178,7 +199,12 @@ def _checkout_page(request, product_id, pages_namespace):
     from django.shortcuts import render
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
-    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from mpw_commerce.downloads import _private_file
+    from types import SimpleNamespace
+    from services.mpw_trx_commercial_context import (
+        rights_cleared_for_sale, public_product_ids,
+        private_artifact_sha_matches_approved,
+    )
     from services.mpw_trx_commercial_web import _configured_receiver, _nocache
     from services.mpw_walletless_commercial_intent import _commercial_db
 
@@ -192,12 +218,22 @@ def _checkout_page(request, product_id, pages_namespace):
         if isinstance(exc, PaymentHold):
             raise Http404("TRX checkout is temporarily unavailable") from exc
         raise
-    if product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ()):
+    if product_id not in public_product_ids(settings):
         raise Http404
     product = Product.objects.select_related("knowledge_article").filter(
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
+    # A sellable-looking checkout must not appear when its private stock is absent.
+    # Keep the guest GET as strict as the live catalogue and paid-order path.
+    try:
+        asset = _private_file(SimpleNamespace(product=product))
+        if asset.is_symlink() or not asset.is_file() or asset.stat().st_size <= 0:
+            raise Http404("Digital file not available")
+    except (OSError, ValueError) as exc:
+        raise Http404("Digital file not available") from exc
+    if not private_artifact_sha_matches_approved(product, asset):
+        raise Http404("Approved digital product version is unavailable")
     _record_funnel_event_best_effort(request, "begin_checkout", product)
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
@@ -239,9 +275,11 @@ def patch_public(namespace):
                 '<title>Purchase recovery | MojPlayWin</title></head><body>'
                 '<main><h1>TRX purchase recovery</h1>'
                 '<p>No active purchase session was found in this browser. '
-                'Your orders are private and require the original browser session.</p>'
+                'Use the private receipt key saved from your invoice to recover '
+                'your verified download. No email is needed.</p>'
+                '<p><a href="/commerce/trx-easy/receipt/">Recover using receipt key</a></p>'
                 '<p>If you already paid, do not pay again. Contact purchase support '
-                'with your invoice reference and transaction hash. '
+                'if you lost your receipt key; provide an invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
@@ -259,6 +297,81 @@ def patch_public(namespace):
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
 
+    # The live root URLconf includes services.mpw_trx_public_pages for the
+    # commerce/trx-easy/ prefix. Register recovery routes in that public
+    # registry as relative paths; patch_commercial is a different include.
+    from services.mpw_trx_email_recovery import (
+        recovery_request, recovery_verify, recovery_orders, recovery_download,
+    )
+    from services.mpw_trx_receipt_recovery import receipt_recovery
+    recovery_extra = (
+        ("receipt/", receipt_recovery),
+        ("recover/", recovery_request),
+        ("recover/verify/", recovery_verify),
+        ("recover/orders/", recovery_orders),
+        ("recover/download/<int:invoice_id>/", recovery_download),
+    )
+    from collections.abc import Mapping
+
+    def _register_recovery_patterns(patterns):
+        """Register relative recovery routes in the live public URL registry."""
+        if isinstance(patterns, Mapping):
+            items = list(patterns.items())
+            existing = {str(route) for route, _ in items}
+            if any(str(route) in existing for route, _ in recovery_extra):
+                raise RuntimeError("Recovery URL collision")
+            updated = dict(items)
+            updated.update(dict(recovery_extra))
+            return updated
+        if isinstance(patterns, (tuple, list)):
+            items = list(patterns)
+            existing = {str(route) for route, _ in items}
+            if any(str(route) in existing for route, _ in recovery_extra):
+                raise RuntimeError("Recovery URL collision")
+            items.extend(recovery_extra)
+            return type(patterns)(items)
+        return None
+
+    registered = False
+    for key, patterns in list(namespace.items()):
+        if isinstance(patterns, Mapping):
+            items = list(patterns.items())
+        elif isinstance(patterns, (tuple, list)):
+            items = list(patterns)
+        else:
+            continue
+        route_text = " ".join(str(route) for route, _ in items)
+        view_text = " ".join(
+            str(getattr(view, "__name__", "")) for _, view in items
+        )
+        # The live module has used both a prefixed route registry and a
+        # compact product_checkout/purchases registry. Accept either shape.
+        looks_like_public_registry = (
+            "trx-easy" in route_text or "start/" in route_text or
+            "product_checkout" in view_text or "purchases" in view_text
+        )
+        if not looks_like_public_registry:
+            continue
+        updated = _register_recovery_patterns(patterns)
+        if updated is not None:
+            namespace[key] = updated
+            registered = True
+
+    # Older live revisions expose the registry under a neutral name and do
+    # not contain a recognizable route literal. Use the conventional names
+    # only as a bounded fallback; never invent a new global URLconf.
+    if not registered:
+        for key in ("urlpatterns", "URLPATTERNS", "URL_PATTERNS",
+                    "PUBLIC_URLPATTERNS"):
+            patterns = namespace.get(key)
+            if isinstance(patterns, (Mapping, tuple, list)):
+                updated = _register_recovery_patterns(patterns)
+                if updated is not None:
+                    namespace[key] = updated
+                    registered = True
+                    break
+    if not registered:
+        raise RuntimeError("Recovery URL registry not found")
 
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
@@ -301,16 +414,48 @@ def patch_commercial(namespace):
                                else method_decorator(wrapped))
         namespace[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
+    from collections.abc import Mapping
+    if isinstance(patterns, Mapping):
+        pattern_type = dict
+        pattern_items = list(patterns.items())
+    elif isinstance(patterns, (tuple, list)):
+        pattern_type = type(patterns)
+        pattern_items = list(patterns)
+    else:
+        pattern_type = None
+        pattern_items = []
+    if pattern_type is not None:
         rebuilt = []
         route_names = (
             ("/start/", "start_order"), ("/invoice/", "show_invoice"),
             ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
             ("/download/", "download_paid"),
         )
-        for route, view in patterns:
+        for route, view in pattern_items:
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+        # Register recovery routes on every import.  The views remain gated by
+        # MPW_GUEST_RECOVERY_EMAIL_APPROVED, so disabled mode is safe; unconditional
+        # registration prevents a Passenger import race when the feature flag is
+        # enabled after the commerce module has already been loaded.
+        from services.mpw_trx_email_recovery import (
+            recovery_request, recovery_verify, recovery_orders, recovery_download,
+        )
+        from services.mpw_trx_receipt_recovery import receipt_recovery
+        extra = (
+            ("commerce/trx-easy/receipt/", receipt_recovery),
+            ("commerce/trx-easy/recover/", recovery_request),
+            ("commerce/trx-easy/recover/verify/", recovery_verify),
+            ("commerce/trx-easy/recover/orders/", recovery_orders),
+            ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+        )
+        existing = {route for route, _ in rebuilt}
+        if any(route in existing for route, _ in extra):
+            raise RuntimeError("Recovery URL collision")
+        rebuilt.extend(extra)
+        namespace["COMMERCIAL_URLPATTERNS"] = (
+            {route: view for route, view in rebuilt} if pattern_type is dict
+            else pattern_type(rebuilt)
+        )
     namespace["_mpw_guest_checkout_installed"] = True

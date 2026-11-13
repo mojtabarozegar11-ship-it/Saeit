@@ -1,6 +1,19 @@
 name: MPW recovery additive release (guarded)
 
 on:
+  pull_request:
+    branches: [main, integration/mpw-recovery-main-20261107]
+    paths:
+      - .github/workflows/mpw-recovery-additive-release-20261105.yml
+      - scripts/mpw_recovery_guarded_release_20261105.py
+      - tests/test_mpw_recovery_guarded_release_20261105.py
+      - services/mpw_trx_email_recovery.py
+      - services/mpw_trx_guest_commerce.py
+      - services/mpw_trx_receipt_recovery.py
+      - core/guest_recovery_models.py
+      - core/migrations/0040_commercefunnelevent.py
+      - core/migrations/0049_mpw_guest_email_recovery.py
+      - core/management/commands/mpw_purge_recovery_ephemeral.py
   workflow_dispatch:
     inputs:
       operation:
@@ -21,8 +34,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  integrated-source-contract:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'pull_request' && contains(fromJSON('["main","integration/mpw-recovery-main-20261107"]'), github.base_ref)
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate exact integrated recovery source, no secrets or production access
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py services/mpw_trx_receipt_recovery.py core/guest_recovery_models.py core/migrations/0040_commercefunnelevent.py core/migrations/0049_mpw_guest_email_recovery.py
+          python3 - <<'PY'
+          import hashlib, importlib.util, pathlib
+          release_path = pathlib.Path('scripts/mpw_recovery_guarded_release_20261105.py')
+          spec = importlib.util.spec_from_file_location('mpw_recovery_release_contract', release_path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          for key, expected in module.SOURCE_DIGESTS.items():
+              source = pathlib.Path(module.FILES[key]).read_bytes()
+              assert hashlib.sha256(source).hexdigest() == expected, 'UNREVIEWED_SOURCE:' + key
+          recovery_source = pathlib.Path('services/mpw_trx_email_recovery.py').read_text('utf-8')
+          assert 'def _recovery_enabled():' in recovery_source
+          assert 'MPW_GUEST_RECOVERY_EMAIL_APPROVED' in recovery_source
+          assert 'MPW_GUEST_RECOVERY_ENABLED' in recovery_source
+          print('MPW_INTEGRATED_RECOVERY_PINS=6/6')
+          PY
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_recovery_guarded_release_20261105.py' -v
+          echo MPW_INTEGRATED_RECOVERY_CONTRACT=PASS
   guarded-release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/integration/mpw-recovery-main-20261107'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -37,10 +78,13 @@ jobs:
             scripts/mpw_recovery_guarded_release_20261105.py \
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
+            services/mpw_trx_receipt_recovery.py \
             core/guest_recovery_models.py \
             core/migrations/0049_mpw_guest_email_recovery.py
           grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
           grep -q 'EMAIL_ENABLED=FALSE' scripts/mpw_recovery_guarded_release_20261105.py
+          grep -q 'def _recovery_enabled' services/mpw_trx_email_recovery.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_recovery_guarded_release_20261105.py' -v
           echo MPW_ADDITIVE_RELEASE_SOURCE_VALID=PASS
 
       - name: Establish pinned SSH relay to cPanel
@@ -99,7 +143,9 @@ jobs:
             scripts/mpw_recovery_guarded_release_20261105.py \
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
+            services/mpw_trx_receipt_recovery.py \
             core/guest_recovery_models.py \
+            core/migrations/0040_commercefunnelevent.py \
             core/migrations/0049_mpw_guest_email_recovery.py \
             core/management/commands/mpw_purge_recovery_ephemeral.py \
           | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"

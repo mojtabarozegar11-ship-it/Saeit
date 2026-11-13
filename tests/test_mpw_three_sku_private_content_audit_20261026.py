@@ -3,7 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
-from PyPDF2 import PdfWriter
+try:
+    from PyPDF2 import PdfWriter
+except ImportError:
+    from pypdf import PdfWriter
 
 spec=importlib.util.spec_from_file_location(
     "mpw_private_audit",
@@ -13,6 +16,38 @@ audit=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)
 
 class PrivateContentAuditTests(unittest.TestCase):
+    def test_encrypted_pdf_reports_lock_without_decrypting_or_exposing_pages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "locked.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=612, height=792)
+            writer.encrypt("owner-kept-password")
+            with path.open("wb") as stream:
+                writer.write(stream)
+            result = audit.audit_pdf(path)
+            self.assertEqual(result["blocking_defects"], ["PDF_ENCRYPTION_PRESENT"])
+            self.assertTrue(result["encrypted"])
+            self.assertIsNone(result["page_count"])
+            self.assertFalse(result["checks"]["no_pdf_encryption"])
+            self.assertNotIn("extracted_text", result)
+
+    def test_password_locked_zip_reports_lock_without_reading_members(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "locked.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("index.html", "<title>Safe demo</title>")
+            data = bytearray(path.read_bytes())
+            for signature, offset in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+                index = data.index(signature)
+                flags = int.from_bytes(data[index + offset:index + offset + 2], "little")
+                data[index + offset:index + offset + 2] = (flags | 1).to_bytes(2, "little")
+            path.write_bytes(data)
+            result = audit.audit_zip(path)
+            self.assertEqual(result["blocking_defects"], ["ZIP_PASSWORD_PROTECTED_MEMBER"])
+            self.assertEqual(result["password_protected_member_count"], 1)
+            self.assertFalse(result["checks"]["no_password_protected_members"])
+            self.assertNotIn("html_pages", result)
+
     def test_pdf_audit_reports_metrics_without_emitting_text_or_certifying(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"minimal.pdf"
@@ -124,6 +159,30 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertFalse(result["checks"]["local_asset_links_resolve"])
             self.assertEqual(len(result["missing_local_refs"]),4)
             self.assertNotIn("html_content",result)
+
+    def test_nested_zip_html_parent_asset_reference_resolves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "nested-kit.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("pages/index.html",
+                    "<html><head><title>Interior Kit</title>"
+                    "<link rel='stylesheet' href='../assets/site.css'></head>"
+                    "<body><img src='../assets/hero.png' alt='Room'></body></html>")
+                archive.writestr("assets/site.css", "body {color:black}")
+                archive.writestr("assets/hero.png", b"image")
+            result = audit.audit_zip(path)
+            self.assertTrue(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(result["missing_local_refs"], [])
+
+    def test_zip_reference_escaping_archive_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "escaped-kit.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("pages/index.html",
+                    "<title>Kit</title><script src='../../secrets.js'></script>")
+            result = audit.audit_zip(path)
+            self.assertFalse(result["checks"]["local_asset_links_resolve"])
+            self.assertIn("../../secrets.js", result["missing_local_refs"])
 
     def test_srcset_mixed_data_and_local_candidates_are_checked_individually(self):
         self.assertEqual(audit.srcset_urls("data:image/png;base64,AAAA 1x, missing.png 2x"),

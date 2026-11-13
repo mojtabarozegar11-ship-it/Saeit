@@ -49,13 +49,31 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # Check only previously configured VPS SSH ports; reject any
+          # candidate unless the known RSA host fingerprint matches.
+          vps_port=""
+          for port in 22 423 1396; do
+            if timeout 8s ssh-keyscan -T 6 -p "$port" -t rsa 178.239.147.150 > "$d/vps.candidate" 2>/dev/null; then
+              fingerprint="$(ssh-keygen -lf "$d/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if [ "$fingerprint" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]; then
+                echo "::error::VPS_SSH_HOST_KEY_MISMATCH_ON_PORT_${port}"
+                exit 78
+              fi
+              vps_port="$port"
+              mv "$d/vps.candidate" "$d/vps.known"
+              break
+            fi
+          done
+          if [ -z "$vps_port" ]; then
+            echo "::error::VPS_SSH_UNREACHABLE_ON_PINNED_PORTS_22_423_1396"
+            exit 79
+          fi
+          echo "VPS_SSH_PINNED_PORT=${vps_port}"
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
             User githubops
-            Port 22
+            Port $vps_port
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
@@ -292,9 +310,12 @@ jobs:
           import django
           django.setup()
           from django.conf import settings
+          from django.db import connection
           from core.models import Product
           from mpw_commerce.buyer_orders import _eligible
           from mpw_commerce.downloads import _private_file
+          from services.mpw_walletless_commercial_intent import _commercial_db
+          from services.mpw_trx_commercial_web import _configured_receiver
           from types import SimpleNamespace
           try:
             from services.mpw_trx_commercial_context import rights_cleared_for_sale
@@ -305,18 +326,35 @@ jobs:
             release_authorized=public_release_authorized(settings) is True
           except (ImportError,AttributeError):
             release_authorized=False
+          try:
+            _commercial_db(settings,connection)
+            commercial_db_ready=True
+          except Exception:
+            commercial_db_ready=False
+          try:
+            from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+            tron_address_to_hex(_configured_receiver())
+            merchant_receiver_ready=True
+          except Exception:
+            merchant_receiver_ready=False
           print("MPW_PUBLIC_TRX_FLAGS="+json.dumps({
             "public_enabled":getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True,
             "release_authorized":release_authorized,
             "merchant_canary":getattr(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False) is True,
+            "commercial_db_ready":commercial_db_ready,
+            "merchant_receiver_ready":merchant_receiver_ready,
             "rights_gate_installed":rights_cleared_for_sale is not None,
           },sort_keys=True))
           sale_ready=0
           blocked=[]
+          configured_public_ids=getattr(settings,"MPW_TRX_PUBLIC_PRODUCT_IDS",())
+          if type(configured_public_ids) not in (tuple,list,set,frozenset):
+            configured_public_ids=()
           for sku in (72,225,879):
+            public_allowed = sku in configured_public_ids
             product=Product.objects.filter(pk=sku).first()
             if product is None:
-              record={"id":sku,"exists":False,"is_sellable":False}
+              record={"id":sku,"exists":False,"public_product_allowed":public_allowed,"is_sellable":False}
               blocked.append(sku)
             else:
               metadata=product.metadata
@@ -327,6 +365,9 @@ jobs:
                                     len(fields[k].strip())>0]
               stored_rights=fields.get("rights_cleared") is True
               rights=(rights_cleared_for_sale(product) is True) if rights_cleared_for_sale else False
+              def sha256_hex(value):
+                return (type(value) is str and len(value)==64 and
+                    all(character in "0123456789abcdef" for character in value.lower()))
               artifact_sha=None
               try:
                 asset=_private_file(SimpleNamespace(product=product))
@@ -340,18 +381,48 @@ jobs:
               except Exception:
                 file_ready=False
               eligible=bool(_eligible(product))
+              commerce=fields.get("mpw_commerce") if type(fields.get("mpw_commerce")) is dict else {}
+              private_name=commerce.get("private_file")
+              private_is_relative=(type(private_name) is str and bool(private_name.strip())
+                  and not Path(private_name).is_absolute() and ".." not in Path(private_name).parts)
+              article=(getattr(product,"knowledge_article",None)
+                  if getattr(product,"knowledge_article_id",None) else None)
+              internal_gates={
+                  "product_type_accepted":getattr(product,"product_type",None) in ("digital","digital_book"),
+                  "owner_present":bool(getattr(product,"owner_id",None)),
+                  "article_published":getattr(article,"published",False) is True,
+                  "currency_usd":getattr(product,"currency",None)=="USD",
+                  "price_accepted":bool(product.price is not None and 0 < product.price <= 1000),
+                  "commerce_enabled":commerce.get("enabled") is True,
+                  "fulfillment_digital":commerce.get("fulfillment")=="digital",
+                  "private_path_relative":private_is_relative,
+                  "factory_permission":fields.get("factory_publication_permission") is True,
+                  "asset_verified":fields.get("asset_verified") is True,
+                  "quality_approved":fields.get("quality_approved") is True,
+                  "license_verified":fields.get("license_verified") is True,
+              }
+              canonical_sha_ok=bool(artifact_sha and sha256_hex(fields.get("sha256"))
+                  and fields["sha256"].lower()==artifact_sha)
+              rights_asset_sha_ok=bool(artifact_sha and
+                  sha256_hex(fields.get("rights_asset_sha256")) and
+                  fields["rights_asset_sha256"].lower()==artifact_sha)
+              rights_document_sha_ok=sha256_hex(fields.get("rights_document_sha256"))
               is_sellable=(eligible and rights and file_ready
                   and getattr(settings,"MPW_WALLETLESS_TRX_PUBLIC_ENABLED",False) is True
-                  and release_authorized)
+                  and public_allowed and release_authorized
+                  and commercial_db_ready and merchant_receiver_ready
+                  and canonical_sha_ok and rights_asset_sha_ok and rights_document_sha_ok
+                  and fields.get("publication_approved") is True)
               record={"id":sku,"exists":True,"active":product.active is True,
-                 "eligible":eligible,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
+                 "eligible":eligible,"public_product_allowed":public_allowed,"stored_rights":stored_rights,"runtime_rights_gate_present":rights_cleared_for_sale is not None,"explicit_rights":rights,"private_file_ready":file_ready,
+                 "product_internal_gates":internal_gates,
                  "is_sellable":is_sellable,
                  "rights_metadata_keys":rights_keys[:40],
                  "rights_reference_keys":rights_reference_keys[:40],
                  "asset_sha256_prefix":artifact_sha[:16] if artifact_sha else None,
-                 "rights_hash_reference_matches_asset":bool(artifact_sha and
-                    any(fields.get(key)==artifact_sha for key in
-                    ("rights_asset_sha256","rights_artifact_sha256","rights_file_sha256","approved_artifact_sha256"))),
+                 "canonical_catalog_sha_matches_asset":canonical_sha_ok,
+                 "rights_hash_reference_matches_asset":rights_asset_sha_ok,
+                 "rights_document_hash_well_formed":rights_document_sha_ok,
                  "existing_catalog_hash_matches_asset":[key for key in
                     ("asset_sha256","final_pdf_sha256","pdf_sha256","sha256")
                     if artifact_sha and type(fields.get(key)) is str
