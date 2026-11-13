@@ -36,22 +36,26 @@ def stale_task(db):
 
 
 @pytest.mark.django_db
-def test_heartbeat_requires_current_execution_identity(stale_task):
+def test_legacy_heartbeat_cannot_keep_old_executor_alive(stale_task):
     runtime = TaskRuntime()
-    runtime.heartbeat(stale_task.pk, "stale-execution")
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_HEARTBEAT_FORBIDDEN"):
+        runtime.heartbeat(stale_task.pk, "stale-execution")
     stale_task.refresh_from_db()
-    assert stale_task.updated_at > timezone.now() - timedelta(seconds=5)
+    assert stale_task.status == "running"
+    assert stale_task.execution_id == "stale-execution"
+    assert stale_task.updated_at <= timezone.now() - timedelta(minutes=20)
 
     with pytest.raises(TaskExecutionError, match="Execution identity"):
         runtime.heartbeat(stale_task.pk, "wrong-execution")
 
 
 @pytest.mark.django_db
-def test_recover_stale_requeues_and_invalidates_identity(stale_task):
+def test_recover_legacy_stale_blocks_and_preserves_identity(stale_task):
     recovered = TaskRuntime().recover_stale(stale_task.pk, stale_after_seconds=60)
-    assert recovered.status == "queued"
-    assert recovered.execution_id == ""
-    assert recovered.output_data["error"]
+    assert recovered.status == "blocked"
+    assert recovered.execution_id == "stale-execution"
+    assert recovered.output_data["automatic_replay_allowed"] is False
+    assert recovered.output_data["migration_target"] == "mojtaba-bot-ai"
 
 
 @pytest.mark.django_db
@@ -64,7 +68,7 @@ def test_recover_stale_refuses_fresh_execution(stale_task):
 
 
 @pytest.mark.django_db
-def test_recover_stale_exhausted_budget_becomes_failed(stale_task):
+def test_recover_legacy_exhausted_budget_blocks_without_replay(stale_task):
     stale_task.attempt_count = stale_task.max_attempts
     stale_task.save(update_fields=["attempt_count"])
     AgentTask.objects.filter(pk=stale_task.pk).update(
@@ -72,5 +76,6 @@ def test_recover_stale_exhausted_budget_becomes_failed(stale_task):
     )
 
     recovered = TaskRuntime().recover_stale(stale_task.pk, stale_after_seconds=60)
-    assert recovered.status == "failed"
+    assert recovered.status == "blocked"
     assert recovered.execution_id == "stale-execution"
+    assert recovered.output_data["retry_budget_exhausted"] is True
