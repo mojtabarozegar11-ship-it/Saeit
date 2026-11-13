@@ -18,6 +18,7 @@ from core.management.commands.mojtrade_market_watch_export import (
     PRIVATE_NAME, fresh_canonical_drafts, write_private_feed,
 )
 from core.mojtrade_signal_drafts import MarketWatchDraftError
+from core.financial_brand_pages import BRANDS
 from core.unified_bot_identity import (
     BOT_CODE, MOJTRADE_RESEARCH_CAPABILITY, module_for_capability,
 )
@@ -531,3 +532,106 @@ def test_mojtrade_readiness_api_disallows_post_or_data_mutation(client, canonica
     client.force_login(owner)
     assert client.post(reverse("mojtrade-private-readiness"), {"trade": "buy"}).status_code == 405
     assert not AgentTask.objects.exists()
+
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("locale", ["fa", "en", "ar"])
+@pytest.mark.parametrize("brand", [row[0] for row in BRANDS])
+def test_all_17_brand_signal_previews_are_owner_only_source_bound_and_unpublished(
+    client, canonical_market, brand, locale,
+):
+    task, _ = ingest_private_observation()
+    owner = get_user_model().objects.create_superuser(
+        username="brand-preview-owner", email="brand-preview@example.com",
+        password="test-password-only",
+    )
+    url = reverse("mojtrade-private-brand-preview", kwargs={
+        "brand": brand, "locale": locale,
+    })
+    public = client.get(url)
+    assert public.status_code == 403
+    assert "alerts" not in public.json()
+    client.force_login(owner)
+    response = client.get(url)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["canonical_owner"] == BOT_CODE
+    assert data["brand"] == brand and data["locale"] == locale
+    assert data["task_id"] == task.pk
+    assert data["status"] == "private_owner_preview_only"
+    assert data["source_sha256"] == task.input_data["source_sha256"]
+    assert data["draft_sha256"] == task.output_data["market_watch_drafts"]["draft_sha256"]
+    assert data["publication_authorized"] is False
+    assert data["external_delivery_receipts"] == []
+    assert data["trade_execution_authorized"] is False
+    assert data["broker_connected"] is False
+    assert data["orders"] == 0 and data["revenue_verified"] is False
+    assert [row["symbol"] for row in data["alerts"]] == ["BTC/USD", "ETH/USD"]
+    for row in data["alerts"]:
+        assert row["market_watch_text"]
+        assert row["entry_price"] is None and row["stop_loss"] is None
+        assert row["take_profit"] is None and row["order_intent"] is None
+        assert "content" not in row
+    assert "no-store" in response["Cache-Control"]
+    assert "noindex" in response["X-Robots-Tag"]
+    assert response["X-Frame-Options"] == "DENY"
+    assert AgentTask.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_brand_signal_preview_denies_unrecognized_brands_locales_and_staff(
+    client, canonical_market,
+):
+    task, _ = ingest_private_observation()
+    staff = get_user_model().objects.create_user(
+        username="brand-staff-only", is_staff=True,
+    )
+    route = reverse("mojtrade-private-brand-preview", kwargs={
+        "brand": "saman", "locale": "en",
+    })
+    client.force_login(staff)
+    assert client.get(route).status_code == 403
+    owner = get_user_model().objects.create_superuser(
+        username="brand-owning-user", email="owning@example.com",
+        password="test-password-only",
+    )
+    client.force_login(owner)
+    for unknown in [
+        reverse("mojtrade-private-brand-preview", kwargs={"brand": "unknown", "locale": "fa"}),
+        reverse("mojtrade-private-brand-preview", kwargs={"brand": "saman", "locale": "ru"}),
+    ]:
+        response = client.get(unknown)
+        assert response.status_code == 404
+        assert "alerts" not in response.json()
+    assert client.post(route, {"order": "buy"}).status_code == 405
+    assert AgentTask.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_brand_preview_never_replays_expired_or_corrupted_watch(
+    client, canonical_market,
+):
+    task, _ = ingest_private_observation()
+    owner = get_user_model().objects.create_superuser(
+        username="brand-expiry-owner", email="expiry@example.com",
+        password="test-password-only",
+    )
+    client.force_login(owner)
+    url = reverse("mojtrade-private-brand-preview", kwargs={
+        "brand": "mojtaba", "locale": "fa",
+    })
+    assert client.get(url).status_code == 200
+    with patch(
+        "core.management.commands.mojtrade_market_watch_export.timezone.now",
+        return_value=timezone.now() + timedelta(days=1),
+    ):
+        old = client.get(url)
+    assert old.status_code == 503 and "alerts" not in old.json()
+    receipt = AuditLog.objects.get(
+        action="mojtrade_private_research_ingested", target_id=str(task.pk),
+    )
+    receipt.delete()
+    corrupted = client.get(url)
+    assert corrupted.status_code == 503 and "alerts" not in corrupted.json()
+    assert corrupted.json()["publication_authorized"] is False
