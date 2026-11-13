@@ -3,11 +3,12 @@ from django.contrib.auth import get_user_model
 
 from core.models import Agent, AgentCapability, AgentTask, ApprovalRequest, ResearchProject
 from core.task_runtime import TaskExecutionError, TaskRuntime
+from core.unified_bot_identity import BOT_CODE
 
 
 def make_task(*, owner, action="research", risk="low", status="queued", max_attempts=3):
     project = ResearchProject.objects.create(title="Runtime", objective="Execution lifecycle", owner=owner)
-    agent = Agent.objects.create(code=f"{action}_agent", name="Agent", mission=action, active=True)
+    agent = Agent.objects.create(code=BOT_CODE, name="Mojtaba.bot.ai", mission=action, active=True)
     capability = AgentCapability.objects.create(code=action, name=action.title(), risk_level=risk, active=True)
     capability.agents.add(agent)
     task = AgentTask.objects.create(
@@ -51,19 +52,21 @@ def test_high_risk_cannot_claim_without_approval():
 
 
 @pytest.mark.django_db
-def test_failed_task_requeues_until_retry_budget_then_fails():
+def test_failed_canonical_task_blocks_automatic_replay_even_with_attempts_left():
     owner = get_user_model().objects.create_user(username="retry-owner", password="pass", is_staff=True)
     task, _ = make_task(owner=owner, max_attempts=2)
 
     first_claim = TaskRuntime().claim(task.pk)
     first = TaskRuntime().fail(task.pk, "temporary failure", execution_id=first_claim.execution_id)
-    assert first.status == "queued"
+    assert first.status == "blocked"
     assert first.attempt_count == 1
+    assert first.execution_id == first_claim.execution_id
+    assert first.output_data["automatic_replay_allowed"] is False
 
-    second_claim = TaskRuntime().claim(task.pk)
-    second = TaskRuntime().fail(task.pk, "final failure", execution_id=second_claim.execution_id)
-    assert second.status == "failed"
-    assert second.attempt_count == 2
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
+    task.refresh_from_db()
+    assert task.attempt_count == 1
 
 
 @pytest.mark.django_db
