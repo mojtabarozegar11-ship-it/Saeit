@@ -28,6 +28,7 @@ class PageParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.forms = []
         self.links = []
+        self.base_tag_present = False
         self._active_form = None
 
     def handle_starttag(self, tag, attrs):
@@ -51,11 +52,19 @@ class PageParser(HTMLParser):
             self._active_form = form
         elif tag == "a":
             self.links.append(values.get("href") or "")
+        elif tag == "base":
+            # <base> can silently redirect a root-relative checkout POST to
+            # another origin. Even CSP cannot be assumed active until checked.
+            self.base_tag_present = True
 
         form = self._active_form
         if form is None:
             return
         if tag in ("input", "textarea", "select"):
+            fields = [key.lower() for key, _ in attrs if key]
+            if any(fields.count(key) > 1 for key in
+                   ("name", "type", "value", "id", "autocomplete")):
+                form["malformed"] = True
             name = (values.get("name") or "").lower()
             input_type = (values.get("type") or "text").lower()
             # Security-relevant form fields must not be disabled or spoofed.
@@ -74,6 +83,8 @@ class PageParser(HTMLParser):
                     and "disabled" not in values and "hidden" not in values):
                 form["submit_controls"] += 1
         elif tag == "button":
+            if sum(key.lower() == "type" for key, _ in attrs if key) > 1:
+                form["malformed"] = True
             button_type = (values.get("type") or "submit").lower()
             if button_type == "submit" and "disabled" not in values                     and "hidden" not in values:
                 form["submit_controls"] += 1
@@ -87,7 +98,8 @@ def _local_path(value: str) -> str:
     if not isinstance(value, str) or not value.strip():
         return ""
     item = urllib.parse.urlsplit(value)
-    if item.scheme or item.netloc or item.fragment:
+    if (item.scheme or item.netloc or item.fragment or item.query
+            or not item.path.startswith("/")):
         return ""
     return item.path
 
@@ -128,6 +140,8 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
                 if any(_local_path(h) in checkout_paths for h in parser.links)
                 else "detail_product_identity_unverified")
     if kind == "checkout":
+        if parser.base_tag_present:
+            return "checkout_base_href_unverified"
         action = f"/commerce/trx-easy/start/{sku}/"
         forms = [form for form in parser.forms
                  if not form["malformed"] and form["method"] == "post"
@@ -204,7 +218,8 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
     try:
         with opener.open(req, timeout=timeout) as response:
             final = urllib.parse.urlsplit(response.geturl())
-            if final.scheme != "https" or final.hostname != HOST:
+            if (final.scheme != "https" or final.hostname != HOST
+                    or final.port not in (None, 443)):
                 return "unexpected_destination"
             code = response.status
             if code != 200:
@@ -213,7 +228,7 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
             if len(data) > MAX_BODY:
                 return "body_over_limit"
             content_type = response.headers.get("Content-Type", "").lower()
-            if "text/html" not in content_type:
+            if content_type.split(";", 1)[0].strip() != "text/html":
                 return "unexpected_content_type"
             html = data.decode("utf-8", "replace")
             page_status = classify_html(kind, sku, html)
