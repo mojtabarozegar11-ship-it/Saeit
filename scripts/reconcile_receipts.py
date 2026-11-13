@@ -27,6 +27,7 @@ def reconcile(data):
     paid = {}
     returned = {}
     eligible_settlements = set()
+    seen_external_references = set()
     issues = []
     for s in settlements:
         if s.get("status") != "settled": continue
@@ -34,6 +35,11 @@ def reconcile(data):
         if s.get("order_id") not in by_order or not isinstance(s.get("reference"), str) or not s["reference"].strip():
             issues.append({"settlement":s["id"],"issue":"missing_order_or_external_reference"})
             continue
+        reference = s["reference"].strip()
+        if reference in seen_external_references:
+            issues.append({"settlement":s["id"],"issue":"duplicate_external_reference"})
+            continue
+        seen_external_references.add(reference)
         eligible_settlements.add(s["id"])
         paid[s["order_id"]] = paid.get(s["order_id"], Decimal(0)) + value
     for r in refunds:
