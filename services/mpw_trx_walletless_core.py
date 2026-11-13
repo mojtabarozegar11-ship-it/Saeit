@@ -152,7 +152,9 @@ def verify_two_source_transfer(
         raise PaymentHold("Invalid invoice lifetime")
     if not isinstance(first, SolidifiedTransfer) or not isinstance(second, SolidifiedTransfer):
         raise PaymentHold("Independent chain evidence is unavailable")
-    if not first.source_id or not second.source_id or first.source_id == second.source_id:
+    if (type(first.source_id) is not str or not first.source_id.strip()
+            or type(second.source_id) is not str or not second.source_id.strip()
+            or first.source_id.strip() == second.source_id.strip()):
         raise PaymentHold("Two different verification sources required")
     for record in (first, second):
         if (type(record.tx_hash) is not str or TX_ID.fullmatch(record.tx_hash) is None
