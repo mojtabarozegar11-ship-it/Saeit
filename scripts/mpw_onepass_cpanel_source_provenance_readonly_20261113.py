@@ -62,6 +62,8 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     htaccess = _safe_read(public, ".htaccess")
     wsgi = _safe_read(public, "passenger_wsgi.py")
     store_html = _safe_read(public, "store/index.html")
+    store_view = _safe_read(app, "core/mojplaywin_views.py")
+    checkout_view = _safe_read(app, "mpw_commerce/product_checkout_page.py")
     guest_hash = hashlib.sha256(guest).hexdigest() if guest else ""
     guest_class = ("approved_email_free_source" if guest_hash == APPROVED_GUEST_SHA256
                    else "reviewed_legacy_source" if guest_hash in REVIEWED_LEGACY_SHA256
@@ -95,6 +97,18 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "guest_sha256_prefix": guest_hash[:16] if guest else None,
         "template_disk_source": template_state,
         "effective_django_template_origin_verified": False,
+        "store_view_source_regular": store_view is not None,
+        "store_view_sha256_prefix": (hashlib.sha256(store_view).hexdigest()[:16]
+                                     if store_view else None),
+        "store_view_source_function_marker": (
+            store_view is not None and b"def store(request):" in store_view),
+        "checkout_view_source_regular": checkout_view is not None,
+        "checkout_view_sha256_prefix": (
+            hashlib.sha256(checkout_view).hexdigest()[:16]
+            if checkout_view else None),
+        "checkout_view_explicit_script_src_source_marker": (
+            checkout_view is not None and b"script-src" in checkout_view),
+        "effective_checkout_view_import_verified": False,
         "public_fallback": fallback,
         "passenger_stage_source_marker": wsgi_staging,
         "private_checkout_source_readable": template is not None,
