@@ -721,6 +721,41 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         self.assertIn('"checked": 3', sink.getvalue())
         self.assertIn('"category": "checkout_form_invalid"', sink.getvalue())
 
+    def test_owner_email_policy_denies_public_store_mutation_before_side_effects(self):
+        from scripts import mpw_dynamic_store_cutover_20261108 as module
+        self.assertTrue(module.OWNER_BUYER_EMAIL_REQUIRED)
+        with patch.object(module, "PUBLIC", self.public):
+            with patch.object(module, "atomic_replace") as atomic:
+                with patch.object(module, "public_response") as fetch:
+                    with self.assertRaisesRegex(
+                            RuntimeError, "OWNER_BUYER_EMAIL_REQUIRED_STORE_CUTOVER_DENIED"):
+                        perform_cutover(self.public, self.backups, "42425162110", lambda: True)
+        atomic.assert_not_called()
+        fetch.assert_not_called()
+        self.assertEqual((self.public / ".htaccess").read_bytes(), self.original)
+
+    def test_owner_email_policy_denies_main_cutover_without_mutation(self):
+        import os
+        from scripts import mpw_dynamic_store_cutover_20261108 as module
+        with patch.dict(os.environ, {"MPW_STORE_ALLOW_EMAIL_FREE": "1",
+                                     "MPW_OWNER_APPROVED": "1",
+                                     "MPW_BUYER_EMAIL_REQUIRED": "0"}, clear=False):
+            with patch.object(module.pwd, "getpwuid",
+                              return_value=SimpleNamespace(pw_name="zomorod2")):
+                with patch.object(module, "check_actual_staging_store"):
+                    with patch.object(module, "public_response",
+                                      return_value=MARKER + b"x" * 2400):
+                        with patch.object(module, "verify_public_buyer_routes",
+                                          return_value=True):
+                            with patch.object(module.time, "monotonic",
+                                              side_effect=[100, 101]):
+                                with patch.object(module, "perform_cutover") as cutover:
+                                    with self.assertRaisesRegex(
+                                            RuntimeError,
+                                            "OWNER_BUYER_EMAIL_REQUIRED_STORE_CUTOVER_DENIED"):
+                                        module.main("42425162111")
+        cutover.assert_not_called()
+
     def test_failed_buyer_baseline_cannot_start_cutover(self):
         from scripts.mpw_dynamic_store_cutover_20261108 import main
         with patch("scripts.mpw_dynamic_store_cutover_20261108.pwd.getpwuid",

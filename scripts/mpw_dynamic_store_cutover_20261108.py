@@ -57,6 +57,18 @@ BUYER_ROUTE_TOTAL_SECONDS = 25
 PREFLIGHT_BUDGET_SECONDS = 40
 
 
+# A real buyer email is mandatory for order recovery. This cutover only
+# accepts the legacy email-free guest adapter, so it is not an authorized
+# production release under the current owner policy.
+OWNER_BUYER_EMAIL_REQUIRED = True
+
+
+def require_owner_email_policy_before_cutover(public: Path) -> None:
+    """Deny changes to the actual public document root; allow synthetic QA."""
+    if OWNER_BUYER_EMAIL_REQUIRED and public == PUBLIC:
+        raise RuntimeError("OWNER_BUYER_EMAIL_REQUIRED_STORE_CUTOVER_DENIED")
+
+
 def atomic_replace(target: Path, content: bytes, mode: int) -> None:
     fd, tmp = tempfile.mkstemp(prefix=".mpw-store-cutover-", dir=str(target.parent))
     try:
@@ -661,6 +673,7 @@ def verify_dynamic_public(run_id: str) -> bool:
 
 def perform_cutover(public: Path, backup_base: Path, run_id: str, probe) -> None:
     """Guaranteed rollback of owned files for any failed verification."""
+    require_owner_email_policy_before_cutover(public)
     if not re.fullmatch(r"[0-9]{8,12}", run_id):
         raise RuntimeError("INVALID_RUN_ID")
     old_conf, new_conf, mode = inspect_owned_fallback(public)
@@ -729,6 +742,7 @@ def main(run_id: str) -> None:
     if time.monotonic() - started > PREFLIGHT_BUDGET_SECONDS:
         raise RuntimeError("CUTOVER_PREPARATION_TIME_BUDGET_EXCEEDED")
     print("MPW_STATIC_FALLBACK_BASELINE=CONFIRMED")
+    require_owner_email_policy_before_cutover(PUBLIC)
     perform_cutover(PUBLIC, BACKUP_BASE, run_id, lambda: verify_dynamic_public(run_id))
 
 
