@@ -102,9 +102,16 @@ def financial_brand_page(request, brand, locale, page_type):
         from core.finance102_guides import compose_page_copy
         intro, notice = compose_page_copy(slug, locale, page_type, notice)
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    return render(request, "core/financial_brand_page.html", {
+    response = render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
+    if page_type in {"signals", "store"}:
+        from core.finance102_guides import canonical_url
+        # Search indexing metadata is added as an HTTP response header; HTML,
+        # CSS, currently published route names, and payment logic remain intact.
+        response["Link"] = '<' + canonical_url(slug, locale, page_type) + '>; rel="canonical"'
+        response["Content-Language"] = locale
+    return response
