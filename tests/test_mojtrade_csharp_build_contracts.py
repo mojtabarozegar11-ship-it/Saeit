@@ -114,6 +114,7 @@ def test_demo_portfolio_gate_includes_all_account_positions_and_margin():
     assert 'Aggregate Stop Risk %", DefaultValue = 1.0, MinValue = 0.25, MaxValue = 1.0' in source
     assert "Positions.Count >= MaxPositions" in source
     assert "foreach (var current in Positions)" in source
+    assert "if (PendingOrders.Count != 0)" in source
     assert "current.Symbol" in source
     assert "current.StopLoss.HasValue || !current.TakeProfit.HasValue" in source
     assert "current.TradeType == TradeType.Buy" in source
