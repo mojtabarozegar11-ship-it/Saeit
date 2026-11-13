@@ -215,3 +215,34 @@ def test_canonical_sensitive_alias_requires_its_exact_tool_scope(sensitive_task)
     second.refresh_from_db()
     assert second.used_at is not None
     assert calls == [{"target": "private-catalog"}]
+
+
+
+@pytest.mark.parametrize("action", ["trade", "withdraw", "send_sms"])
+def test_canonical_low_risk_label_never_bypasses_sensitive_tool_grant(sensitive_task, action):
+    owner, task, _ = sensitive_task
+    cap = AgentCapability.objects.create(
+        code=action, name="Explicit external operation", risk_level="low",
+        active=True,
+    )
+    cap.agents.add(task.agent)
+    task.action_type = action
+    task.capability_code = action
+    task.risk_snapshot = "low"
+    task.save(update_fields=["action_type", "capability_code", "risk_snapshot"])
+    ApprovalRequest.objects.create(
+        action_type=action, target_type="AgentTask", target_id=str(task.pk),
+        reason="Synthetic low-risk label is not authorization", risk="low",
+        status="approved", requested_by=owner,
+    )
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(code=action, risk="low", handler=lambda data: calls.append(data)),
+    ])
+    with pytest.raises(ToolGatewayError, match="one-time owner grant"):
+        gateway.invoke(
+            action, task.input_data, task_id=task.pk,
+            execution_id=task.execution_id,
+        )
+    assert calls == []
+    assert not AuditLog.objects.filter(action="tool_invocation_started").exists()
