@@ -485,3 +485,43 @@ def test_rejects_candidate_webp_bad_chunk_length_even_when_blob_pinned(sandbox):
         mod.preflight(stage)
     assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
     assert not mod.BACKUP_ROOT.exists()
+
+
+def test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid():
+    import subprocess
+
+    relay = SOURCE.parents[1] / 'deploy/cpanel_direct_command.sh'
+    result = subprocess.run(['bash', '-n', str(relay)], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    script = relay.read_text()
+    assert 'django_migrations|zomorod_fields_audit_live)' in script
+    assert script.count('zomorod_fields_audit_live)') == 3  # allowlist + both relay modes
+    assert script.count('zomorod_fields_audit_stream') == 3  # definition + both modes
+    assert '82f5ae3c339fecf7a29424424244af9f997c6f91' in script
+    assert 'git hash-object -- "$guard"' in script
+    assert 'StrictHostKeyChecking yes' in script
+    assert 'ssh -T -F "$work/config" saeit-cpanel' in script
+    assert 'python3.11 -B - audit-live' in script
+    assert '< "$guard"' in script
+
+
+def test_cpanel_relay_denies_unlisted_release_and_requires_host_key(tmp_path):
+    import os
+    import subprocess
+
+    relay = SOURCE.parents[1] / 'deploy/cpanel_direct_command.sh'
+    env = dict(os.environ)
+    env.pop('HOST_KEY', None)
+    env.pop('VPS_KEY', None)
+    env['RUNNER_TEMP'] = str(tmp_path)
+    denied = subprocess.run(
+        ['bash', str(relay), 'zomorod_fields_apply'],
+        env=env, capture_output=True, text=True, timeout=10)
+    assert denied.returncode == 64
+    assert 'CPANEL_DIRECT_OPERATION_DENIED' in denied.stderr
+    uncredentialed = subprocess.run(
+        ['bash', str(relay), 'zomorod_fields_audit_live'],
+        env=env, capture_output=True, text=True, timeout=10)
+    assert uncredentialed.returncode != 0
+    assert 'HOST_KEY' in uncredentialed.stderr
+    assert not any(tmp_path.iterdir())
