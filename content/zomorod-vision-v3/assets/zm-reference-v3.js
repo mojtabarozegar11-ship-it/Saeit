@@ -55,7 +55,7 @@
    const speed=Math.max(12,Math.min(48,Number(strip.dataset.speed)||25));
    const control=$('[data-rotator-toggle="'+strip.id+'"]');
    const state={strip,period,speed,control,paused:motionPreference.matches,
-                hovered:false,focused:false,visible:false,delayUntil:0};
+                hovered:false,focused:false,visible:false,delayUntil:0,position:strip.scrollLeft};
    strip.setAttribute('aria-live','off');
    const update=()=>{
      if(!control)return;
@@ -109,11 +109,18 @@
      if(state.paused||state.hovered||state.focused||!state.visible||
         document.hidden||now<state.delayUntil)continue;
      const s=state.strip;
-     s.scrollLeft-=state.speed*elapsed/1000;
-     if(s.scrollLeft<=-state.period)s.scrollLeft+=state.period;
+     // Maintain subpixel position independently: WebKit can round scrollLeft
+     // to whole pixels, which would otherwise discard every small 30fps step.
+     let logical=state.position;
+     if(Math.abs(logical-s.scrollLeft)>3)logical=s.scrollLeft;
+     logical-=state.speed*elapsed/1000;
+     if(logical<=-state.period)logical+=state.period;
+     state.position=logical;
+     s.scrollLeft=logical;
    }
    requestAnimationFrame(tick);
  };
  if(rotators.length)requestAnimationFrame(tick);
  document.documentElement.dataset.rotatingRows=String(rotators.length);
+ window.__zmRotatorDiagnostics=()=>rotators.map(x=>({id:x.strip.id,paused:x.paused,hovered:x.hovered,focused:x.focused,visible:x.visible,documentHidden:document.hidden,subpixelPosition:x.position,scrollLeft:x.strip.scrollLeft}));
 })();
