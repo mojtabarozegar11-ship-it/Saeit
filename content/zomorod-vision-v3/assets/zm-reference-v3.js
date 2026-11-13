@@ -106,7 +106,7 @@
      strip.scrollBy({left:next?-amount:amount,
        behavior:motionPreference.matches?'instant':'smooth'});
    });
-   const manualButtons=$('[data-strip="'+strip.id+'"]');
+   const manualButtons=Array.from(document.querySelectorAll('[data-strip="'+strip.id+'"]'));
    for(const button of manualButtons){
      button.disabled=false;
      button.removeAttribute('aria-disabled');
