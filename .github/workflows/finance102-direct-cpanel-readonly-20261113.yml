@@ -1,12 +1,11 @@
 name: Finance 102 cPanel direct pinned fallback READ ONLY
 on:
-  pull_request:
-    paths:
-      - .github/workflows/finance102-direct-cpanel-readonly-20261113.yml
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   direct-readonly:
+    if: github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
