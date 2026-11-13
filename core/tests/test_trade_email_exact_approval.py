@@ -164,6 +164,7 @@ def test_disabled_sender_does_not_consume_grant_or_send(queued_trade):
     assert grant.used_at is None
 
 
+@pytest.mark.django_db(transaction=True)
 def test_valid_owner_grant_selects_only_approved_message(queued_trade):
     owner, first, second = queued_trade
     approval = _review(owner, second)
@@ -196,6 +197,7 @@ def test_direct_sender_cannot_bypass_owner_approval(queued_trade):
     assert first.status == "queued"
 
 
+@pytest.mark.django_db(transaction=True)
 def test_direct_sender_rejects_grant_issued_for_a_different_message(queued_trade):
     owner, first, second = queued_trade
     approval = _review(owner, second)

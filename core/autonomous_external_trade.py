@@ -77,7 +77,7 @@ def execute_one_authorized_outbox(*, grant_id):
     AuditLog.objects.create(
         actor_type="economic-agent",
         actor_id="mojtaba.bot.ai",
-        action="external_trade_email_sent",
+        action="external_trade_email_sent" if sent.status == "sent" else "external_trade_email_delivery_unknown",
         target_type="TradeEmailOutbox",
         target_id=str(sent.pk),
         after_state={"status": sent.status},
