@@ -640,6 +640,14 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
                     release.verify_live_checkout_markup(changed, 72)
 
+    def test_live_short_csrf_control_does_not_prove_browser_security(self):
+        html = self._rendered_checkout(72).replace(
+            b'value="1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01"',
+            b'value="short-token"'
+        )
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
+            release.verify_live_checkout_markup(html, 72)
+
     def test_live_form_probe_rejects_non_allowlisted_product(self):
         with self.assertRaisesRegex(RuntimeError, "LIVE_PRODUCT_NOT_ALLOWLISTED"):
             release.verify_live_checkout_markup(self._rendered_checkout(72), 73)

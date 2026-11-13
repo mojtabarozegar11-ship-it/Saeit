@@ -327,6 +327,7 @@ class CheckoutEmailControlParser(HTMLParser):
                 "action": attributes.get("action", ""),
                 "csrf": False,
                 "csrf_hidden": False,
+                "csrf_strong": False,
                 "cta": False,
             }
         if self.current_form is not None:
@@ -341,9 +342,17 @@ class CheckoutEmailControlParser(HTMLParser):
                 if (attributes.get("name", "").lower() == "csrfmiddlewaretoken"
                         and attributes.get("type", "hidden").lower() == "hidden"
                         and "disabled" not in attributes
-                        and 16 <= len(attributes.get("value", "")) <= 128):
+                        and bool(attributes.get("value", ""))):
+                    # Template-level verification accepts a nonempty rendered
+                    # fixture; public verification independently insists on
+                    # a full-length alphanumeric Django CSRF token.
+                    token = attributes["value"]
                     self.current_form["csrf"] = True
                     self.current_form["csrf_hidden"] = True
+                    self.current_form["csrf_strong"] = (
+                        32 <= len(token) <= 128 and token.isascii()
+                        and token.isalnum()
+                    )
                 if (attributes.get("type", "").lower() == "submit"
                         and attributes.get("value", "") == CTA.decode("utf-8")
                         and "disabled" not in attributes):
@@ -437,7 +446,7 @@ def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
     form = forms[0]
     # {% csrf_token %} in unrendered source is NOT a rendered CSRF control.
     if (form["method"] != "post" or not form["cta"]
-            or not form["csrf_hidden"]):
+            or not form["csrf_hidden"] or not form["csrf_strong"]):
         abort("LIVE_INVOICE_CONTRACT_INVALID:" + str(product_id))
     return {"product_id": product_id, "http_method": "POST",
             "email_field": False, "rendered_csrf": True,
