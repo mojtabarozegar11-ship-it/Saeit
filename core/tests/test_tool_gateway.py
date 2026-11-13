@@ -216,3 +216,112 @@ def test_gateway_audits_failed_invocation(running_task):
         target_id=str(running_task.pk),
         action="tool_invocation_failed",
     ).exists()
+
+
+
+def test_gateway_reserves_one_call_even_while_task_remains_running(running_task):
+    """One execution token authorizes one dispatch, not repeated provider calls."""
+    from core.models import AuditLog
+
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(code="research", handler=lambda p: calls.append(p) or {"ok": True}),
+    ])
+    assert gateway.invoke(
+        "research", {"request": "first"},
+        task_id=running_task.pk, execution_id="exec-123",
+    ) == {"ok": True}
+    with pytest.raises(ToolGatewayError, match="already reserved"):
+        gateway.invoke(
+            "research", {"request": "duplicate"},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert calls == [{"request": "first"}]
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(running_task.pk),
+        action="tool_invocation_started",
+    ).count() == 1
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(running_task.pk),
+        action="tool_invocation_completed",
+    ).count() == 1
+
+
+def test_gateway_lost_acknowledgement_reservation_survives_handler_error(running_task):
+    from core.models import AuditLog
+
+    calls = []
+
+    def no_receipt(payload):
+        calls.append(payload)
+        raise RuntimeError("provider acknowledgement lost")
+
+    gateway = ToolGateway([ToolSpec(code="research", handler=no_receipt)])
+    with pytest.raises(RuntimeError, match="acknowledgement lost"):
+        gateway.invoke(
+            "research", {"request": 1},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    with pytest.raises(ToolGatewayError, match="receipt reconciliation"):
+        gateway.invoke(
+            "research", {"request": 2},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert len(calls) == 1
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_started",
+    ).count() == 1
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_failed",
+    ).count() == 1
+
+
+def test_gateway_second_alias_cannot_bypass_single_dispatch_reservation(running_task):
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(
+            code="research_lookup", allowed_actions=("research",),
+            handler=lambda p: calls.append("alias") or {"ok": True},
+        ),
+        ToolSpec(
+            code="research", handler=lambda p: calls.append("direct") or {"ok": True},
+        ),
+    ])
+    gateway.invoke(
+        "research_lookup", {}, task_id=running_task.pk,
+        execution_id="exec-123",
+    )
+    with pytest.raises(ToolGatewayError, match="already reserved"):
+        gateway.invoke(
+            "research", {}, task_id=running_task.pk,
+            execution_id="exec-123",
+        )
+    assert calls == ["alias"]
+
+
+def test_gateway_new_legacy_execution_gets_new_reservation_not_old_token(running_task):
+    """An explicitly re-claimed legacy task has a distinct execution token."""
+    from core.models import AuditLog
+    from core.task_runtime import TaskRuntime
+
+    calls = []
+    gateway = ToolGateway([
+        ToolSpec(code="research", handler=lambda p: calls.append(p) or {"ok": True}),
+    ])
+    gateway.invoke("research", {"attempt": 1}, task_id=running_task.pk, execution_id="exec-123")
+    runtime = TaskRuntime()
+    requeued = runtime.fail(
+        running_task.pk, "external receipt unreconciled in legacy fixture",
+        execution_id="exec-123",
+    )
+    assert requeued.status == "queued"
+    claimed = runtime.claim(running_task.pk)
+    assert claimed.execution_id != "exec-123"
+    gateway.invoke(
+        "research", {"attempt": 2},
+        task_id=running_task.pk, execution_id=claimed.execution_id,
+    )
+    assert calls == [{"attempt": 1}, {"attempt": 2}]
+    assert AuditLog.objects.filter(
+        target_id=str(running_task.pk), action="tool_invocation_started",
+    ).count() == 2
