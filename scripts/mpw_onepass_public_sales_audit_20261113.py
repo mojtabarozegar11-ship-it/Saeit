@@ -176,6 +176,31 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
 
 
 
+def script_csp_category(headers) -> str:
+    """Expose fixed policy categories, never public CSP source values."""
+    policy = (headers.get("Content-Security-Policy", "") or "").lower()
+    if not policy.strip():
+        return "csp_missing"
+    rules = [d.strip().split() for d in policy.split(";") if d.strip()]
+    script = [rule[1:] for rule in rules if rule and rule[0] == "script-src"]
+    if not script:
+        return "script_src_missing"
+    if len(script) != 1:
+        return "script_src_duplicate"
+    tokens = script[0]
+    if tokens == ["'none'"]:
+        return "script_none"
+    if "'unsafe-inline'" in tokens or "'unsafe-eval'" in tokens:
+        return "script_unsafe_inline_or_eval"
+    if "*" in tokens or any(item.startswith("http:") for item in tokens):
+        return "script_wildcard_or_http"
+    if tokens == ["'self'"]:
+        return "script_self_only"
+    if any(item.startswith("'nonce-") or item.startswith("'sha") for item in tokens):
+        return "script_nonce_or_hash"
+    return "script_other"
+
+
 def checkout_header_status(headers) -> str:
     """Fail closed if security/cache headers fail the public GET contract.
 
@@ -210,7 +235,7 @@ class RejectRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
-            checkout_form_observations=None):
+            checkout_form_observations=None, checkout_script_policies=None):
     url = "https://" + HOST + path
     req = urllib.request.Request(
         url, headers={"User-Agent": UA, "Cache-Control": "no-cache",
@@ -237,6 +262,8 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
                 # This avoids masking a legacy email form when CSP is absent.
                 if checkout_form_observations is not None:
                     checkout_form_observations[path] = page_status
+                if checkout_script_policies is not None:
+                    checkout_script_policies[path] = script_csp_category(response.headers)
                 headers_status = checkout_header_status(response.headers)
                 if headers_status != "checkout_headers_pass":
                     return headers_status
@@ -265,13 +292,15 @@ def audit(timeout: int = 6, opener=None) -> dict:
         ))
     result = {}
     checkout_form_observations = {}
+    checkout_script_policies = {}
     for kind, sku, path in routes:
         result[path] = observe(path, kind, sku, timeout, opener,
-                               checkout_form_observations)
+                               checkout_form_observations, checkout_script_policies)
     return {
         "schema": "mpw.public_buyer_journey.readonly.v1",
         "observed_routes": result,
         "checkout_form_observations": checkout_form_observations,
+        "checkout_script_policy_categories": checkout_script_policies,
         "pages_checked": len(result),
         "required_skus": list(SKUS),
         "guest_email_policy_expected": "email_not_collected",
