@@ -596,6 +596,20 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                                 "# original styled template\n" * 9)
             with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL"):
                 verify_email_free_invoice_sources(app)
+            # Valid HTML permits both single-quoted and unquoted attributes;
+            # neither may silently reintroduce email into guest checkout.
+            for email_markup in (
+                "<input name='email' required>",
+                "<input type='email' name='buyer'>",
+                "<input name=email required>",
+                "<input type=email name=buyer>",
+                "<input NAME = 'EMAIL' required>",
+            ):
+                with self.subTest(email_markup=email_markup):
+                    template.write_text("{% csrf_token %}\\n" + email_markup +
+                                        "\\n" + "# original styled template\\n" * 9)
+                    with self.assertRaisesRegex(RuntimeError, "STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL"):
+                        verify_email_free_invoice_sources(app)
             template.write_text("{% csrf_token %}\n" + "# original styled template\n" * 9)
             candidate = app / "services/mpw_trx_commercial_web.py"
             candidate.write_text(candidate.read_text() + "\ndef bad_helper(request):\n    return request.POST['email']\n")
