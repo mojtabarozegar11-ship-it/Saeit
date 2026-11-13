@@ -8,6 +8,10 @@ on:
       - 'scripts/mpw_paid_provenance_readonly_20261105.py'
       - 'tests/test_mpw_onepass_public_sales_audit_20261113.py'
       - 'tests/test_mpw_paid_sku_scope_20261113.py'
+      - 'services/mpw_trx_guest_commerce.py'
+      - 'scripts/mpw_guest_no_email_release.py'
+      - 'scripts/test_mpw_guest_route_patching.py'
+      - 'tests/test_mpw_guest_no_email_release.py'
       - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
   workflow_dispatch:
 
@@ -35,6 +39,10 @@ jobs:
           python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py scripts/mpw_paid_provenance_readonly_20261105.py
           python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+          python3 -m py_compile services/mpw_trx_guest_commerce.py scripts/mpw_guest_no_email_release.py
+          python3 scripts/test_mpw_guest_route_patching.py
+          python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
   public-pr-readonly-observation:
     # Public HTTPS GET only, no credentials, only an internal reviewed PR.
     needs: isolated-safety-contract
@@ -67,6 +75,10 @@ jobs:
           python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py
           python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+          python3 -m py_compile services/mpw_trx_guest_commerce.py scripts/mpw_guest_no_email_release.py
+          python3 scripts/test_mpw_guest_route_patching.py
+          python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
       - name: Bounded public HTML observations; never POST or create invoice
         shell: bash
         run: |
