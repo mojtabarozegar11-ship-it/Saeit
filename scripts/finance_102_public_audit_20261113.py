@@ -53,11 +53,16 @@ class BasicHTML(HTMLParser):
         self.lang = None
         self.title_depth = 0
         self.title = ""
+        self.links = []
     def handle_starttag(self, tag, attrs):
         if tag == "html":
             self.lang = dict(attrs).get("lang")
         if tag == "title":
             self.title_depth += 1
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if isinstance(href, str):
+                self.links.append(href)
     def handle_endtag(self, tag):
         if tag == "title":
             self.title_depth = max(0, self.title_depth - 1)
@@ -79,7 +84,8 @@ def probe(target):
     host, lang, slug, kind, path = target
     url = "https://" + host + path
     result = {"host": host, "lang": lang, "slug": slug, "type": kind, "path": path,
-              "http": None, "content_ok": False, "title": "", "error": None}
+              "http": None, "content_ok": False, "title": "",
+              "expected_shop_link_present": False, "error": None}
     try:
         opener = urllib.request.build_opener(LocalOnlyRedirect(host))
         req = urllib.request.Request(url, method="GET", headers={
@@ -96,8 +102,11 @@ def probe(target):
                 parsed = BasicHTML()
                 parsed.feed(html)
                 result["title"] = parsed.title[:130]
+                expected_shop_path = "/store/" if lang == "fa" else "/commerce/"
+                result["expected_shop_link_present"] = expected_shop_path in parsed.links
                 result["content_ok"] = (
                     parsed.lang == lang
+                    and result["expected_shop_link_present"]
                     and "MojPlayWin / Zomorod Melal" in html
                     and parsed.title.startswith(BRAND_LABELS[slug][LOCALE_INDEX[lang]] + " | ")
                     and (("market" in html.lower() or "بازار" in html or "الأسواق" in html)
@@ -112,6 +121,24 @@ def probe(target):
     except (urllib.error.URLError, TimeoutError, OSError, ValueError, ssl.SSLError) as ex:
         result["error"] = type(ex).__name__
     return result
+
+def check_shop_link(host, path):
+    """GET only one allowed main-shop destination, never follow off-host redirects."""
+    try:
+        opener = urllib.request.build_opener(LocalOnlyRedirect(host))
+        request = urllib.request.Request("https://" + host + path, method="GET", headers={
+            "User-Agent": "Saeit-Finance102-ReadOnly-20261113/1.0", "Accept": "text/html"
+        })
+        with opener.open(request, timeout=9) as response:
+            kind = response.headers.get("Content-Type", "").lower()
+            snippet = response.read(2048)
+            return {"host": host, "path": path, "http": response.status,
+                    "content_type_html": "html" in kind, "nonempty": bool(snippet),
+                    "valid": response.status == 200 and "html" in kind and bool(snippet)}
+    except urllib.error.HTTPError as ex:
+        return {"host": host, "path": path, "http": ex.code, "valid": False, "error": "HTTPError"}
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError, ssl.SSLError) as ex:
+        return {"host": host, "path": path, "http": None, "valid": False, "error": type(ex).__name__}
 
 def main():
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -129,11 +156,15 @@ def main():
             "content_verified": sum(r["content_ok"] for r in subset),
             "codes": dict(Counter(str(r["http"]) if r["http"] is not None else "connection_failure" for r in subset))
         }
+    shops = [check_shop_link(host, path) for host, path in (
+        ("zomorodmelal.ir", "/store/"), ("mojplaywin.com", "/commerce/"))]
     report = {"classification": "PUBLIC_READ_ONLY_NO_DEPLOY",
+              "shop_destinations": shops,
+              "cta_links_present": sum(r["expected_shop_link_present"] for r in results),
               "target_count": len(results), "verified": sum(r["content_ok"] for r in results),
               "groups": by_group, "failures": [r for r in results if not r["content_ok"]]}
     print("FINANCE102_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True))
-    return 0 if report["verified"] == 102 else 2
+    return 0 if report["verified"] == 102 and all(x["valid"] for x in shops) else 2
 
 if __name__ == "__main__":
     raise SystemExit(main())
