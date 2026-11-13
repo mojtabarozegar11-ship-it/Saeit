@@ -20,6 +20,14 @@ class TestSettlement(unittest.TestCase):
     def test_unmatched_refund(self):
         self.data["refunds"][0]["settlement_id"]="unknown"
         self.assertIn("unmatched_settlement",str(reconcile(self.data)["issues"]))
+    def test_refund_for_unrecognized_settlement_does_not_reduce_net(self):
+        self.data["settlements"][0]["order_id"] = "missing"
+        result = reconcile(self.data)
+        self.assertEqual(result["gross_settled_unverified"], "0")
+        self.assertEqual(result["completed_refunds_unverified"], "0")
+        self.assertEqual(result["net_settled_unverified"], "0")
+        self.assertIn("unmatched_settlement", str(result["issues"]))
+        self.assertFalse(result["revenue_certified"])
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
