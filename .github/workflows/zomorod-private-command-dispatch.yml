@@ -185,7 +185,7 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName 178.239.147.125
+            HostName zohal.pws-dns.net
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
@@ -195,7 +195,7 @@ jobs:
             ControlPath $d/cpanel.sock
             ControlPersist 300
           Host saeit-cpanel-direct
-            HostName 178.239.147.125
+            HostName zohal.pws-dns.net
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
@@ -217,7 +217,7 @@ jobs:
           EOF
           chmod 600 "$d/config"
           # 30GB hosting public key; verify fingerprint before any authentication.
-          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          printf '%s\n' '[zohal.pws-dns.net]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
           fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
           observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
           if test -z "$observed"; then
