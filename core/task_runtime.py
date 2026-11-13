@@ -105,6 +105,12 @@ class TaskRuntime:
             raise TaskExecutionError(
                 "Execution identity does not match the active task execution"
             )
+        if task.agent_id and not task.agent.code == BOT_CODE:
+            # A task started before cutover is not a continuing licence for
+            # an independent worker. Preserve the original execution state.
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_HEARTBEAT_FORBIDDEN"
+            )
         task.save(update_fields=["updated_at"])
         return task
 
@@ -126,29 +132,27 @@ class TaskRuntime:
             raise TaskExecutionError("Task execution is not stale")
 
         previous_execution_id = task.execution_id
-        if task.agent.code == BOT_CODE:
-            # Even an exhausted retry budget does not prove an external side
-            # effect failed. Preserve the prior execution identity for
-            # reconciliation and never silently requeue or close the incident.
-            task.status = "blocked"
-            task.output_data = {
-                "error": "Stale canonical execution requires effect reconciliation",
-                "requires_review": True,
-                "automatic_replay_allowed": False,
-                "previous_execution_id": previous_execution_id,
-                "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
-            }
-        elif task.attempt_count >= task.max_attempts:
-            task.status = "failed"
-            task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
-            }
-        else:
-            task.status = "queued"
-            task.execution_id = ""
-            task.output_data = {
-                "error": "Execution became stale and was re-queued for recovery"
-            }
+        # No stale task is automatically requeued. A legacy executor might
+        # already have produced an unacknowledged external effect. Retain its
+        # execution token, task owner and audit trail for canonical migration.
+        task.status = "blocked"
+        task.output_data = {
+            "error": (
+                "Stale canonical execution requires effect reconciliation"
+                if task.agent.code == BOT_CODE
+                else "Stale legacy execution requires canonical handoff reconciliation"
+            ),
+            "requires_review": True,
+            "automatic_replay_allowed": False,
+            "previous_execution_id": previous_execution_id,
+            "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+        }
+        if task.agent.code != BOT_CODE:
+            task.output_data.update({
+                "legacy_agent_code": task.agent.code,
+                "migration_target": BOT_CODE,
+                "legacy_work_replayed": False,
+            })
 
         task.save(
             update_fields=["status", "execution_id", "output_data", "updated_at"]
@@ -174,6 +178,12 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not running: {task.status}")
         if not execution_id or execution_id != task.execution_id:
             raise TaskExecutionError("Execution identity does not match the active task execution")
+        if task.agent.code != BOT_CODE:
+            # Do not let old worker callbacks claim post-cutover successful
+            # completion, obscure pending effects or silently close the case.
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_COMPLETION_FORBIDDEN"
+            )
         if not isinstance(output_data or {}, dict):
             raise TaskExecutionError("Task output must be an object")
         try:
@@ -225,28 +235,23 @@ class TaskRuntime:
         if not str(error or "").strip():
             raise TaskExecutionError("Task failure reason is required")
         previous_execution_id = task.execution_id
-        if task.agent.code == BOT_CODE:
-            # The tool may have produced an external effect immediately before
-            # failing or losing its acknowledgement. Without an independently
-            # reconciled receipt an automatic retry is unsafe, regardless of
-            # remaining attempts. Preserve the execution token for correlation.
-            task.status = "blocked"
-            task.output_data = {
-                "error": str(error)[:5000],
-                "requires_review": True,
-                "automatic_replay_allowed": False,
-                "previous_execution_id": previous_execution_id,
-                "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
-            }
-        else:
-            task.output_data = {"error": str(error)[:5000]}
-            if task.attempt_count >= task.max_attempts:
-                task.status = "failed"
-            else:
-                # Preserve the pre-existing retry policy for noncanonical
-                # workers until their external effects have been inventoried.
-                task.execution_id = ""
-                task.status = "queued"
+        # Neither canonical nor historical workers can automatically retry
+        # after an external-capable execution. Unknown delivery or side effects
+        # require a human-verifiable receipt before any canonical replan.
+        task.status = "blocked"
+        task.output_data = {
+            "error": str(error)[:5000],
+            "requires_review": True,
+            "automatic_replay_allowed": False,
+            "previous_execution_id": previous_execution_id,
+            "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+        }
+        if task.agent.code != BOT_CODE:
+            task.output_data.update({
+                "legacy_agent_code": task.agent.code,
+                "migration_target": BOT_CODE,
+                "legacy_work_replayed": False,
+            })
         task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
         self._audit(
             task,
