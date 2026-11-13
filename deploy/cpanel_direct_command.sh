@@ -22,7 +22,7 @@ trap cleanup EXIT
 # Strictly read-only: stream a pinned source guard over SSH stdin. Never stage on cPanel.
 zomorod_fields_audit_stream() {
   local guard=scripts/zomorod_fields_guard_20261113.py
-  local approved_blob=82f5ae3c339fecf7a29424424244af9f997c6f91
+  local approved_blob=aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32
   if [[ ! -f "$guard" || -L "$guard" || "$(git hash-object -- "$guard")" != "$approved_blob" ]]; then
     echo "ZOMOROD_AUDIT_SOURCE_NOT_PINNED" >&2
     return 65

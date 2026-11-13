@@ -497,7 +497,7 @@ def test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid():
     assert 'django_migrations|zomorod_fields_audit_live)' in script
     assert script.count('zomorod_fields_audit_live)') == 3  # allowlist + both relay modes
     assert script.count('zomorod_fields_audit_stream') == 3  # definition + both modes
-    assert '82f5ae3c339fecf7a29424424244af9f997c6f91' in script
+    assert 'aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32' in script
     assert 'git hash-object -- "$guard"' in script
     assert 'StrictHostKeyChecking yes' in script
     assert 'ssh -T -F "$work/config" saeit-cpanel' in script
