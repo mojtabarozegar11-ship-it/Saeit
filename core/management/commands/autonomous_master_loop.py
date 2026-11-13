@@ -28,6 +28,7 @@ class Command(BaseCommand):
         master_agent = resolve_single_active_agent(Agent)
         if master_agent is None:
             self.stdout.write("AUTO_BLOCKED_NO_ACTIVE_CANONICAL_BOT")
+            self.stdout.write("AUTONOMOUS_IDLE")
             return
         requested_steps=max(1, opts["max_steps"])
         steps=min(20, requested_steps)
@@ -66,8 +67,6 @@ class Command(BaseCommand):
                 self.stdout.write(f"AUTO_REPLAN failed_task={active.pk} reason={exc} prerequisite={prereq or 'unknown'}")
                 if not prereq:
                     return
-                # Failed task is already safely requeued by WorkerRunner when retries remain.
-                # Cancel it as superseded so the inferred prerequisite can run first.
                 active.refresh_from_db()
                 if active.status=="queued":
                     active.status="cancelled"
@@ -82,8 +81,6 @@ class Command(BaseCommand):
                     "reason":str(exc)[:1000]},status="queued")
                 continue
 
-            # Stop when progress reaches an external-world boundary rather than
-            # pretending an internal artifact equals a sale.
             done.refresh_from_db()
             if done.output_data.get("verified_effect") is not True:
                 self.stdout.write(
