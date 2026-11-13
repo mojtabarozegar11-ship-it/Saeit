@@ -437,5 +437,99 @@
     "deployment_proven": false,
     "live_host_evidence_attested": false,
     "actual_legacy_deactivations": 0
+  },
+  "trader_consolidation_registry": {
+    "canonical_destination": "mojtaba.bot.ai",
+    "activation_policy": "blocked_until_consolidated_and_verified",
+    "deletion_policy": "delete_only_after_backup_and_verified_replacement",
+    "evidence_scope": "repository_source_inventory_not_live_runtime_attestation",
+    "surfaces": [
+      {
+        "id": "quantumscalp_v2_cbot",
+        "paths": [
+          "trading/MojTradeDemoBot.cs",
+          "trading/README.md"
+        ],
+        "status": "absorbed_pending_compile_and_demo_verification",
+        "disposition": "absorb_strategy_modules_and_risk_features_into_canonical_execution_core"
+      },
+      {
+        "id": "omega_x_demo_cbot",
+        "paths": [
+          "trading/MojTradeOmegaXDemoBot.cs",
+          "trading/MojTrade_OMEGA_X_Build_Spec.md",
+          "trading/MojTrade_OMEGA_X_Deploy_Guide.md"
+        ],
+        "status": "canonical_core_pending_compile_and_demo_verification",
+        "disposition": "candidate_single_execution_shell_not_activated"
+      },
+      {
+        "id": "market_observer",
+        "paths": [
+          "scripts/mojtrade_observe_market.py",
+          "scripts/mojtrade_consume_observation.py"
+        ],
+        "status": "pending_merge",
+        "disposition": "canonical_signal_input_research_only"
+      },
+      {
+        "id": "research_product_builder",
+        "paths": [
+          "scripts/mojtrade_build_research_product.py"
+        ],
+        "status": "pending_merge",
+        "disposition": "canonical_evidence_packaging_only"
+      },
+      {
+        "id": "observer_runtime",
+        "paths": [
+          "deploy/install_mojtrade_observer_vps.sh",
+          "deploy/systemd/mojtrade-observer.service",
+          "deploy/systemd/mojtrade-observer.timer"
+        ],
+        "status": "pending_merge",
+        "disposition": "canonical_read_only_data_collection_only"
+      },
+      {
+        "id": "readonly_relay_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-readonly-relay.yml"
+        ],
+        "status": "pending_merge",
+        "disposition": "canonical_read_only_transport_only"
+      },
+      {
+        "id": "observer_activation_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-vps-observer-activate.yml"
+        ],
+        "status": "pending_merge",
+        "disposition": "manual_owner_gated_only"
+      },
+      {
+        "id": "mt5_readonly_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-mt5-readonly-vps-install.yml"
+        ],
+        "status": "pending_merge",
+        "disposition": "inventory_only_no_trading_activation"
+      }
+    ],
+    "consolidation_decision": {
+      "execution_core": "omega_x_cbot_as_single_execution_shell",
+      "capability_source": "quantumscalp_v2_features_are_to_be_absorbed_before_activation",
+      "signal_core": "market_observer_and_research_consumer_only_until_demo_gate",
+      "mt5_surface": "read_only_inventory_only_no_independent_trader_activation",
+      "old_roots": "retain_until_verified_replacement_and_backup",
+      "live_trading": "locked"
+    },
+    "last_verified_change": {
+      "change": "QuantumScalp capability source copied into OMEGA execution-core path",
+      "target_path": "trading/MojTradeOmegaXDemoBot.cs",
+      "source_path": "trading/MojTradeDemoBot.cs",
+      "verification": "static_source_checks_passed",
+      "runtime_verification": "not_available",
+      "old_source_retention": "retained_until_backup_and_verified_replacement"
+    }
   }
 }
