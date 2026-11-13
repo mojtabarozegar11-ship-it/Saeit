@@ -137,7 +137,7 @@ class AuditTests(unittest.TestCase):
     def test_security_headers_missing_csp(self):
         self.assertEqual(
             MOD.checkout_header_status({"Cache-Control": "no-store"}),
-            "checkout_security_headers_unverified")
+            "checkout_csp_missing")
 
     def test_security_headers_no_store_required(self):
         headers = {
@@ -156,7 +156,7 @@ class AuditTests(unittest.TestCase):
             "Cache-Control": "no-store",
         }
         self.assertEqual(MOD.checkout_header_status(headers),
-                         "checkout_security_headers_unverified")
+                         "checkout_csp_scripts_unverified")
 
     def test_security_headers_reject_unsafe_scripts(self):
         headers = {
@@ -166,7 +166,7 @@ class AuditTests(unittest.TestCase):
             "Cache-Control": "no-store",
         }
         self.assertEqual(MOD.checkout_header_status(headers),
-                         "checkout_security_headers_unverified")
+                         "checkout_csp_scripts_unverified")
 
     def test_hidden_csrf_required(self):
         html = checkout(72).replace('type="hidden"', 'type="text"')
@@ -204,6 +204,55 @@ class AuditTests(unittest.TestCase):
     def test_wrong_sku_rejected_before_form_lookup(self):
         self.assertEqual(MOD.classify_html("checkout", 779, checkout(72)),
                          "invalid_sku")
+
+    def test_missing_form_action_category(self):
+        headers = {"Content-Security-Policy":
+                   "script-src 'none'; frame-ancestors 'none'",
+                   "Cache-Control": "no-store"}
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_csp_form_action_unverified")
+
+    def test_missing_frame_ancestors_category(self):
+        headers = {"Content-Security-Policy":
+                   "script-src 'none'; form-action 'self'",
+                   "Cache-Control": "no-store"}
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_csp_frames_unverified")
+
+    def test_missing_script_src_category(self):
+        headers = {"Content-Security-Policy":
+                   "form-action 'self'; frame-ancestors 'none'",
+                   "Cache-Control": "no-store"}
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_csp_scripts_unverified")
+
+    def test_checkout_form_is_reported_despite_missing_csp(self):
+        page = checkout(72).encode("utf-8")
+        url = "https://mojplaywin.com/store/product/72/checkout/"
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "text/html",
+                       "Cache-Control": "no-store"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return url
+            def read(self, length):
+                return page[:length]
+        class FakeOpener:
+            def open(self, request, timeout=None):
+                self.last_method = request.get_method()
+                return FakeResponse()
+        client = FakeOpener()
+        forms = {}
+        status = MOD.observe("/store/product/72/checkout/", "checkout",
+                             72, 4, client, forms)
+        self.assertEqual(client.last_method, "GET")
+        self.assertEqual(status, "checkout_csp_missing")
+        self.assertEqual(forms["/store/product/72/checkout/"],
+                         "no_email_checkout_get_ok_not_paid")
 
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
