@@ -43,7 +43,9 @@ FILES = {
 }
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 SOURCE_DIGESTS = {
-    "guest": "b9e0b9b210fa2d36db96b91f596af91ccbfc5923338fd2eb3fc87e800ca0f957",
+    # Reviewed no-buyer-email guest principal, with reserved .invalid internal alias.
+    # This pins only candidate code; it does not authorize email recovery for new sales.
+    "guest": "41d86a1985288c3db1097b66aae5a17f8fe0faaaa5d9dfa25b1d0cdfc154eaf0",
     "recovery": "164db1b46bf454dc311502f993e6f9d06e2f20b020e9f8986fb81fcda81a23bf",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "9913e106dee36cefab78137fb54936339c65bd68fefd6d72e616c36011866572",
