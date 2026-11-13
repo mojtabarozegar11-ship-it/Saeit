@@ -128,6 +128,17 @@ class InternalCyberModuleTests(unittest.TestCase):
         with self.assertRaisesRegex(CyberModuleError, "FINDINGS_INVALID"):
             self.run_review(data=evidence(findings="untrusted"))
 
+    def test_list_severity_is_rejected_without_exception_leak(self):
+        bad = evidence(findings=[{**evidence()["findings"][0], "severity": ["high"]}])
+        with self.assertRaisesRegex(CyberModuleError, "SEVERITY_INVALID"):
+            self.run_review(data=bad)
+
+    def test_dict_severity_is_rejected_without_exception_leak(self):
+        bad = evidence(findings=[{**evidence()["findings"][0], "severity": {"x": "high"}}])
+        with self.assertRaisesRegex(CyberModuleError, "SEVERITY_INVALID"):
+            self.run_review(data=bad)
+
+
 
 if __name__ == "__main__":
     unittest.main()
