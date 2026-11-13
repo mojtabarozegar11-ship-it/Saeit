@@ -51,6 +51,7 @@ jobs:
           from pathlib import Path
           from html.parser import HTMLParser
           import re
+          import xml.etree.ElementTree as ET
           h=Path('content/zomorod-vision-v3/index.html').read_text()
           js=Path('content/zomorod-vision-v3/assets/zm-reference-v3.js').read_text()
           css=Path('content/zomorod-vision-v3/assets/zm-reference-v3.css').read_text()
@@ -64,7 +65,23 @@ jobs:
           assert photo_region.count('class="field-card neon-panel"')==10,'Ten real original photo cards required'
           photos=re.findall(r'<img\b[^>]*\bsrc="([^"]+)"',photo_region)
           assert len(photos)==len(set(photos))==10,'Ten distinct first-party images required'
-          assert all(x.startswith('/assets/zm-v3-') and x.endswith('.webp') for x in photos)
+          assert sum(x.startswith('/assets/zm-v3-') and x.endswith('.webp') for x in photos)==4
+          assert sum(x.startswith('/assets/zm-field-') and x.endswith('.svg') for x in photos)==6
+          routes=re.findall(r'class="field-card neon-panel" href="([^"]+)"',photo_region)
+          assert len(routes)==len(set(routes))==10,'Every card must have its own destination'
+          slugs=('innovation','laboratory','greenhouse','livestock','smart-tools','games-simulation')
+          for slug in slugs:
+              page=Path('content/zomorod-vision-v3/fields')/slug/'index.html'
+              art=Path('content/zomorod-vision-v3/assets')/f'zm-field-{slug}.svg'
+              assert page.is_file() and art.is_file(),slug
+              text=page.read_text()
+              assert f'<h1 id="hero-title">' in text and f'/assets/zm-field-{slug}.svg' in text
+              assert f'https://zomorodmelal.ir/fields/{slug}/' in text
+              assert routes.count(f'/fields/{slug}/')==1
+              svg=ET.parse(art).getroot()
+              assert svg.attrib.get('viewBox')=='0 0 1200 750'
+              assert svg.attrib.get('width')=='1200' and svg.attrib.get('height')=='750'
+              assert not list(svg.iter('{http://www.w3.org/2000/svg}script'))
           assert photo_region.count('<strong>')==10,'Each card must have a readable title'
           assert 'چرخش خودکار ده کارت تصویری' in h
           assert h.count('fetchpriority="high"')<=2
@@ -84,6 +101,8 @@ jobs:
           mkdir -p "$root/assets"
           cp "$ZOMOROD_STAGE/new/index.html" "$root/index.html"
           cp "$ZOMOROD_STAGE/new/assets/"* "$root/assets/"
+          cp content/zomorod-vision-v3/assets/zm-field-*.svg "$root/assets/"
+          cp -R content/zomorod-vision-v3/fields "$root/fields"
           python3 - <<'PY'
           from pathlib import Path
           import os,zipfile
@@ -174,6 +193,21 @@ jobs:
                   throw Error('CAROUSEL_TEN_NOT_ADVANCING_TO_NEW_IMAGES '+JSON.stringify({first,second}));
                 await photo.evaluate(el=>{el.scrollLeft=0;});
                 await button.click();
+              }
+              // Every advertised new topic route must be a real fully renderable page, not a 404.
+              if(width===390){
+                for(const slug of ['innovation','laboratory','greenhouse','livestock','smart-tools','games-simulation']){
+                  const landing=await browser.newPage({viewport:{width:390,height:800}});
+                  const response=await landing.goto('http://127.0.0.1:8099/fields/'+slug+'/',{waitUntil:'load',timeout:30000});
+                  if(response.status()!==200)throw Error('TOPIC_PAGE_404_'+slug+'_'+response.status());
+                  if(await landing.locator('h1').count()!==1||
+                     await landing.locator('link[rel="canonical"]').getAttribute('href')!=='https://zomorodmelal.ir/fields/'+slug+'/')
+                    throw Error('TOPIC_PAGE_META_FAIL_'+slug);
+                  const image=landing.locator('main img[src*="/assets/zm-field-'+slug+'.svg"]');
+                  if(await image.count()!==1||!(await image.evaluate(el=>el.complete&&el.naturalWidth>0)))
+                    throw Error('TOPIC_IMAGE_BROKEN_'+slug);
+                  await landing.close();
+                }
               }
               const transparent=await page.evaluate(async()=>{
                 const img=new Image();img.src='/assets/zm-logo-transparent-v1.webp';await img.decode();
