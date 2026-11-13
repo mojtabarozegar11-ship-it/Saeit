@@ -250,6 +250,15 @@ def inspect(root: Path = ROOT) -> dict:
     recorder_count = sum(f["invoice_recorder_definition_count"] for f in files
                          if f["file"] in SOURCE_PATHS[:3])
     missing_recorder = recorder_count == 0
+    # An imported recorder is not a missing invoice implementation: it is
+    # outside this limited read-only source scope until inspected separately.
+    external_recorder = any(
+        any(isinstance(call, dict) and
+            isinstance(call.get("import"), str) and
+            call["import"].endswith(".record_invoice")
+            for call in file.get("invoice_import_calls", []))
+        for file in files if file["file"] in SOURCE_PATHS[:3]
+    )
     duplicate_recorder = recorder_count > 1
     duplicate_functions = any(f["duplicate_functions"] for f in files)
     truncated_graph = any(f["helper_limit_hit"] for f in files[:3])
@@ -262,6 +271,7 @@ def inspect(root: Path = ROOT) -> dict:
     status = ("SOURCE_MISSING_OR_UNREADABLE" if missing or not template.get("exists")
               else "DUPLICATE_SOURCE_FUNCTIONS" if duplicate_functions
               else "START_HANDLER_NOT_FOUND" if missing_start
+              else "INVOICE_RECORDER_EXTERNAL_UNVERIFIED" if missing_recorder and external_recorder
               else "INVOICE_RECORDER_NOT_FOUND" if missing_recorder
               else "INVOICE_RECORDER_DUPLICATED" if duplicate_recorder
               else "EMAIL_REFERENCES_PRESENT" if email_hits
@@ -281,6 +291,7 @@ def inspect(root: Path = ROOT) -> dict:
         "template": template,
         "checkout_source_requires_email": email_template,
         "invoice_recorder_found": recorder_count == 1,
+        "invoice_recorder_external_unverified": bool(missing_recorder and external_recorder),
         "invoice_recorder_definition_count": recorder_count,
         "csrf_template_marker_found": not missing_csrf,
         "email_hit_functions": email_hits,
@@ -329,7 +340,16 @@ def validate_remote_report(output: str) -> int:
         calls = item.get("checkout_call_targets", [])
         safe_calls = sorted({v for v in calls if isinstance(v, str) and
                              re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", v)})[:35] if isinstance(calls, list) else []
+        imports = item.get("invoice_import_calls", [])
+        safe_imports = sorted({
+            entry["import"] for entry in imports if isinstance(entry, dict)
+            and isinstance(entry.get("import"), str)
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,7}",
+                             entry["import"])
+            and len(entry["import"]) <= 140
+        })[:15] if isinstance(imports, list) else []
         safe_modules.append({"file": item["file"], "sha16": digest,
+                             "invoice_imports": safe_imports,
                              "start_definitions": int(item.get("start_handler_definition_count", 0)) if type(item.get("start_handler_definition_count")) is int else None,
                              "recorder_definitions": int(item.get("invoice_recorder_definition_count", 0)) if type(item.get("invoice_recorder_definition_count")) is int else None,
                              "checkout_calls": safe_calls})

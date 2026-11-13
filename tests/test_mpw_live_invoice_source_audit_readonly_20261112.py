@@ -243,6 +243,31 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
 
+    def test_external_imported_invoice_recorder_is_unverified_not_missing(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text(
+            "from services.invoice_ledger import record_invoice\n"
+            "def _start_order(request):\n"
+            "    return record_invoice(request)\n"
+        )
+        (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
+            "def _eligible(product):\n    return True\n"
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "INVOICE_RECORDER_EXTERNAL_UNVERIFIED")
+        self.assertTrue(report["invoice_recorder_external_unverified"])
+        code, printed = self._remote_gate_result(report)
+        self.assertEqual(code, 21)
+        self.assertIn("BLOCKED_INVOICE_RECORDER_EXTERNAL_UNVERIFIED", printed)
+        evidence = json.loads(next(
+            line.split("=", 1)[1] for line in printed.splitlines()
+            if line.startswith("MPW_SOURCE_EVIDENCE=")
+        ))
+        web_entry = next(f for f in evidence["modules"]
+                         if f["file"] == AUDIT.SOURCE_PATHS[0])
+        self.assertIn("services.invoice_ledger.record_invoice",
+                      web_entry["invoice_imports"])
+
     def test_distinct_module_invoice_recorders_are_ambiguous(self):
         web = self.root / AUDIT.SOURCE_PATHS[0]
         web.write_text("def record_invoice(order):\n    return order\n"
