@@ -10,6 +10,7 @@ from django.core.management.base import CommandError
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from unittest.mock import patch
 
 from core.models import Agent, AgentTask, AuditLog
 from core.mojtrade_bridge import MojTradeBridgeError, ingest_private_observation
@@ -388,3 +389,52 @@ def test_private_watch_api_post_does_not_trigger_market_ingest(client, canonical
     response = client.post(reverse("mojtrade-private-watch"), data={"trade": "buy"})
     assert response.status_code == 405
     assert AgentTask.objects.count() == 0
+
+
+
+@pytest.mark.django_db
+def test_private_watch_api_expires_even_after_a_previously_successful_get(client, canonical_market):
+    task, _ = ingest_private_observation()
+    user = get_user_model().objects.create_superuser(
+        username="watch-expired-owner", email="watch-expired@example.com",
+        password="local-test-only",
+    )
+    client.force_login(user)
+    url = reverse("mojtrade-private-watch")
+    assert client.get(url).status_code == 200
+    with patch(
+        "core.management.commands.mojtrade_market_watch_export.timezone.now",
+        return_value=timezone.now() + timedelta(days=1),
+    ):
+        expired = client.get(url)
+    assert expired.status_code == 503
+    assert "watch" not in expired.json()
+    assert "no-store" in expired["Cache-Control"]
+    assert task.status == "completed"
+
+
+@pytest.mark.django_db
+def test_private_watch_api_does_not_revert_to_old_completed_snapshot(client, canonical_market):
+    earlier, _ = ingest_private_observation()
+    user = get_user_model().objects.create_superuser(
+        username="watch-no-fallback-owner", email="no-fallback@example.com",
+        password="local-test-only",
+    )
+    client.force_login(user)
+    latest = AgentTask.objects.create(
+        agent=earlier.agent,
+        action_type=MOJTRADE_RESEARCH_CAPABILITY,
+        capability_code=MOJTRADE_RESEARCH_CAPABILITY,
+        risk_snapshot="low",
+        status="queued",
+        input_data={"source_sha256": "d" * 64},
+    )
+    with patch(
+        "core.management.commands.mojtrade_market_watch_export.timezone.now",
+        return_value=timezone.now(),
+    ):
+        response = client.get(reverse("mojtrade-private-watch"))
+    assert latest.pk > earlier.pk
+    assert response.status_code == 503
+    assert "watch" not in response.json()
+    assert AgentTask.objects.count() == 2
