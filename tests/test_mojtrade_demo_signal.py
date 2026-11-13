@@ -94,7 +94,7 @@ def test_dual_confirmation_generates_private_priced_gold_levels_but_never_orders
     assert levels["prices_are_executable"] is False
     assert all(result["copy"][lang] for lang in ("fa", "en", "ar"))
     assert len(result["source_digest_sha256"]) == 64
-    assert result["risk_advisory_capacity_account_currency"] == "25.000000"
+    assert Decimal(result["risk_advisory_capacity_account_currency"]) == Decimal("25")
     assert result["publication_authorized"] is False
     assert result["trade_execution_authorized"] is False
     assert result["broker_execution_connected"] is False
