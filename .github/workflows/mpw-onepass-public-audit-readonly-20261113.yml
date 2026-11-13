@@ -21,6 +21,7 @@ on:
       - 'tests/test_mpw_cpanel_source_bridge_readonly_20261113.py'
       - 'deploy/cpanel_direct_command.sh'
       - '.github/workflows/cpanel-direct-command-bridge.yml'
+      - '.github/workflows/mpw-public-passenger-runtime-readonly-20261102.yml'
       - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
   workflow_dispatch:
 
