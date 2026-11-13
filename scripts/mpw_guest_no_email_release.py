@@ -100,6 +100,9 @@ def audit_invoice_email_dependencies() -> dict:
         "services/mpw_trx_commercial_web.py",
         "services/mpw_trx_commercial_context.py",
         "mpw_commerce/buyer_orders.py",
+        # Exact recorder module found by read-only pinned cPanel SSH evidence:
+        # services.mpw_trx_guest_delivery.record_invoice
+        "services/mpw_trx_guest_delivery.py",
     )
     inspected = []
     invoice_handlers = 0
@@ -110,6 +113,7 @@ def audit_invoice_email_dependencies() -> dict:
         "services.mpw_trx_commercial_web": "services/mpw_trx_commercial_web.py",
         "services.mpw_trx_commercial_context": "services/mpw_trx_commercial_context.py",
         "mpw_commerce.buyer_orders": "mpw_commerce/buyer_orders.py",
+        "services.mpw_trx_guest_delivery": "services/mpw_trx_guest_delivery.py",
     }
     recorder_definitions = {}
     invoked_recorders = set()
@@ -206,7 +210,7 @@ def audit_invoice_email_dependencies() -> dict:
         if rel.endswith("mpw_trx_commercial_web.py"):
             invoice_handlers = len(functions.get("_start_order", []))
         invoice_recorders += len(functions.get("record_invoice", []))
-        module_name = rel.removesuffix(".py").replace("/", ".")
+        module_name = rel[:-3].replace("/", ".")
         recorder_definitions[module_name] = len(functions.get("record_invoice", []))
 
         roots = {"_start_order", "record_invoice"}

@@ -37,6 +37,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             ),
             "services/mpw_trx_commercial_context.py": "def rights_cleared_for_sale(product):\n    return False\n",
             "mpw_commerce/buyer_orders.py": "def _eligible(product):\n    return True\n",
+            "services/mpw_trx_guest_delivery.py": "def _test_fixture_marker():\n    return None\n",
         }
         for rel, source in sources.items():
             dest = root / rel
@@ -83,7 +84,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             }
             with patch.object(release, "APP", root):
                 report = release.audit_invoice_email_dependencies()
-            self.assertEqual(report["invoice_sources_examined"], 3)
+            self.assertEqual(report["invoice_sources_examined"], 4)
             self.assertTrue(report["invoice_handler_found"])
             after = {
                 str(p.relative_to(root)): p.read_bytes()
@@ -196,8 +197,99 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             with patch.object(release, "APP", root):
                 report = release.audit_invoice_email_dependencies()
             self.assertEqual(report["audited_imported_recorders"], 1)
-            self.assertEqual(report["invoice_sources_examined"], 3)
+            self.assertEqual(report["invoice_sources_examined"], 4)
             self.assertTrue(report["invoice_recorder_found"])
+
+    def test_live_imported_recorder_with_required_email_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    from services.mpw_trx_guest_delivery import record_invoice\n"
+                "    return record_invoice(product_id)\n",
+                "",
+            )
+            (root / "services/mpw_trx_guest_delivery.py").write_text(
+                "def normalize_email(value):\n"
+                "    return value.strip().lower()\n"
+                "def record_invoice(order, buyer_email):\n"
+                "    return normalize_email(buyer_email)\n"
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_live_imported_recorder_still_needs_paid_delivery_proof(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    from services.mpw_trx_guest_delivery import record_invoice\n"
+                "    return record_invoice(product_id)\n",
+                "",
+            )
+            (root / "services/mpw_trx_guest_delivery.py").write_text(
+                "def record_invoice(order):\n    return order\n"
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertEqual(report["invoice_sources_examined"], 4)
+            self.assertEqual(report["audited_imported_recorders"], 1)
+            self.assertEqual(report["scope"],
+                             "reachable_source_indicators_only_not_live_transaction")
+
+    def test_live_recorder_alias_import_is_checked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "from services.mpw_trx_guest_delivery import record_invoice as save\n"
+                "def _start_order(request, product_id):\n"
+                "    return save(product_id)\n",
+                "",
+            )
+            (root / "services/mpw_trx_guest_delivery.py").write_text(
+                "def record_invoice(order, customer_email):\n"
+                "    return customer_email\n"
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_missing_actual_live_recorder_file_blocks_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    return product_id\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            (root / "services/mpw_trx_guest_delivery.py").unlink()
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_duplicate_invoice_recorder_in_live_module_blocks_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "def _start_order(request, product_id):\n"
+                "    from services.mpw_trx_guest_delivery import record_invoice\n"
+                "    return record_invoice(product_id)\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            (root / "services/mpw_trx_guest_delivery.py").write_text(
+                "def record_invoice(order):\n    return order\n"
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(
+                    RuntimeError, "INVOICE_RECORDER_MISSING_OR_DUPLICATED"
+                ):
+                    release.audit_invoice_email_dependencies()
 
     def test_handler_local_allowlisted_recorder_is_audited(self):
         with tempfile.TemporaryDirectory() as folder:
