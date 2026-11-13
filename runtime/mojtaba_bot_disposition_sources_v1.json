@@ -591,7 +591,20 @@
     "official_source": "Spotware homebrew-tap",
     "credentials_or_account_access": "not_used",
     "cbot_run_backtest_deployment_orders": "not_run",
-    "factory_runner_blocker": "CPU lacks SSSE3 for Homebrew Linux x86_64"
+    "factory_runner_blocker": "CPU lacks SSSE3 for Homebrew Linux x86_64",
+    "compile_artifact_gap": {
+      "trading_directory_inventory": [
+        "MojTradeDemoBot.cs",
+        "MojTradeOmegaXDemoBot.cs",
+        "MojTrade_OMEGA_X_Build_Spec.md",
+        "MojTrade_OMEGA_X_Deploy_Guide.md",
+        "README.md"
+      ],
+      "algo_or_cbot_project_present": false,
+      "compile_status": "blocked_missing_cbot_project_or_algo_artifact",
+      "required_next_input": "official cTrader desktop/Algo project export or .algo artifact",
+      "no_credentials_or_orders": true
+    }
   },
   "updated_from_cycle": "E-20261113-CLI-compatibility"
 }
