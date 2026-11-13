@@ -6,7 +6,7 @@ No network, email, publication, payments or broker access is possible here.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
@@ -87,6 +87,12 @@ def build_market_watch_drafts(
     if (not isinstance(signals, list) or not isinstance(decisions, list)
             or len(signals) != 2 or len(decisions) != 2):
         raise MarketWatchDraftError("source_review_cardinality_mismatch")
+    digest = hashlib.sha256(json.dumps(
+        {"version": MODEL_VERSION, "decisions": decisions},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    ).encode("utf-8")).hexdigest()
+    if review.get("decision_digest_sha256") != digest:
+        raise MarketWatchDraftError("review_digest_mismatch")
     items = []
     for index, (source, decision) in enumerate(zip(signals, decisions)):
         if not isinstance(source, dict) or not isinstance(decision, dict):
@@ -104,7 +110,7 @@ def build_market_watch_drafts(
                 or decision.get("order_intent") is not None):
             raise MarketWatchDraftError("review_does_not_match_validated_source")
         observed = _utc(source.get("observed_at"), "observed")
-        if observed > generated or generated - observed > __import__("datetime").timedelta(hours=3):
+        if observed > generated or generated - observed > timedelta(hours=3):
             raise MarketWatchDraftError("source_candle_too_old")
         items.append({
             "symbol": SYMBOLS[index],
