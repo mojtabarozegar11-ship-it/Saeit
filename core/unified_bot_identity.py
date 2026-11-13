@@ -45,9 +45,12 @@ def unresolved_master_task_id(task_model, *, exclude_task_id=None):
     budget does not prove that the preceding effect was rolled back.
     Keep both canonical and legacy audit records in this safety query.
     """
+    # Do not let an old worker evade the safety barrier by accidentally
+    # changing an uncertain task to queued/cancelled/completed. A dedicated
+    # independently attested closure must explicitly clear the uncertainty.
     pending = task_model.objects.filter(
         agent__code__in=EXECUTOR_RUNTIME_CODES,
-        status__in=("blocked", "failed"),
+        attempt_count__gt=0,
         output_data__requires_review=True,
     )
     if exclude_task_id is not None:

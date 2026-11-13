@@ -9,6 +9,7 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 from .task_reconciliation import (
     build_reconciliation_dossier, record_reconciliation_observation,
 )
+from .unified_bot_identity import BOT_CODE, EXECUTOR_RUNTIME_CODES
 
 
 from .orchestrator import MasterAgent
@@ -48,6 +49,13 @@ class InternalStaffWritePermission(BasePermission):
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return True
         return bool(request.user.is_staff)
+
+
+class OwnerTaskPermission(BasePermission):
+    """Task inventories and controls are not staff-wide data."""
+
+    def has_permission(self, request, view):
+        return is_authorized_chat_operator(request.user)
 
 
 def vs(model, serializer, permission=StaffWritePermission):
@@ -477,10 +485,29 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
 
 
 class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
-    """Tasks are created only through Master Agent planning, never by direct CRUD."""
+    """Owner-scoped task inventory; master execution lives in WorkerRunner."""
     queryset = AgentTask.objects.all()
     serializer_class = AgentTaskSerializer
-    permission_classes = [InternalStaffWritePermission]
+    permission_classes = [OwnerTaskPermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not is_authorized_chat_operator(user):
+            return AgentTask.objects.none()
+        return AgentTask.objects.select_related("agent", "project").filter(
+            models.Q(project__owner=user)
+            | models.Q(project__isnull=True, agent__code=BOT_CODE)
+        )
+
+    def _master_api_lifecycle_denial(self):
+        """Browser/user API cannot synthesize a master execution receipt."""
+        task = self.get_object()
+        if task.agent.code in EXECUTOR_RUNTIME_CODES:
+            return Response(
+                {"detail": "MASTER_LIFECYCLE_VIA_HTTP_FORBIDDEN_USE_WORKER_RUNNER"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
 
     @action(detail=True, methods=["get"], url_path="reconciliation")
     def reconciliation(self, request, pk=None):
@@ -534,6 +561,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="claim")
     def claim(self, request, pk=None):
+        denied = self._master_api_lifecycle_denial()
+        if denied is not None:
+            return denied
         try:
             task = TaskRuntime().claim(pk)
         except AgentTask.DoesNotExist:
@@ -544,6 +574,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="complete")
     def complete(self, request, pk=None):
+        denied = self._master_api_lifecycle_denial()
+        if denied is not None:
+            return denied
         output_data = request.data.get("output_data") or {}
         if not isinstance(output_data, dict):
             return Response({"detail": "output_data must be an object."}, status=status.HTTP_400_BAD_REQUEST)
@@ -558,6 +591,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="heartbeat")
     def heartbeat(self, request, pk=None):
+        denied = self._master_api_lifecycle_denial()
+        if denied is not None:
+            return denied
         execution_id = str(request.data.get("execution_id", "")).strip()
         if not execution_id:
             return Response({"detail": "execution_id is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -571,6 +607,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="recover-stale")
     def recover_stale(self, request, pk=None):
+        denied = self._master_api_lifecycle_denial()
+        if denied is not None:
+            return denied
         stale_after = request.data.get("stale_after_seconds", 900)
         try:
             task = TaskRuntime().recover_stale(pk, stale_after_seconds=stale_after)
@@ -582,6 +621,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="fail")
     def fail(self, request, pk=None):
+        denied = self._master_api_lifecycle_denial()
+        if denied is not None:
+            return denied
         error = str(request.data.get("error", "")).strip()
         if not error:
             return Response({"detail": "error is required."}, status=status.HTTP_400_BAD_REQUEST)

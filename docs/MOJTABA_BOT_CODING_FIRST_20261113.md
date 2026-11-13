@@ -153,3 +153,7 @@ The existing `AgentTaskViewSet` also exposes owner-only `POST /.../{id}/record-r
 ## Cycle 11 — AuditLog schema-width correction
 
 The owner observation audit actor label was shortened to `owner_review` (12 characters) because `AuditLog.actor_type` is a 30-character Django field; the earlier 32-character label exceeded that limit. The code no longer attempts an oversized value. No database migration or existing audit row was changed, and runtime acceptance remains untested.
+
+## Cycle 12 — owner task API and previous-effect barrier
+
+Changes A01–A08: (A01) enforce active superuser-only access to the task collection; (A02) filter task rows to the exact project owner or projectless canonical tasks; (A03–A07) deny five direct HTTP lifecycle mutations for canonical and legacy master tasks (claim, complete, heartbeat, recover-stale, fail), requiring the existing authenticated backend WorkerRunner/TaskRuntime route instead; (A08) treat every previously attempted master task with an unresolved `requires_review=true` flag as a blocker regardless of its current status, even if older code incorrectly marks it queued or cancelled. This is fail-closed source hardening and has NOT been run against real Django accounts or tasks; unrestricted staff API access and direct fake completion from this view are disabled at the source.
