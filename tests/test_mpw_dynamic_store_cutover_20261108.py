@@ -93,6 +93,22 @@ class DynamicStoreCutoverTests(unittest.TestCase):
                                        kwargs={"product_id": product_id}, func=handler)
         raise LookupError("unknown route")
 
+    def test_guest_invoice_rejects_duplicate_html_attributes(self):
+        """A second attribute must not conceal an email field from preflight."""
+        prefix = (b'<form method="post" action="/commerce/trx-easy/start/72/">'
+                  b'<input type="hidden" name="csrfmiddlewaretoken" value="token">')
+        self.assertTrue(has_guarded_guest_invoice_form(prefix + b'</form>', 72))
+        variants = (
+            b'<input name="email" name="not_email" type="hidden">',
+            b'<input type="email" type="hidden" name="contact">',
+            b'<input name="contact" name="email" type="text">',
+            b'<form method="post" method="get" action="/commerce/trx-easy/start/72/">',
+        )
+        for variant in variants:
+            with self.subTest(variant=variant):
+                self.assertFalse(has_guarded_guest_invoice_form(
+                    prefix + variant + b'</form>', 72))
+
     def test_all_three_real_buyer_url_routes_must_resolve(self):
         callback = verify_buyer_route_resolution(self.sample_route_resolver)
         self.assertTrue(callable(callback))
