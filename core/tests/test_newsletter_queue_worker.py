@@ -196,6 +196,13 @@ class NewsletterDefaultDenyPublicationTests(TestCase):
 
 
 
+class NewsletterSingleBotAuthorshipTests(TestCase):
+    def setUp(self):
+        self.bot = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai",
+            mission="Only canonical newsletter owner", active=True,
+        )
+
     def test_legacy_newsletter_cannot_create_new_story_even_if_database_identity_active(self):
         # A legacy launcher may remain in a cron on another host. It must not
         # produce new artifacts as an independent bot after source migration.
