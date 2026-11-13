@@ -90,6 +90,12 @@ jobs:
             tests/test_mojtrade_broker_statement_check.py \
             tests/test_mojtrade_csharp_build_contracts.py \
             tests/test_approval_security.py \
+            tests/test_runtime.py \
+            core/tests/test_approval_lifecycle.py \
+            core/tests/test_approval_audit.py \
+            core/tests/test_approval_api.py \
+            core/tests/test_approval_grants.py \
+            core/tests/test_canonical_approval_scope.py \
             core/tests/test_knowledge_agent_generate.py \
             core/tests/test_consolidate_legacy_agents.py \
             core/tests.py \
