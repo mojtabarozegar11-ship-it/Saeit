@@ -9,7 +9,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from core.approval import ApprovalService
-from core.models import Agent, AgentTask, AuditLog, ApprovalRequest
+from core.models import Agent, AgentCapability, AgentTask, AuditLog, ApprovalRequest
+from core.tool_gateway import ToolGateway, ToolGatewayError, ToolSpec
 from core.task_runtime import TaskExecutionError, TaskRuntime
 from core.unified_bot_identity import BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES, module_for_capability
 
@@ -430,3 +431,98 @@ def test_partial_live_receipt_is_not_retirement_authority():
     assert Agent.objects.get(pk=old.pk).active
     grant.refresh_from_db()
     assert grant.used_at is None
+
+
+
+@pytest.mark.django_db
+def test_noncanonical_pre_cutover_queued_task_cannot_claim_new_execution():
+    """A task created by an old scheduler cannot bypass source routing."""
+    previous = Agent.objects.create(
+        code="obsolete-executor-route", name="Old scheduler",
+        mission="Historical only", active=True,
+    )
+    capability = AgentCapability.objects.create(
+        code="legacy-private-operation", name="Legacy operation",
+        risk_level="low", active=True,
+    )
+    capability.agents.add(previous)
+    pending = AgentTask.objects.create(
+        agent=previous, action_type=capability.code,
+        capability_code=capability.code, risk_snapshot="low",
+        status="queued", input_data={"source": "pre-cutover"},
+    )
+    count_before = AuditLog.objects.filter(
+        action="task_claimed", target_id=str(pending.pk),
+    ).count()
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_TASK_EXECUTION_FORBIDDEN"):
+        TaskRuntime().claim(pending.pk)
+    pending.refresh_from_db()
+    assert pending.status == "queued"
+    assert pending.attempt_count == 0
+    assert pending.execution_id == ""
+    assert Agent.objects.get(pk=previous.pk).active
+    assert AuditLog.objects.filter(
+        action="task_claimed", target_id=str(pending.pk),
+    ).count() == count_before
+
+
+@pytest.mark.django_db
+def test_stale_noncanonical_running_token_cannot_invoke_any_tool():
+    """Tool boundary rejects a legacy runner even with the old execution id."""
+    previous = Agent.objects.create(
+        code="obsolete-running-executor", name="Old live worker",
+        mission="Historical execution", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="legacy-observe", name="Observer",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(previous)
+    running = AgentTask.objects.create(
+        agent=previous, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="running", execution_id="old-session",
+        attempt_count=1,
+    )
+    executions = []
+    gateway = ToolGateway([
+        ToolSpec(code=cap.code, handler=lambda d: executions.append(d)),
+    ])
+    with pytest.raises(ToolGatewayError, match="NONCANONICAL_TOOL_EXECUTION_FORBIDDEN"):
+        gateway.invoke(
+            cap.code, {"test": True}, task_id=running.pk,
+            execution_id="old-session",
+        )
+    assert executions == []
+    running.refresh_from_db()
+    assert running.status == "running" and running.execution_id == "old-session"
+    assert not AuditLog.objects.filter(
+        action="tool_invocation_started", target_id=str(running.pk),
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_canonical_claim_and_tool_gate_continue_with_internal_capability():
+    """Only existing canonical task ownership can enter the tool gateway."""
+    canonical = Agent.objects.create(
+        code=BOT_CODE, name=BOT_NAME, mission="One bot", active=True,
+    )
+    capability = AgentCapability.objects.create(
+        code="internal_private_research", name="Internal module",
+        risk_level="low", active=True,
+    )
+    capability.agents.add(canonical)
+    task = AgentTask.objects.create(
+        agent=canonical, action_type=capability.code,
+        capability_code=capability.code, risk_snapshot="low",
+        status="queued",
+    )
+    claimed = TaskRuntime().claim(task.pk)
+    gateway = ToolGateway([
+        ToolSpec(code=capability.code, handler=lambda data: {"safe": True}),
+    ])
+    assert gateway.invoke(
+        capability.code, {}, task_id=task.pk, execution_id=claimed.execution_id,
+    ) == {"safe": True}
+    assert TaskRuntime().complete(
+        task.pk, {"review_only": True}, execution_id=claimed.execution_id,
+    ).status == "completed"
