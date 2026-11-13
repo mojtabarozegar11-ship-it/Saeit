@@ -39,7 +39,9 @@ def _read_user(request):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if user is None or user.has_usable_password():
+        if (user is None or user.has_usable_password() or
+                getattr(user, "is_staff", False) or
+                getattr(user, "is_superuser", False)):
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -94,8 +96,21 @@ def _new_user(request):
     Model = get_user_model()
     field = Model.USERNAME_FIELD
     value = _guest_username(request)
-    if field.lower() in ("email", "email_address"):
-        value += "@guest.mojplaywin.com"
+    # This is a private, deterministic NON-CONTACTABLE identifier, not buyer
+    # email collection. The .invalid top-level domain is reserved for nonmail
+    # use. It must never be used for customer notices or real recovery.
+    internal_email = value + "@guest.mojplaywin.invalid"
+    username_is_email = field.lower() in ("email", "email_address")
+    if username_is_email:
+        value = internal_email
+    else:
+        try:
+            email_field = Model._meta.get_field("email")
+        except Exception as exc:
+            raise Http404("Guest model cannot support the existing invoice ledger") from exc
+        if (not getattr(email_field, "concrete", False) or
+                getattr(email_field, "is_relation", True)):
+            raise Http404("Guest model has an incompatible email field")
     if not Model._meta.get_field(field).unique:
         raise Http404("Guest identity field must be unique")
     query = {field: value}
@@ -106,16 +121,30 @@ def _new_user(request):
             # If another request wins this insert, its committed user is reused.
             with transaction.atomic():
                 user = Model(**query)
+                if not username_is_email:
+                    user.email = internal_email
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
+                # A guest account must never inherit privileged model defaults.
+                if hasattr(user, "is_staff"):
+                    user.is_staff = False
+                if hasattr(user, "is_superuser"):
+                    user.is_superuser = False
                 user.save(force_insert=True)
         except IntegrityError:
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if not getattr(user, "is_active", True) or user.has_usable_password():
+    if (not getattr(user, "is_active", True) or user.has_usable_password()
+            or getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)):
         raise Http404("Guest identity conflict")
+    # Never silently modify older guest principals or bind a real address.
+    # A legacy guest with an empty/mismatched email requires explicit source
+    # and migration reconciliation instead of creating a broken invoice.
+    if getattr(user, "email", None) != internal_email:
+        raise Http404("Unverified guest internal invoice identifier")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
         raise Http404("Guest receipt could not be issued")
@@ -273,6 +302,8 @@ def patch_commercial(namespace):
         "reconcile_invoice": ("_reconcile_invoice", False, require_POST, True),
         "download_paid": ("_download_paid", False, require_GET, False),
     }
+    # Stage handlers locally to avoid partially mutating a drifted route table.
+    pending = {}
     for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
         inner = namespace.get(inner_name)
         if inner is None:
@@ -282,35 +313,90 @@ def patch_commercial(namespace):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
                 if view_name == "start_order":
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
+                    # Record invoice creation only after an actual successful
+                    # redirect to a positive-ID local TRX invoice. Validation
+                    # errors, 200 pages and unrelated redirects are NOT sales
+                    # funnel successes; analytics may never break checkout.
                     try:
-                        from core.models import Product
-                        product = Product.objects.filter(
-                            pk=kwargs.get("product_id"), active=True,
-                        ).first()
-                        if product is not None:
-                            _record_funnel_event_best_effort(
-                                request, "invoice_created", product,
-                            )
-                    except Exception:
-                        pass
+                        import re
+                        from urllib.parse import urlsplit
+                        location = response.get("Location", "")
+                        redirect = urlsplit(location) if type(location) is str else None
+                        invoice_created = (
+                            getattr(response, "status_code", None) in (302, 303)
+                            and redirect is not None
+                            and not redirect.scheme and not redirect.netloc
+                            and re.fullmatch(
+                                r"/commerce/trx-easy/invoice/[1-9][0-9]*/",
+                                redirect.path,
+                            ) is not None
+                        )
+                    except (AttributeError, TypeError, ValueError):
+                        invoice_created = False
+                    if invoice_created:
+                        try:
+                            from core.models import Product
+                            product = Product.objects.filter(
+                                pk=kwargs.get("product_id"), active=True,
+                            ).first()
+                            if product is not None:
+                                _record_funnel_event_best_effort(
+                                    request, "invoice_created", product,
+                                )
+                        except Exception:
+                            pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
-        namespace[public_name] = make_view(inner, create, public_name)
+        pending[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
-        rebuilt = []
-        route_names = (
-            ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-            ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-            ("/download/", "download_paid"),
-        )
-        for route, view in patterns:
-            route_name = next((name for token, name in route_names if token in route), None)
-            replacement = namespace.get(route_name, view)
-            rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+    if not isinstance(patterns, tuple):
+        raise RuntimeError("Guest commercial routes must be an audited tuple")
+    rebuilt = []
+    # /invoice/<id>/status/ and /invoice/<id>/reconcile/ must not
+    # accidentally match the less specific invoice-detail endpoint.
+    # Never rebind an unrelated route merely because its URL contains
+    # "/start/" or "/invoice/".  Only the five audited commerce endpoints
+    # may receive the privileged guest identity wrappers.  Unrecognized
+    # endpoints under this prefix must block installation, not fail open.
+    route_names = {
+        "commerce/trx-easy/start/<int:product_id>/": "start_order",
+        "commerce/trx-easy/invoice/<int:invoice_id>/": "show_invoice",
+        "commerce/trx-easy/invoice/<str:invoice_id>/": "show_invoice",
+        "commerce/trx-easy/invoice/<int:invoice_id>/status/": "invoice_status",
+        "commerce/trx-easy/invoice/<str:invoice_id>/status/": "invoice_status",
+        "commerce/trx-easy/invoice/<int:invoice_id>/reconcile/": "reconcile_invoice",
+        "commerce/trx-easy/invoice/<str:invoice_id>/reconcile/": "reconcile_invoice",
+        "commerce/trx-easy/download/<int:invoice_id>/": "download_paid",
+        "commerce/trx-easy/download/<str:receipt_id>/": "download_paid",
+    }
+    seen = {name: 0 for name in targets}
+    for entry in patterns:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise RuntimeError("Malformed guest commercial route table")
+        route, view = entry
+        if not isinstance(route, str) or not callable(view):
+            raise RuntimeError("Unsupported guest commercial route entry")
+        # Source route tables may have one leading slash; preserve that exact
+        # syntax in the rewritten table.  A double slash is never normalized.
+        canonical = route[1:] if route.startswith("/") else route
+        route_name = route_names.get(canonical)
+        if route_name is None:
+            if canonical == "commerce/trx-easy/catalogue/":
+                rebuilt.append(entry)  # Public read-only catalogue is not a buyer endpoint.
+                continue
+            if route.lstrip("/").startswith("commerce/trx-easy/"):
+                raise RuntimeError("Unrecognized guest commercial route: " + route)
+            rebuilt.append(entry)
+            continue
+        seen[route_name] += 1
+        if seen[route_name] != 1:
+            raise RuntimeError("Duplicate guest commercial route: " + route_name)
+        rebuilt.append((route, pending[route_name]))
+    missing = [name for name in targets if seen[name] != 1]
+    if missing:
+        raise RuntimeError("Missing guest commercial routes: " + ",".join(missing))
+    namespace.update(pending)
+    namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
