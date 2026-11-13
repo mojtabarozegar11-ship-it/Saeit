@@ -137,3 +137,19 @@ def canonical_url(slug: str, locale: str, kind: str) -> str:
     domain = "zomorodmelal.ir" if locale == "fa" else "mojplaywin.com"
     prefix = "/ar" if locale == "ar" else ""
     return "https://" + domain + prefix + "/" + slug + "/" + ROUTE_KIND[kind] + "/"
+
+def locale_from_public_host(host: str) -> str:
+    """Route the Persian host only by exact allowlisted host, never substring.
+
+    An unrecognized host retains the legacy English fallback. The caller must
+    pass the effective HTTP_HOST (not attacker-controlled X-Forwarded-Host).
+    """
+    import re
+    if not isinstance(host, str):
+        return "en"
+    normalized = host.strip().lower().rstrip(".")
+    return (
+        "fa"
+        if re.fullmatch(r"(?:www\\.)?zomorodmelal\\.ir(?::(?:80|443))?", normalized)
+        else "en"
+    )
