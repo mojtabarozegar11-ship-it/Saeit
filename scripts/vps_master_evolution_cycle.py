@@ -138,6 +138,7 @@ def evaluate(db_path: Path, state_path: Path):
     # Persist a stable task-ID watermark. Legacy states without a cursor can
     # credit events only when the previous completed count was genuinely zero;
     # otherwise abstain from claiming any historical actions as new progress.
+    watermark_reopened = False
     previous_cursor = previous.get("last_completed_task_id")
     if previous_cursor is not None:
         if type(previous_cursor) is not int or previous_cursor < 0:
@@ -150,8 +151,6 @@ def evaluate(db_path: Path, state_path: Path):
             # A high-watermark task was reopened, so preserve the previous
             # cursor and reduce serial execution depth for this regression.
             watermark_reopened = True
-        else:
-            watermark_reopened = False
         cursor_trusted = True
     elif previous and prev_count.get("completed") == 0:
         previous_cursor = 0
@@ -159,8 +158,6 @@ def evaluate(db_path: Path, state_path: Path):
     else:
         previous_cursor = latest_completed_id
         cursor_trusted = False
-    if "watermark_reopened" not in locals():
-        watermark_reopened = False
     # Querying one extra row makes the audit-window limit exact, even when
     # task IDs are contiguous; the old gap-based detection missed that case.
     if sum(task_id > previous_cursor for task_id, _, _ in rows) > MAX_NEW_TASKS_PER_AUDIT:
