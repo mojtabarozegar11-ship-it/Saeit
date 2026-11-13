@@ -35,7 +35,7 @@ class Finance102GuidesTest(unittest.TestCase):
 
     def test_existing_live_template_is_exact_main_blob(self):
         payload = Path("core/templates/core/financial_brand_page.html").read_bytes()
-        blob = b"blob " + str(len(payload)).encode("ascii") + b"\\x00" + payload
+        blob = b"blob " + str(len(payload)).encode("ascii") + b"\x00" + payload
         self.assertEqual(sha1(blob).hexdigest(), "9189b3fc292cad19cd661ad082039a93b8c98d2e")
         self.assertNotIn(b"finance_guide", payload)
         self.assertIn(b'class="cards"', payload)
