@@ -28,6 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Inspect production baseline with existing pinned VPS-to-cPanel relay (zero writes)
         env:
           FACTORY_VPS_RUNNER: "1"
