@@ -22,7 +22,7 @@ UA = "MojPlayWin-readonly-sales-evidence/20261113"
 
 
 class PageParser(HTMLParser):
-    """Associate hidden security inputs with their enclosing form only."""
+    """Parse form boundaries without handling or printing buyer input values."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -33,21 +33,50 @@ class PageParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
         if tag == "form":
-            # HTML does not permit nested forms. A malformed nested form
-            # invalidates the outer one rather than borrowing its CSRF field.
-            if self._active_form is not None:
+            # Duplicate action/method attributes are ambiguous in browsers.
+            keys = [name.lower() for name, _ in attrs if name]
+            nested = self._active_form is not None
+            if nested:
                 self._active_form["malformed"] = True
-            form = {"action": values.get("action") or "",
-                    "method": (values.get("method") or "get").lower(),
-                    "inputs": [], "malformed": self._active_form is not None}
+            form = {
+                "action": values.get("action") or "",
+                "method": (values.get("method") or "get").lower(),
+                "inputs": [],
+                "submit_controls": 0,
+                "email_control": False,
+                "malformed": nested or keys.count("action") != 1
+                             or keys.count("method") != 1,
+            }
             self.forms.append(form)
             self._active_form = form
-        elif tag == "input" and self._active_form is not None:
-            self._active_form["inputs"].append(
-                (values.get("name") or "", values.get("value") or "",
-                 (values.get("type") or "text").lower()))
         elif tag == "a":
             self.links.append(values.get("href") or "")
+
+        form = self._active_form
+        if form is None:
+            return
+        if tag in ("input", "textarea", "select"):
+            name = (values.get("name") or "").lower()
+            input_type = (values.get("type") or "text").lower()
+            # Security-relevant form fields must not be disabled or spoofed.
+            if tag == "input":
+                form["inputs"].append(
+                    (name, values.get("value") or "", input_type,
+                     "disabled" in values))
+            email_terms = {"email", "buyer_email", "customer_email",
+                           "purchase_email", "purchaser_email"}
+            form["email_control"] |= (
+                "email" in name or "email" in (values.get("id") or "").lower()
+                or input_type == "email"
+                or (values.get("autocomplete") or "").lower() == "email"
+            )
+            if (tag == "input" and input_type == "submit"
+                    and "disabled" not in values and "hidden" not in values):
+                form["submit_controls"] += 1
+        elif tag == "button":
+            button_type = (values.get("type") or "submit").lower()
+            if button_type == "submit" and "disabled" not in values                     and "hidden" not in values:
+                form["submit_controls"] += 1
 
     def handle_endtag(self, tag):
         if tag == "form":
@@ -110,18 +139,25 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
         post_forms = [form for form in parser.forms if form["method"] == "post"]
         if len(forms) != 1 or len(post_forms) != 1:
             return "checkout_form_ambiguous"
-        valid = any(any(name == "csrfmiddlewaretoken" and bool(value)
-                            and type_ == "hidden"
-                            for name, value, type_ in form["inputs"])
-                    for form in forms)
-        if not valid:
+        # Django renders 32/64-character ASCII alphanumeric CSRF tokens.
+        # A hidden, enabled field from the exact invoice POST is required.
+        csrf_fields = [
+            (name, value, input_type, disabled)
+            for name, value, input_type, disabled in forms[0]["inputs"]
+            if name == "csrfmiddlewaretoken"
+        ]
+        if len(csrf_fields) != 1:
             return "checkout_csrf_unverified"
-        emails = any(name.lower() in {"email", "buyer_email", "customer_email",
-                                      "purchase_email", "purchaser_email"}
-                     or type_ == "email"
-                     for form in forms for name, _, type_ in form["inputs"])
-        return ("legacy_email_requested" if emails
-                else "no_email_checkout_get_ok_not_paid")
+        _, token, token_type, disabled = csrf_fields[0]
+        if (token_type != "hidden" or disabled
+                or len(token) not in (32, 64) or not token.isascii()
+                or not token.isalnum()):
+            return "checkout_csrf_unverified"
+        if forms[0]["submit_controls"] < 1:
+            return "checkout_submit_control_unverified"
+        if forms[0]["email_control"]:
+            return "legacy_email_requested"
+        return "no_email_checkout_get_ok_not_paid"
     return "unknown_route_kind"
 
 
