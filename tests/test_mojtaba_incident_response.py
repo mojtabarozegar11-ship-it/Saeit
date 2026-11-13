@@ -170,6 +170,18 @@ class IncidentResponseTests(unittest.TestCase):
         self.assertEqual(result["risk"], "informational")
         self.assertEqual(result["executed_actions"], 0)
 
+    def test_list_payload_not_valid_indicator_kind(self):
+        with self.assertRaisesRegex(CyberModuleError, "INDICATOR_CLASS_INVALID"):
+            self.plan(incident(indicators=[indicator(kind=["suspected_ransomware"])]))
+
+    def test_list_payload_not_valid_indicator_confidence(self):
+        with self.assertRaisesRegex(CyberModuleError, "INDICATOR_CLASS_INVALID"):
+            self.plan(incident(indicators=[indicator(confidence=["high"])]))
+
+    def test_list_payload_not_valid_backup_integrity(self):
+        with self.assertRaisesRegex(CyberModuleError, "BACKUP_ATTESTATION_INVALID"):
+            self.plan(incident(backups=[backup(integrity_status=["verified_claim"])]))
+
     def test_deterministic_audit_digest(self):
         first = self.plan()["audit_sha256"]
         second = self.plan()["audit_sha256"]
