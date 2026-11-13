@@ -77,6 +77,12 @@ ROUTES = (
     "SAEIT_MOJTRADE_OBSERVER_V1",
 )
 CRON_TOKENS = re.compile(r"^[0-9*/?,LW#-]{1,40}$", re.IGNORECASE)
+CRON_ALIASES = frozenset({
+    "@reboot", "@hourly", "@daily", "@weekly", "@monthly",
+    "@yearly", "@annually", "@midnight",
+})
+CRON_SCAN_LINE_LIMIT = 500
+OBSERVATION_OUTPUT_LIMIT = 512000
 
 
 def route_flags(command: str) -> list[str]:
@@ -92,7 +98,7 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
     except (OSError, subprocess.TimeoutExpired):
         return "unavailable", ""
     if proc.returncode == 0:
-        return "observed", proc.stdout[:512000]
+        return "observed", proc.stdout[:OBSERVATION_OUTPUT_LIMIT]
     if args[:2] == ["crontab", "-l"] and proc.returncode == 1:
         # rc=1 is commonly 'no crontab', but can be an access failure.
         # Do not claim zero scheduled jobs from this ambiguous signal.
@@ -101,18 +107,28 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
 
 
 def safe_cron(stdout: str) -> list[dict]:
+    """Redact scheduled commands, including cron @reboot/@hourly aliases."""
     out = []
-    for line in stdout.splitlines()[:500]:
+    for line in stdout.splitlines()[:CRON_SCAN_LINE_LIMIT]:
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("@"):
+        if not line or line.startswith("#"):
             continue
-        parts = line.split(maxsplit=5)
-        if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
-            continue
-        flags = route_flags(parts[5])
+        if line.startswith("@"):
+            alias, sep, command = line.partition(" ")
+            if alias.lower() not in CRON_ALIASES or not sep or not command.strip():
+                continue
+            schedule = alias.lower()
+            command = command.strip()
+        else:
+            parts = line.split(maxsplit=5)
+            if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
+                continue
+            schedule = " ".join(parts[:5])
+            command = parts[5]
+        flags = route_flags(command)
         out.append({
-            "schedule": " ".join(parts[:5]),
-            "command_digest": hashlib.sha256(parts[5].encode()).hexdigest()[:16],
+            "schedule": schedule,
+            "command_digest": hashlib.sha256(command.encode()).hexdigest()[:16],
             "known_route_flags": flags,
         })
     return out
@@ -303,6 +319,20 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
         "--all", "--plain", "--no-legend", "--no-pager",
     ])
     cron_rows = safe_cron(cron_raw) if cron_state == "observed" else []
+    # The output transport and the parser both have finite caps. These are
+    # redacted warning flags, not proof that no other schedulers exist.
+    cron_truncated = (
+        cron_state == "observed" and (
+            len(cron_raw.splitlines()) > CRON_SCAN_LINE_LIMIT
+            or len(cron_raw) >= OBSERVATION_OUTPUT_LIMIT
+        )
+    )
+    process_truncated = (
+        process_state == "observed" and (
+            len(ps_raw.splitlines()) > 20000
+            or len(ps_raw) >= OBSERVATION_OUTPUT_LIMIT
+        )
+    )
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
     }
@@ -318,8 +348,12 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "state": cron_state, "enumerated_entries": len(cron_rows)
             if cron_state == "observed" else None,
             "entries": cron_rows,
+            "enumeration_truncated": bool(cron_truncated),
         },
-        "processes": {"state": process_state, **processes},
+        "processes": {
+            "state": process_state, **processes,
+            "enumeration_truncated": bool(process_truncated),
+        },
         "user_services": {
             "state": service_state,
             "candidate_units": safe_service_units(services_raw)
