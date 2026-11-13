@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "release_id": "mpw-official-support-email-20261113",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "change_pr": 2264,
+  "customer_contact": "mojplaywin@gmail.com",
+  "deployment_authorized": false,
+  "operational_mode": "READ_ONLY_SOURCE_PREFLIGHT",
+  "policy": "Production must not be modified by this preflight. Require explicit owner deployment approval, verified active app destinations, per-file before hashes and backups, selective release and independent after HTTP+body evidence.",
+  "reviewed_main_commit": "4683f41c4d024251f088aa86373755aeb4501b2a",
+  "files": [
+    {
+      "path": "core/templates/brands/mojplaywin/page.html",
+      "source_git_blob_sha": "995ac7c1d60c7f642effaeb6d0e5ed6a8b917129",
+      "role": "legacy-page",
+      "production_target_hint": "/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/page.html",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "MojPlayWin%20Support"
+      ]
+    },
+    {
+      "path": "core/templates/mojplaywin/footer.html",
+      "source_git_blob_sha": "604f470b0f931ee50b3fd3a8c18823a5382f4f57",
+      "role": "main-shell",
+      "production_target_hint": "/home/zomorod2/Saeit-staging/core/templates/mojplaywin/footer.html",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "MojPlayWin%20Contact",
+        "MojPlayWin%20Support"
+      ]
+    },
+    {
+      "path": "core/templates/mojplaywin/store.html",
+      "source_git_blob_sha": "96db78524c0522c0474f8d5f6a0f9f22869c15c1",
+      "role": "store",
+      "production_target_hint": "/home/zomorod2/Saeit-staging/core/templates/mojplaywin/store.html",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mpw-shop-help",
+        "mojplaywin@gmail.com",
+        "Email customer support"
+      ]
+    },
+    {
+      "path": "core/templates/mojplaywin/theme.html",
+      "source_git_blob_sha": "ab3a81b456d87878a11142b08fc742d3ab61e010",
+      "role": "site-navigation",
+      "production_target_hint": "/home/zomorod2/Saeit-staging/core/templates/mojplaywin/theme.html",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "MojPlayWin%20Support"
+      ]
+    },
+    {
+      "path": "mpw_revenue_20261020/earn/inquiry.php",
+      "source_git_blob_sha": "82915f92348c79e1b2e2d8ebd830f0f9e5e75dbe",
+      "role": "commercial-inquiry",
+      "production_target_hint": "/home/zomorod2/mojplaywin.com/mpw-editorial/revenue/inquiry.php",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "store_inquiry",
+        "From: support@mojplaywin.com"
+      ]
+    },
+    {
+      "path": "services/mpw_trx_guest_commerce.py",
+      "source_git_blob_sha": "df2e6d6b215a8da9f0b55ae42faeb25bd715de17",
+      "role": "purchase-recovery",
+      "production_target_hint": "/home/zomorod2/Saeit-staging/services/mpw_trx_guest_commerce.py",
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "Never share a wallet recovery phrase"
+      ]
+    },
+    {
+      "path": "tests/test_mpw_support_email_contract_20261113.py",
+      "source_git_blob_sha": "0c68ad8f3095fb33f30dc355d1abfc140e627767",
+      "role": "source-tests",
+      "production_target_hint": null,
+      "production_target_verified": false,
+      "expected_live_sha256": null,
+      "markers": [
+        "mojplaywin@gmail.com",
+        "test_commercial_inquiry_routes"
+      ]
+    }
+  ],
+  "website_probes": [
+    {
+      "path": "/",
+      "kind": "GET",
+      "must_include": [
+        "mojplaywin@gmail.com"
+      ],
+      "status": "unverified"
+    },
+    {
+      "path": "/store/",
+      "kind": "GET",
+      "must_include": [
+        "Email customer support",
+        "mojplaywin@gmail.com"
+      ],
+      "status": "unverified"
+    },
+    {
+      "path": "/mpw-editorial/revenue/inquiry.php?service=general",
+      "kind": "GET",
+      "must_include": [
+        "mojplaywin@gmail.com"
+      ],
+      "status": "unverified"
+    }
+  ],
+  "blocked_until": [
+    "explicit_owner_production_release_approval",
+    "read_only_host_app_mapping",
+    "before_hashes_and_backups",
+    "single_allowlisted_publish_plan",
+    "post_release_http_body_proof"
+  ],
+  "workflows": {
+    "main_django": ".github/workflows/mojplaywin-main-deploy.yml",
+    "legacy_content": ".github/workflows/mojplaywin-legacy-content-deploy.yml",
+    "guest_checkout": ".github/workflows/mpw-guest-checkout-live-release.yml",
+    "inquiry_php": ".github/workflows/mpw-inquiry-cookie-session-repair-20261026.yml",
+    "guide_links": ".github/workflows/mpw-main-guide-links-safe-20261027.yml"
+  }
+}
