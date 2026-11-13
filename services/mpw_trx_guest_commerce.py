@@ -356,13 +356,17 @@ def patch_commercial(namespace):
     rebuilt = []
     # /invoice/<id>/status/ and /invoice/<id>/reconcile/ must not
     # accidentally match the less specific invoice-detail endpoint.
-    route_names = (
-        ("/reconcile/", "reconcile_invoice"),
-        ("/status/", "invoice_status"),
-        ("/download/", "download_paid"),
-        ("/start/", "start_order"),
-        ("/invoice/", "show_invoice"),
-    )
+    # Never rebind an unrelated route merely because its URL contains
+    # "/start/" or "/invoice/".  Only the five audited commerce endpoints
+    # may receive the privileged guest identity wrappers.  Unrecognized
+    # endpoints under this prefix must block installation, not fail open.
+    route_names = {
+        "commerce/trx-easy/start/<int:product_id>/": "start_order",
+        "commerce/trx-easy/invoice/<int:invoice_id>/": "show_invoice",
+        "commerce/trx-easy/invoice/<int:invoice_id>/status/": "invoice_status",
+        "commerce/trx-easy/invoice/<int:invoice_id>/reconcile/": "reconcile_invoice",
+        "commerce/trx-easy/download/<int:invoice_id>/": "download_paid",
+    }
     seen = {name: 0 for name in targets}
     for entry in patterns:
         if not isinstance(entry, tuple) or len(entry) != 2:
@@ -370,8 +374,10 @@ def patch_commercial(namespace):
         route, view = entry
         if not isinstance(route, str) or not callable(view):
             raise RuntimeError("Unsupported guest commercial route entry")
-        route_name = next((name for token, name in route_names if token in route), None)
+        route_name = route_names.get(route)
         if route_name is None:
+            if route.lstrip("/").startswith("commerce/trx-easy/"):
+                raise RuntimeError("Unrecognized guest commercial route: " + route)
             rebuilt.append(entry)
             continue
         seen[route_name] += 1
