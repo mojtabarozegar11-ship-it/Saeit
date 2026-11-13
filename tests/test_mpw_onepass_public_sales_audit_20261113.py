@@ -125,6 +125,60 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(set(statuses.values()),
                          {"network_unavailable_not_outage_proof"})
 
+    def test_security_headers_strict_valid(self):
+        headers = {
+            "Content-Security-Policy":
+                "default-src 'self'; script-src 'none'; form-action 'self'; "
+                "frame-ancestors 'none'; style-src 'self' 'unsafe-inline'",
+            "Cache-Control": "private, no-cache, no-store",
+        }
+        self.assertEqual(MOD.checkout_header_status(headers), "checkout_headers_pass")
+
+    def test_security_headers_missing_csp(self):
+        self.assertEqual(
+            MOD.checkout_header_status({"Cache-Control": "no-store"}),
+            "checkout_security_headers_unverified")
+
+    def test_security_headers_no_store_required(self):
+        headers = {
+            "Content-Security-Policy":
+                "script-src 'none'; form-action 'self'; frame-ancestors 'none'",
+            "Cache-Control": "private, no-cache",
+        }
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_cache_policy_unverified")
+
+    def test_security_headers_reject_duplicate_script_directives(self):
+        headers = {
+            "Content-Security-Policy":
+                "script-src 'none'; script-src 'self'; form-action 'self'; "
+                "frame-ancestors 'none'",
+            "Cache-Control": "no-store",
+        }
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_security_headers_unverified")
+
+    def test_security_headers_reject_unsafe_scripts(self):
+        headers = {
+            "Content-Security-Policy":
+                "script-src 'none' 'unsafe-inline'; form-action 'self'; "
+                "frame-ancestors 'none'",
+            "Cache-Control": "no-store",
+        }
+        self.assertEqual(MOD.checkout_header_status(headers),
+                         "checkout_security_headers_unverified")
+
+    def test_hidden_csrf_required(self):
+        html = checkout(72).replace('type="hidden"', 'type="text"')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_get_only_http_method_contract(self):
+        import inspect
+        source = inspect.getsource(MOD.observe)
+        self.assertIn('method="GET"', source)
+        self.assertNotIn('method="POST"', source)
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
