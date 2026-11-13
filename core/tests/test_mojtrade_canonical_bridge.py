@@ -438,3 +438,96 @@ def test_private_watch_api_does_not_revert_to_old_completed_snapshot(client, can
     assert response.status_code == 503
     assert "watch" not in response.json()
     assert AgentTask.objects.count() == 2
+
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("tamper", ["missing", "digest", "source_binding", "duplicated"])
+def test_private_watch_requires_exact_canonical_audit_trail(canonical_market, tamper):
+    from core.mojtrade_signal_drafts import MarketWatchDraftError
+
+    task, _ = ingest_private_observation()
+    receipt = AuditLog.objects.get(
+        action="mojtrade_private_research_ingested", target_id=str(task.pk),
+    )
+    if tamper == "missing":
+        receipt.delete()
+    elif tamper == "digest":
+        receipt.after_state = {**receipt.after_state, "source_sha256": "d" * 64}
+        receipt.save(update_fields=["after_state"])
+    elif tamper == "source_binding":
+        output = dict(task.output_data)
+        output["evidence"] = {"source_sha256": "d" * 64}
+        task.output_data = output
+        task.save(update_fields=["output_data"])
+    else:
+        AuditLog.objects.create(
+            actor_type="agent", actor_id=str(task.agent_id),
+            action="mojtrade_private_research_ingested",
+            target_type="AgentTask", target_id=str(task.pk),
+            after_state=dict(receipt.after_state),
+            trace_id="duplicate-receipt-proof-must-fail",
+        )
+    with pytest.raises(MarketWatchDraftError, match="audit"):
+        fresh_canonical_drafts()
+
+
+@pytest.mark.django_db
+def test_mojtrade_readiness_api_denies_public_and_non_superusers(client, canonical_market):
+    url = reverse("mojtrade-private-readiness")
+    anonymous = client.get(url)
+    assert anonymous.status_code == 403
+    assert "gates" not in anonymous.json()
+    assert "no-store" in anonymous["Cache-Control"]
+
+    user = get_user_model().objects.create_user(
+        username="staff-readiness-not-owner", is_staff=True,
+    )
+    client.force_login(user)
+    denied = client.get(url)
+    assert denied.status_code == 403
+    assert "gates" not in denied.json()
+
+
+@pytest.mark.django_db
+def test_mojtrade_readiness_api_proves_only_fresh_private_watch(client, canonical_market):
+    owner = get_user_model().objects.create_superuser(
+        username="readiness-owner", email="readiness@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    url = reverse("mojtrade-private-readiness")
+    before = client.get(url)
+    assert before.status_code == 200
+    gates = before.json()["gates"]
+    assert gates["canonical_bot_active_in_current_database"] is True
+    assert gates["fresh_canonical_private_watch_receipt"] is False
+    task, _ = ingest_private_observation()
+    after = client.get(url)
+    assert after.status_code == 200
+    evidence = after.json()
+    assert evidence["market_watch_task_id"] == task.pk
+    assert evidence["gates"]["fresh_canonical_private_watch_receipt"] is True
+    assert evidence["gates"]["local_demo_closed_deal_log_audited"] is False
+    assert evidence["gates"]["broker_authenticated_demo_execution_and_account"] is False
+    assert evidence["gates"]["canonical_approved_demo_order_control"] is False
+    assert evidence["gates"]["verified_customer_signal_delivery"] is False
+    assert evidence["gates"]["settled_real_revenue_verified"] is False
+    assert evidence["operational_completion_percent"] is None
+    assert evidence["public_signal_publication_authorized"] is False
+    assert evidence["live_account_orders_authorized"] is False
+    assert evidence["real_revenue_verified"] is False
+    assert "no-store" in after["Cache-Control"]
+    assert "noindex" in after["X-Robots-Tag"]
+    assert AgentTask.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_mojtrade_readiness_api_disallows_post_or_data_mutation(client, canonical_market):
+    owner = get_user_model().objects.create_superuser(
+        username="readiness-post-owner", email="readiness-post@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    assert client.post(reverse("mojtrade-private-readiness"), {"trade": "buy"}).status_code == 405
+    assert not AgentTask.objects.exists()
