@@ -133,15 +133,20 @@ def checkout_header_status(headers) -> str:
     intermediary. Do not emit header values, cookies, or any sensitive data.
     """
     policy = (headers.get("Content-Security-Policy", "") or "").lower()
+    if not policy.strip():
+        return "checkout_csp_missing"
     rules = [d.strip().split() for d in policy.split(";") if d.strip()]
     expected = {"script-src": ["'none'"], "form-action": ["'self'"],
                 "frame-ancestors": ["'none'"]}
-    # Reject duplicate/mixed CSP directives; a separate permissive script-src
-    # must not make the security gate appear green.
+    categories = {"script-src": "checkout_csp_scripts_unverified",
+                  "form-action": "checkout_csp_form_action_unverified",
+                  "frame-ancestors": "checkout_csp_frames_unverified"}
+    # Emit only fixed categories, NEVER raw headers or security tokens.
+    # Duplicate/mixed CSP rules are unsafe and must fail closed.
     for directive, permitted_sources in expected.items():
         actual = [rule[1:] for rule in rules if rule and rule[0] == directive]
         if actual != [permitted_sources]:
-            return "checkout_security_headers_unverified"
+            return categories[directive]
     cache = (headers.get("Cache-Control", "") or "").lower()
     controls = {token.strip().split("=", 1)[0] for token in cache.split(",")}
     if "no-store" not in controls:
@@ -154,7 +159,8 @@ class RejectRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def observe(path: str, kind: str, sku: int | None, timeout: int, opener):
+def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
+            checkout_form_observations=None):
     url = "https://" + HOST + path
     req = urllib.request.Request(
         url, headers={"User-Agent": UA, "Cache-Control": "no-cache",
@@ -173,13 +179,17 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener):
             content_type = response.headers.get("Content-Type", "").lower()
             if "text/html" not in content_type:
                 return "unexpected_content_type"
-            # Only classify checkout content after verifying its own response
-            # security headers. The observer never prints token or headers.
+            html = data.decode("utf-8", "replace")
+            page_status = classify_html(kind, sku, html)
             if kind == "checkout":
+                # Record form status separately from the header safety gate.
+                # This avoids masking a legacy email form when CSP is absent.
+                if checkout_form_observations is not None:
+                    checkout_form_observations[path] = page_status
                 headers_status = checkout_header_status(response.headers)
                 if headers_status != "checkout_headers_pass":
                     return headers_status
-            return classify_html(kind, sku, data.decode("utf-8", "replace"))
+            return page_status
     except urllib.error.HTTPError as exc:
         if 300 <= exc.code < 400:
             return "redirect_not_followed"
@@ -203,11 +213,14 @@ def audit(timeout: int = 6, opener=None) -> dict:
             ("checkout", sku, f"/commerce/book/{sku}/"),
         ))
     result = {}
+    checkout_form_observations = {}
     for kind, sku, path in routes:
-        result[path] = observe(path, kind, sku, timeout, opener)
+        result[path] = observe(path, kind, sku, timeout, opener,
+                               checkout_form_observations)
     return {
         "schema": "mpw.public_buyer_journey.readonly.v1",
         "observed_routes": result,
+        "checkout_form_observations": checkout_form_observations,
         "pages_checked": len(result),
         "required_skus": list(SKUS),
         "guest_email_policy_expected": "email_not_collected",
