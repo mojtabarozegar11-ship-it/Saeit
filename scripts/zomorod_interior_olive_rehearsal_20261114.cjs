@@ -11,6 +11,11 @@ const targets=[
   css:':root{--bg:#252b19;--panel:#303822;--panel2:#39432a}body{background:var(--bg)!important}.header,.tala-live-market,.ticker,.tools,.footer{background:var(--bg)!important}'},
  {route:'/amozeshgah/',type:'academy',selectors:['body','header','.topline','main','.section.alt','footer'],
   css:'body.academy-page,body.academy-page header,body.academy-page .topline,body.academy-page main,body.academy-page main>.hero,body.academy-page main>.section,body.academy-page main>.metrics,body.academy-page .section.alt,body.academy-page footer{background:#252b19!important}'}
+ ,...['/company/','/services/','/research/','/industry/'].map(route=>({
+  route,type:'v7-'+route.replace(/\//g,''),
+  selectors:['body','main','.zm-v7-header','.zm-v7-footer','.zm-hero','.zm-narrative','.zm-next'],
+  css:':root{--zm7-bg:#252b19}body.zm-unified-v7,body.zm-unified-v7 main,body.zm-unified-v7 .zm-v7-header,body.zm-unified-v7 .zm-v7-footer,body.zm-unified-v7 .zm-hero,body.zm-unified-v7 .zm-narrative,body.zm-unified-v7 .zm-next{background:#252b19!important;background-image:none!important}'
+}))
 ];
 const successes=[];
 (async()=>{
