@@ -77,9 +77,13 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         known_label = b"mpw-buy-email" in raw
         template_state = ("email_field_present" if email_control or known_label
                           else "email_not_found_static_source")
+    # Presence on disk does not establish the effective Apache or Passenger
+    # routing. Accept the exact *leading* owned rule only, never a duplicate
+    # or text merely embedded lower in the file.
     fallback = "unknown"
     if htaccess is not None and store_html is not None:
-        fallback = ("owned_static_fallback_present" if
+        fallback = ("owned_static_fallback_rule_on_disk" if
+                    htaccess.startswith(FALLBACK_BLOCK) and
                     htaccess.count(FALLBACK_BLOCK) == 1 and
                     b"MPW_STATIC_STORE_FALLBACK_V1" in store_html
                     else "fallback_not_exactly_proven")
