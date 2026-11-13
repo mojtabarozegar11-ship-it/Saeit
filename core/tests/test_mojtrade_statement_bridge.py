@@ -9,6 +9,8 @@ import pytest
 from django.core.management import call_command
 
 from core.models import Agent, AgentTask, AuditLog
+from core.mojtrade_demo_evidence_bridge import ingest_private_demo_evidence
+from core.mojtrade_readiness import trading_readiness_report
 from core.mojtrade_statement_bridge import (
     DemoStatementBridgeError, ingest_demo_statement_crosscheck,
 )
@@ -159,3 +161,64 @@ def test_blocked_duplicate_requires_reconciliation(demo_statement_files):
     task.save(update_fields=["status"])
     with pytest.raises(DemoStatementBridgeError, match="requires_reconciliation"):
         ingest_demo_statement_crosscheck()
+
+
+
+@pytest.mark.django_db
+def test_two_demo_sources_must_pair_to_same_canonical_log_for_readiness(demo_statement_files):
+    before = trading_readiness_report()
+    assert before["gates"]["local_demo_closed_deal_log_audited"] is False
+    assert before["gates"]["local_two_unverified_demo_exports_matched_to_same_log"] is False
+    log_task, _ = ingest_private_demo_evidence()
+    log_only = trading_readiness_report()
+    assert log_only["demo_log_task_id"] == log_task.pk
+    assert log_only["gates"]["local_demo_closed_deal_log_audited"] is True
+    assert log_only["gates"]["local_two_unverified_demo_exports_matched_to_same_log"] is False
+
+    statement_task, _ = ingest_demo_statement_crosscheck()
+    matched = trading_readiness_report()
+    assert matched["statement_task_id"] == statement_task.pk
+    assert matched["gates"]["local_two_unverified_demo_exports_matched_to_same_log"] is True
+    assert matched["gates"]["broker_authenticated_demo_execution_and_account"] is False
+    assert matched["gates"]["canonical_approved_demo_order_control"] is False
+    assert matched["gates"]["settled_real_revenue_verified"] is False
+    assert matched["operational_completion_percent"] is None
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("tamper", [
+    "mismatched_demo_digest", "fake_statement_profit", "missing_demo_receipt",
+    "changed_source_alias", "unfinished_statement",
+])
+def test_demo_readiness_never_infers_independent_broker_validation(
+    demo_statement_files, tamper,
+):
+    log_task, _ = ingest_private_demo_evidence()
+    statement_task, _ = ingest_demo_statement_crosscheck()
+    if tamper == "mismatched_demo_digest":
+        values = dict(log_task.input_data)
+        values["source_sha256"] = "d" * 64
+        log_task.input_data = values
+        log_task.save(update_fields=["input_data"])
+    elif tamper == "fake_statement_profit":
+        values = dict(statement_task.output_data)
+        values["profit_verified"] = True
+        statement_task.output_data = values
+        statement_task.save(update_fields=["output_data"])
+    elif tamper == "missing_demo_receipt":
+        AuditLog.objects.filter(
+            action="mojtrade_demo_closed_deals_audited", target_id=str(log_task.pk),
+        ).delete()
+    elif tamper == "changed_source_alias":
+        values = dict(statement_task.input_data)
+        values["account_alias"] = "OTHER_ACCOUNT"
+        statement_task.input_data = values
+        statement_task.save(update_fields=["input_data"])
+    else:
+        statement_task.status = "blocked"
+        statement_task.save(update_fields=["status"])
+    report = trading_readiness_report()
+    assert report["gates"]["local_two_unverified_demo_exports_matched_to_same_log"] is False
+    assert report["gates"]["broker_authenticated_demo_execution_and_account"] is False
+    assert report["gates"]["canonical_approved_demo_order_control"] is False
+    assert report["real_revenue_verified"] is False
