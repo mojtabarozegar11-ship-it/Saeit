@@ -2,6 +2,7 @@ from django.db.models import Case, IntegerField, Value, When
 
 from .models import Agent, AgentCapability
 from .services import normalize_risk
+from .unified_bot_identity import BOT_CODE, module_for_capability
 
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -20,6 +21,22 @@ class AgentRegistry:
         capability = self._capability(normalized) or self._capability(f"core_{normalized}")
         if not capability:
             return None
+
+        # Exactly one canonical owner must receive every capability that has
+        # already been assigned to an internal Mojtaba.bot.ai module.
+        # In particular, an older lower-risk agent must NEVER win the
+        # generic risk/id ordering and receive new economic/factory/content
+        # work after the single-bot migration starts.
+        canonical = capability.agents.filter(code=BOT_CODE, active=True).first()
+        if canonical is not None:
+            return canonical
+        if module_for_capability(capability.code) != "unmapped_requires_adapter_review":
+            # Fail closed if the successor is not provisioned, active or
+            # registered. Do not silently resurrect a legacy executor.
+            return None
+
+        # Generic capabilities not yet inventoried retain the previous
+        # specialist selection policy, pending explicit live handoff.
         # String ordering puts "critical" before "low". Use policy risk order.
         risk_priority = Case(
             *(When(risk_level=name, then=Value(priority)) for name, priority in RISK_ORDER.items()),
