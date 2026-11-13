@@ -19,8 +19,10 @@ class Finance102GuidesTest(unittest.TestCase):
             self.assertTrue(all(len(x) >= 18 for x in guide.values()))
             self.assertNotIn("{topic}", str(guide))
             self.assertIn(BRAND_TOPICS[slug][LOCALES[locale]], guide["steps"])
-            self.assertIn("500" if locale == "en" else ("۵۰۰" if locale == "fa" else "٥٠٠"),
-                          guide["example"] if kind == "signals" else ("500" if locale == "en" else ("۵۰۰" if locale == "fa" else "٥٠٠")))
+            if kind == "signals":
+                self.assertIn({"fa": "۵۰۰", "en": "500", "ar": "٥٠٠"}[locale], guide["example"])
+            else:
+                self.assertIn({"fa": "۱۳۰", "en": "130", "ar": "١٣٠"}[locale], guide["example"])
             self.assertNotIn("guaranteed profit", guide["intro"].lower())
 
     def test_unknown_or_unsafe_guide_rejected(self):
