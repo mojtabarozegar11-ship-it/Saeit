@@ -356,7 +356,9 @@ def master_self_improvement(payload):
         if independent_engine.is_symlink() or not independent_engine.is_file():
             raise ValueError("MASTER_INDEPENDENT_UPGRADE_ENGINE_MISSING")
         from .isolated_upgrade_proof import inspect_isolated_proof
-        proof = inspect_isolated_proof(dossier)
+        proof = inspect_isolated_proof(
+            dossier, source_root=independent_engine.parents[1]
+        )
         return {
             "action_performed": (
                 "Inspected the existing fresh, private factory self-upgrade dossier "
@@ -375,10 +377,19 @@ def master_self_improvement(payload):
     spec.loader.exec_module(engine)
     output = Path.home() / "factory-runtime" / "private" / "master-agent" / "code-upgrade"
     report = engine.generate(repo, output)
+    # A generated report is not self-authenticating: re-read the private
+    # dossier and independently verify its inventory and candidate artifacts.
+    from .isolated_upgrade_proof import inspect_isolated_proof
+    proof = inspect_isolated_proof(
+        output / "evolution-proof.json", source_root=repo
+    )
     verified = (
         report.get("unresolved_known_security_regressions") == 0
-        and report.get("validated_repair_rule_coverage", 0)
-        == report.get("candidate_count", 0) + report.get("preexisting_verified_repairs", 0)
+        and proof["candidate_count"] == report.get("candidate_count")
+        and proof["preexisting_verified_repairs"] == report.get("preexisting_verified_repairs")
+        and proof["candidate_artifacts_hash_verified"] == report.get("candidate_count")
+        and proof["source_manifest_entries_checked"] == report.get("factory_python_files_scanned")
+        and proof["source_files_hash_verified"] == report.get("factory_python_files_scanned")
     )
     return {
         "action_performed": "Ran the bounded private code-upgrade engine and wrote its candidate/evidence dossier.",
@@ -390,7 +401,12 @@ def master_self_improvement(payload):
             "production_promotions": report.get("production_code_promotions"),
             "whole_code_autonomous_evolution_complete": report.get("whole_code_autonomous_evolution_complete"),
             "dossier": str(output / "evolution-proof.json"),
+            "proof_sha256": proof["proof_sha256"],
+            "verification_scope": proof["verification_scope"],
+            "candidate_artifacts_hash_verified": proof["candidate_artifacts_hash_verified"],
+            "source_files_hash_verified": proof["source_files_hash_verified"],
         }),
+        "code_improvement_performed": proof["candidate_count"] > 0,
         "production_promotion": False,
         "next_action": "income_market_research",
     }

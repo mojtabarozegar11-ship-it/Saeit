@@ -17,8 +17,10 @@
 
 ## Source gaps required before any '100% coding complete' statement
 
-1. Unmerged self-evolution hardening in PR #2252 needs careful reconciliation
-   with the canonical one-runtime identity and task/approval contracts.
+1. The isolated source self-upgrade verifier and private repair producer
+   from PR #2252 are integrated with independent source/candidate hash checks.
+   The remaining VPS evolution state reader and canonical task/approval
+   identity mapping still require reconciliation before completion.
 2. Nine source/fleet groups need explicit canonical routing and a verified
    no-duplicate-worker design. Legacy agent rows must retain audit history.
 3. Connect authenticated Django owner sessions, canonical chat runtime, and
@@ -42,3 +44,7 @@ Do not use the number of files or GitHub commits as completion percentage.
 No manual testing, real/demo broker operation, cPanel/VPS deployment,
 financial action, emails, deletion, site redesign, or independent agent
 provisioning is authorized by this integration commit.
+
+## Source-only hardening imported in coding phase
+
+Private source changes must be verified by an independent dossier inspector; a producer's own success flag is insufficient. The existing master economic self-improvement handler now reopens the report and compares candidate and source hashes before claiming a verified internal effect. There is no promotion to the live codebase, no new scheduler and no automatic deployment.
