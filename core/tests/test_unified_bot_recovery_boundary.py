@@ -204,3 +204,35 @@ def test_noncanonical_worker_failure_still_preserves_existing_retry_contract(db)
     final = runtime.fail(task.pk, "final error", execution_id=second.execution_id)
     assert final.status == "failed"
     assert final.execution_id == second.execution_id
+
+def test_failed_gateway_with_unknown_external_effect_is_not_dispatched_twice(economic_agent):
+    """An acknowledgement failure after a side effect cannot trigger replay."""
+    from core.worker_runner import WorkerRunner
+
+    agent, cap = economic_agent
+    task = AgentTask.objects.create(
+        agent=agent, action_type=cap.code, capability_code=cap.code,
+        risk_snapshot="low", status="queued", max_attempts=5,
+    )
+    effects = []
+
+    class AcknowledgementLostGateway:
+        def invoke(self, code, payload, *, task_id, execution_id):
+            effects.append((code, task_id, execution_id))
+            raise RuntimeError("effect receipt unavailable after dispatch")
+
+    worker = WorkerRunner(AcknowledgementLostGateway())
+    with pytest.raises(RuntimeError, match="receipt unavailable"):
+        worker.run(task.pk)
+    task.refresh_from_db()
+    assert task.status == "blocked"
+    assert task.output_data["automatic_replay_allowed"] is False
+    assert len(effects) == 1
+
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        worker.run(task.pk)
+    assert len(effects) == 1
+    assert AuditLog.objects.filter(
+        target_type="AgentTask", target_id=str(task.pk), action="task_failed",
+    ).count() == 1
+
