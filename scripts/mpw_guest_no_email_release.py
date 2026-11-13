@@ -68,7 +68,61 @@ def _file(path: Path) -> bytes:
     return path.read_bytes()
 
 
-def guard():
+def confirm_registered_public_passenger_root() -> None:
+    """Read-only cPanel UAPI check that the PUBLIC root is registered at '/'.
+
+    Literal source paths and WSGI files alone are insufficient. Do not
+    publish to the staging app while Passenger maps the public domain to
+    an unrelated app or subpath. This never imports Django or reads orders.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["uapi", "--output=json", "PassengerApps", "list_applications"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        abort("PASSENGER_UAPI_UNAVAILABLE")
+    if result.returncode or len(result.stdout) > 300000:
+        abort("PASSENGER_UAPI_UNAVAILABLE")
+    try:
+        payload = json.loads(result.stdout)
+        data = payload["result"]
+        if not isinstance(data, dict) or data.get("status") not in (1, True, "1"):
+            abort("PASSENGER_UAPI_UNVERIFIED")
+    except (ValueError, KeyError, TypeError):
+        abort("PASSENGER_UAPI_UNVERIFIED")
+
+    stack = [data.get("data")]
+    visited = 0
+    public_roots = []
+    while stack:
+        node = stack.pop()
+        visited += 1
+        if visited > 500:
+            abort("PASSENGER_UAPI_TOO_COMPLEX")
+        if isinstance(node, list):
+            stack.extend(node[:100])
+        elif isinstance(node, dict):
+            domain = str(node.get("domain") or "").strip().lower().rstrip(".")
+            if domain in ("mojplaywin.com", "www.mojplaywin.com"):
+                root = str(node.get("app_root") or node.get("app_path")
+                           or node.get("application_root") or "")
+                uri = str(node.get("base_uri") or node.get("app_uri")
+                          or node.get("application_uri") or "")
+                if root and uri:
+                    public_roots.append((root.rstrip("/"), uri.rstrip("/") or "/"))
+            stack.extend(list(node.values())[:100])
+    if not public_roots:
+        abort("PUBLIC_PASSENGER_MAPPING_UNKNOWN")
+    root_uris = [(root, uri) for root, uri in public_roots if uri == "/"]
+    if (len(root_uris) != 1 or root_uris[0][0] != str(PUBLIC)):
+        abort("PUBLIC_PASSENGER_ROOT_NOT_PROVEN")
+
+
+def guard(*, confirm_public_binding: bool = False):
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         abort("WRONG_ACCOUNT")
     for root in (APP, PUBLIC):
@@ -86,6 +140,8 @@ def guard():
         abort("RESTART_TARGET_DRIFT")
     for target in (GUEST, TEMPLATE):
         _file(target)
+    if confirm_public_binding:
+        confirm_registered_public_passenger_root()
 
 
 def audit_invoice_email_dependencies() -> dict:
@@ -661,7 +717,7 @@ def _restart():
 
 
 def publish(run: str, source: Path):
-    guard()
+    guard(confirm_public_binding=True)
     audit_invoice_email_dependencies()
     old, new = plan(source)
     if new is None:
@@ -744,7 +800,7 @@ def rollback(run: str):
 
 def main(argv):
     if len(argv) == 3 and argv[1] == "preflight":
-        guard()
+        guard(confirm_public_binding=True)
         invoice_audit = audit_invoice_email_dependencies()
         old, new = plan(Path(argv[2]))
         print(json.dumps({"invoice_source_audit": invoice_audit, "publish_needed": new is not None,
@@ -754,7 +810,7 @@ def main(argv):
     elif len(argv) == 4 and argv[1] == "publish":
         publish(argv[2], Path(argv[3]))
     elif len(argv) == 2 and argv[1] == "verify":
-        guard()
+        guard(confirm_public_binding=True)
         audit_invoice_email_dependencies()
         if sha(_file(GUEST)) != APPROVED_GUEST_SHA256:
             abort("GUEST_NOT_INSTALLED")
