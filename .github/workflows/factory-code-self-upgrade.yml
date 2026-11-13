@@ -25,7 +25,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 has no setup-python 3.8/3.9 toolchain archives.
+    # Pin the older compatibility pair to the supported 24.04 image.
+    runs-on: ${{ (matrix.python == '3.8' || matrix.python == '3.9') && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 8
     strategy:
       fail-fast: false
