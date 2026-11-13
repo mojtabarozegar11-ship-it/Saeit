@@ -1,6 +1,15 @@
-# MojTrade QuantumScalp v2 — Demo Only
+# mojtaba.bot.ai — Canonical Trading Core (Demo Only)
 
-This is a short-term multi-strategy cBot for cTrader Cloud. It is locked to demo accounts and stops immediately if Account.IsLive is true.
+This document describes the canonical trading core of mojtaba.bot.ai. QuantumScalp capabilities are absorbed into trading/MojTradeOmegaXDemoBot.cs. The legacy source is retained only until compile, demo verification, backup and owner-approved retirement. Live accounts are permanently rejected.
+
+## Canonical ownership and activation gate
+
+- Canonical bot: `mojtaba.bot.ai`
+- Canonical execution source: `trading/MojTradeOmegaXDemoBot.cs`
+- Independent trader activation: forbidden
+- Demo activation: blocked until cTrader compile, backtest, risk checks and owner-gated verification pass
+- Live trading: permanently locked
+- Legacy root `trading/MojTradeDemoBot.cs`: retained for rollback evidence; do not activate independently
 
 ## Major engine
 
