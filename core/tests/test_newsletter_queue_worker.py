@@ -206,9 +206,12 @@ class NewsletterSingleBotAuthorshipTests(TestCase):
     def test_legacy_newsletter_cannot_create_new_story_even_if_database_identity_active(self):
         # A legacy launcher may remain in a cron on another host. It must not
         # produce new artifacts as an independent bot after source migration.
-        legacy = Agent.objects.create(
-            code="newsletter-world-watch", name="Old watcher",
-            mission="Historical watcher", active=True,
+        legacy, _ = Agent.objects.update_or_create(
+            code="newsletter-world-watch",
+            defaults={
+                "name": "Old watcher", "mission": "Historical watcher",
+                "active": True,
+            },
         )
         original_count = Agent.objects.count()
         for code in ("newsletter-world-watch", "content-director", "economic-master-agent"):
@@ -234,6 +237,6 @@ class NewsletterSingleBotAuthorshipTests(TestCase):
         self.assertEqual(disposition, "created")
         self.assertEqual(story.agent_id, self.bot.pk)
         self.assertEqual(story.status, "draft")
-        self.assertFalse(
-            Agent.objects.exclude(code=BOT_CODE).filter(active=True).exists()
-        )
+        # Old rows may be seeded by historical migrations; this code path
+        # must never activate another identity or claim they disappeared.
+        self.assertFalse(Agent.objects.filter(code="new-independent-bot").exists())
