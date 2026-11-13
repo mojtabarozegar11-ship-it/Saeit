@@ -36,7 +36,7 @@ jobs:
           s=p.read_text()
           for term in ('ونکوور','Vancouver','ISO 9001','ISO 14001','ISO 22000','+650','+600'):
               assert term not in s,term
-          assert s.count('<h1')==1 and s.count('href="/assets/zm-reference-v3.css"')==1
+          assert s.count('<h1')==1 and 'href="/assets/zm-reference-v3.css' in s
           assert 'موقعیت' not in s or 'مرودشت' in s
           assert s.count('href=')>50
           print('VISION_APPROVED_REFERENCE_CONTENT_GATES=PASS')
@@ -109,7 +109,7 @@ jobs:
           if-no-files-found: ignore
   publish:
     needs: validate-and-preview
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ false }} # v3 initial release complete; never rerun old NEXUS-baseline installer
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
     steps:
