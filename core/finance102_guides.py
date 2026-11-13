@@ -150,6 +150,6 @@ def locale_from_public_host(host: str) -> str:
     normalized = host.strip().lower().rstrip(".")
     return (
         "fa"
-        if re.fullmatch(r"(?:www\\.)?zomorodmelal\\.ir(?::(?:80|443))?", normalized)
+        if re.fullmatch(r"(?:www\.)?zomorodmelal\.ir(?::(?:80|443))?", normalized)
         else "en"
     )
