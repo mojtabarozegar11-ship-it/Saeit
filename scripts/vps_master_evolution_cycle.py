@@ -26,6 +26,26 @@ COMPLETED_GUARD_ID = re.compile(r"[1-9][0-9]{0,18}\Z")
 COMPLETED_GUARD_HASH = re.compile(r"[a-f0-9]{64}\Z")
 
 
+# Persistent safety flags are not grants of authority. Even before a worker's
+# independent approval gate, the evaluator must reject attempts to rewrite
+# its own one-agent, no-spend, no-publication operating policy.
+MASTER_POLICY_INVARIANTS = {
+    "agent_code": "economic-master-agent",
+    "operating_mode": "private_vps_serial_tasks_controlled",
+    "hard_max_steps_cap": 20,
+    "volume_scaling_enabled": False,
+    "parallel_master_tasks": False,
+    "self_modifying_code": False,
+    "commercial_publication_enabled": False,
+    "financial_actions_enabled": False,
+}
+MASTER_CHECK_BASELINE_REQUIRED = frozenset(MASTER_POLICY_INVARIANTS) | {
+    "last_completed_task_id",
+    "completed_guard",
+    "pending_prior_ids",
+}
+
+
 def _completed_fingerprint(action, raw_output, execution_id, attempt_count):
     """Detect post-completion row mutation across bounded private snapshots.
 
@@ -71,14 +91,28 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     # late-completing older tasks can be checked in that same snapshot.
     previous = {}
     if state_path.exists():
-        if not state_path.is_file() or state_path.stat().st_size > MAX_STATE_BYTES:
+        current_stat = state_path.stat()
+        if (not state_path.is_file() or current_stat.st_size > MAX_STATE_BYTES
+                or current_stat.st_nlink != 1):
             raise RuntimeError("MASTER_EVOLUTION_STATE_UNSAFE")
+        if check_only and stat.S_IMODE(current_stat.st_mode) & 0o077:
+            raise RuntimeError("MASTER_EVOLUTION_CHECK_STATE_NOT_PRIVATE")
         try:
             previous = json.loads(state_path.read_text(encoding="utf-8"))
         except (ValueError, UnicodeError) as exc:
             raise RuntimeError("MASTER_EVOLUTION_STATE_INVALID_JSON") from exc
         if not isinstance(previous, dict) or previous.get("schema") != "saeit.master.evolution.v1":
             raise RuntimeError("UNKNOWN_PREVIOUS_EVOLUTION_STATE")
+        for field, safe_value in MASTER_POLICY_INVARIANTS.items():
+            if field in previous and (
+                    type(previous[field]) is not type(safe_value)
+                    or previous[field] != safe_value):
+                raise RuntimeError("MASTER_EVOLUTION_PREVIOUS_POLICY_INVARIANT_VIOLATION")
+        if check_only and any(
+                field not in previous for field in MASTER_CHECK_BASELINE_REQUIRED):
+            # Check-only does not elevate partially initialized legacy state.
+            # Scheduled non-check-only evaluation may migrate it first.
+            raise RuntimeError("MASTER_EVOLUTION_CHECK_BASELINE_INCOMPLETE")
     prior_guard = previous.get("completed_guard", {})
     if (
         not isinstance(prior_guard, dict)
