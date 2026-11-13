@@ -1,17 +1,119 @@
-/* Zomorod Mellal VISION 3: homepage-only progressive enhancements, no external APIs. */
+/* Zomorod Mellal VISION 3 — homepage interaction corrections, 2026-11-13.
+   Scoped to the page, no third-party scripts, no requests or user-data submission. */
 (()=>{'use strict';
-  const q=(s,root=document)=>root.querySelector(s),qa=(s,root=document)=>[...root.querySelectorAll(s)];
-  const toggle=q('.search-toggle'),form=q('.search-form'),box=q('#search-wrap'),feedback=q('#search-feedback');
-  const setOpen=(button,region,open)=>{region.hidden=!open;button.setAttribute('aria-expanded',String(open));};
-  toggle?.addEventListener('click',()=>{const open=box.hidden;setOpen(toggle,box,open);if(open)q('#site-search')?.focus();});
-  const mobile=q('.mobile-menu-btn'),mobileNav=q('#mobile-nav');
-  mobile?.addEventListener('click',()=>setOpen(mobile,mobileNav,mobileNav.hidden));
-  qa('.mobile-nav a').forEach(a=>a.addEventListener('click',()=>setOpen(mobile,mobileNav,false)));
-  const notify=(message)=>{const t=q('#toast');if(!t)return;t.hidden=false;t.textContent=message;t.onclick=()=>{t.hidden=true;};};
-  form?.addEventListener('submit',e=>{e.preventDefault();const term=(q('#site-search').value||'').trim().toLocaleLowerCase('fa-IR');if(!term){feedback.textContent='نام حوزه موردنظر را وارد کنید.';return;}const targets=qa('a[href]:not(.skip-link)');const matched=targets.find(a=>(a.textContent+' '+(a.getAttribute('data-search')||'')).toLocaleLowerCase('fa-IR').includes(term));if(matched){feedback.textContent='مورد مرتبط پیدا شد: '+matched.textContent.trim().slice(0,70);matched.scrollIntoView({behavior:'smooth',block:'center'});matched.classList.add('search-found');setTimeout(()=>matched.classList.remove('search-found'),2000);}else{feedback.textContent='در این صفحه موردی یافت نشد. بخش خدمات و دانشنامه را بررسی کنید.';}});
-  qa('[data-strip]').forEach(btn=>btn.addEventListener('click',()=>{const el=document.getElementById(btn.dataset.strip);if(!el)return;const direction=btn.dataset.direction==='prev'?-1:1;const amount=Math.max(140,Math.round(el.clientWidth*.73));el.scrollBy({left:direction*amount,behavior:'smooth'});}));
-  // Language controls are real, but don't pretend that untranslated internal pages are localized.
-  const languages={fa:'زبان فارسی فعال است. محتوای انگلیسی و عربی سایت در صفحات داخلی به‌صورت مستقل ارائه می‌شود.',en:'This homepage is currently provided in Persian. For English-language enquiries, use the contact page.',ar:'هذه الصفحة متاحة حالياً بالفارسية. للاستفسارات بالعربية، يرجى استخدام صفحة التواصل.'};
-  qa('.lang-switch button').forEach(b=>b.addEventListener('click',()=>{qa('.lang-switch button').forEach(x=>x.classList.toggle('active',x===b));notify(languages[b.dataset.lang]||languages.fa);if(b.dataset.lang!=='fa'){q('.contact-mini')?.focus();}}));
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!box.hidden)setOpen(toggle,box,false);if(!mobileNav.hidden)setOpen(mobile,mobileNav,false);const t=q('#toast');if(t)t.hidden=true;}});
+ const $=(selector,root=document)=>root.querySelector(selector);
+ const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
+ const searchButton=$('.search-toggle');
+ const searchBox=$('#search-wrap');
+ const searchForm=$('.search-form');
+ const searchInput=$('#site-search');
+ const feedback=$('#search-feedback');
+ const mobileButton=$('.mobile-menu-btn');
+ const mobileNav=$('#mobile-nav');
+ const toast=$('#toast');
+ const toggle=(button,region,open)=>{
+   if(!button||!region)return;
+   region.hidden=!open;
+   button.setAttribute('aria-expanded',String(open));
+ };
+ searchButton?.addEventListener('click',()=>{
+   const open=searchBox.hidden;
+   toggle(searchButton,searchBox,open);
+   if(open)searchInput?.focus();
+ });
+ mobileButton?.addEventListener('click',()=>toggle(mobileButton,mobileNav,mobileNav.hidden));
+ $$('.mobile-nav a').forEach(a=>a.addEventListener('click',()=>toggle(mobileButton,mobileNav,false)));
+ const normalize=s=>String(s||'').normalize('NFKC').replace(/ي/g,'ی').replace(/ك/g,'ک').replace(/[\u200c\u200f]/g,' ').replace(/\s+/g,' ').trim().toLocaleLowerCase('fa-IR');
+ // A genuine in-page finder: do not promise a full-site search index.
+ searchForm?.addEventListener('submit',event=>{
+   event.preventDefault();
+   const term=normalize(searchInput?.value);
+   if(!feedback)return;
+   if(!term){feedback.textContent='موضوع موردنظر را وارد کنید.';searchInput?.focus();return;}
+   const candidates=$$('main a[href],.metric-rail a[href],.side-dock a[href]');
+   const matching=candidates.find(a=>normalize(a.textContent+' '+(a.getAttribute('data-search')||'')+' '+(a.getAttribute('aria-label')||'')+' '+(a.getAttribute('title')||'')).includes(term));
+   if(!matching){
+     feedback.textContent='در همین صفحه نتیجه‌ای پیدا نشد. برای موضوعات بیشتر به دانشنامه یا بخش خدمات مراجعه کنید.';
+     return;
+   }
+   const label=matching.textContent.trim().replace(/\s+/g,' ').slice(0,75)||matching.getAttribute('aria-label')||matching.getAttribute('title')||'بخش مرتبط';
+   feedback.textContent='بخش مرتبط پیدا شد: '+label;
+   const scroller=matching.closest('.card-strip');
+   if(scroller)scroller.scrollTo({left:matching.offsetLeft*-1,behavior:'smooth'});
+   matching.scrollIntoView({block:'center',behavior:'smooth',inline:'nearest'});
+   matching.classList.add('search-found');
+   const previousTabIndex=matching.getAttribute('tabindex');
+   if(previousTabIndex===null)matching.setAttribute('tabindex','-1');
+   matching.focus({preventScroll:true});
+   window.setTimeout(()=>{
+     matching.classList.remove('search-found');
+     if(previousTabIndex===null)matching.removeAttribute('tabindex');
+   },2400);
+ });
+ // Chromium/Firefox/WebKit standard RTL scrollLeft is 0 at the right edge and
+ // becomes negative as the user moves visually left. Positive "next" clamped.
+ const sliders=new Map();
+ $$('[data-strip]').forEach(button=>{
+   const strip=document.getElementById(button.dataset.strip);
+   if(!strip)return;
+   sliders.set(button.dataset.strip,strip);
+   button.setAttribute('aria-controls',strip.id);
+   button.addEventListener('click',()=>{
+     if(button.disabled)return;
+     const amount=Math.max(130,Math.round(strip.clientWidth*.68));
+     const delta=button.dataset.direction==='next'?-amount:amount;
+     strip.scrollBy({left:delta,behavior:'smooth'});
+     window.setTimeout(()=>updateButtons(strip),280);
+   });
+ });
+ const updateButtons=strip=>{
+   const overflow=strip.scrollWidth>strip.clientWidth+2;
+   const max=Math.max(0,strip.scrollWidth-strip.clientWidth);
+   const rtl=getComputedStyle(strip).direction==='rtl';
+   // RTL negative model is used by current target browsers.
+   const position=rtl?-strip.scrollLeft:strip.scrollLeft;
+   $$('[data-strip="'+strip.id+'"]').forEach(button=>{
+     const next=button.dataset.direction==='next';
+     button.disabled=!overflow||(next?position>=max-2:position<=2);
+     button.setAttribute('aria-disabled',String(button.disabled));
+   });
+ };
+ for(const strip of sliders.values()){
+   strip.addEventListener('scroll',()=>updateButtons(strip),{passive:true});
+   updateButtons(strip);
+ }
+ window.addEventListener('resize',()=>{for(const strip of sliders.values())updateButtons(strip)},{passive:true});
+ // EN / AR provide contact-language guidance. They do not switch the document
+ // language or select a nonexistent translation.
+ const notices={
+   fa:'زبان این صفحه فارسی است.',
+   en:'This page is in Persian. For English enquiries, please use the Contact page.',
+   ar:'هذه الصفحة بالفارسية. للاستفسارات بالعربية يرجى استخدام صفحة التواصل.'
+ };
+ const notify=message=>{
+   if(!toast)return;
+   toast.hidden=false;
+   toast.setAttribute('role','status');
+   toast.textContent=message;
+   toast.setAttribute('tabindex','-1');
+   toast.focus({preventScroll:true});
+ };
+ $$('.lang-switch button').forEach(button=>{
+   button.setAttribute('aria-pressed',String(button.dataset.lang==='fa'));
+   button.addEventListener('click',()=>{
+     $$('.lang-switch button').forEach(other=>{
+       const selected=other.dataset.lang==='fa';
+       other.classList.toggle('active',selected);
+       other.setAttribute('aria-pressed',String(selected));
+     });
+     notify(notices[button.dataset.lang]||notices.fa);
+   });
+ });
+ toast?.addEventListener('click',()=>{toast.hidden=true;});
+ document.addEventListener('keydown',e=>{
+   if(e.key!=='Escape')return;
+   if(searchBox&&!searchBox.hidden){toggle(searchButton,searchBox,false);searchButton?.focus();}
+   if(mobileNav&&!mobileNav.hidden){toggle(mobileButton,mobileNav,false);mobileButton?.focus();}
+   if(toast)toast.hidden=true;
+ });
 })();
