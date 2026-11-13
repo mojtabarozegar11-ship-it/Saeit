@@ -60,8 +60,10 @@ class ExistingSiteAuditContractTests(unittest.TestCase):
 
     def test_store_mobile_sha256_wrap_is_localized_and_preserves_original_store(self):
         source = (ROOT / "content/zomorod-v11/store_index.php").read_text(encoding="utf8")
-        rule = ".grid article small.muted{overflow-wrap:anywhere;word-break:break-word}"
+        rule = ".grid article small.muted{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word}"
         self.assertEqual(source.count(rule), 1)
+        self.assertIn("grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr))", source)
+        self.assertIn(".grid>article,.grid>section{min-width:0}", source)
         self.assertIn("SHA-256: ", source)
         self.assertIn("پرداخت آنلاین تا اتصال درگاه غیرفعال است", source)
         self.assertIn("فروشگاه‌های تخصصی زمرد ملل", source)
