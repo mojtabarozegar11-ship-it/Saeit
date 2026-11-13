@@ -2,8 +2,8 @@
 """Read-only HTTP continuity check for MojPlayWin and its protected child sites.
 
 The real sub-sites are URL prefixes beneath mojplaywin.com, not unverified
-hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ and
-/picm/ intentionally do not support HEAD.
+hostnames such as taniya.mojplaywin.com. Only GET is used: /farnaz/ intentionally does not
+support HEAD. Retired PICM routes are excluded from the active scope.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ REQUIRED_PATHS = (
     "/taniya/",
     "/studio.Roham/",
     "/zahra$$/",
- ) + PERSONAL_PATHS
+) + PERSONAL_PATHS
 PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/")
 SITEMAP_URLS = (
     "/knowledge/",
