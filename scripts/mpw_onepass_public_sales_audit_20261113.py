@@ -123,11 +123,15 @@ def checkout_header_status(headers) -> str:
     intermediary. Do not emit header values, cookies, or any sensitive data.
     """
     policy = (headers.get("Content-Security-Policy", "") or "").lower()
-    directives = {d.strip() for d in policy.split(";") if d.strip()}
-    expected = {"script-src 'none'", "form-action 'self'",
-                "frame-ancestors 'none'"}
-    if not expected.issubset(directives):
-        return "checkout_security_headers_unverified"
+    rules = [d.strip().split() for d in policy.split(";") if d.strip()]
+    expected = {"script-src": ["'none'"], "form-action": ["'self'"],
+                "frame-ancestors": ["'none'"]}
+    # Reject duplicate/mixed CSP directives; a separate permissive script-src
+    # must not make the security gate appear green.
+    for directive, permitted_sources in expected.items():
+        actual = [rule[1:] for rule in rules if rule and rule[0] == directive]
+        if actual != [permitted_sources]:
+            return "checkout_security_headers_unverified"
     cache = (headers.get("Cache-Control", "") or "").lower()
     controls = {token.strip().split("=", 1)[0] for token in cache.split(",")}
     if "no-store" not in controls:
