@@ -82,3 +82,48 @@ fallback. These historical observations are not real-time site status.
 5. **Financial acceptance**: independently confirm one owner-approved TRX mainnet settlement for a nontrial SKU, match DB ledgers and private entitlement, verify a genuine authorized download, then measure net revenue only from independently proven sales. No transfer initiated by this audit.
 
 Current release verdict: **BLOCKED / NOT DEPLOYED / REVENUE UNKNOWN**. The public GET probe independently verifies the blockers, not their remediation.
+
+## Consolidation update — reviewed email-free guest candidate in this PR
+
+PR #2263 **now contains executable source changes**, not solely an auditor.
+The exact reviewed source snapshots below were brought from Draft #1890
+without launching a production process:
+
+- \`services/mpw_trx_guest_commerce.py\` — immutable signed browser owner,
+  private non-deliverable \`@guest.mojplaywin.invalid\` internal invoice
+  identifier, never collects a buyer mailbox, fail-closed privileged owner
+  checks, exact unambiguous commercial route binding and correct
+  post-commit analytics classification.
+- \`scripts/mpw_guest_no_email_release.py\` — manually invoked, owner-gated,
+  reversible, hash-pinned replacement of precisely the known email field
+  and stale recovery copy in the **effective private cPanel checkout
+  template**, not a blanket replacement of site templates.
+- \`scripts/test_mpw_guest_route_patching.py\`,
+  \`scripts/test_mpw_guest_first_order_identity.py\`, and
+  \`tests/test_mpw_guest_no_email_release.py\` — isolated no-network
+  regression tests for route preservation, guest concurrency, staff and
+  legacy-email rejection, template integrity and release plan rollback.
+
+The reviewed no-email patch is not a successful production checkout merely
+because source-level tests pass. The **effective**
+\`mpw_commerce/templates/mpw_commerce/product_checkout.html\` template is
+not present in main GitHub and must be audited and surgically changed
+only after its actual cPanel owner, content hash, and complete route
+dependencies are confirmed. No fake checkout template may be shipped.
+
+### Explicit conflict with draft #2213
+
+Dynamic storefront draft #2213 enforces **email ownership and recovery**
+with \`verify_guest_email_ownership_source\` and
+\`verify_guest_recovery_checkout_source\`. These checks conflict
+with the newer **no customer email** policy now selected in the
+guest candidate. **Do not cherry-pick #2213's installer as-is**;
+its email and schema gates must be reworked and tested for the new
+session-only purchase model. In the meantime, the static fallback
+is a real public release blocker; removing it before safe no-email
+entitlement/delivery checks would be premature.
+
+**This entire PR remains Draft / not merged / not deployed.** Commercial
+sales, finality and authenticated download remain unverified. No
+positive revenue figure or production readiness percentage is inferred
+from the passing offline suite.
