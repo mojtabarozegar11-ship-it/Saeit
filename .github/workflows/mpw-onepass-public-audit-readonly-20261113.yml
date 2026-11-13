@@ -2,6 +2,13 @@ name: MojPlayWin one-pass public sales audit (read only)
 # Manually run on reviewed main only. No production login, payment, mail,
 # mutation, network transfer of buyer data or external task subscription.
 on:
+  pull_request:
+    paths:
+      - 'scripts/mpw_onepass_public_sales_audit_20261113.py'
+      - 'scripts/mpw_paid_provenance_readonly_20261105.py'
+      - 'tests/test_mpw_onepass_public_sales_audit_20261113.py'
+      - 'tests/test_mpw_paid_sku_scope_20261113.py'
+      - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
   workflow_dispatch:
 
 permissions:
@@ -12,6 +19,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  isolated-safety-contract:
+    if: "${{ github.event_name == 'pull_request' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout pull request without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify two precise MojPlayWin regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py scripts/mpw_paid_provenance_readonly_20261105.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
   public-buyer-journey:
     if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
     runs-on: [self-hosted, factory-vps]
