@@ -187,7 +187,7 @@ def test_noncanonical_worker_failure_still_preserves_existing_retry_contract(db)
         code="ordinary-worker", name="Ordinary", mission="Legacy", active=True,
     )
     cap = AgentCapability.objects.create(
-        code="ordinary-research", name="Ordinary research",
+        code="research", name="Ordinary research",
         risk_level="low", active=True,
     )
     cap.agents.add(agent)
