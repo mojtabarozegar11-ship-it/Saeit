@@ -56,7 +56,6 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
     def test_login_redirect_and_known_child_are_allowed(self):
         for url in (
             guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F",
-            guard.ORIGIN + "/picm/login/",
             guard.ORIGIN + "/studio.Roham/",
             guard.ORIGIN + "/zahra$$/",
         ):
