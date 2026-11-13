@@ -107,21 +107,22 @@ class TaskRuntime:
             raise TaskExecutionError("Task execution is not stale")
 
         previous_execution_id = task.execution_id
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
-            task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
-            }
-        elif task.agent.code == BOT_CODE:
-            # Staleness is not proof of failure: a previous economic action
-            # might already have made a private or external change.  Never
-            # replay such work until the previous effect has been reconciled.
+        if task.agent.code == BOT_CODE:
+            # Even an exhausted retry budget does not prove an external side
+            # effect failed. Preserve the prior execution identity for
+            # reconciliation and never silently requeue or close the incident.
             task.status = "blocked"
             task.output_data = {
-                "error": "Stale economic execution requires reconciliation before any retry",
+                "error": "Stale canonical execution requires effect reconciliation",
                 "requires_review": True,
                 "automatic_replay_allowed": False,
                 "previous_execution_id": previous_execution_id,
+                "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+            }
+        elif task.attempt_count >= task.max_attempts:
+            task.status = "failed"
+            task.output_data = {
+                "error": "Execution became stale and retry budget was exhausted"
             }
         else:
             task.status = "queued"
@@ -205,13 +206,28 @@ class TaskRuntime:
         if not str(error or "").strip():
             raise TaskExecutionError("Task failure reason is required")
         previous_execution_id = task.execution_id
-        task.output_data = {"error": str(error)[:5000]}
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
+        if task.agent.code == BOT_CODE:
+            # The tool may have produced an external effect immediately before
+            # failing or losing its acknowledgement. Without an independently
+            # reconciled receipt an automatic retry is unsafe, regardless of
+            # remaining attempts. Preserve the execution token for correlation.
+            task.status = "blocked"
+            task.output_data = {
+                "error": str(error)[:5000],
+                "requires_review": True,
+                "automatic_replay_allowed": False,
+                "previous_execution_id": previous_execution_id,
+                "retry_budget_exhausted": task.attempt_count >= task.max_attempts,
+            }
         else:
-            # Invalidate the previous worker identity before the retry is claimable.
-            task.execution_id = ""
-            task.status = "queued"
+            task.output_data = {"error": str(error)[:5000]}
+            if task.attempt_count >= task.max_attempts:
+                task.status = "failed"
+            else:
+                # Preserve the pre-existing retry policy for noncanonical
+                # workers until their external effects have been inventoried.
+                task.execution_id = ""
+                task.status = "queued"
         task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
         self._audit(
             task,
@@ -222,6 +238,8 @@ class TaskRuntime:
                 "execution_id": task.execution_id,
                 "previous_execution_id": previous_execution_id,
                 "attempt": task.attempt_count,
+                "requires_review": task.status == "blocked",
+                "automatic_replay_allowed": task.status == "queued",
             },
             trace_execution_id=previous_execution_id,
         )
