@@ -33,7 +33,7 @@ trading/MojTradeOmegaXDemoBot.cs
 | Risk % | 0.25 |
 | Max Positions | 3 |
 | Daily Loss Stop % | 2 |
-| Consecutive Loss Stop | 5 |
+| Consecutive Loss Stop | 3 |
 | Fast EMA | 8 |
 | Slow EMA | 34 |
 | ATR Period | 14 |
