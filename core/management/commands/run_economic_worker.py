@@ -33,6 +33,7 @@ class Command(BaseCommand):
         master_agent = resolve_single_active_agent(Agent)
         if master_agent is None:
             self.stdout.write("IDLE: no active canonical bot runtime.")
+            self.stdout.write("IDLE: no queued economic task.")
             return
         gateway = build_economic_gateway()
         supported = frozenset(
@@ -42,8 +43,6 @@ class Command(BaseCommand):
         )
         runner = None
         for _ in range(limit):
-            # Never retry the same queued identity within this invocation.
-            # A failed or re-queued task is left for the normal retry policy.
             task_query = (
                 AgentTask.objects.filter(
                     agent=master_agent,
