@@ -583,7 +583,12 @@ def publish(run: str, source: Path):
     audit_invoice_email_dependencies()
     old, new = plan(source)
     if new is None:
-        print("MPW_EMAIL_FREE=ALREADY_INSTALLED")
+        # Idempotence is source-only; a stale public Passenger response must
+        # never be reported as a completed commercial installation.
+        public_proof = audit_live_public_checkout_forms()
+        if len(public_proof) != len(PUBLIC_CHECKOUT_PRODUCTS):
+            abort("PUBLIC_BUYER_FORMS_UNVERIFIED")
+        print("MPW_EMAIL_FREE=ALREADY_INSTALLED;PUBLIC_BUYER_FORMS_VERIFIED=YES")
         return
     folder = _backup_dir(run)
     before = {k: sha(v) for k, v in old.items()}
@@ -600,6 +605,12 @@ def publish(run: str, source: Path):
                 _write_atomic(target, new[name], before[name])
                 changed.append(name)
         _restart()
+        # This is still GET-only; every SKU must visibly render the new
+        # owner-safe checkout form before success is reported. Failure
+        # automatically restores the exact saved source and template.
+        public_proof = audit_live_public_checkout_forms()
+        if len(public_proof) != len(PUBLIC_CHECKOUT_PRODUCTS):
+            abort("PUBLIC_BUYER_FORMS_UNVERIFIED")
     except BaseException:
         for name in reversed(changed):
             if sha(_file(targets[name])) == after[name]:
@@ -607,7 +618,7 @@ def publish(run: str, source: Path):
         _restart()
         raise
     print("MPW_EMAIL_FREE=PUBLISHED;CHANGED=" + ",".join(changed) +
-          ";INVOICES_CREATED=0;EMAILS_SENT=0")
+          ";PUBLIC_BUYER_FORMS_VERIFIED=YES;INVOICES_CREATED=0;EMAILS_SENT=0")
 
 
 def rollback(run: str):
