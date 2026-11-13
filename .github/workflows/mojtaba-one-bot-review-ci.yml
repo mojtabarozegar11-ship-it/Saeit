@@ -12,6 +12,7 @@ on:
       - "trading/mojtrade_demo_receipt_reconcile.py"
       - "trading/mojtrade_broker_statement_check.py"
       - "trading/MojTradeDemoHistoryAuditBot.cs"
+      - "trading/MojTradeGoldSnapshotAuditBot.cs"
       - "trading/MojTradeOmegaXDemoBot.cs"
       - "trading/ctrader-build/**"
       - "tests/test_mojtrade_costed_oos.py"
@@ -162,6 +163,10 @@ jobs:
       - name: Verify read-only cTrader History audit cBot compiles
         run: |
           dotnet build trading/ctrader-build/MojTradeDemoHistoryAuditBot/MojTradeDemoHistoryAuditBot.csproj \
+            -c Release --nologo -p:AlgoBuild=false -p:AlgoPublish=false
+      - name: Verify read-only cTrader XAUUSD H1 market and account snapshot cBot compiles
+        run: |
+          dotnet build trading/ctrader-build/MojTradeGoldSnapshotAuditBot/MojTradeGoldSnapshotAuditBot.csproj \
             -c Release --nologo -p:AlgoBuild=false -p:AlgoPublish=false
       - name: No live release artifacts
         run: |
