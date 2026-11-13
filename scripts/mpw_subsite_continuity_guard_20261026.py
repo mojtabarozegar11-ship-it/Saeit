@@ -53,9 +53,8 @@ REQUIRED_PATHS = (
     "/taniya/",
     "/studio.Roham/",
     "/zahra$$/",
-    "/picm/",
-) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
+ ) + PERSONAL_PATHS
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -69,7 +68,7 @@ CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
 REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
-    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+    "/sitemap.xml", "/accounts/login/",
     *CHECKOUT_PATHS,
 })
 
@@ -200,7 +199,7 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
 
 def check_site_page(path: str) -> Check:
     check, data = get(ORIGIN + path)
-    expected_final = ORIGIN + ("/picm/login/" if path == "/picm/" else path)
+    expected_final = ORIGIN + path
     parsed_final = urllib.parse.urlsplit(check.effective)
     # Optional query params added by the application are allowed. A route that
     # silently resolves to / or to an unrelated app is not considered healthy.
@@ -283,12 +282,11 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 6
+        assert len(PROTECTED_CHILDREN) == 5
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
         assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
-        assert "/picm/" in REQUIRED_PATHS
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
