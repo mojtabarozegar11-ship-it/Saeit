@@ -55,6 +55,76 @@ class EvolutionTests(unittest.TestCase):
             self.assertEqual(out["recent_new_verified_action_types"],2)
             self.assertEqual(out["decision"],"hold_serial_chain_after_verified_progress")
 
+    def test_old_verified_actions_are_not_recounted_when_new_task_is_unverified(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_profit_optimize',?)",
+                    (json.dumps({"verified_effect": False}),)
+                )
+            previous = json.loads(state.read_text())
+            previous["task_counts"]["completed"] = 2
+            previous["last_completed_task_id"] = 2
+            state.write_text(json.dumps(previous))
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["completed_tasks_net_change"], 1)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(result["recent_new_verified_action_types"], 0)
+            self.assertEqual(result["decision"], "hold_serial_chain_until_verified_progress")
+            self.assertEqual(result["last_completed_task_id"], 3)
+
+    def test_only_new_verified_action_is_counted_after_cursor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            previous = json.loads(state.read_text())
+            previous["task_counts"]["completed"] = 1
+            previous["last_completed_task_id"] = 1
+            state.write_text(json.dumps(previous))
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+            self.assertEqual(result["recent_new_verified_action_types"], 1)
+            self.assertEqual(result["decision"], "hold_serial_chain_until_verified_progress")
+            mod.evaluate(db, state)
+            second = json.loads(state.read_text())
+            self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(second["last_completed_task_id"], 2)
+
+    def test_legacy_nonzero_completed_history_abstains_without_cursor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            previous = json.loads(state.read_text())
+            previous["task_counts"]["completed"] = 2
+            state.write_text(json.dumps(previous))
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertFalse(result["previous_completed_cursor_trusted"])
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(result["recent_new_verified_action_types"], 0)
+
+    def test_rejects_invalid_stored_task_cursor_without_modifying_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            previous = json.loads(state.read_text())
+            previous["last_completed_task_id"] = True
+            state.write_text(json.dumps(previous))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "INVALID_PREVIOUS_EVOLUTION_TASK_CURSOR"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
     def test_legacy_state_migrates_to_serial_task_chain(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research", "income_opportunity_score"],
