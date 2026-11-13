@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned, reversible, three-file-only Zomorod photo carousel release gate.
+"""Pinned, reversible, 15-file Zomorod photo carousel release gate.
 
 Read-only by default. Never creates a release merely because the source branch merges.
 A production change additionally requires an explicit --owner-approved operator flag.
@@ -16,12 +16,17 @@ import shutil
 import stat
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path('/home/zomorod2/public_html')
 BACKUP_ROOT = Path('/home/zomorod2/.backups/zomorod-fields-20261113')
 FILES = ('index.html', 'assets/zm-reference-v3.css', 'assets/zm-reference-v3.js')
+SLUGS = ('innovation', 'laboratory', 'greenhouse', 'livestock', 'smart-tools', 'games-simulation')
+CREATED = tuple(f'assets/zm-field-{slug}.svg' for slug in SLUGS) + tuple(
+    f'fields/{slug}/index.html' for slug in SLUGS
+)
 # Exact Git blobs of the successfully verified #2251 live-release source.
 OLD_BLOBS = dict(zip(FILES, (
     'afd94198a01194ee7b31be941bb305f775cacacf',
@@ -30,10 +35,24 @@ OLD_BLOBS = dict(zip(FILES, (
 )))
 # Exact Git blobs from PR #2254 after its 4th carousel browser tests passed.
 NEW_BLOBS = dict(zip(FILES, (
-    '0640683589db69023b2a9bdaf66fcfd8db138549',
+    'ceaa5c79e267fa095c1ce71f1f1007fd1cfe179a',
     '63559875709de300ffabbd148bfa76c22e88abfc',
     'b5f99cf18ad8b74a2854a837bcd252bf98a1a30e',
 )))
+NEW_BLOBS.update({
+    'fields/innovation/index.html': '80a59d1c7583a731ef56c880ffcc6b401996b3af',
+    'assets/zm-field-innovation.svg': '9b03f1dca6acb4f4f68056374b1345e96442f395',
+    'fields/laboratory/index.html': '2ddb2f86ad5c0bdbb60b63265028e75ca161ad03',
+    'assets/zm-field-laboratory.svg': '7d2a86ab46ed6b7b673983a2de860ff3318d70d0',
+    'fields/greenhouse/index.html': '66b6a520b0a4fba403f27a254d7ae002101b8c8f',
+    'assets/zm-field-greenhouse.svg': 'b0fbd9f50b95eec21c77995855252c81ad33b502',
+    'fields/livestock/index.html': 'b200895e3e4d6f303b782d7cc28c399c10a98679',
+    'assets/zm-field-livestock.svg': '7760d102b51cd9ebb4ea236dffc2054a8da4d263',
+    'fields/smart-tools/index.html': '391c250c0e44b68bb1a11dbc3d98f34b08b2b5aa',
+    'assets/zm-field-smart-tools.svg': '75589d89b3d5a28097274896a767ae3420fecd8e',
+    'fields/games-simulation/index.html': 'a553b715e0e224c8ec321ddae226f9d102627d01',
+    'assets/zm-field-games-simulation.svg': '387dae7b7a91ed91f2df254a762f1b76da423940',
+})
 PROTECTED = (
     '.htaccess', 'sitemap.xml', 'agriculture/index.html',
     'research/index.html', 'industry/index.html', 'services/index.html',
@@ -77,22 +96,24 @@ def safe_stage(stage: Path) -> Path:
         if folder.is_symlink() or not folder.is_dir():
             raise RuntimeError('Missing private stage subfolder: ' + name)
         actual = {str(p.relative_to(folder)) for p in folder.rglob('*') if p.is_file() or p.is_symlink()}
-        if actual != set(FILES):
-            raise RuntimeError(f'Unexpected staged files in {name}: {actual ^ set(FILES)}')
+        allowed = set(FILES if name == 'old' else FILES + CREATED)
+        if actual != allowed:
+            raise RuntimeError(f'Unexpected staged files in {name}: {actual ^ allowed}')
     return stage
 
 
 def candidates(stage: Path):
     safe_stage(stage)
     old = {name: read_regular(stage / 'old' / name) for name in FILES}
-    new = {name: read_regular(stage / 'new' / name) for name in FILES}
+    new = {name: read_regular(stage / 'new' / name) for name in FILES + CREATED}
     for name in FILES:
         if git_blob(old[name]) != OLD_BLOBS[name]:
             raise RuntimeError('Old source does not match approved revision: ' + name)
-        if git_blob(new[name]) != NEW_BLOBS[name]:
-            raise RuntimeError('Candidate not approved and browser-tested: ' + name)
         if old[name] == new[name]:
             raise RuntimeError('No actual change: ' + name)
+    for name in FILES + CREATED:
+        if git_blob(new[name]) != NEW_BLOBS[name]:
+            raise RuntimeError('Candidate not approved and browser-tested: ' + name)
     page = new['index.html']
     js = new['assets/zm-reference-v3.js']
     if not (page.count(b'data-auto-strip=') == 3 and
@@ -103,7 +124,6 @@ def candidates(stage: Path):
             b'const strips=Array.from(document.querySelectorAll(' in js and
             b'prefers-reduced-motion' in js):
         raise RuntimeError('Candidate lacks verified four-carousel behavior')
-    # The carousel MUST have ten different real cards, not four cards cloned by JavaScript.
     starts = page.split(b'<div id="fields-carousel"', 1)
     if len(starts) != 2:
         raise RuntimeError('Missing original photo carousel')
@@ -113,10 +133,32 @@ def candidates(stage: Path):
     photo_region = body[0]
     card_count = photo_region.count(b'class="field-card neon-panel"')
     sources = re.findall(rb'<img\b[^>]*\bsrc="([^"]+)"', photo_region)
+    routes = re.findall(rb'<a class="field-card neon-panel" href="([^"]+)"', photo_region)
+    required_webp = (
+        b'/assets/zm-v3-farming.webp', b'/assets/zm-v3-genetics.webp',
+        b'/assets/zm-v3-industry.webp', b'/assets/zm-v3-economy.webp',
+    )
+    required_svg = tuple(f'/assets/zm-field-{slug}.svg'.encode() for slug in SLUGS)
+    required_routes = (
+        b'/agriculture/', b'/research/', b'/industry/', b'/economy/',
+    ) + tuple(f'/fields/{slug}/'.encode() for slug in SLUGS)
     if (card_count != 10 or len(sources) != 10 or len(set(sources)) != 10 or
-            any(not source.startswith(b'/assets/zm-v3-') or not source.endswith(b'.webp')
-                for source in sources)):
-        raise RuntimeError('Release must contain ten original cards with distinct first-party photos')
+            tuple(sources) != required_webp + required_svg or
+            tuple(routes) != required_routes):
+        raise RuntimeError('Release must contain ten original cards, ten unique routes and distinct first-party photos')
+    for slug in SLUGS:
+        art = new[f'assets/zm-field-{slug}.svg']
+        svg = ET.fromstring(art)
+        if (svg.attrib.get('viewBox') != '0 0 1200 750' or
+                svg.attrib.get('width') != '1200' or
+                svg.attrib.get('height') != '750' or
+                list(svg.iter('{http://www.w3.org/2000/svg}script'))):
+            raise RuntimeError('Unapproved illustration: ' + slug)
+        page_html = new[f'fields/{slug}/index.html']
+        if (b'<h1 id="hero-title">' not in page_html or
+                f'/assets/zm-field-{slug}.svg'.encode() not in page_html or
+                f'https://zomorodmelal.ir/fields/{slug}/'.encode() not in page_html):
+            raise RuntimeError('Dedicated topic page missing: ' + slug)
     return old, new
 
 
@@ -143,6 +185,22 @@ def ensure_disk_space(old, new):
             raise RuntimeError('Insufficient free disk for verified release and rollback: ' + str(directory))
 
 
+def created_destination(name: str, create_parents: bool = False) -> Path:
+    if name not in CREATED:
+        raise RuntimeError('Path outside approved create allowlist')
+    parent = ROOT
+    for piece in Path(name).parts[:-1]:
+        parent = parent / piece
+        if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+            raise RuntimeError('Untrusted target directory: ' + str(parent))
+        if create_parents and not parent.exists():
+            parent.mkdir(mode=0o755)
+    path = ROOT / name
+    if path.is_symlink():
+        raise RuntimeError('Symlinked target: ' + str(path))
+    return path
+
+
 def preflight(stage: Path):
     identity()
     old, new = candidates(stage)
@@ -157,7 +215,12 @@ def preflight(stage: Path):
                         'mode': stat.S_IMODE(path.stat().st_mode)}
     if BACKUP_ROOT.is_symlink():
         raise RuntimeError('Untrusted backup directory')
-    return {'files': before, 'protected': protected_fingerprints()}
+    for name in CREATED:
+        target = created_destination(name)
+        if target.exists() or target.is_symlink():
+            raise RuntimeError('New destination already exists; refuse overwrite: ' + name)
+    return {'files': before, 'created': {name: sha256(new[name]) for name in CREATED},
+            'protected': protected_fingerprints()}
 
 
 def atomic(path: Path, data: bytes, mode: int):
@@ -216,7 +279,7 @@ def load_backup(release: Path):
     if release.is_symlink() or not release.is_dir():
         raise RuntimeError('Missing private release backup')
     manifest = json.loads(read_regular(release / 'manifest.json'))
-    if set(manifest['files']) != set(FILES):
+    if set(manifest['files']) != set(FILES) or set(manifest.get('created', {})) != set(CREATED):
         raise RuntimeError('Unsafe release manifest')
     old = {name: read_regular(release / 'old' / name) for name in FILES}
     for name in FILES:
@@ -233,25 +296,41 @@ def verify(release_id: str) -> None:
     for name in FILES:
         if sha256(read_regular(ROOT / name)) != manifest['files'][name]['new']:
             raise RuntimeError('Published file does not match approved candidate: ' + name)
-    print('ZM_FIELDS_RELEASE=VERIFIED; REPLACED_FILES=3; INTERNAL_FILES_UNTOUCHED=YES')
+    for name in CREATED:
+        if sha256(read_regular(created_destination(name))) != manifest['created'][name]:
+            raise RuntimeError('Created asset/page does not match approved candidate: ' + name)
+    print('ZM_FIELDS_RELEASE=VERIFIED; REPLACED_FILES=3; CREATED_FILES=12; INTERNAL_FILES_UNTOUCHED=YES')
 
 
 def restore(release_id: str) -> None:
     manifest, old = load_backup(release_dir(release_id))
     if protected_fingerprints() != manifest['protected']:
         raise RuntimeError('Protected content mismatch; refuse automated restore')
-    # Verify all files BEFORE touching any file. Concurrent human edits are never clobbered.
+    # Precheck EVERY target before changing anything. Preserve concurrent owner edits.
     for name in FILES:
         if sha256(read_regular(ROOT / name)) not in (
                 manifest['files'][name]['new'], manifest['files'][name]['old']):
             raise RuntimeError('Concurrent edit detected; refuse restore: ' + name)
-    for name in FILES:
+    for name in CREATED:
+        target = created_destination(name)
+        if target.exists() or target.is_symlink():
+            if sha256(read_regular(target)) != manifest['created'][name]:
+                raise RuntimeError('Concurrent edit detected on created file; refuse restore: ' + name)
+    # Restore old HTML first, before removing the six linked destination pages.
+    for name in ('index.html', 'assets/zm-reference-v3.css', 'assets/zm-reference-v3.js'):
         if sha256(read_regular(ROOT / name)) == manifest['files'][name]['new']:
             atomic(ROOT / name, old[name], manifest['files'][name]['mode'])
+    for name in CREATED:
+        target = created_destination(name)
+        if target.exists() or target.is_symlink():
+            if sha256(read_regular(target)) != manifest['created'][name]:
+                raise RuntimeError('Created file changed during rollback: ' + name)
+            target.unlink()
     for name in FILES:
         if sha256(read_regular(ROOT / name)) != manifest['files'][name]['old']:
             raise RuntimeError('Post-rollback mismatch: ' + name)
-    print('ZM_FIELDS_RELEASE=ROLLED_BACK_EXACTLY')
+    print('ZM_FIELDS_RELEASE=ROLLED_BACK_EXACTLY; CREATED_FILES_REMOVED=12')
+
 
 
 def apply(stage: Path, release_id: str) -> None:
@@ -265,8 +344,14 @@ def apply(stage: Path, release_id: str) -> None:
             raise RuntimeError('Untrusted backup root')
         BACKUP_ROOT.mkdir(mode=0o700, exist_ok=True)
         backup(release, manifest, old)
-        # Atomic per-file writes; HTML last so old page keeps using old versioned assets.
+        # Create all six destination pages and their SVGs BEFORE updating homepage.
+        # Final HTML switch is the last step. Every file is hash-pinned.
         try:
+            for name in CREATED:
+                target = created_destination(name, create_parents=True)
+                if target.exists() or target.is_symlink():
+                    raise RuntimeError('Create destination already claimed: ' + name)
+                atomic(target, new[name], 0o644)
             for name in ('assets/zm-reference-v3.js', 'assets/zm-reference-v3.css', 'index.html'):
                 if sha256(read_regular(ROOT / name)) != manifest['files'][name]['old']:
                     raise RuntimeError('Changed since audit: ' + name)
@@ -275,7 +360,8 @@ def apply(stage: Path, release_id: str) -> None:
         except BaseException:
             restore(release_id)
             raise
-        print('ZM_FIELDS_RELEASE=APPLIED_AFTER_EXPLICIT_APPROVAL')
+        print('ZM_FIELDS_RELEASE=APPLIED_AFTER_EXPLICIT_APPROVAL; CREATED_FILES=12')
+
 
 
 def main(argv=None) -> int:
