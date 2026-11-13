@@ -4,7 +4,9 @@ from typing import Any, Callable, Dict
 from .agent_registry import AgentRegistry, RISK_ORDER
 from .task_approval_scope import has_approved_task_request
 from .models import Agent, AgentTask, ApprovalRequest, AuditLog
-from .unified_bot_identity import assert_single_executor
+from .unified_bot_identity import (
+    EXECUTOR_RUNTIME_CODES, assert_single_executor, unresolved_master_task_id,
+)
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
 
@@ -85,6 +87,14 @@ class ToolGateway:
         # The task may have been claimed before a legacy scheduler appeared.
         # Re-read identities before any handler can produce side effects.
         assert_single_executor(Agent, task.agent.code)
+        if task.agent.code in EXECUTOR_RUNTIME_CODES:
+            blocked_id = unresolved_master_task_id(
+                AgentTask, exclude_task_id=task.pk,
+            )
+            if blocked_id is not None:
+                raise ToolGatewayError(
+                    f"UNRECONCILED_MASTER_EFFECT_BLOCKS_TOOL:{blocked_id}"
+                )
         if spec.required_agent_code and task.agent.code != spec.required_agent_code:
             raise ToolGatewayError("Tool requires canonical agent identity")
         registry = AgentRegistry()

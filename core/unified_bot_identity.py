@@ -38,6 +38,23 @@ def assert_single_executor(agent_model, expected_code):
         )
 
 
+def unresolved_master_task_id(task_model, *, exclude_task_id=None):
+    """Read-only barrier against subsequent work after an unknown effect.
+
+    A completed source scan, owner approval, timeout, or exhausted retry
+    budget does not prove that the preceding effect was rolled back.
+    Keep both canonical and legacy audit records in this safety query.
+    """
+    pending = task_model.objects.filter(
+        agent__code__in=EXECUTOR_RUNTIME_CODES,
+        status__in=("blocked", "failed"),
+        output_data__requires_review=True,
+    )
+    if exclude_task_id is not None:
+        pending = pending.exclude(pk=exclude_task_id)
+    return pending.order_by("pk").values_list("pk", flat=True).first()
+
+
 ECONOMIC_CAPABILITY_PREFIX = "income_"
 ECONOMIC_SPECIAL_CAPABILITIES = frozenset({"master_self_improvement"})
 FACTORY_CAPABILITIES = frozenset({

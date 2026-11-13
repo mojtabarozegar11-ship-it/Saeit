@@ -44,6 +44,20 @@ class ApprovalService:
             if not approval_covers_task(approval, task):
                 raise ValueError("Approval does not match target task action or risk")
             if task:
+                # A prior attempt may have performed a side effect before
+                # reporting a failure. A standard approval decision is NOT
+                # a reconciliation receipt and must never reset its status.
+                uncertain = (
+                    task.status == "blocked" and (
+                        task.attempt_count > 0
+                        or (task.output_data or {}).get("requires_review") is True
+                        or (task.output_data or {}).get("automatic_replay_allowed") is False
+                    )
+                )
+                if uncertain:
+                    raise ValueError(
+                        "UNCERTAIN_TASK_EFFECT_REQUIRES_INDEPENDENT_RECONCILIATION"
+                    )
                 if approved and task.status != "blocked":
                     raise ValueError("Only a blocked task can be released by approval")
                 if not approved and task.status not in {"blocked", "queued"}:

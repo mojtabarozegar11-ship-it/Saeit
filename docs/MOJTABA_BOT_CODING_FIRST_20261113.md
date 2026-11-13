@@ -133,3 +133,7 @@ The internal `business_portfolio_review` operation is now wired to the existing 
 ## Cycle 9 verification-effect correction
 
 A source-only `business_portfolio_review(domain=games|trading)` must return `verified_effect=False` even if all allowlisted local source files can be hashed; source existence alone is NOT an operational or commercial result. For a request encompassing a Django row-count domain the old `verified_effect` semantics of that internal read remain, but no game run, trade or settlement is certified. The audit payload explicitly marks `source_only_no_operational_credit` so aggregate reports cannot mistake source inventory for execution.
+
+## Cycle 10 — uncertain-effect barrier across owner approvals and task execution
+
+A previously attempted `blocked` task cannot be released or cancelled through an ordinary Owner Approval decision. An independent outcome-reconciliation workflow is required; the approval transaction rolls back instead of requeueing. The single master/legacy task registry now records `requires_review=true` on ambiguous terminal failures (including exhausted retry budget), and an unresolved-effect barrier is checked both before task claim and immediately before tool invocation. Historical tasks are not silently deleted or retried. The new barrier is source only; previous unknown effects and live VPS schedulers were NOT inspected, and no new reconciliation API was activated.

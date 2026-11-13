@@ -11,6 +11,7 @@ from .models import Agent, AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_risk, requires_owner_approval
 from .unified_bot_identity import (
     BOT_CODE, EXECUTOR_RUNTIME_CODES, assert_single_executor,
+    unresolved_master_task_id,
 )
 
 
@@ -36,6 +37,14 @@ class TaskRuntime:
         # Reject duplicate canonical/legacy executors before claiming a task.
         # No remote process is started or stopped by this guard.
         assert_single_executor(Agent, task.agent.code)
+        if task.agent.code in EXECUTOR_RUNTIME_CODES:
+            blocked_id = unresolved_master_task_id(
+                AgentTask, exclude_task_id=task.pk,
+            )
+            if blocked_id is not None:
+                raise TaskExecutionError(
+                    f"UNRECONCILED_MASTER_EFFECT_BLOCKS_NEW_CLAIM:{blocked_id}"
+                )
 
         # One execution owner across economic and factory lanes of Mojtaba.bot.ai.
         # On row-locking databases select_for_update also locks the joined
@@ -114,7 +123,10 @@ class TaskRuntime:
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
             task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
+                "error": "Execution became stale and retry budget was exhausted",
+                "requires_review": task.agent.code in EXECUTOR_RUNTIME_CODES,
+                "automatic_replay_allowed": False,
+                "previous_execution_id": previous_execution_id,
             }
         elif task.agent.code in EXECUTOR_RUNTIME_CODES:
             # Staleness is not proof of failure: a previous economic action
@@ -214,6 +226,14 @@ class TaskRuntime:
         task.output_data = {"error": str(error)[:5000]}
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
+            if task.agent.code in EXECUTOR_RUNTIME_CODES:
+                task.output_data = {
+                    "error": str(error)[:5000],
+                    "requires_review": True,
+                    "automatic_replay_allowed": False,
+                    "previous_execution_id": previous_execution_id,
+                    "retry_budget_exhausted": True,
+                }
         elif task.agent.code in EXECUTOR_RUNTIME_CODES:
             # A handler can fail AFTER its external/private effect occurred.
             # Never automatically retry the one master/factory executor.
