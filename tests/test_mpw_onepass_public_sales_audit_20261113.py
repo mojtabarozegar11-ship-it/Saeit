@@ -460,6 +460,64 @@ class AuditTests(unittest.TestCase):
                          {"redirect_not_followed"})
         self.assertFalse(result["payments_sent"])
 
+    def test_script_policy_categories_do_not_emit_raw_headers(self):
+        scenarios = {
+            "csp_missing": "",
+            "script_src_missing": "default-src 'self'; form-action 'self'",
+            "script_src_duplicate": "script-src 'none'; script-src 'self'",
+            "script_none": "script-src 'none'",
+            "script_self_only": "script-src 'self'",
+            "script_unsafe_inline_or_eval": "script-src 'self' 'unsafe-inline'",
+            "script_wildcard_or_http": "script-src http: *",
+            "script_nonce_or_hash": "script-src 'self' 'nonce-nonlogged-testtoken'",
+            "script_other": "script-src https://cdn.example.org",
+        }
+        for expected, value in scenarios.items():
+            with self.subTest(category=expected):
+                got = MOD.script_csp_category({"Content-Security-Policy": value})
+                self.assertEqual(got, expected)
+                self.assertNotIn("nonlogged-testtoken", got)
+                self.assertNotIn("cdn.example.org", got)
+                self.assertLess(len(got), 55)
+
+    def test_audit_records_sanitized_policy_but_not_buyer_data(self):
+        from urllib.error import HTTPError
+        class NoNetwork:
+            def open(self, req, timeout=None):
+                raise HTTPError(req.full_url, 503, "unavailable", {}, None)
+        result = MOD.audit(opener=NoNetwork())
+        self.assertEqual(result["checkout_script_policy_categories"], {})
+        self.assertIsNone(result["commercial_sales_verified"])
+        self.assertFalse(result["customer_data_read"])
+
+    def test_observer_keeps_header_category_separate_from_checkout_form(self):
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "text/html",
+                       "Cache-Control": "no-store",
+                       "Content-Security-Policy":
+                           "script-src 'self'; form-action 'self'; frame-ancestors 'none'"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return "https://mojplaywin.com/store/product/72/checkout/"
+            def read(self, n):
+                return checkout(72).encode()
+        class FakeOpener:
+            def open(self, req, timeout):
+                return FakeResponse()
+        form = {}
+        policies = {}
+        state = MOD.observe("/store/product/72/checkout/", "checkout", 72,
+                            5, FakeOpener(), form, policies)
+        self.assertEqual(state, "checkout_csp_scripts_unverified")
+        self.assertEqual(form["/store/product/72/checkout/"],
+                         "no_email_checkout_get_ok_not_paid")
+        self.assertEqual(policies["/store/product/72/checkout/"],
+                         "script_self_only")
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
