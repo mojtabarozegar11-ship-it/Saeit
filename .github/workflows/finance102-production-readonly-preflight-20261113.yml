@@ -1,0 +1,108 @@
+name: Finance 102 production source-parity preflight READ ONLY
+on:
+  pull_request:
+    paths:
+      - .github/workflows/finance102-production-readonly-preflight-20261113.yml
+permissions:
+  contents: read
+jobs:
+  inspect-no-writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Strict pinned relay and production file identity check (no writes)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/finance102-preflight"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          if [[ -z "$VPS_KEY" || -z "$HOST_KEY" ]]; then
+            echo "FINANCE102_RELAY=KEYS_UNAVAILABLE"; exit 3
+          fi
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          if ! timeout 17s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null; then
+            echo "FINANCE102_RELAY=VPS_NETWORK_UNAVAILABLE"; exit 3
+          fi
+          found="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          [[ "$found" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || {
+            echo "FINANCE102_RELAY=VPS_FINGERPRINT_UNVERIFIED"; exit 3
+          }
+          cat > "$d/config" <<CONF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+            ConnectionAttempts 1
+          CONF
+          chmod 600 "$d/config"
+          scan="$(timeout 38s ssh -F "$d/config" -o ConnectionAttempts=1 saeit-vps 'timeout 16s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125' 2>/dev/null || true)"
+          if [[ -z "$scan" ]]; then
+            echo "FINANCE102_RELAY=CPANEL_SCAN_UNAVAILABLE"; exit 3
+          fi
+          printf '%s\n' "$scan" > "$d/host.known"
+          found="$(ssh-keygen -lf "$d/host.known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+          [[ "$found" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || {
+            echo "FINANCE102_RELAY=CPANEL_FINGERPRINT_UNVERIFIED"; exit 3
+          }
+          echo "FINANCE102_RELAY=HOST_KEYS_VERIFIED"
+          timeout 42s ssh -F "$d/config" -o ConnectionAttempts=1 saeit-cpanel 'python3 -B -' <<'PY'
+          from pathlib import Path
+          import ast, os, pwd
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("FINANCE102_REMOTE_IDENTITY=REJECTED")
+          print("FINANCE102_REMOTE_IDENTITY=VERIFIED")
+          for label, root in [
+              ("ZM",Path("/home/zomorod2/Saeit")),
+              ("MPW",Path("/home/zomorod2/Saeit-staging"))
+          ]:
+              if root.is_symlink() or not root.is_dir():
+                  print("FINANCE102_"+label+"_ROOT=NOT_VERIFIED"); continue
+              for name, rel in [
+                  ("VIEW","core/financial_brand_pages.py"),
+                  ("TEMPLATE","core/templates/core/financial_brand_page.html"),
+                  ("URLS","config/urls.py"),
+              ]:
+                  file=root/rel
+                  try:
+                      if file.is_symlink() or not file.is_file() or not 100 < file.stat().st_size < 100000:
+                          raise ValueError()
+                      source=file.read_text("utf-8")
+                      if name=="VIEW":
+                          ast.parse(source)
+                          ok=("BRANDS" in source and "financial_brand_page" in source)
+                      elif name=="TEMPLATE":
+                          ok=("{{ page_title }}" in source and "MojPlayWin / Zomorod Melal" in source)
+                      else:
+                          ast.parse(source)
+                          ok=("market-signals/" in source and "digital-products/" in source)
+                      print("FINANCE102_"+label+"_"+name+"="+("EXPECTED_SHAPE" if ok else "DIVERGED"))
+                  except (OSError,UnicodeError,SyntaxError,ValueError):
+                      print("FINANCE102_"+label+"_"+name+"=NOT_VERIFIED")
+          print("FINANCE102_REMOTE_WRITES=0")
+          PY
+          echo "FINANCE102_PREFLIGHT=READ_ONLY_COMPLETE"
