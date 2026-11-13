@@ -310,6 +310,8 @@ def test_documented_trader_login_can_differ_from_internal_account_identifier(pri
     '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"success":false}',
     '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"error":"not-authorized"}',
     '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"ok":false}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"success":"false"}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"ok":0}',
     '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false,"equity":NaN}]}',
 ])
 def test_reject_duplicate_json_keys_and_cli_errors_before_any_trade_read(
