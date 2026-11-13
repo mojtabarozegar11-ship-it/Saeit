@@ -573,6 +573,77 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         new = b'<input type="submit" value="' + release.CTA + b'">'
         release.verify_template(clean.replace(old, new))
 
+    @staticmethod
+    def _rendered_checkout(product_id=72):
+        clean = release.patch_template(template())
+        clean = clean.replace(
+            b'{% csrf_token %}',
+            b'<input type="hidden" name="csrfmiddlewaretoken" '
+            b'value="1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01">',
+        )
+        if product_id != 72:
+            clean = clean.replace(b'/commerce/trx-easy/start/72/',
+                                  b'/commerce/trx-easy/start/' +
+                                  str(product_id).encode() + b'/')
+        return clean
+
+    def test_all_three_public_rendered_form_contracts_are_valid(self):
+        for product_id in (72, 225, 879):
+            with self.subTest(product=product_id):
+                report = release.verify_live_checkout_markup(
+                    self._rendered_checkout(product_id), product_id
+                )
+                self.assertEqual(report["http_method"], "POST")
+                self.assertTrue(report["rendered_csrf"])
+                self.assertFalse(report["email_field"])
+
+    def test_live_required_or_optional_email_fields_both_block_release(self):
+        for required in (True, False):
+            with self.subTest(required=required):
+                html = self._rendered_checkout() + (
+                    b'<input type="email" name="email"' +
+                    (b' required' if required else b'') + b'>'
+                )
+                with self.assertRaisesRegex(RuntimeError, "LIVE_EMAIL_FIELD_PRESENT"):
+                    release.verify_live_checkout_markup(html, 72)
+
+    def test_live_atelier_missing_csrf_is_a_release_block(self):
+        html = self._rendered_checkout(879)
+        html = html.replace(
+            b'<input type="hidden" name="csrfmiddlewaretoken" '
+            b'value="1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01">',
+            b'',
+        )
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:879"):
+            release.verify_live_checkout_markup(html, 879)
+
+    def test_live_unrendered_csrf_tag_is_not_a_real_token(self):
+        original = release.patch_template(template())
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
+            release.verify_live_checkout_markup(original, 72)
+
+    def test_live_wrong_product_invoice_action_blocks_release(self):
+        with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_ACTION_MISSING:225"):
+            release.verify_live_checkout_markup(self._rendered_checkout(72), 225)
+
+    def test_live_disabled_and_empty_csrf_controls_are_rejected(self):
+        original = self._rendered_checkout(72)
+        for changed in (
+            original.replace(b'type="hidden" name="csrfmiddlewaretoken"',
+                             b'type="hidden" disabled name="csrfmiddlewaretoken"'),
+            original.replace(
+                b'value="1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01"',
+                b'value=""'
+            ),
+        ):
+            with self.subTest(case=changed[-120:]):
+                with self.assertRaisesRegex(RuntimeError, "LIVE_INVOICE_CONTRACT_INVALID:72"):
+                    release.verify_live_checkout_markup(changed, 72)
+
+    def test_live_form_probe_rejects_non_allowlisted_product(self):
+        with self.assertRaisesRegex(RuntimeError, "LIVE_PRODUCT_NOT_ALLOWLISTED"):
+            release.verify_live_checkout_markup(self._rendered_checkout(72), 73)
+
     def test_rejects_unknown_email_label(self):
         with self.assertRaisesRegex(RuntimeError, "EMAIL_LABEL_DRIFT"):
             release.patch_template(template().replace(b'for="mpw-buy-email"', b'for="unexpected"'))

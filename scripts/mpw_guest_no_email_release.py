@@ -326,6 +326,7 @@ class CheckoutEmailControlParser(HTMLParser):
                 "method": attributes.get("method", "").lower(),
                 "action": attributes.get("action", ""),
                 "csrf": False,
+                "csrf_hidden": False,
                 "cta": False,
             }
         if self.current_form is not None:
@@ -339,8 +340,10 @@ class CheckoutEmailControlParser(HTMLParser):
             if tag == "input":
                 if (attributes.get("name", "").lower() == "csrfmiddlewaretoken"
                         and attributes.get("type", "hidden").lower() == "hidden"
-                        and "disabled" not in attributes):
+                        and "disabled" not in attributes
+                        and 16 <= len(attributes.get("value", "")) <= 128):
                     self.current_form["csrf"] = True
+                    self.current_form["csrf_hidden"] = True
                 if (attributes.get("type", "").lower() == "submit"
                         and attributes.get("value", "") == CTA.decode("utf-8")
                         and "disabled" not in attributes):
@@ -404,6 +407,73 @@ def verify_template(raw: bytes):
     if form["method"] != "post" or not allowed_action or not form["csrf"]:
         abort("FORM_CONTRACT_LOST")
 
+
+
+# Only actual public anonymous HTML proves every released SKU is usable.
+# These checks never POST, authenticate, read buyer records, or log CSRF values.
+PUBLIC_CHECKOUT_PRODUCTS = (72, 225, 879)
+
+
+def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
+    """Strict, read-only acceptance for one *rendered* public checkout page."""
+    if product_id not in PUBLIC_CHECKOUT_PRODUCTS:
+        abort("LIVE_PRODUCT_NOT_ALLOWLISTED")
+    if not raw or len(raw) > 500_000:
+        abort("LIVE_CHECKOUT_UNSAFE_SIZE:" + str(product_id))
+    try:
+        inspector = CheckoutEmailControlParser()
+        inspector.feed(raw.decode("utf-8"))
+        inspector.close()
+    except (UnicodeError, ValueError) as exc:
+        abort("LIVE_CHECKOUT_UNREADABLE:" + str(product_id))
+    if inspector.has_email_control:
+        abort("LIVE_EMAIL_FIELD_PRESENT:" + str(product_id))
+    if inspector.malformed_forms or inspector.current_form is not None:
+        abort("LIVE_FORM_MALFORMED:" + str(product_id))
+    exact = "/commerce/trx-easy/start/" + str(product_id) + "/"
+    forms = [form for form in inspector.forms if form["action"] == exact]
+    if len(forms) != 1:
+        abort("LIVE_INVOICE_ACTION_MISSING:" + str(product_id))
+    form = forms[0]
+    # {% csrf_token %} in unrendered source is NOT a rendered CSRF control.
+    if (form["method"] != "post" or not form["cta"]
+            or not form["csrf_hidden"]):
+        abort("LIVE_INVOICE_CONTRACT_INVALID:" + str(product_id))
+    return {"product_id": product_id, "http_method": "POST",
+            "email_field": False, "rendered_csrf": True,
+            "invoice_action": "exact", "probe": "GET_ONLY"}
+
+
+def audit_live_public_checkout_forms() -> list:
+    """Three bounded anonymous GETs; no order creation or sensitive output."""
+    import urllib.request
+    from urllib.parse import urlsplit
+    passed = []
+    for product_id in PUBLIC_CHECKOUT_PRODUCTS:
+        url = ("https://mojplaywin.com/store/product/" + str(product_id)
+               + "/checkout/")
+        req = urllib.request.Request(
+            url, method="GET", headers={
+                "Cache-Control": "no-cache, no-store", "Pragma": "no-cache",
+                "Cookie": "", "User-Agent": "MPWReadOnlyBuyerContract/1.0",
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=16) as response:
+                final = urlsplit(response.geturl())
+                if (response.status != 200 or final.scheme != "https"
+                        or final.netloc != "mojplaywin.com"
+                        or final.path != "/store/product/" + str(product_id) + "/checkout/"
+                        or final.query or final.fragment):
+                    abort("LIVE_CHECKOUT_REDIRECT_OR_HTTP:" + str(product_id))
+                content = response.read(500_001)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError("MPW_EMAIL_FREE_ABORT:LIVE_CHECKOUT_UNREACHABLE:"
+                               + str(product_id)) from exc
+        passed.append(verify_live_checkout_markup(content, product_id))
+    return passed
 
 
 def _source(path: Path) -> bytes:
@@ -567,11 +637,20 @@ def main(argv):
         if sha(_file(GUEST)) != APPROVED_GUEST_SHA256:
             abort("GUEST_NOT_INSTALLED")
         verify_template(_file(TEMPLATE))
-        print("MPW_EMAIL_FREE=SOURCE_VERIFIED;NO_PAYMENT_ATTEMPTED=TRUE")
+        buyer_contracts = audit_live_public_checkout_forms()
+        print(json.dumps({"MPW_EMAIL_FREE": "PUBLIC_BUYER_FORMS_VERIFIED",
+                          "products": buyer_contracts,
+                          "email_field": False, "invoices_created": 0,
+                          "payments_created": 0, "emails_sent": 0},
+                         sort_keys=True))
+    elif len(argv) == 2 and argv[1] == "public-audit":
+        print(json.dumps({"MPW_LIVE_CHECKOUT_AUDIT": audit_live_public_checkout_forms(),
+                          "invoices_created": 0, "payments_created": 0},
+                         sort_keys=True))
     elif len(argv) == 3 and argv[1] == "rollback":
         rollback(argv[2])
     else:
-        raise SystemExit("preflight GUEST_SOURCE | publish RUN_ID GUEST_SOURCE | verify | rollback RUN_ID")
+        raise SystemExit("preflight GUEST_SOURCE | publish RUN_ID GUEST_SOURCE | verify | public-audit | rollback RUN_ID")
 
 
 if __name__ == "__main__":
