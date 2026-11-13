@@ -54,7 +54,7 @@ def candidates():
  if not all(s in source['index.html'] for s in (
    b'zm-reference-v3.css?v=20261113-all1',b'zm-reference-v3.js?v=20261113-all1',
    b'data-auto-strip="services-strip"',b'data-auto-strip="products-strip"',
-   b'data-auto-strip="projects-strip"',b'href="/search/"',b'href="/en/"',b'href="/ar/"',
+   b'data-auto-strip="projects-strip"',b'action="/search/"',b'href="/en/"',b'href="/ar/"',
    b'assets/zm-logo-transparent-v1.webp',b'lang="fa"')):
   raise RuntimeError('Homepage feature contract incomplete')
  if source['index.html'].count(b'data-auto-strip=')!=3:raise RuntimeError('Wrong rotating row count')
