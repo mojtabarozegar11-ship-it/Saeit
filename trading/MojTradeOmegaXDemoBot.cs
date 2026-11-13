@@ -106,7 +106,14 @@ namespace Mojtaba.Bot.Ai
         {
             if (Account.IsLive)
             {
-                Print("BLOCKED: MojTradeDemoBot is demo-only.");
+                Print("BLOCKED: mojtaba.bot.ai rejects live accounts.");
+                Stop();
+                return;
+            }
+
+            if (!EnableDemoTrading)
+            {
+                Print("BLOCKED: EnableDemoTrading=false; observation mode only.");
                 Stop();
                 return;
             }
