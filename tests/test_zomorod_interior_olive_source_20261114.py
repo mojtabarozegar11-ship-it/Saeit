@@ -91,5 +91,15 @@ class ExistingInteriorOliveBackground(unittest.TestCase):
         self.assertIn('border-top:4px solid #d7b767', s)
 
 
+    def test_existing_store_main_header_and_footer_share_olive(self):
+        s = (ROOT / "content/zomorod-v11/store_index.php").read_text(encoding="utf8")
+        self.assertIn('body{margin:0;min-height:100vh;background:#252b19;color:#f2efdb}', s)
+        self.assertIn('header,footer{background:#252b19;padding:18px 5%;border-bottom:1px solid #bfaa67}', s)
+        self.assertIn('SHA-256: ', s)
+        self.assertIn('zmStoreDb($private)', s)
+        self.assertIn('پرداخت آنلاین تا اتصال درگاه غیرفعال است', s)
+        self.assertNotIn('header,footer{background:#172e1c', s)
+
+
 if __name__ == "__main__":
     unittest.main()
