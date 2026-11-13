@@ -8,6 +8,8 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 from core.models import Agent, AgentTask, AuditLog
 from core.mojtrade_bridge import MojTradeBridgeError, ingest_private_observation
@@ -282,3 +284,107 @@ def test_signal_feed_export_refuses_unsafe_target(canonical_market, tmp_path, se
         call_command("mojtrade_market_watch_export")
     if condition == "symlink_file":
         assert outside.read_text(encoding="utf-8") == "private original"
+
+
+
+@pytest.mark.django_db
+def test_private_watch_api_denies_anonymous_and_regular_staff(client, canonical_market):
+    url = reverse("mojtrade-private-watch")
+    response = client.get(url)
+    assert response.status_code == 403
+    assert response.json() == {"detail": "owner_access_required"}
+    assert "no-store" in response["Cache-Control"]
+    assert "noindex" in response["X-Robots-Tag"]
+    assert "Cookie" in response["Vary"]
+    for label, is_staff in (("normal-watch", False), ("staff-watch", True)):
+        user = get_user_model().objects.create_user(
+            username=label, is_staff=is_staff,
+        )
+        client.force_login(user)
+        assert client.get(url).status_code == 403
+        client.logout()
+
+
+@pytest.mark.django_db
+def test_private_watch_api_active_superuser_sees_only_fresh_canonical_draft(client, canonical_market):
+    task, created = ingest_private_observation()
+    assert created is True
+    owner = get_user_model().objects.create_superuser(
+        username="watch-owner", email="watch-owner@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    response = client.get(reverse("mojtrade-private-watch"))
+    assert response.status_code == 200
+    document = response.json()
+    assert document["owner"] == BOT_CODE
+    assert document["task_id"] == task.pk
+    assert document["private_research_only"] is True
+    assert document["watch"] == task.output_data["market_watch_drafts"]
+    assert document["watch"]["languages"] == ["fa", "en", "ar"]
+    assert document["watch"]["publication_authorized"] is False
+    assert document["watch"]["trade_execution_authorized"] is False
+    assert all(card["entry_price"] is None for card in document["watch"]["alerts"])
+    assert "no-store" in response["Cache-Control"]
+    assert "noarchive" in response["X-Robots-Tag"]
+    assert response["X-Content-Type-Options"] == "nosniff"
+    assert "Cookie" in response["Vary"]
+    assert response["Content-Type"].startswith("application/json")
+    assert AgentTask.objects.count() == 1
+    assert not AuditLog.objects.filter(action="signal_published").exists()
+
+
+@pytest.mark.django_db
+def test_private_watch_api_refuses_missing_stale_or_incomplete_task(client, canonical_market):
+    owner = get_user_model().objects.create_superuser(
+        username="watch-missing-owner", email="missing@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    url = reverse("mojtrade-private-watch")
+    empty = client.get(url)
+    assert empty.status_code == 503
+    assert "watch" not in empty.json()
+    task, _ = ingest_private_observation()
+    task.status = "blocked"
+    task.save(update_fields=["status"])
+    blocked = client.get(url)
+    assert blocked.status_code == 503
+    task.status = "completed"
+    task.save(update_fields=["status"])
+    original = dict(task.output_data)
+    saved = dict(original["market_watch_drafts"])
+    saved["publication_authorized"] = True
+    original["market_watch_drafts"] = saved
+    task.output_data = original
+    task.save(update_fields=["output_data"])
+    tampered = client.get(url)
+    assert tampered.status_code == 503
+    assert "watch" not in tampered.json()
+    assert tampered.json()["trade_execution_authorized"] is False
+
+
+@pytest.mark.django_db
+def test_private_watch_api_disabled_superuser_denied(client, canonical_market):
+    user = get_user_model().objects.create_superuser(
+        username="deactivated-watch-owner", email="disabled@example.com",
+        password="local-test-only",
+    )
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+    client.force_login(user)
+    response = client.get(reverse("mojtrade-private-watch"))
+    assert response.status_code == 403
+    assert "watch" not in response.json()
+
+
+@pytest.mark.django_db
+def test_private_watch_api_post_does_not_trigger_market_ingest(client, canonical_market):
+    owner = get_user_model().objects.create_superuser(
+        username="post-watch-owner", email="post@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    response = client.post(reverse("mojtrade-private-watch"), data={"trade": "buy"})
+    assert response.status_code == 405
+    assert AgentTask.objects.count() == 0
