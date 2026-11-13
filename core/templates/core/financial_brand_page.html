@@ -19,11 +19,5 @@ a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{displ
 <nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
 <section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% elif page_type == "game" %}Game world{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
 <section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
-{% if finance_guide %}
-<section class="cards" aria-label="{{ finance_guide.section_label }}">
-  <article class="card"><h2>{{ finance_guide.steps_heading }}</h2><p>{{ finance_guide.steps }}</p></article>
-  <article class="card"><h2>{{ finance_guide.example_heading }}</h2><p>{{ finance_guide.example }}</p></article>
-</section>
-{% endif %}
 <footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
 </main></body></html>
