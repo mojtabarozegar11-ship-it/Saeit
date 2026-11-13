@@ -18,7 +18,7 @@ concurrency:
 jobs:
   audit-live:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -45,100 +45,66 @@ jobs:
           assert route_bucket("/store/product/72/checkout/") == "product_checkout"
           print("MPW_SALES_FUNNEL_ROUTE_CLASSIFICATION=PASS")
           PY
-      - name: Establish pinned SSH relay to cPanel
+      - name: Establish fingerprint-pinned cPanel SSH directly from the factory runner
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
+          test -n "${HOST_KEY:-}"
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/"*
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          chmod 600 "$d/host.key"
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          # Bound transient VPS connection drops; reject a changed identity immediately.
-          for attempt in 1 2 3 4; do
-            if timeout 12s ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/vps.candidate" 2>/dev/null && test -s "$d/vps.candidate"; then
-              actual_pin="$(ssh-keygen -lf "$d/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)"
-              if test "$actual_pin" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
-                echo "MPW_AUDIT_VPS_PIN=mismatch_fail_closed" >&2
-                exit 1
-              fi
-              mv "$d/vps.candidate" "$d/vps.known"
-              echo "MPW_AUDIT_VPS_PIN=verified_attempt_$attempt"
-              break
-            fi
-            if test "$attempt" = 4; then
-              echo "MPW_AUDIT_VPS_RELAY=unreachable_after_4_attempts" >&2
-              exit 1
-            fi
-            sleep $((attempt * 2))
-          done
+          timeout 20s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/host.candidate" 2>/dev/null
+          test -s "$d/host.candidate"
+          actual_pin="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+          if test "$actual_pin" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "MPW_CPANEL_READONLY_HOST_KEY_MISMATCH" >&2
+            exit 1
+          fi
+          mv "$d/host.candidate" "$d/host.known"
           cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
             HostName zohal.pws-dns.net
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
             ConnectTimeout 10
             ConnectionAttempts 1
+            ServerAliveInterval 5
+            ServerAliveCountMax 2
             ForwardAgent no
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          # Keep the hosting host-key pin independent of the VPS relay.
-          for attempt in 1 2 3 4; do
-            if timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null && test -s "$d/host.candidate"; then
-              actual_pin="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
-              if test "$actual_pin" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
-                echo "MPW_AUDIT_CPANEL_PIN=mismatch_fail_closed" >&2
-                exit 1
-              fi
-              mv "$d/host.candidate" "$d/host.known"
-              echo "MPW_AUDIT_CPANEL_PIN=verified_attempt_$attempt"
-              break
-            fi
-            if test "$attempt" = 4; then
-              echo "MPW_AUDIT_CPANEL_RELAY=unreachable_after_4_attempts" >&2
-              exit 1
-            fi
-            sleep $((attempt * 2))
-          done
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2"'
+          echo "MPW_CPANEL_READONLY_DIRECT_PINNED=READY"
       - name: Run read-only live sales and checkout audit
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
-          timeout 150s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_sales_intake_readonly_20261024.py
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_sales_intake_readonly_20261024.py
           echo MPW_INTAKE_AUDIT=PASS
       - name: Check payment reconciler heartbeat from live cPanel, read only
         continue-on-error: true
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
-          timeout 65s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_payment_cron_heartbeat_readonly.py
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_payment_cron_heartbeat_readonly.py
       - name: Read live login CSRF and payment activation flags without mutation
         continue-on-error: true
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_payment_100_live_baseline_readonly_20261021.py
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_payment_100_live_baseline_readonly_20261021.py
       - name: Join paid flags to finalized receipts and fulfillment (read only)
         continue-on-error: true
         env:
