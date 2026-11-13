@@ -139,6 +139,19 @@ class InternalCyberModuleTests(unittest.TestCase):
             self.run_review(data=bad)
 
 
+    def test_long_lived_authorization_rejected(self):
+        with self.assertRaisesRegex(CyberModuleError, "AUTHORIZATION_WINDOW_INVALID"):
+            self.run_review(auth=signed(expires_at="2026-11-14T01:00:00+00:00"))
+
+    def test_zero_length_authorization_rejected(self):
+        with self.assertRaisesRegex(CyberModuleError, "AUTHORIZATION_WINDOW_INVALID"):
+            self.run_review(auth=signed(expires_at="2026-11-13T00:00:00+00:00"))
+
+    def test_standard_one_day_authorization_remains_accepted(self):
+        report = self.run_review(auth=signed())
+        self.assertEqual(report["mode"], "offline_evidence")
+
+
 
 if __name__ == "__main__":
     unittest.main()
