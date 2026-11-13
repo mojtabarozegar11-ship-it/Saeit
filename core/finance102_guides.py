@@ -89,3 +89,19 @@ def guide_for(slug: str, locale: str, kind: str) -> dict:
         raise ValueError("Unknown finance102 brand, locale or page kind")
     topic = BRAND_TOPICS[slug][LOCALES[locale]]
     return {k: v.replace("{topic}", topic) for k, v in TEXT[locale][kind].items()}
+
+def compose_page_copy(slug: str, locale: str, kind: str, original_notice: str) -> tuple:
+    """Render full educational copy inside the existing template's text slots.
+
+    No new sections, template edits, payment widgets, or HTML are introduced.
+    The original noncommercial disclosure stays at the beginning of the notice.
+    """
+    if not isinstance(original_notice, str) or not original_notice.strip():
+        raise ValueError("Empty existing disclaimer")
+    guide = guide_for(slug, locale, kind)
+    notice = (
+        original_notice.strip() + " "
+        + guide["steps_heading"] + ": " + guide["steps"] + " "
+        + guide["example_heading"] + ": " + guide["example"]
+    )
+    return guide["intro"], notice
