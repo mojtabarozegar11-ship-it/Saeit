@@ -1,12 +1,11 @@
 name: Finance 102 production source-parity preflight READ ONLY
 on:
-  pull_request:
-    paths:
-      - .github/workflows/finance102-production-readonly-preflight-20261113.yml
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   inspect-no-writes:
+    if: github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
