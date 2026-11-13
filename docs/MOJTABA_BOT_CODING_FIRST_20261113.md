@@ -76,3 +76,24 @@ Existing task acceptance now checks the original request's action, target task i
 ## Retried execution is never assumed safe
 
 For all three recognized executor IDs, errors during an active task no longer place it back into a runnable queue automatically; they leave a blocked task and preserve the previous execution identity for manual reconciliation. This includes errors after a tool reported a side effect but before `TaskRuntime.complete` persisted the result. Both heartbeat and completion now recheck the canonical/legacy singleton before confirming a running task. A stopped execution is not proof of rollback, and approval of a retry must be narrowly scoped.
+
+## Auditable coding worklist (a subset, not whole-bot readiness)
+
+**Implemented in the open Draft branch, not validated in operation:**
+
+1. [source staged] VPS evolution state explicitly binds its economic runtime code and will not silently migrate an existing legacy ledger.
+2. [source staged] Canonical/legacy active executor singleton rechecked at task claim, heartbeat, completion and tool invocation.
+3. [source staged] Approval decisions and task invocations bind requested action, task ID, allowed risk and the active designated owner.
+4. [source staged] On uncertain tool failure, all known master/factory executor tasks block pending reconciliation instead of automatic replay.
+
+**Remaining code and integration, before whole-bot QA:**
+
+5. [not complete] Authenticated canonical chat/goal runtime connected to durable task and audit state.
+6. [not complete] Full games/Moj Coin, products and commerce, customer communication and research capability adapters mapped and coded under one dispatcher.
+7. [not complete] All pending self-evolution, runtime state, scheduling and fleet disposition dependencies reconciled with canonical identity.
+8. [not complete] Branch conflicts with main and overlapping PR sources reconciled without overwriting live website templates or newer changes.
+
+This **4 of 8 source milestones** inventory is limited to the explicitly named
+milestones above. It is not a percentage of all source lines, all capabilities,
+QA acceptance or commercial completion. A source-staged milestone is NOT an
+assertion that code runs correctly; owner requested acceptance testing later.

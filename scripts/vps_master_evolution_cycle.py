@@ -39,6 +39,7 @@ MASTER_POLICY_INVARIANTS = {
     "financial_actions_enabled": False,
 }
 MASTER_CHECK_BASELINE_REQUIRED = frozenset(MASTER_POLICY_INVARIANTS) | {
+    "agent_code",
     "last_completed_task_id",
     "completed_guard",
     "pending_prior_ids",
