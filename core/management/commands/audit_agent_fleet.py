@@ -13,7 +13,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.economic_tool_pack import build_economic_gateway
-from core.canonical_bot_identity import audit_identity_rows
+from core.canonical_bot_identity import CANONICAL_BOT_CODE, audit_identity_rows
 from core.management.commands.consolidate_legacy_agents import (
     LEGACY_AGENT_CODES, assess_agent,
 )
@@ -21,6 +21,7 @@ from core.models import Agent, AgentTask
 
 
 EXECUTOR_SCOPES = {
+    CANONICAL_BOT_CODE: lambda code: code.startswith("income_") or code == "master_self_improvement",
     "economic-master-agent": lambda code: code.startswith("income_") or code == "master_self_improvement",
     "moj_1ro_1": lambda code: code in {"factory_native_review", "factory_f41_private_build"},
 }
