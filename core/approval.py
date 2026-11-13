@@ -39,19 +39,21 @@ class ApprovalService:
                 "agent", "project"
             ).filter(pk=approval.target_id).first()
             if task:
+                # Both approval and rejection must match the actual task.
+                # Otherwise a different action/owner could cancel it or
+                # release it using a recycled target primary key.
+                if normalize_action(approval.action_type) != normalize_action(task.action_type):
+                    raise ValueError("Approval action does not match task action")
+                if task.project_id and approval.requested_by_id != task.project.owner_id:
+                    raise ValueError("Approval owner does not match task project owner")
+                reconciliation_hold = task.agent.code == BOT_CODE and (
+                    (task.output_data or {}).get("requires_review") is True
+                    or (task.output_data or {}).get("automatic_replay_allowed") is False
+                )
                 if approved:
-                    # An unrelated approval must never release a different
-                    # action, even when someone reuses its task primary key.
-                    if normalize_action(approval.action_type) != normalize_action(task.action_type):
-                        raise ValueError("Approval action does not match task action")
-                    if task.project_id and approval.requested_by_id != task.project.owner_id:
-                        raise ValueError("Approval owner does not match task project owner")
                     if task.status != "blocked":
                         raise ValueError("Only a blocked task can be released by approval")
-                    if task.agent.code == BOT_CODE and (
-                        (task.output_data or {}).get("requires_review") is True
-                        or (task.output_data or {}).get("automatic_replay_allowed") is False
-                    ):
+                    if reconciliation_hold:
                         # A previous canonical execution may already have
                         # changed an external system. A normal approval cannot
                         # establish that no effect occurred or authorize replay.
@@ -60,8 +62,13 @@ class ApprovalService:
                         )
                 elif task.status not in {"blocked", "queued"}:
                     raise ValueError("Rejected approval cannot alter an executing or terminal task")
-                task.status = "queued" if approved else "cancelled"
-                task.save(update_fields=["status", "updated_at"])
+                if not approved and reconciliation_hold:
+                    # Reject the new authorization but preserve the incident
+                    # for explicit receipt reconciliation, not silent closure.
+                    pass
+                else:
+                    task.status = "queued" if approved else "cancelled"
+                    task.save(update_fields=["status", "updated_at"])
         elif approval.target_type == "KnowledgeArticle":
             article = KnowledgeArticle.objects.select_for_update().filter(pk=approval.target_id).first()
             if article is None:
