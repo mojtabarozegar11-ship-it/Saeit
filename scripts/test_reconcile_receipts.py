@@ -96,8 +96,9 @@ class TestSettlement(unittest.TestCase):
     def test_missing_identifier_and_unicode_currency_rejected(self):
         self.data["orders"][0].pop("id")
         self.assertRaises(ValueError, reconcile, self.data)
+        self.data["orders"][0]["id"] = "o"
         self.data["currency"] = "ششش"
-        self.assertRaises(ValueError, reconcile, self.data)
+        self.assertRaisesRegex(ValueError, "ISO-style currency", reconcile, self.data)
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
