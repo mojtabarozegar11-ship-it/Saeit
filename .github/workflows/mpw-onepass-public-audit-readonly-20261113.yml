@@ -19,6 +19,8 @@ on:
       - 'scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
       - 'tests/test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
       - 'tests/test_mpw_cpanel_source_bridge_readonly_20261113.py'
+      - '.github/workflows/mpw-sales-intake-readonly-20261024.yml'
+      - 'tests/test_mpw_sales_intake_selfhost_readonly_20261113.py'
       - 'deploy/cpanel_direct_command.sh'
       - '.github/workflows/cpanel-direct-command-bridge.yml'
       - '.github/workflows/mpw-public-passenger-runtime-readonly-20261102.yml'
@@ -59,6 +61,7 @@ jobs:
           python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
           python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_sales_intake_selfhost_readonly_20261113.py' -v
   public-pr-readonly-observation:
     # Public HTTPS GET only, no credentials, only an internal reviewed PR.
     needs: isolated-safety-contract
@@ -101,6 +104,7 @@ jobs:
           python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
           python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_sales_intake_selfhost_readonly_20261113.py' -v
       - name: Bounded public HTML observations; never POST or create invoice
         shell: bash
         run: |
