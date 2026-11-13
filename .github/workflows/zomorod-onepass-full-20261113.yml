@@ -60,6 +60,7 @@ jobs:
           assert h.count('<h1')==1
           assert '/en/' in h and '/assets/zm-ar-v1.html' in h and '<html lang="ar" dir="rtl">' in ar
           assert 'setInterval' in js and 'prefers-reduced-motion' in js
+          assert "const strips=$('" in js, 'Selecting a single strip breaks all carousel initialization'
           assert 'auto-scroll-row' in css and 'auto-rotator-toggle' in css
           assert all(n not in h for n in ('Vancouver','ونکوور','ISO 9001','ISO 14001'))
           print('ZM_ONEPASS_EXACT_FOOTER_LANG_SEARCH_LOGO_THREE_ROWS=PASS')
