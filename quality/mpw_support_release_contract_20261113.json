@@ -137,5 +137,26 @@
     "guest_checkout": ".github/workflows/mpw-guest-checkout-live-release.yml",
     "inquiry_php": ".github/workflows/mpw-inquiry-cookie-session-repair-20261026.yml",
     "guide_links": ".github/workflows/mpw-main-guide-links-safe-20261027.yml"
+  },
+  "last_host_access_evidence": {
+    "checked_at_utc": "2026-11-13T15:56:06Z",
+    "source": "GitHub Actions owner-scoped read-only runtime and private relay workflows",
+    "read_only_passenger_run_id": 43454715777,
+    "private_relay_run_id": 43457001017,
+    "pinned_host_keys_verified": true,
+    "ssh_authenticated": false,
+    "live_application_files_read": false,
+    "result": "RELAY_RETRIES_EXHAUSTED_AND_DIRECT_CPANEL_TIMEOUT",
+    "notes": "Five VPS relay connection attempts failed; the direct cPanel fallback to port 1396 timed out. This records those run outcomes only; it does not establish current host availability or public-site health.",
+    "requires_new_authenticated_read_only_evidence": true
+  },
+  "release_routes": {
+    "core/templates/mojplaywin/footer.html": "main_site_push",
+    "core/templates/mojplaywin/store.html": "main_site_push",
+    "core/templates/mojplaywin/theme.html": "main_site_push",
+    "core/templates/brands/mojplaywin/page.html": "legacy_safe_lock_no_guaranteed_publish",
+    "mpw_revenue_20261020/earn/inquiry.php": "separate_php_inquiry_release",
+    "services/mpw_trx_guest_commerce.py": "manual_guest_checkout_release",
+    "tests/test_mpw_support_email_contract_20261113.py": "test_only_not_deployed"
   }
 }

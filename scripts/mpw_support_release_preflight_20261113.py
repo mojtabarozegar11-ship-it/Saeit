@@ -69,6 +69,52 @@ def audit(root: Path = ROOT) -> dict:
             if entry.get("production_target_verified") is not True or not entry.get("expected_live_sha256"):
                 pending_host_baselines.append(path)
 
+    # Deployment route coverage: main-site publisher does not own every source.
+    release_routes = document.get("release_routes", {})
+    expected_routes = {
+        "core/templates/mojplaywin/footer.html": "main_site_push",
+        "core/templates/mojplaywin/store.html": "main_site_push",
+        "core/templates/mojplaywin/theme.html": "main_site_push",
+        "core/templates/brands/mojplaywin/page.html": "legacy_safe_lock_no_guaranteed_publish",
+        "mpw_revenue_20261020/earn/inquiry.php": "separate_php_inquiry_release",
+        "services/mpw_trx_guest_commerce.py": "manual_guest_checkout_release",
+        "tests/test_mpw_support_email_contract_20261113.py": "test_only_not_deployed",
+    }
+    if release_routes != expected_routes:
+        problems.append("release_route_matrix_mismatch")
+    try:
+        publisher = (root / "scripts/deploy_mojplaywin_branding.py").read_text(encoding="utf-8")
+        owned = publisher.split("OWNED_FILES = (", 1)[1].split("\n)", 1)[0]
+        for file in (
+            "core/templates/mojplaywin/footer.html",
+            "core/templates/mojplaywin/store.html",
+            "core/templates/mojplaywin/theme.html",
+        ):
+            if f'Path("{file}")' not in owned:
+                problems.append("owned_release_file_missing:" + file)
+        for file in (
+            "core/templates/brands/mojplaywin/page.html",
+            "services/mpw_trx_guest_commerce.py",
+        ):
+            if f'Path("{file}")' in owned:
+                problems.append("unexpected_main_release_scope:" + file)
+    except (OSError, IndexError) as exc:
+        problems.append("publisher_scope_unavailable:" + type(exc).__name__)
+
+    # Read-only SSH failed before authenticating; do not promote source checks
+    # to proven production access or a live site availability claim.
+    access = document.get("last_host_access_evidence") or {}
+    expected_access = "RELAY_RETRIES_EXHAUSTED_AND_DIRECT_CPANEL_TIMEOUT"
+    if (
+        access.get("result") != expected_access
+        or access.get("read_only_passenger_run_id") != 43454715777
+        or access.get("private_relay_run_id") != 43457001017
+        or access.get("pinned_host_keys_verified") is not True
+        or access.get("ssh_authenticated") is not False
+        or access.get("live_application_files_read") is not False
+    ):
+        problems.append("host_readback_evidence_unverified")
+
     workflows = document["workflows"]
     try:
         main_workflow = (root / workflows["main_django"]).read_text(encoding="utf-8")
@@ -98,6 +144,10 @@ def audit(root: Path = ROOT) -> dict:
         "production_ready": False,
         "host_baselines_pending": pending_host_baselines,
         "public_pages_verified": 0,
+        "live_host_access_verified": False,
+        "release_route_matrix": release_routes,
+        "release_routes_needing_separate_publication": 3,
+        "last_host_probe": access.get("result", "UNKNOWN"),
         "scope": "Source checks only: not a deployment or a live customer test.",
     }
 
