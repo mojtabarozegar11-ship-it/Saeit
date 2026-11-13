@@ -68,3 +68,40 @@ def test_demo_execution_adapter_enforces_warmup_accountwide_cap_and_utc_loss():
     assert "if (Account.IsLive)" in code
     assert "Enable Demo Trading\", DefaultValue = false" in code
     assert "AccessRights = AccessRights.None" in code
+
+
+
+def test_demo_order_reconciles_protective_fills_and_blocks_ambiguous_retry():
+    source = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+    assert 'private const string Label = "MojTrade-OMEGA-X-DEMO";' in source
+    assert "AccessRights = AccessRights.None" in source
+    assert "if (Account.IsLive)" in source
+    assert "[Parameter(\"Enable Demo Trading\", DefaultValue = false)]" in source
+    assert "_lastAttemptedSignalKey = signalKey;" in source
+    assert "foreach (var position in Positions.FindAll(Label))" in source
+    assert "foreach (var closedTrade in History.FindAll(Label))" in source
+    assert "closedTrade.Comment == signalKey" in source
+    assert "closedBarTime.ToString" in source
+    assert "ExecuteMarketOrder(" in source
+    assert "stopPips, takePips, signalKey" in source
+    assert "var opened = result.Position;" in source
+    assert "!opened.StopLoss.HasValue || !opened.TakeProfit.HasValue" in source
+    assert "var closed = ClosePosition(opened);" in source
+    assert "_orderReconciliationHold = true;" in source
+    assert "if (!result.IsSuccessful)" in source
+
+
+def test_demo_restart_does_not_reset_daily_risk_or_loss_streak():
+    source = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+    assert "foreach (var trade in History)" in source
+    assert "accountNetToday += trade.NetProfit;" in source
+    assert "Array.Sort(owned" in source
+    assert "History.FindAll(Label)" in source
+    assert "_dayStartEquity = Account.Balance - accountNetToday;" in source
+    assert "if (trade.NetProfit < 0)" in source
+    assert "if (trade.NetProfit > 0)" in source
+    assert "catch (Exception)" in source
+    assert "broker history was not reconciled" in source
+    assert "_dayStartEquity = Account.Equity;" not in source
+    assert "_consecutiveLosses = 0;" not in source
+    assert "Account.IsLive || !EnableDemoTrading || _orderReconciliationHold" in source
