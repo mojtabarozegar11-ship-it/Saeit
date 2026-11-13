@@ -558,6 +558,28 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
 
+    def test_checkout_probe_rejects_second_email_form_and_detached_email(self):
+        good = (b'<form method="post" action="/commerce/trx-easy/start/225/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        self.assertTrue(has_guarded_guest_invoice_form(good, 225))
+        for extra in (
+            b'<form action="/contact"><input name="email"></form>',
+            b'<input type="email" name="contact">',
+            b'<input name="BUYER_EMAIL" type="text">',
+            good,
+            b'<form method="post" action="/commerce/trx-easy/start/225/">'
+            b'<input name="csrfmiddlewaretoken" value="synthetic">',
+            b'</form>',
+        ):
+            with self.subTest(extra=extra):
+                self.assertFalse(has_guarded_guest_invoice_form(good + extra, 225))
+
+    def test_checkout_probe_rejects_email_form_before_valid_invoice(self):
+        good = (b'<form method="post" action="/commerce/trx-easy/start/72/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        email_form = b'<form><input name="email" type="text"></form>'
+        self.assertFalse(has_guarded_guest_invoice_form(email_form + good, 72))
+
     def test_main_guest_adapter_is_email_free_signed_cookie_source(self):
         # This test proves the repository source contract, not the deployed host.
         root = Path(__file__).resolve().parents[1]
