@@ -491,6 +491,20 @@ def verify_live_checkout_markup(raw: bytes, product_id: int) -> dict:
             "invoice_action": "exact", "probe": "GET_ONLY"}
 
 
+class NoFollowCheckoutRedirect:
+    """Do not fetch redirect targets in the buyer preflight."""
+
+    @staticmethod
+    def build_opener():
+        import urllib.request
+
+        class RejectRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        return urllib.request.build_opener(RejectRedirect())
+
+
 def audit_live_public_checkout_forms() -> list:
     """Six bounded anonymous GETs for canonical and alias public buyer forms.
 
@@ -499,6 +513,8 @@ def audit_live_public_checkout_forms() -> list:
     """
     import urllib.request
     from urllib.parse import urlsplit
+    import urllib.error
+    opener = NoFollowCheckoutRedirect.build_opener()
     passed = []
     for product_id, route in PUBLIC_CHECKOUT_ROUTES:
         url = "https://mojplaywin.com" + route
@@ -509,7 +525,7 @@ def audit_live_public_checkout_forms() -> list:
             }
         )
         try:
-            with urllib.request.urlopen(req, timeout=12) as response:
+            with opener.open(req, timeout=12) as response:
                 final = urlsplit(response.geturl())
                 if (response.status != 200 or final.scheme != "https"
                         or final.netloc != "mojplaywin.com"
@@ -535,6 +551,10 @@ def audit_live_public_checkout_forms() -> list:
                 content = response.read(500_001)
         except RuntimeError:
             raise
+        except urllib.error.HTTPError as exc:
+            if 300 <= exc.code <= 399:
+                abort("LIVE_CHECKOUT_REDIRECT_OR_HTTP:" + str(product_id))
+            abort("LIVE_CHECKOUT_HTTP_ERROR:" + str(product_id))
         except Exception as exc:
             raise RuntimeError("MPW_EMAIL_FREE_ABORT:LIVE_CHECKOUT_UNREACHABLE:"
                                + str(product_id)) from exc
