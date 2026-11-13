@@ -383,3 +383,57 @@ def test_manual_two_host_summary_compares_only_allowlisted_source_digests(tmp_pa
         "source_revision_comparison_proves_active_runtime"
     ] is False
     assert sanitized["cpanel"]["live_handoff_attested"] is False
+
+
+
+@pytest.mark.parametrize("schedule", [
+    "@reboot", "@hourly", "@daily", "@weekly", "@monthly",
+    "@yearly", "@annually", "@midnight",
+])
+def test_cron_alias_schedules_are_inventoried_without_exposing_private_command(schedule):
+    secret = "private-token-DO-NOT-LOG"
+    found = observer.safe_cron(
+        f"{schedule} /usr/bin/python manage.py autonomous_master_loop --key={secret}\n"
+    )
+    assert len(found) == 1
+    assert found[0]["schedule"] == schedule
+    assert found[0]["known_route_flags"] == ["autonomous_master_loop"]
+    assert len(found[0]["command_digest"]) == 16
+    assert secret not in json.dumps(found)
+
+
+def test_malformed_or_unsupported_cron_alias_does_not_create_false_worker():
+    assert observer.safe_cron(
+        "@not_a_schedule python manage.py mojcoin\n"
+        "@reboot\n"
+        "# @hourly python manage.py mojcoin\n"
+    ) == []
+
+
+def test_truncated_cron_and_process_census_are_flagged_not_silently_complete(tmp_path):
+    # Build more rows than the host parser limit without changing the host.
+    cron = "0 * * * * echo safe\n" * (observer.CRON_SCAN_LINE_LIMIT + 1)
+    processes = "unrelated process\n" * 20001
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", cron), ("observed", processes),
+        ("observed", ""), ("observed", ""),
+    ]):
+        report = observer.collect("vps", username="githubops", home=tmp_path)
+    assert report["cron"]["enumeration_truncated"] is True
+    assert report["processes"]["enumeration_truncated"] is True
+    assert report["attestation"]["external_schedulers_fully_enumerated"] is False
+    assert report["attestation"]["automatic_deactivation_authorized"] is False
+
+
+def test_cron_alias_reboot_is_preserved_as_route_indicator_in_snapshot(tmp_path):
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", "@reboot python manage.py autonomous_master_loop --debug\n"),
+        ("observed", ""), ("observed", ""), ("observed", ""),
+    ]):
+        report = observer.collect("cpanel", username="zomorod2", home=tmp_path)
+    assert report["cron"]["enumerated_entries"] == 1
+    assert report["cron"]["entries"][0]["schedule"] == "@reboot"
+    assert report["cron"]["entries"][0]["known_route_flags"] == [
+        "autonomous_master_loop"
+    ]
+    assert report["attestation"]["handoff_verified"] is False
