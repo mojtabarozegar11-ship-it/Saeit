@@ -37,7 +37,9 @@ def _private_file(path: Path, *, max_size: int) -> bytes:
     """Reject symlinks, hardlinks and world-visible data before reading."""
     if not path.is_absolute() or path.is_symlink():
         raise PreflightError("private_file_path_invalid")
-    if not path.parent.is_dir() or path.parent.is_symlink():
+    if not path.parent.is_dir() or any(
+        folder.is_symlink() for folder in (path.parent, *path.parent.parents)
+    ):
         raise PreflightError("private_directory_untrusted")
     if stat.S_IMODE(path.parent.stat().st_mode) & 0o077:
         raise PreflightError("private_directory_not_0700")
@@ -199,7 +201,7 @@ def run_readonly(config_path: Path, *, cli_binary: str = "ctrader-cli",
         "multiple_cli_cbot_instances_detected": count > 1,
         "single_runtime_instance_independently_attested": False,
         "cloud_and_external_process_census_verified": False,
-        "no_live_account_orders": True,
+        "live_orders_submitted_by_this_probe": 0,
         "orders_placed_by_this_probe": 0,
         "trading_release_authorized": False,
         "real_revenue_verified": False,
