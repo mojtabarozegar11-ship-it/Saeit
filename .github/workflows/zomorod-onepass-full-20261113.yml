@@ -106,7 +106,7 @@ jobs:
               page.on('pageerror',e=>errors.push(e.message));
               page.on('requestfailed',r=>failed.push(r.url()));
               await page.goto('http://127.0.0.1:8099/?width='+width,{waitUntil:'load',timeout:45000});
-              await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3',null,{timeout:12000});
+              await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3',null,{timeout:12000}).catch(async error=>{console.error('ZM_CAROUSEL_INIT_DIAGNOSTICS='+JSON.stringify(await page.evaluate(()=>({rotatingRows:document.documentElement.dataset.rotatingRows,fieldCarouselReady:document.documentElement.dataset.fieldCarouselReady,autoStrips:document.querySelectorAll('[data-auto-strip]').length,fieldCarouselCount:document.querySelectorAll('[data-field-carousel]').length,scriptSrc:document.querySelector('script[src*="zm-reference-v3.js"]')?.src,scriptResponse:performance.getEntriesByType('resource').filter(e=>e.name.includes('zm-reference-v3.js')).map(e=>({name:e.name,duration:e.duration,transferSize:e.transferSize})),readyState:document.readyState})),null,2)));console.error('ZM_CAROUSEL_PAGE_ERRORS='+JSON.stringify(errors));console.error('ZM_CAROUSEL_FAILED_REQUESTS='+JSON.stringify(failed));throw error;});
               const evidence=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,
                 h1:document.querySelectorAll('h1').length,rows:document.querySelectorAll('[data-auto-strip]').length,
                 controls:document.querySelectorAll('[data-rotator-toggle]').length,
@@ -114,7 +114,7 @@ jobs:
                 logo:document.querySelector('.identity img')?.naturalWidth,
                 ar:document.querySelector('.lang-switch a[href="/assets/zm-ar-v1.html"]')!==null,
                 search:document.querySelector('.search-form')?.getAttribute('action')}));
-              if(evidence.scroll>width+3||evidence.h1!==1||evidence.rows!==3||evidence.controls!==3||!evidence.footer||evidence.logo!==512||!evidence.ar||evidence.search!=='/search/'||errors.length)throw Error('ZM_LAYOUT_BASE_FAIL '+JSON.stringify({width,evidence,errors,failed}));
+              if(evidence.scroll>width+3||evidence.h1!==1||evidence.rows!==3||evidence.controls!==4||!evidence.footer||evidence.logo!==512||!evidence.ar||evidence.search!=='/search/'||errors.length)throw Error('ZM_LAYOUT_BASE_FAIL '+JSON.stringify({width,evidence,errors,failed}));
               const transparent=await page.evaluate(async()=>{
                 const img=new Image();img.src='/assets/zm-logo-transparent-v1.webp';await img.decode();
                 const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
