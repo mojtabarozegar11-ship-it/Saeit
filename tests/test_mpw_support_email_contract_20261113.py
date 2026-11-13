@@ -82,3 +82,13 @@ class MojPlayWinCustomerMailRenderTests(TestCase):
                 self.assertIn(f'href="mailto:{MAIL}?subject=MojPlayWin%20Support">Support</a>', html)
                 self.assertEqual(html.count('class="mw-site-footer"'), 1)
                 self.assertNotIn(OLD_MAIL, html)
+
+def test_commercial_inquiry_routes_fallback_and_owner_notice_to_official_inbox():
+    # Read-only: no form submission, no outgoing mail, no storage mutation.
+    form = source("mpw_revenue_20261020/earn/inquiry.php")
+    assert f"Please email {MAIL}." in form
+    assert f"$fallback='mailto:{MAIL}?subject='.$subject;" in form
+    assert f">{MAIL} — <?=h($title)?></a>" in form
+    assert f"@mail('{MAIL}','New MojPlayWin web inquiry" in form
+    # The legacy sender header is intentionally unchanged until SMTP/DKIM is verified.
+    assert 'From: support@mojplaywin.com\\r\\nContent-Type: text/plain; charset=UTF-8' in form
