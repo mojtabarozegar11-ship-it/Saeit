@@ -357,7 +357,7 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["delta"]["verified_completed_tasks"], 0)
 
-    def test_legacy_state_migrates_pending_ids_without_replaying_old_completed(self):
+    def test_legacy_state_does_not_credit_unproven_old_pending_tasks(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
             with sqlite3.connect(db) as conn:
@@ -378,7 +378,8 @@ class EvolutionTests(unittest.TestCase):
             first = json.loads(state.read_text())
             self.assertFalse(first["previous_pending_tracking_available"])
             self.assertEqual(first["delta"]["verified_completed_tasks"], 0)
-            self.assertEqual(first["pending_prior_ids"], [2])
+            self.assertEqual(first["pending_prior_ids"], [])
+            self.assertEqual(first["suppressed_unproven_prior_pending_count"], 1)
             with sqlite3.connect(db) as conn:
                 conn.execute(
                     "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
@@ -387,7 +388,8 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db, state)
             second = json.loads(state.read_text())
             self.assertTrue(second["previous_pending_tracking_available"])
-            self.assertEqual(second["late_verified_completed_tasks"], 1)
+            self.assertEqual(second["late_verified_completed_tasks"], 0)
+            self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
 
     def test_contiguous_129_new_completions_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -459,6 +461,121 @@ class EvolutionTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_PENDING_TRACKING_LIMIT_EXCEEDED"):
                     mod.evaluate(db, state)
             self.assertEqual(state.read_bytes(), before)
+
+    def test_previously_completed_older_task_cannot_be_recredited_after_reset(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["last_completed_task_id"], 2)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='queued',output_data='{}' WHERE id=1"
+                )
+            mod.evaluate(db, state)
+            reopened = json.loads(state.read_text())
+            self.assertEqual(reopened["pending_prior_ids"], [])
+            self.assertEqual(reopened["suppressed_unproven_prior_pending_count"], 1)
+            self.assertEqual(reopened["max_steps"], 1)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=1",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            final = json.loads(state.read_text())
+            self.assertEqual(final["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(final["late_verified_completed_tasks"], 0)
+            self.assertEqual(final["last_completed_task_id"], 2)
+
+    def test_reopened_watermark_task_retains_monotone_cursor_and_restricts_steps(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            mod.evaluate(db, state)
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET status='queued',output_data='{}' WHERE id=2")
+            mod.evaluate(db, state)
+            reopened = json.loads(state.read_text())
+            self.assertTrue(reopened["watermark_task_reopened"])
+            self.assertEqual(reopened["last_completed_task_id"], 2)
+            self.assertEqual(reopened["max_steps"], 1)
+            self.assertEqual(reopened["pending_prior_ids"], [])
+            self.assertEqual(reopened["delta"]["verified_completed_tasks"], 0)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertFalse(result["watermark_task_reopened"])
+            self.assertEqual(result["last_completed_task_id"], 2)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 0)
+
+    def test_pending_task_credited_once_remains_ineligible_after_subsequent_reset(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["late_verified_completed_tasks"], 1)
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET status='queued',output_data='{}' WHERE id=2")
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["delta"]["verified_completed_tasks"], 0)
+
+    def test_new_pending_above_cursor_remains_eligible_for_late_credit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            mid = json.loads(state.read_text())
+            self.assertEqual(mid["pending_prior_ids"], [2])
+            self.assertEqual(mid["suppressed_unproven_prior_pending_count"], 0)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["late_verified_completed_tasks"], 1)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
