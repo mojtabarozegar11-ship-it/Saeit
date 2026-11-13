@@ -11,6 +11,7 @@ from .api import (
 from .views import HealthView
 from .weather_views import weather_api
 from .bridge_views import bridge_health, bridge_dispatch
+from .mojtrade_private_views import owner_private_market_watch
 
 router = DefaultRouter()
 router.register("projects", ResearchProjectViewSet, basename="research-project")
@@ -34,6 +35,7 @@ urlpatterns = [
     path("weather/", weather_api, name="weather"),
     path("bridge/health/", bridge_health, name="bridge-health"),
     path("bridge/dispatch/", bridge_dispatch, name="bridge-dispatch"),
+    path("mojtrade/private-watch/", owner_private_market_watch, name="mojtrade-private-watch"),
     path("", include(router.urls)),
 ]
 
