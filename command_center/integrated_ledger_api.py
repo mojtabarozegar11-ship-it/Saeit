@@ -126,7 +126,7 @@ def _system_status(request):
 def integrated_ledger_api(request):
     if request.method == "GET":
         # HTTP GET is strictly read-only: never complete commands or write audit rows.
-        return JsonResponse({"captured_at": timezone.now().isoformat(),
+        response = JsonResponse({"captured_at": timezone.now().isoformat(),
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
             "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
@@ -152,6 +152,8 @@ def integrated_ledger_api(request):
                 "approvals": {"pending": ApprovalRequest.objects.filter(status="pending").count()},
                 "projects": {"active_or_draft": ResearchProject.objects.exclude(status__in=["done", "closed", "archived"]).count()},
             }})
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        return response
     try:
         payload = json.loads(request.body or "{}")
     except json.JSONDecodeError:
