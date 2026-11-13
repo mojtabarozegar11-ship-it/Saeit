@@ -574,6 +574,22 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
 
+    def test_checkout_probe_rejects_non_submitted_or_ambiguous_csrf(self):
+        # Browser-disabled inputs do not submit. A whitespace-only or
+        # duplicated token must not satisfy the pre-release CSRF form gate.
+        base = (b'<form method="post" action="/commerce/trx-easy/start/225/">'
+                b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
+        self.assertTrue(has_guarded_guest_invoice_form(base, 225))
+        for invalid in (
+            base.replace(b'value="synthetic"', b'value="synthetic" disabled'),
+            base.replace(b'value="synthetic"', b'value="synthetic" disabled="disabled"'),
+            base.replace(b'value="synthetic"', b'value="  "'),
+            base.replace(b'</form>',
+                         b'<input name="csrfmiddlewaretoken" value="other"></form>'),
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(has_guarded_guest_invoice_form(invalid, 225))
+
     def test_checkout_probe_rejects_second_email_form_and_detached_email(self):
         good = (b'<form method="post" action="/commerce/trx-easy/start/225/">'
                 b'<input name="csrfmiddlewaretoken" value="synthetic"></form>')
