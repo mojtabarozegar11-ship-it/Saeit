@@ -94,3 +94,50 @@ def test_reject_extra_staged_files(sandbox):
     (stage / 'new' / 'unexpected.txt').write_text('must reject')
     with pytest.raises(RuntimeError, match='Unexpected staged files'):
         mod.preflight(stage)
+
+
+def test_mid_publish_failure_rolls_back_untouched_original(sandbox, monkeypatch):
+    root, stage, old, new = sandbox
+    atomic = mod.atomic
+    fail_once = {'should_fail': True}
+
+    def injecting_failure(path, data, mode):
+        # Fail only a production candidate write, never the private backup.
+        if path == root / 'assets/zm-reference-v3.css' and data == new['assets/zm-reference-v3.css'] and fail_once['should_fail']:
+            fail_once['should_fail'] = False
+            raise OSError('simulated interruption during CSS write')
+        return atomic(path, data, mode)
+
+    monkeypatch.setattr(mod, 'atomic', injecting_failure)
+    with pytest.raises(OSError, match='simulated interruption'):
+        mod.apply(stage, 'fields-1234570')
+    assert all((root / x).read_bytes() == old[x] for x in mod.FILES)
+    assert (mod.BACKUP_ROOT / 'fields-1234570' / 'manifest.json').is_file()
+
+
+def test_preserve_protected_changes_and_reject_new_page_inside_root(sandbox):
+    root, stage, old, new = sandbox
+    mod.apply(stage, 'fields-1234571')
+    protected = root / 'research/index.html'
+    original = protected.read_bytes()
+    protected.write_bytes(b'concurrent protected edit')
+    with pytest.raises(RuntimeError, match='Internal content changed'):
+        mod.verify('fields-1234571')
+    with pytest.raises(RuntimeError, match='Protected content mismatch'):
+        mod.restore('fields-1234571')
+    assert protected.read_bytes() == b'concurrent protected edit'
+    protected.write_bytes(original)
+    mod.restore('fields-1234571')
+    assert all((root / x).read_bytes() == old[x] for x in mod.FILES)
+
+
+def test_staging_cannot_be_inside_public_html(sandbox):
+    root, stage, old, new = sandbox
+    bad_stage = root / 'unexpected-stage'
+    for part in ('old', 'new'):
+        for name in mod.FILES:
+            dest = bad_stage / part / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes((stage / part / name).read_bytes())
+    with pytest.raises(RuntimeError, match='Stage cannot be inside public_html'):
+        mod.preflight(bad_stage)
