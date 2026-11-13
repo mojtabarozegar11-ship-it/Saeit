@@ -1,4 +1,4 @@
-name: Zomorod one-pass complete homepage + three actual rotating rows
+name: Zomorod homepage three rails and four-card photo carousel
 on:
   pull_request:
     paths:
@@ -59,7 +59,8 @@ jobs:
           for s in ('آبان ۱۳۹۸','کلیه حقوق مادی و معنوی محفوظ است','action="/search/"','hreflang="en"','hreflang="ar"','zm-logo-transparent-v1.webp'):
               assert s in h,s
           assert h.count('data-auto-strip=')==3
-          assert h.count('data-rotator-toggle=')==3
+          assert h.count('data-rotator-toggle=')==4
+          assert h.count('data-field-carousel=')==1
           assert h.count('fetchpriority="high"')<=2
           assert h.count('<h1')==1
           assert '/en/' in h and '/assets/zm-ar-v1.html' in h and '<html lang="ar" dir="rtl">' in ar
@@ -133,7 +134,7 @@ jobs:
                 const form=page.locator('.search-form');if(await form.getAttribute('method')!=='get'||await form.getAttribute('action')!=='/search/')throw Error('SEARCH_NOT_NATIVE');
                 await page.locator('.search-toggle').click();
               }
-              for(const id of ['services-strip','products-strip','projects-strip']){
+              for(const id of ['services-strip','products-strip','projects-strip','fields-carousel']){
                 const row=page.locator('#'+id);
                 await row.scrollIntoViewIfNeeded();await page.waitForTimeout(450);
                 const from=await row.evaluate(x=>x.scrollLeft);
@@ -189,7 +190,7 @@ jobs:
                 const errors=[];page.on('pageerror',e=>errors.push(e.message));
                 await page.goto('http://127.0.0.1:8101/',{waitUntil:'load',timeout:45000});
                 await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3');
-                for(const id of ['services-strip','products-strip','projects-strip']){
+                for(const id of ['services-strip','products-strip','projects-strip','fields-carousel']){
                   const row=page.locator('#'+id);
                   await row.scrollIntoViewIfNeeded();await page.mouse.move(0,0);await page.waitForTimeout(500);
                   const before=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(850);
@@ -373,7 +374,7 @@ jobs:
                 image:document.querySelector('.identity img')?.naturalWidth,
                 rows:document.querySelectorAll('[data-auto-strip]').length,h1:document.querySelectorAll('h1').length}));
               if(p.scroll>width+3||!p.rights||p.image!==512||p.rows!==3||p.h1!==1||errors.length)throw Error('ZM_ONEPASS_LIVE_LAYOUT_FAIL '+JSON.stringify({width,p,errors}));
-              for(const id of ['services-strip','products-strip','projects-strip']){
+              for(const id of ['services-strip','products-strip','projects-strip','fields-carousel']){
                 const row=page.locator('#'+id);
                 await row.scrollIntoViewIfNeeded();await page.waitForTimeout(350);
                 const start=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(1050);
