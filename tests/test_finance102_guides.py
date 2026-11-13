@@ -98,6 +98,7 @@ class Finance102GuidesTest(unittest.TestCase):
         view = Path("core/financial_brand_pages.py").read_text("utf-8")
         self.assertIn('response["Link"]', view)
         self.assertIn('response["Content-Language"] = locale', view)
+        self.assertIn('response["X-Finance102-Editorial-Revision"] = "finance102-20261113-v2"', view)
 
     def test_host_language_detection_denies_forwarded_and_substring_spoofing(self):
         for host in (
