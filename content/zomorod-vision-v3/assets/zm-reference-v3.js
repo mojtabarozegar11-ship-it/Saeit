@@ -76,7 +76,7 @@
      state.paused=motionPreference.matches?true:!state.paused;
      state.delayUntil=0;update();
    });
-   motionPreference.addEventListener('change',event=>{
+   const onMotionChange=event=>{
      if(event.matches){
        state.paused=true;state.delayUntil=0;
        // Cancel any in-flight smooth manual scroll immediately.
@@ -84,7 +84,9 @@
        state.position=strip.scrollLeft;
        update();
      }
-   });
+   };
+   if(typeof motionPreference.addEventListener==='function')motionPreference.addEventListener('change',onMotionChange);
+   else if(typeof motionPreference.addListener==='function')motionPreference.addListener(onMotionChange);
    strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
    strip.addEventListener('focusin',()=>{state.focused=keyboardFocus;});
