@@ -25,7 +25,7 @@
  // The form is a genuine GET request to the existing site's /search/?q= backend.
  // JavaScript is deliberately not required to submit or display search results.
  const motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');
- const strips=$('[data-auto-strip], [data-field-carousel]');
+ const strips=Array.from(document.querySelectorAll('[data-auto-strip], [data-field-carousel]'));
  const rotators=[];
  // Touchscreens cannot safely use sticky mouse hover or persistent tap focus as pause signals.
  const trueHover=window.matchMedia('(hover: hover) and (pointer: fine)');
