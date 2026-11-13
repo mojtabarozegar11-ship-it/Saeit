@@ -62,7 +62,11 @@ def reconcile(data):
             issues.append({"refund":r["id"],"issue":"unmatched_settlement"})
             continue
         sid = s["id"]
-        returned[sid] = returned.get(sid, Decimal(0)) + value
+        candidate = returned.get(sid, Decimal(0)) + value
+        if candidate > amount(s["amount"]):
+            issues.append({"refund":r["id"],"issue":"refund_exceeds_settlement"})
+            continue
+        returned[sid] = candidate
     for oid, value in paid.items():
         if value > amount(by_order[oid]["amount"]):
             issues.append({"order":oid,"issue":"settlements_exceed_order"})
