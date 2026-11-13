@@ -203,3 +203,29 @@ def test_noncanonical_unmapped_specialist_is_blocked_until_canonical_handoff():
     assert AgentRegistry().resolve("unknown_legacy_private_job") is None
     cap.agents.add(canonical)
     assert AgentRegistry().resolve("unknown_legacy_private_job") == canonical
+
+
+
+def test_historical_capability_association_is_not_permission_to_execute():
+    legacy = Agent.objects.create(
+        code="retired-research-runtime", name="Historical Research",
+        mission="Record retained for audit", active=True,
+    )
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="One owner", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="legacy_research_module", name="Research",
+        risk_level="low", active=True,
+    )
+    cap.agents.add(legacy, canonical)
+    registry = AgentRegistry()
+    # Audit may inspect historical assignments without authorizing the bot.
+    assert registry.capability_for(legacy, cap.code) == cap
+    assert registry.can_execute(legacy, cap.code) is False
+    assert registry.can_execute(canonical, cap.code) is True
+    canonical.active = False
+    canonical.save(update_fields=["active"])
+    assert registry.can_execute(canonical, cap.code) is False
+    assert registry.resolve(cap.code) is None
