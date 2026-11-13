@@ -10,7 +10,7 @@ fs.mkdirSync(artifact,{recursive:true});
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  const rows=[];
  try{
-  for(const width of [320,390,768,1440]){
+  for(const width of [320,390,768]){
    const page=await browser.newPage({viewport:{width,height:870},locale:'fa-IR'});
    const errors=[];page.on('pageerror',e=>errors.push(e.message.slice(0,180)));
    const response=await page.goto('https://zomorodmelal.ir/store/',{waitUntil:'domcontentloaded',timeout:45000});
