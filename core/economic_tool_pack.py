@@ -421,8 +421,18 @@ def factory_native_review(payload):
     return inspect_family(root, payload)
 
 
-def build_economic_gateway():
-    return ToolGateway([
+def build_economic_gateway(*, cyber_verify_key=None, enable_cyber_offline=False):
+    """Return the EXISTING master gateway with optional signed-scope cyber tools.
+
+    Cyber handlers are internal tools of the canonical agent only. They are
+    never enabled merely because a key is configured; the host must also
+    deliberately set enable_cyber_offline. No independent worker is created.
+    """
+    if type(enable_cyber_offline) is not bool:
+        raise ValueError("CYBER_ENABLED_FLAG_INVALID")
+    if enable_cyber_offline and cyber_verify_key is None:
+        raise ValueError("CYBER_VERIFY_KEY_REQUIRED")
+    tools = [
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
@@ -433,4 +443,10 @@ def build_economic_gateway():
         ToolSpec(code="income_revenue_verify", handler=revenue_verify, risk="medium"),
         ToolSpec(code="income_profit_optimize", handler=profit_optimize, risk="medium"),
         ToolSpec(code="master_self_improvement", handler=master_self_improvement, risk="medium"),
-    ])
+    ]
+    if cyber_verify_key is not None:
+        from .mojtaba_modules.gateway_adapter import build_cyber_gateway_tools
+        tools.extend(build_cyber_gateway_tools(
+            cyber_verify_key, enable_offline=enable_cyber_offline,
+        ))
+    return ToolGateway(tools)

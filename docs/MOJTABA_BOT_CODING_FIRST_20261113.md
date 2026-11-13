@@ -48,3 +48,7 @@ provisioning is authorized by this integration commit.
 ## Source-only hardening imported in coding phase
 
 Private source changes must be verified by an independent dossier inspector; a producer's own success flag is insufficient. The existing master economic self-improvement handler now reopens the report and compares candidate and source hashes before claiming a verified internal effect. There is no promotion to the live codebase, no new scheduler and no automatic deployment.
+
+## Signed cyber gateway source wiring
+
+`build_economic_gateway` now exposes optional, disabled-by-default signed cyber handlers through the **existing** Django `ToolGateway`. A host-owned verifier key and explicit `enable_cyber_offline` flag are both required for handler activation. Each handler is further restricted to `mojtaba-bot-ai` and an authenticated AgentTask. The canonical agent capability definitions have been included in the existing seed catalog. No keys, users, services, tasks, host processes or payments were provisioned by this commit.

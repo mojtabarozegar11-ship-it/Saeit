@@ -6,6 +6,9 @@ from core.unified_bot_identity import BOT_CODE, BOT_NAME, LEGACY_EXECUTOR_CODES
 
 
 CAPABILITIES = [
+    ("cyber_evidence_review", "Signed offline security review", "Review only owner-scoped signed pre-collected evidence. No network scanning, host changes or customer action.", "medium"),
+    ("cyber_origin_defense", "Signed offline origin risk review", "Recommend origin-side mitigation only for signed in-scope assets; never block traffic automatically.", "medium"),
+    ("cyber_incident_response", "Signed offline incident plan", "Produce evidence-minimized defensive response planning; no deletion, remote access, counterattack or backup writes.", "medium"),
     ("factory_native_review", "Factory native evidence review", "Reopen independently reviewed private native build receipts and queue verified specialist/device gaps. No commercial release.", "low"),
     ("factory_f41_private_build", "F41 private blockchain utility build", "Build only bounded vetted F41 orders in the private warehouse; no wallets, network, sales or public deployment.", "low"),
     ("income_market_research", "Internal commercial inventory", "Measure local product inventory and queued tasks. Does not verify external customer demand, competitors, legal feasibility or willingness to pay.", "low"),
