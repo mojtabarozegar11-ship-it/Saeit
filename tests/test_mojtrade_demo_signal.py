@@ -3,8 +3,15 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import random
+import json
+from unittest.mock import patch
 
 import pytest
+from django.contrib.auth import get_user_model
+from django.test import Client
+from django.urls import reverse
+
+from core.models import AgentTask
 
 from core.mojtrade_demo_signal import (
     DemoSignalPlanError, SCHEMA, OUTPUT_SCHEMA, plan_private_demo_signal,
@@ -207,3 +214,71 @@ def test_invalid_data_never_changes_inputs():
     result = plan_private_demo_signal(data, now=NOW)
     assert data == original
     assert result["order_intent"] is None
+
+
+
+@pytest.mark.django_db
+def test_private_gold_signal_endpoint_authorizes_owner_without_creating_orders(client):
+    url = reverse("mojtrade-private-demo-gold-signal-plan")
+    data = snapshot()
+    denied = client.post(url, data=json.dumps(data), content_type="application/json")
+    assert denied.status_code == 403
+    assert "levels" not in denied.json()
+    staff = get_user_model().objects.create_user(
+        username="gold-signal-staff", is_staff=True,
+    )
+    client.force_login(staff)
+    assert client.post(
+        url, data=json.dumps(data), content_type="application/json",
+    ).status_code == 403
+    owner = get_user_model().objects.create_superuser(
+        username="gold-signal-owner", email="gold-signal@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    with patch(
+        "core.mojtrade_private_views.plan_private_demo_signal",
+        side_effect=lambda data: plan_private_demo_signal(data, now=NOW),
+    ):
+        response = client.post(
+            url, data=json.dumps(data), content_type="application/json",
+        )
+    assert response.status_code == 200
+    report = response.json()
+    assert report["owner"] == "mojtaba-bot-ai"
+    assert report["classification"] == "demo_setup_buy"
+    assert report["levels"]["entry_indicative"]
+    assert report["levels"]["order_volume"] is None
+    assert report["publication_authorized"] is False
+    assert report["trade_execution_authorized"] is False
+    assert report["broker_data_independently_authenticated"] is False
+    assert report["orders"] == 0
+    assert "no-store" in response["Cache-Control"]
+    assert "noindex" in response["X-Robots-Tag"]
+    assert response["X-Frame-Options"] == "DENY"
+    assert not AgentTask.objects.exists()
+
+
+@pytest.mark.django_db
+def test_private_gold_signal_endpoint_refuses_get_malformed_json_and_csrf(client):
+    url = reverse("mojtrade-private-demo-gold-signal-plan")
+    owner = get_user_model().objects.create_superuser(
+        username="gold-signal-security", email="gold-security@example.com",
+        password="local-test-only",
+    )
+    client.force_login(owner)
+    assert client.get(url).status_code == 405
+    assert client.post(url, "not json", content_type="text/plain").status_code == 415
+    assert client.post(url, "not json", content_type="application/json").status_code == 422
+    assert client.post(
+        url, '{"schema":1,"schema":2}', content_type="application/json",
+    ).status_code == 422
+    assert client.post(
+        url, "{" + "a" * 128_001 + "}", content_type="application/json",
+    ).status_code == 413
+    strict_client = Client(enforce_csrf_checks=True)
+    strict_client.force_login(owner)
+    assert strict_client.post(
+        url, data=json.dumps(snapshot()), content_type="application/json",
+    ).status_code == 403
+    assert not AgentTask.objects.exists()
