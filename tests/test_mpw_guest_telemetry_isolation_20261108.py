@@ -110,6 +110,63 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 4)
 
+    def test_guest_invoice_routes_are_exact_and_unrelated_routes_unchanged(self):
+        """Prevent silent ownership-wrapper installation on unrelated or drifted URLs."""
+        response = types.SimpleNamespace(status_code=400, get=lambda *args: "")
+        modules = stub_modules(Mock(), object())
+        dispatch = Mock(return_value=response)
+        with patch.dict(sys.modules, modules):
+            installer = source_function("patch_commercial", {
+                "_dispatch": dispatch,
+                "_record_funnel_event_best_effort": lambda *args: False,
+            })
+            base = (
+                ("commerce/trx-easy/start/<int:product_id>/", lambda *a, **k: response),
+                ("commerce/trx-easy/invoice/<int:invoice_id>/", lambda *a, **k: response),
+                ("commerce/trx-easy/invoice/<int:invoice_id>/status/", lambda *a, **k: response),
+                ("commerce/trx-easy/invoice/<int:invoice_id>/reconcile/", lambda *a, **k: response),
+                ("commerce/trx-easy/download/<int:invoice_id>/", lambda *a, **k: response),
+            )
+            handlers = {
+                "_" + name: (lambda *args, **kwargs: response)
+                for name in ("start_order", "show_invoice", "invoice_status",
+                             "reconcile_invoice", "download_paid")
+            }
+            for route in (
+                "commerce/trx-easy/start/72/",
+                "commerce/trx-easy/start/<str:product_id>/",
+                "commerce/trx-easy/start/<int:product_id>/extra/",
+                "commerce/trx-easy/invoice/<int:invoice_id>/download/",
+                "/commerce/trx-easy/start/<int:product_id>/",
+            ):
+                with self.subTest(route=route):
+                    namespace = dict(handlers, COMMERCIAL_URLPATTERNS=base + (
+                        (route, lambda *a, **k: response),))
+                    before = dict(namespace)
+                    with self.assertRaisesRegex(RuntimeError,
+                                                "Unrecognized guest commercial route"):
+                        installer(namespace)
+                    self.assertEqual(namespace, before)
+                    self.assertNotIn("_mpw_guest_checkout_installed", namespace)
+
+            # A superficially similar path outside the commerce namespace is
+            # never rebound to a payment or download handler.
+            unrelated = ("other/start/<int:product_id>/",
+                         lambda *args, **kwargs: "unrelated")
+            namespace = dict(handlers, COMMERCIAL_URLPATTERNS=base + (unrelated,))
+            installer(namespace)
+            self.assertTrue(namespace["_mpw_guest_checkout_installed"])
+            self.assertIs(namespace["COMMERCIAL_URLPATTERNS"][-1][1],
+                          unrelated[1])
+            self.assertEqual(namespace["COMMERCIAL_URLPATTERNS"][-1][1](), "unrelated")
+
+            # A duplicate privileged route fails before any namespace mutation.
+            namespace = dict(handlers, COMMERCIAL_URLPATTERNS=base + (base[0],))
+            with self.assertRaisesRegex(RuntimeError, "Duplicate guest commercial route"):
+                installer(namespace)
+            self.assertNotIn("_mpw_guest_checkout_installed", namespace)
+
+
 
 if __name__ == "__main__":
     unittest.main()
