@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with Bitstamp's unauthenticated OHLC endpoint as the first fallback, followed by Binance public klines, Kraken Spot OHLC and Bitfinex public-candle fallbacks. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
+- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with Bitstamp's unauthenticated OHLC endpoint as the first fallback, followed by Kraken Spot OHLC and Bitfinex public-candle fallbacks. The separate Binance BTCUSDT/ETHUSDT parser is **excluded from the active USD-quote fallback chain**: its prices are quoted in USDT, not USD, and publishing them as BTC/USD or ETH/USD would misrepresent the market. Future USDT support requires an explicit schema and matching downstream consumer. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
 - Uses only finished hourly candles; rejects data gaps, duplicate or invalid prices, and stale observations.
 - Calculates reproducible SMA20/SMA50/momentum10 *research watch states*; these are **not** verified profitable strategies or personalized recommendations.
 - Emits exactly the schema required by the separate signed-feed interface in PR #1892 (`schema_version=1`, `source=mojtrade-vps`, `signals[]`). The output is private, atomically replaced, and expires in 90 minutes.

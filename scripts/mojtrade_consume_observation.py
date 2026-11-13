@@ -18,8 +18,11 @@ from pathlib import Path
 
 EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
 ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
+# USD-quoted spot markets only. Binance BTCUSDT/ETHUSDT cannot be
+# relabelled as BTC/USD or ETH/USD without breaking price provenance.
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
+    "bitstamp-public-ohlc",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
 })

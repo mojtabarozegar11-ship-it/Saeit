@@ -106,6 +106,35 @@ class ObservationConsumerTests(unittest.TestCase):
             self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
             self.assertEqual(list(private.iterdir()), [destination])
 
+    def test_bitstamp_usd_fallback_reaches_private_research_report(self):
+        with tempfile.TemporaryDirectory() as root:
+            private = Path(root) / "private"
+            private.mkdir(mode=0o700)
+            source = private / "observation.json"
+            item = payload(self.now)
+            for signal in item["signals"]:
+                signal["data_source"] = "bitstamp-public-ohlc"
+            source.write_text(json.dumps(item), encoding="utf-8")
+            os.chmod(source, 0o600)
+            report = consumer.read_observation(source, self.now)
+            self.assertEqual([s["data_source"] for s in report["signals"]],
+                             ["bitstamp-public-ohlc"] * 2)
+            self.assertEqual(report["execution"], "disabled")
+            self.assertEqual(report["orders"], 0)
+
+    def test_binance_usdt_market_cannot_claim_usd_provenance(self):
+        with tempfile.TemporaryDirectory() as root:
+            private = Path(root) / "private"
+            private.mkdir(mode=0o700)
+            source = private / "observation.json"
+            item = payload(self.now)
+            item["signals"][0]["data_source"] = "binance-public-klines"
+            source.write_text(json.dumps(item), encoding="utf-8")
+            os.chmod(source, 0o600)
+            with self.assertRaisesRegex(consumer.ObservationError, "provider_invalid"):
+                consumer.read_observation(source, self.now)
+
+
 
 if __name__ == "__main__":
     unittest.main()

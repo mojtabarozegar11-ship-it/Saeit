@@ -88,6 +88,36 @@ class ResearchProductArtifactTests(unittest.TestCase):
                     with self.assertRaisesRegex(ProductArtifactError, reason):
                         build_artifact(path, datetime(2026, 11, 6, 11, tzinfo=timezone.utc))
 
+    def test_bitstamp_usd_report_becomes_private_nontrading_product(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "report.json"
+            self._report(path, signals=[
+                {"symbol": sym, "stance": "neutral",
+                 "observed_at": "2026-11-06T09:00:00+00:00",
+                 "data_source": "bitstamp-public-ohlc", "method": "sma"}
+                for sym in ("BTC/USD", "ETH/USD")
+            ])
+            product = build_artifact(path, datetime(2026, 11, 6, 11, tzinfo=timezone.utc))
+            self.assertEqual(len(product["signals"]), 2)
+            self.assertEqual(product["signals"][0]["data_source"], "bitstamp-public-ohlc")
+            self.assertFalse(product["publication_enabled"])
+            self.assertFalse(product["delivery_enabled"])
+            self.assertFalse(product["revenue_verified"])
+            self.assertEqual(product["orders"], 0)
+
+    def test_rejects_usdt_quotation_as_usd_product(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "report.json"
+            self._report(path, signals=[
+                {"symbol": sym, "stance": "neutral",
+                 "observed_at": "2026-11-06T09:00:00+00:00",
+                 "data_source": "binance-public-klines", "method": "sma"}
+                for sym in ("BTC/USD", "ETH/USD")
+            ])
+            with self.assertRaisesRegex(ProductArtifactError, "report_provider_invalid"):
+                build_artifact(path, datetime(2026, 11, 6, 11, tzinfo=timezone.utc))
+
+
 
 if __name__ == "__main__":
     unittest.main()
