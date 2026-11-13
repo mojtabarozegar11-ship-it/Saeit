@@ -88,7 +88,7 @@ def _perform_chat_action(approval: ApprovalRequest, data=None) -> tuple[str, dic
         instruction = str(params["instruction"])[:4000]
         if target == "mojplaywin":
             record = MpwRecord.objects.filter(
-                tenant=TENANT, page_path=path
+                tenant=TENANT, page_path=path, state="draft"
             ).order_by("-updated_at").first()
             if record is None:
                 raise ValueError("draft_page_not_found")
@@ -115,14 +115,9 @@ def _perform_chat_action(approval: ApprovalRequest, data=None) -> tuple[str, dic
     elif action in {"cpanel.preflight", "cpanel.passenger_inventory"}:
         result = _run_readonly(action)
     elif action == "cpanel.deploy_release":
-        root = _root()
-        result_proc = subprocess.run(
-            ["bash", str(root / "deploy/cpanel_deploy.sh")],
-            cwd=str(root), text=True, capture_output=True, timeout=600, check=False
-        )
-        result = {"returncode": result_proc.returncode,
-                  "stdout": (result_proc.stdout or "")[-12000:],
-                  "stderr": (result_proc.stderr or "")[-4000:]}
+        # No production deploy via an unpinned approval or mutable checkout.
+        # Independent immutable-manifest release verification is required.
+        raise PermissionError("UNPINNED_PRODUCTION_DEPLOYMENT_FORBIDDEN")
     else:
         raise ValueError("unsupported_chat_operation")
     if isinstance(result, dict) and result.get("returncode", 0) != 0:

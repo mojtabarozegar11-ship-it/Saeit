@@ -13,7 +13,8 @@ from .models import ChatSession
 EXPECTED = {
     "cpanel.preflight": ("cPanel", "medium", frozenset()),
     "cpanel.passenger_inventory": ("cPanel", "medium", frozenset()),
-    "cpanel.deploy_release": ("cPanel", "critical", frozenset()),
+    # Production release is blocked until an immutable build/release digest
+    # and a dedicated independently approved deployment intent exist.
     "site.create_draft_page": ("site", "high", frozenset(("path", "title", "body"))),
     "site.update_draft_page": ("site", "high", frozenset(("path", "instruction"))),
 }

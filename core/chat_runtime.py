@@ -78,6 +78,23 @@ class MasterAgentChat:
                     },
                 )
                 return reply
+            if operation.action == "cpanel.deploy_release":
+                # No moving-branch deploy is authorized by an ambiguous chat
+                # phrase. An immutable release digest and separate signed
+                # change-control workflow are prerequisites, not optional.
+                reply = (
+                    "انتشار از گفتگوی ربات مسدود است: نسخهٔ ثابت، "
+                    "شناسهٔ انتشار و تأیید مستقل استقرار ثبت نشده‌اند."
+                )
+                ChatMessage.objects.create(
+                    session=session, role="assistant", content=reply,
+                    metadata={
+                        "bot_id": BOT_ID,
+                        "operation_id": operation.operation_id,
+                        "execution": "release_target_not_attested_blocked",
+                    },
+                )
+                return reply
             # An authenticated superuser may REQUEST a binding operation,
             # but never implicitly grant its own production/write approval
             # simply by sending a chat message. Existing approval lifecycle

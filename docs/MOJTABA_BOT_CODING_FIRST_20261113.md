@@ -113,3 +113,7 @@ The request-scoped canonical bridge now re-verifies the ChatSession ownership in
 ## Cycle 7 — canonical owner for new managed tasks
 
 New tasks planned through the existing `master-chat/plan` endpoint require an authenticated active superuser. `MasterAgent` chooses only the single active `mojtaba-bot-ai` Agent row with the explicitly registered capability, not a lowest-risk legacy Agent from the global registry; it refuses simultaneous canonical/legacy runtime rows. High-risk task approval requests bind to the authenticated requester (or the validated active designated project owner for internal uses). Non-dictionary payloads are rejected. This is code only; no tasks were queued on a live server, and no tests or model/provider calls were run for this commit.
+
+## Cycle 7 — release boundary and draft integrity
+
+The existing ChatOperation intent does **not** authorize `cpanel.deploy_release` for an unspecified Git SHA. This path now refuses requests at the chat layer, approval allowlist and executor; immutable release identity, signed manifest and a separate per-case owner approval are prerequisites for future work. The existing website/template remains unchanged. The MojPlayWin draft update action now targets existing draft records only; it will not demote or mutate a published page record by changing its `state`. API planning returns a safe conflict on canonical-runtime misconfiguration. No live deployment, payment, email, chat provider billing, tests or DB migration was executed in this cycle.

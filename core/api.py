@@ -10,6 +10,7 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 
 from .orchestrator import MasterAgent
 from django.db import models, transaction
+from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
 from django.utils import timezone
 import hashlib
@@ -662,7 +663,7 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
             )
         except ResearchProject.DoesNotExist:
             return Response({"detail": "Research project not found."}, status=status.HTTP_404_NOT_FOUND)
-        except (RuntimeError, ValueError, PermissionError) as exc:
+        except (RuntimeError, ValueError, PermissionError, ImproperlyConfigured) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data, status=status.HTTP_201_CREATED)
 
