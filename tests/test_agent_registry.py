@@ -75,3 +75,97 @@ def test_registry_prefers_low_risk_agent_before_critical_risk_agent():
     capability.agents.add(critical, low)
 
     assert AgentRegistry().resolve("publish") == low
+
+
+
+@pytest.mark.parametrize("code", [
+    "income_market_research",
+    "factory_native_review",
+    "mojtrade_observation_ingest",
+    "mojtrade_demo_audit_ingest",
+    "master_self_improvement",
+])
+def test_canonical_module_owner_beats_legacy_lower_risk(code):
+    """Old row ID and cheaper risk must not route new work to old bots."""
+    from core.unified_bot_identity import BOT_CODE
+
+    legacy = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="Old executor",
+        risk_level="low", active=True,
+    )
+    canonical = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", mission="Single bot",
+        risk_level="high", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code=code, name=code, risk_level="low", active=True,
+    )
+    cap.agents.add(legacy, canonical)
+    assert AgentRegistry().resolve(code).pk == canonical.pk
+
+
+@pytest.mark.parametrize("state", ["missing", "inactive", "capability_missing"])
+def test_canonical_module_cannot_fall_back_to_old_executor(state):
+    from core.models import AgentTask
+    from core.unified_bot_identity import BOT_CODE
+
+    owner = get_user_model().objects.create_user(username=f"single-owner-{state}")
+    project = ResearchProject.objects.create(
+        title="Canonical routing", objective="No legacy fallback", owner=owner,
+    )
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old income master", active=True,
+    )
+    cap = AgentCapability.objects.create(
+        code="income_market_research", name="Revenue research", active=True,
+        risk_level="low",
+    )
+    cap.agents.add(old)
+    if state != "missing":
+        canonical = Agent.objects.create(
+            code=BOT_CODE, name="Mojtaba.bot.ai",
+            active=state != "inactive",
+        )
+        if state != "capability_missing":
+            cap.agents.add(canonical)
+    assert AgentRegistry().resolve("income_market_research") is None
+    before = AgentTask.objects.count()
+    with pytest.raises(RuntimeError, match="No active agent"):
+        MasterAgent().plan(project, "income_market_research", {"private": True})
+    assert AgentTask.objects.count() == before
+
+
+def test_master_agent_plans_economic_work_only_for_canonical_owner():
+    from core.models import AgentTask
+    from core.unified_bot_identity import BOT_CODE
+
+    owner = get_user_model().objects.create_user(username="canonical-plan-owner")
+    project = ResearchProject.objects.create(
+        title="Single worker", objective="Canonical only", owner=owner,
+    )
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old", active=True, risk_level="low",
+    )
+    canonical = Agent.objects.create(
+        code=BOT_CODE, name="Mojtaba.bot.ai", active=True, risk_level="high",
+    )
+    cap = AgentCapability.objects.create(
+        code="income_market_research", name="Research", active=True, risk_level="low",
+    )
+    cap.agents.add(old, canonical)
+    task = MasterAgent().plan(project, "income_market_research", {"private": True})
+    assert task.agent_id == canonical.pk
+    assert task.status == "queued"
+    assert AgentTask.objects.filter(agent=old).count() == 0
+
+
+def test_noncanonical_unmapped_specialist_remains_routable_until_handoff():
+    old = Agent.objects.create(
+        code="independent-legacy-specialist", name="Unmapped specialist",
+        active=True, risk_level="low",
+    )
+    cap = AgentCapability.objects.create(
+        code="unknown_legacy_private_job", name="Not yet mapped", active=True,
+    )
+    cap.agents.add(old)
+    assert AgentRegistry().resolve("unknown_legacy_private_job") == old
