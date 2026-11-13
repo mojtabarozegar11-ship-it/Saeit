@@ -19,8 +19,13 @@ class ApprovalService:
             raise ValueError("Approval is no longer pending")
         if not isinstance(approved, bool):
             raise ValueError("Approval decision must be a boolean")
-        if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
+        # Do not accept an absent actor or a caller-supplied actor_type
+        # such as "system"/"agent" to bypass the designated owner check.
+        # API authentication still happens independently at the view boundary.
+        if actor_type != "owner" or actor_id is None or approval.requested_by_id != actor_id:
             raise ValueError("Only the designated owner can make this approval decision")
+        if not get_user_model().objects.filter(pk=actor_id, is_active=True).exists():
+            raise ValueError("Only an active designated owner can decide an approval")
         if approval.target_type == "ChatOperation":
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
             if not is_authorized_chat_operator(operator) or approval.requested_by_id != actor_id:
@@ -34,6 +39,11 @@ class ApprovalService:
         article = None
         if approval.target_type == "AgentTask":
             task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
+            # A deleted/nonexistent task must never receive an approval token
+            # that could be reused if its numeric ID appears again later.
+            # Rejection still permits the owner to close an orphan request.
+            if task is None and approved:
+                raise ValueError("Approval target task no longer exists")
             if task:
                 # Approval must be bound to the task's current action and risk.
                 # This also prevents a mismatched rejection from cancelling a
