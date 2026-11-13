@@ -36,6 +36,8 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                 "    return order\n",
             "services/mpw_trx_guest_commerce.py":
                 (ROOT / "services/mpw_trx_guest_commerce.py").read_text(encoding="utf-8"),
+            "services/mpw_trx_guest_delivery.py":
+                "def delivery_helper(order):\n    return order\n",
             AUDIT.TEMPLATE:
                 '<form>{% csrf_token %}<input name="mpw_guest"></form>',
         }
@@ -242,6 +244,40 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertEqual(
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
+
+    def test_live_delivery_recorder_email_requirement_blocks_source_gate(self):
+        (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
+            "def _eligible(product):\n    return True\n"
+        )
+        (self.root / AUDIT.SOURCE_PATHS[4]).write_text(
+            "def record_invoice(order, buyer_email):\n"
+            "    if not buyer_email:\n"
+            "        raise ValueError('email required')\n"
+            "    return order\n"
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "EMAIL_REFERENCES_PRESENT")
+        self.assertEqual(report["invoice_recorder_definition_count"], 1)
+        self.assertTrue(any(
+            item["file"] == AUDIT.SOURCE_PATHS[4] and
+            "record_invoice" in item["functions"]
+            for item in report["email_hit_functions"]
+        ))
+        code, printed = self._remote_gate_result(report)
+        self.assertEqual(code, 21)
+        self.assertIn("MPW_SOURCE_GATE=BLOCKED_EMAIL_REFERENCES_PRESENT", printed)
+
+    def test_live_delivery_recorder_still_needs_commercial_proof(self):
+        (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
+            "def _eligible(product):\n    return True\n"
+        )
+        (self.root / AUDIT.SOURCE_PATHS[4]).write_text(
+            "def record_invoice(order):\n    return order\n"
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["invoice_recorder_definition_count"], 1)
+        self.assertEqual(report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED")
+        self.assertFalse(report["safe_to_deploy"])
 
     def test_external_imported_invoice_recorder_is_unverified_not_missing(self):
         web = self.root / AUDIT.SOURCE_PATHS[0]

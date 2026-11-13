@@ -23,6 +23,9 @@ SOURCE_PATHS = (
     "services/mpw_trx_commercial_context.py",
     "mpw_commerce/buyer_orders.py",
     "services/mpw_trx_guest_commerce.py",
+    # Exact path identified by authenticated live cPanel AST import:
+    # services.mpw_trx_guest_delivery.record_invoice
+    "services/mpw_trx_guest_delivery.py",
 )
 TEMPLATE = "mpw_commerce/templates/mpw_commerce/product_checkout.html"
 MAX_FILE_BYTES = 400_000
@@ -142,8 +145,10 @@ def module_report(relative: str, raw: bytes) -> dict:
         roots = [name for name in functions if "invoice" in name.lower()]
     elif relative == SOURCE_PATHS[3]:
         roots = ["_new_user", "_identity", "patch_commercial"]
+    elif relative == SOURCE_PATHS[4]:
+        roots = ["record_invoice"]
     # Invoice recorders may reside in any of the three audited commerce modules.
-    if relative in SOURCE_PATHS[:3] and "record_invoice" in functions:
+    if relative in (*SOURCE_PATHS[:3], SOURCE_PATHS[4]) and "record_invoice" in functions:
         roots.append("record_invoice")
     explored = set()
     pending = list(roots)
@@ -251,7 +256,7 @@ def inspect(root: Path = ROOT) -> dict:
     start = next((f for f in files if f["file"] == SOURCE_PATHS[0]), None)
     email_hits = [
         {"file": f["file"], "functions": f["email_referencing_functions"]}
-        for f in files if f["file"] in SOURCE_PATHS[:3]
+        for f in files if f["file"] in (*SOURCE_PATHS[:3], SOURCE_PATHS[4])
         and f["email_referencing_functions"]
     ]
     guest = next((f for f in files if f["file"] == SOURCE_PATHS[3]), None)
@@ -265,13 +270,13 @@ def inspect(root: Path = ROOT) -> dict:
     )
     missing_start = not start or start["start_handler_definition_count"] != 1
     recorder_count = sum(f["invoice_recorder_definition_count"] for f in files
-                         if f["file"] in SOURCE_PATHS[:3])
+                         if f["file"] in (*SOURCE_PATHS[:3], SOURCE_PATHS[4]))
     missing_recorder = recorder_count == 0
     # An imported recorder is not a missing invoice implementation: it is
     # outside this limited read-only source scope until inspected separately.
     inspected_recorders = {
         name[:-3].replace("/", ".") + ".record_invoice"
-        for name in SOURCE_PATHS[:3]
+        for name in (*SOURCE_PATHS[:3], SOURCE_PATHS[4])
     }
     external_recorder = any(
         any(isinstance(call, dict) and
@@ -279,11 +284,12 @@ def inspect(root: Path = ROOT) -> dict:
             call["import"].endswith(".record_invoice") and
             call["import"] not in inspected_recorders
             for call in file.get("invoice_import_calls", []))
-        for file in files if file["file"] in SOURCE_PATHS[:3]
+        for file in files if file["file"] in (*SOURCE_PATHS[:3], SOURCE_PATHS[4])
     )
     duplicate_recorder = recorder_count > 1
     duplicate_functions = any(f["duplicate_functions"] for f in files)
-    truncated_graph = any(f["helper_limit_hit"] for f in files[:3])
+    truncated_graph = any(f["helper_limit_hit"] for f in files
+                          if f["file"] in (*SOURCE_PATHS[:3], SOURCE_PATHS[4]))
     email_template = bool(
         template.get("legacy_email_input_marker")
         or template.get("email_name_marker")
@@ -370,7 +376,13 @@ def validate_remote_report(output: str) -> int:
                              entry["import"])
             and len(entry["import"]) <= 140
         })[:15] if isinstance(imports, list) else []
+        email_functions = item.get("email_referencing_functions", [])
+        safe_email_functions = sorted({
+            value for value in email_functions
+            if isinstance(value, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", value)
+        })[:20] if isinstance(email_functions, list) else []
         safe_modules.append({"file": item["file"], "sha16": digest,
+                             "email_referencing_functions": safe_email_functions,
                              "invoice_imports": safe_imports,
                              "start_definitions": int(item.get("start_handler_definition_count", 0)) if type(item.get("start_handler_definition_count")) is int else None,
                              "recorder_definitions": int(item.get("invoice_recorder_definition_count", 0)) if type(item.get("invoice_recorder_definition_count")) is int else None,
