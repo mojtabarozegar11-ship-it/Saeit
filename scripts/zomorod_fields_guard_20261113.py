@@ -68,7 +68,8 @@ def identity() -> None:
 def safe_stage(stage: Path) -> Path:
     if not stage.is_absolute() or stage.is_symlink() or not stage.is_dir():
         raise RuntimeError('Stage must be a real absolute private directory')
-    if stage == ROOT or ROOT in stage.parents:
+    resolved = stage.resolve(strict=True)
+    if resolved == ROOT.resolve() or ROOT.resolve() in resolved.parents:
         raise RuntimeError('Stage cannot be inside public_html')
     for name in ('old', 'new'):
         folder = stage / name
@@ -160,7 +161,7 @@ def release_dir(release_id: str) -> Path:
 
 @contextmanager
 def exclusive():
-    if BACKUP_ROOT.is_symlink() or not BACKUP_ROOT.parent.is_dir():
+    if BACKUP_ROOT.is_symlink() or BACKUP_ROOT.parent.is_symlink() or not BACKUP_ROOT.parent.is_dir():
         raise RuntimeError('Untrusted backup parent')
     lock_file = BACKUP_ROOT.parent / '.zomorod-fields-release.lock'
     if lock_file.is_symlink():
