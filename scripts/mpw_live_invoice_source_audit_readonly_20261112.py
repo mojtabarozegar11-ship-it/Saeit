@@ -252,10 +252,15 @@ def inspect(root: Path = ROOT) -> dict:
     missing_recorder = recorder_count == 0
     # An imported recorder is not a missing invoice implementation: it is
     # outside this limited read-only source scope until inspected separately.
+    inspected_recorders = {
+        name.removesuffix(".py").replace("/", ".") + ".record_invoice"
+        for name in SOURCE_PATHS[:3]
+    }
     external_recorder = any(
         any(isinstance(call, dict) and
             isinstance(call.get("import"), str) and
-            call["import"].endswith(".record_invoice")
+            call["import"].endswith(".record_invoice") and
+            call["import"] not in inspected_recorders
             for call in file.get("invoice_import_calls", []))
         for file in files if file["file"] in SOURCE_PATHS[:3]
     )
