@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           install_dir="${HOME}/.dotnet"
           mkdir -p "$install_dir"
-          if [ -x "$install_dir/dotnet" ] && "$install_dir/dotnet" --list-sdks 2>/dev/null | grep -q '^8\\.0\\.'; then
+          if [ -x "$install_dir/dotnet" ] && "$install_dir/dotnet" --list-sdks 2>/dev/null | grep -q '^8\.0\.'; then
             echo "dotnet8=already-present"
           else
             tmp_script="$(mktemp)"
@@ -35,7 +35,7 @@ jobs:
             curl --fail --silent --show-error --location https://dot.net/v1/dotnet-install.sh -o "$tmp_script"
             bash "$tmp_script" --channel 8.0 --install-dir "$install_dir" --no-path
             test -x "$install_dir/dotnet"
-            "$install_dir/dotnet" --list-sdks | grep '^8\\.0\\.'
+            "$install_dir/dotnet" --list-sdks | grep '^8\.0\.'
             echo "dotnet8=installed"
           fi
           echo "dotnet_path=$install_dir/dotnet"
