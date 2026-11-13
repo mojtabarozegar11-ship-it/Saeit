@@ -133,12 +133,16 @@ def inspect_business_portfolio(payload):
             "Read bounded aggregate inventory from existing Django models "
             "without modifying products, tasks, trades or publications."
         ),
-        "verified_effect": bool(inspected or source_read),
+        # Source files are merely available for inspection. Their hashes
+        # do not prove a delivered game, a working cBot or an operational
+        # task effect. Source-only requests must NOT count as verified work.
+        "verified_effect": bool(inspected),
         "evidence": {
             "kind": "internal_portfolio_row_inventory",
             "requested_domain": domain,
             "inspected_local_domains": inspected,
             "source_inventory_only_domains": source_read,
+            "source_only_no_operational_credit": bool(source_read) and not bool(inspected),
             "source": "Django SQL row counts plus bounded local source-file digests",
             "sections": sections,
         },
