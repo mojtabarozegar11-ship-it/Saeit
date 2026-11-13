@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
+from core.canonical_bot_identity import CANONICAL_BOT_CODE
+
 from core.mojtrade_research_review import (
     ResearchReviewError,
     inspect_private_observation,
@@ -65,7 +67,7 @@ class MasterMojTradeReviewTests(unittest.TestCase):
 
     def test_review_preserves_provenance_without_claiming_performance_or_orders(self):
         reviewed = inspect_private_observation(self.path, NOW)
-        self.assertEqual(reviewed["canonical_agent"], "economic-master-agent")
+        self.assertEqual(reviewed["canonical_agent"], CANONICAL_BOT_CODE)
         self.assertEqual(len(reviewed["source_sha256"]), 64)
         self.assertEqual(reviewed["observed_symbols"], ["BTC/USD", "ETH/USD"])
         self.assertEqual(reviewed["observations"][0]["data_source"], "bitstamp-public-ohlc")
