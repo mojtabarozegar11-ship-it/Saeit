@@ -1082,6 +1082,40 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "PASSENGER_UAPI_UNAVAILABLE"):
                 release.confirm_registered_public_passenger_root()
 
+    def test_owner_policy_blocks_email_removal_before_side_effects(self):
+        """A valid buyer email is mandatory; old publisher cannot be used."""
+        from unittest.mock import Mock
+        self.assertTrue(release.OWNER_BUYER_EMAIL_REQUIRED)
+        guarded = Mock()
+        scanned = Mock()
+        planned = Mock()
+        backed_up = Mock()
+        restarted = Mock()
+        with patch.multiple(
+            release, guard=guarded, audit_invoice_email_dependencies=scanned,
+            plan=planned, _backup_dir=backed_up, _restart=restarted,
+        ):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "OWNER_BUYER_EMAIL_REQUIRED_NO_EMAIL_RELEASE_DENIED"):
+                release.publish("202611130001", Path("/nonexistent/no-email.py"))
+        for observer in (guarded, scanned, planned, backed_up, restarted):
+            observer.assert_not_called()
+
+    def test_no_environment_or_cli_approval_bypasses_owner_email_policy(self):
+        """Even an explicit legacy opt-in cannot disable the policy guard."""
+        from unittest.mock import Mock
+        import os
+        read_guard = Mock()
+        with patch.dict(os.environ, {
+            "MPW_EMAIL_FREE_PUBLISH": "1",
+            "MPW_OWNER_APPROVED": "1",
+            "MPW_BUYER_EMAIL_REQUIRED": "0",
+        }, clear=False), patch.object(release, "guard", read_guard):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "OWNER_BUYER_EMAIL_REQUIRED_NO_EMAIL_RELEASE_DENIED"):
+                release.publish("202611130001", Path("/nonexistent/no-email.py"))
+        read_guard.assert_not_called()
+
     def test_release_guard_not_required_for_rollback(self):
         import inspect
         self.assertIn("guard()", inspect.getsource(release.rollback))
@@ -1139,6 +1173,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 _restart=restart,
                 _write_atomic=guarded_write,
                 audit_live_public_checkout_forms=probe,
+                require_owner_email_policy_for_publish=lambda: None,
             ):
                 with contextlib.redirect_stdout(sink):
                     try:

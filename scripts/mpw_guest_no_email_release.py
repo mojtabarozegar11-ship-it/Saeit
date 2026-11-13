@@ -60,6 +60,18 @@ def sha(data: bytes) -> str:
 def abort(reason: str):
     raise RuntimeError("MPW_EMAIL_FREE_ABORT:" + reason)
 
+# Commercial owner policy: real, validated buyer email is mandatory for
+# order recovery. This legacy email-removal publisher must remain fail-closed.
+# Never use an environment override, run ID or approval flag to bypass it.
+OWNER_BUYER_EMAIL_REQUIRED = True
+
+
+def require_owner_email_policy_for_publish() -> None:
+    """Block the incompatible release before network, backup or file mutation."""
+    if OWNER_BUYER_EMAIL_REQUIRED:
+        abort("OWNER_BUYER_EMAIL_REQUIRED_NO_EMAIL_RELEASE_DENIED")
+
+
 
 def _file(path: Path) -> bytes:
     if (path.is_symlink() or path.parent.is_symlink() or not path.is_file()
@@ -717,6 +729,7 @@ def _restart():
 
 
 def publish(run: str, source: Path):
+    require_owner_email_policy_for_publish()
     guard(confirm_public_binding=True)
     audit_invoice_email_dependencies()
     old, new = plan(source)
@@ -804,6 +817,8 @@ def main(argv):
         invoice_audit = audit_invoice_email_dependencies()
         old, new = plan(Path(argv[2]))
         print(json.dumps({"invoice_source_audit": invoice_audit, "publish_needed": new is not None,
+                          "commercial_publish_permitted": not OWNER_BUYER_EMAIL_REQUIRED,
+                          "commercial_policy": "valid_buyer_email_required",
                           "before": {k: sha(v) for k, v in old.items()},
                           "after": {k: sha(v) for k, v in (new or old).items()},
                           "invoices_created": 0, "emails_sent": 0}, sort_keys=True))
