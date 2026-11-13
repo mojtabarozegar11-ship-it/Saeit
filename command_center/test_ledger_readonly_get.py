@@ -30,3 +30,14 @@ class ManagementLedgerGetReadOnlyTests(TestCase):
         self.assertIsNone(self.pending.executed_at)
         self.assertEqual(self.pending.result, "")
         self.assertEqual(LedgerAuditEvent.objects.count(), before)
+
+    def test_invalid_json_top_levels_never_raise_server_error_or_write_audit(self):
+        initial = LedgerAuditEvent.objects.count()
+        for body in (b"[]", b"null", b"42", b'"abc"', bytes([255])):
+            with self.subTest(body=body):
+                response = self.client.post(
+                    self.url, data=body, content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(LedgerAuditEvent.objects.count(), initial)
+
