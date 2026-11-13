@@ -4,6 +4,7 @@ import json
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from core.models import ApprovalRequest
+from .models import ApprovalDecision
 
 
 class SensitiveApprovalPermissionTests(TestCase):
@@ -56,3 +57,42 @@ class SensitiveApprovalPermissionTests(TestCase):
         self.assertEqual(second.status_code, 409)
         self.approval.refresh_from_db()
         self.assertEqual(self.approval.status, "approved")
+
+    def test_legacy_approval_staff_cannot_impersonate_the_owner(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"kind": "approval", "status": "approved",
+                             "approver": self.owner_admin.get_username(),
+                             "evidence": "forged example only"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ApprovalDecision.objects.count(), 0)
+
+    def test_legacy_approval_requires_actual_actor_and_evidence(self):
+        self.client.force_login(self.owner_admin)
+        for approver, evidence in (("someone-else", "claim"), (self.owner_admin.get_username(), "")):
+            with self.subTest(approver=approver, evidence=evidence):
+                response = self.client.post(
+                    self.url,
+                    data=json.dumps({"kind": "approval", "status": "approved",
+                                     "approver": approver, "evidence": evidence}),
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(ApprovalDecision.objects.exists())
+
+    def test_legacy_decision_is_attributed_to_signed_in_admin(self):
+        self.client.force_login(self.owner_admin)
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"kind": "approval", "status": "rejected",
+                             "approver": self.owner_admin.get_username(),
+                             "evidence": "fixture only: owner consent not asserted"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        entry = ApprovalDecision.objects.get()
+        self.assertEqual(entry.created_by_id, self.owner_admin.pk)
+        self.assertEqual(entry.approver, self.owner_admin.get_username())
