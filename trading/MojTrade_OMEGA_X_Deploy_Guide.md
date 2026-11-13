@@ -1,10 +1,12 @@
-# راهنمای استقرار MojTrade OMEGA X در cTrader
+# راهنمای استقرار هسته ترید canonical `mojtaba.bot.ai` در cTrader
 
 ## وضعیت امنیتی
 
 - حساب واقعی ممنوع است.
 - برداشت وجه در این پروژه وجود ندارد.
 - `EnableDemoTrading` به‌صورت پیش‌فرض خاموش است.
+- تنها cBot مجاز: `MojtabaBotTradingCoreDemo` در مسیر `MojTradeOmegaXDemoBot.cs`.
+- `MojTradeDemoBot.cs` ریشه legacy است و نباید مستقل فعال شود.
 - تا قبل از تأیید کامپایل و اجرای دمو، هیچ Cloud Instance شروع نمی‌شود.
 
 ## فایل اصلی
@@ -17,7 +19,7 @@ trading/MojTradeOmegaXDemoBot.cs
 
 1. ورود دستی به cTrader با حساب کاربر.
 2. بازکردن cTrader Algo.
-3. ساخت cBot یا بازکردن cBot مربوط به `MojTradeOmegaXDemoBot`.
+3. ساخت cBot یا بازکردن cBot مربوط به `MojtabaBotTradingCoreDemo`.
 4. جایگزین‌کردن کد با فایل GitHub.
 5. انتخاب Build/Compile.
 6. رفع همه خطاهای کامپایل؛ هشدار غیرحساس باید ثبت شود.
@@ -43,7 +45,7 @@ trading/MojTradeOmegaXDemoBot.cs
 1. بررسی نمایش Demo در حساب.
 2. کامپایل موفق.
 3. Backtest و بررسی حدضرر/حدسود.
-4. فعال‌کردن `EnableDemoTrading=true` فقط روی دمو.
+4. فعال‌کردن `EnableDemoTrading=true` فقط روی دمو و فقط پس از تأیید دستی compile، backtest و گیت ریسک.
 5. اجرای یک Instance برای XAUUSD.
 6. اجرای جداگانه برای BTCUSD.
 7. اجرای جداگانه برای ETHUSD.
