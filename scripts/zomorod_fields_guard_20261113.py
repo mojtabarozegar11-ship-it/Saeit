@@ -26,6 +26,14 @@ SLUGS = ('innovation', 'laboratory', 'greenhouse', 'livestock', 'smart-tools', '
 CREATED = tuple(f'assets/zm-field-{slug}.webp' for slug in SLUGS) + tuple(
     f'fields/{slug}/index.html' for slug in SLUGS
 )
+# The first four cards already depend on these untouched production images.
+# Check them read-only before any new page may link to the carousel.
+LEGACY_IMAGES = {
+    'assets/zm-v3-farming.webp': (150, 90),
+    'assets/zm-v3-genetics.webp': (150, 90),
+    'assets/zm-v3-industry.webp': (150, 90),
+    'assets/zm-v3-economy.webp': (150, 90),
+}
 # Exact Git blobs of the successfully verified #2251 live-release source.
 OLD_BLOBS = dict(zip(FILES, (
     'afd94198a01194ee7b31be941bb305f775cacacf',
@@ -124,6 +132,18 @@ def webp_dimensions(data: bytes) -> tuple[int, int]:
     else:
         raise RuntimeError('Unsupported WebP encoding')
     return (width, height)
+
+
+def validate_legacy_images() -> dict[str, str]:
+    """Read-only check: existing four photo cards must not become broken on release."""
+    fingerprints = {}
+    for name, minimum in LEGACY_IMAGES.items():
+        data = read_regular(ROOT / name)
+        width, height = webp_dimensions(data)
+        if width < minimum[0] or height < minimum[1]:
+            raise RuntimeError('Legacy card image is too small: ' + name)
+        fingerprints[name] = sha256(data)
+    return fingerprints
 
 
 def candidates(stage: Path):
@@ -243,7 +263,7 @@ def preflight(stage: Path):
         if target.exists() or target.is_symlink():
             raise RuntimeError('New destination already exists; refuse overwrite: ' + name)
     return {'files': before, 'created': {name: sha256(new[name]) for name in CREATED},
-            'protected': protected_fingerprints()}
+            'protected': protected_fingerprints(), 'legacy': validate_legacy_images()}
 
 
 def atomic(path: Path, data: bytes, mode: int):
@@ -328,7 +348,8 @@ def load_backup(release: Path):
     if release.is_symlink() or not release.is_dir():
         raise RuntimeError('Missing private release backup')
     manifest = json.loads(read_regular(release / 'manifest.json'))
-    if set(manifest['files']) != set(FILES) or set(manifest.get('created', {})) != set(CREATED):
+    if (set(manifest['files']) != set(FILES) or set(manifest.get('created', {})) != set(CREATED) or
+            set(manifest.get('legacy', {})) != set(LEGACY_IMAGES)):
         raise RuntimeError('Unsafe release manifest')
     old = {name: read_regular(release / 'old' / name) for name in FILES}
     for name in FILES:
@@ -342,6 +363,8 @@ def verify(release_id: str) -> None:
     manifest, _ = load_backup(release_dir(release_id))
     if protected_fingerprints() != manifest['protected']:
         raise RuntimeError('Internal content changed during release')
+    if validate_legacy_images() != manifest['legacy']:
+        raise RuntimeError('Legacy card photos changed during release')
     for name in FILES:
         if sha256(read_regular(ROOT / name)) != manifest['files'][name]['new']:
             raise RuntimeError('Published file does not match approved candidate: ' + name)
