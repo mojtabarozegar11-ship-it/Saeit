@@ -105,3 +105,7 @@ A chat command is now **pending** even when entered by a Django superuser. The d
 ## Authenticated conversation composition root — source only
 
 The existing Django `MasterAgentChat` now invokes `core.canonical_chat_bridge.respond_with_mojtaba_runtime` for non-operational conversation. The bridge instantiates `ava_core.MojtabaBot` for this authenticated request, injects the existing host-owned model provider, and reads **only** the current user's bounded ChatSession history. Persistence remains in the existing Django ChatMessage table. Operational commands remain separately approved ChatOperations; no new Django agent/worker/queue or additional public bot identity is created. External model use requires `MOJTABA_CHAT_EXTERNAL_MODEL_ENABLED=1`; a key alone is not authorization. This code is untested, unmerged and undeployed. This is request-scoped composition, NOT proof of one globally running VPS process.
+
+## Conversation tenant isolation and usage bounds
+
+The request-scoped canonical bridge now re-verifies the ChatSession ownership in Django before any model usage and refuses external model calls for non-superusers. Historical context is bounded to 12 prior chat messages and a response token ceiling. External-provider use remains disabled by default, and any future billing policy must be reviewed before turning it on; no actual provider call was initiated in this coding cycle.

@@ -9,6 +9,7 @@ import os
 
 from ava_core import MojtabaBot
 from .bot_identity import BOT_ID
+from .models import ChatSession
 
 
 def respond_with_mojtaba_runtime(session, text: str, *, system_prompt: str) -> str:
@@ -18,6 +19,14 @@ def respond_with_mojtaba_runtime(session, text: str, *, system_prompt: str) -> s
         raise PermissionError("CANONICAL_CHAT_SESSION_NOT_AUTHORIZED")
     if not isinstance(system_prompt, str) or not system_prompt.strip():
         raise ValueError("CANONICAL_CHAT_SYSTEM_PROMPT_REQUIRED")
+    if not ChatSession.objects.filter(
+            pk=session.pk, user_id=session.user_id, status="active").exists():
+        raise PermissionError("CANONICAL_CHAT_SESSION_OWNER_MISMATCH")
+    if not session.user.is_superuser:
+        # Non-owner users cannot trigger billable provider calls merely by
+        # holding an ordinary chat session, even if the host enables a model.
+        return ("گفتگو ثبت شد؛ اجرای مدل بیرونی برای این حساب "
+                "نیازمند مجوز جداگانه مالک است.")
 
     # A configured API key does not itself authorize a billable provider call.
     key = os.getenv("OPENAI_API_KEY")
@@ -35,7 +44,7 @@ def respond_with_mojtaba_runtime(session, text: str, *, system_prompt: str) -> s
     previous = [
         item for item in reversed(history)
         if item.pk != current_id and item.role in {"user", "assistant"}
-    ][-20:]
+    ][-12:]
 
     def brain(messages):
         from openai import OpenAI
@@ -54,6 +63,7 @@ def respond_with_mojtaba_runtime(session, text: str, *, system_prompt: str) -> s
                 *prior,
                 dict(messages[-1]),
             ],
+            max_completion_tokens=1200,
         )
         return result.choices[0].message.content or ""
 
