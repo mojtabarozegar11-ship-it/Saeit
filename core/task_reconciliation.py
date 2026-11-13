@@ -5,6 +5,10 @@ did or did not occur. It never retries, unblocks, settles, or marks a job done.
 """
 from __future__ import annotations
 
+import re
+from django.db import transaction
+from .chat_operation_security import is_authorized_chat_operator
+
 from .models import AgentTask, ApprovalRequest, AuditLog
 from .unified_bot_identity import EXECUTOR_RUNTIME_CODES
 
@@ -85,4 +89,93 @@ def build_reconciliation_dossier(task: AgentTask) -> dict:
             "whether and how to close or supersede this task."
         ),
         "replay_or_queue_transition_performed": False,
+    }
+
+# A human-attached hash is a claim about an external artifact, not proof that
+# the referenced artifact exists or establishes that no side effect occurred.
+OBSERVATION_KINDS = frozenset({
+    "host_process_record", "payment_provider_reference",
+    "broker_order_reference", "game_event_ledger",
+    "factory_receipt", "other_independent_record",
+})
+OBSERVED_DISPOSITIONS = frozenset({
+    "owner_observed_effect", "owner_observed_no_effect", "still_unknown",
+})
+
+
+@transaction.atomic
+def record_reconciliation_observation(
+    task_id, *, actor, evidence_sha256, source_kind, disposition,
+):
+    """Append one owner observation, preserving the blocked/failed task state.
+
+    This does NOT attest the external evidence, reconcile money or enable
+    retries. An independent verifier and explicit non-replay closure design
+    are still required before a task may be superseded.
+    """
+    if not is_authorized_chat_operator(actor):
+        raise PermissionError("RECONCILIATION_OWNER_REQUIRED")
+    if not isinstance(source_kind, str) or source_kind not in OBSERVATION_KINDS:
+        raise ValueError("RECONCILIATION_EVIDENCE_SOURCE_INVALID")
+    if not isinstance(disposition, str) or disposition not in OBSERVED_DISPOSITIONS:
+        raise ValueError("RECONCILIATION_OBSERVATION_INVALID")
+    if not isinstance(evidence_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", evidence_sha256
+    ) or evidence_sha256 == "0" * 64:
+        raise ValueError("RECONCILIATION_EVIDENCE_DIGEST_INVALID")
+
+    task = AgentTask.objects.select_for_update().select_related(
+        "agent", "project"
+    ).get(pk=task_id)
+    if task.project_id and task.project.owner_id != actor.pk:
+        raise PermissionError("RECONCILIATION_PROJECT_OWNER_MISMATCH")
+    if not reconciliation_candidate(task):
+        raise ValueError("RECONCILIATION_TASK_NOT_REVIEWABLE")
+
+    output = task.output_data if isinstance(task.output_data, dict) else {}
+    execution_id = output.get("previous_execution_id") or task.execution_id
+    if not isinstance(execution_id, str) or not re.fullmatch(
+        r"[a-f0-9]{32}", execution_id
+    ):
+        raise ValueError("RECONCILIATION_EXECUTION_ID_NOT_ATTESTED")
+
+    # Serialized by the existing task row; no parallel audit write for this
+    # task may create the same observation through this method.
+    duplicate = AuditLog.objects.filter(
+        action="task_reconciliation_observation_recorded",
+        target_type="AgentTask",
+        target_id=str(task.pk),
+        after_state__execution_id=execution_id,
+        after_state__evidence_sha256=evidence_sha256,
+    ).exists()
+    if duplicate:
+        raise ValueError("RECONCILIATION_DUPLICATE_OBSERVATION")
+
+    event = AuditLog.objects.create(
+        actor_type="owner_reconciliation_observation",
+        actor_id=str(actor.pk),
+        action="task_reconciliation_observation_recorded",
+        target_type="AgentTask",
+        target_id=str(task.pk),
+        trace_id=f"task-{task.pk}-{execution_id}",
+        before_state={},
+        after_state={
+            "execution_id": execution_id,
+            "evidence_sha256": evidence_sha256,
+            "source_kind": source_kind,
+            "disposition": disposition,
+            "independent_evidence_verified": False,
+            "external_effect_status": "unknown",
+            "task_status_preserved": task.status,
+            "replay_allowed": False,
+        },
+    )
+    return {
+        "status": "owner_observation_recorded_only",
+        "task_id": task.pk,
+        "audit_id": event.pk,
+        "task_status": task.status,
+        "independent_evidence_verified": False,
+        "automatic_replay_allowed": False,
+        "payment_or_delivery_attested": False,
     }

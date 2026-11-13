@@ -6,7 +6,9 @@ from rest_framework.response import Response
 from .approval import ApprovalService
 from .chat_operation_security import is_authorized_chat_operator
 from .task_runtime import TaskExecutionError, TaskRuntime
-from .task_reconciliation import build_reconciliation_dossier
+from .task_reconciliation import (
+    build_reconciliation_dossier, record_reconciliation_observation,
+)
 
 
 from .orchestrator import MasterAgent
@@ -499,6 +501,36 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(report)
+
+    @action(detail=True, methods=["post"], url_path="record-reconciliation")
+    def record_reconciliation(self, request, pk=None):
+        """Append an owner assertion only; never release or retry the task."""
+        if not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Active owner permission required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            result = record_reconciliation_observation(
+                pk,
+                actor=request.user,
+                evidence_sha256=request.data.get("evidence_sha256"),
+                source_kind=request.data.get("source_kind"),
+                disposition=request.data.get("disposition"),
+            )
+        except AgentTask.DoesNotExist:
+            return Response(
+                {"detail": "Task not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except PermissionError:
+            return Response(
+                {"detail": "Project owner permission required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(result, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="claim")
     def claim(self, request, pk=None):
