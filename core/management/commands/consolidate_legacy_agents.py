@@ -16,6 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import Agent, AgentTask, AuditLog, ApprovalGrant
+from core.knowledge_agent_models import KnowledgeAgentRun
 from core.approval import ApprovalService
 from core.unified_bot_identity import BOT_CODE
 
@@ -125,10 +126,36 @@ def assess_agent(agent):
         # contract is implemented; a completed task alone is insufficient.
         missing_successor_coverage.append("accepted_research_delivery")
     if agent.code == "knowledge-content-director":
-        # A provisioned owner alone cannot certify draft quality, paid
-        # generation authorization or knowledge task handoff. Until a
-        # specific successor delivery contract is verified, hold retirement.
-        missing_successor_coverage.append("accepted_knowledge_delivery")
+        # Knowledge is not a NewsletterStory. Require a genuinely completed
+        # canonical generation task paired to the same completed run and
+        # nonempty reviewed book. An Agent row or generated task alone is NOT
+        # successor proof. The live handoff receipt is separately mandatory.
+        verified_knowledge_output = False
+        if successor is not None:
+            for completed in AgentTask.objects.filter(
+                agent=successor,
+                action_type="knowledge_content_generation",
+                capability_code="research-write-review",
+                status="completed",
+                updated_at__gte=review_cutoff,
+            ).order_by("-updated_at", "-pk")[:100]:
+                output = completed.output_data
+                if not isinstance(output, dict):
+                    continue
+                run_id = output.get("run_id")
+                book_id = output.get("book_id")
+                if type(run_id) is not int or type(book_id) is not int:
+                    continue
+                if KnowledgeAgentRun.objects.filter(
+                    pk=run_id, book_id=book_id,
+                    status="completed",
+                    finished_at__gte=review_cutoff,
+                    book__generated_sections__gt=0,
+                ).exclude(book__content="").exists():
+                    verified_knowledge_output = True
+                    break
+        if not verified_knowledge_output:
+            missing_successor_coverage.append("accepted_knowledge_delivery")
 
     if protected:
         decision = "retain_required"
