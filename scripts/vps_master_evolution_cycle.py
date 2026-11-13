@@ -99,11 +99,18 @@ def evaluate(db_path: Path, state_path: Path):
             if type(prior_cursor_value) is int and prior_cursor_value > 0
             else None
         )
+        # Never lose already-tracked unfinished tasks merely because the
+        # most recently completed high-watermark task was reopened.
+        tracking_ceiling = max(
+            latest_completed_id,
+            prior_cursor_value
+            if type(prior_cursor_value) is int and prior_cursor_value >= 0 else 0,
+        )
         pending_ids = [
             item[0] for item in db.execute(
                 "SELECT id FROM core_agenttask WHERE agent_id=? "
                 "AND status!='completed' AND id<=? ORDER BY id LIMIT ?",
-                (row[0], latest_completed_id, MAX_TRACKED_PENDING_TASKS + 1)
+                (row[0], tracking_ceiling, MAX_TRACKED_PENDING_TASKS + 1)
             ).fetchall()
         ]
         if len(pending_ids) > MAX_TRACKED_PENDING_TASKS:
