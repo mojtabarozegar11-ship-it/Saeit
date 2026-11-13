@@ -424,6 +424,71 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
             release.verify_template(nested)
 
+    def test_purchase_words_in_paragraph_do_not_prove_submit(self):
+        clean = release.patch_template(template())
+        button = b'<button type="submit">' + release.CTA + b'</button>'
+        disguised = clean.replace(button, b'<p>' + release.CTA + b'</p>')
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(disguised)
+
+    def test_disabled_or_non_submit_button_cannot_create_invoice(self):
+        clean = release.patch_template(template())
+        original = b'<button type="submit">' + release.CTA + b'</button>'
+        for substitute in (
+            b'<button type="submit" disabled>' + release.CTA + b'</button>',
+            b'<button type="button">' + release.CTA + b'</button>',
+        ):
+            with self.subTest(button=substitute):
+                with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+                    release.verify_template(clean.replace(original, substitute))
+
+    def test_prefix_matching_cannot_approve_broken_invoice_actions(self):
+        clean = release.patch_template(template())
+        base = b'/commerce/trx-easy/start/72/'
+        for wrong in (
+            b'/commerce/trx-easy/start/72/other/',
+            b'/commerce/trx-easy/start/72/?next=/support/',
+            b'/commerce/trx-easy/start/0/',
+            b'/commerce/trx-easy/start/72/../support/',
+            b"/commerce/trx-easy/start/not-a-product/",
+        ):
+            with self.subTest(action=wrong):
+                with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+                    release.verify_template(clean.replace(base, wrong))
+
+    def test_product_id_template_variable_has_exact_internal_route(self):
+        clean = release.patch_template(template())
+        for field in (b"id", b"pk"):
+            dynamic = (b'/commerce/trx-easy/start/{{ product.' + field + b' }}/')
+            release.verify_template(clean.replace(
+                b'/commerce/trx-easy/start/72/', dynamic
+            ))
+
+    def test_duplicate_form_action_attributes_fail_closed(self):
+        clean = release.patch_template(template())
+        duplicate = clean.replace(
+            b'<form method="post" action="/commerce/trx-easy/start/72/">',
+            b'<form method="post" action="/commerce/trx-easy/start/72/" '
+            b'action="/support/">',
+        )
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(duplicate)
+
+    def test_disabled_hidden_csrf_control_is_not_submitted(self):
+        clean = release.patch_template(template())
+        disabled = clean.replace(
+            b'{% csrf_token %}',
+            b'<input type="hidden" disabled name="csrfmiddlewaretoken" value="xyz">',
+        )
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(disabled)
+
+    def test_enabled_input_submit_may_be_used_instead_of_button(self):
+        clean = release.patch_template(template())
+        old = b'<button type="submit">' + release.CTA + b'</button>'
+        new = b'<input type="submit" value="' + release.CTA + b'">'
+        release.verify_template(clean.replace(old, new))
+
     def test_rejects_unknown_email_label(self):
         with self.assertRaisesRegex(RuntimeError, "EMAIL_LABEL_DRIFT"):
             release.patch_template(template().replace(b'for="mpw-buy-email"', b'for="unexpected"'))
