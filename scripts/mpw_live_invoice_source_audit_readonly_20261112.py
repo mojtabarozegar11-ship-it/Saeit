@@ -112,6 +112,49 @@ def template_email_controls(raw: bytes) -> bool:
     return parser.found
 
 
+
+def safe_function_contract(fn: ast.AST) -> dict:
+    """Only AST parameter names, required flags and call categories; no values.
+
+    Never inspect parameter defaults, decorator values, source text, runtime
+    objects, Django models or order records. A signature is NOT evidence that
+    the database allows an empty buyer-email column.
+    """
+    positional = list(fn.args.posonlyargs) + list(fn.args.args)
+    defaults = len(fn.args.defaults)
+    all_args = []
+    for index, arg in enumerate(positional[:20]):
+        all_args.append({"name": arg.arg, "required": index < len(positional)-defaults,
+                         "kind": "positional"})
+    for arg, value in zip(fn.args.kwonlyargs, fn.args.kw_defaults):
+        if len(all_args) >= 24:
+            break
+        all_args.append({"name": arg.arg, "required": value is None,
+                         "kind": "keyword_only"})
+    imports = set()
+    calls = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            if node.module.startswith(("mpw_commerce.", "services.")):
+                imports.add(node.module)
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                calls.add(node.func.id)
+            elif isinstance(node.func, ast.Attribute):
+                calls.add(node.func.attr)
+    # Read-only structural hints, not proof of invoice state changes.
+    return {"parameters": all_args, "has_varargs": fn.args.vararg is not None,
+            "has_varkw": fn.args.kwarg is not None,
+            "calls_normalize_email": "normalize_email" in calls,
+            "calls_create": "create" in calls,
+            "calls_get_or_create": "get_or_create" in calls,
+            "calls_atomic": "atomic" in calls,
+            "calls_reserve_commercial_intent": "reserve_commercial_intent" in calls,
+            "raises_exception": any(isinstance(node, ast.Raise)
+                                    for node in ast.walk(fn)),
+            "local_import_modules": sorted(imports)[:16]}
+
+
 def module_report(relative: str, raw: bytes) -> dict:
     tree = ast.parse(raw.decode("utf-8"), filename=relative)
     definitions = [
@@ -225,6 +268,11 @@ def module_report(relative: str, raw: bytes) -> dict:
         "helper_limit_hit": len(explored) >= MAX_HELPERS,
         # Identifiers only, not function bodies, request fields, buyer data or secrets.
         "checkout_call_targets": sorted(checkout_call_targets)[:48],
+        "invoice_contracts": {
+            key: safe_function_contract(functions[key])
+            for key in ("_start_order", "record_invoice", "normalize_email")
+            if key in functions and names.count(key) == 1
+        } if relative in (SOURCE_PATHS[0], SOURCE_PATHS[4]) else {},
     }
 
 
@@ -381,7 +429,37 @@ def validate_remote_report(output: str) -> int:
             value for value in email_functions
             if isinstance(value, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", value)
         })[:20] if isinstance(email_functions, list) else []
+        candidate_contracts = item.get("invoice_contracts", {})
+        candidate_contracts = candidate_contracts if isinstance(candidate_contracts, dict) else {}
+        safe_contracts = {}
+        for fn_name in ("_start_order", "record_invoice", "normalize_email"):
+            contract = candidate_contracts.get(fn_name, {})
+            if not isinstance(contract, dict):
+                continue
+            args = contract.get("parameters", [])
+            safe_args = []
+            for arg in args[:24] if isinstance(args, list) else []:
+                if (isinstance(arg, dict) and
+                        isinstance(arg.get("name"), str) and
+                        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", arg["name"]) and
+                        type(arg.get("required")) is bool and
+                        arg.get("kind") in ("positional", "keyword_only")):
+                    safe_args.append({"name": arg["name"], "kind": arg["kind"],
+                                      "required": arg["required"]})
+            flag_names = ("has_varargs", "has_varkw", "calls_normalize_email",
+                          "calls_create", "calls_get_or_create", "calls_atomic",
+                          "calls_reserve_commercial_intent", "raises_exception")
+            safe_contracts[fn_name] = {
+                "parameters": safe_args,
+                "flags": {key: contract.get(key) is True for key in flag_names},
+                "local_import_modules": sorted({
+                    value for value in (contract.get("local_import_modules") or [])
+                    if isinstance(value, str) and len(value) <= 120 and
+                    re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,6}", value)
+                })[:16],
+            }
         safe_modules.append({"file": item["file"], "sha16": digest,
+                             "invoice_function_contracts": safe_contracts,
                              "email_referencing_functions": safe_email_functions,
                              "invoice_imports": safe_imports,
                              "start_definitions": int(item.get("start_handler_definition_count", 0)) if type(item.get("start_handler_definition_count")) is int else None,

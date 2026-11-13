@@ -245,6 +245,51 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
             report["status"], "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED"
         )
 
+    def test_static_invoice_signature_reports_required_and_optional_arguments(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "def normalize_email(value):\n    return value.strip()\n"
+            "def record_invoice(order, buyer_email, receipt=None, *, required_id, memo=''):\n"
+            "    if not buyer_email:\n        raise ValueError('required')\n"
+            "    return normalize_email(buyer_email)\n"
+        )
+        report = AUDIT.inspect(self.root)
+        contract = next(f for f in report["files"]
+                        if f["file"] == AUDIT.SOURCE_PATHS[4])["invoice_contracts"]
+        invoice = contract["record_invoice"]
+        self.assertEqual([(p["name"], p["required"]) for p in invoice["parameters"]],
+                         [("order", True), ("buyer_email", True),
+                          ("receipt", False), ("required_id", True), ("memo", False)])
+        self.assertTrue(invoice["calls_normalize_email"])
+        self.assertTrue(invoice["raises_exception"])
+
+    def test_static_invoice_parameter_defaults_are_not_logged(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text(
+            "def record_invoice(order, auth_token='SECRET_NEVER_TO_LOG'):\n"
+            "    return order\n"
+        )
+        _, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        self.assertIn("MPW_SOURCE_EVIDENCE=", printed)
+        self.assertNotIn("SECRET_NEVER_TO_LOG", printed)
+        record = json.loads(next(line.split("=", 1)[1]
+                                 for line in printed.splitlines()
+                                 if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        delivery = next(x for x in record["modules"]
+                        if x["file"] == AUDIT.SOURCE_PATHS[4])
+        self.assertEqual(delivery["invoice_function_contracts"]["record_invoice"]
+                         ["parameters"][1]["required"], False)
+        self.assertFalse(record["production_changed"])
+
+    def test_unrecognized_invoice_root_reports_no_contract(self):
+        p = self.root / AUDIT.SOURCE_PATHS[4]
+        p.write_text("def other_helper(order):\n    return order\n")
+        report = AUDIT.inspect(self.root)
+        delivery = next(x for x in report["files"]
+                        if x["file"] == AUDIT.SOURCE_PATHS[4])
+        self.assertEqual(delivery["invoice_contracts"], {})
+        self.assertFalse(report["safe_to_deploy"])
+
     def test_live_delivery_recorder_email_requirement_blocks_source_gate(self):
         (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
             "def _eligible(product):\n    return True\n"
