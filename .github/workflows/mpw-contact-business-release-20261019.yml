@@ -178,8 +178,8 @@ jobs:
                   code,body=read('/contact/?mpw_contact_fix='+rid+'-'+str(attempt))
                   ok=(code==200 and 'mpw-contact-safe-business-20261019' in body and
                       body.count('class="mpw-contact-direct"')==2 and
-                      'mailto:support@mojplaywin.com?subject=Business%20Partnership' in body and
-                      'mailto:support@mojplaywin.com?subject=Press%20Inquiry' in body and
+                      'mailto:mojplaywin@gmail.com?subject=Business%20Partnership' in body and
+                      'mailto:mojplaywin@gmail.com?subject=Press%20Inquiry' in body and
                       '<small>Coming soon</small>' not in body and
                       'mojplaywin-coin-logo.420e0d1f954b.png' in body)
                   if ok:break
