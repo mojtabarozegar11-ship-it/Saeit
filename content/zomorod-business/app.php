@@ -82,7 +82,7 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','mojplaywin'=>'پایش MojPlayWin','approval_register'=>'دفتر مصوبات','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','genetics_center'=>'ژنتیک و اصلاح نژاد جانوران','mojplaywin'=>'پایش MojPlayWin','approval_register'=>'دفتر مصوبات','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
@@ -258,8 +258,30 @@ try {
         } elseif($action==='document'){
             $title=req('title');$body=req('body');if($title===''||$body==='')bail('عنوان و متن سند الزامی است.');
             $db->prepare('INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)')->execute([$title,req('category','اداری'),$body,actor()]);audit($db,'create','document',(int)$db->lastInsertId());
+        } elseif($action==='genetics_project_register'){
+            // Project registration is an explicit admin-only metadata action; never an accounting journal.
+            if(role()!=='admin')bail('ثبت پرونده راهبردی فقط برای مدیر اصلی مجاز است.',403);
+            $geneticsTitle='ZM-AGRC-GEN-1405-001 | مرکز جامع تحقیقات ژنتیک و اصلاح نژاد جانوران زمرد ملل';
+            $db->exec('BEGIN IMMEDIATE TRANSACTION');
+            try {
+                // Reconcile legacy records by reserved ID, not only exact mutable display title.
+                $matching=q($db,'SELECT id,title FROM projects WHERE trim(title) LIKE ? ORDER BY id LIMIT 2',['ZM-AGRC-GEN-1405-001%']);
+                if(count($matching)>1)bail('چند پرونده با شناسه یکسان وجود دارد؛ بررسی و اصلاح داده لازم است.',409);
+                if(count($matching)===0){
+                    $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,0)')
+                       ->execute([$geneticsTitle,'شرکت کشت و صنعت زمرد ملل','planned']);
+                    audit($db,'register','genetics-project',(int)$db->lastInsertId());
+                }
+                // BEGIN IMMEDIATE is an SQL-level transaction; use SQL commit for PDO-SQLite compatibility.
+                $db->exec('COMMIT');
+            }catch(Throwable $e){
+                try {$db->exec('ROLLBACK');}catch(Throwable $rollbackError){}
+                throw $e;
+            }
         } elseif($action==='project'){
             $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
+            // Reserve the genetics dossier ID for its idempotent admin-only registration action.
+            if(str_starts_with(trim($title),'ZM-AGRC-GEN-1405-001'))bail('ثبت پروژه ژنتیک فقط از مسیر اختصاصی مدیر مجاز است.',409);
             $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
         } elseif($action==='mpw_check'){
             $stage=req('stage');$status=req('status','unknown');$certainty=req('certainty','unverified');
@@ -291,7 +313,11 @@ try {
     echo '<h1>'.esc(APP_TITLE).'</h1><p class="muted">اطلاعات خصوصی شرکت. واحد مبالغ مطابق کد ارز انتخابی است؛ اسناد مالی ثبت‌شده حذف یا ویرایش نمی‌شوند.</p>';
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
-        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section>';
+        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section><section><h2>مرکز ژنتیک و اصلاح نژاد جانوران</h2><p>پرونده مطالعاتی ۵۰۰ گونه پرنده و واحدهای دام و حیات‌وحش؛ برآورد سرمایه، جانمایی، ظرفیت و گیت‌های علمی و مجوزی. اطلاعات مالی فقط تخمینی است.</p><a href="?page=genetics_center">مشاهده پرونده پروژه</a></section>';
+        // Internal-navigation-only provider entry for the authenticated owner; no credentials stored.
+        if(role()==='admin'){
+            echo '<section><h2>دسترسی داخلی به هاست زمرد ملل</h2><p>ورود از صفحات رسمی شرکت میزبان: سایت پارس وب سرور ← «ورود | عضویت» ← «سرویس‌های من» ← سرویس هاست زمرد ملل ← «ورود به cPanel».</p><p class="muted">این پیوند فقط مسیر مرورگر را باز می‌کند. اتصال یا ورود حساب احراز نشده؛ هیچ پورت SSH، رمز، پرداخت یا دستوری ارسال نمی‌شود.</p><a href="https://parswebserver.com/" target="_blank" rel="noopener noreferrer">آغاز از صفحه داخلی سایت میزبان</a></section>';
+        }
     } elseif($page==='mojplaywin'){
         authorize('view');
         $stages=[
@@ -370,8 +396,13 @@ try {
     } elseif($page==='documents'){
         echo '<section><h2>نامه‌ها و مکاتبات اداری</h2>';foreach(q($db,'SELECT * FROM documents ORDER BY id DESC LIMIT 50') as $r)echo '<article class="card"><h3>'.esc($r['title']).' · '.esc($r['category']).'</h3><p>'.nl2br(esc($r['body'])).'</p><small class="muted">'.esc($r['created_at']).'</small></article>';echo '</section>';
         if(role()!=='viewer'){echo '<section><h2>ثبت نامه یا دستورکار</h2>';formBegin('document');echo '<label>عنوان</label><input name="title" required><label>دسته</label><input name="category" value="اداری"><label>متن</label><textarea name="body" required></textarea><br><button>ثبت سند اداری</button></form></section>';}
+    } elseif($page==='genetics_center'){
+        authorize('view');
+        $dossier=__DIR__.'/genetics-center.php';
+        if(is_file($dossier)){require $dossier;}else{echo '<section class="notice danger">پرونده مرکز ژنتیک در این نسخه نصب نشده است.</section>';}
     } elseif($page==='projects'){
         echo '<section><h2>پروژه‌های شرکت</h2><div class="scroll"><table><tr><th>نام</th><th>مسئول</th><th>وضعیت</th><th>بودجه IRR</th></tr>';foreach(q($db,'SELECT * FROM projects ORDER BY id DESC') as $r)echo '<tr><td>'.esc($r['title']).'</td><td>'.esc($r['owner']).'</td><td>'.esc($r['state']).'</td><td>'.money((int)$r['budget']).'</td></tr>';echo '</table></div></section>';
+        echo '<section><h2>پرونده تخصصی مرکز ژنتیک جانوران</h2><p>شناسه ZM-AGRC-GEN-1405-001 · وضعیت: طرح مفهومی · پیشرفت اجرایی مستند: ۰٪ · برآورد سرمایه میانی: ۶۵٫۴ میلیون دلار (غیرقطعی و خارج از دفتر کل).</p><p class="muted">این صفحه به‌تنهایی پروژه یا سند حسابداری ثبت نمی‌کند. ثبت یک‌بارهٔ ردیف برنامه‌ریزی در دفتر پروژه‌ها فقط با عملیات مجاز مدیر انجام می‌شود و بودجه آن صفر (غیرمصوب) خواهد بود.</p><a href="?page=genetics_center">جزئیات طرح، ظرفیت‌ها، زمین و بودجه</a></section>';
         if(role()!=='viewer'){echo '<section><h2>افزودن پروژه</h2>';formBegin('project');echo '<div class="form"><div><label>عنوان پروژه</label><input name="title" required></div><div><label>مسئول</label><input name="owner" required></div><div><label>وضعیت</label><select name="state"><option value="planned">برنامه‌ریزی</option><option value="active">فعال</option><option value="paused">متوقف</option><option value="done">خاتمه‌یافته</option></select></div><div><label>بودجه IRR</label><input name="budget" value="0"></div></div><button>ثبت پروژه</button></form></section>';}
     } elseif($page==='approval_register'){
         authorize('view');

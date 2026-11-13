@@ -1,0 +1,166 @@
+name: Zomorod business cPanel direct evidence (read-only)
+on:
+  push:
+    branches:
+      - feat/zomorod-animal-genetics-business-20261111
+    paths:
+      - .github/workflows/zomorod-business-direct-live-audit.yml
+      - scripts/zomorod_business_live_semantic_readonly.py
+      - scripts/zomorod_business_genetics_overlay_preview.py
+      - scripts/zomorod_business_genetics_readonly_preflight.sh
+      - scripts/zomorod_business_homepage_invariant.sh
+      - scripts/zomorod_business_public_surface_invariant.py
+      - scripts/zomorod_business_public_reference_audit.py
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-direct-live-evidence
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout authorized development branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Direct cPanel private source and SQLite metadata inventory
+        shell: bash
+        env:
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$CPANEL_KEY" ]] || { echo 'DIRECT_AUDIT_KEY=UNAVAILABLE'; exit 2; }
+          d="$RUNNER_TEMP/zm-business-audit-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys;s=sys.stdin.read();sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$d/host.known" 2>/dev/null
+          [[ -s "$d/host.known" ]] || { echo 'DIRECT_AUDIT_HOSTKEY=UNAVAILABLE'; exit 3; }
+          expected='SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$actual" == "$expected" ]] || { echo 'DIRECT_AUDIT_HOSTKEY=MISMATCH'; exit 3; }
+          cat > "$d/config" <<EOF
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          expected_app="$(sha256sum content/zomorod-business/app.php | awk '{print $1}')"
+          expected_dossier="$(sha256sum content/zomorod-business/genetics-center.php | awk '{print $1}')"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel bash -s -- "$expected_app" "$expected_dossier" <<'REMOTE'
+          set -euo pipefail
+          [[ "$(id -un)" == zomorod2 ]] || exit 4
+          base=/home/zomorod2/.private/zomorod-business
+          app="$base/app.php"
+          dossier="$base/genetics-center.php"
+          db="$base/management.sqlite3"
+          [[ -d "$base" && ! -L "$base" ]] || { echo 'LIVE_PRIVATE_DIRECTORY=NOT_VERIFIED'; exit 5; }
+          echo 'DIRECT_CPANEL_SSH=VERIFIED'
+          echo 'LIVE_APP_SOURCE=READ_ONLY'
+          if [[ -s "$app" && ! -L "$app" ]]; then
+            h="$(sha256sum "$app" | awk '{print $1}')"
+            echo 'LIVE_APP_PRESENT=true'
+            echo "LIVE_APP_SHA256=$h"
+            if [[ "$h" == "$1" ]]; then echo 'LIVE_APP_MATCHES_PROPOSED=true'; else echo 'LIVE_APP_MATCHES_PROPOSED=false'; fi
+            if command -v php >/dev/null && php -l "$app" >/dev/null 2>&1; then echo 'LIVE_APP_PHP_SYNTAX=PASS'; else echo 'LIVE_APP_PHP_SYNTAX=UNKNOWN_OR_FAIL'; fi
+          else
+            echo 'LIVE_APP_PRESENT=false'
+          fi
+          if [[ -s "$dossier" && ! -L "$dossier" ]]; then
+            h="$(sha256sum "$dossier" | awk '{print $1}')"
+            echo 'LIVE_DOSSIER_PRESENT=true'
+            echo "LIVE_DOSSIER_SHA256=$h"
+            if [[ "$h" == "$2" ]]; then echo 'LIVE_DOSSIER_MATCHES_PROPOSED=true'; else echo 'LIVE_DOSSIER_MATCHES_PROPOSED=false'; fi
+          else
+            echo 'LIVE_DOSSIER_PRESENT=false'
+          fi
+          if [[ -f "$db" && ! -L "$db" ]]; then
+            echo 'LIVE_MANAGEMENT_SQLITE_PRESENT=true'
+            stat -c 'LIVE_MANAGEMENT_SQLITE_BYTES=%s' "$db"
+          else
+            echo 'LIVE_MANAGEMENT_SQLITE_PRESENT=false'
+          fi
+          df -Pk "$base" | awk 'NR==2{print "LIVE_PRIVATE_DISK_AVAILABLE_KIB="$4}'
+          echo 'LIVE_FINANCIAL_ROWS_QUERIED=no'
+          echo 'LIVE_FILES_MODIFIED=no'
+          echo 'LIVE_DEPLOYMENT_ATTEMPTED=no'
+          REMOTE
+          # Inspect semantic compatibility and project schema without exporting live source.
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel \
+            'test -x /home/zomorod2/Saeit/.venv/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python - bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63' \
+            < scripts/zomorod_business_live_semantic_readonly.py
+          # A candidate is built and linted only IN MEMORY on cPanel; it is never saved.
+          preview_code="$(base64 -w0 scripts/zomorod_business_genetics_overlay_preview.py)"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel \
+            "PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/Saeit/.venv/bin/python -c 'exec(__import__(\"base64\").b64decode(\"$preview_code\"))' bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63" \
+            < content/zomorod-business/app.php
+          # Execute the exact release preflight against real cPanel with no writes.
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -s -- \
+            bf0510b796bac0f4044515b5d595247be7615cd6738ae3764ee57cb9b19a8b63 ABSENT \
+            < scripts/zomorod_business_genetics_readonly_preflight.sh
+          echo 'LIVE_RELEASE_PREFLIGHT_VERIFICATION=READ_ONLY_COMPLETE'
+          # Public homepage GETs only; fail if its HTML is unstable or unavailable.
+          bash scripts/zomorod_business_homepage_invariant.sh capture >/dev/null
+          echo 'LIVE_PUBLIC_HOMEPAGE_BASELINE=STABLE_READ_ONLY'
+          # Bounded metadata inventory of possible public homepage filesystem surfaces.
+          # Do not print document bodies, filenames outside fixed allowlist, or secrets.
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel 'python3 -B -' <<'PUBLIC_ROOT_AUDIT'
+          from pathlib import Path
+          import os
+          import stat
+          root = Path('/home/zomorod2/public_html')
+          if not root.is_dir() or root.is_symlink() or root.stat().st_uid != os.geteuid():
+              print('PUBLIC_ROOT_INVENTORY=UNVERIFIED')
+              raise SystemExit(6)
+          print('PUBLIC_ROOT_INVENTORY=VERIFIED_READ_ONLY')
+          for name in ('.htaccess','index.php','index.html','index.htm','passenger_wsgi.py'):
+              entry = root / name
+              present = entry.is_file() and not entry.is_symlink() and entry.stat().st_uid == os.geteuid()
+              print('PUBLIC_ENTRY_' + name.replace('.','_').strip('_').upper() + '=' + str(present).lower())
+          for dirname in ('assets','static','css','js','images','img','media'):
+              entry = root / dirname
+              present = entry.is_dir() and not entry.is_symlink()
+              print('PUBLIC_DIR_' + dirname.upper() + '=' + str(present).lower())
+              if present:
+                  n = 0
+                  try:
+                      for _,dirs,files in os.walk(entry,followlinks=False):
+                          n += len(files)
+                          if n > 4000: break
+                  except OSError:
+                      n = 4001
+                  print('PUBLIC_DIR_' + dirname.upper() + '_FILES_CAP=' + str(min(n,4001)))
+          print('PUBLIC_INVENTORY_FILES_MODIFIED=no')
+          PUBLIC_ROOT_AUDIT
+          # Verify the public homepage files and local assets directly on cPanel.
+          # Only the checksum is transported; no private content is copied.
+          public_file_digest_1="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+              'python3 -B - capture' < scripts/zomorod_business_public_surface_invariant.py)"
+          public_file_digest_2="$(timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+              'python3 -B - capture' < scripts/zomorod_business_public_surface_invariant.py)"
+          [[ "$public_file_digest_1" =~ ^[0-9a-f]{64}$ && "$public_file_digest_1" == "$public_file_digest_2" ]] || {
+            echo 'LIVE_PUBLIC_SURFACE=UNSTABLE_ABORT'
+            exit 9
+          }
+          echo 'LIVE_PUBLIC_SURFACE=STABLE_READ_ONLY'
+          # Inspect homepage HTML/CSS visual references, without printing any paths.
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+            'python3 -B - enforce' < scripts/zomorod_business_public_reference_audit.py
+          echo 'LIVE_PUBLIC_REFERENCES=READ_ONLY_COMPLETE'
+
