@@ -267,14 +267,16 @@ authentication job was safely re-run without any write operations:
 It returned `CPANEL_SSH_AUTH_OK=1`, reported the expected cPanel host name
 `zohal.pws-dns.net` and a connection address of
 `178.239.147.124:1396`. The prior hardcoded `178.239.147.125`
-address is therefore an evidence-backed **likely transport mismatch**,
-not an authoritative current destination. The host key fingerprint is
+address was a **plausible cause of runner-dependent transport mismatch**,
+but NOT proof that the fixed address is globally dead. A later
+self-hosted Passenger UAPI rerun on 13 November succeeded from the
+existing main workflow, so distinguish runner reachability from address validity. The host key fingerprint is
 still independently pinned and is not disabled or replaced.
 
 PR #2263 now updates the cPanel SSH bridge in
 `deploy/cpanel_direct_command.sh` (both pinned hop configurations) and
 the existing issue-comment Passenger read-only workflow to use the
-**verified DNS hostname** instead of the stale fixed IP. The same
+**verified DNS hostname** instead of relying on the fixed IP, while retaining the same key fingerprint. The same
 ED25519 fingerprint, batch mode, strict known-host verification, original
 VPS identity and no-forward-agent configuration remain in place.
 The changes are only in the Draft branch, **not on main or cPanel**.
@@ -300,3 +302,47 @@ download and collected revenue are **unknown**.
 
 Release remains **NO-GO**. No live merge, cPanel deployment/restart,
 customer invoice, payment, email or paid tool invocation occurred.
+
+## Cycle 9 — first fresh real cPanel Passenger mapping, no production mutations
+
+**High-value real server evidence:** The existing self-hosted factory-VPS
+`passenger_inventory` read-only job was re-run with its current main
+workflow, without any merge:
+[run 43162619527, rerun job 131997282584](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43162619527).
+The cPanel UAPI call succeeded and reported two registered application
+records in total, including exactly **one** entry for `mojplaywin.com`.
+That entry's sanitized app-root classification has
+`references_shared_saeit_staging=false` and an opaque fingerprint.
+This does **not** prove the effective Django app, public URL resolver or
+which private HTML template served the six checkout routes; those require
+separate source/template and active routing inspection. The UAPI auditor
+itself reports `production_isolation_proven=false`,
+`release_permitted=false`.
+
+The separate [owner-commanded private relay run 43457001017](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43457001017)
+**failed before any remote source read**: five GitHub-hosted VPS SSH
+banner timeouts and a direct fallback timeout to the fixed target.
+The successful **same-day self-hosted** cPanel Passenger UAPI read means
+the fixed IP cannot be called categorically unavailable; the actual
+blocker is cloud-runner-dependent transport and lack of authoritative
+effective-root/template proof.
+
+**Source-only correction in Draft PR #2263:** the existing owner-gated
+`.github/workflows/zomorod-private-command-dispatch.yml` now uses
+`zohal.pws-dns.net` for both cPanel SSH modes, with the *same*
+fingerprint-pinned ED25519 key, strict host checking, no agent forwarding,
+and existing owner/main gating. Associated regression assertions were
+updated and a new test requires preservation of the exact gate.
+The dedicated Authenticated cPanel chat relay contract passed in
+[run 43457852465](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43457852465).
+No workflows were changed on main, so this fix has **not been proven on the
+live private command relay**.
+
+**Production verdict remains NO-GO.** The static storefront, six
+email-collecting checkout forms and script policy mismatch were
+independently observed on public GET; sales, on-chain settlement and
+authorized delivery are unverified. Further safe action: obtain
+effective Passenger root, Django template origin and exact source
+fingerprints via the already authorized self-hosted route before
+considering separate deployment approval. No paid or mutating
+operation occurred.
