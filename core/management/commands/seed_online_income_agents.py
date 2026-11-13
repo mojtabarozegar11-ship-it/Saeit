@@ -1,6 +1,7 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from core.canonical_bot_identity import CANONICAL_BOT_CODE, RUNTIME_CODES
 from core.models import Agent, AgentCapability
 
 
@@ -36,6 +37,19 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        # Never revive a deliberately disabled master, and never turn a
+        # completed handoff into two active runtimes. Lock before modifying
+        # capabilities so an unsafe identity state rolls back atomically.
+        existing = list(Agent.objects.select_for_update().filter(
+            code__in=RUNTIME_CODES,
+        ).order_by("code"))
+        active = [agent for agent in existing if agent.active]
+        if len(active) > 1:
+            raise CommandError("MASTER_SEED_MULTIPLE_ACTIVE_RUNTIME_IDENTITIES")
+        if existing and not active:
+            raise CommandError("MASTER_SEED_REFUSES_INACTIVE_RUNTIME_REACTIVATION")
+        master = active[0] if active else None
+
         capabilities = {}
         for code, name, description, risk in CAPABILITIES:
             obj, _ = AgentCapability.objects.update_or_create(
@@ -45,11 +59,21 @@ class Command(BaseCommand):
             capabilities[code] = obj
 
         code, name, mission = MASTER_AGENT
-        agent, _ = Agent.objects.update_or_create(
-            code=code,
-            defaults={"name": name, "mission": mission, "risk_level": "medium", "active": True},
-        )
-        agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
+        if master is None:
+            # Backward-compatible fresh bootstrap; the canonical handoff is
+            # a separately audited operation, never performed by this seed.
+            master = Agent.objects.create(
+                code=code, name=name, mission=mission,
+                risk_level="medium", active=True,
+            )
+        else:
+            # In particular, do not re-enable the legacy row when the active
+            # runtime is already the canonical Mojtaba.bot.ai identity.
+            master.name = "Mojtaba.bot.ai" if master.code == CANONICAL_BOT_CODE else name
+            master.mission = mission
+            master.risk_level = "medium"
+            master.save(update_fields=("name", "mission", "risk_level"))
+        master.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
 
         code, name, mission = FACTORY_AGENT
         factory, _ = Agent.objects.update_or_create(
@@ -63,4 +87,7 @@ class Command(BaseCommand):
         # Use consolidate_legacy_agents for preview-first, evidenced retirement.
         # This seeder only owns the master and the dedicated factory identity.
 
-        self.stdout.write(self.style.SUCCESS("Economic Master Agent and dedicated moj_1ro_1 factory agent seeded, with financial capabilities isolated."))
+        self.stdout.write(self.style.SUCCESS(
+            f"Single active master {master.code} and dedicated moj_1ro_1 factory agent seeded; "
+            "no legacy identity reactivation, financial capabilities isolated."
+        ))
