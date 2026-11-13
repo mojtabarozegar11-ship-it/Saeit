@@ -99,12 +99,14 @@
    },{threshold:0.02,rootMargin:'100px 0px'});
    rotators.forEach(x=>observer.observe(x.strip));
  }else rotators.forEach(x=>x.visible=true);
- let previous=0;
- const tick=now=>{
-   if(!previous){previous=now;requestAnimationFrame(tick);return;}
-   const elapsed=Math.min(now-previous,100);
-   if(now-previous<25){requestAnimationFrame(tick);return;}
-   previous=now;
+ // An explicit timer also runs in headless WebKit, which can suspend
+ // requestAnimationFrame despite the tab being foreground and visible.
+ let previous=performance.now(),tickCount=0;
+ const tick=()=>{
+   const now=performance.now();
+   const elapsed=Math.min(Math.max(0,now-previous),100);
+   if(elapsed<15)return;
+   previous=now;tickCount++;
    for(const state of rotators){
      if(state.paused||state.hovered||state.focused||!state.visible||
         document.hidden||now<state.delayUntil)continue;
@@ -118,9 +120,8 @@
      state.position=logical;
      s.scrollLeft=logical;
    }
-   requestAnimationFrame(tick);
  };
- if(rotators.length)requestAnimationFrame(tick);
+ if(rotators.length)window.setInterval(tick,40);
  document.documentElement.dataset.rotatingRows=String(rotators.length);
- window.__zmRotatorDiagnostics=()=>rotators.map(x=>({id:x.strip.id,paused:x.paused,hovered:x.hovered,focused:x.focused,visible:x.visible,documentHidden:document.hidden,subpixelPosition:x.position,scrollLeft:x.strip.scrollLeft}));
+ window.__zmRotatorDiagnostics=()=>rotators.map(x=>({id:x.strip.id,paused:x.paused,hovered:x.hovered,focused:x.focused,visible:x.visible,documentHidden:document.hidden,tickCount,subpixelPosition:x.position,scrollLeft:x.strip.scrollLeft}));
 })();
