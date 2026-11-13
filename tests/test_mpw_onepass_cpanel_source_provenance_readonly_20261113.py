@@ -28,7 +28,10 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.ht = self.public / ".htaccess"
         self.wsgi = self.public / "passenger_wsgi.py"
         self.store = self.public / "store/index.html"
-        for file in (self.guest, self.template, self.ht, self.wsgi, self.store):
+        self.storeview = self.app / "core/mojplaywin_views.py"
+        self.checkoutview = self.app / "mpw_commerce/product_checkout_page.py"
+        for file in (self.guest, self.template, self.ht, self.wsgi,
+                     self.store, self.storeview, self.checkoutview):
             file.parent.mkdir(parents=True, exist_ok=True)
         self.guest.write_bytes(b"synthetic source only\n")
         self.template.write_bytes(
@@ -37,6 +40,8 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.ht.write_bytes(probe.FALLBACK_BLOCK + b"Owner original directives\n")
         self.wsgi.write_bytes(b"APP='/home/zomorod2/Saeit-staging'\n")
         self.store.write_bytes(b"<html>MPW_STATIC_STORE_FALLBACK_V1</html>\n")
+        self.storeview.write_bytes(b"def store(request):\n    return None\n")
+        self.checkoutview.write_bytes(b"def apply_csp():\n    return \"script-src 'self'\"\n")
 
     def inspect(self):
         return probe.inspect(self.app, self.public)
@@ -93,6 +98,48 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
                 self.template.write_bytes(b"<form>" + field + b"</form>")
                 self.assertEqual(self.inspect()["template_disk_source"], "email_field_present")
 
+    def test_store_and_checkout_view_source_are_fingerprinted(self):
+        report = self.inspect()
+        self.assertTrue(report["store_view_source_regular"])
+        self.assertTrue(report["checkout_view_source_regular"])
+        self.assertTrue(report["store_view_source_function_marker"])
+        self.assertTrue(report["checkout_view_explicit_script_src_source_marker"])
+        self.assertEqual(report["store_view_sha256_prefix"],
+                         hashlib.sha256(self.storeview.read_bytes()).hexdigest()[:16])
+        self.assertEqual(report["checkout_view_sha256_prefix"],
+                         hashlib.sha256(self.checkoutview.read_bytes()).hexdigest()[:16])
+        self.assertFalse(report["effective_checkout_view_import_verified"])
+
+    def test_missing_checkout_view_is_unproven_not_a_processor_outage(self):
+        self.checkoutview.unlink()
+        report = self.inspect()
+        self.assertFalse(report["checkout_view_source_regular"])
+        self.assertIsNone(report["checkout_view_sha256_prefix"])
+        self.assertFalse(report["checkout_view_explicit_script_src_source_marker"])
+        self.assertIsNone(report["confirmed_revenue"])
+
+    def test_checkout_source_without_script_marker_stays_unproven(self):
+        self.checkoutview.write_bytes(b"def apply_csp():\n    return None\n")
+        report = self.inspect()
+        self.assertTrue(report["checkout_view_source_regular"])
+        self.assertFalse(report["checkout_view_explicit_script_src_source_marker"])
+        self.assertFalse(report["effective_checkout_view_import_verified"])
+
+    def test_symlinked_checkout_source_is_ignored(self):
+        self.checkoutview.unlink()
+        other = self.base / "sensitive-external-code.py"
+        other.write_bytes(b"script-src would be unsafe proof")
+        self.checkoutview.symlink_to(other)
+        report = self.inspect()
+        self.assertFalse(report["checkout_view_source_regular"])
+        self.assertIsNone(report["checkout_view_sha256_prefix"])
+
+    def test_store_source_without_expected_view_function_is_not_certified(self):
+        self.storeview.write_bytes(b"def unrelated():\n    return True\n")
+        report = self.inspect()
+        self.assertTrue(report["store_view_source_regular"])
+        self.assertFalse(report["store_view_source_function_marker"])
+
     def test_symlinked_guest_file_refuses_read(self):
         self.guest.unlink()
         external = self.base / "external.py"
@@ -142,7 +189,8 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.assertFalse(self.inspect()["passenger_stage_source_marker"])
 
     def test_readonly_probe_never_changes_any_fixture_bytes(self):
-        files = (self.guest, self.template, self.ht, self.wsgi, self.store)
+        files = (self.guest, self.template, self.ht, self.wsgi, self.store,
+                 self.storeview, self.checkoutview)
         before = {str(file): file.read_bytes() for file in files}
         report = self.inspect()
         after = {str(file): file.read_bytes() for file in files}
