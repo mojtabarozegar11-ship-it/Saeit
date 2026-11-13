@@ -17,6 +17,18 @@ class TestSettlement(unittest.TestCase):
     def test_overpayment(self):
         self.data["settlements"][0]["amount"]="31.00"
         self.assertIn("settlements_exceed_order",str(reconcile(self.data)["issues"]))
+    def test_excessive_refund_does_not_make_net_negative(self):
+        self.data["refunds"][0]["amount"]="35.00"
+        result=reconcile(self.data)
+        self.assertEqual(result["completed_refunds_unverified"],"0")
+        self.assertEqual(result["net_settled_unverified"],"30.00")
+        self.assertIn("refund_exceeds_settlement",str(result["issues"]))
+    def test_cumulative_refunds_cannot_exceed_settlement(self):
+        self.data["refunds"].append({"id":"r2","settlement_id":"s","amount":"26.00","status":"completed"})
+        result=reconcile(self.data)
+        self.assertEqual(result["completed_refunds_unverified"],"5.00")
+        self.assertEqual(result["net_settled_unverified"],"25.00")
+        self.assertIn("refund_exceeds_settlement",str(result["issues"]))
     def test_unmatched_refund(self):
         self.data["refunds"][0]["settlement_id"]="unknown"
         self.assertIn("unmatched_settlement",str(reconcile(self.data)["issues"]))
