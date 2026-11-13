@@ -160,6 +160,17 @@ class OriginDefenseTests(unittest.TestCase):
         with self.assertRaisesRegex(CyberModuleError, "COLLECTOR_INVALID"):
             self.run_plan(evidence=evidence)
 
+    def test_list_collector_rejected_as_invalid(self):
+        bad = traffic(observations=[signal(collector=["verified_edge_export"])])
+        with self.assertRaisesRegex(CyberModuleError, "COLLECTOR_INVALID"):
+            self.run_plan(evidence=bad)
+
+    def test_dict_collector_rejected_as_invalid(self):
+        bad = traffic(observations=[signal(collector={"source": "verified_edge_export"})])
+        with self.assertRaisesRegex(CyberModuleError, "COLLECTOR_INVALID"):
+            self.run_plan(evidence=bad)
+
+
 
 if __name__ == "__main__":
     unittest.main()
