@@ -7,17 +7,16 @@ from hashlib import sha256
 from pathlib import Path
 from unittest.mock import patch
 
-repo=Path(__file__).resolve().parents[1]
-source=repo/'scripts/zomorod_vision_ux_guarded_20261113.py'
-spec=importlib.util.spec_from_file_location('zm_ux_guard',source)
-mod=importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-def main(argv=None):
-    """Run a staged offline UX verification only from explicit CLI invocation."""
-    argv = sys.argv[1:] if argv is None else argv
-    if len(argv) != 1:
-        raise SystemExit('Supply locally staged old/new release directory')
-    stage = Path(argv[0]).resolve()
+
+def main():
+    repo=Path(__file__).resolve().parents[1]
+    source=repo/'scripts/zomorod_vision_ux_guarded_20261113.py'
+    spec=importlib.util.spec_from_file_location('zm_ux_guard',source)
+    mod=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    oldref=sys.argv[1] if len(sys.argv)>1 else None
+    if not oldref:raise SystemExit('Supply locally staged old/new release directory')
+    stage=Path(oldref).resolve()
     with tempfile.TemporaryDirectory(prefix='zm-ux-safe-') as temporary:
      root=Path(temporary)
      site=root/'public_html'
@@ -66,5 +65,5 @@ def main(argv=None):
       print('ZOMOROD_UX_INNER_PAGES_UNCHANGED=PASS')
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

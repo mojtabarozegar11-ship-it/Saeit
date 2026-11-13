@@ -5,16 +5,14 @@ from hashlib import sha256
 from pathlib import Path
 from unittest.mock import patch
 
-repo=Path(__file__).resolve().parents[1]
-script=repo/'scripts/zomorod_onepass_guarded_20261113.py'
-spec=importlib.util.spec_from_file_location('guard_zm_once',script)
-g=importlib.util.module_from_spec(spec);spec.loader.exec_module(g)
-def main(argv=None):
-    """Run an explicit staged-site contract check, never at pytest import time."""
-    argv = sys.argv[1:] if argv is None else argv
-    if len(argv) != 1:
-        raise SystemExit('Pass old/new stage root')
-    stage = Path(argv[0]).resolve()
+
+def main():
+    repo=Path(__file__).resolve().parents[1]
+    script=repo/'scripts/zomorod_onepass_guarded_20261113.py'
+    spec=importlib.util.spec_from_file_location('guard_zm_once',script)
+    g=importlib.util.module_from_spec(spec);spec.loader.exec_module(g)
+    if len(sys.argv)!=2:raise SystemExit('Pass old/new stage root')
+    stage=Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory() as directory:
      home=Path(directory)
      site=home/'public_html';(site/'assets').mkdir(parents=True)
@@ -44,5 +42,5 @@ def main(argv=None):
     print('ZM_ONEPASS_ISOLATED_INSTALL_VERIFY_ROLLBACK_AND_CONCURRENT_GUARD=PASS')
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
