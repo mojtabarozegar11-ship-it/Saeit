@@ -6,6 +6,8 @@ on:
       - "runtime/mojtrade_signal_catalog_v1.json"
       - "scripts/mojtrade_build_research_product.py"
       - "scripts/tests/test_mojtrade_build_research_product.py"
+      - "core/management/commands/seed_mojtrade_signal_products.py"
+      - "core/tests/test_seed_mojtrade_signal_products.py"
       - ".github/workflows/mojtrade-signal-catalog-ci.yml"
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - "runtime/mojtrade_signal_catalog_v1.json"
       - "scripts/mojtrade_build_research_product.py"
       - "scripts/tests/test_mojtrade_build_research_product.py"
+      - "core/management/commands/seed_mojtrade_signal_products.py"
+      - "core/tests/test_seed_mojtrade_signal_products.py"
       - ".github/workflows/mojtrade-signal-catalog-ci.yml"
 
 permissions:
@@ -33,6 +37,7 @@ jobs:
         run: |
           python -m json.tool runtime/mojtrade_signal_catalog_v1.json >/dev/null
           python -m py_compile scripts/mojtrade_build_research_product.py
+          python -m py_compile core/management/commands/seed_mojtrade_signal_products.py
       - name: Run catalog and packaging tests
         run: |
           python -m unittest discover -s scripts/tests -p 'test_mojtrade_build_research_product.py' -v
