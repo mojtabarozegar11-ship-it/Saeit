@@ -35,7 +35,8 @@ def private_cli(tmp_path):
     return config, password, content
 
 
-def runner_factory(*, account=None, cbots=None, retcode=0, commands=None):
+def runner_factory(*, account=None, cbots=None, positions=None, orders=None,
+                   retcode=0, commands=None):
     account = account if account is not None else {"accounts": [{
         "accountId": 12345678,
         "brokerName": "LiteFinance",
@@ -44,10 +45,12 @@ def runner_factory(*, account=None, cbots=None, retcode=0, commands=None):
     cbots = cbots if cbots is not None else {"cbots": [{
         "instanceId": "first-demo-instance",
     }]}
+    positions = positions if positions is not None else {"positions": []}
+    orders = orders if orders is not None else {"orders": []}
     def fake(argv, *, capture_output, text, timeout, check):
         assert capture_output is True and text is True
         assert timeout == 25 and check is False
-        assert argv[1] in {"accounts", "cbots"}
+        assert argv[1] in {"accounts", "cbots", "positions", "orders"}
         assert not any(
             item in argv for item in (
                 "run", "stop", "order", "place-market", "place-limit",
@@ -56,7 +59,10 @@ def runner_factory(*, account=None, cbots=None, retcode=0, commands=None):
         )
         if commands is not None:
             commands.append(tuple(argv))
-        body = account if argv[1] == "accounts" else cbots
+        body = {
+            "accounts": account, "cbots": cbots, "positions": positions,
+            "orders": orders,
+        }[argv[1]]
         return subprocess.CompletedProcess(argv, retcode, json.dumps(body), "")
     return fake
 
@@ -78,9 +84,12 @@ def test_read_only_cli_produces_redacted_account_and_cbot_evidence(private_cli):
     assert report["trading_release_authorized"] is False
     assert report["orders_placed_by_this_probe"] == 0
     assert report["real_revenue_verified"] is False
-    assert len(commands) == 2
-    assert [cmd[1] for cmd in commands] == ["accounts", "cbots"]
-    assert "-q" not in commands[0] and "-q" in commands[1]
+    assert len(commands) == 4
+    assert [cmd[1] for cmd in commands] == [
+        "accounts", "cbots", "positions", "orders",
+    ]
+    assert "-q" not in commands[0]
+    assert all("-q" in command for command in commands[1:])
     for command in commands:
         assert "--pwd-file=" + str(password) in command
         assert "--account=" + values["demo_account"] in command
@@ -90,7 +99,12 @@ def test_read_only_cli_produces_redacted_account_and_cbot_evidence(private_cli):
     assert values["demo_account"] not in safe
     assert password.read_text(encoding="utf-8") not in safe
     assert "first-demo-instance" not in safe
-    assert set(report["redacted_source_sha256"]) == {"accounts", "cbots"}
+    assert report["observed_open_position_count"] == 0
+    assert report["observed_pending_order_count"] == 0
+    assert report["account_exposure_reconciled_for_new_order"] is False
+    assert set(report["redacted_source_sha256"]) == {
+        "accounts", "cbots", "positions", "orders",
+    }
     assert all(len(digest) == 64 for digest in report["redacted_source_sha256"].values())
 
 
@@ -200,3 +214,44 @@ def test_timeout_blocks_without_raw_credential_error(private_cli):
         raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
     with pytest.raises(PreflightError, match="accounts_cli_unavailable"):
         run_readonly(config, cli_binary=sys.executable, runner=timed_out)
+
+
+
+def test_open_positions_and_pending_orders_are_counted_not_executed(private_cli):
+    config, *_ = private_cli
+    called = []
+    report = run_readonly(config, cli_binary=sys.executable,
+        runner=runner_factory(
+            positions={"positions": [{"positionId": 1}, {"positionId": 2}]},
+            orders={"orders": [{"orderId": 3}]}, commands=called,
+        ))
+    assert report["observed_open_position_count"] == 2
+    assert report["observed_pending_order_count"] == 1
+    assert report["account_exposure_reconciled_for_new_order"] is False
+    assert report["trading_release_authorized"] is False
+    assert {command[1] for command in called} == {
+        "accounts", "cbots", "positions", "orders",
+    }
+
+
+@pytest.mark.parametrize("kind", ["positions", "orders"])
+def test_unknown_open_exposure_schema_fails_closed(private_cli, kind):
+    config, *_ = private_cli
+    fake = runner_factory(**{kind: {kind: "not-a-list"}})
+    with pytest.raises(PreflightError, match=kind + "_output_schema_unrecognized"):
+        run_readonly(config, cli_binary=sys.executable, runner=fake)
+
+
+def test_live_identity_blocks_all_followup_account_commands(private_cli):
+    config, *_ = private_cli
+    calls = []
+    fake = runner_factory(
+        account={"accounts": [{
+            "accountId": 12345678, "brokerName": "LiteFinance",
+            "isLive": True,
+        }]},
+        commands=calls,
+    )
+    with pytest.raises(PreflightError, match="demo_identity_not_explicit"):
+        run_readonly(config, cli_binary=sys.executable, runner=fake)
+    assert [command[1] for command in calls] == ["accounts"]
