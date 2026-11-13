@@ -28,6 +28,7 @@ SOURCE_PATHS = (
     "services/mpw_trx_guest_delivery.py",
 )
 TEMPLATE = "mpw_commerce/templates/mpw_commerce/product_checkout.html"
+MODEL_SOURCE = "mpw_commerce/models.py"  # Static definition only; no SQL or Django import.
 MAX_FILE_BYTES = 400_000
 MAX_HELPERS = 64
 # The independently reviewed guest identity adapter used by the release guard.
@@ -35,7 +36,7 @@ APPROVED_GUEST_SHA256 = "b9e0b9b210fa2d36db96b91f596af91ccbfc5923338fd2eb3fc87e8
 
 
 def source_bytes(root: Path, relative: str) -> bytes:
-    if relative not in (*SOURCE_PATHS, TEMPLATE):
+    if relative not in (*SOURCE_PATHS, TEMPLATE, MODEL_SOURCE):
         raise ValueError("OUTSIDE_ALLOWLIST")
     if root.is_symlink() or not root.is_dir():
         raise ValueError("UNSAFE_APPLICATION_ROOT")
@@ -324,6 +325,72 @@ def module_report(relative: str, raw: bytes) -> dict:
     }
 
 
+def guest_delivery_schema_contract(raw: bytes) -> dict:
+    """Inspect only the local GuestTrxDelivery class declaration.
+
+    This cannot establish the physical MariaDB column, constraints, migration
+    history, data quality, or runtime behavior. Never print defaults or data.
+    """
+    tree = ast.parse(raw.decode("utf-8"), filename=MODEL_SOURCE)
+    models = [node for node in tree.body if isinstance(node, ast.ClassDef)
+              and node.name == "GuestTrxDelivery"]
+    if len(models) != 1:
+        origins = []
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name == "GuestTrxDelivery":
+                        origins.append({"module": node.module or "",
+                                        "relative_level": node.level})
+        return {"status": "CLASS_NOT_DEFINED_HERE", "class_count": len(models),
+                "reexport_origins": origins[:8], "fields": {}}
+    cls = models[0]
+    fields = {}
+    for node in cls.body:
+        target = None
+        value = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        if not (isinstance(target, ast.Name) and
+                target.id in ("email", "order") and
+                isinstance(value, ast.Call)):
+            continue
+        constructor = value.func
+        field_type = constructor.attr if isinstance(constructor, ast.Attribute) else (
+            constructor.id if isinstance(constructor, ast.Name) else "UNKNOWN")
+        flags = {"null": None, "blank": None, "unique": None,
+                 "db_index": None}
+        default_defined = False
+        for kw in value.keywords:
+            if kw.arg in flags and isinstance(kw.value, ast.Constant) and (
+                    type(kw.value.value) is bool):
+                flags[kw.arg] = kw.value.value
+            if kw.arg == "default":
+                default_defined = True
+        fields[target.id] = {"field_type": field_type, "flags": flags,
+                             "default_defined": default_defined}
+    constraint_fields = set()
+    for node in ast.walk(cls):
+        if isinstance(node, ast.Call):
+            ctor = node.func
+            name = ctor.attr if isinstance(ctor, ast.Attribute) else (
+                ctor.id if isinstance(ctor, ast.Name) else "")
+            if name != "UniqueConstraint":
+                continue
+            for kw in node.keywords:
+                if kw.arg == "fields" and isinstance(kw.value, (ast.List, ast.Tuple)):
+                    for value in kw.value.elts:
+                        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                            if value.value in ("email", "order"):
+                                constraint_fields.add(value.value)
+    return {"status": "CLASS_DECLARATION_FOUND", "class_count": 1,
+            "fields": fields,
+            "declared_unique_constraint_fields": sorted(constraint_fields),
+            "reexport_origins": []}
+
+
 def inspect(root: Path = ROOT) -> dict:
     files = []
     missing = []
@@ -333,6 +400,13 @@ def inspect(root: Path = ROOT) -> dict:
             files.append(module_report(relative, raw))
         except (OSError, UnicodeError, ValueError, SyntaxError) as exc:
             missing.append({"file": relative, "reason": type(exc).__name__})
+    schema = {"status": "MODEL_SOURCE_UNVERIFIED", "fields": {}}
+    try:
+        schema = guest_delivery_schema_contract(source_bytes(root, MODEL_SOURCE))
+        schema["source_sha256"] = hashlib.sha256(source_bytes(root, MODEL_SOURCE)).hexdigest()
+    except (OSError, ValueError, UnicodeError, SyntaxError) as exc:
+        schema = {"status": "MODEL_SOURCE_UNVERIFIED",
+                  "reason": type(exc).__name__, "fields": {}}
     template = {}
     try:
         raw = source_bytes(root, TEMPLATE)
@@ -419,6 +493,7 @@ def inspect(root: Path = ROOT) -> dict:
         "invoice_recorder_definition_count": recorder_count,
         "csrf_template_marker_found": not missing_csrf,
         "email_hit_functions": email_hits,
+        "guest_delivery_model_source": schema,
         "guest_source_matches_reviewed_digest": reviewed_guest_source,
         "guest_internal_email_indicators_review_required": guest_email_indicators,
         "external_invoice_code_proven_email_free": False,
@@ -569,8 +644,56 @@ def validate_remote_report(output: str) -> int:
                              "checkout_calls": safe_calls})
     template = report.get("template", {})
     template = template if isinstance(template, dict) else {}
+    model = report.get("guest_delivery_model_source", {})
+    model = model if isinstance(model, dict) else {}
+    fields = model.get("fields", {})
+    fields = fields if isinstance(fields, dict) else {}
+    safe_fields = {}
+    for key in ("email", "order"):
+        info = fields.get(key, {})
+        if not isinstance(info, dict):
+            continue
+        name = info.get("field_type", "")
+        if not isinstance(name, str) or re.fullmatch(
+                r"[A-Za-z_][A-Za-z0-9_]{0,79}", name) is None:
+            name = "UNKNOWN"
+        flags = info.get("flags", {})
+        flags = flags if isinstance(flags, dict) else {}
+        safe_fields[key] = {
+            "type": name,
+            "explicit_flags": {flag: flags.get(flag) if type(flags.get(flag)) is bool
+                               else None
+                               for flag in ("null", "blank", "unique", "db_index")},
+            "default_declared": info.get("default_defined") is True,
+        }
+    origins = model.get("reexport_origins", [])
+    safe_origins = []
+    for item in origins[:8] if isinstance(origins, list) else []:
+        if (isinstance(item, dict) and
+                isinstance(item.get("module"), str) and
+                re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){0,7}",
+                             item["module"]) and
+                type(item.get("relative_level")) is int and
+                0 <= item["relative_level"] <= 4):
+            safe_origins.append(item)
+    model_digest = model.get("source_sha256", "")
+    if not isinstance(model_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", model_digest):
+        model_digest = ""
+    safe_model = {
+        "status": model.get("status") if model.get("status") in (
+            "CLASS_DECLARATION_FOUND", "CLASS_NOT_DEFINED_HERE",
+            "MODEL_SOURCE_UNVERIFIED") else "UNKNOWN",
+        "source_sha16": model_digest[:16] if model_digest else "UNKNOWN",
+        "fields": safe_fields,
+        "declared_unique_constraint_fields": [
+            x for x in ("email", "order")
+            if x in (model.get("declared_unique_constraint_fields") or [])],
+        "reexport_origins": safe_origins,
+        "database_schema_verified": False,
+    }
     print("MPW_SOURCE_EVIDENCE=" + json.dumps({
         "status": status,
+        "guest_delivery_model": safe_model,
         "modules": safe_modules[:len(SOURCE_PATHS)],
         "source_problem_count": len(report.get("source_problems", [])) if isinstance(report.get("source_problems"), list) else None,
         "template_exists": template.get("exists") is True,

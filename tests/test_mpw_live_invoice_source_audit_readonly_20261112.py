@@ -40,6 +40,11 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                 "def delivery_helper(order):\n    return order\n",
             AUDIT.TEMPLATE:
                 '<form>{% csrf_token %}<input name="mpw_guest"></form>',
+            AUDIT.MODEL_SOURCE:
+                "from django.db import models\n"
+                "class GuestTrxDelivery(models.Model):\n"
+                "    order = models.ForeignKey('Order', on_delete=models.CASCADE, unique=True)\n"
+                "    email = models.EmailField(blank=False, null=False)\n",
         }
         for path, contents in sources.items():
             p = self.root / path
@@ -359,6 +364,42 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
                         if x["file"] == AUDIT.SOURCE_PATHS[4])
         self.assertEqual(delivery["invoice_contracts"], {})
         self.assertFalse(report["safe_to_deploy"])
+
+    def test_static_guest_delivery_model_declared_email_constraint_is_reported(self):
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["guest_delivery_model_source"]["status"],
+                         "CLASS_DECLARATION_FOUND")
+        code, printed = self._remote_gate_result(report)
+        self.assertNotEqual(code, 0)
+        result = json.loads(next(line.split("=", 1)[1] for line in printed.splitlines()
+                                 if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        email = result["guest_delivery_model"]["fields"]["email"]
+        self.assertEqual(email["type"], "EmailField")
+        self.assertEqual(email["explicit_flags"]["blank"], False)
+        self.assertEqual(email["explicit_flags"]["null"], False)
+        self.assertFalse(result["guest_delivery_model"]["database_schema_verified"])
+
+    def test_static_model_default_value_remains_private(self):
+        p = self.root / AUDIT.MODEL_SOURCE
+        p.write_text(
+            "from django.db import models\n"
+            "class GuestTrxDelivery(models.Model):\n"
+            "    email = models.EmailField(default='PRIVATE_DO_NOT_ECHO')\n"
+            "    order = models.ForeignKey('Order', on_delete=models.CASCADE)\n"
+        )
+        _, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        self.assertNotIn("PRIVATE_DO_NOT_ECHO", printed)
+        evidence = json.loads(next(line.split("=", 1)[1] for line in printed.splitlines()
+                                   if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        self.assertTrue(evidence["guest_delivery_model"]["fields"]["email"]
+                        ["default_declared"])
+
+    def test_model_reexport_is_unknown_not_model_class_proof(self):
+        p = self.root / AUDIT.MODEL_SOURCE
+        p.write_text("from .delivery_models import GuestTrxDelivery\n")
+        evidence = AUDIT.inspect(self.root)["guest_delivery_model_source"]
+        self.assertEqual(evidence["status"], "CLASS_NOT_DEFINED_HERE")
+        self.assertEqual(evidence["reexport_origins"][0]["module"], "delivery_models")
 
     def test_live_delivery_recorder_email_requirement_blocks_source_gate(self):
         (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
