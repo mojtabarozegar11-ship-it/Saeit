@@ -22,6 +22,11 @@ def reconcile(data):
         ids = [r["id"] for r in records]
         if any(not isinstance(i, str) or not i.strip() for i in ids) or len(set(ids)) != len(ids):
             raise ValueError("duplicate or missing ids")
+    # Validate every order, including unpaid orders, before calculating any totals.
+    for order in orders:
+        if "amount" not in order:
+            raise ValueError("order amount missing")
+        amount(order["amount"])
     by_order = {r["id"]: r for r in orders}
     by_settlement = {r["id"]: r for r in settlements}
     paid = {}
