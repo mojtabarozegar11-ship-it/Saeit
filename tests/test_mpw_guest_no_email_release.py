@@ -320,6 +320,90 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 report = release.audit_invoice_email_dependencies()
                 self.assertTrue(report["invoice_handler_found"])
 
+    def test_module_dict_email_field_used_by_invoice_handler_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "INVOICE_FIELDS = {'buyer': 'customer_email'}\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(INVOICE_FIELDS['buyer'])\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_module_dict_composed_email_field_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "INVOICE_FIELDS = {'buyer': 'customer_' + 'email'}\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(INVOICE_FIELDS['buyer'])\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_module_tuple_email_field_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "FIELDS = ('order_reference', 'invoice_email')\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(FIELDS[1])\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_annotated_module_mapping_email_field_is_blocked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "FIELDS: dict = {'buyer': 'email'}\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(FIELDS['buyer'])\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "INVOICE_EMAIL_DEPENDENCY"):
+                    release.audit_invoice_email_dependencies()
+
+    def test_unreachable_module_email_mapping_is_not_an_invoice_dependency(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "LEGACY_EMAIL_FIELDS = {'old': 'customer_email'}\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get('order_reference')\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertTrue(report["invoice_handler_found"])
+
+    def test_non_email_module_mapping_remains_allowed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self._live_invoice_fixture(
+                root,
+                "INVOICE_FIELDS = {'buyer': 'order_reference'}\n"
+                "def _start_order(request, product_id):\n"
+                "    return request.POST.get(INVOICE_FIELDS['buyer'])\n",
+                "def record_invoice(order):\n    return order\n",
+            )
+            with patch.object(release, "APP", root):
+                report = release.audit_invoice_email_dependencies()
+            self.assertTrue(report["invoice_handler_found"])
+
     def test_unreachable_legacy_email_helper_does_not_block_checkout(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

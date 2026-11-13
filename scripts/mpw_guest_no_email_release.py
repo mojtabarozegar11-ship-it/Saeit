@@ -174,6 +174,23 @@ def audit_invoice_email_dependencies() -> dict:
                 functions.setdefault(stmt.name, []).append(stmt)
             elif isinstance(stmt, (ast.Assign, ast.AnnAssign)):
                 value = folded_string(stmt.value) if stmt.value is not None else None
+                if stmt.value is None:
+                    continue
+                # A module-level dictionary/tuple/list may hide the required
+                # email field from the existing direct-string alias check:
+                #     INVOICE_FIELDS = {"buyer": "customer_email"}
+                #     request.POST.get(INVOICE_FIELDS["buyer"])
+                # It is safe to mark the entire *referenced* container as
+                # email-dependent; do not execute arbitrary source expressions.
+                if value is None:
+                    parts = [
+                        folded_string(child)
+                        for child in ast.walk(stmt.value)
+                        if isinstance(child, (ast.Constant, ast.BinOp, ast.JoinedStr))
+                    ]
+                    if any(part is not None and "email" in part.lower()
+                           for part in parts):
+                        value = "email-container"
                 if value is not None:
                     targets = stmt.targets if isinstance(stmt, ast.Assign) else (stmt.target,)
                     for symbol in targets:
