@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
+from html import unescape
 from pathlib import Path
 
 
@@ -372,7 +373,13 @@ def verify_email_free_invoice_sources(app: Path) -> None:
     template = app / "mpw_commerce/templates/mpw_commerce/product_checkout.html"
     if template.is_symlink() or not template.is_file() or not 100 < template.stat().st_size <= 250_000:
         raise RuntimeError("STAGING_INVOICE_TEMPLATE_UNAVAILABLE")
-    markup = template.read_bytes().lower()
+    # Decode HTML character references before checking field names and types:
+    # name="e&#109;ail" and type="em&#97;il" are browser-equivalent to email.
+    # Reject undecodable templates rather than silently accepting a bypass.
+    try:
+        markup = unescape(template.read_text("utf-8")).casefold().encode("utf-8")
+    except (UnicodeError, OSError) as exc:
+        raise RuntimeError("STAGING_INVOICE_TEMPLATE_UNREADABLE") from exc
     # Attribute values may use single quotes, double quotes or no quotes.
     # The previous double-quote-only scan silently accepted email fields in
     # valid Django templates, permitting an email-dependent cutover.
