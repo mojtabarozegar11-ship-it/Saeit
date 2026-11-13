@@ -228,6 +228,9 @@ def test_private_php_registry_inventory_is_immutable_and_redacted(tmp_path):
     assert report["records"] == 4
     assert report["known_roles_found"] == 3
     assert report["enabled_count"] == 3
+    # Unknown enabled identities must not inflate the known-role count.
+    assert report["known_enabled_count"] == 2
+    assert report["unknown_enabled_count"] == 1
     assert report["unknown_code_records"] == 1
     assert report["run_status_counts"] == {"ok": 1}
     assert report["recent_worker_output_status_counts"] == {"review": 1}
