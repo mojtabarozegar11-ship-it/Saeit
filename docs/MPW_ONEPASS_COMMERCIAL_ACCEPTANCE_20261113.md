@@ -111,17 +111,24 @@ not present in main GitHub and must be audited and surgically changed
 only after its actual cPanel owner, content hash, and complete route
 dependencies are confirmed. No fake checkout template may be shipped.
 
-### Explicit conflict with draft #2213
+### Source integration of guarded cutover candidate #2213
 
-Dynamic storefront draft #2213 enforces **email ownership and recovery**
-with \`verify_guest_email_ownership_source\` and
-\`verify_guest_recovery_checkout_source\`. These checks conflict
-with the newer **no customer email** policy now selected in the
-guest candidate. **Do not cherry-pick #2213's installer as-is**;
-its email and schema gates must be reworked and tested for the new
-session-only purchase model. In the meantime, the static fallback
-is a real public release blocker; removing it before safe no-email
-entitlement/delivery checks would be premature.
+The same Draft PR #2263 now includes the guarded dynamic-store cutover
+script and its 45 isolated tests. Its invoked staging preflight checks
+the **email-free** guest source and associated invoice dependencies;
+unused definitions inherited from the earlier email-ownership proposal
+are not part of the invoked preflight path.
+
+Source integration does not activate /store/, change cPanel, or establish
+a completed payment. The public static fallback must remain until the
+effective cPanel template, permissions, guest invoice/entitlement flow,
+CSP, and rollback are independently verified. Do not execute a legacy
+email-recovery cutover by itself.
+
+Latest reviewed source commit 72ac96edf0620747527d0e985768e5f02ba26219:
+224/224 isolated unit tests passed; CI and Django CI passed. The public
+GET-only release gate continues to identify the static storefront,
+six email-collecting forms and strict CSP mismatch.
 
 **This entire PR remains Draft / not merged / not deployed.** Commercial
 sales, finality and authenticated download remain unverified. No
