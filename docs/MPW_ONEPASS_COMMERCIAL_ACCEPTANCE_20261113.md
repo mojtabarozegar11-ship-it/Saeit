@@ -346,3 +346,63 @@ effective Passenger root, Django template origin and exact source
 fingerprints via the already authorized self-hosted route before
 considering separate deployment approval. No paid or mutating
 operation occurred.
+
+## Cycle 11 — Restore privacy-safe commercial evidence collection via proven factory runner
+
+**Root cause confirmed:** Last scheduled [MojPlayWin visitor and support inbox read-only audit,
+run 43477203438](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43477203438)
+failed at its cloud GitHub runner SSH relay setup *before* any financial
+or checkout evidence was collected. There is no defensible conclusion of
+zero revenue, a completed payment or a working download from that run.
+Separately, the existing self-hosted factory-to-cPanel SSH verification and
+Passenger inventory succeeded in
+[runs 43157969516](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43157969516)
+and [43162619527](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43162619527).
+
+**Existing workflow repaired in Draft PR #2263:**
+`.github/workflows/mpw-sales-intake-readonly-20261024.yml` now runs
+its pre-existing hourly sales audit on `[self-hosted, factory-vps]`
+and SSHes directly to `zohal.pws-dns.net:1396` as `zomorod2`.
+The previously approved ED25519 fingerprint, strict host verification,
+noninteractive authentication, no agent forwarding, bounded SSH timeouts,
+private temporary credentials and unconditional cleanup are all maintained.
+The unnecessary cloud-to-VPS proxy and VPS SSH private key were removed
+from this path. Seven remote Python invocations are now `-B` to suppress
+bytecode-file side effects. Its live sales, paid-proof, heartbeat and
+access diagnostics remain pre-existing read-only operations.
+
+**Validation without PR merge:** PR #2263 currently reports
+`mergeable_state=dirty`. GitHub does not reliably execute
+`pull_request` workflows for a conflicted merge ref. Therefore the
+existing `.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml`
+was given a strictly scoped **Draft-branch-only `push` trigger for its
+isolated safety-contract job**. It does not run the public buyer journey
+or access cPanel when triggered this way. In
+[run 43479642220](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43479642220),
+**284/284 isolated unit tests passed**, including nine new checks for
+the self-hosted sales audit, and both standalone guest identity/route
+checks passed. The branch's historic broad CI and Django CI succeeded
+on the prior reviewed commit; they are **not** new broad CI results for
+this Draft head.
+
+**Merge conflict footprint identified, not silently resolved:**
+GitHub reports the PR is 86+ commits ahead of its merge base and behind
+one new main commit (Zomorod 10-card carousel). Exactly three PR-touched
+paths overlap that new main commit:
+`deploy/cpanel_direct_command.sh`,
+`scripts/test_zomorod_onepass_20261113.py`, and
+`scripts/test_zomorod_vision_ux_20261113.py`.
+The main commit also includes new Zomorod assets and functions that must
+not be overwritten. Resolve these conflicts while preserving both main
+carousel code and the new MojPlayWin guarded audit, with separate
+owner approval before any merge of the PR into main. No force-push or
+merge was attempted.
+
+**Commercial status remains NO-GO:** No actual production
+cutover, payment POST, customer invoice, TRX settlement, entitled
+download, email or fee occurred in this cycle. The public store
+is still static, six checkout pages request email and their explicit
+target `script-src` policy is not verified. Actual received sales
+remain **UNKNOWN** until an authorized read-only production audit
+successfully returns defensible independent payment and fulfillment
+evidence. A green unit test is not commercial proof.
