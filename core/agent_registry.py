@@ -21,7 +21,7 @@ class AgentRegistry:
 
     def resolve(self, action):
         normalized = self._normalize(action)
-        if not normalized:
+        if not normalized or not self._cyber_action_allowed(normalized):
             return None
         # Dispatch only on a capability that the execution gate will accept.
         # Matching an arbitrary token can select an agent that cannot run the
@@ -47,7 +47,7 @@ class AgentRegistry:
 
     def capability_for(self, agent, action):
         normalized = self._normalize(action)
-        if not agent or not normalized:
+        if not agent or not normalized or not self._cyber_action_allowed(normalized):
             return None
         if normalized in CANONICAL_CYBER_ACTIONS and agent.code != CANONICAL_CYBER_AGENT:
             return None
@@ -63,6 +63,14 @@ class AgentRegistry:
         capability_risk = normalize_risk(capability.risk_level or "low")
         requested = normalize_risk(requested_risk)
         return capability_risk if RISK_ORDER[capability_risk] >= RISK_ORDER[requested] else requested
+
+    @staticmethod
+    def _cyber_action_allowed(normalized):
+        # The cyber namespace is reserved for one bot and a strict allowlist.
+        # Never allow the legacy "core_" alias to bypass the canonical owner.
+        if normalized.startswith("core_cyber_"):
+            return False
+        return not normalized.startswith("cyber_") or normalized in CANONICAL_CYBER_ACTIONS
 
     @staticmethod
     def _normalize(action):
