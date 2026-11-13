@@ -162,6 +162,23 @@ def module_report(relative: str, raw: bytes) -> dict:
         if has_email_reference(fn, constants):
             email_functions.append(name)
         for part in ast.walk(fn):
+            # Live handlers may import the invoice recorder inside the
+            # handler rather than at module scope. Merely seeing the call
+            # name without its local import must never certify the recorder.
+            if isinstance(part, ast.ImportFrom):
+                for alias in part.names:
+                    if alias.name == "record_invoice":
+                        origin = part.module or ""
+                        if part.level == 0 and origin:
+                            external_calls.append({
+                                "caller": name,
+                                "import": origin + ".record_invoice"
+                            })
+                        else:
+                            external_calls.append({
+                                "caller": name,
+                                "import": "relative.record_invoice"
+                            })
             if not isinstance(part, ast.Call):
                 continue
             if isinstance(part.func, ast.Name):

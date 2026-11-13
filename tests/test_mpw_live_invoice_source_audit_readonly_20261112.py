@@ -268,6 +268,28 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertIn("services.invoice_ledger.record_invoice",
                       web_entry["invoice_imports"])
 
+    def test_handler_local_invoice_recorder_import_is_reported(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text(
+            "def _start_order(request):\n"
+            "    from services.mpw_invoice_ledger import record_invoice as persist\n"
+            "    return persist(request)\n"
+        )
+        (self.root / AUDIT.SOURCE_PATHS[2]).write_text(
+            "def _eligible(product):\n    return True\n"
+        )
+        report = AUDIT.inspect(self.root)
+        self.assertEqual(report["status"], "INVOICE_RECORDER_EXTERNAL_UNVERIFIED")
+        code, printed = self._remote_gate_result(report)
+        self.assertEqual(code, 21)
+        info = json.loads(next(line.split("=", 1)[1]
+                               for line in printed.splitlines()
+                               if line.startswith("MPW_SOURCE_EVIDENCE=")))
+        web_info = next(x for x in info["modules"]
+                        if x["file"] == AUDIT.SOURCE_PATHS[0])
+        self.assertIn("services.mpw_invoice_ledger.record_invoice",
+                      web_info["invoice_imports"])
+
     def test_distinct_module_invoice_recorders_are_ambiguous(self):
         web = self.root / AUDIT.SOURCE_PATHS[0]
         web.write_text("def record_invoice(order):\n    return order\n"
