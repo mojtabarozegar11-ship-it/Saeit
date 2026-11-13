@@ -57,6 +57,34 @@ def _completed_fingerprint(action, raw_output, execution_id, attempt_count):
     ).encode("utf-8")).hexdigest()
 
 
+def _verified_task_action(action, raw_output, execution_id, attempt_count):
+    """Credit only a complete internally evidenced execution, not a bare flag.
+
+    The task runtime requires an action description and concrete evidence for
+    economic/master actions. This read-only auditor also checks execution
+    identity and positive attempt count before reporting verified progress.
+    These internal checks are not independent revenue/settlement attestation.
+    """
+    try:
+        output = json.loads(raw_output) if isinstance(raw_output, str) else raw_output
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(output, dict) or output.get("verified_effect") is not True:
+        return False
+    evidence = output.get("evidence")
+    if (
+        not isinstance(action, str) or not action.strip()
+        or not isinstance(execution_id, str) or not execution_id.strip()
+        or type(attempt_count) is not int or attempt_count <= 0
+        or not isinstance(output.get("action_performed"), str)
+        or not output["action_performed"].strip()
+        or not isinstance(evidence, dict)
+        or not any(str(value or "").strip() for value in evidence.values())
+    ):
+        raise RuntimeError("MASTER_EVOLUTION_INCOMPLETE_VERIFIED_EVIDENCE")
+    return True
+
+
 def _contains_symlink(path):
     return any(part.is_symlink() for part in (path, *path.parents))
 
@@ -199,8 +227,8 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
             batch = prior_pending[offset:offset + 128]
             placeholders = ",".join("?" for _ in batch)
             prior_pending_rows.extend(db.execute(
-                "SELECT id,status,action_type,output_data FROM core_agenttask "
-                "WHERE agent_id=? AND id IN (" + placeholders + ")",
+                "SELECT id,status,action_type,output_data,execution_id,attempt_count "
+                "FROM core_agenttask WHERE agent_id=? AND id IN (" + placeholders + ")",
                 (row[0], *batch)
             ).fetchall())
         if len(prior_pending_rows) != len(prior_pending or []):
@@ -285,26 +313,18 @@ def evaluate(db_path: Path, state_path: Path, *, check_only=False):
     for task_id, action, raw, execution_id, attempt_count in rows:
         if task_id <= previous_cursor:
             continue
-        try:
-            evidence = json.loads(raw) if isinstance(raw, str) else raw
-        except (TypeError, ValueError):
-            continue
-        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
-            recent_new.append(str(action))
+        if _verified_task_action(action, raw, execution_id, attempt_count):
+            recent_new.append(action)
     # A task can finish AFTER a newer-ID task. Only count those older IDs if
     # they were recorded as unfinished during the previous verified snapshot.
     late_completed = 0
     late_verified = 0
-    for task_id, status, action, raw in prior_pending_rows:
+    for task_id, status, action, raw, execution_id, attempt_count in prior_pending_rows:
         if status != "completed":
             continue
         late_completed += 1
-        try:
-            evidence = json.loads(raw) if isinstance(raw, str) else raw
-        except (TypeError, ValueError):
-            continue
-        if isinstance(evidence, dict) and evidence.get("verified_effect") is True:
-            recent_new.append(str(action))
+        if _verified_task_action(action, raw, execution_id, attempt_count):
+            recent_new.append(action)
             late_verified += 1
     diversity = len(set(recent_new))
     # Serial task depth is distinct from factory product volume. Never run
