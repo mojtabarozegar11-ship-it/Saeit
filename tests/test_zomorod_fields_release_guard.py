@@ -176,3 +176,5 @@ def test_carousel_workflow_has_no_production_job():
     assert "      - 'scripts/zomorod_fields_guard_20261113.py'" in workflow
     assert "      - 'tests/test_zomorod_fields_release_guard.py'" in workflow
     assert '  contents: read' in workflow
+    assert '  cancel-in-progress: true' in workflow
+    assert '  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}' in workflow
