@@ -249,7 +249,7 @@
 .zm-vision-v3 .auto-rotator-toggle:focus-visible{outline:3px solid #ffe29a;outline-offset:3px}
 .zm-vision-v3 .panel-head{flex-wrap:wrap}
 .zm-vision-v3 .panel-head .auto-rotator-toggle{margin-inline-start:3px}
-.zm-vision-v3 .card-strip .carousel-copy,.zm-vision-v3 .service-ribbon .carousel-copy{pointer-events:none}
+.zm-vision-v3 .card-strip .carousel-copy,.zm-vision-v3 .service-ribbon .carousel-copy{pointer-events:auto}
 .zm-vision-v3 .footer-bottom{font-size:12px;line-height:1.65}
 .zm-vision-v3 .top-nav a,.zm-vision-v3 .metric,.zm-vision-v3 .field-overlay small,
 .zm-vision-v3 .panel-head a,.zm-vision-v3 .mini-card span,
