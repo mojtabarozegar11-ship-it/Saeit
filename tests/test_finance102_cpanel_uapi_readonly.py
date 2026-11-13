@@ -45,6 +45,10 @@ class FakeOpener:
         return FakeResponse(self.data)
 
 
+def verified_identity():
+    return {"dns_exact_expected_ipv4": True, "tls_hostname_and_ca_verified": True}
+
+
 class Tests(unittest.TestCase):
     def test_get_only_readonly_api(self):
         self.assertEqual(
@@ -54,7 +58,7 @@ class Tests(unittest.TestCase):
 
     def test_direct_execute_envelope_with_warnings(self):
         opener = FakeOpener(fixture())
-        self.assertEqual(run("T" * 20, opener), {
+        self.assertEqual(run("T" * 20, opener, verified_identity), {
             "zomorodmelal.ir": True, "mojplaywin.com": True,
         })
         self.assertEqual(opener.req.get_method(), "GET")
@@ -69,7 +73,7 @@ class Tests(unittest.TestCase):
             "func": "list_applications", "result": fixture(),
         }
         self.assertTrue(all(parse_uapi_response(wrapped).values()))
-        self.assertTrue(all(run("T" * 20, FakeOpener(wrapped)).values()))
+        self.assertTrue(all(run("T" * 20, FakeOpener(wrapped), verified_identity).values()))
 
     def test_legacy_bare_result_cannot_assert_authentication(self):
         with self.assertRaises(ValueError):
@@ -111,6 +115,23 @@ class Tests(unittest.TestCase):
             classify(corrupted)
         with self.assertRaises(ValueError):
             parse_uapi_response({"error": "not authorized"})
+
+    def test_credential_never_transmitted_to_mismatched_destination(self):
+        for identity in (
+            None,
+            {},
+            {"dns_exact_expected_ipv4": False,
+             "tls_hostname_and_ca_verified": True},
+            {"dns_exact_expected_ipv4": True,
+             "tls_hostname_and_ca_verified": False},
+        ):
+            with self.subTest(identity=identity):
+                opener = FakeOpener(fixture())
+                with self.assertRaisesRegex(
+                    ValueError, "CPANEL_DESTINATION_IDENTITY_UNVERIFIED"
+                ):
+                    run("T" * 20, opener, lambda: identity)
+                self.assertIsNone(opener.req)
 
     def test_missing_application_is_not_success(self):
         result = fixture()
