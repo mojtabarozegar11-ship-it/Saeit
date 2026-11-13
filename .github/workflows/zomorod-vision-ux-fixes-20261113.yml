@@ -1,0 +1,330 @@
+name: Zomorod homepage VISION UX repair guarded deployment
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-vision-v3/index.html'
+      - 'content/zomorod-vision-v3/assets/zm-reference-v3.css'
+      - 'content/zomorod-vision-v3/assets/zm-reference-v3.js'
+      - 'scripts/zomorod_vision_ux_guarded_20261113.py'
+      - 'scripts/test_zomorod_vision_ux_20261113.py'
+      - '.github/workflows/zomorod-vision-ux-fixes-20261113.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'content/zomorod-vision-v3/index.html'
+      - 'content/zomorod-vision-v3/assets/zm-reference-v3.css'
+      - 'content/zomorod-vision-v3/assets/zm-reference-v3.js'
+      - 'scripts/zomorod_vision_ux_guarded_20261113.py'
+      - 'scripts/test_zomorod_vision_ux_20261113.py'
+      - '.github/workflows/zomorod-vision-ux-fixes-20261113.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare immutable previous version and corrected candidate
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-ux-qa"
+          mkdir -p "$d/old/assets" "$d/new/assets"
+          for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
+            git show "6ec3e6ee768ba018c6bda6a052b8bb6a56b085ca:content/zomorod-vision-v3/$rel" > "$d/old/$rel"
+            cp "content/zomorod-vision-v3/$rel" "$d/new/$rel"
+            test -s "$d/old/$rel" && test -s "$d/new/$rel"
+          done
+          echo "ZOMOROD_UX_STAGE=$d" >> "$GITHUB_ENV"
+      - name: Python security and functional source regression
+        run: |
+          set -euo pipefail
+          node --check content/zomorod-vision-v3/assets/zm-reference-v3.js
+          python3 -m py_compile scripts/zomorod_vision_ux_guarded_20261113.py
+          python3 scripts/test_zomorod_vision_ux_20261113.py "$ZOMOROD_UX_STAGE"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('content/zomorod-vision-v3/index.html').read_text()
+          assert p.count('<h1')==1
+          assert 'href="/economy/"' in p and 'href="/news/"' in p
+          assert 'aria-pressed="false"' in p and 'جستجو در بخش‌های همین صفحه' in p
+          assert 'ونکوور' not in p and 'Vancouver' not in p
+          assert 'zm-reference-v3.js?v=20261113-ux1' in p
+          print('ZOMOROD_UX_CONTENT_NAV_A11Y=PASS')
+          PY
+      - name: Build local read-only homepage visual test
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/zm-ux-preview"
+          mkdir -p "$site/assets" "$site/static/site/zomorod-v7" "$site/static/site/heroes"
+          cp "$ZOMOROD_UX_STAGE/new/index.html" "$site/index.html"
+          cp "$ZOMOROD_UX_STAGE/new/assets/"* "$site/assets/"
+          python3 - <<'PY'
+          import os,zipfile
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'zm-ux-preview'
+          with zipfile.ZipFile('content/zomorod-vision-v3/artwork.zip') as z:
+              for n in z.namelist():
+                  if n.startswith('art/') and n.endswith('.webp'):
+                      (root/'assets'/('zm-v3-'+n.split('/')[-1])).write_bytes(z.read(n))
+          assert len(list((root/'assets').glob('zm-v3-*.webp')))==17
+          (root/'static/site/zomorod-v7/company-logo.webp').write_bytes((root/'assets/zm-v3-hero.webp').read_bytes())
+          (root/'static/site/heroes/ai.webp').write_bytes((root/'assets/zm-v3-hero.webp').read_bytes())
+          PY
+      - name: Chromium search, RTL controls, mobile menu and screenshots
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          python3 -m http.server 8097 --directory "$RUNNER_TEMP/zm-ux-preview" > "$RUNNER_TEMP/zomorod-ux-local.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [360,390,768,1024,1440]){
+              const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+              const errors=[];page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('http://127.0.0.1:8097/?test='+width,{waitUntil:'load',timeout:45000});
+              const d=await page.evaluate(()=>({view:innerWidth,scroll:document.documentElement.scrollWidth,h1:document.querySelectorAll('h1').length,links:document.querySelectorAll('a[href]').length,hero:document.querySelector('.hero-photo')?.naturalWidth,labels:[...document.querySelectorAll('.side-dock a')].every(x=>!!x.getAttribute('aria-label'))}));
+              if(d.scroll>width+3||d.h1!==1||d.links<65||d.hero<250||!d.labels||errors.length)throw Error('LAYOUT_FAIL '+JSON.stringify({width,d,errors}));
+              if(width===390){
+                await page.locator('.mobile-menu-btn').click();if(!await page.locator('#mobile-nav').isVisible())throw Error('MENU_OPEN_FAILED');
+                await page.locator('.mobile-menu-btn').click();if(await page.locator('#mobile-nav').isVisible())throw Error('MENU_CLOSE_FAILED');
+                await page.locator('.search-toggle').click();
+                await page.locator('#site-search').fill('ژنتیک');
+                await page.locator('.search-form button[type=submit]').click();
+                if(!await page.locator('.search-found').count())throw Error('IN_PAGE_SEARCH_NO_HIGHLIGHT');
+                await page.locator('.search-toggle').click();
+                await page.locator('[data-lang="en"]').click();
+                if(await page.locator('[data-lang="en"]').getAttribute('aria-pressed')!=='false'||await page.locator('[data-lang="fa"]').getAttribute('aria-pressed')!=='true')throw Error('FALSE_LANGUAGE_SWITCH');
+                await page.keyboard.press('Escape'); // Screenshot should depict the normal page, not a temporary language notice.
+                const strip=page.locator('#products-strip');
+                const st=await strip.evaluate(x=>({overflow:x.scrollWidth-x.clientWidth,pos:x.scrollLeft}));
+                if(st.overflow>5){
+                  const next=page.locator('[data-strip="products-strip"][data-direction="next"]');
+                  if(await next.isDisabled())throw Error('RTL_NEXT_DISABLED');
+                  await next.click();await page.waitForTimeout(750);
+                  const moved=await strip.evaluate(x=>x.scrollLeft);
+                  if(moved>=st.pos-3)throw Error('RTL_NEXT_NO_MOTION '+JSON.stringify({st,moved}));
+                  await page.locator('[data-strip="products-strip"][data-direction="prev"]').click();
+                  await page.waitForTimeout(750);
+                  if((await strip.evaluate(x=>x.scrollLeft))<=moved+3)throw Error('RTL_PREV_NO_MOTION');
+                }
+              }
+              for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=850){await page.evaluate(y=>scrollTo(0,y),y);await page.waitForTimeout(35);}
+              await page.evaluate(()=>scrollTo(0,0));
+              await page.screenshot({path:'zomorod-ux-preview-'+width+'.png',fullPage:true,animations:'disabled'});
+              console.log('ZOMOROD_UX_PREVIEW_OK='+width);
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Preserve visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-ux-prepublish-visual-qa
+          path: ${{ runner.temp }}/zomorod-ux-preview-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  publish:
+    needs: validate
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Create private old/new package pinned to last successful release
+        run: |
+          set -euo pipefail
+          s="$RUNNER_TEMP/zomorod-ux-package"
+          mkdir -p "$s/old/assets" "$s/new/assets"
+          for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
+            git show "6ec3e6ee768ba018c6bda6a052b8bb6a56b085ca:content/zomorod-vision-v3/$rel" > "$s/old/$rel"
+            cp "content/zomorod-vision-v3/$rel" "$s/new/$rel"
+          done
+          cp scripts/zomorod_vision_ux_guarded_20261113.py "$s/guard.py"
+      - name: Establish direct authenticated and pinned cPanel route
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${HOST_KEY:-}"
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ok=0
+          for attempt in 1 2 3; do
+            if timeout 14s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/candidate" 2>/dev/null && test -s "$d/candidate"; then
+              actual="$(ssh-keygen -lf "$d/candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              test "$actual" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_FINGERPRINT_MISMATCH_STOP' >&2;exit 1; }
+              mv "$d/candidate" "$d/known";ok=1;break
+            fi
+            sleep "$attempt"
+          done
+          test "$ok" = 1 || { echo 'CPANEL_UNREACHABLE_STOP' >&2;exit 1; }
+          cat > "$d/config" <<EOF
+          Host zm-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ServerAliveInterval 8
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config" "$d/known"
+          timeout 35s ssh -T -F "$d/config" zm-cpanel 'id -un' | grep -Fxq 'zomorod2'
+          echo ZOMOROD_UX_CPANEL_PINNED=VERIFIED
+      - name: Transfer into private staging and verify exact current source hashes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          s="/home/zomorod2/.zm-ux-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" zm-cpanel "test ! -e '$s' && test ! -L '$s' && install -d -m 700 '$s'"
+          tar -C "$RUNNER_TEMP/zomorod-ux-package" -cf - . | timeout 70s ssh -T -F "$d/config" zm-cpanel "tar -C '$s' -xf -"
+          timeout 55s ssh -T -F "$d/config" zm-cpanel "python3 '$s/guard.py' check" | grep -E 'index.html|zm-reference-v3'
+      - name: Apply SHA-guarded atomic update of homepage CSS and JS only
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          s="/home/zomorod2/.zm-ux-stage-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$d/config" zm-cpanel "python3 '$s/guard.py' apply 'ux-$GITHUB_RUN_ID'"
+      - name: Verify installed hashes and public site routes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          s="/home/zomorod2/.zm-ux-stage-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" zm-cpanel "python3 '$s/guard.py' verify 'ux-$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request,urlopen
+          site='https://zomorodmelal.ir'
+          ok=False
+          for attempt in range(5):
+              with urlopen(Request(site+'/?ux-fix='+str(attempt),headers={'Cache-Control':'no-cache'}),timeout=22) as r:
+                  body=r.read(180000)
+              if b'zm-reference-v3.css?v=20261113-ux1' in body and b'zm-reference-v3.js?v=20261113-ux1' in body:
+                  ok=True;break
+              time.sleep(2)
+          assert ok,'Corrected homepage not publicly visible'
+          for path in ('/assets/zm-reference-v3.css?v=20261113-ux1','/assets/zm-reference-v3.js?v=20261113-ux1','/assets/zm-v3-hero.webp','/agriculture/','/industry/','/research/','/services/','/economy/','/news/','/knowledge/','/store/','/auctions/','/contact/'):
+              with urlopen(site+path,timeout=22) as r:
+                  assert r.status==200 and len(r.read(2048))>150,path
+              print('ZOMOROD_UX_PUBLIC_ROUTE_OK='+path)
+          print('ZOMOROD_UX_PUBLIC_VERIFY=PASS')
+          PY
+      - name: Roll back only homepage CSS JS if public verification failed
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          s="/home/zomorod2/.zm-ux-stage-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$d/config" zm-cpanel "python3 '$s/guard.py' rollback 'ux-$GITHUB_RUN_ID'"
+      - name: Remove private SSH files on runner
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zomorod-ux-ssh"
+          test -d "$d" && rm -rf -- "$d" || true
+  live-browser:
+    needs: publish
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Verify responsive homepage interactions on public URL
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const b=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [390,768,1024,1440]){
+              const p=await b.newPage({viewport:{width,height:900}}),errors=[];
+              p.on('pageerror',e=>errors.push(e.message));
+              await p.goto('https://zomorodmelal.ir/?uxlive='+width,{waitUntil:'load',timeout:45000});
+              const x=await p.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth,h1:document.querySelectorAll('h1').length,css:[...document.styleSheets].some(s=>s.href?.includes('ux1')),image:document.querySelector('.hero-photo')?.naturalWidth}));
+              if(x.scroll>width+3||x.h1!==1||!x.css||x.image<250||errors.length)throw Error('LIVE_REGRESSION '+JSON.stringify({width,x,errors}));
+              if(width===390){
+                await p.locator('.mobile-menu-btn').click();if(!await p.locator('#mobile-nav').isVisible())throw Error('LIVE_MENU');
+                await p.locator('.mobile-menu-btn').click();
+                await p.locator('.search-toggle').click();
+                await p.locator('#site-search').fill('ژنتیک');
+                await p.locator('.search-form button[type=submit]').click();
+                if(!await p.locator('.search-found').count())throw Error('LIVE_SEARCH');
+                const strip=p.locator('#products-strip');
+                const st=await strip.evaluate(el=>({m:el.scrollWidth-el.clientWidth,l:el.scrollLeft}));
+                if(st.m>5){await p.locator('[data-strip="products-strip"][data-direction="next"]').click();await p.waitForTimeout(750);if((await strip.evaluate(el=>el.scrollLeft))>=st.l-3)throw Error('LIVE_RTL');}
+              }
+              for(let y=0;y<await p.evaluate(()=>document.body.scrollHeight);y+=850){await p.evaluate(y=>scrollTo(0,y),y);await p.waitForTimeout(30);}
+              await p.evaluate(()=>scrollTo(0,0));
+              await p.screenshot({path:'zomorod-ux-live-'+width+'.png',fullPage:true,animations:'disabled'});
+              console.log('ZOMOROD_UX_LIVE_BROWSER_OK='+width);
+              await p.close();
+            }
+            await b.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Archive real public screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-ux-live-after-fix
+          path: ${{ runner.temp }}/zomorod-ux-live-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  rollback-after-browser-failure:
+    needs: [publish,live-browser]
+    if: ${{ always() && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' && needs.live-browser.result != 'success' }}
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Restore three SHA-verified originals if public browser failed
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-ux-rollback"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "${HOST_KEY:-}"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 16s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          s="/home/zomorod2/.zm-ux-stage-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -i "$d/key" -p 1396 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 zomorod2@178.239.147.125 "python3 '$s/guard.py' rollback 'ux-$GITHUB_RUN_ID'"
+          echo ZOMOROD_UX_BROWSER_ROLLBACK=COMPLETE
