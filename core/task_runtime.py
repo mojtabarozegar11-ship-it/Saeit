@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
-from .services import normalize_risk, requires_owner_approval
+from .services import normalize_action, normalize_risk, requires_owner_approval
 from .unified_bot_identity import BOT_CODE
 
 
@@ -23,7 +23,7 @@ class TaskRuntime:
 
     @transaction.atomic
     def claim(self, task_id):
-        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent", "project").get(pk=task_id)
         if task.status != "queued":
             if task.status == "failed" and task.attempt_count >= task.max_attempts:
                 raise TaskExecutionError("Task retry budget exhausted")
@@ -56,11 +56,20 @@ class TaskRuntime:
         if effective_risk != snapshot_risk:
             raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
         if requires_owner_approval(task.action_type, effective_risk):
-            approved = ApprovalRequest.objects.filter(
-                target_type="AgentTask", target_id=str(task.pk), status="approved"
-            ).exists()
-            if not approved:
-                raise TaskExecutionError("Owner approval is required before execution")
+            # A same-PK approval for another action (or another project's
+            # owner) is not an execution authorization.
+            approvals = ApprovalRequest.objects.filter(
+                target_type="AgentTask",
+                target_id=str(task.pk),
+                action_type=normalize_action(task.action_type),
+                status="approved",
+            )
+            if task.project_id:
+                approvals = approvals.filter(requested_by_id=task.project.owner_id)
+            if not approvals.exists():
+                raise TaskExecutionError(
+                    "Matching owner approval is required before execution"
+                )
 
         if task.attempt_count >= task.max_attempts:
             raise TaskExecutionError("Task retry budget exhausted")
