@@ -58,7 +58,8 @@ def candidates():
    b'assets/zm-logo-transparent-v1.webp',b'lang="fa"')):
   raise RuntimeError('Homepage feature contract incomplete')
  if source['index.html'].count(b'data-auto-strip=')!=3:raise RuntimeError('Wrong rotating row count')
- if source['index.html'].count(b'data-rotator-toggle=')!=3:raise RuntimeError('Missing motion control')
+ if source['index.html'].count(b'data-rotator-toggle=')!=4:raise RuntimeError('Missing photo carousel motion control')
+ if source['index.html'].count(b'data-field-carousel=')!=1:raise RuntimeError('Missing main fields photo carousel')
  if not all(x in source['assets/zm-reference-v3.js'] for x in (b'setInterval',b'prefers-reduced-motion',b'carousel-copy',b'paused')):
   raise RuntimeError('Real row controller absent')
  img=source['assets/zm-logo-transparent-v1.webp']
