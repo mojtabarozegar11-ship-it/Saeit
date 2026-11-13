@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/zomorod-live-10card-public-acceptance.yml'
+      - 'scripts/zomorod_existing_homepage_readonly_browser_20261113.cjs'
 permissions:
   contents: read
 jobs:
@@ -101,3 +102,29 @@ jobs:
               f.write("\nNo live writes, no templates or new pages, no form submission, no payments.\n")
           if passed!=n:raise SystemExit("CURRENT_HOMEPAGE_AUDIT_FOUND_ERRORS")
           PY
+  existing-homepage-browser-readonly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare temporary Chromium runtime (audit only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Inspect live current homepage interactions without submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/zomorod_existing_homepage_readonly_browser_20261113.cjs
+      - name: Save audit screenshots and outcome only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-current-home-browser-readonly
+          path: ${{ runner.temp }}/zm-existing-homepage-browser-evidence/
+          retention-days: 7
+          if-no-files-found: ignore
