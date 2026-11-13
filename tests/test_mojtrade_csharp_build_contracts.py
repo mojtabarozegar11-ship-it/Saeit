@@ -105,3 +105,35 @@ def test_demo_restart_does_not_reset_daily_risk_or_loss_streak():
     assert "_dayStartEquity = Account.Equity;" not in source
     assert "_consecutiveLosses = 0;" not in source
     assert "Account.IsLive || !EnableDemoTrading || _orderReconciliationHold" in source
+
+
+
+def test_demo_portfolio_gate_includes_all_account_positions_and_margin():
+    """Reject new risk when unrelated positions exhaust the account budget."""
+    source = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+    assert 'Aggregate Stop Risk %", DefaultValue = 1.0, MinValue = 0.25, MaxValue = 1.0' in source
+    assert "Positions.Count >= MaxPositions" in source
+    assert "foreach (var current in Positions)" in source
+    assert "current.Symbol" in source
+    assert "current.StopLoss.HasValue || !current.TakeProfit.HasValue" in source
+    assert "current.TradeType == TradeType.Buy" in source
+    assert "current.VolumeInUnits" in source
+    assert "instrument.AmountRisked(" in source
+    assert "Symbol.AmountRisked(volume, stopPips)" in source
+    assert "Symbol.GetEstimatedMargin(side, volume)" in source
+    assert "Account.FreeMargin" in source
+    assert "portfolioRisk > budget" in source
+    assert "portfolioRisk += existingRisk;" in source
+
+
+def test_portfolio_risk_checks_precede_any_demo_execution_attempt():
+    source = (ROOT / "trading/MojTradeOmegaXDemoBot.cs").read_text(encoding="utf-8")
+    start = source.index("private void SubmitDemoOrder(")
+    end = source.index("private bool PortfolioRiskAllows(", start)
+    order = source[start:end]
+    assert "if (Account.IsLive" in order
+    assert "Positions.Count >= MaxPositions" in order
+    assert "if (!PortfolioRiskAllows(tradeType, volume, stopPips))" in order
+    assert order.index("PortfolioRiskAllows(tradeType, volume, stopPips)") < order.index("ExecuteMarketOrder(")
+    assert "Enable Demo Trading\", DefaultValue = false" in source
+    assert "AccessRights = AccessRights.None" in source
