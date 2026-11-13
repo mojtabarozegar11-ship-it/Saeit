@@ -1110,7 +1110,10 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             }
             final = url + "?redirected=1" if redirect else url
             return FakeResponse(final, body, headers)
-        with patch("urllib.request.urlopen", side_effect=fake_open):
+        import types
+        fake_opener = types.SimpleNamespace(open=fake_open)
+        with patch.object(release.NoFollowCheckoutRedirect, "build_opener",
+                          return_value=fake_opener):
             try:
                 result = release.audit_live_public_checkout_forms()
                 error = None
@@ -1143,6 +1146,28 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         _, evidence, error = self._anonymous_six_route_audit(bad_mime=True)
         self.assertIsNone(evidence)
         self.assertIn("LIVE_CHECKOUT_WRONG_CONTENT_TYPE:72", error)
+
+    def test_opener_redirect_handler_cannot_follow_target(self):
+        opener = release.NoFollowCheckoutRedirect.build_opener()
+        handlers = [h for h in opener.handlers if
+                    h.__class__.__name__ == "RejectRedirect"]
+        self.assertEqual(len(handlers), 1)
+        req = __import__("urllib.request", fromlist=["Request"]).Request(
+            "https://mojplaywin.com/store/product/72/checkout/")
+        result = handlers[0].redirect_request(
+            req, None, 302, "redirect", {},
+            "https://evil.example/collect")
+        self.assertIsNone(result)
+
+    def test_http_redirect_response_cannot_obscure_release_gate(self):
+        from urllib.error import HTTPError
+        import types
+        def reject(request, timeout):
+            raise HTTPError(request.full_url, 302, "redirect", {}, None)
+        with patch.object(release.NoFollowCheckoutRedirect, "build_opener",
+                          return_value=types.SimpleNamespace(open=reject)):
+            with self.assertRaisesRegex(RuntimeError, "LIVE_CHECKOUT_REDIRECT_OR_HTTP:72"):
+                release.audit_live_public_checkout_forms()
 
     def test_six_route_public_probe_rejects_redirects(self):
         _, evidence, error = self._anonymous_six_route_audit(redirect=True)
