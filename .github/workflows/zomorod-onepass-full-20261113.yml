@@ -40,6 +40,34 @@ jobs:
           cp content/zomorod-vision-v3/ar/index.html "$stage/new/assets/zm-ar-v1.html"
           cp scripts/zomorod_onepass_guarded_20261113.py "$stage/guard.py"
           echo "ZOMOROD_STAGE=$stage" >> "$GITHUB_ENV"
+      - name: Verify immutable 15-file deployment candidate without cPanel writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/zm-fields-15-candidate"
+          mkdir -p "$stage/old/assets" "$stage/new/assets"
+          for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
+            git show "1a9e83144d1d30228ee62bf793e0e13f23894eb1:content/zomorod-vision-v3/$rel" > "$stage/old/$rel"
+            cp "content/zomorod-vision-v3/$rel" "$stage/new/$rel"
+          done
+          for slug in innovation laboratory greenhouse livestock smart-tools games-simulation; do
+            mkdir -p "$stage/new/fields/$slug"
+            cp "content/zomorod-vision-v3/fields/$slug/index.html" "$stage/new/fields/$slug/index.html"
+            cp "content/zomorod-vision-v3/assets/zm-field-$slug.svg" "$stage/new/assets/zm-field-$slug.svg"
+          done
+          python3 -m py_compile scripts/zomorod_fields_guard_20261113.py
+          python3 - <<'PY'
+          import importlib.util,os,pathlib
+          source=pathlib.Path('scripts/zomorod_fields_guard_20261113.py').resolve()
+          spec=importlib.util.spec_from_file_location('zm_fields_guard',source)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          stage=pathlib.Path(os.environ['RUNNER_TEMP'])/'zm-fields-15-candidate'
+          old,new=module.candidates(stage)
+          assert len(old)==3 and len(new)==15
+          assert all(module.git_blob(new[name])==module.NEW_BLOBS[name] for name in new)
+          print('ZM_FIELDS_FIFTEEN_SOURCE_HASHED=YES; REPLACE=3; CREATE=12; NO_REMOTE_WRITE=YES')
+          PY
       - name: Verify code syntax, release rollback and full feature contract
         shell: bash
         run: |
