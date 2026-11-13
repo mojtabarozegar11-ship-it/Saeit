@@ -63,11 +63,18 @@ def _parse_snapshot(row, now):
     if report.get("canonical_agent") != "economic-master-agent":
         raise ForwardEvidenceError("MODEL_AGENT_MISMATCH")
     controls = report.get("controls")
-    if not isinstance(controls, dict) or any(controls.get(k) is not v for k, v in {
+    expected = {
         "research_only": True, "orders": 0, "execution": "disabled",
         "publication_enabled": False, "delivery_enabled": False,
         "financial_actions_enabled": False,
-    }.items()):
+    }
+    # JSON deserialization constructs new string objects: identity comparison
+    # ("is") is wrong for values such as "disabled". Require exact type
+    # AND equality so False cannot masquerade as integer zero.
+    if not isinstance(controls, dict) or any(
+            type(controls.get(key)) is not type(value)
+            or controls[key] != value
+            for key, value in expected.items()):
         raise ForwardEvidenceError("MODEL_EXECUTION_BOUNDARY_INVALID")
     sha = report.get("source_sha256")
     if not isinstance(sha, str) or not HASH.fullmatch(sha):

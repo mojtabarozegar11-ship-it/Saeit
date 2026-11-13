@@ -1,5 +1,6 @@
 """Deterministic, non-financial forward-research model regression suite."""
 import copy
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -143,6 +144,25 @@ class ForwardMetricsTests(unittest.TestCase):
         item = snapshot()
         item["review"]["observations"][0]["data_source"] = "binance-public-klines"
         with self.assertRaisesRegex(ForwardEvidenceError, "MODEL_USD_PROVIDER_INVALID"):
+            assess_reviewed_history([item], NOW)
+
+    def test_json_roundtrip_production_values_pass_strict_boundary(self):
+        first = json.loads(json.dumps(snapshot()))
+        second = json.loads(json.dumps(snapshot(
+            START + timedelta(hours=1), btc_close=104,
+            stance="neutral", sha_number=2,
+        )))
+        outcome = assess_reviewed_history([first, second], NOW)
+        self.assertEqual(outcome["eligible_hypothetical_one_hour_pairs"], 1)
+        self.assertEqual(outcome["recent_reference_samples"][0][
+            "modeled_net_return_pct"], "3.7000")
+
+    def test_numeric_zero_is_not_equivalent_to_false(self):
+        item = json.loads(json.dumps(snapshot()))
+        item["review"]["controls"]["orders"] = False
+        with self.assertRaisesRegex(
+            ForwardEvidenceError, "MODEL_EXECUTION_BOUNDARY_INVALID"
+        ):
             assess_reviewed_history([item], NOW)
 
     def test_reject_wrong_agent_or_financial_execution_flags(self):
