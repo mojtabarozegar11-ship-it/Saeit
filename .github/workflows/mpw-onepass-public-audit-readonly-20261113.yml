@@ -11,6 +11,7 @@ on:
       - 'services/mpw_trx_guest_commerce.py'
       - 'scripts/mpw_guest_no_email_release.py'
       - 'scripts/test_mpw_guest_route_patching.py'
+      - 'scripts/test_mpw_guest_first_order_identity.py'
       - 'tests/test_mpw_guest_no_email_release.py'
       - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
   workflow_dispatch:
