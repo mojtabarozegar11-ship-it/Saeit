@@ -13,6 +13,7 @@ on:
       - 'scripts/test_mpw_guest_route_patching.py'
       - 'scripts/test_mpw_guest_first_order_identity.py'
       - 'tests/test_mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_guest_telemetry_isolation_20261108.py'
       - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
   workflow_dispatch:
 
@@ -44,6 +45,7 @@ jobs:
           python3 scripts/test_mpw_guest_route_patching.py
           python3 scripts/test_mpw_guest_first_order_identity.py
           python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
   public-pr-readonly-observation:
     # Public HTTPS GET only, no credentials, only an internal reviewed PR.
     needs: isolated-safety-contract
@@ -80,6 +82,7 @@ jobs:
           python3 scripts/test_mpw_guest_route_patching.py
           python3 scripts/test_mpw_guest_first_order_identity.py
           python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
       - name: Bounded public HTML observations; never POST or create invoice
         shell: bash
         run: |
