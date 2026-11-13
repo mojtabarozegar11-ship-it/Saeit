@@ -104,21 +104,25 @@ namespace MojTrade.OmegaX
             var openRisk = 0.0;
             foreach (var position in Positions)
             {
-                Require(position.StopLoss.HasValue &&
-                        position.TakeProfit.HasValue &&
-                        Valid(position.EntryPrice) && position.EntryPrice > 0 &&
-                        Valid(position.StopLoss.Value) &&
+                var stop = position.StopLoss;
+                var instrument = position.Symbol;
+                if (!stop.HasValue || !position.TakeProfit.HasValue ||
+                    instrument == null)
+                    throw new InvalidOperationException(
+                        "unprotected_or_invalid_position");
+                Require(Valid(position.EntryPrice) && position.EntryPrice > 0 &&
+                        Valid(stop.Value) &&
                         Valid(position.VolumeInUnits) && position.VolumeInUnits > 0 &&
-                        position.Symbol != null && Valid(position.Symbol.PipSize) &&
-                        position.Symbol.PipSize > 0, "unprotected_or_invalid_position");
+                        Valid(instrument.PipSize) && instrument.PipSize > 0,
+                    "unprotected_or_invalid_position");
                 var riskDistance = position.TradeType == TradeType.Buy
-                    ? position.EntryPrice - position.StopLoss.Value
-                    : position.StopLoss.Value - position.EntryPrice;
+                    ? position.EntryPrice - stop.Value
+                    : stop.Value - position.EntryPrice;
                 Require(Valid(riskDistance), "stop_risk_invalid");
                 if (riskDistance > 0)
                 {
-                    var risk = position.Symbol.AmountRisked(
-                        position.VolumeInUnits, riskDistance / position.Symbol.PipSize);
+                    var risk = instrument.AmountRisked(
+                        position.VolumeInUnits, riskDistance / instrument.PipSize);
                     Require(Valid(risk) && risk >= 0, "stop_risk_unavailable");
                     openRisk += risk;
                 }
@@ -127,8 +131,9 @@ namespace MojTrade.OmegaX
                 "portfolio_risk_invalid");
 
             var bars = MarketData.GetBars(TimeFrame.Hour, SymbolName);
-            Require(bars != null && bars.Count >= BarCount,
-                "insufficient_loaded_h1_bars");
+            if (bars == null)
+                throw new InvalidOperationException("h1_bars_unavailable");
+            Require(bars.Count >= BarCount, "insufficient_loaded_h1_bars");
             var last = bars.Count - 1;
             // Current unfinished H1 candle may be included in GetBars.
             if (bars.OpenTimes[last].AddHours(1) > now)
