@@ -17,7 +17,7 @@ body.zm-unified-v7>header:not(.zm-v7-header),body.zm-unified-v7>footer:not(.zm-v
 .zm-v7-chain a span{display:grid;place-items:center;width:22px;height:22px;border:1px solid #e7cd86;border-radius:50%;font-size:15px;color:#f8e4b4}
 .zm-v7-skip{position:absolute!important;inset-inline-start:14px;top:-100px;z-index:1000;background:#f7e7ad;color:#192c18!important;padding:8px;border-radius:8px}.zm-v7-skip:focus{top:10px}
 body.zm-unified-v7 :is(main,.wrap,.zm-container,.frame,.section){max-width:100%}
-body.zm-unified-v7 main{min-width:0;position:relative;isolation:isolate;}
+body.zm-unified-v7 main{min-width:0;position:relative;isolation:isolate;background:var(--zm7-bg)!important;}
 body.zm-unified-v7 :is(.zm-hero,.zm-narrative,.zm-next,.hero,.section,.frame){background:var(--zm7-bg)!important;background-image:none!important;color:var(--zm7-text)!important}
 body.zm-unified-v7 :is(.zm-card,.zm-article,.card,.note,.zm-history-card,.tile,.feature-card){background:#28472d!important;background-image:none!important;border:1px solid #9f884b!important;color:var(--zm7-text)!important;border-radius:18px!important;box-shadow:0 6px 18px #10241666!important}
 body.zm-unified-v7 :is(h1,h2,h3,h4){color:#f0d58b!important;text-shadow:none!important}
