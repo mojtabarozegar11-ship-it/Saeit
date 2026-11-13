@@ -13,7 +13,8 @@ def checkout(sku, extra=""):
     return (
         "<html><title>MojPlayWin</title><body><main>"
         f'<form method="post" action="/commerce/trx-easy/start/{sku}/">'
-        '<input type="hidden" name="csrfmiddlewaretoken" value="nonempty"/>'
+        '<input type="hidden" name="csrfmiddlewaretoken" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"/>'
+        '<button type="submit">Create TRX invoice</button>'
         + extra + "</form></main></body></html>"
     )
 
@@ -36,7 +37,7 @@ class AuditTests(unittest.TestCase):
             "checkout_post_action_unverified")
 
     def test_missing_csrf_fails(self):
-        html = checkout(879).replace('value="nonempty"', 'value=""')
+        html = checkout(879).replace('value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"', 'value=""')
         self.assertEqual(
             MOD.classify_html("checkout", 879, html),
             "checkout_csrf_unverified")
@@ -61,13 +62,13 @@ class AuditTests(unittest.TestCase):
             "checkout_post_action_unverified")
 
     def test_csrf_outside_form_does_not_validate_purchase(self):
-        html = checkout(72).replace('name="csrfmiddlewaretoken" value="nonempty"', 'name="other" value="nonempty"')
+        html = checkout(72).replace('name="csrfmiddlewaretoken" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"', 'name="other" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"')
         html += '<input type="hidden" name="csrfmiddlewaretoken" value="forged">'
         self.assertEqual(MOD.classify_html("checkout", 72, html),
                          "checkout_csrf_unverified")
 
     def test_csrf_in_unrelated_form_does_not_validate_purchase(self):
-        html = checkout(72).replace('name="csrfmiddlewaretoken" value="nonempty"', 'name="other" value="nonempty"')
+        html = checkout(72).replace('name="csrfmiddlewaretoken" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"', 'name="other" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"')
         html += ('<form method="post" action="/different/">'
                  '<input name="csrfmiddlewaretoken" value="forged"></form>')
         self.assertEqual(MOD.classify_html("checkout", 72, html),
@@ -253,6 +254,84 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(status, "checkout_csp_missing")
         self.assertEqual(forms["/store/product/72/checkout/"],
                          "no_email_checkout_get_ok_not_paid")
+
+    def test_weak_csrf_rejected(self):
+        html = checkout(72).replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "tiny")
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_non_alphanumeric_csrf_rejected(self):
+        html = checkout(72).replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "A" * 63 + "-")
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_valid_32_character_csrf_token(self):
+        html = checkout(72).replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Z" * 32)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "no_email_checkout_get_ok_not_paid")
+
+    def test_disabled_csrf_rejected(self):
+        html = checkout(72).replace('name="csrfmiddlewaretoken"',
+                                    'name="csrfmiddlewaretoken" disabled')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_duplicate_csrf_rejected(self):
+        html = checkout(72, '<input type="hidden" name="csrfmiddlewaretoken" value="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_no_submit_control_rejected(self):
+        html = checkout(72).replace('<button type="submit">Create TRX invoice</button>', "")
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_submit_control_unverified")
+
+    def test_disabled_submit_rejected(self):
+        html = checkout(72).replace('type="submit">', 'type="submit" disabled>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_submit_control_unverified")
+
+    def test_button_type_button_not_submit(self):
+        html = checkout(72).replace('type="submit">', 'type="button">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_submit_control_unverified")
+
+    def test_input_submit_accepted(self):
+        html = checkout(72).replace('<button type="submit">Create TRX invoice</button>',
+                                    '<input type="submit" value="Start order">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "no_email_checkout_get_ok_not_paid")
+
+    def test_button_default_type_submit_accepted(self):
+        html = checkout(72).replace('type="submit">', '>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "no_email_checkout_get_ok_not_paid")
+
+    def test_email_alias_id_detected(self):
+        html = checkout(72, '<input id="mpw-buy-email" name="contact">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "legacy_email_requested")
+
+    def test_email_autocomplete_detected(self):
+        html = checkout(72, '<input name="contact" autocomplete="email">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "legacy_email_requested")
+
+    def test_email_textarea_detected(self):
+        html = checkout(72, '<textarea name="buyer_email"></textarea>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "legacy_email_requested")
+
+    def test_duplicate_form_method_rejected(self):
+        html = checkout(72).replace('method="post"', 'method="post" method="get"')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_duplicate_form_action_rejected(self):
+        html = checkout(72).replace('action="/commerce/trx-easy/start/72/"',
+                                    'action="/commerce/trx-easy/start/72/" action="/evil/"')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
 
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
