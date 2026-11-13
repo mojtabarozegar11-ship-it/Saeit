@@ -148,11 +148,11 @@ def safe_processes(stdout: str) -> dict:
             "process_identity_proven": False}
 
 
-def safe_service_units(stdout: str) -> list[dict]:
+def safe_service_units(stdout: str, *, suffix: str = ".service") -> list[dict]:
     entries = []
     for line in stdout.splitlines()[:1000]:
         parts = line.split()
-        if len(parts) < 4 or not parts[0].endswith(".service"):
+        if len(parts) < 4 or not parts[0].endswith(suffix):
             continue
         flags = route_flags(parts[0])
         if flags:
@@ -318,6 +318,17 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
         "systemctl", "list-units", "--type=service",
         "--all", "--plain", "--no-legend", "--no-pager",
     ])
+    # A timer can launch an independent agent while its service is currently
+    # inactive. Inspect user and system timers separately without reading
+    # private unit contents, enabling services or running any timer.
+    user_timer_state, user_timers_raw = call_readonly([
+        "systemctl", "--user", "list-units", "--type=timer",
+        "--all", "--plain", "--no-legend", "--no-pager",
+    ])
+    system_timer_state, system_timers_raw = call_readonly([
+        "systemctl", "list-units", "--type=timer",
+        "--all", "--plain", "--no-legend", "--no-pager",
+    ])
     cron_rows = safe_cron(cron_raw) if cron_state == "observed" else []
     # The output transport and the parser both have finite caps. These are
     # redacted warning flags, not proof that no other schedulers exist.
@@ -359,12 +370,40 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "candidate_units": safe_service_units(services_raw)
             if service_state == "observed" else [],
             "service_name_indicators_only": True,
+            "enumeration_truncated": service_state == "observed" and (
+                len(services_raw.splitlines()) > 1000
+                or len(services_raw) >= OBSERVATION_OUTPUT_LIMIT
+            ),
         },
         "system_services": {
             "state": system_service_state,
             "candidate_units": safe_service_units(system_services_raw)
             if system_service_state == "observed" else [],
             "service_name_indicators_only": True,
+            "enumeration_truncated": system_service_state == "observed" and (
+                len(system_services_raw.splitlines()) > 1000
+                or len(system_services_raw) >= OBSERVATION_OUTPUT_LIMIT
+            ),
+        },
+        "user_timers": {
+            "state": user_timer_state,
+            "candidate_units": safe_service_units(user_timers_raw, suffix=".timer")
+            if user_timer_state == "observed" else [],
+            "timer_name_indicators_only": True,
+            "enumeration_truncated": user_timer_state == "observed" and (
+                len(user_timers_raw.splitlines()) > 1000
+                or len(user_timers_raw) >= OBSERVATION_OUTPUT_LIMIT
+            ),
+        },
+        "system_timers": {
+            "state": system_timer_state,
+            "candidate_units": safe_service_units(system_timers_raw, suffix=".timer")
+            if system_timer_state == "observed" else [],
+            "timer_name_indicators_only": True,
+            "enumeration_truncated": system_timer_state == "observed" and (
+                len(system_timers_raw.splitlines()) > 1000
+                or len(system_timers_raw) >= OBSERVATION_OUTPUT_LIMIT
+            ),
         },
         "installed_source_digests": safe_source_digests(root, role),
         "private_php_site_registry": (
