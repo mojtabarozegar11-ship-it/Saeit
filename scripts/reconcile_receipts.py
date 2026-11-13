@@ -53,6 +53,10 @@ def reconcile(data):
         if reference in seen_external_references:
             issues.append({"settlement":s["id"],"issue":"duplicate_external_reference"})
             continue
+        # Fail closed: do not recognize a settlement that would overpay its order.
+        if paid.get(s["order_id"], Decimal(0)) + value > amount(by_order[s["order_id"]]["amount"]):
+            issues.append({"settlement":s["id"],"issue":"settlements_exceed_order"})
+            continue
         seen_external_references.add(reference)
         eligible_settlements.add(s["id"])
         paid[s["order_id"]] = paid.get(s["order_id"], Decimal(0)) + value
