@@ -15,7 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="cTrader.Automate" Version="1.*-*" />
+    <PackageReference Include="cTrader.Automate" Version="1.0.21" />
   </ItemGroup>
 
   <ItemGroup>

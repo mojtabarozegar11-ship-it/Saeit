@@ -20,23 +20,48 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup .NET 8
+      - name: Setup .NET 6 for cTrader.Automate 1.0.21
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "6.0.x"
 
-      - name: Restore
-        working-directory: trading
-        run: dotnet restore Mojtaba.Bot.Ai.csproj
-
-      - name: Build
-        working-directory: trading
-        run: dotnet build Mojtaba.Bot.Ai.csproj --configuration Release --no-restore
-
-      - name: Verify canonical output
-        working-directory: trading
+      # cTrader.Automate can name an .algo after its source root directory.
+      # Keep a self-contained build root named for the ONE canonical bot, not
+      # the repository (Saeit) or a legacy executor (MojTradeOmegaXDemoBot).
+      # This only copies reviewed source into the ephemeral GitHub runner.
+      - name: Prepare isolated canonical build root
         shell: bash
         run: |
           set -euo pipefail
-          test -f bin/Release/net8.0/Mojtaba.Bot.Ai.algo
-          test ! -e bin/Release/net8.0/MojTradeOmegaXDemoBot.algo
+          bot_root="${RUNNER_TEMP}/Mojtaba.Bot.Ai"
+          mkdir -p "$bot_root"
+          cp trading/Mojtaba.Bot.Ai.csproj "$bot_root/Mojtaba.Bot.Ai.csproj"
+          cp trading/MojTradeOmegaXDemoBot.cs "$bot_root/MojTradeOmegaXDemoBot.cs"
+          test -s "$bot_root/Mojtaba.Bot.Ai.csproj"
+          test -s "$bot_root/MojTradeOmegaXDemoBot.cs"
+
+      - name: Restore pinned cTrader package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore "${RUNNER_TEMP}/Mojtaba.Bot.Ai/Mojtaba.Bot.Ai.csproj"
+
+      - name: Build canonical cBot package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build "${RUNNER_TEMP}/Mojtaba.Bot.Ai/Mojtaba.Bot.Ai.csproj" --configuration Release --no-restore
+
+      - name: Verify actual canonical algo artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="${RUNNER_TEMP}/Mojtaba.Bot.Ai/bin/Release/net6.0"
+          canonical="$output/Mojtaba.Bot.Ai.algo"
+          test -s "$canonical"
+          test ! -e "$output/Saeit.algo"
+          test ! -e "$output/MojTradeOmegaXDemoBot.algo"
+          mapfile -t algos < <(find "$output" -maxdepth 1 -type f -name '*.algo' -print)
+          test "${#algos[@]}" -eq 1
+          test "${algos[0]}" = "$canonical"
+          sha256sum "$canonical"
