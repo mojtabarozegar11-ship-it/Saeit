@@ -533,7 +533,11 @@
     },
     "verification_route": {
       "source_compile": "cTrader Desktop/Algo must compile and export the canonical .algo artifact",
-      "cli_prerequisites": [".NET 8", "cTrader ID/account", "credentials file"],
+      "cli_prerequisites": [
+        ".NET 8",
+        "cTrader ID/account",
+        "credentials file"
+      ],
       "metadata_check": "ctrader-cli metadata <canonical.algo>",
       "backtest_check": "ctrader-cli backtest <canonical.algo> with explicit symbol, period, dates and data mode",
       "demo_gate": "EnableDemoTrading=true only after compile, backtest and risk evidence",
@@ -577,5 +581,17 @@
       }
     ],
     "deletion_scope_rule": "No recursive deletion; only exact listed paths may be considered after every gate is true."
-  }
+  },
+  "cli_compatibility_evidence": {
+    "workflow": ".github/workflows/mojtrade-ctrader-cli-githubhosted-check.yml",
+    "run_id": 43418253931,
+    "job_id": 131861476694,
+    "runner": "GitHub-hosted ubuntu-26.04",
+    "ctrader_cli": "5.9.0.28 verified",
+    "official_source": "Spotware homebrew-tap",
+    "credentials_or_account_access": "not_used",
+    "cbot_run_backtest_deployment_orders": "not_run",
+    "factory_runner_blocker": "CPU lacks SSSE3 for Homebrew Linux x86_64"
+  },
+  "updated_from_cycle": "E-20261113-CLI-compatibility"
 }
