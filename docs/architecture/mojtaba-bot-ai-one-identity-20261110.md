@@ -107,6 +107,32 @@ They are not proof of MariaDB production concurrency, external delivery,
 broker transactions, or revenue. Production merge/deploy is separately
 gated and remains unapproved.
 
+## Expanded root / scheduler disposition coverage (review branch)
+
+The earlier read-only, two-host preview only classified **nine** source groups,
+even though the VPS/cPanel route collector could already recognize MojTrade,
+MojCoin and the separate canonical/legacy cycle coordinator entrypoints.
+Absence from the nine-group report was **not** evidence of retirement.
+
+The source ledger and read-only disposition preview now enumerate **14 logical
+source groups**. The five additions cover MojTrade observer/broker integration,
+MojCoin/game/token schedulers, master/coordinator cycle entrypoints, Android
+Termux/Automate/SMS, and independent third-party/connected-app automations.
+The first three reuse *existing* pinned host route tags. The latter two are
+explicitly marked **outside VPS/cPanel observation**, not silently counted as
+absent or disabled. The report retains six outstanding external inventory
+scopes, rejects unknown/duplicate manifest groups, and records incomplete
+coverage instead of a fictitious 100% score.
+
+These 14 groups are logical audit categories, **not 14 confirmed live bots**.
+The known Django and private PHP code roster is also not a census of all
+running services. No independent scheduler has been stopped, no real agent
+identity retired, no root code deleted, and no new live host attestation was
+produced by this source-only change. To prove cleanup, reconcile each site,
+phone, broker, game server and connector schedule against an execution receipt
+and a verified canonical successor, then perform an owner-approved cutover.
+Retain historical database identities and audit evidence.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
