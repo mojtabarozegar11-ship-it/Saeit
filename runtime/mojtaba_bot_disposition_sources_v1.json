@@ -530,6 +530,33 @@
       "verification": "static_source_checks_passed",
       "runtime_verification": "not_available",
       "old_source_retention": "retained_until_backup_and_verified_replacement"
-    }
+    },
+    "deletion_candidates": [
+      {
+        "path": "trading/MojTradeDemoBot.cs",
+        "role": "legacy_quantumscalp_execution_root",
+        "delete_when": [
+          "canonical_core_compile_verified",
+          "canonical_core_backtest_verified",
+          "demo_run_verified",
+          "rollback_backup_sha256_recorded",
+          "owner_merge_approved"
+        ],
+        "current_status": "retained_blocked"
+      },
+      {
+        "path": "trading/README.md",
+        "role": "canonical_documentation",
+        "delete_when": [],
+        "current_status": "retain"
+      },
+      {
+        "path": "trading/MojTradeOmegaXDemoBot.cs",
+        "role": "canonical_execution_core",
+        "delete_when": [],
+        "current_status": "retain"
+      }
+    ],
+    "deletion_scope_rule": "No recursive deletion; only exact listed paths may be considered after every gate is true."
   }
 }
