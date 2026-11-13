@@ -437,5 +437,75 @@
     "deployment_proven": false,
     "live_host_evidence_attested": false,
     "actual_legacy_deactivations": 0
+  },
+  "trader_consolidation_registry": {
+    "canonical_destination": "mojtaba.bot.ai",
+    "activation_policy": "blocked_until_consolidated_and_verified",
+    "deletion_policy": "delete_only_after_backup_and_verified_replacement",
+    "evidence_scope": "repository_source_inventory_not_live_runtime_attestation",
+    "surfaces": [
+      {
+        "id": "quantumscalp_v2_cbot",
+        "paths": [
+          "trading/MojTradeDemoBot.cs",
+          "trading/README.md"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "omega_x_demo_cbot",
+        "paths": [
+          "trading/MojTradeOmegaXDemoBot.cs",
+          "trading/MojTrade_OMEGA_X_Build_Spec.md",
+          "trading/MojTrade_OMEGA_X_Deploy_Guide.md"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "market_observer",
+        "paths": [
+          "scripts/mojtrade_observe_market.py",
+          "scripts/mojtrade_consume_observation.py"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "research_product_builder",
+        "paths": [
+          "scripts/mojtrade_build_research_product.py"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "observer_runtime",
+        "paths": [
+          "deploy/install_mojtrade_observer_vps.sh",
+          "deploy/systemd/mojtrade-observer.service",
+          "deploy/systemd/mojtrade-observer.timer"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "readonly_relay_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-readonly-relay.yml"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "observer_activation_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-vps-observer-activate.yml"
+        ],
+        "status": "pending_merge"
+      },
+      {
+        "id": "mt5_readonly_workflow",
+        "paths": [
+          ".github/workflows/mojtrade-mt5-readonly-vps-install.yml"
+        ],
+        "status": "pending_merge"
+      }
+    ]
   }
 }
