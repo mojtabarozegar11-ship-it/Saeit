@@ -91,7 +91,20 @@
    strip.addEventListener('focusout',()=>{state.focused=strip.contains(document.activeElement);});
    strip.addEventListener('pointerdown',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
    strip.addEventListener('wheel',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
-   const manualButtons=$$('[data-strip="'+strip.id+'"]');
+   // Keyboard-accessible manual navigation, including the photo rail without arrow buttons.
+   // Arrow keys act only while the rail itself is focused; child links keep normal behavior.
+   strip.addEventListener('keydown',event=>{
+     if(event.target!==strip||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+     event.preventDefault();
+     state.delayUntil=performance.now()+6500;
+     const amount=Math.max(135,Math.round(strip.clientWidth*.65));
+     const next=event.key==='ArrowLeft'; // RTL: visual forward is left.
+     if(!next&&strip.scrollLeft>-2)strip.scrollLeft=-state.period;
+     if(next&&strip.scrollLeft<=-state.period+2)strip.scrollLeft=0;
+     strip.scrollBy({left:next?-amount:amount,
+       behavior:motionPreference.matches?'instant':'smooth'});
+   });
+   const manualButtons=$('[data-strip="'+strip.id+'"]');
    for(const button of manualButtons){
      button.disabled=false;
      button.removeAttribute('aria-disabled');
