@@ -71,6 +71,11 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
         return "brand_not_found"
     parser = PageParser()
     parser.feed(html)
+    parser.close()
+    # A dangling form may absorb later inputs in the browser; do not certify
+    # an incompletely closed checkout form as a protected buyer action.
+    if parser._active_form is not None:
+        parser._active_form["malformed"] = True
     if kind == "store":
         if "MPW_STATIC_STORE_FALLBACK_V1" in html:
             return "static_fallback_not_dynamic"
@@ -100,6 +105,11 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
                  and _local_path(form["action"]) == action]
         if not forms:
             return "checkout_post_action_unverified"
+        # Two competing POST actions can mislead the buyer even when one
+        # contains a valid CSRF token. Fail closed rather than selecting one.
+        post_forms = [form for form in parser.forms if form["method"] == "post"]
+        if len(forms) != 1 or len(post_forms) != 1:
+            return "checkout_form_ambiguous"
         valid = any(any(name == "csrfmiddlewaretoken" and bool(value)
                             and type_ == "hidden"
                             for name, value, type_ in form["inputs"])
