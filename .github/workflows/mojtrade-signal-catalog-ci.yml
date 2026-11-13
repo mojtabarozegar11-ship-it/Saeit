@@ -1,0 +1,38 @@
+name: MojTrade signal catalog gate
+
+on:
+  pull_request:
+    paths:
+      - "runtime/mojtrade_signal_catalog_v1.json"
+      - "scripts/mojtrade_build_research_product.py"
+      - "scripts/tests/test_mojtrade_build_research_product.py"
+      - ".github/workflows/mojtrade-signal-catalog-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/mojtrade_signal_catalog_v1.json"
+      - "scripts/mojtrade_build_research_product.py"
+      - "scripts/tests/test_mojtrade_build_research_product.py"
+      - ".github/workflows/mojtrade-signal-catalog-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate catalog JSON and source syntax
+        run: |
+          python -m json.tool runtime/mojtrade_signal_catalog_v1.json >/dev/null
+          python -m py_compile scripts/mojtrade_build_research_product.py
+      - name: Run catalog and packaging tests
+        run: |
+          python -m unittest discover -s scripts/tests -p 'test_mojtrade_build_research_product.py' -v
