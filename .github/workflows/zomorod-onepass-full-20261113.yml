@@ -6,13 +6,8 @@ on:
       - 'scripts/zomorod_onepass_guarded_20261113.py'
       - 'scripts/test_zomorod_onepass_20261113.py'
       - '.github/workflows/zomorod-onepass-full-20261113.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'content/zomorod-vision-v3/**'
-      - 'scripts/zomorod_onepass_guarded_20261113.py'
-      - 'scripts/test_zomorod_onepass_20261113.py'
-      - '.github/workflows/zomorod-onepass-full-20261113.yml'
+  # The former one-shot publisher was already applied on Nov 13.
+  # No automated production redeployment on merge: explicit approval and a new pinned live baseline are required.
 permissions:
   contents: read
 concurrency:
