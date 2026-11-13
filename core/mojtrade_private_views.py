@@ -12,6 +12,7 @@ from django.utils.cache import patch_vary_headers
 from core.chat_operation_security import is_authorized_chat_operator
 from core.management.commands.mojtrade_market_watch_export import fresh_canonical_drafts
 from core.mojtrade_signal_drafts import MarketWatchDraftError
+from core.mojtrade_readiness import trading_readiness_report
 
 
 def private_response(data, *, status):
@@ -53,3 +54,21 @@ def owner_private_market_watch(request):
         "private_research_only": True,
         "watch": watch,
     }, status=200)
+
+
+
+@never_cache
+@require_GET
+def owner_private_mojtrade_readiness(request):
+    """Expose bounded operational proof gates to an active superuser only."""
+    if not is_authorized_chat_operator(request.user):
+        return private_response({"detail": "owner_access_required"}, status=403)
+    try:
+        report = trading_readiness_report()
+    except DatabaseError:
+        return private_response({
+            "status": "unavailable",
+            "detail": "trading_readiness_database_unavailable",
+            "operational_completion_percent": None,
+        }, status=503)
+    return private_response(report, status=200)
