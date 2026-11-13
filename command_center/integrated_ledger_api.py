@@ -223,6 +223,10 @@ def integrated_ledger_api(request):
         _audit(event_action, "issue", row.id, f"مانع {row.cycle} به‌روزرسانی شد.", request.user, evidence)
         return JsonResponse({"issue": _issue(row)})
     if kind == "approval_request":
+        # Staff may inspect requests, but a staff role alone must never approve
+        # sensitive external actions or impersonate the owner's decision.
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "تصمیم حساس فقط برای مدیر ارشد مجاز است و تأیید موردی مالک همچنان الزامی است."}, status=403)
         try:
             row = ApprovalRequest.objects.select_for_update().get(pk=int(payload.get("id")))
         except (ApprovalRequest.DoesNotExist, TypeError, ValueError):
@@ -231,6 +235,10 @@ def integrated_ledger_api(request):
         note = _text(payload.get("note"))
         if action not in {"approved", "rejected", "explanation"}:
             return JsonResponse({"error": "عملیات باید قبول، رد یا توضیح باشد."}, status=400)
+        if row.status != "pending":
+            return JsonResponse({"error": "درخواست قبلاً تصمیم‌گیری شده و قابل تغییر نیست."}, status=409)
+        if action in {"approved", "rejected"} and not note:
+            return JsonResponse({"error": "توضیح تصمیم و مرجع مجوز موردی مالک الزامی است."}, status=400)
         if action == "explanation":
             if not note:
                 return JsonResponse({"error": "توضیح خالی است."}, status=400)
