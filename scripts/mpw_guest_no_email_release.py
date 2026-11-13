@@ -323,6 +323,13 @@ class CheckoutEmailControlParser(HTMLParser):
         if tag == "base":
             # A base element can change the browser submission destination.
             self.base_element_seen = True
+        if tag == "meta" and attributes.get("http-equiv", "").lower() == "refresh":
+            # Refresh redirects can make an otherwise valid form unusable.
+            self.malformed_forms = True
+        if tag in ("button", "input") and "form" in attributes:
+            # An out-of-form submitter can bind to a form by ID and override
+            # its action; no such attachment is needed in this buyer flow.
+            self.malformed_forms = True
         if tag == "form":
             # Duplicate browser attributes and nested forms are ambiguous.
             field_names = [name.lower() for name, _ in attrs]
