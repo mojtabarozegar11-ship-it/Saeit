@@ -14,7 +14,7 @@ const targets=[
  ,...['/company/','/services/','/research/','/industry/'].map(route=>({
   route,type:'v7-'+route.replace(/\//g,''),
   selectors:['body','main','.zm-v7-header','.zm-v7-footer','.zm-hero','.zm-narrative','.zm-next'],
-  css:':root{--zm7-bg:#252b19}body.zm-unified-v7,body.zm-unified-v7 main,body.zm-unified-v7 .zm-v7-header,body.zm-unified-v7 .zm-v7-footer,body.zm-unified-v7 .zm-hero,body.zm-unified-v7 .zm-narrative,body.zm-unified-v7 .zm-next{background:#252b19!important;background-image:none!important}'
+  css:':root{--zm7-bg:#252b19}body.zm-unified-v7,body.zm-unified-v7 main,body.zm-unified-v7 .zm-v7-header,body.zm-unified-v7 .zm-v7-footer,body.zm-unified-v7 main .zm-hero,body.zm-unified-v7 main .zm-narrative,body.zm-unified-v7 main .zm-next{background:#252b19!important;background-image:none!important}'
 }))
 ];
 const successes=[];
