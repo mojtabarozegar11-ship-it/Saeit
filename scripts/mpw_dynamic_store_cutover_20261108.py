@@ -485,42 +485,62 @@ def public_response(run_id: str) -> bytes:
 
 
 class _InvoiceFormScanner(HTMLParser):
-    """Inspect GET-rendered forms only; never execute or disclose CSRF tokens."""
+    """Fail closed on email fields in ANY form, not merely the chosen invoice form.
+
+    A safe-looking second form must not hide a buyer-email collection form.
+    This is a read-only release gate, not proof of a completed payment.
+    """
 
     def __init__(self, action: str) -> None:
         super().__init__(convert_charrefs=True)
         self.action = action
         self.active = None
-        self.verified = False
+        self.valid_count = 0
+        self.email_present = False
+        self.invalid_structure = False
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
         if tag == "form":
+            if self.active is not None:
+                self.invalid_structure = True
             self.active = {
                 "method": (attributes.get("method") or "").lower(),
                 "action": attributes.get("action"),
-                "email_present": False,
                 "csrf": False,
             }
-        elif tag == "input" and self.active is not None:
-            if (attributes.get("name") == "email" or
-                    (attributes.get("type") or "").lower() == "email" or
-                    attributes.get("id") == "mpw-buy-email"):
-                self.active["email_present"] = True
-            if (attributes.get("name") == "csrfmiddlewaretoken" and
-                    bool(attributes.get("value"))):
+        elif tag == "input":
+            # Detect email collection anywhere on the checkout page, including
+            # other forms, detached inputs, and case/whitespace variants.
+            name = (attributes.get("name") or "").strip().casefold()
+            input_type = (attributes.get("type") or "").strip().casefold()
+            input_id = (attributes.get("id") or "").strip().casefold()
+            if (name == "email" or "email" in name or input_type == "email"
+                    or input_id == "mpw-buy-email"):
+                self.email_present = True
+            if (self.active is not None and name == "csrfmiddlewaretoken"
+                    and bool(attributes.get("value"))):
                 self.active["csrf"] = True
 
     def handle_endtag(self, tag):
-        if tag == "form" and self.active is not None:
-            self.verified |= (self.active["method"] == "post" and
-                              self.active["action"] == self.action and
-                              not self.active["email_present"] and self.active["csrf"])
+        if tag == "form":
+            if self.active is None:
+                self.invalid_structure = True
+                return
+            if (self.active["method"] == "post"
+                    and self.active["action"] == self.action
+                    and self.active["csrf"]):
+                self.valid_count += 1
             self.active = None
+
+    @property
+    def verified(self) -> bool:
+        return (self.valid_count == 1 and not self.email_present
+                and not self.invalid_structure and self.active is None)
 
 
 def has_guarded_guest_invoice_form(body: bytes, product_id: int) -> bool:
-    """Require exact product-specific POST and CSRF, with NO email input."""
+    """Require one correct POST+CSRF form and zero email inputs on the page."""
     scanner = _InvoiceFormScanner(f"/commerce/trx-easy/start/{product_id}/")
     try:
         scanner.feed(body.decode("utf-8"))
