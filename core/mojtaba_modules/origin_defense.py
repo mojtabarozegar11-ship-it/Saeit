@@ -25,7 +25,8 @@ def _count(value: object, *, ceiling: int = 10_000_000) -> int:
     return value
 
 
-def _identity(source_ip: str, *, key: bytes, engagement_id: str) -> tuple[str, bool]:
+def _identity(source_ip: str, *, key: bytes, tenant_id: str,
+              engagement_id: str) -> tuple[str, bool]:
     if not isinstance(source_ip, str):
         raise CyberModuleError("SOURCE_IP_INVALID")
     try:
@@ -34,7 +35,8 @@ def _identity(source_ip: str, *, key: bytes, engagement_id: str) -> tuple[str, b
         raise CyberModuleError("SOURCE_IP_INVALID") from exc
     if str(ip) != source_ip:
         raise CyberModuleError("SOURCE_IP_NOT_CANONICAL")
-    opaque = hmac.new(key, (engagement_id + "|" + str(ip)).encode("utf-8"),
+    # Include BOTH tenant and engagement to prevent cross-customer linkability.
+    opaque = hmac.new(key, (tenant_id + "|" + engagement_id + "|" + str(ip)).encode("utf-8"),
                       hashlib.sha256).hexdigest()[:24]
     return opaque, ip.is_global
 
@@ -78,7 +80,8 @@ def plan_origin_defense(*, engagement: dict, traffic: dict,
             raise CyberModuleError("OBSERVATION_OUTSIDE_TIME_WINDOW")
 
         opaque_source, public = _identity(
-            item.get("source_ip"), key=verify_key, engagement_id=scope["engagement_id"]
+            item.get("source_ip"), key=verify_key, tenant_id=scope["tenant_id"],
+            engagement_id=scope["engagement_id"]
         )
         total = _count(item.get("requests_5m"))
         errors_4xx = _count(item.get("errors_4xx_5m"))
