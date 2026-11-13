@@ -24,6 +24,30 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/canonical_bot_identity.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# The deployed installer is deliberately legacy-only until the verified
+# canonical handoff also covers evolution state, recovery and cron. Detect an
+# already canonical or operator-disabled runtime before ANY filesystem or DB
+# mutation: do not let the legacy seeder silently reverse that handoff.
+master_identity_preflight() {
+  SAEIT_ENV=production DJANGO_SETTINGS_MODULE=config.settings "$py" - <<'PY'
+import django
+
+django.setup()
+from core.models import Agent
+
+rows = list(Agent.objects.filter(
+    code__in=("economic-master-agent", "mojtaba-bot-ai"),
+).values_list("code", "active"))
+active = [code for code, enabled in rows if enabled]
+if len(active) > 1:
+    raise SystemExit("MASTER_ACTIVATION_MULTIPLE_ACTIVE_RUNTIMES")
+if "mojtaba-bot-ai" in active:
+    raise SystemExit("MASTER_ACTIVATION_CANONICAL_HANDOFF_NOT_SUPPORTED")
+if rows and not active:
+    raise SystemExit("MASTER_ACTIVATION_OPERATOR_DISABLED_RUNTIME")
+print("MASTER_ACTIVATION_LEGACY_RUNTIME_PREFLIGHT_OK")
+PY
+}
 # A SQLite rollback snapshot needs at least the size of the live database on
 # the backup filesystem. Refuse activation BEFORE changing cron if insufficient.
 # No database rows are read, and this gate creates no files.
@@ -61,6 +85,7 @@ PY
 # Resolve config.settings relative to the live Django app before importing it.
 # This read-only directory change precedes every backup or cron mutation.
 cd "$app"
+master_identity_preflight
 master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"

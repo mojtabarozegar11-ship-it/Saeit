@@ -24,6 +24,19 @@ def _extract_runner():
 
 
 class VpsMasterCycleLockTests(unittest.TestCase):
+
+    def test_activation_rejects_incompatible_identity_before_any_mutation(self):
+        """A canonical handoff cannot be reversed by the legacy-only installer."""
+        source = (REPO_ROOT / 'deploy/activate_vps_master_agent.sh').read_text(encoding='utf-8')
+        assert 'MASTER_ACTIVATION_CANONICAL_HANDOFF_NOT_SUPPORTED' in source
+        assert 'MASTER_ACTIVATION_MULTIPLE_ACTIVE_RUNTIMES' in source
+        assert 'MASTER_ACTIVATION_OPERATOR_DISABLED_RUNTIME' in source
+        assert source.index('master_identity_preflight\nmaster_capacity_preflight') < source.index(
+            'install -d -m 700 "$master"'
+        )
+        syntax = subprocess.run(['bash', '-n'], input=source, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
     def test_cycle_has_one_nonblocking_lock_for_both_commands(self):
         script = _extract_runner()
         self.assertIn('exec 9>"$root/master-cycle.lock"', script)
