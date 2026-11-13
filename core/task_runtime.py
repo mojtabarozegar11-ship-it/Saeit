@@ -38,6 +38,12 @@ class TaskRuntime:
         # No remote process is started or stopped by this guard.
         assert_single_executor(Agent, task.agent.code)
         if task.agent.code in EXECUTOR_RUNTIME_CODES:
+            # A prior attempt is not independently reconciled merely
+            # because an old service changed status back to queued.
+            if task.attempt_count > 0:
+                raise TaskExecutionError(
+                    "MASTER_ATTEMPT_REPLAY_REQUIRES_INDEPENDENT_RECONCILIATION"
+                )
             blocked_id = unresolved_master_task_id(
                 AgentTask, exclude_task_id=task.pk,
             )

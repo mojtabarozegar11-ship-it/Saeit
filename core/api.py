@@ -485,7 +485,7 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
             task = TaskRuntime().claim(pk)
         except AgentTask.DoesNotExist:
             return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
-        except TaskExecutionError as exc:
+        except (TaskExecutionError, ImproperlyConfigured) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data)
 

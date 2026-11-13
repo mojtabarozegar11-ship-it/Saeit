@@ -1,9 +1,13 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.core.exceptions import ImproperlyConfigured
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
-from core.unified_bot_identity import BOT_CODE, non_factory_task_scope
+from core.unified_bot_identity import (
+    BOT_CODE, non_factory_task_scope, assert_single_executor,
+    unresolved_master_task_id,
+)
 
 MASTER_AGENT_CODE = BOT_CODE
 
@@ -18,6 +22,17 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["stale_after_seconds"] < 300:
             raise CommandError("stale-after-seconds must be at least 300")
+        try:
+            assert_single_executor(Agent, BOT_CODE)
+        except ImproperlyConfigured as exc:
+            raise CommandError("MASTER_RUNTIME_SINGLETON_REQUIRED") from exc
+        unresolved = unresolved_master_task_id(AgentTask)
+        if unresolved is not None:
+            self.stdout.write(
+                f"BRAIN_RECONCILIATION_FIRST task={unresolved} "
+                "new_task_created=false"
+            )
+            return
         agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
         if not agent:
             self.stderr.write("Missing active Mojtaba.bot.ai.")
@@ -95,6 +110,14 @@ class Command(BaseCommand):
             self.stdout.write(f"BRAIN_DECISION action={action} reason={chosen['reason']} score={chosen['score']}")
             return
 
+        # Recheck after locking the canonical Agent row.
+        unresolved = unresolved_master_task_id(AgentTask)
+        if unresolved is not None:
+            self.stdout.write(
+                f"BRAIN_RECONCILIATION_FIRST task={unresolved} "
+                "new_task_created=false"
+            )
+            return
         task = AgentTask.objects.create(
             agent=agent,
             action_type=action,

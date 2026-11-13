@@ -2,7 +2,9 @@ from django.db import transaction
 
 from core.models import Agent, AgentTask, ApprovalRequest
 from core.chat_operation_security import is_authorized_chat_operator
-from core.unified_bot_identity import BOT_CODE, assert_single_executor
+from core.unified_bot_identity import (
+    BOT_CODE, assert_single_executor, unresolved_master_task_id,
+)
 from core.agent_registry import AgentRegistry
 from core.services import normalize_action, normalize_risk, requires_owner_approval
 
@@ -28,8 +30,11 @@ class MasterAgent:
     def plan(self, project, action, payload, risk="low", *, requester=None):
         # A requested approval is not permission. The caller must first
         # authenticate the owner if this is a human-originated command.
-        if requester is not None and not is_authorized_chat_operator(requester):
-            raise PermissionError("MASTER_PLAN_REQUIRES_AUTHENTICATED_OWNER")
+        if requester is not None:
+            if not is_authorized_chat_operator(requester):
+                raise PermissionError("MASTER_PLAN_REQUIRES_AUTHENTICATED_OWNER")
+            if project is None or requester.pk != project.owner_id:
+                raise PermissionError("MASTER_PROJECT_OWNER_MISMATCH")
         if not isinstance(payload, dict):
             raise ValueError("Master task payload must be a JSON object")
         normalized_action = normalize_action(action)
@@ -37,6 +42,11 @@ class MasterAgent:
         agent = self._select_agent(normalized_action)
         if not agent:
             raise RuntimeError("No active agent")
+        unresolved = unresolved_master_task_id(AgentTask)
+        if unresolved is not None:
+            raise RuntimeError(
+                f"MASTER_PLAN_BLOCKED_PENDING_RECONCILIATION:{unresolved}"
+            )
 
         capability = AgentRegistry().capability_for(agent, normalized_action)
         if not capability:
