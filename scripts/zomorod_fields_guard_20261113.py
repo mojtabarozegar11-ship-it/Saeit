@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import io
+import zipfile
 import json
 import os
 import pwd
@@ -159,6 +161,12 @@ def candidates(stage: Path):
     safe_stage(stage)
     old = {name: read_regular(stage / 'old' / name) for name in FILES}
     new = {name: read_regular(stage / 'new' / name) for name in FILES + CREATED}
+    return validate_candidate_maps(old, new)
+
+
+def validate_candidate_maps(old, new):
+    if set(old) != set(FILES) or set(new) != set(FILES + CREATED):
+        raise RuntimeError('Stream candidate has unexpected file inventory')
     for name in FILES:
         if git_blob(old[name]) != OLD_BLOBS[name]:
             raise RuntimeError('Old source does not match approved revision: ' + name)
@@ -285,9 +293,59 @@ def audit_live_baseline() -> dict:
     }
 
 
+def inspect_streamed_candidate(archive_bytes=None) -> dict:
+    """Verify all 3 prior + 15 candidate files on cPanel entirely in RAM.
+
+    Archive is supplied through SSH stdin; never extract, stage, deploy or
+    open a writable cPanel path. Protect against traversal and zip bombs.
+    """
+    identity()
+    limit = 16 * 1024 * 1024
+    payload = sys.stdin.buffer.read(limit + 1) if archive_bytes is None else archive_bytes
+    if len(payload) > limit:
+        raise RuntimeError('Stream candidate exceeds compressed size limit')
+    expected = {f'old/{name}' for name in FILES} | {
+        f'new/{name}' for name in FILES + CREATED
+    }
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        members = archive.infolist()
+        names = [info.filename for info in members]
+        if len(names) != len(expected) or set(names) != expected:
+            raise RuntimeError('Stream candidate has unexpected file inventory')
+        if sum(info.file_size for info in members) > 64 * 1024 * 1024:
+            raise RuntimeError('Stream candidate exceeds expanded size limit')
+        for info in members:
+            kind = stat.S_IFMT(info.external_attr >> 16)
+            if (info.is_dir() or kind not in (0, stat.S_IFREG) or
+                    info.flag_bits & 1 or info.file_size > 16 * 1024 * 1024):
+                raise RuntimeError('Unsafe streamed archive entry: ' + info.filename)
+        old = {name: archive.read('old/' + name) for name in FILES}
+        new = {name: archive.read('new/' + name) for name in FILES + CREATED}
+    validate_candidate_maps(old, new)
+    manifest = preflight_mappings(old, new)
+    result = {
+        'status': 'READ_ONLY_STAGE_STREAM_VERIFIED',
+        'prior_source_files_verified': len(old),
+        'candidate_files_verified': len(new),
+        'protected_existing_files': len(manifest['protected']),
+        'legacy_photos_healthy': len(manifest['legacy']),
+        'new_destinations_available': len(manifest['created']),
+        'stage_hashes_verified': True,
+        'deployment_authorized': False,
+        'deployment_performed': False,
+        'host_files_written': 0,
+    }
+    print(json.dumps(result, sort_keys=True))
+    return result
+
+
 def preflight(stage: Path):
     identity()
     old, new = candidates(stage)
+    return preflight_mappings(old, new)
+
+
+def preflight_mappings(old, new):
     ensure_disk_space(old, new)
     before = {}
     for name in FILES:
