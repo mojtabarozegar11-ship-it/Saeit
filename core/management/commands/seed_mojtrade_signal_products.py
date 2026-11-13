@@ -46,7 +46,6 @@ def load_catalog(path: Path = CATALOG) -> dict:
             or tier.get("max_verified_signals") != 10
             for tier in tiers
         )
-        for tier in tiers
     ):
         raise CommandError("SIGNAL_CATALOG_TIERS_INVALID")
     return data
