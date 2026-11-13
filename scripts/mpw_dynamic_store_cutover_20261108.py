@@ -524,9 +524,16 @@ class _InvoiceFormScanner(HTMLParser):
             if (name == "email" or "email" in name or input_type == "email"
                     or input_id == "mpw-buy-email"):
                 self.email_present = True
-            if (self.active is not None and name == "csrfmiddlewaretoken"
-                    and bool(attributes.get("value"))):
-                self.active["csrf"] = True
+            # A disabled control is not submitted by the browser. Merely
+            # finding its name/value in HTML does not establish CSRF coverage.
+            # Duplicate token controls are ambiguous and must fail closed.
+            if self.active is not None and name == "csrfmiddlewaretoken":
+                if ("disabled" in attributes or
+                        not (attributes.get("value") or "").strip() or
+                        self.active["csrf"]):
+                    self.invalid_structure = True
+                else:
+                    self.active["csrf"] = True
 
     def handle_endtag(self, tag):
         if tag == "form":
