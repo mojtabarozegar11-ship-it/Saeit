@@ -296,6 +296,12 @@ namespace MojTrade.OmegaX
             // account currency; realized risk can exceed stops from gaps.
             try
             {
+                // A pending order on any symbol/label can fill after this
+                // gate and silently breach the shared stop-risk limit.
+                // Until an account-level pending-order reservation ledger
+                // is broker-reconciled, refuse additional market exposure.
+                if (PendingOrders.Count != 0)
+                    return false;
                 var equity = Account.Equity;
                 if (!IsFinite(equity) || equity <= 0 ||
                     !IsFinite(Account.FreeMargin) || Account.FreeMargin <= 0 ||
