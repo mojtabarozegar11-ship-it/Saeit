@@ -172,9 +172,30 @@ jobs:
             }
             const reduced=await browser.newPage({viewport:{width:390,height:800},reducedMotion:'reduce'});
             await reduced.goto('http://127.0.0.1:8099/',{waitUntil:'load'});
-            const button=reduced.locator('[data-rotator-toggle="products-strip"]');
-            if(await button.getAttribute('aria-pressed')!=='false')throw Error('REDUCED_MOTION_NOT_PAUSED');
+            for(const id of ['services-strip','products-strip','projects-strip','fields-carousel']){
+              const button=reduced.locator('[data-rotator-toggle="'+id+'"]');
+              if(await button.getAttribute('aria-pressed')!=='false')throw Error('REDUCED_MOTION_NOT_PAUSED_'+id);
+            }
+            const photoResume=reduced.locator('[data-rotator-toggle="fields-carousel"]');
+            await photoResume.click();
+            if(await photoResume.getAttribute('aria-pressed')!=='true')throw Error('REDUCED_MOTION_MANUAL_RESUME_MISSING');
             await reduced.close();
+
+            // Actual touch device emulation: hover must never latch the carousel motion.
+            const phone=await browser.newPage({viewport:{width:390,height:820},isMobile:true,hasTouch:true,reducedMotion:'no-preference'});
+            await phone.goto('http://127.0.0.1:8099/?touch=1',{waitUntil:'load'});
+            await phone.waitForFunction(()=>document.documentElement.dataset.fieldCarouselReady==='1');
+            const photo=phone.locator('#fields-carousel');
+            await photo.scrollIntoViewIfNeeded();
+            await photo.evaluate(el=>el.dispatchEvent(new MouseEvent('mouseenter')));
+            await phone.waitForTimeout(500);
+            const phoneDiag=await phone.evaluate(()=>window.__zmRotatorDiagnostics().find(x=>x.id==='fields-carousel'));
+            if(phoneDiag.hovered||phoneDiag.paused||!phoneDiag.visible)throw Error('TOUCH_HOVER_LATCH_FAILURE '+JSON.stringify(phoneDiag));
+            const phoneStart=await photo.evaluate(el=>el.scrollLeft);
+            await phone.waitForTimeout(900);
+            const phoneEnd=await photo.evaluate(el=>el.scrollLeft);
+            if(!(phoneEnd<phoneStart-3))throw Error('TOUCH_CAROUSEL_STATIC '+JSON.stringify({phoneStart,phoneEnd}));
+            await phone.close();
             const ar=await browser.newPage();await ar.goto('http://127.0.0.1:8099/assets/zm-ar-v1.html',{waitUntil:'load'});
             if(!await ar.locator('html[lang="ar"][dir="rtl"] h1').count())throw Error('ARABIC_LANDING_NOT_FUNCTIONAL');
             await ar.close();await browser.close();
