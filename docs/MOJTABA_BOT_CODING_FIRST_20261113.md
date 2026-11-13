@@ -56,3 +56,11 @@ Private source changes must be verified by an independent dossier inspector; a p
 ## Canonical module mapping
 
 The three signed cyber actions now map to the internal `cyber_security` lane in the existing unified identity catalog. Any unknown capability remains unmapped and requires human review rather than being silently treated as executable.
+
+## چرخهٔ بعدی: حالت VPS و هویت واحد
+
+- موتور وضعیت خودارتقایی از شاخهٔ سخت‌گیری شواهد گرفته شد و سابقهٔ کارهای انجام‌شده، هش وظایف و cursor مستقل از `verified_effect` ساده بررسی می‌شود.
+- در جابه‌جایی از `economic-master-agent` به `mojtaba-bot-ai` پروندهٔ وضعیت قدیمی بدون تطبیق رد می‌شود؛ هویت جدید فقط با تاریخچهٔ مستقل خود پذیرفته می‌شود.
+- حضور هم‌زمان شناسهٔ canonical و شناسه‌های اقتصادی/کارخانه‌ای قدیمی در انتخاب runtime متوقف می‌شود.
+- افزایش عمق اجرای ترتیبی از ۱ به ۲۰ فقط با دست‌کم دو اقدام جدید، مستند و دارای تنوع پذیرفته می‌شود؛ این تغییر خودبه‌خود مجوز هزینه، استقرار یا معامله نیست.
+- **این فقط Commit کد است:** هنوز آزمون، اجرا روی VPS، مهاجرت وضعیت و استقرار انجام نشده است.
