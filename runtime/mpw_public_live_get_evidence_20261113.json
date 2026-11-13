@@ -1,0 +1,62 @@
+{
+  "schema": "mpw.public_checkout_observation.evidence.v1",
+  "observed_on": "2026-11-13",
+  "source": {
+    "github_actions_run": 43429609528,
+    "github_actions_job": 131899604691,
+    "url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43429609528"
+  },
+  "methods": [
+    "GET"
+  ],
+  "source_of_truth": "Public HTTPS response body and headers observed by GitHub-hosted runner; not cPanel DB or blockchain",
+  "storefront": {
+    "path": "/store/",
+    "status": "static_fallback_not_dynamic"
+  },
+  "details": {
+    "/store/product/72/": "detail_public_get_ok_not_sale",
+    "/store/product/225/": "detail_public_get_ok_not_sale",
+    "/store/product/879/": "detail_public_get_ok_not_sale"
+  },
+  "checkouts": {
+    "/store/product/72/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/store/product/225/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/store/product/879/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/72/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/225/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/879/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    }
+  },
+  "routes_checked": 10,
+  "buyer_purchase_POST_performed": false,
+  "order_or_invoice_created": false,
+  "independent_chain_transfer_verified": false,
+  "authenticated_buyer_download_verified": false,
+  "confirmed_commercial_sales": null,
+  "confirmed_revenue_USD": null,
+  "severity": "release_blocked",
+  "disclaimers": [
+    "Header classification is a strict source-independent release contract check; it does not prove the underlying payment service is down.",
+    "Presence of an email field conflicts with the intended no-email policy, but it does not prove an invoice POST succeeded or failed.",
+    "The three product detail pages pass GET/CTA checks only; this is not a valid sale.",
+    "No personal data, payment identifiers, wallet addresses, or secrets were accessed or copied."
+  ]
+}
