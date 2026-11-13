@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 
 from core.models import Agent, AgentCapability, AgentTask, ApprovalRequest, ResearchProject
 from core.tool_gateway import ToolGateway, ToolGatewayError, ToolSpec
+from core.unified_bot_identity import BOT_CODE
 
 
 @pytest.fixture
@@ -14,7 +15,7 @@ def running_task(db):
         title="Tool test", objective="Validate gateway", owner=user
     )
     agent = Agent.objects.create(
-        code="research-agent",
+        code=BOT_CODE,
         name="Research Agent",
         mission="Execute research",
         risk_level="low",
@@ -85,9 +86,12 @@ def test_gateway_requires_approval_for_sensitive_tool(running_task):
         requested_by=running_task.project.owner,
     )
 
-    assert gateway.invoke(
-        "deploy", {}, task_id=running_task.pk, execution_id="exec-123"
-    ) == {"ok": True}
+    # A plain approved row is no longer sufficient: the only bot requires
+    # a separately scoped, single-use owner approval grant.
+    with pytest.raises(ToolGatewayError, match="one-time owner grant"):
+        gateway.invoke(
+            "deploy", {}, task_id=running_task.pk, execution_id="exec-123"
+        )
 
 
 def test_gateway_denies_cross_capability_tool_even_with_an_approval(running_task):
@@ -299,29 +303,34 @@ def test_gateway_second_alias_cannot_bypass_single_dispatch_reservation(running_
     assert calls == ["alias"]
 
 
-def test_gateway_new_legacy_execution_gets_new_reservation_not_old_token(running_task):
-    """An explicitly re-claimed legacy task has a distinct execution token."""
+def test_canonical_failure_holds_execution_until_receipt_reconciliation(running_task):
+    """The sole bot never repeats a side effect after acknowledgement loss."""
     from core.models import AuditLog
-    from core.task_runtime import TaskRuntime
+    from core.task_runtime import TaskExecutionError, TaskRuntime
 
     calls = []
     gateway = ToolGateway([
         ToolSpec(code="research", handler=lambda p: calls.append(p) or {"ok": True}),
     ])
-    gateway.invoke("research", {"attempt": 1}, task_id=running_task.pk, execution_id="exec-123")
+    gateway.invoke(
+        "research", {"attempt": 1},
+        task_id=running_task.pk, execution_id="exec-123",
+    )
     runtime = TaskRuntime()
-    requeued = runtime.fail(
-        running_task.pk, "external receipt unreconciled in legacy fixture",
+    held = runtime.fail(
+        running_task.pk, "external receipt not independently reconciled",
         execution_id="exec-123",
     )
-    assert requeued.status == "queued"
-    claimed = runtime.claim(running_task.pk)
-    assert claimed.execution_id != "exec-123"
-    gateway.invoke(
-        "research", {"attempt": 2},
-        task_id=running_task.pk, execution_id=claimed.execution_id,
-    )
-    assert calls == [{"attempt": 1}, {"attempt": 2}]
+    assert held.status == "blocked"
+    assert held.execution_id == "exec-123"
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        runtime.claim(running_task.pk)
+    with pytest.raises(ToolGatewayError, match="running"):
+        gateway.invoke(
+            "research", {"attempt": 2},
+            task_id=running_task.pk, execution_id="exec-123",
+        )
+    assert calls == [{"attempt": 1}]
     assert AuditLog.objects.filter(
         target_id=str(running_task.pk), action="tool_invocation_started",
-    ).count() == 2
+    ).count() == 1
