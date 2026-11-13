@@ -23,7 +23,7 @@ def _symlink_in_path(path):
 
 
 def _safe_source_path(value):
-    if (type(value) is not str or not value.endswith(".py") or "\\\\" in value
+    if (type(value) is not str or not value.endswith(".py") or "\\" in value
             or any(part in ("", ".", "..") for part in value.split("/"))
             or not value.startswith(("scripts/", "ops/factory-toolchain/"))):
         raise ValueError("ISOLATED_UPGRADE_PROOF_UNSAFE_SOURCE_PATH")
