@@ -20,20 +20,19 @@ jobs:
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
     steps:
-      - name: Install official Homebrew and Spotware cTrader CLI
+      - name: Install official user-scoped Homebrew and Spotware cTrader CLI
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v brew >/dev/null 2>&1; then
-            export NONINTERACTIVE=1
-            export CI=1
-            bash -c "$(curl --fail --silent --show-error --location https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          brew_prefix="${HOME}/.linuxbrew"
+          if [ ! -x "$brew_prefix/bin/brew" ]; then
+            mkdir -p "$brew_prefix"
+            git clone --depth 1 https://github.com/Homebrew/brew "$brew_prefix/Homebrew"
+            mkdir -p "$brew_prefix/bin"
+            ln -sfn "$brew_prefix/Homebrew/bin/brew" "$brew_prefix/bin/brew"
           fi
-          if [ -x "${HOME}/.linuxbrew/bin/brew" ]; then
-            eval "$("${HOME}/.linuxbrew/bin/brew" shellenv)"
-          elif [ -x "${HOME}/.linuxbrew/bin/brew" ]; then
-            eval "$("${HOME}/.linuxbrew/bin/brew" shellenv)"
-          fi
+          eval "$("$brew_prefix/bin/brew" shellenv)"
+          brew --version
           brew tap spotware/tap https://github.com/spotware/homebrew-tap
           brew install spotware/tap/ctrader-cli
           ctrader-cli --version
