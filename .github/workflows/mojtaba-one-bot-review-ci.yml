@@ -89,6 +89,7 @@ jobs:
             tests/test_mojtrade_demo_receipts.py \
             tests/test_mojtrade_broker_statement_check.py \
             tests/test_mojtrade_csharp_build_contracts.py \
+            tests/test_mojtrade_signal_drafts.py \
             tests/test_approval_security.py \
             tests/test_runtime.py \
             tests/test_agent_registry.py \
