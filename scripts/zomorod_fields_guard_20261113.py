@@ -12,6 +12,7 @@ import json
 import os
 import pwd
 import re
+import shutil
 import stat
 import sys
 import tempfile
@@ -117,9 +118,21 @@ def protected_fingerprints():
     return result
 
 
+def ensure_disk_space(old, new):
+    # Account for private backup, three atomic temporary files, and rollback headroom.
+    copy_bytes = sum(len(old[name]) + len(new[name]) for name in FILES)
+    required = max(32 * 1024 * 1024, 4 * copy_bytes + 8 * 1024 * 1024)
+    if BACKUP_ROOT.parent.is_symlink() or not BACKUP_ROOT.parent.is_dir():
+        raise RuntimeError('Untrusted or missing backup parent directory')
+    for directory in (ROOT, BACKUP_ROOT.parent):
+        if shutil.disk_usage(directory).free < required:
+            raise RuntimeError('Insufficient free disk for verified release and rollback: ' + str(directory))
+
+
 def preflight(stage: Path):
     identity()
     old, new = candidates(stage)
+    ensure_disk_space(old, new)
     before = {}
     for name in FILES:
         path = ROOT / name
