@@ -102,17 +102,42 @@ def read_config(config_path: Path) -> dict:
     return cfg
 
 
+def _unique_cli_keys(pairs):
+    # Silent last-key-wins parsing can turn a denied account or a failed
+    # broker query into an apparently successful list. Reject duplicates at
+    # *every* JSON nesting level (including individual account records).
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise PreflightError("cli_response_duplicate_key")
+        values[key] = value
+    return values
+
+
 def _response(stdout: str, *, kind: str):
     if not isinstance(stdout, str) or len(stdout.encode("utf-8")) > MAX_CLI_OUTPUT_BYTES:
         raise PreflightError(kind + "_output_exceeded")
     try:
-        doc = json.loads(stdout)
+        doc = json.loads(
+            stdout, object_pairs_hook=_unique_cli_keys,
+            parse_constant=lambda _: (_ for _ in ()).throw(
+                PreflightError("cli_response_nonfinite_value")
+            ),
+        )
     except (ValueError, TypeError) as exc:
         raise PreflightError(kind + "_output_not_json") from exc
     if isinstance(doc, list):
         rows = doc
-    elif isinstance(doc, dict) and isinstance(doc.get(kind), list):
-        rows = doc[kind]
+    elif isinstance(doc, dict):
+        # Some versions wrap a list with metadata. An explicit failure
+        # marker always overrides that list, regardless of exit code.
+        if (doc.get("success") is False or doc.get("ok") is False
+                or doc.get("error") not in (None, "")
+                or doc.get("errors") not in (None, "", [])):
+            raise PreflightError(kind + "_cli_reported_failure")
+        rows = doc.get(kind)
+        if not isinstance(rows, list):
+            raise PreflightError(kind + "_output_schema_unrecognized")
     else:
         raise PreflightError(kind + "_output_schema_unrecognized")
     if len(rows) > 2000 or not all(isinstance(row, dict) for row in rows):
@@ -124,16 +149,37 @@ def _demo_bound(rows: list[dict], account: str, broker: str) -> bool:
     """Accept only an explicit, unambiguous account identity + isLive:false."""
     matches = []
     for row in rows:
-        observed = [
-            str(row[key]) for key in
-            ("accountId", "accountNumber", "traderLogin", "account", "login")
-            if key in row and not isinstance(row[key], bool)
+        # traderLogin is the displayed account ID in Spotware's official
+        # Open API model; accountId may instead denote an internal cTID ID.
+        # Do not accept a row where login aliases disagree.
+        login_fields = (
+            "traderLogin", "accountNumber", "login", "account", "accountId",
+        )
+        present = [
+            str(row[key]) for key in login_fields
+            if key in row and isinstance(row[key], (int, str))
+            and not isinstance(row[key], bool)
         ]
-        if account not in observed:
+        if account not in present:
             continue
-        # Some CLI versions expose brokerName rather than broker.
-        name = row.get("brokerName", row.get("broker"))
-        if not isinstance(name, str) or name.casefold() != broker.casefold():
+        specific = [
+            str(row[key]) for key in
+            ("traderLogin", "accountNumber", "login", "account")
+            if key in row and isinstance(row[key], (int, str))
+            and not isinstance(row[key], bool)
+        ]
+        if specific and any(value != account for value in specific):
+            raise PreflightError("account_alias_identity_conflict")
+        # Broker names may have different JSON aliases across versions,
+        # but contradictory aliases must not be silently accepted.
+        names = [
+            row[key] for key in ("brokerName", "broker", "brokerTitleShort")
+            if key in row
+        ]
+        if (not names or not all(
+            isinstance(name, str) and name.casefold() == broker.casefold()
+            for name in names
+        )):
             raise PreflightError("broker_identity_not_verified")
         if row.get("isLive") is not False:
             raise PreflightError("demo_identity_not_explicit")
