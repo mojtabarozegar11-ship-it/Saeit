@@ -325,7 +325,11 @@
         "candidate_system_systemd_service_units",
         "installed_source_sha256",
         "cpanel_private_php_sqlite_known_roles_and_aggregate_run_counts",
-        "fixed_allowlist_source_revision_comparison"
+        "fixed_allowlist_source_revision_comparison",
+        "user_systemd_timer_route_match_counts",
+        "system_systemd_timer_route_match_counts",
+        "redacted_systemd_timer_unit_digests",
+        "timer_inventory_truncated_flags"
       ],
       "credentialed_workflow_trigger": "workflow_dispatch_only_after_review",
       "source_revision_state": "PR_draft_not_merged_or_deployed",
@@ -344,12 +348,15 @@
         "authenticated_pinned_SSH_sessions_not_executed_in_current_turn",
         "source_only_process_markers_do_not_prove_worker_effects",
         "cpanel_PHP_and_Django_database_rows_still_need_read_only_inventory",
-        "live_handoff_receipts_and_rollback_not_attested"
+        "live_handoff_receipts_and_rollback_not_attested",
+        "systemd_timer_unit_inventory_not_fully_attested",
+        "timer_to_service_activation_target_not_verified"
       ],
       "host_probe_execution": "not_dispatched",
       "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts",
       "source_revision_comparison": "fixed_allowlist_file_sha256_vs_reviewed_PR_checkout_match_different_or_unknown_not_execution_proof",
-      "source_revision_comparison_test": "tests/test_mojtaba_live_topology_readonly.py::test_manual_two_host_summary_compares_only_allowlisted_source_digests"
+      "source_revision_comparison_test": "tests/test_mojtaba_live_topology_readonly.py::test_manual_two_host_summary_compares_only_allowlisted_source_digests",
+      "systemd_timer_census": "source_collector_reads_user_and_system_list_units_type_timer_as_redacted_indicators_not_complete_proof"
     },
     {
       "id": "mojtrade_signal_and_broker_runtime",
@@ -498,7 +505,10 @@
     "disposition_preview_all_outputs_non_destructive": true,
     "live_host_disposition_decisions_verified": false,
     "additional_source_groups_now_tracked_not_attested": 5,
-    "per_group_live_retirement_verification_complete": false
+    "per_group_live_retirement_verification_complete": false,
+    "two_host_systemd_timer_route_collector_committed": true,
+    "two_host_systemd_timer_collector_live_attested": false,
+    "systemd_timer_successor_handoff_proven": false
   },
   "readonly_disposition_contract": {
     "schema": "mojtaba.bot.ai.live-disposition-preview.v1",
