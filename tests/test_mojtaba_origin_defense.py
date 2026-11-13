@@ -171,6 +171,34 @@ class OriginDefenseTests(unittest.TestCase):
             self.run_plan(evidence=bad)
 
 
+    def test_source_tags_isolated_between_tenants(self):
+        first = self.run_plan()
+        second = self.run_plan(auth=signed(tenant_id="customer-y"),
+                               evidence=traffic(tenant_id="customer-y"))
+        first_tag = first["recommendations"][0]["source_tag"]
+        second_tag = second["recommendations"][0]["source_tag"]
+        self.assertNotEqual(first_tag, second_tag)
+        self.assertNotIn("8.8.8.8", str(second))
+
+    def test_source_tags_isolated_between_engagements(self):
+        first = self.run_plan()
+        second = self.run_plan(auth=signed(engagement_id="job-456"),
+                               evidence=traffic(engagement_id="job-456"))
+        self.assertNotEqual(first["recommendations"][0]["source_tag"],
+                            second["recommendations"][0]["source_tag"])
+
+    def test_source_tag_no_tenant_separator_collision(self):
+        # Previously, unescaped pipe-delimited labels could alias two tenants.
+        one = self.run_plan(auth=signed(tenant_id="customer-x|group",
+                                        engagement_id="job-123"),
+                            evidence=traffic(tenant_id="customer-x|group"))
+        two = self.run_plan(auth=signed(tenant_id="customer-x",
+                                        engagement_id="group|job-123"),
+                            evidence=traffic(engagement_id="group|job-123"))
+        self.assertNotEqual(one["recommendations"][0]["source_tag"],
+                            two["recommendations"][0]["source_tag"])
+
+
 
 if __name__ == "__main__":
     unittest.main()
