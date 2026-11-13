@@ -116,6 +116,7 @@ def parse_snapshot(path: Path, expected_role: str, *, now: datetime) -> dict:
         raise ValueError("TOPOLOGY_SCHEMA_INVALID")
     required_maps = (
         "cron", "processes", "user_services", "system_services",
+        "user_timers", "system_timers",
         "installed_source_digests", "private_php_site_registry", "attestation",
     )
     if any(not isinstance(item.get(name), dict) for name in required_maps):
@@ -151,7 +152,7 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         for tag, n in processes.get("route_match_counts", {}).items():
             if tag in allowed:
                 hit_counts[("process_argv_indicator", tag)] += trusted_count(n)
-    for layer in ("user_services", "system_services"):
+    for layer in ("user_services", "system_services", "user_timers", "system_timers"):
         status = snapshot.get(layer, {})
         if status.get("state") != "observed":
             continue
@@ -163,7 +164,8 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         "by_observation_surface": {
             surface: int(sum(v for (s, _), v in hit_counts.items() if s == surface))
             for surface in ("user_cron", "process_argv_indicator",
-                            "user_services_candidate", "system_services_candidate")
+                            "user_services_candidate", "system_services_candidate",
+                            "user_timers_candidate", "system_timers_candidate")
         },
         "route_indicators_total_not_unique_workers": sum(hit_counts.values()),
     }
@@ -280,6 +282,8 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
                 "process_read": snap.get("processes", {}).get("state", "unavailable"),
                 "user_services_read": snap.get("user_services", {}).get("state", "unavailable"),
                 "system_services_read": snap.get("system_services", {}).get("state", "unavailable"),
+                "user_timers_read": snap.get("user_timers", {}).get("state", "unavailable"),
+                "system_timers_read": snap.get("system_timers", {}).get("state", "unavailable"),
                 "source_revisions": source_revision(snap, policy["files"], repository_root),
                 **route_hits(snap, policy["routes"]),
             }
@@ -292,12 +296,16 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
                 else:
                     blockers.append("private_php_sqlite_snapshot_unavailable")
             if any(obs[k] != "observed" for k in
-                   ("cron_read", "process_read", "user_services_read", "system_services_read")):
+                   ("cron_read", "process_read", "user_services_read", "system_services_read",
+                    "user_timers_read", "system_timers_read")):
                 blockers.append("partial_host_topology_observation")
             if snap.get("cron", {}).get("enumeration_truncated") is True:
                 blockers.append("host_cron_inventory_truncated")
             if snap.get("processes", {}).get("enumeration_truncated") is True:
                 blockers.append("host_process_inventory_truncated")
+            if any(snap.get(layer, {}).get("enumeration_truncated") is True for layer in
+                   ("user_services", "system_services", "user_timers", "system_timers")):
+                blockers.append("host_systemd_unit_inventory_truncated")
             if any(v == "drift_or_mismatch" for v in obs["source_revisions"].values()):
                 blockers.append("installed_source_revision_differs_from_reviewed_pr")
             if any(v == "unknown" for v in obs["source_revisions"].values()):
