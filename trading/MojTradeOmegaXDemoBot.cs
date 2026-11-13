@@ -40,6 +40,11 @@ namespace MojTrade.OmegaX
         [Parameter("Max Positions", DefaultValue = 3, MinValue = 1, MaxValue = 3)]
         public int MaxPositions { get; set; }
 
+        // Upper bound includes ALL account positions, not only Omega X
+        // positions; risk is denominated in the cTrader account currency.
+        [Parameter("Aggregate Stop Risk %", DefaultValue = 1.0, MinValue = 0.25, MaxValue = 1.0)]
+        public double AggregateStopRiskPercent { get; set; }
+
         [Parameter("Daily Loss Stop %", DefaultValue = 2.0, MinValue = 0.1)]
         public double DailyLossStopPercent { get; set; }
 
@@ -112,7 +117,7 @@ namespace MojTrade.OmegaX
             // running chart. Concurrency across instances still needs broker
             // reconciliation before any production deployment.
             var positions = Positions.FindAll(Label);
-            if (positions.Length >= MaxPositions)
+            if (positions.Length >= MaxPositions || Positions.Count >= MaxPositions)
                 return;
             // Never add market risk while a prior demo position lacks a
             // broker-confirmed protective stop or target.
@@ -215,6 +220,7 @@ namespace MojTrade.OmegaX
                 !IsFinite(Symbol.PipSize) || Symbol.PipSize <= 0 ||
                 DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop ||
                 Positions.FindAll(Label).Length >= MaxPositions ||
+                Positions.Count >= MaxPositions ||
                 CurrentSpreadPips() > MaxSpreadPips)
                 return;
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
@@ -228,6 +234,8 @@ namespace MojTrade.OmegaX
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
             if (!IsFinite(volume) ||
                 volume < Symbol.VolumeInUnitsMin || volume > Symbol.VolumeInUnitsMax)
+                return;
+            if (!PortfolioRiskAllows(tradeType, volume, stopPips))
                 return;
 
             // A closed-bar identity is stored in the broker-side comment and
@@ -277,6 +285,72 @@ namespace MojTrade.OmegaX
             }
             Print("OMEGA X DEMO reconciled order: position={0} side={1} volume={2}",
                   opened.Id, tradeType, volume);
+        }
+
+        private bool PortfolioRiskAllows(TradeType side, double volume, double stopPips)
+        {
+            // This is a conservative *pre-order* admission gate, not an
+            // atomic account lock. The risk check must include manually
+            // opened trades and all other symbols/labels on the account.
+            // The official Symbol.AmountRisked() estimates values in the
+            // account currency; realized risk can exceed stops from gaps.
+            try
+            {
+                var equity = Account.Equity;
+                if (!IsFinite(equity) || equity <= 0 ||
+                    !IsFinite(Account.FreeMargin) || Account.FreeMargin <= 0 ||
+                    !IsFinite(stopPips) || stopPips <= 0 ||
+                    !IsFinite(volume) || volume <= 0)
+                    return false;
+
+                var intendedRisk = Symbol.AmountRisked(volume, stopPips);
+                var requiredMargin = Symbol.GetEstimatedMargin(side, volume);
+                if (!IsFinite(intendedRisk) || intendedRisk <= 0 ||
+                    !IsFinite(requiredMargin) || requiredMargin < 0 ||
+                    requiredMargin > Account.FreeMargin)
+                    return false;
+
+                var portfolioRisk = intendedRisk;
+                var budget = equity * AggregateStopRiskPercent / 100.0;
+                if (!IsFinite(budget) || budget <= 0 || portfolioRisk > budget)
+                    return false;
+
+                foreach (var current in Positions)
+                {
+                    // A position without a broker-confirmed stop or target
+                    // blocks new portfolio exposure, whatever its label.
+                    if (!current.StopLoss.HasValue || !current.TakeProfit.HasValue)
+                        return false;
+                    var instrument = current.Symbol;
+                    if (instrument == null || !IsFinite(instrument.PipSize) ||
+                        instrument.PipSize <= 0 || !IsFinite(current.EntryPrice) ||
+                        !IsFinite(current.StopLoss.Value) ||
+                        !IsFinite(current.VolumeInUnits) || current.VolumeInUnits <= 0)
+                        return false;
+                    var adverseDistance = current.TradeType == TradeType.Buy
+                        ? current.EntryPrice - current.StopLoss.Value
+                        : current.StopLoss.Value - current.EntryPrice;
+                    if (!IsFinite(adverseDistance))
+                        return false;
+                    if (adverseDistance <= 0)
+                        continue; // A stop already beyond entry locks profit.
+
+                    var existingRisk = instrument.AmountRisked(
+                        current.VolumeInUnits, adverseDistance / instrument.PipSize);
+                    if (!IsFinite(existingRisk) || existingRisk < 0)
+                        return false;
+                    portfolioRisk += existingRisk;
+                    if (!IsFinite(portfolioRisk) || portfolioRisk > budget)
+                        return false;
+                }
+                return true;
+            }
+            catch (Exception)
+            {
+                // Unknown broker/account state must never open a new trade.
+                Print("OMEGA X HOLD: portfolio risk or margin cannot be verified.");
+                return false;
+            }
         }
 
         private double CurrentSpreadPips()
