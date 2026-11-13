@@ -77,6 +77,14 @@ class ToolGateway:
 
         if not task.agent.active:
             raise ToolGatewayError("Task agent is inactive")
+        # An old worker can arrive holding a pre-cutover 'running' task and
+        # an execution token. The claim() policy alone is not protection:
+        # prohibit *all* noncanonical external side effects at the tool edge.
+        # Do not consume an approval grant or record a new tool reservation.
+        if task.agent.code != BOT_CODE:
+            raise ToolGatewayError(
+                "MOJTABA_NONCANONICAL_TOOL_EXECUTION_FORBIDDEN"
+            )
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)
         if capability is None or (
