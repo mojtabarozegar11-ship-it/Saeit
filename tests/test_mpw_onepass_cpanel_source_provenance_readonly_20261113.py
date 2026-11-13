@@ -38,7 +38,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
             b'<form method="post" action="/commerce/trx-easy/start/72/">'
             b'<input id="mpw-buy-email" name="email" type="email"></form>')
         self.ht.write_bytes(probe.FALLBACK_BLOCK + b"Owner original directives\n")
-        self.wsgi.write_bytes(b"APP='/home/zomorod2/Saeit-staging'\n")
+        self.wsgi.write_bytes(("APP='" + str(self.app) + "'\n").encode())
         self.store.write_bytes(b"<html>MPW_STATIC_STORE_FALLBACK_V1</html>\n")
         self.storeview.write_bytes(b"def store(request):\n    return None\n")
         self.checkoutview.write_bytes(b"def apply_csp():\n    return \"script-src 'self'\"\n")
