@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -18,6 +18,19 @@ work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
 cleanup() { rm -rf -- "$work"; }
 trap cleanup EXIT
+
+# Strictly read-only: stream a pinned source guard over SSH stdin. Never stage on cPanel.
+zomorod_fields_audit_stream() {
+  local guard=scripts/zomorod_fields_guard_20261113.py
+  local approved_blob=82f5ae3c339fecf7a29424424244af9f997c6f91
+  if [[ ! -f "$guard" || -L "$guard" || "$(git hash-object -- "$guard")" != "$approved_blob" ]]; then
+    echo "ZOMOROD_AUDIT_SOURCE_NOT_PINNED" >&2
+    return 65
+  fi
+  timeout 90s ssh -T -F "$work/config" saeit-cpanel \
+    'if command -v python3.11 >/dev/null 2>&1; then exec python3.11 -B - audit-live; elif test -x /home/zomorod2/virtualenv/Saeit/3.11/bin/python; then exec /home/zomorod2/virtualenv/Saeit/3.11/bin/python -B - audit-live; else echo CPANEL_PY311_NOT_AVAILABLE >&2; exit 70; fi' \
+    < "$guard"
+}
 
 normalize_key() {
   local value="$1" destination="$2"
@@ -55,6 +68,9 @@ EOF
       ;;
     cpanel_version)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+      ;;
+    zomorod_fields_audit_live)
+      zomorod_fields_audit_stream
       ;;
     passenger_inventory)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
@@ -110,6 +126,9 @@ case "$operation" in
     ;;
   cpanel_version)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+    ;;
+  zomorod_fields_audit_live)
+    zomorod_fields_audit_stream
     ;;
   passenger_inventory)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' |
