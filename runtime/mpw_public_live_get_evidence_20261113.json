@@ -94,5 +94,22 @@
     "independent_real_payment_verified": false,
     "purchase_download_verified": false,
     "confirmed_revenue_usd": null
+  },
+  "cycle_6_readonly_facts": {
+    "run_id": 43450899114,
+    "job_id": 131972804962,
+    "source": "GitHub-hosted public unauthenticated HTTPS GET only",
+    "checked_routes": 10,
+    "dynamic_storefront": "static_fallback_not_dynamic",
+    "verified_product_detail_get_count": 3,
+    "checkout_email_collection_detected_count": 6,
+    "checkout_script_src_explicit_missing_count": 6,
+    "checkout_strict_csp_pass_count": 0,
+    "no_payment_post": true,
+    "cpanel_source_probe_executed": false,
+    "cpanel_source_bridge_option_implemented_in_pr": true,
+    "commercial_revenue_verified": null,
+    "buyer_delivery_verified": false,
+    "caveat": "CSP missing explicit script-src does not alone prove an exploitable vulnerability; default-src may restrict scripts. No paid checkout was performed."
   }
 }
