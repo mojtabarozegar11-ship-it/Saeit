@@ -373,8 +373,14 @@ def verify_email_free_invoice_sources(app: Path) -> None:
     if template.is_symlink() or not template.is_file() or not 100 < template.stat().st_size <= 250_000:
         raise RuntimeError("STAGING_INVOICE_TEMPLATE_UNAVAILABLE")
     markup = template.read_bytes().lower()
-    if (b'name="email"' in markup or b'type="email"' in markup or
-            b"mpw-buy-email" in markup or
+    # Attribute values may use single quotes, double quotes or no quotes.
+    # The previous double-quote-only scan silently accepted email fields in
+    # valid Django templates, permitting an email-dependent cutover.
+    email_attribute = re.search(
+        rb"""\b(?:name|type)\s*=\s*(?:["']\s*email\s*["']|email(?=[\s/>]))""",
+        markup,
+    )
+    if (email_attribute is not None or b"mpw-buy-email" in markup or
             not (b"csrf_token" in markup or b"csrfmiddlewaretoken" in markup)):
         raise RuntimeError("STAGING_INVOICE_TEMPLATE_REQUIRES_EMAIL_OR_LACKS_CSRF")
 
