@@ -13,7 +13,13 @@ def test_registry_resolves_exact_capability():
     agent = Agent.objects.create(code="researcher", name="Researcher", mission="research", active=True)
     capability = AgentCapability.objects.create(code="collect_source", name="Collect source")
     capability.agents.add(agent)
-    assert AgentRegistry().resolve("collect_source") == agent
+    assert AgentRegistry().resolve("collect_source") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Sole new-task owner", active=True,
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("collect_source") == canonical
 
 
 def test_registry_rejects_inactive_capability():
@@ -32,8 +38,16 @@ def test_master_agent_uses_capability_registry_before_mission_fallback():
     specialist = Agent.objects.create(code="specialist", name="Specialist", mission="research", active=True)
     capability = AgentCapability.objects.create(code="publish", name="Publish")
     capability.agents.add(specialist)
+    with pytest.raises(RuntimeError, match="No active agent"):
+        MasterAgent().plan(project, "publish", {})
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central publication owner", active=True,
+    )
+    capability.agents.add(canonical)
     task = MasterAgent().plan(project, "publish", {})
-    assert task.agent_id == specialist.id
+    assert task.agent_id == canonical.id
+    assert task.agent_id != specialist.id
 
 
 def test_registry_does_not_route_compound_action_to_unrelated_token_capability():
@@ -60,8 +74,14 @@ def test_registry_supports_core_prefixed_capability_accepted_by_runtime():
     capability = AgentCapability.objects.create(code="core_collect_source", name="Collect")
     capability.agents.add(agent)
 
-    assert AgentRegistry().resolve("collect_source") == agent
-    assert AgentRegistry().capability_for(agent, "collect_source") == capability
+    assert AgentRegistry().resolve("collect_source") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central core capability owner", active=True,
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("collect_source") == canonical
+    assert AgentRegistry().capability_for(canonical, "collect_source") == capability
 
 
 def test_registry_prefers_low_risk_agent_before_critical_risk_agent():
@@ -74,7 +94,13 @@ def test_registry_prefers_low_risk_agent_before_critical_risk_agent():
     capability = AgentCapability.objects.create(code="publish", name="Publish")
     capability.agents.add(critical, low)
 
-    assert AgentRegistry().resolve("publish") == low
+    assert AgentRegistry().resolve("publish") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central owner", active=True, risk_level="high",
+    )
+    capability.agents.add(canonical)
+    assert AgentRegistry().resolve("publish") == canonical
 
 
 
@@ -159,7 +185,7 @@ def test_master_agent_plans_economic_work_only_for_canonical_owner():
     assert AgentTask.objects.filter(agent=old).count() == 0
 
 
-def test_noncanonical_unmapped_specialist_remains_routable_until_handoff():
+def test_noncanonical_unmapped_specialist_is_blocked_until_canonical_handoff():
     old = Agent.objects.create(
         code="independent-legacy-specialist", name="Unmapped specialist",
         active=True, risk_level="low",
@@ -168,4 +194,12 @@ def test_noncanonical_unmapped_specialist_remains_routable_until_handoff():
         code="unknown_legacy_private_job", name="Not yet mapped", active=True,
     )
     cap.agents.add(old)
-    assert AgentRegistry().resolve("unknown_legacy_private_job") == old
+    assert AgentRegistry().resolve("unknown_legacy_private_job") is None
+    canonical = Agent.objects.create(
+        code="mojtaba-bot-ai", name="Mojtaba.bot.ai",
+        mission="Central handoff owner", active=True,
+    )
+    # A handoff must assign the exact capability; renaming is insufficient.
+    assert AgentRegistry().resolve("unknown_legacy_private_job") is None
+    cap.agents.add(canonical)
+    assert AgentRegistry().resolve("unknown_legacy_private_job") == canonical
