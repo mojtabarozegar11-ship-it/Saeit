@@ -983,14 +983,101 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         self.assertEqual(state["restart_count"], 2)
         self.assertNotIn("PUBLISHED", state["message"])
 
-    def test_publish_succeeds_only_after_three_public_form_checks(self):
-        proof = [{"product_id": pid} for pid in release.PUBLIC_CHECKOUT_PRODUCTS]
+    def test_publish_succeeds_only_after_six_public_form_checks(self):
+        proof = [{"product_id": pid, "route": path}
+                 for pid, path in release.PUBLIC_CHECKOUT_ROUTES]
         state = self._exercise_guarded_publish(proof)
         self.assertIsNone(state["error"])
         self.assertEqual(state["final"], state["desired"])
         self.assertEqual(state["restart_count"], 1)
         self.assertEqual(state["probe_count"], 1)
         self.assertIn("PUBLIC_BUYER_FORMS_VERIFIED=YES", state["message"])
+
+    def _anonymous_six_route_audit(self, *, bad_csp=False, bad_cache=False,
+                                   bad_mime=False, redirect=False,
+                                   email_field=False):
+        """Mock actual public HTTP responses without touching the Internet."""
+        from urllib.parse import urlsplit
+        from unittest.mock import Mock
+        class FakeResponse:
+            status = 200
+            def __init__(self, url, data, headers):
+                self._url = url
+                self._data = data
+                self.headers = headers
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return self._url
+            def read(self, size):
+                return self._data[:size]
+        seen = []
+        def fake_open(request, timeout):
+            url = request.full_url
+            path = urlsplit(url).path
+            routes = dict((route, pid) for pid, route in release.PUBLIC_CHECKOUT_ROUTES)
+            self.assertIn(path, routes)
+            self.assertEqual(request.get_method(), "GET")
+            self.assertTrue(0 < timeout <= 12)
+            seen.append(path)
+            body = self._rendered_checkout(routes[path])
+            if email_field:
+                body += b'<input type="email" name="email" required>'
+            headers = {
+                "Content-Type": "application/json" if bad_mime else "text/html; charset=utf-8",
+                "Content-Security-Policy":
+                    ("script-src 'self'; form-action 'self'; frame-ancestors 'none'"
+                     if bad_csp else
+                     "default-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'"),
+                "Cache-Control": "private, no-cache" if bad_cache else "private, no-store",
+            }
+            final = url + "?redirected=1" if redirect else url
+            return FakeResponse(final, body, headers)
+        with patch("urllib.request.urlopen", side_effect=fake_open):
+            try:
+                result = release.audit_live_public_checkout_forms()
+                error = None
+            except RuntimeError as exc:
+                result = None
+                error = str(exc)
+        return seen, result, error
+
+    def test_six_real_public_checkout_paths_are_get_only_and_verified(self):
+        paths, evidence, error = self._anonymous_six_route_audit()
+        self.assertIsNone(error)
+        self.assertEqual(len(paths), 6)
+        self.assertEqual(len(evidence), 6)
+        self.assertEqual(sum(x["route_group"] == "canonical" for x in evidence), 3)
+        self.assertEqual(sum(x["route_group"] == "alias" for x in evidence), 3)
+        self.assertEqual(sorted(x["product_id"] for x in evidence),
+                         [72, 72, 225, 225, 879, 879])
+
+    def test_six_route_public_probe_rejects_bad_script_csp(self):
+        _, evidence, error = self._anonymous_six_route_audit(bad_csp=True)
+        self.assertIsNone(evidence)
+        self.assertIn("LIVE_CHECKOUT_CSP_UNSAFE:72", error)
+
+    def test_six_route_public_probe_rejects_missing_no_store(self):
+        _, evidence, error = self._anonymous_six_route_audit(bad_cache=True)
+        self.assertIsNone(evidence)
+        self.assertIn("LIVE_CHECKOUT_CACHE_UNSAFE:72", error)
+
+    def test_six_route_public_probe_rejects_non_html(self):
+        _, evidence, error = self._anonymous_six_route_audit(bad_mime=True)
+        self.assertIsNone(evidence)
+        self.assertIn("LIVE_CHECKOUT_WRONG_CONTENT_TYPE:72", error)
+
+    def test_six_route_public_probe_rejects_redirects(self):
+        _, evidence, error = self._anonymous_six_route_audit(redirect=True)
+        self.assertIsNone(evidence)
+        self.assertIn("LIVE_CHECKOUT_REDIRECT_OR_HTTP:72", error)
+
+    def test_six_route_public_probe_rejects_customer_email_input(self):
+        _, evidence, error = self._anonymous_six_route_audit(email_field=True)
+        self.assertIsNone(evidence)
+        self.assertIn("LIVE_EMAIL_FIELD_PRESENT:72", error)
 
     def test_idempotent_publish_never_skips_public_reverification(self):
         state = self._exercise_guarded_publish(RuntimeError("STALE_PUBLIC_FORM"),
