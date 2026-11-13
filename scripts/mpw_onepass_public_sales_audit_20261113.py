@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import urllib.error
 import urllib.parse
@@ -23,23 +22,36 @@ UA = "MojPlayWin-readonly-sales-evidence/20261113"
 
 
 class PageParser(HTMLParser):
+    """Associate hidden security inputs with their enclosing form only."""
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.forms = []
         self.links = []
+        self._active_form = None
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
         if tag == "form":
-            self.forms.append({"action": values.get("action", ""),
-                               "method": values.get("method", "get").lower(),
-                               "inputs": []})
-        elif tag == "input" and self.forms:
-            self.forms[-1]["inputs"].append(
-                (values.get("name", ""), values.get("value", ""),
-                 values.get("type", "text").lower()))
+            # HTML does not permit nested forms. A malformed nested form
+            # invalidates the outer one rather than borrowing its CSRF field.
+            if self._active_form is not None:
+                self._active_form["malformed"] = True
+            form = {"action": values.get("action") or "",
+                    "method": (values.get("method") or "get").lower(),
+                    "inputs": [], "malformed": self._active_form is not None}
+            self.forms.append(form)
+            self._active_form = form
+        elif tag == "input" and self._active_form is not None:
+            self._active_form["inputs"].append(
+                (values.get("name") or "", values.get("value") or "",
+                 (values.get("type") or "text").lower()))
         elif tag == "a":
-            self.links.append(values.get("href", ""))
+            self.links.append(values.get("href") or "")
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self._active_form = None
 
 
 def _local_path(value: str) -> str:
@@ -65,19 +77,26 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
         required = ("/store/product/72/checkout/",
                     "/store/product/225/checkout/",
                     "/store/product/879/")
+        # A URL mentioned only in a comment, CSS, or script is not a
+        # clickable customer CTA; require a real anchor for each SKU.
         if not all(any(_local_path(h) == route for h in parser.links)
-                   or route in html for route in required):
+                   for route in required):
             return "catalog_ctas_unverified"
         return "store_public_get_ok_not_sale"
     if sku not in SKUS:
         return "invalid_sku"
     if kind == "detail":
+        # Literal numbers in CSS or templates are not proof that the
+        # product is individually actionable. Check the product-specific CTA.
+        checkout_paths = {f"/store/product/{sku}/checkout/",
+                          f"/commerce/book/{sku}/"}
         return ("detail_public_get_ok_not_sale"
-                if str(sku) in html else "detail_product_identity_unverified")
+                if any(_local_path(h) in checkout_paths for h in parser.links)
+                else "detail_product_identity_unverified")
     if kind == "checkout":
         action = f"/commerce/trx-easy/start/{sku}/"
         forms = [form for form in parser.forms
-                 if form["method"] == "post"
+                 if not form["malformed"] and form["method"] == "post"
                  and _local_path(form["action"]) == action]
         if not forms:
             return "checkout_post_action_unverified"
