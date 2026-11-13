@@ -64,6 +64,25 @@ class WalletlessRecipientRegression(unittest.TestCase):
                 tx_previously_consumed=lambda network, tx: True,
             )
 
+    def test_malformed_provider_identifiers_fail_closed(self):
+        invoice, first, second = fixture()
+        for bad in (None, 0, 123, [], {}, " ", "\\t"):
+            with self.subTest(source_id=repr(bad)):
+                with self.assertRaises(PaymentHold):
+                    verify_two_source_transfer(
+                        invoice, replace(first, source_id=bad), second,
+                        tx_previously_consumed=lambda network, tx: False,
+                    )
+
+    def test_whitespace_equivalent_provider_ids_fail_closed(self):
+        invoice, first, second = fixture()
+        with self.assertRaises(PaymentHold):
+            verify_two_source_transfer(
+                invoice, replace(first, source_id=" node-1 "),
+                replace(second, source_id="node-1"),
+                tx_previously_consumed=lambda network, tx: False,
+            )
+
     def test_duplicate_provider_fails_closed(self):
         invoice, first, _ = fixture()
         with self.assertRaises(PaymentHold):
