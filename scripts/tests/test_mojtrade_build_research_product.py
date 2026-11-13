@@ -149,6 +149,36 @@ class ResearchProductArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(ProductArtifactError, "close_usd_invalid"):
                 build_artifact(path, datetime(2026, 11, 6, 11, tzinfo=timezone.utc))
 
+    def test_catalog_metadata_is_attached_to_private_artifact(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "report.json"
+            self._report(path)
+            artifact = build_artifact(
+                path, datetime(2026, 11, 6, 11, tzinfo=timezone.utc)
+            )
+            self.assertEqual(artifact["access_days"], 15)
+            self.assertEqual(artifact["maximum_verified_signals"], 10)
+            self.assertEqual(
+                [tier["price_trx"] for tier in artifact["catalog_tiers"]],
+                [5, 10, 15],
+            )
+
+    def test_invalid_catalog_blocks_packaging(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "report.json"
+            catalog = Path(folder) / "catalog.json"
+            self._report(path)
+            catalog.write_text(json.dumps({
+                "schema": "mojtaba.bot.ai.signal-catalog.v1",
+                "canonical_bot_id": "wrong-bot",
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ProductArtifactError, "catalog_owner"):
+                build_artifact(
+                    path,
+                    datetime(2026, 11, 6, 11, tzinfo=timezone.utc),
+                    catalog_path=catalog,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
