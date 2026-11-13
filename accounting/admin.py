@@ -50,6 +50,33 @@ class JournalEntryAdmin(admin.ModelAdmin):
     search_fields = ("reference", "memo")
     inlines = (JournalLineInline,)
 
+    # Once posted, a journal must be reversed by a separate entry, never edited or removed.
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.status == JournalEntry.Status.POSTED:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.status == JournalEntry.Status.POSTED:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        # Do not trust a submitted status field: check the original persisted state.
+        if change and JournalEntry.objects.filter(pk=obj.pk, status=JournalEntry.Status.POSTED).exists():
+            raise ValidationError("سند قطعی قابل ویرایش نیست؛ اصلاح باید با سند معکوس ثبت شود.")
+        super().save_model(request, obj, form, change)
+
+    def delete_model(self, request, obj):
+        if obj.status == JournalEntry.Status.POSTED:
+            raise ValidationError("حذف سند قطعی ممنوع است.")
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(status=JournalEntry.Status.POSTED).exists():
+            raise ValidationError("حذف گروهی اسناد قطعی ممنوع است.")
+        super().delete_queryset(request, queryset)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         if form.instance.status == JournalEntry.Status.POSTED:
