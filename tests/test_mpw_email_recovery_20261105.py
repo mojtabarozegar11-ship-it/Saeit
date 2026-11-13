@@ -96,9 +96,32 @@ class RecoveryIsolationTests(TransactionTestCase):
                         guest_adapter, "_guest_username",
                         return_value="mpwguest_" + secrets.token_hex(12)):
                     new_user, token = guest_adapter._new_user(request)
-                self.assertEqual(new_user.email, "")
+                # Internal reserved-domain alias is not a buyer-supplied
+                # or contactable email address. The existing invoice ledger
+                # nevertheless requires a nonempty user.email attribute.
+                self.assertEqual(new_user.email,
+                                 new_user.username + "@guest.mojplaywin.invalid")
+                self.assertNotIn(new_user.email, fields.values())
                 self.assertFalse(new_user.has_usable_password())
                 self.assertTrue(token)
+
+    def test_guest_submitted_contact_address_is_never_retained_or_recovered(self):
+        request = self.rf.post(
+            "/commerce/trx-easy/start/72/",
+            {"email": "customer@real.example",
+             "buyer_email": "attacker@another.example"},
+            secure=True, HTTP_HOST="mojplaywin.com",
+        )
+        with patch.object(guest_adapter, "_rate_limit"), patch.object(
+                guest_adapter, "_guest_username",
+                return_value="mpwguest_" + secrets.token_hex(12)):
+            new_user, token = guest_adapter._new_user(request)
+        self.assertTrue(token)
+        self.assertEqual(new_user.email,
+                         new_user.username + "@guest.mojplaywin.invalid")
+        self.assertNotIn(new_user.email, request.POST.values())
+        self.assertFalse(GuestOrderEmail.objects.filter(
+            order__customer=new_user).exists())
 
     @override_settings(MPW_GUEST_RECOVERY_ENABLED=True)
     def test_checkout_dispatch_never_enters_email_recovery_binding(self):
