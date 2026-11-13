@@ -58,6 +58,25 @@ class ExistingSiteAuditContractTests(unittest.TestCase):
         self.assertIn("${{ runner.temp }}/zm-deep-browser/", text)
         self.assertIn("if-no-files-found: warn", text)
 
+    def test_store_mobile_sha256_wrap_is_localized_and_preserves_original_store(self):
+        source = (ROOT / "content/zomorod-v11/store_index.php").read_text(encoding="utf8")
+        rule = ".grid article small.muted{overflow-wrap:anywhere;word-break:break-word}"
+        self.assertEqual(source.count(rule), 1)
+        self.assertIn("SHA-256: ", source)
+        self.assertIn("پرداخت آنلاین تا اتصال درگاه غیرفعال است", source)
+        self.assertIn("فروشگاه‌های تخصصی زمرد ملل", source)
+        self.assertIn("zmStoreDb($private)", source)
+        # The rule targets the pre-existing card's unbroken fingerprint only.
+        self.assertNotIn("body{overflow-x:hidden}", source)
+
+    def test_store_browser_diagnostic_never_submits_or_writes(self):
+        source = (ROOT / "scripts/zomorod_store_overflow_readonly_20261113.cjs").read_text()
+        self.assertIn("ZM_STORE_LOCAL_CSS_REHEARSAL", source)
+        self.assertIn("localOnly:true", source)
+        self.assertIn("https://zomorodmelal.ir/store/", source)
+        self.assertNotIn("method:'POST'", source)
+        self.assertNotIn("form.submit(", source)
+
 
 if __name__ == "__main__":
     unittest.main()
