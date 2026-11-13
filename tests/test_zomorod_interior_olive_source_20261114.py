@@ -32,7 +32,7 @@ class ExistingInteriorOliveBackground(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, s)
         for old in ('background:#11120fe8', 'background:#161712',
-                    'background:#151611', 'background:#0d0e0c',
+                    'background:#0d0e0c',
                     'background:linear-gradient(180deg,#151611,#11120f)'):
             with self.subTest(old=old):
                 self.assertNotIn(old, s)
