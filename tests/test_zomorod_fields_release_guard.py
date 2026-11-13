@@ -280,3 +280,40 @@ def test_mid_publish_rollback_removes_all_created_assets(sandbox, monkeypatch):
         mod.apply(stage, 'fields-1234583')
     assert all(not (root / p).exists() for p in mod.CREATED)
     assert all((root / name).read_bytes() == old[name] for name in mod.FILES)
+
+
+def test_disk_budget_includes_all_twelve_created_files(sandbox, monkeypatch):
+    from types import SimpleNamespace
+    root, stage, old, new = sandbox
+    # Artificially inflate just one of the created assets. The preflight should
+    # reject under its larger 4x total-size safety budget.
+    large = b'Z' * (11 * 1024 * 1024)
+    name = mod.CREATED[0]
+    (stage / 'new' / name).write_bytes(large)
+    monkeypatch.setitem(mod.NEW_BLOBS, name, mod.git_blob(large))
+    monkeypatch.setattr(mod.shutil, 'disk_usage',
+                        lambda _: SimpleNamespace(free=33 * 1024 * 1024))
+    with pytest.raises(RuntimeError, match='Insufficient free disk'):
+        mod.preflight(stage)
+    assert all((root / path).read_bytes() == old[path] for path in mod.FILES)
+
+
+def test_atomic_create_never_replaces_concurrent_owner_file(sandbox):
+    root, stage, old, new = sandbox
+    target = root / mod.CREATED[0]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b'owner placed image before release write')
+    with pytest.raises(FileExistsError):
+        mod.atomic_create(target, b'new released image bytes', 0o644)
+    assert target.read_bytes() == b'owner placed image before release write'
+
+
+def test_atomic_create_safely_writes_new_file(sandbox):
+    root, stage, old, new = sandbox
+    target = root / mod.CREATED[0]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    mod.atomic_create(target, b'new released image bytes', 0o644)
+    assert target.read_bytes() == b'new released image bytes'
+    with pytest.raises(FileExistsError):
+        mod.atomic_create(target, b'second write must fail', 0o644)
+    assert target.read_bytes() == b'new released image bytes'
