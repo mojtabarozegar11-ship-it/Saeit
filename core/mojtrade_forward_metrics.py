@@ -9,6 +9,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 
+from .canonical_bot_identity import RUNTIME_CODES
+
 MAX_HISTORY = 128
 MAX_LOOKBACK_DAYS = 45
 MIN_MODEL_SAMPLES = 30
@@ -60,7 +62,7 @@ def _parse_snapshot(row, now):
     report = row["review"]
     if not isinstance(report, dict) or report.get("schema") != "mojtaba.bot.ai.private-market-research-review.v1":
         raise ForwardEvidenceError("MODEL_REVIEW_SCHEMA_INVALID")
-    if report.get("canonical_agent") != "economic-master-agent":
+    if report.get("canonical_agent") not in RUNTIME_CODES:
         raise ForwardEvidenceError("MODEL_AGENT_MISMATCH")
     controls = report.get("controls")
     expected = {

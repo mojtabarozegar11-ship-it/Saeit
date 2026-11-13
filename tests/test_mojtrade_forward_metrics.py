@@ -219,5 +219,28 @@ class ForwardMetricsTests(unittest.TestCase):
         self.assertFalse(report["independently_attested_market_data"])
 
 
+class CanonicalHandoffReportTests(unittest.TestCase):
+    def test_new_canonical_reviews_can_pair_without_claiming_live_pnl(self):
+        first = snapshot()
+        first["review"]["canonical_agent"] = "mojtaba-bot-ai"
+        next_hour = snapshot(START + timedelta(hours=1), btc_close=104,
+                             stance="neutral", sha_number=2)
+        next_hour["review"]["canonical_agent"] = "mojtaba-bot-ai"
+        result = assess_reviewed_history([first, next_hour], NOW)
+        self.assertEqual(result["eligible_hypothetical_one_hour_pairs"], 1)
+        self.assertIsNone(result["verified_trade_pnl"])
+        self.assertIsNone(result["collected_revenue"])
+        self.assertEqual(result["orders"], 0)
+
+    def test_mixed_legacy_and_canonical_reviews_do_not_reset_history(self):
+        legacy = snapshot()
+        canonical = snapshot(START + timedelta(hours=1), btc_close=104,
+                             stance="neutral", sha_number=2)
+        canonical["review"]["canonical_agent"] = "mojtaba-bot-ai"
+        result = assess_reviewed_history([canonical, legacy], NOW)
+        self.assertEqual(result["eligible_hypothetical_one_hour_pairs"], 1)
+        self.assertEqual(result["recent_reference_samples"][0]["modeled_net_return_pct"],
+                         "3.7000")
+
 if __name__ == "__main__":
     unittest.main()

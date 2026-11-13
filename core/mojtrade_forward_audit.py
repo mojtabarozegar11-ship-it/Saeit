@@ -1,10 +1,11 @@
-"""Existing economic-master-agent's bounded, read-only forward watch audit."""
+"""Sole Mojtaba.bot.ai runtime's bounded, read-only forward watch audit."""
 from __future__ import annotations
 
 import os
 from django.db.models import F
 
-from .models import AgentTask
+from .canonical_bot_identity import RUNTIME_CODES, resolve_single_active_agent
+from .models import Agent, AgentTask
 from .mojtrade_forward_metrics import MAX_HISTORY, assess_reviewed_history, ForwardEvidenceError
 
 
@@ -14,9 +15,12 @@ def master_forward_audit(payload):
     if not isinstance(payload, dict) or payload:
         # No caller-supplied prices, paths, fee overrides, orders or accounts.
         raise ForwardEvidenceError("MODEL_NO_CALLER_CONTROLLED_EVIDENCE")
+    # Require exactly one active runtime, but keep historical completed receipts
+    # from the inactive legacy identity after an evidenced canonical handoff.
+    if resolve_single_active_agent(Agent) is None:
+        raise ForwardEvidenceError("MODEL_ACTIVE_MASTER_REQUIRED")
     rows = list(AgentTask.objects.filter(
-        agent__code="economic-master-agent",
-        agent__active=True,
+        agent__code__in=RUNTIME_CODES,
         status="completed",
         action_type="income_mojtrade_research_review",
         capability_code=F("action_type"),

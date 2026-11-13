@@ -112,3 +112,78 @@ def test_forward_audit_rejects_custom_prices_and_orders(monkeypatch):
                       {"source_path": "/tmp/forged.json"}):
         with pytest.raises(ForwardEvidenceError, match="NO_CALLER_CONTROLLED"):
             master_forward_audit(forbidden)
+
+
+@pytest.mark.django_db
+def test_forward_audit_retains_completed_legacy_reviews_after_canonical_handoff(monkeypatch):
+    """Inactive old master receipts remain countable, never executable."""
+    monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
+    call_command("seed_online_income_agents")
+    legacy = Agent.objects.get(code="economic-master-agent")
+    canonical, _ = Agent.objects.update_or_create(
+        code="mojtaba-bot-ai",
+        defaults={"name": "Mojtaba.bot.ai", "mission": "One runtime", "active": True},
+    )
+    canonical.capabilities.set(legacy.capabilities.all())
+    legacy.active = False
+    legacy.save(update_fields=["active"])
+    t0 = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=3)
+    reviews = [make_review(t0, 100, 17), make_review(
+        t0 + timedelta(hours=1), 104, 18, "neutral",
+    )]
+    historical_ids = []
+    for index, snapshot in enumerate(reviews):
+        task = AgentTask.objects.create(
+            agent=legacy, status="completed",
+            action_type="income_mojtrade_research_review",
+            capability_code="income_mojtrade_research_review",
+            execution_id=f"archived-{index}", attempt_count=1,
+            output_data={
+                "verified_effect": True,
+                "evidence": {"kind": "mojtrade_private_research_review",
+                             "value": copy.deepcopy(snapshot["report"])},
+            },
+        )
+        AgentTask.objects.filter(pk=task.pk).update(updated_at=snapshot["reviewed_at"])
+        historical_ids.append(task.pk)
+    capability = canonical.capabilities.get(code="income_mojtrade_forward_audit")
+    audit = AgentTask.objects.create(
+        agent=canonical, status="queued", input_data={},
+        action_type=capability.code, capability_code=capability.code,
+        risk_snapshot=capability.risk_level,
+    )
+    call_command("run_economic_worker", task_id=audit.pk)
+    audit.refresh_from_db()
+    report = audit.output_data["evidence"]["value"]
+    assert audit.status == "completed"
+    assert report["eligible_hypothetical_one_hour_pairs"] == 1
+    assert report["recent_reference_samples"][0]["modeled_net_return_pct"] == "3.7000"
+    assert report["verified_trade_pnl"] is None
+    assert report["collected_revenue"] is None
+    assert report["orders"] == 0
+    assert AgentTask.objects.filter(pk__in=historical_ids, status="completed").count() == 2
+    legacy.refresh_from_db()
+    assert legacy.active is False
+
+
+@pytest.mark.django_db
+def test_forward_audit_rejects_missing_or_parallel_master_runtime(monkeypatch):
+    from django.core.exceptions import ImproperlyConfigured
+    from core.mojtrade_forward_audit import master_forward_audit
+    from core.mojtrade_forward_metrics import ForwardEvidenceError
+    monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
+    call_command("seed_online_income_agents")
+    legacy = Agent.objects.get(code="economic-master-agent")
+    legacy.active = False
+    legacy.save(update_fields=["active"])
+    Agent.objects.filter(code="mojtaba-bot-ai").update(active=False)
+    with pytest.raises(ForwardEvidenceError, match="MODEL_ACTIVE_MASTER_REQUIRED"):
+        master_forward_audit({})
+    legacy.active = True
+    legacy.save(update_fields=["active"])
+    Agent.objects.update_or_create(
+        code="mojtaba-bot-ai",
+        defaults={"name": "Mojtaba.bot.ai", "mission": "Parallel prohibited", "active": True},
+    )
+    with pytest.raises(ImproperlyConfigured, match="CANONICAL_BOT_MULTIPLE_ACTIVE"):
+        master_forward_audit({})

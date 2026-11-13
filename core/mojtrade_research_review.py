@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from scripts.mojtrade_consume_observation import ObservationError, read_observation
+from .canonical_bot_identity import CANONICAL_BOT_CODE
 
 
 MAX_SOURCE_BYTES = 96_000
@@ -106,7 +107,7 @@ def inspect_private_observation(path: Path, now: datetime | None = None) -> dict
     digest = hashlib.sha256(original).hexdigest()
     return {
         "schema": "mojtaba.bot.ai.private-market-research-review.v1",
-        "canonical_agent": "economic-master-agent",
+        "canonical_agent": CANONICAL_BOT_CODE,
         "source_sha256": digest,
         "source_bytes": len(original),
         "observed_symbols": [item["symbol"] for item in sources],
