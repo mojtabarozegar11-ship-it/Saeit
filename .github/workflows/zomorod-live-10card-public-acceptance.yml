@@ -138,3 +138,98 @@ jobs:
           if passed != total:
               raise SystemExit("Production release not fully proven by read-only acceptance")
           PY
+  existing-homepage-only-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Audit existing homepage search, lead intake destinations, media and mobile source (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re, time
+          from html.parser import HTMLParser
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlsplit
+          
+          BASE="https://zomorodmelal.ir"
+          class Tags(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.a=[]; self.img=[]; self.form=[]; self.script=[]; self.css=[]; self.metas=[]; self.h1=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="a" and a.get("href"): self.a.append(a["href"])
+                  if tag=="img": self.img.append(a)
+                  if tag=="form": self.form.append(a)
+                  if tag=="script" and a.get("src"): self.script.append(a["src"])
+                  if tag=="link" and a.get("rel")=="stylesheet": self.css.append(a.get("href",""))
+                  if tag=="meta": self.metas.append(a)
+                  if tag=="h1": self.h1+=1
+          results=[]
+          def get(path,max_bytes=2000000):
+              url=BASE+path
+              started=time.monotonic()
+              req=Request(url,headers={"User-Agent":"ZomorodExistingHomepageAudit/1.0 (read only)","Cache-Control":"no-cache"},method="GET")
+              try:
+                  with urlopen(req,timeout=17) as r:
+                      body=r.read(max_bytes+1)
+                      status=r.status; final=r.url; ct=r.headers.get("Content-Type","")
+              except HTTPError as e:
+                  body=b"";status=e.code;final=e.url;ct=e.headers.get("Content-Type","")
+              except (URLError,TimeoutError,ConnectionError) as e:
+                  body=b"";status=0;final=url;ct=str(type(e).__name__)
+              elapsed=round(1000*(time.monotonic()-started))
+              if len(body)>max_bytes: body=b"";status=0;ct="SIZE_LIMIT"
+              h=urlsplit(final)
+              safe=(h.hostname=="zomorodmelal.ir" and h.scheme=="https")
+              return {"path":path,"status":status,"body":body,"type":ct,"ms":elapsed,"safe":safe}
+          def record(key,ok,evidence):
+              row={"check":key,"pass":bool(ok),"detail":str(evidence)[:165]}
+              results.append(row);print("ZM_CURRENT_HOMEPAGE "+json.dumps(row,ensure_ascii=False),flush=True)
+          home=get("/")
+          record("home_http_and_real_html",home["status"]==200 and home["safe"] and len(home["body"])>10000 and b"</html>" in home["body"][-600:],{"http":home["status"],"bytes":len(home["body"]),"ms":home["ms"]})
+          s=home["body"].decode("utf8","replace")
+          p=Tags();p.feed(s)
+          record("farsi_and_rtl",bool(re.search(r'<html[^>]+lang="fa"[^>]+dir="rtl"',s)), "html lang=fa dir=rtl")
+          record("exactly_one_h1",p.h1==1,"count="+str(p.h1))
+          record("meta_title_description_canonical",bool(re.search(r'<title>[^<]{12,}</title>',s) and re.search(r'<meta name="description" content="[^"]{60,}"',s) and 'rel="canonical" href="https://zomorodmelal.ir/"' in s),"title/description/canonical")
+          record("logo_and_hero_metadata",'/assets/zm-logo-transparent-v1.webp' in s and '/assets/zm-v3-hero.webp' in s,"existing logo and hero referenced")
+          record("accessible_navigation_markup",'class="skip-link"' in s and 'class="mobile-menu-btn"' in s and 'aria-controls="mobile-nav"' in s,"skip link and mobile menu controls")
+          record("search_form",any(f.get("action")=="/search/" and f.get("method")=="get" for f in p.form),"GET /search/ in existing page")
+          record("service_inquiry_cta",'/ask-master/index.php?service=1' in p.a,"existing lead inquiry destination")
+          record("contact_cta",'/contact/' in p.a,"existing contact page link")
+          record("business_navigation",all(x in p.a for x in ("/company/","/services/","/research/","/store/","/auctions/")),"existing main business menu")
+          for path in ("/search/?q=%DA%A9%D8%B4%D8%A7%D9%88%D8%B1%D8%B2%DB%8C",
+                       "/ask-master/index.php?service=1","/contact/","/services/",
+                       "/store/","/auctions/","/company/","/knowledge/","/newsletter/"):
+              r=get(path,1000000)
+              ishtml=(b"<html" in r["body"][:500].lower() or b"<!doctype html" in r["body"][:500].lower())
+              record("route:"+path,r["status"]==200 and r["safe"] and ishtml and len(r["body"])>500,{"http":r["status"],"bytes":len(r["body"]),"ms":r["ms"],"type":r["type"][:44]})
+          photos=[x for x in p.img if x.get("src","").startswith("/assets/")]
+          uris=sorted(set(x.get("src") for x in photos))
+          record("image_alt_present",all("alt" in x for x in p.img),"images="+str(len(p.img)))
+          for path in uris:
+              r=get(path,2500000)
+              webp=r["body"][:4]==b"RIFF" and r["body"][8:12]==b"WEBP"
+              record("image:"+path,r["status"]==200 and r["safe"] and webp,{"http":r["status"],"bytes":len(r["body"]),"ms":r["ms"]})
+          for path in p.script+p.css:
+              r=get(path)
+              record("asset:"+path,r["status"]==200 and r["safe"] and len(r["body"])>100,
+                 {"http":r["status"],"bytes":len(r["body"]),"ms":r["ms"],"type":r["type"][:40]})
+              if path in p.css and r["status"]==200:
+                  record("mobile_css_breakpoints",b"@media" in r["body"] and b"640px" in r["body"],"CSS has mobile breakpoints; actual rendering NOT certified")
+              if path in p.script and r["status"]==200:
+                  record("js_menu_and_search_handlers",b"search-toggle" in r["body"] and b"mobile-menu-btn" in r["body"],"JS handlers present; actual interaction NOT certified")
+          passed=sum(r["pass"] for r in results); n=len(results)
+          summary={"pass":passed,"fail":n-passed,"total":n,"site_mutations":0,"scope":"existing_homepage_only"}
+          print("ZM_CURRENT_HOMEPAGE_SUMMARY "+json.dumps(summary,ensure_ascii=False),flush=True)
+          with open(__import__("os").environ.get("GITHUB_STEP_SUMMARY","/tmp/zomorod-homepage-summary.md"),"a",encoding="utf8") as f:
+              f.write("\n## Current Zomorod homepage — read-only audit, no new layout\n\n")
+              f.write(f"{passed}/{n} objective checks passed. Rendering and transaction submission were NOT tested.\n\n")
+              f.write("| Existing homepage check | Result | Evidence |\n|---|---|---|\n")
+              for r in results:f.write("| "+r["check"].replace("|","/")+" | "+("PASS" if r["pass"] else "FAIL")+" | "+r["detail"].replace("|","/")+" |\n")
+              f.write("\nNo live writes, no templates or new pages, no form submission, no payments.\n")
+          if passed!=n:raise SystemExit("CURRENT_HOMEPAGE_AUDIT_FOUND_ERRORS")
+          PY
