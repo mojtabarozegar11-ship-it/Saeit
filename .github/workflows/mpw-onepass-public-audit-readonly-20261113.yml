@@ -25,6 +25,18 @@ on:
       - '.github/workflows/cpanel-direct-command-bridge.yml'
       - '.github/workflows/mpw-public-passenger-runtime-readonly-20261102.yml'
       - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
+  # Read-only isolated tests for the Draft branch, even when GitHub
+  # cannot generate a pull_request merge ref because of main conflicts.
+  # This does not authorize a cPanel release or financial action.
+  push:
+    branches:
+      - audit/mpw-onepass-sales-20261113
+    paths:
+      - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
+      - '.github/workflows/mpw-sales-intake-readonly-20261024.yml'
+      - 'tests/test_mpw_sales_intake_selfhost_readonly_20261113.py'
+      - 'scripts/mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_guest_no_email_release.py'
   workflow_dispatch:
 
 permissions:
@@ -36,7 +48,7 @@ concurrency:
 
 jobs:
   isolated-safety-contract:
-    if: "${{ github.event_name == 'pull_request' }}"
+    if: "${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mpw-onepass-sales-20261113') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
