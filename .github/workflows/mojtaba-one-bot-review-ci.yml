@@ -127,6 +127,9 @@ jobs:
             core/tests/test_queue_dispatcher.py \
             core/tests/test_task_runtime_lifecycle.py \
             core/tests/test_task_runtime_identity.py \
+            core/tests/test_task_recovery.py \
+            core/tests/test_recovery_command.py \
+            core/tests/test_recovery_scheduler.py \
             tests/test_task_runtime.py \
             tests/test_task_retry.py \
             tests/test_task_policy_snapshot.py \
