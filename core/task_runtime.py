@@ -30,6 +30,16 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+        # Planning exclusively under the canonical bot is not sufficient:
+        # historical queued tasks, stale API clients and old cron workers
+        # can call claim() by primary key. No noncanonical row may acquire
+        # a NEW execution identity after the source cutover. Do not mutate
+        # the old task here: its pending work requires an audited handoff.
+        if task.agent.code != BOT_CODE:
+            raise TaskExecutionError(
+                "MOJTABA_NONCANONICAL_TASK_EXECUTION_FORBIDDEN; "
+                "legacy task requires verified handoff"
+            )
 
         # One execution owner across economic and factory lanes of Mojtaba.bot.ai.
         # On row-locking databases select_for_update also locks the joined
