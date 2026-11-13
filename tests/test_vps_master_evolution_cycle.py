@@ -155,6 +155,111 @@ class EvolutionTests(unittest.TestCase):
                 mod.evaluate(db, alias / "evolution.json")
             self.assertEqual(json.loads((private / "evolution.json").read_text())["revision"], 1)
 
+    def test_rejects_database_with_symlinked_ancestor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            private = root / "actual"
+            private.mkdir()
+            db, state = self.fixture(str(private), [])
+            alias = root / "db-alias"
+            alias.symlink_to(private, target_is_directory=True)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_PRIVATE_DB_NOT_FOUND"):
+                mod.evaluate(alias / db.name, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_state_with_symlinked_grandparent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            private = root / "actual" / "nested"
+            private.mkdir(parents=True)
+            db, state = self.fixture(str(private), [])
+            alias = root / "state-alias"
+            alias.symlink_to(root / "actual", target_is_directory=True)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_PARENT_SYMLINK"):
+                mod.evaluate(db, alias / "nested" / state.name)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_invalid_state_json_without_replacing_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, [])
+            state.write_bytes(b"{broken")
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_INVALID_JSON"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_invalid_old_counts_without_replacing_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            data = json.loads(state.read_text())
+            data["task_counts"]["completed"] = True
+            state.write_text(json.dumps(data))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_PREVIOUS_COUNTS_INVALID"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_cursor_ahead_of_restored_database(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            data = json.loads(state.read_text())
+            data["last_completed_task_id"] = 100
+            state.write_text(json.dumps(data))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_TASK_CURSOR_AHEAD"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_invalid_stored_policy_and_revision(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, [])
+            for key, value, expected in (
+                ("max_steps", "20", "INVALID_PREVIOUS_EVOLUTION_POLICY"),
+                ("revision", True, "MASTER_EVOLUTION_PREVIOUS_REVISION_INVALID"),
+            ):
+                data = json.loads(state.read_text())
+                data[key] = value
+                state.write_text(json.dumps(data))
+                before = state.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    mod.evaluate(db, state)
+                self.assertEqual(state.read_bytes(), before)
+                data[key] = 1
+                state.write_text(json.dumps(data))
+
+    def test_rejects_oversized_previous_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, [])
+            state.write_bytes(b"x" * (mod.MAX_STATE_BYTES + 1))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_UNSAFE"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_rejects_truncated_audit_window_without_false_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"] * 130, previous_steps=20)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_NEW_TASKS_EXCEED_AUDIT_WINDOW"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_corrected_corrupt_state_can_resume_without_bypassing_checks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            baseline = state.read_bytes()
+            state.write_text("not-json")
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_INVALID_JSON"):
+                mod.evaluate(db, state)
+            state.write_bytes(baseline)
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+            self.assertFalse(result["commercial_publication_enabled"])
+            self.assertFalse(result["financial_actions_enabled"])
+
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"],
