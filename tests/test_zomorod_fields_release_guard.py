@@ -287,7 +287,12 @@ def test_disk_budget_includes_all_twelve_created_files(sandbox, monkeypatch):
     root, stage, old, new = sandbox
     # Artificially inflate just one of the created assets. The preflight should
     # reject under its larger 4x total-size safety budget.
-    large = b'Z' * (11 * 1024 * 1024)
+    # Keep XML valid so the test reaches the disk-space check, not ET.ParseError.
+    large = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750"'
+        b' width="1200" height="750"><!--' +
+        b'Z' * (11 * 1024 * 1024) + b'--></svg>'
+    )
     name = mod.CREATED[0]
     (stage / 'new' / name).write_bytes(large)
     monkeypatch.setitem(mod.NEW_BLOBS, name, mod.git_blob(large))
