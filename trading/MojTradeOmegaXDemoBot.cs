@@ -413,7 +413,7 @@ namespace Mojtaba.Bot.Ai
 
         protected override void OnStop()
         {
-            Print("MojTrade QuantumScalp v2 stopped. Existing positions remain open.");
+            Print("mojtaba.bot.ai canonical trading core stopped. Existing positions remain open.");
         }
     }
 }
