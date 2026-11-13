@@ -13,6 +13,7 @@ import tempfile
 from django.utils import timezone
 from .factory_native_review_gateway import inspect_family
 from .factory_f41_gateway import build_verified_order
+from .mojtrade_research_review import master_research_review
 
 from .models import AgentTask, Product
 from .production_gate import ProductionGate
@@ -426,6 +427,7 @@ def build_economic_gateway():
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
+        ToolSpec(code="income_mojtrade_research_review", handler=master_research_review, risk="low"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
         ToolSpec(code="income_mvp_build", handler=mvp_build, risk="medium"),

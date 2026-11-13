@@ -13,6 +13,34 @@
 
 `scripts/mojtrade_consume_observation.py` is the downstream research consumer. It reads the private observation, rejects expired/future payloads, validates the schema, provider, symbols, timeframe and research stance, and atomically writes a private report. The report explicitly contains `action=research_only`, `execution=disabled` and `orders=0`. It never places orders, contacts a broker, sends email or changes the source observation.
 
+## Canonical master-bot research review (new capability)
+
+The **existing** `economic-master-agent` (`Mojtaba.bot.ai`), not a second bot,
+can execute a queued `income_mojtrade_research_review` task via its normal
+`ToolGateway`, `TaskRuntime` and audit ledger. The seeder grants this low-risk
+capability only to the existing master, not to factory/specialist agents.
+This adds **no new cron**, daemon, market-data fetch, broker connector or live
+trading permission. An explicit queued, correctly authorized task is required.
+
+The review reads exactly
+`~/factory-runtime/private/mojtrade/validated-payload.json`, with no
+caller-controlled pathname, enforces 0700 private directory/0600-style file
+permissions, no file symlinks/hardlinks, 96 KB max, immutable read snapshot
+consistency, the existing consumer's schema/provider/market validation,
+at most 90-minute source validity, and completed candle freshness within 3h.
+Missing/stale/untrusted evidence is an explicit failed task, never invented
+signals. No source file is modified.
+
+The output records SHA-256 provenance, source, symbol, directional *watch*
+classification, and **zero** independently measured forward-outcome or
+backtest samples. Win rate and independently verified P&L are **null**;
+orders=0, execution=disabled, publication and delivery=false. Task completion
+verifies that this bounded private audit occurred, **not** the strategy's
+predictive accuracy, profitability or live VPS installation.
+A real performance score requires independently sourced future market closes,
+a clearly defined entry/exit and fee/slippage model, sample-size tracking,
+and separate trade-execution approvals.
+
 ## Independent VPS execution path
 
 1. Provision a dedicated unprivileged service account and a *private* directory (permissions 0700) outside any site document root, e.g. `/var/lib/mojtrade/private`.
