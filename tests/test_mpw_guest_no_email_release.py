@@ -902,5 +902,91 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                     release.plan(GUEST_FILE)
 
 
+    def _exercise_guarded_publish(self, public_probe, *, idempotent=False):
+        """Isolated files only: never cPanel, wallet, mail, or public HTTPS."""
+        import contextlib
+        import io
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            guest = root / "guest.py"
+            checkout = root / "checkout.html"
+            original = {"guest": b"original guest module",
+                        "template": b"original checkout template"}
+            desired = {"guest": b"replacement signed guest module",
+                       "template": b"checkout template without email"}
+            guest.write_bytes(desired["guest"] if idempotent else original["guest"])
+            checkout.write_bytes(desired["template"] if idempotent else original["template"])
+            backup = root / "private-backup"
+            def private_backup(_run):
+                backup.mkdir(mode=0o700)
+                return backup
+            restart = Mock()
+            probe = Mock(side_effect=public_probe) if isinstance(public_probe, Exception) \
+                    else Mock(return_value=public_probe)
+            plan = Mock(return_value=(desired if idempotent else original,
+                                     None if idempotent else desired))
+            sink = io.StringIO()
+            with patch.multiple(
+                release, GUEST=guest, TEMPLATE=checkout,
+                guard=lambda: None,
+                audit_invoice_email_dependencies=lambda: {"invoice_handler_found": True},
+                plan=plan,
+                _backup_dir=private_backup,
+                _restart=restart,
+                audit_live_public_checkout_forms=probe,
+            ):
+                with contextlib.redirect_stdout(sink):
+                    try:
+                        release.publish("202611130001", root / "source-not-used.py")
+                        error = None
+                    except RuntimeError as exc:
+                        error = str(exc)
+            return {
+                "before": original, "desired": desired,
+                "final": {"guest": guest.read_bytes(), "template": checkout.read_bytes()},
+                "backup_exists": backup.exists(),
+                "restart_count": restart.call_count,
+                "probe_count": probe.call_count,
+                "message": sink.getvalue(), "error": error,
+            }
+
+    def test_publish_rolls_back_every_file_when_public_checkout_fails(self):
+        state = self._exercise_guarded_publish(RuntimeError("PUBLIC_GET_BLOCKED"))
+        self.assertIn("PUBLIC_GET_BLOCKED", state["error"])
+        self.assertEqual(state["final"], state["before"])
+        self.assertEqual(state["restart_count"], 2)
+        self.assertEqual(state["probe_count"], 1)
+        self.assertNotIn("PUBLISHED", state["message"])
+        self.assertTrue(state["backup_exists"])
+
+    def test_publish_requires_all_three_checked_public_skus(self):
+        state = self._exercise_guarded_publish([{"product_id": 72}, {"product_id": 225}])
+        self.assertIn("PUBLIC_BUYER_FORMS_UNVERIFIED", state["error"])
+        self.assertEqual(state["final"], state["before"])
+        self.assertEqual(state["restart_count"], 2)
+        self.assertNotIn("PUBLISHED", state["message"])
+
+    def test_publish_succeeds_only_after_three_public_form_checks(self):
+        proof = [{"product_id": pid} for pid in release.PUBLIC_CHECKOUT_PRODUCTS]
+        state = self._exercise_guarded_publish(proof)
+        self.assertIsNone(state["error"])
+        self.assertEqual(state["final"], state["desired"])
+        self.assertEqual(state["restart_count"], 1)
+        self.assertEqual(state["probe_count"], 1)
+        self.assertIn("PUBLIC_BUYER_FORMS_VERIFIED=YES", state["message"])
+
+    def test_idempotent_publish_never_skips_public_reverification(self):
+        state = self._exercise_guarded_publish(RuntimeError("STALE_PUBLIC_FORM"),
+                                              idempotent=True)
+        self.assertIn("STALE_PUBLIC_FORM", state["error"])
+        self.assertEqual(state["final"], state["desired"])
+        self.assertEqual(state["restart_count"], 0)
+        self.assertFalse(state["backup_exists"])
+        self.assertEqual(state["probe_count"], 1)
+        self.assertNotIn("ALREADY_INSTALLED", state["message"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
