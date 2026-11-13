@@ -218,6 +218,46 @@ Official sources:
 https://help.ctrader.com/ctrader-algo/synchronisation/
 https://help.ctrader.com/ctrader-algo/references/Localstorage/LocalStorage/
 
+## Account-wide DEMO portfolio risk admission (review branch)
+
+The earlier cTrader DEMO engine limited open positions **only by the
+`MojTrade-OMEGA-X-DEMO` label** and sized each proposed order at its
+individual risk percentage. A different manual trade or another label
+could exhaust the same account risk budget unnoticed.
+
+The current `MojTradeOmegaXDemoBot` now gates every proposed order on
+**all open positions** on that DEMO account, including other labels and
+symbols:
+
+- Count total account positions against `MaxPositions` (1–3), not
+  just labelled Omega X positions.
+- Refuse to add exposure if any open position is missing its
+  broker-confirmed SL or TP, or if numeric/instrument data are invalid.
+- Estimate open-stop risk from the position's own symbol and SL
+  distance using official cTrader `Symbol.AmountRisked`.
+- Estimate the proposed stop risk and margin using
+  `Symbol.AmountRisked` and `Symbol.GetEstimatedMargin`.
+- Require finite positive equity and available margin, no leverage
+  shortfall, and total *estimated* at-risk amount (including new order)
+  ≤ `AggregateStopRiskPercent` of current equity. The parameter
+  defaults to **1%**, cannot be set above 1%, and is separate from
+  the 0.25% default per-order cap.
+- Fail closed if the broker or account objects cannot provide the
+  required values. This admission check is before any DEMO
+  `ExecuteMarketOrder` call; real accounts are still rejected and
+  DEMO trading remains disabled by default.
+
+**Limits:** This is a conservative risk *estimate*, not a guarantee of
+filled stop price, negative-balance protection or profit. Commissions,
+slippage, price gaps, currency conversions and multiple concurrent
+cBots may cause realized losses outside the estimate. The check
+cannot prevent two processes from racing between observation and
+order. The **single-executor broker-verified cutover** remains
+mandatory before production approval.
+
+Official API reference:
+https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/Symbol/
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
