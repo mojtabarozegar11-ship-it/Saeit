@@ -114,4 +114,5 @@ def financial_brand_page(request, brand, locale, page_type):
         # CSS, currently published route names, and payment logic remain intact.
         response["Link"] = '<' + canonical_url(slug, locale, page_type) + '>; rel="canonical"'
         response["Content-Language"] = locale
+        response["X-Finance102-Editorial-Revision"] = "finance102-20261113-v2"
     return response
