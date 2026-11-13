@@ -1,4 +1,4 @@
-name: Zomorod homepage 4-card carousel — PR validation only
+name: Zomorod homepage 10-card carousel — PR validation only
 on:
   pull_request:
     paths:
@@ -50,6 +50,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           from html.parser import HTMLParser
+          import re
           h=Path('content/zomorod-vision-v3/index.html').read_text()
           js=Path('content/zomorod-vision-v3/assets/zm-reference-v3.js').read_text()
           css=Path('content/zomorod-vision-v3/assets/zm-reference-v3.css').read_text()
@@ -59,6 +60,13 @@ jobs:
           assert h.count('data-auto-strip=')==3
           assert h.count('data-rotator-toggle=')==4
           assert h.count('data-field-carousel=')==1
+          photo_region=h.split('<div id="fields-carousel"',1)[1].split('</div><button class="auto-rotator-toggle fields-rotator-toggle"',1)[0]
+          assert photo_region.count('class="field-card neon-panel"')==10,'Ten real original photo cards required'
+          photos=re.findall(r'<img\b[^>]*\bsrc="([^"]+)"',photo_region)
+          assert len(photos)==len(set(photos))==10,'Ten distinct first-party images required'
+          assert all(x.startswith('/assets/zm-v3-') and x.endswith('.webp') for x in photos)
+          assert photo_region.count('<strong>')==10,'Each card must have a readable title'
+          assert 'چرخش خودکار ده کارت تصویری' in h
           assert h.count('fetchpriority="high"')<=2
           assert h.count('<h1')==1
           assert '/en/' in h and '/assets/zm-ar-v1.html' in h and '<html lang="ar" dir="rtl">' in ar
@@ -134,6 +142,39 @@ jobs:
                 ar:document.querySelector('.lang-switch a[href="/assets/zm-ar-v1.html"]')!==null,
                 search:document.querySelector('.search-form')?.getAttribute('action')}));
               if(evidence.scroll>width+3||evidence.h1!==1||evidence.rows!==3||evidence.controls!==4||!evidence.footer||evidence.logo!==512||!evidence.ar||evidence.search!=='/search/'||errors.length)throw Error('ZM_LAYOUT_BASE_FAIL '+JSON.stringify({width,evidence,errors,failed}));
+              // Ten source cards: desktop displays four at once, not four endlessly cloned placeholders.
+              const photoEvidence=await page.evaluate(async()=>{
+                const strip=document.querySelector('#fields-carousel');
+                const cards=Array.from(strip.querySelectorAll(':scope > a.field-card:not(.carousel-copy)'));
+                const src=cards.map(c=>c.querySelector('img')?.getAttribute('src'));
+                const titles=cards.map(c=>c.querySelector('strong')?.textContent.trim());
+                const clip=strip.getBoundingClientRect();
+                const inView=cards.filter(c=>{const r=c.getBoundingClientRect();const cx=(r.left+r.right)/2;return cx>clip.left&&cx<clip.right;}).length;
+                const loaded=await Promise.all(src.map(async path=>{if(!path)return false;const image=new Image();image.src=path;try{await image.decode();return image.naturalWidth>0;}catch{return false;}}));
+                return {count:cards.length,photos:new Set(src).size,titles:new Set(titles).size,inView,loaded:loaded.every(Boolean)};
+              });
+              const expectedVisible=width>=1024?4:width>=641?3:null;
+              if(photoEvidence.count!==10||photoEvidence.photos!==10||photoEvidence.titles!==10||!photoEvidence.loaded||
+                 (expectedVisible!==null&&photoEvidence.inView!==expectedVisible))
+                throw Error('TEN_PHOTO_FOUR_VISIBLE_CONTRACT '+JSON.stringify({width,photoEvidence,expectedVisible}));
+              if(width===1440){
+                const photo=page.locator('#fields-carousel');
+                const button=page.locator('[data-rotator-toggle="fields-carousel"]');
+                await button.click();
+                const visibleTitles=()=>photo.evaluate(el=>{
+                  const clip=el.getBoundingClientRect();
+                  return Array.from(el.querySelectorAll(':scope > a.field-card:not(.carousel-copy)'))
+                    .filter(a=>{const r=a.getBoundingClientRect();return (r.left+r.right)/2>clip.left&&(r.left+r.right)/2<clip.right;})
+                    .map(a=>a.querySelector('strong')?.textContent.trim());
+                });
+                const first=await visibleTitles();
+                await photo.evaluate(el=>{el.scrollLeft=-el.clientWidth;});
+                const second=await visibleTitles();
+                if(second.length!==4||second.every(title=>first.includes(title)))
+                  throw Error('CAROUSEL_TEN_NOT_ADVANCING_TO_NEW_IMAGES '+JSON.stringify({first,second}));
+                await photo.evaluate(el=>{el.scrollLeft=0;});
+                await button.click();
+              }
               const transparent=await page.evaluate(async()=>{
                 const img=new Image();img.src='/assets/zm-logo-transparent-v1.webp';await img.decode();
                 const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
