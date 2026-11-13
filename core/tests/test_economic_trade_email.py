@@ -62,8 +62,16 @@ class ExternalTradeApprovalTests(TestCase):
             username="trade-owner",
             email="owner@example.com",
         )
-        request = authorize_external_trade(owner_id=owner.pk)
+        with self.assertRaisesRegex(ValueError, "outbox_id"):
+            authorize_external_trade(owner_id=owner.pk)
+        outbox = queue_trade_email(
+            recipient="buyer@example.org", subject="Private inquiry",
+            body="Please review this nonbinding trade inquiry.",
+        )
+        request = authorize_external_trade(owner_id=owner.pk, outbox_id=outbox.pk)
         request.refresh_from_db()
+        self.assertEqual(request.target_type, "TradeEmailOutbox")
+        self.assertEqual(request.target_id, str(outbox.pk))
         self.assertIsInstance(request, ApprovalRequest)
         self.assertEqual(request.status, "pending")
         self.assertFalse(request.grants.exists())

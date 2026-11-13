@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
 from .task_approval_scope import approval_covers_task
 from .services import normalize_action
+from .trade_approval_scope import trade_email_approval_matches, trade_email_fingerprint
+from .economic_trade_models import TradeEmailOutbox
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -57,6 +59,13 @@ class ApprovalService:
                     raise ValueError("Rejected approval cannot alter an executing or terminal task")
                 task.status = "queued" if approved else "cancelled"
                 task.save(update_fields=["status", "updated_at"])
+        elif approval.target_type == "TradeEmailOutbox":
+            reviewed_outbox = (
+                TradeEmailOutbox.objects.select_for_update().select_related("mailbox")
+                .filter(pk=approval.target_id).first()
+            )
+            if approved and not trade_email_approval_matches(approval, reviewed_outbox):
+                raise ValueError("Trade email approval target or content has changed")
         elif approval.target_type == "KnowledgeArticle":
             article = KnowledgeArticle.objects.select_for_update().filter(pk=approval.target_id).first()
             if article is None:
@@ -136,6 +145,17 @@ class ApprovalService:
         elif approval.target_type == "TradeMailbox":
             if scope.get("target") != approval.target_id:
                 raise ValueError("Execution grant mailbox target mismatch")
+        elif approval.target_type == "TradeEmailOutbox":
+            outbox = (
+                TradeEmailOutbox.objects.select_related("mailbox")
+                .filter(pk=approval.target_id).first()
+            )
+            if not trade_email_approval_matches(approval, outbox):
+                raise ValueError("Execution grant reviewed trade email changed")
+            if scope.get("outbox_id") != outbox.pk:
+                raise ValueError("Execution grant outbox identity mismatch")
+            if scope.get("message_sha256") != trade_email_fingerprint(outbox):
+                raise ValueError("Execution grant reviewed message digest mismatch")
 
     @transaction.atomic
     def issue_grant(self, approval_id, actor_id, scope=None, ttl_seconds=300):
