@@ -209,3 +209,44 @@ execution of `mpw_source_provenance` against the real cPanel account,
 followed by actual effective Django template resolution and rights
 proof. No merge or production deployment is authorized by this
 document.
+
+## Cycle 7 — cPanel source classification now covers the actual commerce modules
+
+The cPanel-only read-only source report was extended to include both
+`core/mojplaywin_views.py` (storefront view) and
+`mpw_commerce/product_checkout_page.py` (checkout/CSP source). It returns
+bounded file-presence flags, SHA-256 prefixes and literal source markers;
+it deliberately **does not** claim that those Python modules were imported
+by Passenger or that `script-src` was sent in the HTTP response.
+
+The static fallback classification now requires the exact owned leading
+rewrite block at the very start of `public/.htaccess`. A duplicate rule
+or a rule following unrelated directives cannot be certified. Even the
+positive category `owned_static_fallback_rule_on_disk` is **not evidence
+of an effective Apache route**.
+
+### Next source reconciliation sequence
+
+1. Observe public anonymous GETs and classify checkout forms/CSP; this is
+   already established in the GitHub-hosted read-only gate.
+2. Execute the separately controlled `mpw_source_provenance` option in
+   the **existing** pinned cPanel bridge, once the reviewed code is
+   approved and available to that main-only workflow. Do not
+   activate the old cutover or the payment/release workflow.
+3. Compare bounded guest, storefront and checkout source digests against
+   the reviewed exact versions; verify the **effective** Django
+   template origin and Passenger module separately using only
+   owner-approved read-only diagnostics.
+4. After all six public checkout forms and CSP are correct, request
+   an owner-approved exact-source backup/cutover with rollback.
+   Full commercial readiness still needs an approved real purchase,
+   independently finalized TRX and an authenticated download.
+
+The bridge has **not** been dispatched, the source audit has **not**
+inspected actual cPanel yet, and no file or configuration was deployed.
+Passing isolated code tests is not a substitute for these observations.
+
+[Latest isolated regression results](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43453342347):
+**257/257 passing** across public observer, provenance, guest source,
+telemetry, dynamic cutover, source-only cPanel and bridge safety. Two
+additional independent identity/route scripts passed.
