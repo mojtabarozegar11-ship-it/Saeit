@@ -244,7 +244,7 @@ def patch_public(namespace):
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
                 '<p><a href="/store/">Return to store</a> | '
-                '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
+                '<a href="mailto:mojplaywin@gmail.com?subject=MojPlayWin%20Purchase%20Support">Purchase support</a></p>'
                 '</main></body></html>',
                 content_type="text/html; charset=utf-8",
                 status=200,
