@@ -427,6 +427,75 @@ and real contract economics, and obtain a bound per-order owner approval
 and atomic account-wide risk reservation. DEMO execution is still locked
 without this evidence; real funded trading is separately prohibited.
 
+## One-shot cTrader XAUUSD H1 private data handoff (review branch)
+
+To close the gap between `core/mojtrade_demo_signal.py` and real
+cTrader market/account inputs, the sole bot now has a **read-only
+collector adapter**:
+
+- `trading/MojTradeGoldSnapshotAuditBot.cs`: on a **DEMO USD** account
+  and an exact `XAUUSD` chart, takes a one-time quote, 80 **closed,
+  contiguous hourly candles**, current equity/free margin, account-wide
+  closed P&L visible since UTC midnight, estimated stop-loss risk across
+  all open positions, and counts of positions/pending orders.
+- It rejects live accounts, unprotected positions, non-USD accounts,
+  missing or inconsistent candle histories, invalid quotes, duplicate or
+  overly large historical deal sets. It emits bounded
+  `MOJTABA_GOLD_H1_CAPTURE_V1` START/BAR/END records, all bound to one
+  session and a SHA-256 content checksum, then stops. **No order API,
+  HTTP, trading credential, new independent bot identity or automated
+  deployment.** These records may include equity/free margin; store the
+  output only in a secured local location.
+- `core/mojtrade_gold_capture.py`: requires exactly 80 bars + complete
+  envelope, correct SHA-256, recent UTC server timestamp and a private
+  0600 file within a 0700 directory; rejects missing/extra/reordered
+  lines, malformed account values and partially emitted output.
+- `core/management/commands/mojtrade_gold_capture_preview.py`: local
+  read-only Django CLI to pass the parsed DEMO dataset to the existing
+  sole-bot XAUUSD signal planner, emitting ONLY a private review with
+  no order volume, public delivery, fee or authorization.
+
+Build contract: `dotnet build
+trading/ctrader-build/MojTradeGoldSnapshotAuditBot/MojTradeGoldSnapshotAuditBot.csproj
+-c Release -p:AlgoBuild=false -p:AlgoPublish=false` (official
+cTrader.Automate 1.0.21). The CI compiles this as a **third** independent
+library contract alongside the existing two cTrader components.
+
+**Operator process (only after permitted DEMO access exists):**
+Run the audit cBot on XAUUSD/DEMO/USD on an authorized cTrader host.
+Privately extract **only** the exact marker-prefixed lines
+`MOJTABA_GOLD_H1_CAPTURE_V1|...` to an existing private 0700 directory
+as a 0600 file; do not place it under a website or in GitHub. Within
+**60 seconds** of capture, on the **same trusted host**, run
+
+```bash
+python manage.py mojtrade_gold_capture_preview \
+  --input /ABSOLUTE/PRIVATE/DIRECTORY/gold-demo.log
+```
+
+The command will refuse stale, truncated or altered snapshots; it has
+no fallback to older data. This is a proposed on-host procedure, not a
+claim that cTrader, the broker, or the VPS has already been accessed.
+
+**Evidence boundary:** An unkeyed SHA-256 checksum only detects
+corruption. Anyone able to replace the source can recompute it; it
+does not verify a licensed broker, data origin, account identity or
+trustworthy fee/P&L history. Visible cTrader `History` may be
+incomplete; closed P&L and stop-risk estimates MUST NOT be considered
+independent reconciliations. The data signal remains
+`source_kind=unverified_local_ctrader_demo_log`,
+`source_authenticated_by_broker=false`, and
+`broker_data_independently_authenticated=false`.
+**Never treat the preview as an executable signal.** Multi-instance
+race protections, server-side signed command ledger, approved DEMO order
+adapter, broker-reconciled fills, real consumer delivery and collected
+revenue remain separate missing release gates.
+
+Official API references:
+https://help.ctrader.com/ctrader-algo/references/MarketData/MarketData/GetBars/
+https://help.ctrader.com/ctrader-algo/references/MarketData/Symbols/Symbol/
+https://help.ctrader.com/ctrader-algo/references/Account/IAccount/
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
