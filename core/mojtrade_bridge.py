@@ -20,6 +20,7 @@ from django.db import transaction
 from core.models import Agent, AgentTask, AuditLog
 from core.task_runtime import TaskRuntime
 from core.mojtrade_strategy_risk import review_research
+from core.mojtrade_signal_drafts import build_market_watch_drafts
 from core.unified_bot_identity import BOT_CODE, MOJTRADE_RESEARCH_CAPABILITY
 from scripts.mojtrade_consume_observation import (
     ObservationError, validate_observation_payload,
@@ -130,12 +131,17 @@ def ingest_private_observation(now: datetime | None = None) -> tuple[AgentTask, 
         },
     )
     execution = TaskRuntime().claim(task.pk)
+    reviewed = review_research(report)
+    private_drafts = build_market_watch_drafts(
+        report, reviewed, source_sha, now=now,
+    )
     output = {
         "verified_effect": True,  # Private research receipt in the database ONLY.
         "action_performed": "canonical_private_market_observation_ingested",
         "evidence": {"source_sha256": source_sha},
         "market_observations": report["signals"],
-        "strategy_risk_review": review_research(report),
+        "strategy_risk_review": reviewed,
+        "market_watch_drafts": private_drafts,
         "report_type": report["report_type"],
         "execution": "disabled",
         "orders": 0,
