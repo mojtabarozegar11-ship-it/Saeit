@@ -29,11 +29,13 @@ def reconcile(data):
             record_currency = record.get("currency")
             if record_currency is not None and (not isinstance(record_currency, str) or record_currency.upper() != currency.upper()):
                 raise ValueError("record currency differs from report currency")
-    # Validate every order, including unpaid orders, before calculating any totals.
-    for order in orders:
-        if "amount" not in order:
-            raise ValueError("order amount missing")
-        amount(order["amount"])
+    # Validate all monetary claims, including pending/failed rows, before any totals.
+    # Otherwise malformed records can silently become counted after a status change.
+    for kind, records in (("order", orders), ("settlement", settlements), ("refund", refunds)):
+        for record in records:
+            if "amount" not in record:
+                raise ValueError(f"{kind} amount missing")
+            amount(record["amount"])
     by_order = {r["id"]: r for r in orders}
     by_settlement = {r["id"]: r for r in settlements}
     paid = {}
