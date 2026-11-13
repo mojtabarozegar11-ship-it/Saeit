@@ -20,10 +20,13 @@ Demo، اعتبارسنجی در cTrader CLI یا اجازهٔ معاملهٔ و
 در اجرای قبلی، کامپایل موفق بود اما `Saeit.algo` در مسیر
 `net6.0` ساخته شد، درحالی‌که CI مسیر قدیمی
 `net8.0/Mojtaba.Bot.Ai.algo` را جست‌وجو می‌کرد.
-در برخی نسخه‌های بستهٔ cTrader نام فایل از نام پوشهٔ ریشهٔ پروژه
-گرفته می‌شود؛ تغییر نام فایل پس از Build اثبات هویت نیست.
+در برخی نسخه‌های بستهٔ cTrader نام فایل از نام پوشهٔ بالادستیِ محل پروژه
+گرفته می‌شود (طبق شواهد عملی CI برای نسخهٔ 1.0.21)؛ تغییر نام فایل پس از Build اثبات هویت نیست.
 بنابراین Workflow پروژه و کد مورد بررسی را داخل پوشهٔ موقت و
-ایزولهٔ `Mojtaba.Bot.Ai` کپی و همان‌جا Build می‌کند.
+ایزولهٔ `Mojtaba.Bot.Ai/source` کپی و همان‌جا Build می‌کند.
+گیت نخست پس از ساخت موفق DLL، فایل `_temp.algo` را پیدا کرد:
+این مشاهده تأیید کرد که محل پروژه باید یک پوشه پایین‌تر از
+`Mojtaba.Bot.Ai` قرار گیرد.
 
 ## اجرای همان Build در محیط Linux/macOS
 
@@ -31,7 +34,7 @@ Demo، اعتبارسنجی در cTrader CLI یا اجازهٔ معاملهٔ و
 
 ```bash
 set -euo pipefail
-bot_root="$(mktemp -d)/Mojtaba.Bot.Ai"
+bot_root="$(mktemp -d)/Mojtaba.Bot.Ai/source"
 mkdir -p "$bot_root"
 cp trading/Mojtaba.Bot.Ai.csproj "$bot_root/"
 cp trading/MojTradeOmegaXDemoBot.cs "$bot_root/"

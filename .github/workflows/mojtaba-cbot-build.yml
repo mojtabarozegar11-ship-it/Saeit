@@ -28,12 +28,14 @@ jobs:
       # cTrader.Automate can name an .algo after its source root directory.
       # Keep a self-contained build root named for the ONE canonical bot, not
       # the repository (Saeit) or a legacy executor (MojTradeOmegaXDemoBot).
+      # Empirically, cTrader.Automate 1.0.21 names the .algo after the
+      # PARENT directory of the directory containing the csproj. Hence /source.
       # This only copies reviewed source into the ephemeral GitHub runner.
       - name: Prepare isolated canonical build root
         shell: bash
         run: |
           set -euo pipefail
-          bot_root="${RUNNER_TEMP}/Mojtaba.Bot.Ai"
+          bot_root="${RUNNER_TEMP}/Mojtaba.Bot.Ai/source"
           mkdir -p "$bot_root"
           cp trading/Mojtaba.Bot.Ai.csproj "$bot_root/Mojtaba.Bot.Ai.csproj"
           cp trading/MojTradeOmegaXDemoBot.cs "$bot_root/MojTradeOmegaXDemoBot.cs"
@@ -44,19 +46,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet restore "${RUNNER_TEMP}/Mojtaba.Bot.Ai/Mojtaba.Bot.Ai.csproj"
+          dotnet restore "${RUNNER_TEMP}/Mojtaba.Bot.Ai/source/Mojtaba.Bot.Ai.csproj"
 
       - name: Build canonical cBot package
         shell: bash
         run: |
           set -euo pipefail
-          dotnet build "${RUNNER_TEMP}/Mojtaba.Bot.Ai/Mojtaba.Bot.Ai.csproj" --configuration Release --no-restore
+          dotnet build "${RUNNER_TEMP}/Mojtaba.Bot.Ai/source/Mojtaba.Bot.Ai.csproj" --configuration Release --no-restore
 
       - name: Verify actual canonical algo artifact
         shell: bash
         run: |
           set -euo pipefail
-          output="${RUNNER_TEMP}/Mojtaba.Bot.Ai/bin/Release/net6.0"
+          output="${RUNNER_TEMP}/Mojtaba.Bot.Ai/source/bin/Release/net6.0"
           canonical="$output/Mojtaba.Bot.Ai.algo"
           test -s "$canonical"
           test ! -e "$output/Saeit.algo"
