@@ -260,13 +260,14 @@ def integrated_ledger_api(request):
         if not request.user.is_superuser:
             return JsonResponse({"error": "ثبت تصمیم حساس فقط برای مدیر ارشد مجاز است."}, status=403)
         decision = _text(payload.get("status"))
+        approval_kind = _text(payload.get("approval_kind"))
         approver = _text(payload.get("approver"))
         evidence = _text(payload.get("evidence"))
-        if (_text(payload.get("kind")) not in {"email", "deploy", "cost"}
+        if (approval_kind not in {"email", "deploy", "cost"}
                 or decision not in {"approved", "rejected"}
                 or approver != request.user.get_username() or not evidence):
             return JsonResponse({"error": "نوع تصمیم، هویت تأییدکننده و شاهد موردی معتبر الزامی است."}, status=400)
-        row = ApprovalDecision.objects.create(kind=_text(payload.get("kind")), status=decision, approver=approver, evidence=evidence, created_by=request.user)
+        row = ApprovalDecision.objects.create(kind=approval_kind, status=decision, approver=approver, evidence=evidence, created_by=request.user)
         _audit("approve", "approval", row.id, f"تصمیم {row.kind} با وضعیت {row.status} ثبت شد.", request.user, row.evidence)
         return JsonResponse({"decision": _decision(row)}, status=201)
     return JsonResponse({"error": "نوع عملیات شناخته نشد."}, status=400)
