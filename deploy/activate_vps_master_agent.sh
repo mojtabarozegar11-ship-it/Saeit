@@ -211,9 +211,9 @@ done
 import django
 django.setup()
 from core.models import Agent
-qs=Agent.objects.filter(code="economic-master-agent",active=True)
-assert qs.count()==1, "MASTER_AGENT_NOT_SINGLE_AND_ACTIVE"
-agent=qs.get()
+from core.canonical_bot_identity import resolve_single_active_agent
+agent=resolve_single_active_agent(Agent)
+assert agent is not None, "CANONICAL_BOT_NOT_SINGLE_AND_ACTIVE"
 assert agent.capabilities.filter(active=True).count()>=7, "MASTER_CAPABILITIES_INCOMPLETE"
 print("MASTER_SINGLE_ACTIVE_AGENT_VERIFIED")
 print("MASTER_CAPABILITIES_ACTIVE="+str(agent.capabilities.filter(active=True).count()))
@@ -258,74 +258,3 @@ PY
        [[ "$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_CHECK_ONLY=//p')" == true ]]; then
       if (( proposed < approved_before )); then
         steps="$proposed"
-      else
-        steps="$approved_before"
-      fi
-      preflight_passed=true
-      echo "MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=$steps"
-    else
-      echo MASTER_EVOLUTION_PREFLIGHT_INVALID_RESULT
-    fi
-  else
-    echo MASTER_EVOLUTION_PREFLIGHT_EVALUATION_FAILED
-  fi
-else
-  echo MASTER_EVOLUTION_DB_SETTINGS_FAILED
-fi
-if [[ "$preflight_passed" != true ]]; then
-  # Never let even a single autonomous task execute after failed integrity
-  # verification. Exit as a temporary failure: cron retries at the next
-  # scheduled cycle; the job and other unrelated services remain enabled.
-  echo MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION
-  exit 75
-fi
-# Read-only policy verification succeeded; perform bounded recovery and
-# serial work only behind the worker's independent owner-approval guards.
-timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
-timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
-SH
-chmod 700 "$master/run-cycle.sh.tmp"
-mv -f "$master/run-cycle.sh.tmp" "$master/run-cycle.sh"
-cat > "$master/run-evolution.sh.tmp" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-umask 077
-base="$HOME/factory-runtime"
-root="$base/operations/master-agent"
-py="$base/.venv/bin/python"
-export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
-cd "$base/django-app"
-db="$("$py" - <<'PY'
-from django.conf import settings
-print(settings.DATABASES["default"]["NAME"])
-PY
-)"
-flock -n "$root/master-evolution.lock" timeout 120 "$py" "$root/evolution.py" --db "$db" --state "$base/private/master-agent/evolution.json"
-SH
-chmod 700 "$master/run-evolution.sh.tmp"
-mv -f "$master/run-evolution.sh.tmp" "$master/run-evolution.sh"
-"$master/run-evolution.sh"
-# Preserve all unrelated cron entries exactly; reject competing master loops.
-if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
-  echo MASTER_COMPETING_EXISTING_CRON_DETECTED
-  exit 1
-fi
-tmp="$master/cron-candidate.tmp"
-grep -v 'SAEIT_MASTER_AGENT_V1' "$old" > "$tmp" || true
-printf '%s\n' \
-  '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-cycle.sh >> /home/githubops/factory-runtime/operations/master-agent/cycle.log 2>&1 # SAEIT_MASTER_AGENT_V1' \
-  '37 */6 * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-evolution.sh >> /home/githubops/factory-runtime/operations/master-agent/evolution.log 2>&1 # SAEIT_MASTER_AGENT_V1' >> "$tmp"
-chmod 600 "$tmp"
-crontab "$tmp"
-rm -f "$tmp"
-test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
-trap - EXIT
-if "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
-  echo MASTER_INITIAL_CYCLE_COMPLETED
-else
-  echo MASTER_INITIAL_CYCLE_DEFERRED_TO_SCHEDULE
-fi
-echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
-echo MASTER_SERIAL_STEPS_UP_TO_20_VERIFIED
-echo MASTER_FACTORY_LOOP_UNMODIFIED
-echo MASTER_NO_PUBLIC_SITE_CHANGES
