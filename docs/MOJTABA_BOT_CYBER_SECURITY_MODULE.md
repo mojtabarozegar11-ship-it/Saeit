@@ -50,6 +50,39 @@ result = plan_origin_defense(
 )
 ```
 
+
+## Existing ToolGateway integration (source-only, disabled by default)
+
+The verified repository exposes `AgentRegistry`, `ToolGateway`, `WorkerRunner`, and `TaskRuntime`. These already enforce a Django `AgentTask` lifecycle, execution IDs, capability policy and audit receipts. The cyber capability **must reuse that path**, never construct an independent scheduler.
+
+- `core/mojtaba_modules/gateway_adapter.py::build_cyber_gateway_tools(verify_key)` returns three disabled-by-default `ToolSpec` objects for `cyber_evidence_review`, `cyber_origin_defense`, and `cyber_incident_response`.
+- `ToolSpec.required_agent_code` is an optional policy field that defaults to an empty string for all existing tools. Cyber specs require the exact Agent code `mojtaba-bot-ai`; the existing `ToolGateway` checks this before calling handlers.
+- All cyber tool specs use `risk="medium"`, reject injected keys/clocks and consume the same scoped, expiring signed engagement as the pure offline modules.
+- A spec is **not** registered into a live dispatcher by this PR. No bot Agent record, capability migration, queued task, API route, cron job or worker is created.
+
+An authorized operator, after a fresh **read-only** live identity and deployment assessment, could explicitly enable and inject the specs into the **existing** gateway constructor:
+
+```python
+# Pseudocode / future gated integration, NOT executed in deployment:
+from core.mojtaba_modules.gateway_adapter import build_cyber_gateway_tools
+from core.tool_gateway import ToolGateway
+specs = build_cyber_gateway_tools(
+    trusted_hmac_key_from_existing_bot_secret_store,
+    enable_offline=True,  # only after the canonical agent and source are attested
+)
+existing_gateway = ToolGateway([*existing_non_cyber_tool_specs, *specs])
+```
+
+Do not copy this pseudocode into any unattended deployment until the actual canonical Agent row, signed authorization issuer, user permissions, secrets storage, queue topology, backup provenance and cost/disk constraints are validated. **A matching Agent code is only a policy guard, not cryptographic attestation of a host process.** The existing TaskRuntime and ToolGateway safety policies are additional required controls.
+
+### Repository verification
+
+- Pure module tests: `python -m unittest discover -s tests -p 'test_mojtaba_*' -v`
+- Database gateway adapter tests: `pytest -q core/tests/test_mojtaba_gateway_adapter.py`
+- All-repository tests: `pytest -q` (staged-release CLI scripts have their own dedicated workflow and are not general pytest tests).
+
+**Acceptance criterion:** targeted CI and Django CI must pass, with zero externally executed requests. A pass in CI does not establish live Bot identity or an operating security defense.
+
 ## Integration and production acceptance gates (pending)
 
 1. Attest the actual canonical bot process, dispatcher, identity/credential store and audit log on the intended hosts.
