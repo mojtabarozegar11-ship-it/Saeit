@@ -277,11 +277,17 @@ difference:
 
 The new `deploy/mojtrade_ctrader_cli_preflight_readonly.py` implements
 the **first no-order CLI connection gate**. Its only invocations
-are `ctrader-cli accounts` and `ctrader-cli cbots -q`; it cannot
-launch/stop cBots or create/modify/close orders. Both CLI outputs remain
+are the read-only `ctrader-cli accounts`, `cbots -q`, `positions -q`
+and `orders -q` commands; it cannot launch/stop cBots or
+create/modify/close orders. It refuses to query cBots, positions
+or pending orders **unless the initial account identity is explicitly
+DEMO**. The observed number of open positions and pending orders is
+reported without exposing individual trade IDs or account values.
+All CLI outputs remain
 inside the process and are represented by SHA-256 digests in a small
 redacted JSON report. Owner's cTID, raw account number, password, broker
-JSON and raw instance identifiers are **never printed**.
+JSON, order/position details and raw instance identifiers are
+**never printed**.
 
 A local operator must provision **two private files** in one existing
 mode-0700 directory, with both files mode 0600:
@@ -312,9 +318,11 @@ python3 deploy/mojtrade_ctrader_cli_preflight_readonly.py \
 It fails closed on missing/unsafe credentials, unexpected response
 schema, non-demo account, wrong broker, ambiguous account, duplicate
 instance IDs or CLI failure. A completed check reports only that this
-one CLI saw the selected DEMO account and some instance count; it
-**cannot establish** that a Cloud instance, another machine or another
-broker session is absent. Therefore
+one CLI saw the selected DEMO account, a running-instance count and
+an observed exposure count. It **cannot establish** that a Cloud
+instance, another machine or another broker session is absent.
+Counts do not prove stop protection, available margin, correct
+portfolio risk or permission to place a new order. Therefore
 `single_runtime_instance_independently_attested=false` and
 `trading_release_authorized=false` remain **fixed**. No real credential
 is available in the CI tests, which use synthetic data and a fake CLI.
