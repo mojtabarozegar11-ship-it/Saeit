@@ -29,11 +29,13 @@ class Atomic:
 
 class Field:
     unique = True
+    concrete = True
+    is_relation = False
 
 
 class Meta:
     def get_field(self, name):
-        assert name == "username"
+        assert name in ("username", "email")
         return Field()
 
 
@@ -65,6 +67,9 @@ class User:
 
     def __init__(self, **kwargs):
         self.username = kwargs["username"]
+        self.email = ""
+        self.is_staff = False
+        self.is_superuser = False
         self.is_active = True
         self.pk = None
         self.unusable = False
@@ -134,6 +139,27 @@ def run():
     assert len(USERS) == 2
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
+    assert all(v.email.endswith("@guest.mojplaywin.invalid") for v in USERS.values())
+    assert all(not v.is_staff and not v.is_superuser for v in USERS.values())
+    # The browser identity must never inherit a real customer mailbox.
+    assert one.email != "buyer@example.com"
+    # Existing privileged principals must not be reused as guest purchases.
+    one.is_staff = True
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("privileged principal was accepted as a guest")
+    one.is_staff = False
+    one.email = "buyer@example.com"
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("existing real email was rebound to guest")
+    one.email = one.username + "@guest.mojplaywin.invalid"
     try:
         functions["_new_user"](request(""))
     except Http404:
