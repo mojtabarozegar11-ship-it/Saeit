@@ -13,8 +13,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-root-homepage
-  cancel-in-progress: false
+  # The newest validation supersedes stale PR runs; this workflow never publishes.
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   validate-and-visual:
     runs-on: ubuntu-24.04
