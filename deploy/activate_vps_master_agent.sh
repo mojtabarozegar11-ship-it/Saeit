@@ -241,6 +241,7 @@ if ! flock -n 9; then
   exit 0
 fi
 steps=1
+preflight_passed=false
 if db="$("$py" - <<'PY'
 from django.conf import settings
 print(settings.DATABASES["default"]["NAME"])
@@ -253,24 +254,33 @@ PY
     approved_before="$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=//p')"
     # A read-only check may tighten the policy immediately but cannot expand
     # the last persisted budget before its scheduled audited evolution pass.
-    if [[ "$proposed" =~ ^(1|2|3|20)$ && "$approved_before" =~ ^(1|2|3|20)$ ]]; then
+    if [[ "$proposed" =~ ^(1|2|3|20)$ && "$approved_before" =~ ^(1|2|3|20)$ ]] &&
+       [[ "$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_CHECK_ONLY=//p')" == true ]]; then
       if (( proposed < approved_before )); then
         steps="$proposed"
       else
         steps="$approved_before"
       fi
+      preflight_passed=true
       echo "MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=$steps"
     else
-      echo MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED
+      echo MASTER_EVOLUTION_PREFLIGHT_INVALID_RESULT
     fi
   else
-    echo MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED
+    echo MASTER_EVOLUTION_PREFLIGHT_EVALUATION_FAILED
   fi
 else
-  echo MASTER_EVOLUTION_DB_SETTINGS_FAIL_CLOSED
+  echo MASTER_EVOLUTION_DB_SETTINGS_FAILED
 fi
-# Always run at least one serial controlled task where the worker's own
-# approval and spending policy permits it; never expand on a failed check.
+if [[ "$preflight_passed" != true ]]; then
+  # Never let even a single autonomous task execute after failed integrity
+  # verification. Exit as a temporary failure: cron retries at the next
+  # scheduled cycle; the job and other unrelated services remain enabled.
+  echo MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION
+  exit 75
+fi
+# Read-only policy verification succeeded; perform bounded recovery and
+# serial work only behind the worker's independent owner-approval guards.
 timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
 timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH
