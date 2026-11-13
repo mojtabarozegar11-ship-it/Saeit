@@ -84,6 +84,20 @@ class TestSettlement(unittest.TestCase):
         self.data["settlements"][0]["status"] = "pending"
         self.data["settlements"][0].pop("amount")
         self.assertRaises(ValueError, reconcile, self.data)
+    def test_missing_collection_is_not_silently_reported_as_zero(self):
+        for key in ("orders", "settlements", "refunds"):
+            with self.subTest(key=key):
+                incomplete = dict(self.data)
+                incomplete.pop(key)
+                with self.assertRaisesRegex(ValueError, "missing required collection"):
+                    reconcile(incomplete)
+    def test_empty_explicit_collection_is_distinct_from_missing(self):
+        self.assertEqual(reconcile({"currency": "USD", "orders": [], "settlements": [], "refunds": []})["gross_settled_unverified"], "0")
+    def test_missing_identifier_and_unicode_currency_rejected(self):
+        self.data["orders"][0].pop("id")
+        self.assertRaises(ValueError, reconcile, self.data)
+        self.data["currency"] = "ششش"
+        self.assertRaises(ValueError, reconcile, self.data)
     def test_bad_money(self):
         for x in ("NaN","1e5","-1","1.234",12):
             self.assertRaises(ValueError,amount,x)
