@@ -39,7 +39,7 @@ class EvolutionTests(unittest.TestCase):
             conn.execute("INSERT INTO core_agent VALUES (1,'economic-master-agent',1)")
             for action in actions:
                 conn.execute("INSERT INTO core_agenttask(agent_id,status,action_type,output_data) VALUES (1,'completed',?,?)",
-                             (action,json.dumps({"verified_effect":True})))
+                             (action,json.dumps(self.proof())))
             for _ in range(failures):
                 conn.execute("INSERT INTO core_agenttask(agent_id,status,action_type,output_data) VALUES (1,'failed','example','{}')")
         state.write_text(json.dumps({
