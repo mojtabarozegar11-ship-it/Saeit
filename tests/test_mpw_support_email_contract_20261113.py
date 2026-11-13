@@ -49,3 +49,36 @@ def test_legacy_support_cta_and_purchase_recovery_use_verified_inbox():
     assert OLD_MAIL not in recovery
     assert "with your invoice reference and transaction hash." in recovery
     assert "Never share a wallet recovery phrase or private key." in recovery
+
+
+from django.test import TestCase, override_settings
+
+
+@override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
+class MojPlayWinCustomerMailRenderTests(TestCase):
+    """Check real Django-rendered main pages, not only template source strings."""
+
+    def test_store_renders_prominent_help_block_and_mailto(self):
+        response = self.client.get("/store/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn('class="mpw-shop-help"', html)
+        self.assertIn('id="mpw-shop-help-title"', html)
+        self.assertIn("Questions about buying or need help?", html)
+        self.assertIn(f"mailto:{MAIL}?subject=MojPlayWin%20Store%20Support", html)
+        self.assertIn("Email customer support", html)
+        self.assertLess(html.index('class="mpw-shop-help"'), html.index('class="mpw-shop-catalog"'))
+        self.assertIn("native TRX on the TRON network only", html)
+        self.assertNotIn(OLD_MAIL, html)
+
+    def test_home_and_research_pages_render_official_support_footer(self):
+        for url in ("/", "/research/"):
+            with self.subTest(url=url):
+                response = self.client.get(url, HTTP_HOST="mojplaywin.com")
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode("utf-8")
+                self.assertIn(f'href="mailto:{MAIL}"', html)
+                self.assertIn(f'href="mailto:{MAIL}?subject=MojPlayWin%20Contact">Contact</a>', html)
+                self.assertIn(f'href="mailto:{MAIL}?subject=MojPlayWin%20Support">Support</a>', html)
+                self.assertEqual(html.count('class="mw-site-footer"'), 1)
+                self.assertNotIn(OLD_MAIL, html)
