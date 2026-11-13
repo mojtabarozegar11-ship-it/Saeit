@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|mpw_source_provenance) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -62,7 +62,12 @@ EOF
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'
       ;;
-    django_check)
+    mpw_source_provenance)
+    # Reviewed source goes through stdin without staging files or site edits.
+    PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+      < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+    ;;
+  django_check)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python=""; for candidate in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do if test -x "$candidate" && "$candidate" -c "import django" >/dev/null 2>&1; then python="$candidate"; break; fi; done; if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
       ;;  esac
   exit 0
@@ -117,6 +122,11 @@ case "$operation" in
     ;;
   cpanel_preflight)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'
+    ;;
+  mpw_source_provenance)
+    # Reviewed source goes through stdin without staging files or site edits.
+    PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+      < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     ;;
   django_check)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py check'
