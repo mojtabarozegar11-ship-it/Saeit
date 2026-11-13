@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Mojtaba.Bot.Ai</AssemblyName>
+    <RootNamespace>Mojtaba.Bot.Ai</RootNamespace>
+    <AlgoName>Mojtaba.Bot.Ai</AlgoName>
+    <AlgoBuild>true</AlgoBuild>
+    <AlgoPublish>false</AlgoPublish>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>false</IncludeSymbols>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="cTrader.Automate" Version="1.*-*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="MojTradeOmegaXDemoBot.cs" />
+  </ItemGroup>
+</Project>
