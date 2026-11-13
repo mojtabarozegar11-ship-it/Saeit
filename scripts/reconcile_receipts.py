@@ -87,12 +87,25 @@ def reconcile(data):
     for order in orders:
         if order.get("status") == "paid" and paid.get(order["id"], Decimal(0)) < amount(order["amount"]):
             issues.append({"order":order["id"],"issue":"paid_claim_not_fully_settled"})
+    refunds_by_order = {}
+    for sid, refunded in returned.items():
+        oid = by_settlement[sid]["order_id"]
+        refunds_by_order[oid] = refunds_by_order.get(oid, Decimal(0)) + refunded
+    fully_settled_delivered_unreversed_claims = sum(
+        order.get("status") == "paid"
+        and order.get("delivery_confirmed") is True
+        and amount(order["amount"]) > 0
+        and paid.get(order["id"], Decimal(0)) == amount(order["amount"])
+        and refunds_by_order.get(order["id"], Decimal(0)) == 0
+        for order in orders
+    )
     gross = sum(paid.values(), Decimal(0))
     refunds_total = sum(returned.values(), Decimal(0))
     return {"currency":currency.upper(),"gross_settled_unverified":str(gross),
             "completed_refunds_unverified":str(refunds_total),
             "net_settled_unverified":str(gross-refunds_total),
             "delivered_order_claims":sum(o.get("delivery_confirmed") is True for o in orders),
+            "fully_settled_delivered_unreversed_claims": fully_settled_delivered_unreversed_claims,
             "issues":issues,"bank_verified":False,"revenue_certified":False}
 
 if __name__ == "__main__":
