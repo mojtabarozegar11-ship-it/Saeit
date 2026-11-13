@@ -64,7 +64,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
     def test_approved_guest_digest_is_exact(self):
         expected = hashlib.sha256(self.guest.read_bytes()).hexdigest()
         with patch.object(probe, "APPROVED_GUEST_SHA256", expected):
-            self.assertEqual(self.inspect()["guest_source"], "approved_email_free_source")
+            self.assertEqual(self.inspect()["guest_source"], "email_free_candidate_blocked_by_owner_policy")
 
     def test_reviewed_legacy_guest_digest_is_separate(self):
         expected = hashlib.sha256(self.guest.read_bytes()).hexdigest()
@@ -302,6 +302,79 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         report = self.inspect()
         self.assertEqual(report["apache_passenger_directive_source"],
                          "htaccess_missing_or_unsafe")
+        self.assertFalse(report["production_release_permitted_by_this_report"])
+
+    def test_wsgi_staging_literal_is_only_disk_evidence(self):
+        report = self.inspect()
+        self.assertEqual(report["wsgi_app_assignment_source"],
+                         "wsgi_expected_stage_literal_on_disk")
+        self.assertTrue(report["passenger_stage_source_marker"])
+        self.assertFalse(report["effective_django_template_origin_verified"])
+        self.assertFalse(report["production_release_permitted_by_this_report"])
+
+    def test_wsgi_string_in_comment_cannot_spoof_staging(self):
+        self.wsgi.write_bytes(
+            ("# APP='" + str(self.app) + "'\n").encode())
+        report = self.inspect()
+        self.assertEqual(report["wsgi_app_assignment_source"],
+                         "wsgi_app_assignment_absent")
+        self.assertFalse(report["passenger_stage_source_marker"])
+
+    def test_wsgi_string_literal_in_docstring_cannot_spoof_staging(self):
+        self.wsgi.write_bytes(
+            ("'''APP='" + str(self.app) + "' '''\n").encode())
+        report = self.inspect()
+        self.assertEqual(report["wsgi_app_assignment_source"],
+                         "wsgi_app_assignment_absent")
+        self.assertFalse(report["passenger_stage_source_marker"])
+
+    def test_wsgi_reassignment_refuses_ambiguous_source(self):
+        self.wsgi.write_bytes(
+            ("APP='" + str(self.app) + "'\nAPP='/another/app'\n").encode())
+        self.assertEqual(self.inspect()["wsgi_app_assignment_source"],
+                         "wsgi_app_assignment_ambiguous")
+        self.assertFalse(self.inspect()["passenger_stage_source_marker"])
+
+    def test_wsgi_dynamic_assignment_cannot_prove_staging(self):
+        self.wsgi.write_bytes(b"import os\nAPP=os.environ.get('DJANGO_ROOT')\n")
+        self.assertEqual(self.inspect()["wsgi_app_assignment_source"],
+                         "wsgi_app_assignment_dynamic")
+        self.assertFalse(self.inspect()["passenger_stage_source_marker"])
+
+    def test_wsgi_syntax_and_unicode_errors_fail_closed(self):
+        for raw in (b"APP='unterminated\n", b"APP=\xff\n"):
+            with self.subTest(raw=raw):
+                self.wsgi.write_bytes(raw)
+                self.assertEqual(self.inspect()["wsgi_app_assignment_source"],
+                                 "wsgi_unparseable")
+                self.assertFalse(self.inspect()["passenger_stage_source_marker"])
+
+    def test_wsgi_other_literal_is_not_expected_stage(self):
+        self.wsgi.write_bytes(b"APP='/home/other/app'\n")
+        self.assertEqual(self.inspect()["wsgi_app_assignment_source"],
+                         "wsgi_other_app_literal_on_disk")
+        self.assertFalse(self.inspect()["passenger_stage_source_marker"])
+
+    def test_wsgi_annotated_literal_remains_supported(self):
+        self.wsgi.write_bytes(("APP: str = '" + str(self.app) + "'\n").encode())
+        self.assertEqual(self.inspect()["wsgi_app_assignment_source"],
+                         "wsgi_expected_stage_literal_on_disk")
+
+    def test_wsgi_symlink_refused_and_never_read(self):
+        self.wsgi.unlink()
+        outside = self.base / "secret-other-app"
+        outside.write_bytes(("APP='" + str(self.app) + "'\n").encode())
+        self.wsgi.symlink_to(outside)
+        report = self.inspect()
+        self.assertEqual(report["wsgi_app_assignment_source"], "wsgi_missing_or_unsafe")
+        self.assertFalse(report["passenger_stage_source_marker"])
+
+    def test_email_free_source_digest_is_not_release_approval(self):
+        with patch.object(probe, "APPROVED_GUEST_SHA256",
+                          hashlib.sha256(self.guest.read_bytes()).hexdigest()):
+            report = self.inspect()
+        self.assertEqual(report["guest_source"],
+                         "email_free_candidate_blocked_by_owner_policy")
         self.assertFalse(report["production_release_permitted_by_this_report"])
 
     def test_passenger_root_drift_is_not_assumed_equivalent(self):

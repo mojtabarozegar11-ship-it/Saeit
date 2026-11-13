@@ -43,6 +43,21 @@ class SourceBridgeContractTests(unittest.TestCase):
                               "migrate", "restart", "publish", "payment", "curl "):
                 self.assertNotIn(forbidden, block)
 
+    def test_exact_readonly_probe_source_blob_is_pinned_on_both_relay_hops(self):
+        import hashlib
+        payload = (ROOT / SCRIPT).read_bytes()
+        # git hash-object calculates SHA1 of the Git blob header and contents.
+        git_blob = b"blob " + str(len(payload)).encode("ascii") + b"\0" + payload
+        digest = hashlib.sha1(git_blob).hexdigest()
+        shell = SHELL.read_text()
+        hashes = re.findall(
+            r"\$\(git hash-object -- " + re.escape(SCRIPT) +
+            r'\)" = "([0-9a-f]{40})"',
+            shell,
+        )
+        self.assertEqual(hashes, [digest, digest])
+        self.assertEqual(shell.count("MPW_READONLY_SOURCE_NOT_PINNED"), 2)
+
     def test_probe_has_no_mutating_or_django_or_network_imports(self):
         content = (ROOT / SCRIPT).read_text()
         self.assertNotIn("import django", content)

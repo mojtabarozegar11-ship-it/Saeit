@@ -8,6 +8,7 @@ origin: it only identifies source-drift and safe next reconciliation steps.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -139,6 +140,43 @@ def classify_apache_passenger_directives(raw, public: Path, app: Path) -> str:
         return "staging_root_slash_directives_on_disk"
     return "other_root_slash_directives_on_disk"
 
+
+def classify_wsgi_stage_assignment(raw, app: Path) -> str:
+    """Classify top-level literal APP assignment without importing WSGI.
+
+    Source comments, string decoys, dynamic expressions, multiple bindings and
+    syntax errors cannot attest the actual loaded Passenger application.
+    Returns fixed categories only; no paths or source content are disclosed.
+    """
+    if raw is None:
+        return "wsgi_missing_or_unsafe"
+    try:
+        module = ast.parse(raw.decode("utf-8"))
+    except (UnicodeError, SyntaxError, ValueError):
+        return "wsgi_unparseable"
+    bindings = []
+    for statement in module.body:
+        if isinstance(statement, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == "APP"
+                   for target in statement.targets):
+                bindings.append(statement.value)
+        elif isinstance(statement, ast.AnnAssign):
+            if isinstance(statement.target, ast.Name) and statement.target.id == "APP":
+                bindings.append(statement.value)
+        elif isinstance(statement, ast.AugAssign):
+            if isinstance(statement.target, ast.Name) and statement.target.id == "APP":
+                bindings.append(statement.value)
+    if not bindings:
+        return "wsgi_app_assignment_absent"
+    if len(bindings) != 1:
+        return "wsgi_app_assignment_ambiguous"
+    value = bindings[0]
+    if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+        return "wsgi_app_assignment_dynamic"
+    return ("wsgi_expected_stage_literal_on_disk"
+            if value.value == str(app) else "wsgi_other_app_literal_on_disk")
+
+
 def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     """Use explicit roots in isolated tests; never expose raw file contents."""
     guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
@@ -149,7 +187,7 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     store_view = _safe_read(app, "core/mojplaywin_views.py")
     checkout_view = _safe_read(app, "mpw_commerce/product_checkout_page.py")
     guest_hash = hashlib.sha256(guest).hexdigest() if guest else ""
-    guest_class = ("approved_email_free_source" if guest_hash == APPROVED_GUEST_SHA256
+    guest_class = ("email_free_candidate_blocked_by_owner_policy" if guest_hash == APPROVED_GUEST_SHA256
                    else "reviewed_legacy_source" if guest_hash in REVIEWED_LEGACY_SHA256
                    else "source_unknown" if guest is not None else "source_missing_or_unsafe")
     # These are disk-source observations, not proof of Django's effective
@@ -183,8 +221,8 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
                     htaccess.count(FALLBACK_BLOCK) == 1 and
                     b"MPW_STATIC_STORE_FALLBACK_V1" in store_html
                     else "fallback_not_exactly_proven")
-    wsgi_staging = (wsgi is not None and
-                    b"APP='/home/zomorod2/Saeit-staging'" in wsgi)
+    wsgi_class = classify_wsgi_stage_assignment(wsgi, app)
+    wsgi_staging = wsgi_class == "wsgi_expected_stage_literal_on_disk"
     result = {
         "schema": "mpw.cpanel.source_provenance.readonly.v1",
         "guest_source": guest_class,
@@ -208,6 +246,7 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "effective_checkout_view_import_verified": False,
         "public_fallback": fallback,
         "apache_passenger_directive_source": classify_apache_passenger_directives(htaccess, public, app),
+        "wsgi_app_assignment_source": wsgi_class,
         "passenger_stage_source_marker": wsgi_staging,
         "private_checkout_source_readable": template is not None,
         "production_invoice_post_verified": False,
