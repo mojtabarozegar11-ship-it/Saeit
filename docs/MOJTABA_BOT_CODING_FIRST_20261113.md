@@ -52,3 +52,7 @@ Private source changes must be verified by an independent dossier inspector; a p
 ## Signed cyber gateway source wiring
 
 `build_economic_gateway` now exposes optional, disabled-by-default signed cyber handlers through the **existing** Django `ToolGateway`. A host-owned verifier key and explicit `enable_cyber_offline` flag are both required for handler activation. Each handler is further restricted to `mojtaba-bot-ai` and an authenticated AgentTask. The canonical agent capability definitions have been included in the existing seed catalog. No keys, users, services, tasks, host processes or payments were provisioned by this commit.
+
+## Canonical module mapping
+
+The three signed cyber actions now map to the internal `cyber_security` lane in the existing unified identity catalog. Any unknown capability remains unmapped and requires human review rather than being silently treated as executable.
