@@ -56,7 +56,7 @@ class IsolatedProofTests(unittest.TestCase):
     def _add_candidate(self):
         proof = valid_dossier()
         prior = proof["already_protected_source_modules"].pop()
-        candidate_data = b"# isolated reviewed repair candidate\\n"
+        candidate_data = b"# isolated reviewed repair candidate\n"
         slot = self.path.parent / "candidate-1"
         slot.mkdir()
         (slot / prior["path"].rsplit("/", 1)[-1]).write_bytes(candidate_data)
