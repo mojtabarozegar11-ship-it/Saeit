@@ -335,6 +335,7 @@ class CheckoutEmailControlParser(HTMLParser):
                 "action": attributes.get("action", ""),
                 "csrf": False,
                 "csrf_fields": 0,
+                "csrf_source_tags": 0,
                 "csrf_hidden": False,
                 "csrf_strong": False,
                 "cta": False,
@@ -388,8 +389,10 @@ class CheckoutEmailControlParser(HTMLParser):
     def handle_data(self, data):
         if self.current_form is None:
             return
-        if re.search(r"{%\s*csrf_token\s*%}", data):
+        csrf_tags = re.findall(r"{%\s*csrf_token\s*%}", data)
+        if csrf_tags:
             self.current_form["csrf"] = True
+            self.current_form["csrf_source_tags"] += len(csrf_tags)
         if (self.current_button is not None and
                 self.current_button["submit"] and
                 CTA.decode("utf-8") in data):
@@ -435,6 +438,8 @@ def verify_template(raw: bytes):
     ) is not None
     if (form["method"] != "post" or not allowed_action or not form["csrf"]
             or form["csrf_fields"] > 1
+            or form["csrf_source_tags"] > 1
+            or (form["csrf_fields"] and form["csrf_source_tags"])
             or sum(item["method"] == "post" for item in inspector.forms) != 1):
         abort("FORM_CONTRACT_LOST")
 
