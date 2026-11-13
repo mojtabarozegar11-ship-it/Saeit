@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -18,6 +18,31 @@ work="${RUNNER_TEMP}/saeit-cpanel-direct"
 install -d -m 700 "$work"
 cleanup() { rm -rf -- "$work"; }
 trap cleanup EXIT
+
+# Strictly read-only: stream a pinned source guard over SSH stdin. Never stage on cPanel.
+zomorod_fields_audit_stream() {
+  local guard=scripts/zomorod_fields_guard_20261113.py
+  local approved_blob=aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32
+  if [[ ! -f "$guard" || -L "$guard" || "$(git hash-object -- "$guard")" != "$approved_blob" ]]; then
+    echo "ZOMOROD_AUDIT_SOURCE_NOT_PINNED" >&2
+    return 65
+  fi
+  timeout 90s ssh -T -F "$work/config" saeit-cpanel \
+    'for py in python3.13 python3.12 python3.11 python3.10 python3.9 python3.8 python3 /opt/alt/python313/bin/python3.13 /opt/alt/python312/bin/python3.12 /opt/alt/python311/bin/python3.11 /opt/alt/python310/bin/python3.10 /opt/alt/python39/bin/python3.9 /opt/alt/python38/bin/python3.8 /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python; do if command -v "$py" >/dev/null 2>&1 && "$py" -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" 2>/dev/null; then exec "$py" -B - audit-live; fi; done; echo CPANEL_COMPATIBLE_PYTHON_NOT_FOUND >&2; exit 70' \
+    < "$guard"
+}
+
+zomorod_fields_verify_stream() {
+  local guard=scripts/zomorod_fields_guard_20261113.py
+  local sender=scripts/zomorod_fields_stream_sender_20261113.py
+  if [[ -L "$guard" || -L "$sender" || ! -f "$guard" || ! -f "$sender" ]] ||
+     [[ "$(git hash-object -- "$guard")" != "aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32" ]] ||
+     [[ "$(git hash-object -- "$sender")" != "5f8c360d343a40de6e4f0bb80369e628f4a48717" ]]; then
+    echo "ZOMOROD_VERIFIER_SOURCE_NOT_PINNED" >&2
+    return 65
+  fi
+  PYTHONDONTWRITEBYTECODE=1 python3 -B "$sender" "$work/config"
+}
 
 normalize_key() {
   local value="$1" destination="$2"
@@ -55,6 +80,12 @@ EOF
       ;;
     cpanel_version)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+      ;;
+    zomorod_fields_audit_live)
+      zomorod_fields_audit_stream
+      ;;
+    zomorod_fields_verify_stream)
+      zomorod_fields_verify_stream
       ;;
     passenger_inventory)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
@@ -110,6 +141,12 @@ case "$operation" in
     ;;
   cpanel_version)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+    ;;
+  zomorod_fields_audit_live)
+    zomorod_fields_audit_stream
+    ;;
+  zomorod_fields_verify_stream)
+    zomorod_fields_verify_stream
     ;;
   passenger_inventory)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' |
