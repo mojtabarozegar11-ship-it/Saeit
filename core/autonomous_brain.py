@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
+from core.unified_bot_identity import BOT_CODE, economic_task_scope, non_factory_task_scope
 
 @dataclass(frozen=True)
 class Candidate:
@@ -17,7 +18,8 @@ class Candidate:
 class AutonomousBrain:
     def observe(self):
         products = Product.objects.all()
-        economic_tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+        economic_tasks = AgentTask.objects.filter(agent__code=BOT_CODE).filter(economic_task_scope())
+        reviewable_tasks = AgentTask.objects.filter(agent__code=BOT_CODE).filter(non_factory_task_scope())
         latest_offer = economic_tasks.filter(
             capability_code="income_offer_design"
         ).order_by("-created_at", "-pk").first()
@@ -77,8 +79,8 @@ class AutonomousBrain:
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
         return {
-            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
-            "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
+            "unfinished_tasks": reviewable_tasks.filter(status__in=("queued","running","blocked")).count(),
+            "failed_tasks": economic_tasks.filter(status="failed").count(),
             "market_research_complete": market_research_complete,
             "market_inventory_measured": latest_inventory is not None,
             "opportunity_scored": opportunity_scored,

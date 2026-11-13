@@ -13,6 +13,7 @@ class RecoverySummary:
     scanned: int = 0
     recovered: int = 0
     failed: int = 0
+    blocked: int = 0
     skipped: int = 0
     errors: List[str] = field(default_factory=list)
 
@@ -61,6 +62,8 @@ class RecoveryScheduler:
                 summary.recovered += 1
             elif task.status == "failed":
                 summary.failed += 1
+            elif task.status == "blocked":
+                summary.blocked += 1
             else:
                 summary.skipped += 1
 
