@@ -6,6 +6,8 @@ on:
     branches: [feature/mpw-recovery-01-20261105]
     paths:
       - '.github/workflows/mpw-live-invoice-source-audit-readonly-20261112.yml'
+      - 'scripts/mpw_live_invoice_source_audit_readonly_20261112.py'
+      - 'tests/test_mpw_live_invoice_source_audit_readonly_20261112.py'
 
 permissions:
   contents: read

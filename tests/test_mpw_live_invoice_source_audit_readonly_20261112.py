@@ -319,6 +319,39 @@ class LiveInvoiceSourceAuditTests(unittest.TestCase):
         self.assertLess(yml.index('if [ -z "$HOST_KEY" ]'),
                         yml.index("mode=direct"))
 
+    def test_remote_diagnostic_prints_bounded_call_names_only(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text(
+            "def _start_order(request):\n"
+            "    return reserve_commercial_intent(request)\n"
+            "def reserve_commercial_intent(request):\n"
+            "    return request.POST.get('order_reference')\n"
+        )
+        report = AUDIT.inspect(self.root)
+        code, printed = self._remote_gate_result(report)
+        self.assertEqual(code, 21)
+        self.assertIn("MPW_SOURCE_GATE=BLOCKED_INVOICE_RECORDER_NOT_FOUND", printed)
+        summary = next(line.split("=", 1)[1] for line in printed.splitlines()
+                       if line.startswith("MPW_SOURCE_EVIDENCE="))
+        parsed = json.loads(summary)
+        web_files = [f for f in parsed["modules"] if f["file"] == AUDIT.SOURCE_PATHS[0]]
+        self.assertEqual(len(web_files), 1)
+        self.assertIn("reserve_commercial_intent", web_files[0]["checkout_calls"])
+        self.assertFalse(parsed["paid_order_verified"])
+        self.assertFalse(parsed["production_changed"])
+
+    def test_diagnostic_does_not_echo_string_literals_or_email_values(self):
+        web = self.root / AUDIT.SOURCE_PATHS[0]
+        web.write_text(
+            "def _start_order(request):\n"
+            "    secret = 'SECRET_SAMPLE_DO_NOT_LOG'\n"
+            "    return secret\n"
+        )
+        _code, printed = self._remote_gate_result(AUDIT.inspect(self.root))
+        self.assertNotIn("SECRET_SAMPLE_DO_NOT_LOG", printed)
+        self.assertIn("MPW_SOURCE_EVIDENCE=", printed)
+        self.assertNotIn("SAFE_TO_DEPLOY", printed)
+
     def test_source_content_not_printed_or_returned(self):
         p = self.root / AUDIT.SOURCE_PATHS[0]
         p.write_text("def _start_order(request):\n"

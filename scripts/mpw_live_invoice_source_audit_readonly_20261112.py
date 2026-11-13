@@ -149,6 +149,7 @@ def module_report(relative: str, raw: bytes) -> dict:
     pending = list(roots)
     email_functions = []
     external_calls = []
+    checkout_call_targets = set()
     dynamic_calls = False
     while pending and len(explored) < MAX_HELPERS:
         name = pending.pop(0)
@@ -165,12 +166,19 @@ def module_report(relative: str, raw: bytes) -> dict:
                 continue
             if isinstance(part.func, ast.Name):
                 callee = part.func.id
+                if relative == SOURCE_PATHS[0] and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", callee):
+                    checkout_call_targets.add(callee)
                 if callee in functions and callee not in explored:
                     pending.append(callee)
                 if callee in aliases:
                     external_calls.append({"caller": name,
                                            "import": aliases[callee][:130]})
             elif isinstance(part.func, ast.Attribute):
+                if (relative == SOURCE_PATHS[0] and
+                        re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", part.func.attr) and
+                        any(fragment in part.func.attr.lower()
+                            for fragment in ("invoice", "order", "intent", "reserve", "payment", "ledger"))):
+                    checkout_call_targets.add(part.func.attr)
                 if part.func.attr == "record_invoice":
                     external_calls.append({"caller": name,
                                            "import": "qualified.record_invoice"})
@@ -193,6 +201,8 @@ def module_report(relative: str, raw: bytes) -> dict:
         ][:15],
         "dynamic_call_observed": dynamic_calls,
         "helper_limit_hit": len(explored) >= MAX_HELPERS,
+        # Identifiers only, not function bodies, request fields, buyer data or secrets.
+        "checkout_call_targets": sorted(checkout_call_targets)[:48],
     }
 
 
@@ -304,6 +314,37 @@ def validate_remote_report(output: str) -> int:
     if not isinstance(status, str) or re.fullmatch(r"[A-Z_]{3,80}", status) is None:
         print("MPW_SOURCE_GATE=BLOCKED_INVALID_SOURCE_STATUS")
         return 20
+    # Bounded, data-minimal owner evidence from an authenticated SSH report.
+    # Never print raw source or arbitrary report strings (which could contain
+    # accidental credentials or customer data). Use only fixed known file keys.
+    modules = report.get("files", [])
+    modules = modules if isinstance(modules, list) else []
+    expected = set(SOURCE_PATHS)
+    safe_modules = []
+    for item in modules:
+        if not isinstance(item, dict) or item.get("file") not in expected:
+            continue
+        digest = item.get("sha256", "")
+        digest = digest[:16] if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else "INVALID"
+        calls = item.get("checkout_call_targets", [])
+        safe_calls = sorted({v for v in calls if isinstance(v, str) and
+                             re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", v)})[:35] if isinstance(calls, list) else []
+        safe_modules.append({"file": item["file"], "sha16": digest,
+                             "start_definitions": int(item.get("start_handler_definition_count", 0)) if type(item.get("start_handler_definition_count")) is int else None,
+                             "recorder_definitions": int(item.get("invoice_recorder_definition_count", 0)) if type(item.get("invoice_recorder_definition_count")) is int else None,
+                             "checkout_calls": safe_calls})
+    template = report.get("template", {})
+    template = template if isinstance(template, dict) else {}
+    print("MPW_SOURCE_EVIDENCE=" + json.dumps({
+        "status": status,
+        "modules": safe_modules[:len(SOURCE_PATHS)],
+        "source_problem_count": len(report.get("source_problems", [])) if isinstance(report.get("source_problems"), list) else None,
+        "template_exists": template.get("exists") is True,
+        "template_email_field": template.get("email_control_marker") is True,
+        "template_csrf_marker": template.get("csrf_template_marker") is True,
+        "guest_exact_reviewed_digest": report.get("guest_source_matches_reviewed_digest") is True,
+        "paid_order_verified": False, "production_changed": False
+    }, sort_keys=True))
     if status != "DIRECT_SOURCE_CLEAN_EXTERNAL_HELPERS_UNVERIFIED":
         print("MPW_SOURCE_GATE=BLOCKED_" + status)
         return 21
