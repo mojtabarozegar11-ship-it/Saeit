@@ -7,6 +7,9 @@ on:
       - 'content/zomorod-business/app.php'
       - 'scripts/zomorod_sitewide_playwright_audit_20261019.cjs'
       - 'scripts/zomorod_store_overflow_readonly_20261113.cjs'
+      - 'scripts/zomorod_cpanel_store_provenance_readonly_20261114.py'
+      - 'scripts/zomorod_cpanel_store_readonly_relay_20261114.sh'
+      - 'tests/test_zomorod_cpanel_store_provenance_readonly_20261114.py'
       - '.github/workflows/zomorod-sitewide-deep-readonly-20261113.yml'
 permissions:
   contents: read
@@ -36,6 +39,8 @@ jobs:
           print('ZM_SITEWIDE_READONLY_POLICY=VERIFIED')
           PY
           python3 -B -m unittest discover -s tests -p 'test_zomorod_sitewide_readonly_parser_20261113.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_cpanel_store_provenance_readonly_20261114.py' -v
+          bash -n scripts/zomorod_cpanel_store_readonly_relay_20261114.sh
       - name: Crawl sitemap and sample up to 200 existing public site pages
         shell: bash
         run: |
@@ -128,5 +133,38 @@ jobs:
         with:
           name: zm-existing-store-overflow-diagnostic
           path: ${{ runner.temp }}/zm-store-overflow-readonly/
+          retention-days: 7
+          if-no-files-found: warn
+
+  store-cpanel-source-provenance:
+    # No repo forks or arbitrary PR branches may access privileged runner secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/zomorod-entire-site-readonly-20261113'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify isolated source/relay contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_cpanel_store_provenance_readonly_20261114.py' -v
+          bash -n scripts/zomorod_cpanel_store_readonly_relay_20261114.sh
+      - name: Attest exact current cPanel native-store source (read-only, pinned relay)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash scripts/zomorod_cpanel_store_readonly_relay_20261114.sh |
+            tee "$RUNNER_TEMP/zm-store-source-provenance.jsonl"
+      - name: Preserve sanitized hash-and-CSS flags only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-store-cpanel-source-provenance
+          path: ${{ runner.temp }}/zm-store-source-provenance.jsonl
           retention-days: 7
           if-no-files-found: warn
