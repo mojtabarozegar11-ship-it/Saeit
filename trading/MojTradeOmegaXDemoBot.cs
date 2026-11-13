@@ -99,6 +99,9 @@ namespace Mojtaba.Bot.Ai
         [Parameter("Trailing Distance (Pips)", DefaultValue = 4.0, MinValue = 1)]
         public double TrailingDistancePips { get; set; }
 
+        [Parameter("Enable Demo Trading", DefaultValue = false)]
+        public bool EnableDemoTrading { get; set; }
+
         protected override void OnStart()
         {
             if (Account.IsLive)
