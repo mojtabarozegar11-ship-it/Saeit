@@ -44,7 +44,7 @@ def save_snapshot(folder, role, data):
 
 def test_no_evidence_never_yields_live_count_or_retirement_permission():
     report = module.preview(snap("vps"), snap("cpanel"), MANIFEST, repository_root=ROOT)
-    assert report["sources_evaluated"] == 9
+    assert report["sources_evaluated"] == 14
     assert report["verified_live_agents"] is None
     assert report["percent_fully_consolidated"] is None
     assert report["production_cutover_authorized"] is False
@@ -186,7 +186,7 @@ def test_cli_generates_safe_per_source_preview_from_two_fake_host_snapshots(tmp_
     assert res.returncode == 0, res.stderr
     assert res.stdout.startswith("MOJTABA_DISPOSITION_PREVIEW=")
     report = json.loads(res.stdout.split("=", 1)[1])
-    assert report["sources_evaluated"] == 9
+    assert report["sources_evaluated"] == 14
     assert report["verified_live_agents"] is None
 
 
@@ -304,3 +304,87 @@ def test_non_boolean_site_enabled_value_is_not_accepted_as_valid_record():
         snap("cpanel", private_php_site_registry=php)
     )
     assert identities[0]["registration_state"] == "not_in_observed_private_registry"
+
+
+def test_source_groups_cover_trading_coin_cycles_and_off_host_runtimes():
+    report = module.preview(snap("vps"), snap("cpanel"), MANIFEST, repository_root=ROOT)
+    groups = {g["source_group"]: g for g in report["groups"]}
+    assert report["sources_evaluated"] == 14
+    assert report["sources_in_manifest"] == 14
+    assert report["unscoped_runtime_scope_count"] == 6
+    assert report["all_source_families_accounted_for"] is False
+    assert report["all_independent_runtimes_retired_verified"] is False
+    for group in (
+        "mojtrade_signal_and_broker_runtime",
+        "moj_coin_game_token_workers",
+        "canonical_cycle_and_legacy_master_schedulers",
+    ):
+        assert len(groups[group]["host_observations"]) == 2
+        assert groups[group]["retirement_authorized"] is False
+    for group in (
+        "mobile_sms_termux_automate_runtime",
+        "external_connected_app_agents",
+    ):
+        assert groups[group]["host_observations"] == []
+        assert "external_runtime_outside_vps_cpanel_observation" in groups[group]["blocking_evidence"]
+        assert groups[group]["retirement_authorized"] is False
+
+
+def test_previously_unclassified_trading_and_game_routes_are_observable_not_attested():
+    vps = snap("vps")
+    vps["cron"]["entries"] = [
+        {"known_route_flags": ["mojtrade_observer"]},
+        {"known_route_flags": ["mojcoin"]},
+        {"known_route_flags": ["autonomous_master_loop"]},
+    ]
+    report = module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+    groups = {g["source_group"]: g for g in report["groups"]}
+    for group in (
+        "mojtrade_signal_and_broker_runtime",
+        "moj_coin_game_token_workers",
+        "canonical_cycle_and_legacy_master_schedulers",
+    ):
+        item = groups[group]
+        assert item["status"] == "candidate_routes_seen_but_not_verified_live"
+        assert item["host_observations"][0]["by_observation_surface"]["user_cron"] == 1
+        assert "no_proven_complete_external_scheduler_census" in item["blocking_evidence"]
+        assert item["retirement_authorized"] is False
+    assert report["verified_live_agents"] is None
+
+
+@pytest.mark.parametrize("invalidity", ["unknown", "duplicate", "malformed"])
+def test_manifest_does_not_silently_drop_or_duplicate_untracked_sources(invalidity):
+    altered = json.loads(json.dumps(MANIFEST))
+    if invalidity == "unknown":
+        altered["sources"].append({"id": "unknown_unreviewed_agent_root"})
+    elif invalidity == "duplicate":
+        altered["sources"].append(dict(altered["sources"][0]))
+    else:
+        altered["sources"].append({"name": "missing_source_id"})
+    with pytest.raises(ValueError, match="DISPOSITION_MANIFEST_"):
+        module.preview(snap("vps"), snap("cpanel"), altered, repository_root=ROOT)
+
+
+def test_missing_manifest_group_is_explicit_blocker_not_completion():
+    altered = json.loads(json.dumps(MANIFEST))
+    altered["sources"] = [
+        x for x in altered["sources"]
+        if x["id"] != "moj_coin_game_token_workers"
+    ]
+    report = module.preview(snap("vps"), snap("cpanel"), altered, repository_root=ROOT)
+    coin = next(
+        x for x in report["groups"]
+        if x["source_group"] == "moj_coin_game_token_workers"
+    )
+    assert "group_missing_from_checked_in_manifest" in coin["blocking_evidence"]
+    assert report["sources_in_manifest"] == 13
+    assert report["all_source_families_accounted_for"] is False
+    assert report["production_cutover_authorized"] is False
+
+
+def test_untracked_external_scope_does_not_disappear_from_completion_report():
+    report = module.preview(snap("vps"), snap("cpanel"), MANIFEST, repository_root=ROOT)
+    assert "mobile_Termux_Automate_SMS_device_schedulers" in report["unscoped_runtime_scopes_not_attested"]
+    assert "external_automation_and_connected_app_agents" in report["unscoped_runtime_scopes_not_attested"]
+    assert "broker_remote_accounts_and_marketplace_webhooks" in report["unscoped_runtime_scopes_not_attested"]
+    assert report["percent_fully_consolidated"] is None
