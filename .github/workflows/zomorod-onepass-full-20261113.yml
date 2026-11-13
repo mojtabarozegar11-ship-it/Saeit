@@ -185,7 +185,8 @@ jobs:
             for(const [name,engine] of [['firefox',firefox],['webkit',webkit]]){
               const browser=await engine.launch({headless:true});
               for(const width of [390,1024]){
-                const page=await browser.newPage({viewport:{width,height:850}});
+                const page=await browser.newPage({viewport:{width,height:850},reducedMotion:'no-preference'});
+                await page.bringToFront();
                 const errors=[];page.on('pageerror',e=>errors.push(e.message));
                 await page.goto('http://127.0.0.1:8101/',{waitUntil:'load',timeout:45000});
                 await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3');
