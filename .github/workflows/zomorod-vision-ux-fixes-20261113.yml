@@ -1,22 +1,6 @@
 name: Zomorod homepage VISION UX repair guarded deployment
 on:
-  pull_request:
-    paths:
-      - 'content/zomorod-vision-v3/index.html'
-      - 'content/zomorod-vision-v3/assets/zm-reference-v3.css'
-      - 'content/zomorod-vision-v3/assets/zm-reference-v3.js'
-      - 'scripts/zomorod_vision_ux_guarded_20261113.py'
-      - 'scripts/test_zomorod_vision_ux_20261113.py'
-      - '.github/workflows/zomorod-vision-ux-fixes-20261113.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'content/zomorod-vision-v3/index.html'
-      - 'content/zomorod-vision-v3/assets/zm-reference-v3.css'
-      - 'content/zomorod-vision-v3/assets/zm-reference-v3.js'
-      - 'scripts/zomorod_vision_ux_guarded_20261113.py'
-      - 'scripts/test_zomorod_vision_ux_20261113.py'
-      - '.github/workflows/zomorod-vision-ux-fixes-20261113.yml'
+  workflow_dispatch: # retired one-off release, superseded by audited one-pass workflow
 permissions:
   contents: read
 concurrency:

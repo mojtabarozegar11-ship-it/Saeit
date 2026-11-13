@@ -198,3 +198,81 @@
  .zm-vision-v3 .triple-banners .small-banner:first-child,.zm-vision-v3 .triple-banners .small-banner:last-child{padding-left:89px}
  .zm-vision-v3 .triple-banners .small-banner>span{overflow-wrap:break-word}
 }
+
+
+/* One-pass audited release: three continuously moving rows / transparent original
+   logo / legible controls. No shared templates or data are affected. */
+.zm-vision-v3 .identity-icon,.zm-vision-v3 .identity-icon img,.zm-vision-v3 .footer-company img{
+ background:transparent!important;border:0!important;border-radius:0!important;
+ box-shadow:none!important;object-fit:contain;overflow:visible
+}
+.zm-vision-v3 .identity-icon img{filter:drop-shadow(0 0 5px #cba53c80)}
+.zm-vision-v3 .footer-company img{filter:drop-shadow(0 0 7px #f4cd57)}
+.zm-vision-v3 .lang-switch a{
+ display:inline-flex;align-items:center;justify-content:center;padding:7px 8px;
+ min-height:36px;min-width:30px;border-radius:18px;
+ color:#e0ede7;font:800 12px/1 Arial,sans-serif;text-decoration:none
+}
+.zm-vision-v3 .lang-switch a.active,.zm-vision-v3 .lang-switch a[aria-current="page"]{
+ background:#007e5b;color:white
+}
+.zm-vision-v3 .lang-switch a:focus-visible{outline:2px solid #f9d17c;outline-offset:2px}
+.zm-vision-v3 .auto-row-shell{position:relative;min-width:0;margin-bottom:9px}
+.zm-vision-v3 .auto-row-shell>.service-ribbon{
+ margin:0;display:flex!important;grid-template-columns:none!important;
+ flex-flow:row nowrap!important;align-items:stretch;justify-content:flex-start;
+ gap:10px;max-width:100%;min-height:70px;padding:6px 45px 6px 14px;
+ overflow-x:auto;overflow-y:hidden;scroll-snap-type:none!important;
+ scroll-behavior:auto!important;scrollbar-width:none;overscroll-behavior-inline:contain;
+}
+.zm-vision-v3 .auto-row-shell>.service-ribbon::-webkit-scrollbar,
+.zm-vision-v3 .auto-scroll-row::-webkit-scrollbar{display:none}
+.zm-vision-v3 .auto-row-shell>.service-ribbon>a{
+ flex:0 0 145px;min-width:145px;min-height:57px;
+ display:flex;flex-direction:column;justify-content:center;align-items:center;
+ padding:5px 7px;font-size:12px;line-height:1.4;white-space:normal;overflow-wrap:break-word
+}
+.zm-vision-v3 .auto-scroll-row.card-strip{
+ scroll-behavior:auto!important;scroll-snap-type:none!important;
+ overscroll-behavior-inline:contain;min-width:0
+}
+.zm-vision-v3 .auto-scroll-row .mini-card{scroll-snap-align:none}
+.zm-vision-v3 .auto-rotator-toggle{
+ display:inline-grid;place-items:center;flex:0 0 32px;width:32px;height:32px;
+ border:1px solid #f2cf8199;border-radius:10px;
+ background:#001c17;color:#f9d780;box-shadow:0 0 8px #00eda86b;
+ font-size:15px;font-weight:800;line-height:1;cursor:pointer;z-index:4
+}
+.zm-vision-v3 .auto-row-shell>.auto-rotator-toggle{
+ position:absolute;top:50%;right:6px;transform:translateY(-50%)
+}
+.zm-vision-v3 .auto-rotator-toggle:focus-visible{outline:3px solid #ffe29a;outline-offset:3px}
+.zm-vision-v3 .panel-head{flex-wrap:wrap}
+.zm-vision-v3 .panel-head .auto-rotator-toggle{margin-inline-start:3px}
+.zm-vision-v3 .card-strip .carousel-copy,.zm-vision-v3 .service-ribbon .carousel-copy{pointer-events:auto}
+.zm-vision-v3 .footer-bottom{font-size:12px;line-height:1.65}
+.zm-vision-v3 .top-nav a,.zm-vision-v3 .metric,.zm-vision-v3 .field-overlay small,
+.zm-vision-v3 .panel-head a,.zm-vision-v3 .mini-card span,
+.zm-vision-v3 .footer-col a,.zm-vision-v3 .footer-col span{font-size:max(12px, .85rem);line-height:1.55}
+.zm-vision-v3 .pulse-card small,.zm-vision-v3 .hero-overline{font-size:11px}
+.zm-vision-v3 .hero-photo{image-rendering:auto}
+@media(max-width:900px){
+ .zm-vision-v3 .auto-row-shell>.service-ribbon>a{flex-basis:135px;min-width:135px;font-size:12px}
+ .zm-vision-v3 .lang-switch a{padding:7px 5px;min-width:26px;font-size:11px}
+ .zm-vision-v3 .service-ribbon a{min-height:58px}
+ .zm-vision-v3 .footer-bottom{font-size:12px}
+}
+@media(max-width:640px){
+ .zm-vision-v3 .auto-row-shell>.service-ribbon{padding-right:39px;min-height:63px}
+ .zm-vision-v3 .auto-row-shell>.service-ribbon>a{flex-basis:115px;min-width:115px;font-size:12px}
+ .zm-vision-v3 .auto-row-shell>.service-ribbon>a svg{width:23px;height:23px}
+ .zm-vision-v3 .auto-rotator-toggle{width:35px;height:35px;flex-basis:35px}
+ .zm-vision-v3 .mini-card{min-width:125px}
+ .zm-vision-v3 .panel-head{gap:5px}
+ .zm-vision-v3 .panel-head h2{font-size:14px}
+ .zm-vision-v3 .footer-bottom{font-size:12px;padding:12px 13px}
+ .zm-vision-v3 .footer-col a,.zm-vision-v3 .footer-col span{font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){
+ .zm-vision-v3 .auto-scroll-row{scroll-behavior:auto!important}
+}
