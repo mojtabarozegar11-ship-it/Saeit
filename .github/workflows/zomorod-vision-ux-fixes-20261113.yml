@@ -107,6 +107,7 @@ jobs:
                 await page.locator('.search-toggle').click();
                 await page.locator('[data-lang="en"]').click();
                 if(await page.locator('[data-lang="en"]').getAttribute('aria-pressed')!=='false'||await page.locator('[data-lang="fa"]').getAttribute('aria-pressed')!=='true')throw Error('FALSE_LANGUAGE_SWITCH');
+                await page.keyboard.press('Escape'); // Screenshot should depict the normal page, not a temporary language notice.
                 const strip=page.locator('#products-strip');
                 const st=await strip.evaluate(x=>({overflow:x.scrollWidth-x.clientWidth,pos:x.scrollLeft}));
                 if(st.overflow>5){
