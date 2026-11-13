@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models import F
-from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
@@ -14,7 +13,6 @@ class Command(BaseCommand):
         parser.add_argument("--max-steps", type=int, default=20)
 
     def handle(self,*args,**opts):
-        brain=AutonomousBrain()
         gateway = build_economic_gateway()
         supported = frozenset(
             code for code, spec in gateway.describe().items()
@@ -25,10 +23,10 @@ class Command(BaseCommand):
             self.stdout.write("AUTO_BLOCKED_NO_REGISTERED_TOOLS")
             return
         runner = None
-        requested_steps=max(1, opts["max_steps"])
-        steps=min(20, requested_steps)
-        if requested_steps>steps:
-            self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")
+        requested_steps = opts["max_steps"]
+        if not 1 <= requested_steps <= 20:
+            raise ValueError("max-steps must be 1..20")
+        steps = requested_steps
         for step in range(steps):
             in_flight = AgentTask.objects.filter(
                 agent__code=BOT_CODE, agent__active=True, status="running"
@@ -37,6 +35,16 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"AUTO_WAIT_RUNNING task={in_flight.pk} "
                     "prevents_parallel_execution=true revenue_not_assessed=true"
+                )
+                return
+            # Unreconciled tasks may already have caused real side effects.
+            blocked = AgentTask.objects.filter(
+                agent__code=BOT_CODE, agent__active=True, status="blocked"
+            ).order_by("pk").first()
+            if blocked:
+                self.stdout.write(
+                    f"AUTO_STOP_UNRECONCILED task={blocked.pk} "
+                    "automatic_replay_allowed=false"
                 )
                 return
             active=self._next_eligible_task(supported)
@@ -67,25 +75,15 @@ class Command(BaseCommand):
                     f"revenue_not_assessed=true"
                 ))
             except Exception as exc:
-                prereq=brain.prerequisite_from_error(exc)
-                self.stdout.write(f"AUTO_REPLAN failed_task={active.pk} reason={exc} prerequisite={prereq or 'unknown'}")
-                if not prereq:
-                    return
-                # Failed task is already safely requeued by WorkerRunner when retries remain.
-                # Cancel it as superseded so the inferred prerequisite can run first.
+                # The handler may have made an irreversible effect before
+                # raising. Never auto-enqueue an inferred prerequisite.
                 active.refresh_from_db()
-                if active.status=="queued":
-                    active.status="cancelled"
-                    active.output_data={**(active.output_data or {}),"replanned_to":prereq,"blocker":str(exc)[:1000]}
-                    active.save(update_fields=["status","output_data","updated_at"])
-                agent=active.agent
-                cap=agent.capabilities.filter(code=prereq,active=True).first()
-                if not cap:
-                    self.stdout.write(f"AUTO_BLOCKED missing_capability={prereq}"); return
-                AgentTask.objects.create(agent=agent,action_type=prereq,capability_code=prereq,
-                    risk_snapshot=cap.risk_level,input_data={"objective":agent.mission,"replanned_from":active.pk,
-                    "reason":str(exc)[:1000]},status="queued")
-                continue
+                self.stdout.write(
+                    f"AUTO_STOP_RECONCILIATION task={active.pk} "
+                    f"status={active.status} error_type={type(exc).__name__} "
+                    "new_tasks_created=0 automatic_replay_allowed=false"
+                )
+                return
 
             # Stop when progress reaches an external-world boundary rather than
             # pretending an internal artifact equals a sale.

@@ -117,3 +117,7 @@ New tasks planned through the existing `master-chat/plan` endpoint require an au
 ## Cycle 7 — release boundary and draft integrity
 
 The existing ChatOperation intent does **not** authorize `cpanel.deploy_release` for an unspecified Git SHA. This path now refuses requests at the chat layer, approval allowlist and executor; immutable release identity, signed manifest and a separate per-case owner approval are prerequisites for future work. The existing website/template remains unchanged. The MojPlayWin draft update action now targets existing draft records only; it will not demote or mutate a published page record by changing its `state`. API planning returns a safe conflict on canonical-runtime misconfiguration. No live deployment, payment, email, chat provider billing, tests or DB migration was executed in this cycle.
+
+## Cycle 8: Fail-closed autonomous task replanning
+
+The existing autonomous loop previously created new inferred prerequisite AgentTask rows following a handler failure, including cases where the previous task could have applied a side effect. The speculative-replan branch is now removed, all blocked canonical tasks pause the loop, and max-steps is constrained to 1..20. On failure the original task remains under TaskRuntime reconciliation and no new task is auto-created. Source only: no worker started, no tests or deployment.
