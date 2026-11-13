@@ -118,6 +118,15 @@ def webp_dimensions(data: bytes) -> tuple[int, int]:
             int.from_bytes(data[4:8], 'little') + 8 != len(data)):
         raise RuntimeError('Invalid WebP RIFF file')
     kind = data[12:16]
+    # The RIFF envelope alone cannot prove the first image chunk is complete.
+    # Refuse truncated/oversized chunks, including forged valid-looking dimensions.
+    chunk_size = int.from_bytes(data[16:20], 'little')
+    chunk_end = 20 + chunk_size + (chunk_size & 1)  # RIFF chunks are word-aligned
+    if (chunk_end > len(data) or
+            (kind == b'VP8X' and chunk_size != 10) or
+            (kind == b'VP8 ' and chunk_size < 10) or
+            (kind == b'VP8L' and chunk_size < 5)):
+        raise RuntimeError('Invalid WebP RIFF chunk')
     if kind == b'VP8 ' and data[23:26] == b'\x9d\x01\x2a':
         width = int.from_bytes(data[26:28], 'little') & 0x3fff
         height = int.from_bytes(data[28:30], 'little') & 0x3fff
