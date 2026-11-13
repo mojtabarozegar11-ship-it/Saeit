@@ -25,6 +25,10 @@ class MojTradeSignalProductSeederTests(TestCase):
         self.assertTrue(all(product.metadata["canonical_bot_id"] == "mojtaba.bot.ai" for product in products))
         self.assertTrue(all(product.metadata["validity_days"] == 15 for product in products))
         self.assertTrue(all(product.metadata["max_verified_signals"] == 10 for product in products))
+        self.assertTrue(all(
+            product.metadata["receiver"] == "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+            for product in products
+        ))
         self.assertEqual(Product.objects.filter(product_type="signal").count(), 3)
 
     def test_activation_requires_explicit_release_flag(self):
