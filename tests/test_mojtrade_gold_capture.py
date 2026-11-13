@@ -3,6 +3,13 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 from pathlib import Path
 from contextlib import nullcontext
+from io import StringIO
+import json
+from unittest.mock import patch
+
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from core.models import AgentTask
 
 import pytest
 
@@ -212,3 +219,35 @@ def test_private_log_file_safety_blocks_unsafe_paths(private_capture, tmp_path, 
         source = Path("relative.log")
     with pytest.raises(GoldCaptureError):
         preview_private_gold_capture(source, now=NOW)
+
+
+
+@pytest.mark.django_db
+def test_owner_private_capture_management_command_never_creates_order_task(
+    private_capture,
+):
+    output = StringIO()
+    original = preview_private_gold_capture
+    with patch(
+        "core.management.commands.mojtrade_gold_capture_preview.preview_private_gold_capture",
+        side_effect=lambda path: original(path, now=NOW),
+    ):
+        call_command("mojtrade_gold_capture_preview",
+                     "--input", str(private_capture), stdout=output)
+    report = json.loads(output.getvalue())
+    assert report["source_kind"] == "unverified_local_ctrader_demo_log"
+    assert report["source_authenticated_by_broker"] is False
+    assert report["trade_execution_authorized"] is False
+    assert report["publication_authorized"] is False
+    assert report["orders"] == 0
+    assert report["order_intent"] is None
+    assert not AgentTask.objects.exists()
+
+
+@pytest.mark.django_db
+def test_owner_private_capture_command_blocks_world_readable_evidence(private_capture):
+    private_capture.chmod(0o644)
+    with pytest.raises(CommandError, match="MOJTABA_GOLD_CAPTURE_BLOCKED"):
+        call_command("mojtrade_gold_capture_preview",
+                     "--input", str(private_capture), stdout=StringIO())
+    assert not AgentTask.objects.exists()
