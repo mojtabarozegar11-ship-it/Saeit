@@ -172,7 +172,7 @@ try {
             header('Location: ?page=dashboard',true,303);exit;
         }
         layoutStart('setup');echo '<section class="sign"><h1>راه‌اندازی امن میز مدیریت</h1><p>برای نخستین ورود، توکن یک‌بارمصرف نگهداری‌شده در <code>~/.private/zomorod-business/setup.token</code> را از فایل‌منیجر cPanel یا SSH بخوانید. این رمز در کد یا گزارش GitHub منتشر نمی‌شود.</p>';
-        formBegin('setup');echo '<label>توکن فعال‌سازی</label><input name="setup_token" type="password" required autocomplete="off"><label>نام کاربری مدیر</label><input name="username" required minlength="5" maxlength="40"><label>گذرواژه جدید</label><input name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
+        formBegin('setup');echo '<label for="zm-setup-token">توکن فعال‌سازی</label><input id="zm-setup-token" name="setup_token" type="password" required autocomplete="off"><label for="zm-setup-username">نام کاربری مدیر</label><input id="zm-setup-username" name="username" required minlength="5" maxlength="40"><label for="zm-setup-password">گذرواژه جدید</label><input id="zm-setup-password" name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
     }
     if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
     $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
@@ -190,7 +190,7 @@ try {
             $_SESSION['uid']=(int)$acc[0]['id'];$_SESSION['role']=$acc[0]['role'];$_SESSION['failed_count']=0;session_regenerate_id(true);
             header('Location: ?page=dashboard',true,303);exit;
         }
-        layoutStart('login');echo '<section class="sign"><h1>ورود مدیر و حسابدار</h1><p>دسترسی فقط برای کاربران مجاز شرکت.</p>';formBegin('login');echo '<label>نام کاربری</label><input name="username" required autocomplete="username"><label>رمز عبور</label><input name="password" type="password" required autocomplete="current-password"><button>ورود امن</button></form></section>';layoutEnd();exit;
+        layoutStart('login');echo '<section class="sign"><h1>ورود مدیر و حسابدار</h1><p>دسترسی فقط برای کاربران مجاز شرکت.</p>';formBegin('login');echo '<label for="zm-login-username">نام کاربری</label><input id="zm-login-username" name="username" required autocomplete="username"><label for="zm-login-password">رمز عبور</label><input id="zm-login-password" name="password" type="password" required autocomplete="current-password"><button>ورود امن</button></form></section>';layoutEnd();exit;
     }
     $page=(string)($_GET['page']??'dashboard');
     $post=$_SERVER['REQUEST_METHOD']==='POST';

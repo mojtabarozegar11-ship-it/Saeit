@@ -3,12 +3,14 @@ on:
   pull_request:
     paths:
       - 'scripts/zomorod_public_sitewide_readonly_audit_20261113.py'
+      - 'tests/test_zomorod_sitewide_readonly_parser_20261113.py'
+      - 'content/zomorod-business/app.php'
       - 'scripts/zomorod_sitewide_playwright_audit_20261019.cjs'
       - '.github/workflows/zomorod-sitewide-deep-readonly-20261113.yml'
 permissions:
   contents: read
 concurrency:
-  group: zm-sitewide-readonly-\${{ github.event.pull_request.number }}
+  group: zm-sitewide-readonly-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
   public-census:
@@ -32,6 +34,7 @@ jobs:
           assert '"site_writes":0' in code
           print('ZM_SITEWIDE_READONLY_POLICY=VERIFIED')
           PY
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_sitewide_readonly_parser_20261113.py' -v
       - name: Crawl sitemap and sample up to 200 existing public site pages
         shell: bash
         run: |
@@ -44,10 +47,10 @@ jobs:
         with:
           name: zm-existing-sitewide-http-audit
           path: |
-            \${{ runner.temp }}/zm-sitewide-audit/
-            \${{ runner.temp }}/sitewide-public-log.txt
+            ${{ runner.temp }}/zm-sitewide-audit/
+            ${{ runner.temp }}/sitewide-public-log.txt
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
   browser-visual-a11y:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
@@ -97,6 +100,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zm-existing-sitewide-browser-axe-audit
-          path: \${{ runner.temp }}/zm-deep-browser/
+          path: ${{ runner.temp }}/zm-deep-browser/
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn

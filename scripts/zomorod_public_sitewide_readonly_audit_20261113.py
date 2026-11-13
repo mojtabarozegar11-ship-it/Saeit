@@ -56,7 +56,9 @@ class Parser(HTMLParser):
     def handle_starttag(self,tag,attrs):
         a=dict(attrs)
         if tag=="html":self.rootattrs=a
-        if tag in ("title","h1"):self.current=tag
+        if tag in ("title","h1"):
+            self.current=tag
+            if tag=="h1":self.h1.append("")
         if tag=="main":self.seen_main=True;self.in_skip+=1
         if tag=="meta" and a.get("name"):self.meta[a["name"].lower()]=a.get("content","")
         if tag=="link" and a.get("rel")=="canonical":self.canonical.append(a.get("href",""))
@@ -69,7 +71,8 @@ class Parser(HTMLParser):
         txt=" ".join(data.split())
         if not txt:return
         if self.current=="title":self.titles.append(txt)
-        if self.current=="h1":self.h1.append(txt)
+        if self.current=="h1" and self.h1:
+            self.h1[-1]+=(" " if self.h1[-1] else "")+txt
         if self.in_skip:self.body.append(txt)
 
 def allowed(path):
