@@ -902,7 +902,8 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                     release.plan(GUEST_FILE)
 
 
-    def _exercise_guarded_publish(self, public_probe, *, idempotent=False):
+    def _exercise_guarded_publish(self, public_probe, *, idempotent=False,
+                                  fail_after_replace=False, concurrent_drift=False):
         """Isolated files only: never cPanel, wallet, mail, or public HTTPS."""
         import contextlib
         import io
@@ -922,8 +923,22 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 backup.mkdir(mode=0o700)
                 return backup
             restart = Mock()
-            probe = Mock(side_effect=public_probe) if isinstance(public_probe, Exception) \
-                    else Mock(return_value=public_probe)
+            def verified_public_probe():
+                if concurrent_drift:
+                    checkout.write_bytes(b"third-party checkout edit")
+                    raise RuntimeError("CONCURRENT_OWNER_EDIT")
+                if isinstance(public_probe, Exception):
+                    raise public_probe
+                return public_probe
+            probe = Mock(side_effect=verified_public_probe)
+            original_write = release._write_atomic
+            state = {"failed_once": False}
+            def guarded_write(target, payload, expected_hash):
+                original_write(target, payload, expected_hash)
+                if (fail_after_replace and not state["failed_once"]
+                        and target == checkout and payload == desired["template"]):
+                    state["failed_once"] = True
+                    raise RuntimeError("POST_RENAME_FSYNC_FAILURE")
             plan = Mock(return_value=(desired if idempotent else original,
                                      None if idempotent else desired))
             sink = io.StringIO()
@@ -934,6 +949,7 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
                 plan=plan,
                 _backup_dir=private_backup,
                 _restart=restart,
+                _write_atomic=guarded_write,
                 audit_live_public_checkout_forms=probe,
             ):
                 with contextlib.redirect_stdout(sink):
@@ -985,6 +1001,29 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
         self.assertFalse(state["backup_exists"])
         self.assertEqual(state["probe_count"], 1)
         self.assertNotIn("ALREADY_INSTALLED", state["message"])
+
+
+    def test_post_rename_fsync_failure_restores_both_owned_files(self):
+        state = self._exercise_guarded_publish(
+            [{"product_id": pid} for pid in release.PUBLIC_CHECKOUT_PRODUCTS],
+            fail_after_replace=True,
+        )
+        self.assertIn("POST_RENAME_FSYNC_FAILURE", state["error"])
+        self.assertEqual(state["final"], state["before"])
+        self.assertEqual(state["restart_count"], 1)
+        self.assertEqual(state["probe_count"], 0)
+        self.assertNotIn("PUBLISHED", state["message"])
+
+    def test_concurrent_unexpected_file_edit_never_gets_overwritten(self):
+        state = self._exercise_guarded_publish(
+            [{"product_id": pid} for pid in release.PUBLIC_CHECKOUT_PRODUCTS],
+            concurrent_drift=True,
+        )
+        self.assertIn("ROLLBACK_CONFLICT:template", state["error"])
+        self.assertEqual(state["final"]["guest"], state["before"]["guest"])
+        self.assertEqual(state["final"]["template"], b"third-party checkout edit")
+        self.assertEqual(state["restart_count"], 2)
+        self.assertNotIn("PUBLISHED", state["message"])
 
 
 
