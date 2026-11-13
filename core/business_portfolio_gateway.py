@@ -11,6 +11,7 @@ from .models import (
     ResearchProject, ResearchSource,
 )
 from .unified_bot_identity import BOT_CODE, FACTORY_CAPABILITIES
+from .domain_source_attestation import inspect_domain_source
 
 
 DOMAINS = (
@@ -106,8 +107,11 @@ def inspect_business_portfolio(payload):
     sections = {}
     for item in selected:
         if item in ("games", "trading"):
+            # Source scripts are evidence of SOURCE EXISTENCE only. They are
+            # never evidence of a published game, broker link or profitability.
             sections[item] = {
-                "local_django_coverage": "unverified",
+                "local_django_coverage": "not_available",
+                "source_inventory": inspect_domain_source(item),
                 "independent_external_runtime_required": True,
                 "live_activity_attested": False,
             }
@@ -120,17 +124,22 @@ def inspect_business_portfolio(payload):
     inspected = tuple(
         item for item in selected if item not in ("games", "trading")
     )
+    source_read = tuple(
+        item for item in selected if item in ("games", "trading")
+        and sections[item]["source_inventory"]["source_files_present"] > 0
+    )
     return {
         "action_performed": (
             "Read bounded aggregate inventory from existing Django models "
             "without modifying products, tasks, trades or publications."
         ),
-        "verified_effect": bool(inspected),
+        "verified_effect": bool(inspected or source_read),
         "evidence": {
             "kind": "internal_portfolio_row_inventory",
             "requested_domain": domain,
             "inspected_local_domains": inspected,
-            "source": "Django SQL row counts only",
+            "source_inventory_only_domains": source_read,
+            "source": "Django SQL row counts plus bounded local source-file digests",
             "sections": sections,
         },
         "commercial_publication": False,
