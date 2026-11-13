@@ -71,7 +71,14 @@
        (strip.id==='services-strip'?'خدمات':strip.id==='products-strip'?'محصولات':strip.id==='fields-carousel'?'تصاویر حوزه‌های اصلی':'حوزه‌های توسعه'));
    };
    update();
-   control?.addEventListener('click',()=>{state.paused=!state.paused;state.delayUntil=0;update();});
+   control?.addEventListener('click',()=>{
+     // Never re-enable autoplay while the OS requests reduced motion.
+     state.paused=motionPreference.matches?true:!state.paused;
+     state.delayUntil=0;update();
+   });
+   motionPreference.addEventListener('change',event=>{
+     if(event.matches){state.paused=true;state.delayUntil=0;update();}
+   });
    strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
    strip.addEventListener('focusin',()=>{state.focused=keyboardFocus;});
@@ -90,7 +97,7 @@
        // RTL negative scrollLeft; prewrap the previous direction at the origin.
        if(!next&&strip.scrollLeft>-2)strip.scrollLeft=-state.period;
        if(next&&strip.scrollLeft<=-state.period+2)strip.scrollLeft=0;
-       strip.scrollBy({left:next?-amount:amount,behavior:'smooth'});
+       strip.scrollBy({left:next?-amount:amount,behavior:motionPreference.matches?'auto':'smooth'});
      });
    }
    rotators.push(state);
