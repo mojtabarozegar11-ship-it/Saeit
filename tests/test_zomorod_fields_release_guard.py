@@ -501,7 +501,8 @@ def test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid():
     assert 'git hash-object -- "$guard"' in script
     assert 'StrictHostKeyChecking yes' in script
     assert 'ssh -T -F "$work/config" saeit-cpanel' in script
-    assert 'python3.11 -B - audit-live' in script
+    assert 'exec "$py" -B - audit-live' in script
+    assert 'sys.version_info >= (3, 8)' in script
     assert '< "$guard"' in script
 
 
