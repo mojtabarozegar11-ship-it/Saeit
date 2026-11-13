@@ -194,7 +194,7 @@ jobs:
                   await row.scrollIntoViewIfNeeded();await page.mouse.move(0,0);await page.waitForTimeout(500);
                   const before=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(850);
                   const after=await row.evaluate(x=>x.scrollLeft);
-                  if(!(after<before-3))throw Error(name+' '+id+' motion not confirmed: '+before+' -> '+after);
+                  if(!(after<before-3))throw Error(name+' '+id+' motion not confirmed: '+before+' -> '+after+' '+JSON.stringify(await page.evaluate(()=>window.__zmRotatorDiagnostics?.())));
                   const pause=page.locator('[data-rotator-toggle="'+id+'"]');
                   await pause.click();
                   if(await pause.getAttribute('aria-pressed')!=='false')throw Error(name+' '+id+' pause');
