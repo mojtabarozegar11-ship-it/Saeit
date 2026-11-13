@@ -133,6 +133,44 @@ phone, broker, game server and connector schedule against an execution receipt
 and a verified canonical successor, then perform an owner-approved cutover.
 Retain historical database identities and audit evidence.
 
+## Cron root census and evidence-weighted progress metrics (review branch)
+
+An older VPS or cPanel bot can start from `@reboot`, `@hourly` or
+another standard cron alias without a five-field schedule. The original
+read-only collector skipped every `@` entry, including agent startup
+commands. The collector now accepts the eight recognized aliases and emits
+only allowlisted route flags, normalized schedule and a short command digest;
+it never emits command arguments, tokens or private URLs.
+
+A source read containing more than 500 cron lines or 20,000 process rows,
+or reaching the fixed 512,000-character capture ceiling, now produces a
+redacted `enumeration_truncated=true` flag. The per-source preview adds
+`host_cron_inventory_truncated` or `host_process_inventory_truncated` as
+applicable. Incomplete scans cannot justify a no-agent or safe-retirement
+finding. Aliases and limited scans are covered by offline regressions;
+live host observation has **not** run in this review cycle.
+
+The preview exposes **separate quantitative gates** in `evidence_progress`:
+
+- `known_source_group_registration`: checked-in known source-group coverage
+  (14 registered of 14 tracked groups = **100% of the current checklist**).
+  This is not a census of every actual running bot.
+- `verified_live_retirement`: zero of 14 groups has verified receipts
+  showing independent schedules retired. **0% proof coverage** reflects
+  absence of accepted evidence; it is not a claim of zero work or real
+  operational progress.
+- `overall_operational_completion_percent`: **null/unknown** until a full
+  process inventory, handoff receipts and live test evidence justify a valid
+  denominator and percentage.
+- The additional six unsurveyed external/device/runtime scopes stay visible
+  and prevent claiming overall 100%, even when the checked-in group manifest
+  itself is complete.
+
+Neither the safe-cron parsing nor evidence percentages authorize stopping
+cron, deleting a historical bot identity, publishing, deploying, sending
+messages or spending funds. They help determine exactly which roots still
+need genuine runtime verification before any approved cutover.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
