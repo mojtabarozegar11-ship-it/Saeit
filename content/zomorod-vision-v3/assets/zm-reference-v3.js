@@ -77,7 +77,13 @@
      state.delayUntil=0;update();
    });
    motionPreference.addEventListener('change',event=>{
-     if(event.matches){state.paused=true;state.delayUntil=0;update();}
+     if(event.matches){
+       state.paused=true;state.delayUntil=0;
+       // Cancel any in-flight smooth manual scroll immediately.
+       strip.scrollTo({left:strip.scrollLeft,behavior:'instant'});
+       state.position=strip.scrollLeft;
+       update();
+     }
    });
    strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
@@ -97,7 +103,7 @@
        // RTL negative scrollLeft; prewrap the previous direction at the origin.
        if(!next&&strip.scrollLeft>-2)strip.scrollLeft=-state.period;
        if(next&&strip.scrollLeft<=-state.period+2)strip.scrollLeft=0;
-       strip.scrollBy({left:next?-amount:amount,behavior:motionPreference.matches?'auto':'smooth'});
+       strip.scrollBy({left:next?-amount:amount,behavior:motionPreference.matches?'instant':'smooth'});
      });
    }
    rotators.push(state);
