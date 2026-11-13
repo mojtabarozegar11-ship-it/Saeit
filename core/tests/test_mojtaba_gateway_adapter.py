@@ -280,7 +280,7 @@ def test_full_canonical_lifecycle_from_planning_to_audit(cyber_planning):
     assert result.status == "completed"
     assert result.output_data["bot_id"] == "mojtaba.bot.ai"
     assert result.output_data["counts"]["medium"] == 1
-    assert str(result.cost) == "0.0000"
+    assert result.cost == 0  # Decimal("0") is a zero-cost offline operation
     assert Agent.objects.count() == initial_agents
     events = set(AuditLog.objects.filter(
         target_type="AgentTask", target_id=str(task.pk),
