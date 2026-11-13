@@ -39,6 +39,10 @@ class AgentRegistry:
         return agent.capabilities.filter(active=True, code=f"core_{normalized}").first()
 
     def can_execute(self, agent, action):
+        # Historical Agent.capabilities are needed for audit/disposition.
+        # They are NOT an authorization to execute a new or old task.
+        if not agent or agent.code != BOT_CODE or not agent.active:
+            return False
         return self.capability_for(agent, action) is not None
 
     def effective_risk(self, capability, requested_risk="low"):
