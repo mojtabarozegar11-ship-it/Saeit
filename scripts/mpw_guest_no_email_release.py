@@ -611,11 +611,27 @@ def publish(run: str, source: Path):
         public_proof = audit_live_public_checkout_forms()
         if len(public_proof) != len(PUBLIC_CHECKOUT_PRODUCTS):
             abort("PUBLIC_BUYER_FORMS_UNVERIFIED")
-    except BaseException:
-        for name in reversed(changed):
-            if sha(_file(targets[name])) == after[name]:
-                _write_atomic(targets[name], old[name], after[name])
-        _restart()
+    except BaseException as publish_error:
+        # A write may have replaced a file and then failed on directory fsync,
+        # before its name reached 'changed'. Inspect BOTH exact target hashes.
+        # Never overwrite unexpected concurrent edits during recovery.
+        conflicts = []
+        for name in reversed(tuple(targets)):
+            try:
+                current_hash = sha(_file(targets[name]))
+                if current_hash == after[name] and after[name] != before[name]:
+                    _write_atomic(targets[name], old[name], after[name])
+                elif current_hash != before[name]:
+                    conflicts.append(name)
+            except BaseException:
+                conflicts.append(name)
+        try:
+            _restart()
+        except BaseException:
+            conflicts.append("restart")
+        if conflicts:
+            raise RuntimeError("MPW_EMAIL_FREE_ABORT:ROLLBACK_CONFLICT:" +
+                               ",".join(conflicts)) from publish_error
         raise
     print("MPW_EMAIL_FREE=PUBLISHED;CHANGED=" + ",".join(changed) +
           ";PUBLIC_BUYER_FORMS_VERIFIED=YES;INVOICES_CREATED=0;EMAILS_SENT=0")
