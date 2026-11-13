@@ -9,7 +9,7 @@ from core.task_runtime import TaskExecutionError, TaskRuntime
 def test_stale_execution_identity_cannot_complete_task():
     owner = get_user_model().objects.create_user(username="identity-owner", password="pass")
     project = ResearchProject.objects.create(title="Identity", objective="Worker", owner=owner)
-    agent = Agent.objects.create(code="identity-agent", name="Identity", mission="identity", active=True)
+    agent = Agent.objects.create(code="mojtaba-bot-ai", name="Mojtaba.bot.ai", mission="identity", active=True)
     capability = AgentCapability.objects.create(code="identity", name="Identity", active=True)
     capability.agents.add(agent)
     task = AgentTask.objects.create(
