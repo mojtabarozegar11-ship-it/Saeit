@@ -169,7 +169,7 @@ def _cron_block() -> str:
     marker = "          # Report only active lines from this verified githubops user's"
     end = '          ops="$root/operations"'
     assert source.count(marker) == 1
-    assert source.count(end) == 3
+    assert source.count(end) == 2
     return source.split(marker, 1)[1].split(end, 1)[0]
 
 
