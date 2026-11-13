@@ -141,3 +141,24 @@ def test_staging_cannot_be_inside_public_html(sandbox):
             dest.write_bytes((stage / part / name).read_bytes())
     with pytest.raises(RuntimeError, match='Stage cannot be inside public_html'):
         mod.preflight(bad_stage)
+
+
+def test_disk_space_guard_refuses_to_touch_live_or_create_backups(sandbox, monkeypatch):
+    from types import SimpleNamespace
+
+    root, stage, old, new = sandbox
+    monkeypatch.setattr(mod.shutil, 'disk_usage', lambda path: SimpleNamespace(free=0))
+    with pytest.raises(RuntimeError, match='Insufficient free disk'):
+        mod.preflight(stage)
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / x).read_bytes() == old[x] for x in mod.FILES)
+
+
+def test_disk_space_guard_allows_sufficient_space(sandbox, monkeypatch):
+    from types import SimpleNamespace
+
+    root, stage, old, new = sandbox
+    monkeypatch.setattr(mod.shutil, 'disk_usage', lambda path: SimpleNamespace(free=128 * 1024 * 1024))
+    manifest = mod.preflight(stage)
+    assert len(manifest['files']) == 3
+    assert not mod.BACKUP_ROOT.exists()
