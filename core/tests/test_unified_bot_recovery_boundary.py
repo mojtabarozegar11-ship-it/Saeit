@@ -182,7 +182,7 @@ def test_canonical_worker_failure_never_requeues_unknown_effect(economic_agent, 
     assert receipt.after_state["automatic_replay_allowed"] is False
 
 
-def test_noncanonical_worker_failure_still_preserves_existing_retry_contract(db):
+def test_noncanonical_worker_cannot_claim_pre_cutover_queued_task(db):
     agent = Agent.objects.create(
         code="ordinary-worker", name="Ordinary", mission="Legacy", active=True,
     )
@@ -196,14 +196,15 @@ def test_noncanonical_worker_failure_still_preserves_existing_retry_contract(db)
         risk_snapshot="low", status="queued", max_attempts=2,
     )
     runtime = TaskRuntime()
-    first = runtime.claim(task.pk)
-    queued = runtime.fail(task.pk, "temporary error", execution_id=first.execution_id)
-    assert queued.status == "queued"
-    assert queued.execution_id == ""
-    second = runtime.claim(task.pk)
-    final = runtime.fail(task.pk, "final error", execution_id=second.execution_id)
-    assert final.status == "failed"
-    assert final.execution_id == second.execution_id
+    with pytest.raises(TaskExecutionError, match="NONCANONICAL_TASK_EXECUTION_FORBIDDEN"):
+        runtime.claim(task.pk)
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.attempt_count == 0
+    assert task.execution_id == ""
+    assert not AuditLog.objects.filter(
+        action="task_claimed", target_id=str(task.pk),
+    ).exists()
 
 def test_failed_gateway_with_unknown_external_effect_is_not_dispatched_twice(economic_agent):
     """An acknowledgement failure after a side effect cannot trigger replay."""
