@@ -48,6 +48,35 @@ Unit tests and the isolated PR runner prove the source-level rule only. It is
 verification before any production cutover. No automatic deactivation,
 database deletion, paid action or external order is authorized.
 
+## Sensitive tool execution: one-shot, payload-bound owner grants (review branch)
+
+On the canonical `mojtaba-bot-ai` owner only, an approved task request is
+**necessary but not sufficient** for a tool requiring owner approval. After
+the selected `AgentTask` has a real execution token, the designated owner
+must issue a short-lived `ApprovalGrant` with an exact scope:
+
+- `action`: normalized task action
+- `agent_task_id`: actual database task primary key (integer)
+- `execution_id`: current TaskRuntime claim token
+- `tool_code`: actual registered adapter code (not just an alias)
+- `payload_sha256`: SHA-256 of the reviewed task input **excluding**
+  `owner_approval_grant_id`, encoded as canonical JSON with sorted keys,
+  compact separators, `ensure_ascii=True`, and no nonfinite numbers.
+
+Store the resulting integer grant id in the task's private
+`input_data.owner_approval_grant_id`. Before any handler dispatch,
+`ToolGateway` locks the task, verifies that the grant's issuing approval
+belongs to the exact task/action and designated owner, checks the unchanged
+payload, consumes the one-time grant, and reserves the invocation in one
+database transaction. Invalid/expired/used/cross-task grants **fail closed**;
+the grant ID is stripped from the adapter payload.
+
+This is a *code-review contract*, not approval to deploy, pay, withdraw, trade,
+publish, rotate credentials or edit production. The registered canonical
+capabilities in this branch still do not include a live deployment or broker
+order adapter. Real owner sign-off, MariaDB concurrency tests, verified
+rollback and host-specific runtime receipts remain mandatory.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
