@@ -1,15 +1,6 @@
 name: Zomorod footer Aban 1398 rights one-field safeguarded release
 on:
-  pull_request:
-    paths:
-      - 'content/zomorod-vision-v3/index.html'
-      - 'scripts/zomorod_footer_rights_aban1398_guard_20261113.py'
-      - '.github/workflows/zomorod-footer-rights-aban1398-20261113.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'scripts/zomorod_footer_rights_aban1398_guard_20261113.py'
-      - '.github/workflows/zomorod-footer-rights-aban1398-20261113.yml'
+  workflow_dispatch: # retired one-off release, superseded by audited one-pass workflow
 permissions:
   contents: read
 concurrency:
