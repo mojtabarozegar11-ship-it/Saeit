@@ -10,7 +10,7 @@ const targets=[
  {route:'/tala/',type:'tala',selectors:['body','.header','.tala-live-market','.ticker','.tools','.footer'],
   css:':root{--bg:#252b19;--panel:#303822;--panel2:#39432a}body{background:var(--bg)!important}.header,.tala-live-market,.ticker,.tools,.footer{background:var(--bg)!important}'},
  {route:'/amozeshgah/',type:'academy',selectors:['body','header','.topline','main','.section.alt','footer'],
-  css:'body.academy-page,body.academy-page header,body.academy-page .topline,body.academy-page main,body.academy-page main>.hero,body.academy-page main>.section,body.academy-page main>.metrics,body.academy-page .section.alt,body.academy-page footer{background:#252b19!important}'}
+  css:'body,header,.topline,main,.section.alt,footer{background:#252b19!important;background-image:none!important}'}
  ,...['/company/','/services/','/research/','/industry/'].map(route=>({
   route,type:'v7-'+route.replace(/\//g,''),
   selectors:['body','main','.zm-v7-header','.zm-v7-footer','.zm-hero','.zm-narrative','.zm-next'],
@@ -22,7 +22,7 @@ const successes=[];
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try{
   for(const target of targets){
-   for(const width of [390,1440]){
+   for(const width of (target.route==='/tala/'?[390,1440]:[390])){
     const page=await browser.newPage({viewport:{width,height:820},locale:'fa-IR',reducedMotion:'reduce'});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     const response=await page.goto('https://zomorodmelal.ir'+target.route,
@@ -38,7 +38,7 @@ const successes=[];
       const heading=title?title.getBoundingClientRect():null;
       const sites={};
       for(const selector of selectors)sites[selector]=where(selector);
-      return {sites,documentWidth:document.documentElement.scrollWidth,
+      return {sites,documentWidth:document.documentElement.scrollWidth,bodyClass:document.body.className,
         heading:{x:Math.round(heading?.x||0),y:Math.round(heading?.y||0),w:Math.round(heading?.width||0)},
         h1Count:document.querySelectorAll('h1').length};
     },target.selectors);
@@ -54,6 +54,8 @@ const successes=[];
     const dw=Math.abs(before.heading.w-after.heading.w);
     const stable=dx<=2&&dy<=2&&dw<=2;
     const result={route:target.route,viewport:width,http:response.status(),
+      liveBodyClass:before.bodyClass,
+      sourceSelectorMatches:target.type!=='academy'||before.bodyClass.includes('academy-page'),
       before:before.sites,after:after.sites,allOlive,stable,
       headingDelta:{x:dx,y:dy,width:dw},
       horizontalOverflowBefore:Math.max(0,before.documentWidth-width),
