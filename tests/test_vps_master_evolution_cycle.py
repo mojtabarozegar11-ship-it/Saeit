@@ -782,6 +782,9 @@ class EvolutionTests(unittest.TestCase):
                 temp, ["income_market_research", "income_opportunity_score"],
                 previous_steps=20
             )
+            # The cron evaluator first persists and privately locks down the
+            # baseline; direct check-only against the legacy fixture is unsafe.
+            mod.evaluate(db, state)
             before = state.read_bytes()
             transcript = io.StringIO()
             with redirect_stdout(transcript):
@@ -897,6 +900,84 @@ class EvolutionTests(unittest.TestCase):
             )
             calls = record.read_text(encoding="utf-8") if record.exists() else ""
             return proc.returncode, proc.stdout + proc.stderr, calls
+
+    def test_existing_prior_safety_flags_cannot_be_flipped(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            good = json.loads(state.read_text())
+            # All eight fields are security assertions; none grants an
+            # operator, spending, publication or parallel execution capability.
+            for field, expected in mod.MASTER_POLICY_INVARIANTS.items():
+                modified = dict(good)
+                if isinstance(expected, bool):
+                    modified[field] = not expected
+                elif isinstance(expected, int):
+                    modified[field] = expected + 1
+                else:
+                    modified[field] = "another-agent" if field == "agent_code" else "unbounded"
+                state.write_text(json.dumps(modified), encoding="utf-8")
+                before = state.read_bytes()
+                with self.assertRaisesRegex(
+                    RuntimeError, "MASTER_EVOLUTION_PREVIOUS_POLICY_INVARIANT_VIOLATION"
+                ):
+                    mod.evaluate(db, state, check_only=True)
+                self.assertEqual(state.read_bytes(), before)
+            state.write_text(json.dumps(good), encoding="utf-8")
+            os.chmod(state, 0o600)
+            mod.evaluate(db, state, check_only=True)
+
+    def test_check_only_refuses_legacy_incomplete_state_without_rewriting(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            os.chmod(state, 0o600)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_CHECK_BASELINE_INCOMPLETE"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+            # Only the scheduled, explicitly state-writing evaluator migrates it.
+            mod.evaluate(db, state)
+            self.assertIn("completed_guard", json.loads(state.read_text()))
+            mod.evaluate(db, state, check_only=True)
+
+    def test_check_only_refuses_world_readable_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            mod.evaluate(db, state)
+            os.chmod(state, 0o644)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_CHECK_STATE_NOT_PRIVATE"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+            self.assertEqual(stat.S_IMODE(state.stat().st_mode), 0o644)
+
+    def test_check_only_rejects_shared_state_hardlink_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            mod.evaluate(db, state)
+            linked = Path(temp) / "shared-evolution.json"
+            os.link(state, linked)
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_UNSAFE"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+            self.assertEqual(linked.read_bytes(), before)
+
+    def test_check_only_refuses_removed_guard_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            good = json.loads(state.read_text())
+            for field in ("completed_guard", "pending_prior_ids", "last_completed_task_id",
+                          "commercial_publication_enabled", "parallel_master_tasks"):
+                modified = dict(good)
+                modified.pop(field)
+                state.write_text(json.dumps(modified), encoding="utf-8")
+                os.chmod(state, 0o600)
+                before = state.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_CHECK_BASELINE_INCOMPLETE"):
+                    mod.evaluate(db, state, check_only=True)
+                self.assertEqual(state.read_bytes(), before)
 
     def test_generated_wrapper_blocks_tasks_if_integrity_check_fails(self):
         code, output, calls = self._run_cycle_wrapper_with_fake_runtime("evaluate_fail")
