@@ -60,6 +60,71 @@ class AuditTests(unittest.TestCase):
             MOD.classify_html("checkout", 72, html),
             "checkout_post_action_unverified")
 
+    def test_csrf_outside_form_does_not_validate_purchase(self):
+        html = checkout(72).replace('name="csrfmiddlewaretoken" value="nonempty"', 'name="other" value="nonempty"')
+        html += '<input type="hidden" name="csrfmiddlewaretoken" value="forged">'
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_csrf_in_unrelated_form_does_not_validate_purchase(self):
+        html = checkout(72).replace('name="csrfmiddlewaretoken" value="nonempty"', 'name="other" value="nonempty"')
+        html += ('<form method="post" action="/different/">'
+                 '<input name="csrfmiddlewaretoken" value="forged"></form>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_csrf_unverified")
+
+    def test_nested_forms_rejected_before_checkout(self):
+        html = ('<html><title>MojPlayWin</title>' + " " * 160
+                + '<form method="post" action="/commerce/trx-easy/start/72/">'
+                + '<form method="post" action="/different/">'
+                + '<input name="csrfmiddlewaretoken" value="token"></form>'
+                + '</form></html>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_store_links_not_comment_strings(self):
+        paths = ('/store/product/72/checkout/',
+                 '/store/product/225/checkout/', '/store/product/879/')
+        html = "<html><title>MojPlayWin</title>" + " " * 180
+        html += "<!-- " + " ".join(paths) + " -->"
+        self.assertEqual(MOD.classify_html("store", None, html),
+                         "catalog_ctas_unverified")
+
+    def test_store_valid_three_product_links(self):
+        paths = ('/store/product/72/checkout/',
+                 '/store/product/225/checkout/', '/store/product/879/')
+        html = "<html><title>MojPlayWin</title>" + " " * 180
+        html += "".join(f'<a href="{p}">View product</a>' for p in paths)
+        self.assertEqual(MOD.classify_html("store", None, html),
+                         "store_public_get_ok_not_sale")
+
+    def test_detail_numbers_in_css_not_evidence_of_product(self):
+        html = '<html><title>MojPlayWin</title><style>width:72px</style>' + " " * 180
+        self.assertEqual(MOD.classify_html("detail", 72, html),
+                         "detail_product_identity_unverified")
+
+    def test_detail_requires_matching_checkout_cta(self):
+        html = ('<html><title>MojPlayWin</title>'
+                '<a href="/store/product/225/checkout/">Buy</a>' + " " * 170)
+        self.assertEqual(MOD.classify_html("detail", 72, html),
+                         "detail_product_identity_unverified")
+        self.assertEqual(MOD.classify_html("detail", 225, html),
+                         "detail_public_get_ok_not_sale")
+
+    def test_missing_method_does_not_crash(self):
+        html = checkout(72).replace('method="post"', 'method')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_no_implicit_purchase_when_network_down(self):
+        class FailedResponse:
+            def open(self, request, timeout=None):
+                raise TimeoutError("timeout")
+        statuses = MOD.audit(opener=FailedResponse())["observed_routes"]
+        self.assertEqual(len(statuses), 10)
+        self.assertEqual(set(statuses.values()),
+                         {"network_unavailable_not_outage_proof"})
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
