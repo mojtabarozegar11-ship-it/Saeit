@@ -50,6 +50,42 @@ code or CI. `MOJTRADE_PRIVATE_DIR` defaults to unset and must be
 configured only with an already verified private path. No automatic
 installation/deployment is authorized by this work.
 
+## Current review branch — canonical signal draft feed and demo risk hardening
+
+The canonical `mojtrade_research_cycle` now attaches an immutable-style
+`market_watch_drafts` package to the SAME completed `mojtaba-bot-ai`
+AgentTask as the validated private market observation. This package:
+
+- Derives exactly BTC/USD and ETH/USD **watch classifications** from the
+  reviewed strategy digest and validated source signal identifiers.
+- Binds the original source SHA-256, decision SHA-256, source observation time
+  and expiry, and provides reviewed text in **fa/en/ar**.
+- Keeps `publication_authorized=false`, no external delivery, zero orders,
+  no executable intents, and **no fabricated entry/stop/take-profit prices**.
+- Refuses expired, duplicate, direction-mismatched or manipulated sources.
+- Can be atomically exported by the operator-only
+  `python manage.py mojtrade_market_watch_export` to the existing
+  mode-0700 `MOJTRADE_PRIVATE_DIR/market-watch-private.json` (0600).
+  Export revalidates the latest canonical completed task and its saved
+  digest. No new bot identity, website publication, SMS, email, trades,
+  API spending or broker credentials are involved.
+
+**This is a usable private signal-research feed, not live customer signal
+service.** No public signal price, stop, target, win-rate or profit is claimed;
+source is hourly *spot* market observations, not an XAUUSD broker quote.
+Public publishing requires a separate authenticated subscriber/site delivery
+service, per-channel owner approval, downstream receipt reconciliation and
+financial/advertising rights review. Feed timestamps are not a substitute for
+independent production runtime evidence.
+
+The cTrader **demo-only** code also now guards a low-parameter negative
+20-bar breakout lookback, unknown indicator values, account-wide labelled
+position count, unprotected existing positions, invalid volume before
+normalization, and day-based UTC loss baseline. Two independent cTrader
+instances are still not atomically account-locked; their actions must be
+reconciled against broker history. No real trade is enabled and this cBot is
+not yet controlled by a signed order instruction from the canonical bot.
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
