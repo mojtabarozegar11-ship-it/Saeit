@@ -105,6 +105,7 @@ jobs:
             core/tests/test_unified_bot_recovery_boundary.py \
             core/tests/test_tool_gateway.py \
             core/tests/test_canonical_sensitive_tool_grants.py \
+            core/tests/test_risk_policy.py \
             core/tests/test_worker_runner.py \
             core/tests/test_task_runtime_lifecycle.py \
             core/tests/test_task_retry_identity.py \
