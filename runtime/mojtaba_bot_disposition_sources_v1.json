@@ -350,14 +350,104 @@
       "unverified_source_scope": "all_system_cron_users_global_daemons_php_sqlite_WAL_live_runtime_receipts",
       "source_revision_comparison": "fixed_allowlist_file_sha256_vs_reviewed_PR_checkout_match_different_or_unknown_not_execution_proof",
       "source_revision_comparison_test": "tests/test_mojtaba_live_topology_readonly.py::test_manual_two_host_summary_compares_only_allowlisted_source_digests"
+    },
+    {
+      "id": "mojtrade_signal_and_broker_runtime",
+      "kind": "independent_trading_observer_and_broker_integration",
+      "evidence_file": "deploy/install_mojtrade_observer_vps.sh",
+      "probe_route_tags": [
+        "mojtrade_observer",
+        "SAEIT_MOJTRADE_OBSERVER_V1"
+      ],
+      "known_live_count": null,
+      "proposed_route": "reconcile_signal_observer_and_broker_execution_under_canonical_module",
+      "execution_status": "source_routes_known_live_orders_and_workers_unverified",
+      "prerequisites": [
+        "read_only_VPS_and_cPanel_cron_process_service_inventory",
+        "broker_authority_and_adapter_inventory_no_live_trades",
+        "independent_trade_order_receipt_reconciliation",
+        "canonical_risk_and_owner_gate_tested_before_any_cutover"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "moj_coin_game_token_workers",
+      "kind": "game_token_and_reward_worker_runtime",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [
+        "mojcoin"
+      ],
+      "known_live_count": null,
+      "proposed_route": "map_game_token_rewards_and_chain_adapters_as_canonical_internal_modules",
+      "execution_status": "source_route_known_runtime_and_chain_receipts_unverified",
+      "prerequisites": [
+        "game_server_and_token_scheduler_inventory",
+        "wallet_chain_execution_authority_review",
+        "reward_receipts_and_gameplay_consistency_audit",
+        "single_scheduler_and_rollback_plan"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "canonical_cycle_and_legacy_master_schedulers",
+      "kind": "cross_host_cycle_coordinator_worker_entrypoints",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [
+        "mojtaba_bot_cycle_worker.py",
+        "mojtaba_bot_cycle_coordinator.py",
+        "autonomous_master_loop"
+      ],
+      "known_live_count": null,
+      "proposed_route": "retain_one_canonical_cycle_owner_and_reconcile_preexisting_duplicate_processes",
+      "execution_status": "source_route_known_live_schedule_ownership_unverified",
+      "prerequisites": [
+        "verify_all_cron_systemd_and_GitHub_schedules",
+        "associate_each_scheduler_to_task_receipt",
+        "identify_and_retire_only_proven_duplicate_entrypoints",
+        "verify_recovery_and_locking_in_production_database"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "mobile_sms_termux_automate_runtime",
+      "kind": "android_mobile_external_runtime",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [],
+      "known_live_count": null,
+      "proposed_route": "audit_owner_authorized_mobile_SMS_gateway_before_connecting_to_canonical_bot",
+      "execution_status": "outside_VPS_cPanel_probe_no_device_execution_receipt",
+      "prerequisites": [
+        "authorized_mobile_device_inventory",
+        "Automate_Termux_flow_and_scheduled_jobs_inventory",
+        "explicit_owner_approval_for_any_SMS_send",
+        "message_delivery_receipts_and_recovery_test"
+      ],
+      "live_retirement_attested": false
+    },
+    {
+      "id": "external_connected_app_agents",
+      "kind": "third_party_connected_app_automations",
+      "evidence_file": "deploy/mojtaba_live_topology_readonly.py",
+      "probe_route_tags": [],
+      "known_live_count": null,
+      "proposed_route": "enumerate_independent_connected_app_schedulers_and_govern_as_internal_or_retired",
+      "execution_status": "outside_VPS_cPanel_probe_connected_app_inventory_missing",
+      "prerequisites": [
+        "authorized_connector_and_external_automation_inventory",
+        "external_event_triggers_and_credentials_scopes",
+        "unique_canonical_job_ownership",
+        "verified_handoff_receipts_without_data_deletion"
+      ],
+      "live_retirement_attested": false
     }
   ],
   "not_yet_enumerated_runtime_scopes": [
-    "independent_MojTrade_schedulers_and_broker_adapters",
-    "Moj_Coin_workers_and_game_schedulers",
     "all_VPS_systemd_cron_supervisor_processes",
     "all_cPanel_Passenger_cron_and_site_php_workers",
-    "external_automation_and_connected_app_agents"
+    "mobile_Termux_Automate_SMS_device_schedulers",
+    "external_automation_and_connected_app_agents",
+    "broker_remote_accounts_and_marketplace_webhooks",
+    "Moj_Coin_public_chain_and_game_server_workers"
   ],
   "completion_gates": {
     "unique_public_bot_identity": "mojtaba.bot.ai",
@@ -406,14 +496,16 @@
     "per_source_disposition_preview_implemented": true,
     "per_identity_disposition_preview_implemented": true,
     "disposition_preview_all_outputs_non_destructive": true,
-    "live_host_disposition_decisions_verified": false
+    "live_host_disposition_decisions_verified": false,
+    "additional_source_groups_now_tracked_not_attested": 5,
+    "per_group_live_retirement_verification_complete": false
   },
   "readonly_disposition_contract": {
     "schema": "mojtaba.bot.ai.live-disposition-preview.v1",
     "evaluator": "deploy/mojtaba_live_disposition_readonly.py",
     "linked_manual_workflow": ".github/workflows/mojtaba-live-topology-readonly.yml",
     "generated_from": "two_fresh_pinned_read_only_host_snapshots_and_checked_in_source_ledger",
-    "logical_source_groups": 9,
+    "logical_source_groups": 14,
     "source_defined_identity_roster": {
       "php_private_site_codes": 11,
       "django_known_codes": 10,
@@ -427,7 +519,7 @@
       "explicit_no_retirement_permission"
     ],
     "no_host_evidence_state": "no_live_agents_claimed_no_retirement_permitted",
-    "evidence_state": "implemented_tested_on_review_branch_not_executed_on_production_hosts",
+    "evidence_state": "expanded_to_14_source_groups_source_only_no_production_probe_or_deactivation",
     "latest_proven_focused_ci": {
       "run_id": 43226389997,
       "reviewed_commit": "35f4173fa548d7dc770d81c97478c709a0caac0c",
