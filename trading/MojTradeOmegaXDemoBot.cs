@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using cAlgo.API;
 using cAlgo.API.Indicators;
 using cAlgo.API.Internals;
@@ -56,6 +57,8 @@ namespace MojTrade.OmegaX
         private double _dayStartEquity;
         private DateTime _riskDayUtc;
         private int _consecutiveLosses;
+        private string _lastAttemptedSignalKey = "";
+        private bool _orderReconciliationHold;
 
         protected override void OnStart()
         {
@@ -82,8 +85,12 @@ namespace MojTrade.OmegaX
             _slowEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, SlowEmaPeriod);
             _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, RsiPeriod);
             _atr = Indicators.AverageTrueRange(AtrPeriod, MovingAverageType.Exponential);
-            _dayStartEquity = Account.Equity;
-            _riskDayUtc = Server.Time.Date;
+            // Reconstruct prior same-day risk from broker history. Starting
+            // the cBot must NOT erase a loss streak or refresh the loss
+            // baseline halfway through the UTC trading day.
+            _riskDayUtc = DateTime.MinValue;
+            if (DailyLossReached())
+                Print("OMEGA X HOLD: historical account risk limit or reconciliation gate.");
             Positions.Closed += OnPositionClosed;
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
@@ -95,7 +102,8 @@ namespace MojTrade.OmegaX
             var minimumBars = Math.Max(
                 Math.Max(SlowEmaPeriod + 5, 22),
                 Math.Max(AtrPeriod + 2, RsiPeriod + 2));
-            if (!EnableDemoTrading || Account.IsLive || Bars.Count < minimumBars)
+            if (!EnableDemoTrading || Account.IsLive || Bars.Count < minimumBars ||
+                _orderReconciliationHold)
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
@@ -205,7 +213,7 @@ namespace MojTrade.OmegaX
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
-            if (Account.IsLive || !EnableDemoTrading ||
+            if (Account.IsLive || !EnableDemoTrading || _orderReconciliationHold ||
                 !IsFinite(Symbol.PipSize) || Symbol.PipSize <= 0 ||
                 DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop ||
                 Positions.FindAll(Label).Length >= MaxPositions ||
@@ -224,12 +232,53 @@ namespace MojTrade.OmegaX
                 volume < Symbol.VolumeInUnitsMin || volume > Symbol.VolumeInUnitsMax)
                 return;
 
-            var result = ExecuteMarketOrder(tradeType, SymbolName, volume, Label, stopPips, takePips);
+            // A closed-bar identity is stored in the broker-side comment and
+            // checked against positions AND closed trades. It reduces
+            // duplicate submissions after a restart. It is not an atomic
+            // distributed lock across multiple simultaneous cBot instances.
+            var closedBarTime = Bars.OpenTimes[Bars.Count - 1];
+            var signalKey = "MOJ:" + SymbolName + ":" +
+                TimeFrame.ToString() + ":" +
+                closedBarTime.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture);
+            if (_lastAttemptedSignalKey == signalKey)
+                return;
+            foreach (var position in Positions.FindAll(Label))
+                if (position.Comment == signalKey)
+                    return;
+            foreach (var closedTrade in History.FindAll(Label))
+                if (closedTrade.Comment == signalKey)
+                    return;
+            // Reserve before dispatch. An ambiguous broker error must NOT
+            // trigger an automatic duplicate on the same closed bar.
+            _lastAttemptedSignalKey = signalKey;
+            var result = ExecuteMarketOrder(
+                tradeType, SymbolName, volume, Label, stopPips, takePips, signalKey);
             if (!result.IsSuccessful)
-                Print("OMEGA X order rejected: {0}", result.Error);
-            else
-                Print("OMEGA X DEMO order: {0} volume={1} SL={2} TP={3}",
-                      tradeType, volume, stopPips, takePips);
+            {
+                _orderReconciliationHold = true;
+                Print("OMEGA X HOLD: demo order rejected or ambiguous, broker reconciliation required: {0}",
+                      result.Error);
+                return;
+            }
+            var opened = result.Position;
+            if (opened == null)
+            {
+                _orderReconciliationHold = true;
+                Print("OMEGA X HOLD: successful broker response has no position receipt.");
+                return;
+            }
+            if (!opened.StopLoss.HasValue || !opened.TakeProfit.HasValue)
+            {
+                _orderReconciliationHold = true;
+                // Only demo positions pass OnStart / SubmitDemoOrder gates.
+                // Reconcile the outcome; do not claim the close succeeded.
+                var closed = ClosePosition(opened);
+                Print("OMEGA X HOLD: missing broker protection; emergency demo close acknowledged={0} error={1}",
+                      closed.IsSuccessful, closed.Error);
+                return;
+            }
+            Print("OMEGA X DEMO reconciled order: position={0} side={1} volume={2}",
+                  opened.Id, tradeType, volume);
         }
 
         private double CurrentSpreadPips()
@@ -243,20 +292,55 @@ namespace MojTrade.OmegaX
 
         private bool DailyLossReached()
         {
-            // The previous baseline was the bot start time, NOT a UTC daily
-            // boundary. Use the actual UTC day and reject invalid account
-            // equity rather than issuing an order with unknown loss capacity.
-            var today = Server.Time.Date;
-            if (today != _riskDayUtc)
+            // A local in-memory baseline resets on a cBot restart and lets
+            // previously realized losses bypass the daily stop. Rebuild it
+            // from the broker's account-wide closed-trade ledger on EACH
+            // decision; this also observes other cBots' closed losses.
+            // Deposits/withdrawals and incomplete provider history remain
+            // external reconciliation blockers before any production use.
+            try
             {
+                var today = Server.Time.Date;
+                var accountNetToday = 0.0;
+                foreach (var trade in History)
+                {
+                    if (trade.ClosingTime.Date != today)
+                        continue;
+                    if (!IsFinite(trade.NetProfit))
+                        return true;
+                    accountNetToday += trade.NetProfit;
+                    if (!IsFinite(accountNetToday))
+                        return true;
+                }
+                var owned = History.FindAll(Label);
+                Array.Sort(owned, (first, second) =>
+                    first.ClosingTime.CompareTo(second.ClosingTime));
+                var losses = 0;
+                foreach (var trade in owned)
+                {
+                    if (trade.ClosingTime.Date != today)
+                        continue;
+                    if (!IsFinite(trade.NetProfit))
+                        return true;
+                    if (trade.NetProfit < 0)
+                        losses++;
+                    else if (trade.NetProfit > 0)
+                        losses = 0;
+                }
+                _consecutiveLosses = losses;
+                _dayStartEquity = Account.Balance - accountNetToday;
                 _riskDayUtc = today;
-                _dayStartEquity = Account.Equity;
-                _consecutiveLosses = 0;
+                if (!IsFinite(_dayStartEquity) || _dayStartEquity <= 0 ||
+                    !IsFinite(Account.Equity) || Account.Equity <= 0)
+                    return true;
+                return Account.Equity <=
+                    _dayStartEquity * (1.0 - DailyLossStopPercent / 100.0);
             }
-            if (!IsFinite(_dayStartEquity) || _dayStartEquity <= 0 ||
-                !IsFinite(Account.Equity) || Account.Equity <= 0)
+            catch (Exception)
+            {
+                Print("OMEGA X HOLD: broker history was not reconciled.");
                 return true;
-            return Account.Equity <= _dayStartEquity * (1.0 - DailyLossStopPercent / 100.0);
+            }
         }
 
         private static bool IsFinite(double value)
@@ -266,12 +350,12 @@ namespace MojTrade.OmegaX
 
         private void OnPositionClosed(PositionClosedEventArgs args)
         {
-            if (args.Position.Label != Label || args.Position.SymbolName != SymbolName)
+            if (args.Position.Label != Label)
                 return;
-            if (args.Position.NetProfit < 0)
-                _consecutiveLosses++;
-            else if (args.Position.NetProfit > 0)
-                _consecutiveLosses = 0;
+            // The next decision reads the account-wide history rather than
+            // trusting a per-instance event counter or per-symbol subset.
+            Print("OMEGA X demo position closed: position={0}; history reconciliation required.",
+                  args.Position.Id);
         }
 
         protected override void OnStop()
