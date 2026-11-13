@@ -63,7 +63,7 @@ jobs:
           assert h.count('fetchpriority="high"')<=2
           assert h.count('<h1')==1
           assert '/en/' in h and '/ar/' in h and '<html lang="ar" dir="rtl">' in ar
-          assert 'requestAnimationFrame' in js and 'prefers-reduced-motion' in js
+          assert 'setInterval' in js and 'prefers-reduced-motion' in js
           assert 'auto-scroll-row' in css and 'auto-rotator-toggle' in css
           assert all(n not in h for n in ('Vancouver','ونکوور','ISO 9001','ISO 14001'))
           print('ZM_ONEPASS_EXACT_FOOTER_LANG_SEARCH_LOGO_THREE_ROWS=PASS')
