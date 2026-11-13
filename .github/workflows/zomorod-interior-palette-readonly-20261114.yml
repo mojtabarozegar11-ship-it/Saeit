@@ -7,6 +7,7 @@ on:
       - 'tests/test_zomorod_interior_olive_source_20261114.py'
       - 'public/tala/index.html'
       - 'public/amozeshgah/index.html'
+      - 'content/zomorod-v7/inner-v7.css'
       - '.github/workflows/zomorod-interior-palette-readonly-20261114.yml'
 permissions:
   contents: read
