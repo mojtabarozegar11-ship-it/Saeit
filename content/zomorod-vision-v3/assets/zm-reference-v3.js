@@ -25,8 +25,13 @@
  // The form is a genuine GET request to the existing site's /search/?q= backend.
  // JavaScript is deliberately not required to submit or display search results.
  const motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)');
- const strips=$$('[data-auto-strip]');
+ const strips=$('[data-auto-strip], [data-field-carousel]');
  const rotators=[];
+ // Touchscreens cannot safely use sticky mouse hover or persistent tap focus as pause signals.
+ const trueHover=window.matchMedia('(hover: hover) and (pointer: fine)');
+ let keyboardFocus=false;
+ document.addEventListener('keydown',()=>{keyboardFocus=true;});
+ document.addEventListener('pointerdown',()=>{keyboardFocus=false;},{passive:true});
  for(const strip of strips){
    const originals=Array.from(strip.children).filter(x=>x.matches('a[href]'));
    if(originals.length<2)continue;
@@ -63,13 +68,13 @@
      control.setAttribute('aria-pressed',String(running));
      control.textContent=running?'⏸':'▶';
      control.setAttribute('aria-label',(running?'توقف':'شروع')+' حرکت ردیف '+
-       (strip.id==='services-strip'?'خدمات':strip.id==='products-strip'?'محصولات':'حوزه‌های توسعه'));
+       (strip.id==='services-strip'?'خدمات':strip.id==='products-strip'?'محصولات':strip.id==='fields-carousel'?'تصاویر حوزه‌های اصلی':'حوزه‌های توسعه'));
    };
    update();
    control?.addEventListener('click',()=>{state.paused=!state.paused;state.delayUntil=0;update();});
-   strip.addEventListener('mouseenter',()=>{state.hovered=true;});
+   strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
-   strip.addEventListener('focusin',()=>{state.focused=true;});
+   strip.addEventListener('focusin',()=>{state.focused=keyboardFocus;});
    strip.addEventListener('focusout',()=>{state.focused=strip.contains(document.activeElement);});
    strip.addEventListener('pointerdown',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
    strip.addEventListener('wheel',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
@@ -122,6 +127,8 @@
    }
  };
  if(rotators.length)window.setInterval(tick,40);
- document.documentElement.dataset.rotatingRows=String(rotators.length);
+ // Preserve the existing 3-rail release contract; expose the new photo rail independently.
+ document.documentElement.dataset.rotatingRows=String(rotators.filter(x=>x.strip.hasAttribute('data-auto-strip')).length);
+ document.documentElement.dataset.fieldCarouselReady=rotators.some(x=>x.strip.id==='fields-carousel')?'1':'0';
  window.__zmRotatorDiagnostics=()=>rotators.map(x=>({id:x.strip.id,paused:x.paused,hovered:x.hovered,focused:x.focused,visible:x.visible,documentHidden:document.hidden,tickCount,subpixelPosition:x.position,scrollLeft:x.strip.scrollLeft}));
 })();
