@@ -54,7 +54,14 @@ def newsletter_quality_score(*, story_type, title, summary, body, source=None, e
 
 
 def create_draft(*, agent_code, story_type, title, summary, body, source=None, event_date=None, keywords=None, publish_at=None):
-    agent = Agent.objects.get(code=agent_code, active=True)
+    # One bot means one *operational task owner*. A historical newsletter
+    # Agent row may remain for FK/audit provenance, but a direct legacy
+    # create_draft call must not resurrect it as an independent publisher.
+    # Do not silently reinterpret that call either: the caller must be
+    # upgraded to the canonical module and its handoff verified explicitly.
+    if agent_code != BOT_CODE:
+        raise RuntimeError("MOJTABA_NONCANONICAL_NEWSLETTER_OWNER_FORBIDDEN")
+    agent = Agent.objects.get(code=BOT_CODE, active=True)
     source_fingerprint = fingerprint(source.url) if source else ""
     fp = fingerprint(story_type, title, source_fingerprint, event_date or "")
     if NewsletterStory.objects.filter(fingerprint=fp).exists():
