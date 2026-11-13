@@ -63,9 +63,19 @@ def parse_uapi_response(data):
         raise ValueError("CPANEL_UAPI_OPERATION_IDENTITY_UNVERIFIED")
     return classify(data["result"])
 
-def run(token, opener=None):
+def run(token, opener=None, identity_preflight=None):
     if not isinstance(token, str) or not 18 <= len(token) <= 300 or "\n" in token or "\r" in token:
         raise ValueError("CPANEL_TOKEN_NOT_CONFIGURED")
+    # A credential must never be sent to an unresolved or mismatched host.
+    # The production call always executes the fixed DNS + CA/SNI TLS preflight.
+    # Tests inject an isolated fake, never a bypass from a public command flag.
+    if identity_preflight is None:
+        from scripts.finance102_cpanel_tls_preflight import check as identity_preflight
+    identity = identity_preflight()
+    if not (isinstance(identity, dict)
+            and identity.get("dns_exact_expected_ipv4") is True
+            and identity.get("tls_hostname_and_ca_verified") is True):
+        raise ValueError("CPANEL_DESTINATION_IDENTITY_UNVERIFIED")
     if opener is None:
         opener = urllib.request.build_opener(
             NoRedirect(), urllib.request.HTTPSHandler(context=ssl.create_default_context())
