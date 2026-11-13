@@ -26,6 +26,12 @@ LEGACY_AGENT_CODES = frozenset({
     "newsletter-company-news",
     "newsletter-world-watch",
     "newsletter-unit-reports",
+    # Former independent content/specialist Agent identities. Retire only
+    # after exact-module handoff; their program logic remains in the one bot.
+    "content-director",
+    "content-research",
+    "knowledge-content-director",
+    "company-activity-intelligence",
 })
 # The prefix alone cannot prove redundancy. Some older income agents may run
 # external integrations that are not represented by Django AgentTask rows.
@@ -35,6 +41,10 @@ LEGACY_SUCCESSORS = {
     "newsletter-company-news": BOT_CODE,
     "newsletter-world-watch": BOT_CODE,
     "newsletter-unit-reports": BOT_CODE,
+    "content-director": BOT_CODE,
+    "content-research": BOT_CODE,
+    "knowledge-content-director": BOT_CODE,
+    "company-activity-intelligence": BOT_CODE,
 }
 REVIEW_ONLY_PREFIXES = ("income-",)
 PROTECTED_AGENT_CODES = frozenset({
@@ -52,6 +62,9 @@ SUCCESSOR_STORY_COVERAGE = {
     "newsletter-company-news": ("company",),
     "newsletter-world-watch": ("world",),
     "newsletter-unit-reports": ("report",),
+    "content-director": ("company",),
+    "content-research": ("report",),
+    "company-activity-intelligence": ("company",),
 }
 SUCCESSOR_PROOF_STATUSES = ("published",)
 ACTIVE_TASK_STATUSES = ("queued", "running", "blocked")
@@ -110,6 +123,11 @@ def assess_agent(agent):
         # Keep exclusive research identity until a separately verified output
         # contract is implemented; a completed task alone is insufficient.
         missing_successor_coverage.append("accepted_research_delivery")
+    if agent.code == "knowledge-content-director":
+        # A provisioned owner alone cannot certify draft quality, paid
+        # generation authorization or knowledge task handoff. Until a
+        # specific successor delivery contract is verified, hold retirement.
+        missing_successor_coverage.append("accepted_knowledge_delivery")
 
     if protected:
         decision = "retain_required"
