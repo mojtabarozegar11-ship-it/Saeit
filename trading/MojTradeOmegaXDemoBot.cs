@@ -53,7 +53,8 @@ namespace MojTrade.OmegaX
         private ExponentialMovingAverage _slowEma = null!;
         private RelativeStrengthIndex _rsi = null!;
         private AverageTrueRange _atr = null!;
-        private double _sessionStartEquity;
+        private double _dayStartEquity;
+        private DateTime _riskDayUtc;
         private int _consecutiveLosses;
 
         protected override void OnStart()
@@ -81,23 +82,42 @@ namespace MojTrade.OmegaX
             _slowEma = Indicators.ExponentialMovingAverage(Bars.ClosePrices, SlowEmaPeriod);
             _rsi = Indicators.RelativeStrengthIndex(Bars.ClosePrices, RsiPeriod);
             _atr = Indicators.AverageTrueRange(AtrPeriod, MovingAverageType.Exponential);
-            _sessionStartEquity = Account.Equity;
+            _dayStartEquity = Account.Equity;
+            _riskDayUtc = Server.Time.Date;
             Positions.Closed += OnPositionClosed;
             Print("OMEGA X DEMO adapter started: {0} {1}", SymbolName, TimeFrame);
         }
 
         protected override void OnBarClosed()
         {
-            if (!EnableDemoTrading || Account.IsLive || Bars.Count < SlowEmaPeriod + 5)
+            // The breakout lookback touches index-20. Low configured EMA
+            // periods must not allow a negative candle index at runtime.
+            var minimumBars = Math.Max(
+                Math.Max(SlowEmaPeriod + 5, 22),
+                Math.Max(AtrPeriod + 2, RsiPeriod + 2));
+            if (!EnableDemoTrading || Account.IsLive || Bars.Count < minimumBars)
                 return;
             if (DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop)
                 return;
             if (CurrentSpreadPips() > MaxSpreadPips)
                 return;
 
-            var positions = Positions.FindAll(Label, SymbolName);
+            // Account-wide bound across symbols, not three positions PER
+            // running chart. Concurrency across instances still needs broker
+            // reconciliation before any production deployment.
+            var positions = Positions.FindAll(Label);
             if (positions.Length >= MaxPositions)
                 return;
+            // Never add market risk while a prior demo position lacks a
+            // broker-confirmed protective stop or target.
+            foreach (var position in positions)
+            {
+                if (!position.StopLoss.HasValue || !position.TakeProfit.HasValue)
+                {
+                    Print("OMEGA X HOLD: existing demo position is unprotected.");
+                    return;
+                }
+            }
 
             var index = Bars.Count - 1;
             var atrPrice = _atr.Result[index];
@@ -111,6 +131,10 @@ namespace MojTrade.OmegaX
             var previousFast = _fastEma.Result[index - 1];
             var previousSlow = _slowEma.Result[index - 1];
             var rsi = _rsi.Result[index];
+            if (!IsFinite(fast) || !IsFinite(slow) ||
+                !IsFinite(previousFast) || !IsFinite(previousSlow) ||
+                !IsFinite(rsi) || rsi < 0 || rsi > 100)
+                return;
 
             if (previousFast <= previousSlow && fast > slow && rsi < 75)
                 buyVotes++;
@@ -151,9 +175,12 @@ namespace MojTrade.OmegaX
 
             foreach (var position in Positions.FindAll(Label, SymbolName))
             {
-                var trigger = position.StopLoss.HasValue
-                    ? Math.Abs(position.EntryPrice - position.StopLoss.Value)
-                    : Symbol.PipSize * 10;
+                // No improvised fallback stop for a position without verified
+                // protection; ask for explicit broker reconciliation instead.
+                if (!position.StopLoss.HasValue || !position.TakeProfit.HasValue ||
+                    !IsFinite(Symbol.PipSize) || Symbol.PipSize <= 0)
+                    continue;
+                var trigger = Math.Abs(position.EntryPrice - position.StopLoss.Value);
                 var current = position.TradeType == TradeType.Buy ? Symbol.Bid : Symbol.Ask;
                 var favourable = position.TradeType == TradeType.Buy
                     ? current - position.EntryPrice
@@ -178,7 +205,11 @@ namespace MojTrade.OmegaX
 
         private void SubmitDemoOrder(TradeType tradeType, double atrPrice)
         {
-            if (Account.IsLive || !EnableDemoTrading || Symbol.PipSize <= 0)
+            if (Account.IsLive || !EnableDemoTrading ||
+                !IsFinite(Symbol.PipSize) || Symbol.PipSize <= 0 ||
+                DailyLossReached() || _consecutiveLosses >= ConsecutiveLossStop ||
+                Positions.FindAll(Label).Length >= MaxPositions ||
+                CurrentSpreadPips() > MaxSpreadPips)
                 return;
             var stopPips = Math.Max(atrPrice * AtrStopMultiplier / Symbol.PipSize, 1.0);
             if (double.IsNaN(stopPips) || double.IsInfinity(stopPips))
@@ -186,8 +217,10 @@ namespace MojTrade.OmegaX
             var takePips = stopPips * RewardRisk;
             var volume = Symbol.VolumeForProportionalRisk(ProportionalAmountType.Equity,
                                                            RiskPercent, stopPips);
+            if (!IsFinite(volume) || volume <= 0)
+                return;
             volume = Symbol.NormalizeVolumeInUnits(volume, RoundingMode.Down);
-            if (double.IsNaN(volume) || double.IsInfinity(volume) ||
+            if (!IsFinite(volume) ||
                 volume < Symbol.VolumeInUnitsMin || volume > Symbol.VolumeInUnitsMax)
                 return;
 
@@ -210,7 +243,25 @@ namespace MojTrade.OmegaX
 
         private bool DailyLossReached()
         {
-            return Account.Equity <= _sessionStartEquity * (1.0 - DailyLossStopPercent / 100.0);
+            // The previous baseline was the bot start time, NOT a UTC daily
+            // boundary. Use the actual UTC day and reject invalid account
+            // equity rather than issuing an order with unknown loss capacity.
+            var today = Server.Time.Date;
+            if (today != _riskDayUtc)
+            {
+                _riskDayUtc = today;
+                _dayStartEquity = Account.Equity;
+                _consecutiveLosses = 0;
+            }
+            if (!IsFinite(_dayStartEquity) || _dayStartEquity <= 0 ||
+                !IsFinite(Account.Equity) || Account.Equity <= 0)
+                return true;
+            return Account.Equity <= _dayStartEquity * (1.0 - DailyLossStopPercent / 100.0);
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         private void OnPositionClosed(PositionClosedEventArgs args)
