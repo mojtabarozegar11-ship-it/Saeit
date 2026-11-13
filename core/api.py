@@ -524,7 +524,12 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
-            report = build_reconciliation_dossier(task)
+            report = build_reconciliation_dossier(task, actor=request.user)
+        except PermissionError:
+            return Response(
+                {"detail": "Exact project owner required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(report)
@@ -538,8 +543,9 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
+            task = self.get_object()
             result = record_reconciliation_observation(
-                pk,
+                task.pk,
                 actor=request.user,
                 evidence_sha256=request.data.get("evidence_sha256"),
                 source_kind=request.data.get("source_kind"),

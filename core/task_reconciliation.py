@@ -31,16 +31,29 @@ def reconciliation_candidate(task: AgentTask) -> bool:
     )
 
 
-def build_reconciliation_dossier(task: AgentTask) -> dict:
-    """Return bounded, non-sensitive metadata only; no provider calls."""
+def build_reconciliation_dossier(task: AgentTask, *, actor) -> dict:
+    """Return bounded, owner-scoped metadata; never an external attestation."""
+    if not is_authorized_chat_operator(actor):
+        raise PermissionError("RECONCILIATION_DOSSIER_OWNER_REQUIRED")
+    if task.project_id and task.project.owner_id != actor.pk:
+        raise PermissionError("RECONCILIATION_DOSSIER_PROJECT_MISMATCH")
     if not reconciliation_candidate(task):
         raise ValueError("TASK_NOT_ELIGIBLE_FOR_UNCERTAIN_EFFECT_REVIEW")
 
     output = task.output_data if isinstance(task.output_data, dict) else {}
     execution_id = output.get("previous_execution_id") or task.execution_id
-    if not isinstance(execution_id, str) or not 0 < len(execution_id) <= 64:
-        # An unverifiable execution identity is itself a reconciliation gap.
+    if not isinstance(execution_id, str) or not re.fullmatch(
+        r"[0-9a-f]{32}", execution_id,
+    ):
         execution_id = None
+    claim_receipt_present = bool(
+        execution_id is not None and AuditLog.objects.filter(
+            target_type="AgentTask",
+            target_id=str(task.pk),
+            action="task_claimed",
+            after_state__execution_id=execution_id,
+        ).exists()
+    )
 
     events = AuditLog.objects.filter(
         target_type="AgentTask",
@@ -72,6 +85,7 @@ def build_reconciliation_dossier(task: AgentTask) -> dict:
         "status": task.status,
         "attempt_count": task.attempt_count,
         "execution_id_recorded": execution_id is not None,
+        "execution_claim_receipt_present": claim_receipt_present,
         "previous_execution_id": execution_id,
         "requires_review": True,
         "automatic_replay_allowed": False,
@@ -138,6 +152,15 @@ def record_reconciliation_observation(
         r"[a-f0-9]{32}", execution_id
     ):
         raise ValueError("RECONCILIATION_EXECUTION_ID_NOT_ATTESTED")
+    # Do not accept an arbitrary identifier copied from task.output_data.
+    # It must match the immutable local claim receipt for THIS task.
+    if not AuditLog.objects.filter(
+        action="task_claimed",
+        target_type="AgentTask",
+        target_id=str(task.pk),
+        after_state__execution_id=execution_id,
+    ).exists():
+        raise ValueError("RECONCILIATION_EXECUTION_CLAIM_RECEIPT_MISSING")
 
     # Serialized by the existing task row; no parallel audit write for this
     # task may create the same observation through this method.
