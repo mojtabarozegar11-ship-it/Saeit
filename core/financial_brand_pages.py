@@ -98,10 +98,16 @@ def financial_brand_page(request, brand, locale, page_type):
     else:
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
+    finance_guide = None
+    if page_type in {"signals", "store"}:
+        from core.finance102_guides import guide_for
+        finance_guide = guide_for(slug, locale, page_type)
+        intro = finance_guide["intro"]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
+        "finance_guide": finance_guide,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
