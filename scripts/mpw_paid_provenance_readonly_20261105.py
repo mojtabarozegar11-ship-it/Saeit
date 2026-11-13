@@ -24,6 +24,7 @@ import django
 django.setup()
 
 from django.apps import apps
+from django.conf import settings
 from core.models import LedgerEntry, OrderItem, PaymentIntent, PaymentWebhookEvent
 from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
 
@@ -141,12 +142,40 @@ def delivery_records_for_order(order_id):
     return result
 
 
+
+def paid_sku_scope(product_ids, public_allowlist):
+    """Classify persisted paid intent SKU scope, never infer actual revenue.
+
+    The legacy SKU 779 was for micro-payment trials. A configured public SKU
+    may be offered for sale but neither its paid flag nor its ledger credit
+    establishes independent chain finality or authenticated customer download.
+    """
+    if not isinstance(product_ids, (tuple, list, set, frozenset)):
+        return "no_valid_products"
+    products = set(product_ids)
+    if not products or any(type(p) is not int or p <= 0 for p in products):
+        return "no_valid_products"
+    if 779 in products:
+        return "historical_trial_779" if products == {779} else "mixed_with_trial_779"
+    if (not isinstance(public_allowlist, (tuple, list, set, frozenset))
+            or not public_allowlist
+            or any(type(p) is not int or p <= 0 for p in public_allowlist)):
+        return "configured_public_skus_unknown"
+    active_candidates = set(public_allowlist) - {779}
+    return ("configured_nontrial_public_sku"
+            if products.issubset(active_candidates)
+            else "other_or_unconfigured_sku")
+
+
 def run():
     paid = PaymentIntent.objects.filter(status="paid").select_related("order")
     total = paid.count()
     rows = []
     provider_counts = Counter()
     valid_walletless_credits = 0
+    sku_scope_counts = Counter()
+    sku_scope_with_persisted_credits = Counter()
+    configured_public_ids = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", None)
     for intent in paid.order_by("pk")[:100]:
         order = intent.order
         provider = str(intent.provider or "")[:64]
@@ -163,6 +192,10 @@ def run():
         ).count()
         verified = bool(verified_walletless_credit(order, intent)) if provider == PROVIDER else False
         valid_walletless_credits += int(verified)
+        sku_scope = paid_sku_scope(products, configured_public_ids)
+        sku_scope_counts[sku_scope] += 1
+        if verified:
+            sku_scope_with_persisted_credits[sku_scope] += 1
         customer = getattr(order, "customer", None)
         customer_class = (
             "unknown" if customer is None else
@@ -171,6 +204,7 @@ def run():
         )
         rows.append({
             "products": products[:12],
+            "sku_scope": sku_scope,
             "provider": provider,
             "order_paid_flag": order.status == "paid",
             "customer_class": customer_class,
@@ -187,6 +221,17 @@ def run():
         "truncated": total > len(rows),
         "provider_counts_examined": dict(sorted(provider_counts.items())),
         "walletless_persisted_credit_verified": valid_walletless_credits,
+        "sku_scope_counts_examined": dict(sorted(sku_scope_counts.items())),
+        "sku_scope_with_persisted_credit_examined": dict(sorted(
+            sku_scope_with_persisted_credits.items())),
+        "sku_scope_only_first_100_paid_intents": True,
+        "confirmed_current_commercial_sales": None,
+        "confirmed_current_commercial_revenue_usd": None,
+        "commercial_sales_limitations": (
+            "A configured nontrial SKU and persisted credit are not evidence "
+            "of an independently confirmed live transfer, actual customer "
+            "receipt or authenticated download. Trial SKU 779 is excluded."
+        ),
         "fulfillment_schema_metadata": fulfillment_model_shape(),
         "delivery_model_inventory": delivery_model_inventory(),
         "independent_mainnet_recheck_performed": False,
