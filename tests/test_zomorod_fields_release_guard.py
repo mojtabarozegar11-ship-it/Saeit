@@ -26,7 +26,16 @@ def sandbox(tmp_path, monkeypatch):
         'assets/zm-reference-v3.js': b'old JS',
     }
     new = {
-        'index.html': b'data-auto-strip=\n' * 3 + b'data-field-carousel=\n' + b'data-rotator-toggle=\n' * 4 + b'zm-reference-v3.js?v=20261113-fields1\nzm-reference-v3.css?v=20261113-fields1\n',
+        'index.html': (
+            b'data-auto-strip=\n' * 3 +
+            b'<div id="fields-carousel" data-field-carousel="fields-carousel">' +
+            b''.join((
+                f'<a class="field-card neon-panel" href="/research/"><img src="/assets/zm-v3-card-{i}.webp"></a>'
+            ).encode() for i in range(10)) +
+            b'</div><button class="auto-rotator-toggle fields-rotator-toggle" data-rotator-toggle="fields-carousel"></button>' +
+            b'data-rotator-toggle=\n' * 3 +
+            b'zm-reference-v3.js?v=20261113-fields1\nzm-reference-v3.css?v=20261113-fields1\n'
+        ),
         'assets/zm-reference-v3.css': b'new CSS for layout',
         'assets/zm-reference-v3.js': b'const strips=Array.from(document.querySelectorAll(\nprefers-reduced-motion',
     }
@@ -178,3 +187,25 @@ def test_carousel_workflow_has_no_production_job():
     assert '  contents: read' in workflow
     assert '  cancel-in-progress: true' in workflow
     assert '  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}' in workflow
+
+
+def test_rejects_four_originals_even_if_js_would_clone(sandbox):
+    root, stage, old, new = sandbox
+    source = (stage / 'new' / 'index.html').read_bytes()
+    import re
+    shortened = re.sub(rb'(<a class="field-card neon-panel"[^>]*>.*?</a>){6}', b'', source, count=1)
+    assert shortened != source
+    (stage / 'new' / 'index.html').write_bytes(shortened)
+    mod.NEW_BLOBS['index.html'] = mod.git_blob(shortened)
+    with pytest.raises(RuntimeError, match='ten original cards'):
+        mod.preflight(stage)
+
+
+def test_rejects_ten_cards_with_repeated_images(sandbox):
+    root, stage, old, new = sandbox
+    source = (stage / 'new' / 'index.html').read_bytes()
+    repeated = source.replace(b'zm-v3-card-9.webp', b'zm-v3-card-8.webp')
+    (stage / 'new' / 'index.html').write_bytes(repeated)
+    mod.NEW_BLOBS['index.html'] = mod.git_blob(repeated)
+    with pytest.raises(RuntimeError, match='distinct first-party photos'):
+        mod.preflight(stage)
