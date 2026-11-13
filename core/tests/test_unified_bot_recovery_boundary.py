@@ -87,7 +87,7 @@ def test_exhausted_economic_stale_work_remains_blocked_for_receipt_review(econom
         TaskRuntime().claim(task.pk)
 
 
-def test_non_economic_stale_work_keeps_existing_requeue_policy(db):
+def test_legacy_stale_work_is_quarantined_without_requeue(db):
     agent = Agent.objects.create(code="ordinary-research", name="Research", mission="Research", active=True)
     task = AgentTask.objects.create(
         agent=agent, action_type="research", capability_code="research", status="running",
@@ -97,8 +97,14 @@ def test_non_economic_stale_work_keeps_existing_requeue_policy(db):
         updated_at=timezone.now() - timedelta(minutes=45)
     )
     result = TaskRuntime().recover_stale(task.pk, stale_after_seconds=900)
-    assert result.status == "queued"
-    assert result.execution_id == ""
+    assert result.status == "blocked"
+    assert result.execution_id == "research-identity"
+    assert result.output_data["migration_target"] == "mojtaba-bot-ai"
+    assert result.output_data["legacy_agent_code"] == "ordinary-research"
+    assert result.output_data["automatic_replay_allowed"] is False
+    assert result.output_data["previous_execution_id"] == "research-identity"
+    with pytest.raises(TaskExecutionError, match="blocked"):
+        TaskRuntime().claim(task.pk)
 
 
 def test_two_economic_tasks_cannot_be_running_together(economic_agent):
