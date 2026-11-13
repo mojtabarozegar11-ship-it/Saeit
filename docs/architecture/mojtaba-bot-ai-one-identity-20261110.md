@@ -171,6 +171,37 @@ cron, deleting a historical bot identity, publishing, deploying, sending
 messages or spending funds. They help determine exactly which roots still
 need genuine runtime verification before any approved cutover.
 
+## systemd timer roots — read-only census expansion (review branch)
+
+A `.timer` can start a bot even when its associated `.service` is not
+running at the instant of a `ps` snapshot. The previous host observer
+queried only active/inactive service units. It now also runs fixed,
+read-only `systemctl [--user] list-units --type=timer --all` commands on
+each authorized host (VPS and cPanel). No systemd units, jobs, cron entries,
+processes, accounts or deployed code are changed.
+
+The collector reports matched *candidate* timer unit names as short SHA-256
+digests plus allowlisted route flags and coarse active states. It does not
+emit private unit names, activation targets, service contents or command
+arguments. A timer matching MojTrade, MojCoin or a canonical/legacy cycle
+route is surfaced separately from Cron and services as an **indicator**, not
+a unique bot or delivery receipt. An unavailable user/system timer interface
+is an explicit partial-inventory blocker. Truncated timer/service lists
+emit `host_systemd_unit_inventory_truncated`; old pre-timer snapshots are
+rejected instead of being mistaken for a clean system.
+
+A generic `.timer` may activate a service under a different name using
+`Unit=`, and the local user's `systemctl` is not an audit of *every*
+user's units or every system-wide startup mechanism. Confirm such mappings
+and rights using separately authorized host evidence before accepting a
+complete scheduler census or turning off any previous runtime.
+
+The 14 known logical source groups are **100% present in the current
+checked-in manifest**, the latest source-only retirement receipt coverage
+remains **0/14 = 0% independently verified**, and the total operational
+completion percentage is **unknown**. Unit test success does not update
+either the proof coverage or any customer's paid/settled revenue.
+
 ## Remaining dependencies / not yet unified
 
 - Legacy `core_research`, newsletter worker roles, content director, knowledge
