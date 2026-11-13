@@ -16,6 +16,12 @@ MAX_BYTES = 1_000_000
 MAX_AGE_SECONDS = 48 * 3600
 MAX_CANDIDATE_BYTES = 1_000_000
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+EXPECTED_REPAIR_PATHS = frozenset((
+    "scripts/factory_research_triage.py",
+    "scripts/factory_specialist_pilots.py",
+    "scripts/factory_first_product_pilot.py",
+    "scripts/factory_public_library_adapter.py",
+))
 
 
 def _symlink_in_path(path):
@@ -51,7 +57,7 @@ def _verify_candidate_artifact(dossier_path, index, item):
         raise ValueError("ISOLATED_UPGRADE_PROOF_CANDIDATE_HASH_MISMATCH")
 
 
-def inspect_isolated_proof(path, *, now=None):
+def inspect_isolated_proof(path, *, now=None, source_root=None):
     path = Path(path)
     if _symlink_in_path(path) or not path.is_file():
         raise ValueError("ISOLATED_UPGRADE_PROOF_MISSING_OR_UNSAFE")
@@ -111,6 +117,7 @@ def inspect_isolated_proof(path, *, now=None):
     if not isinstance(inventory, list) or len(inventory) != scanned:
         raise ValueError("ISOLATED_UPGRADE_PROOF_INVENTORY_INCONSISTENT")
     inventory_hashes = {}
+    inventory_sizes = {}
     for entry in inventory:
         if not isinstance(entry, dict):
             raise ValueError("ISOLATED_UPGRADE_PROOF_INVENTORY_INVALID")
@@ -121,6 +128,27 @@ def inspect_isolated_proof(path, *, now=None):
                 or not 0 <= size <= MAX_CANDIDATE_BYTES):
             raise ValueError("ISOLATED_UPGRADE_PROOF_INVENTORY_INVALID")
         inventory_hashes[source] = digest
+        inventory_sizes[source] = size
+
+    # Optional independent anchoring against the actual private source snapshot.
+    # A dossier and its inventory hashes alone do not prove the source bytes.
+    source_files_hash_verified = 0
+    if source_root is not None:
+        root = Path(source_root).expanduser().absolute()
+        if _symlink_in_path(root) or not root.is_dir():
+            raise ValueError("ISOLATED_UPGRADE_PROOF_SOURCE_ROOT_UNSAFE")
+        for source, expected_hash in inventory_hashes.items():
+            actual = root / source
+            if _symlink_in_path(actual) or not actual.is_file():
+                raise ValueError("ISOLATED_UPGRADE_PROOF_SOURCE_FILE_MISSING_OR_UNSAFE")
+            stat = actual.stat()
+            if stat.st_size != inventory_sizes[source] or stat.st_size > MAX_CANDIDATE_BYTES:
+                raise ValueError("ISOLATED_UPGRADE_PROOF_SOURCE_SIZE_MISMATCH")
+            raw_source = actual.read_bytes()
+            if (len(raw_source) != inventory_sizes[source]
+                    or hashlib.sha256(raw_source).hexdigest() != expected_hash):
+                raise ValueError("ISOLATED_UPGRADE_PROOF_SOURCE_HASH_MISMATCH")
+            source_files_hash_verified += 1
 
     checked = set()
     for index, item in enumerate(proof["candidates"], start=1):
@@ -151,7 +179,17 @@ def inspect_isolated_proof(path, *, now=None):
             raise ValueError("ISOLATED_UPGRADE_PROOF_EXISTING_REPAIR_INVALID")
         checked.add(source)
 
+    # This contract is intentionally exact: a fabricated unrelated source
+    # inventory may not substitute for the four reviewed security repairs.
+    if checked != EXPECTED_REPAIR_PATHS:
+        raise ValueError("ISOLATED_UPGRADE_PROOF_REPAIR_ALLOWLIST_MISMATCH")
+
     return {
+        "source_files_hash_verified": source_files_hash_verified,
+        "source_verification_scope": (
+            "staged_source_snapshot_hashes_only" if source_root is not None
+            else "source_root_not_provided"
+        ),
         "candidate_artifacts_hash_verified": count,
         "source_manifest_entries_checked": scanned,
         "verification_scope": (
