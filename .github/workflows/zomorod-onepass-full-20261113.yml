@@ -346,6 +346,14 @@ jobs:
             }
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
+      - name: Preserve verified immutable 15-file candidate for owner review
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-field-fifteen-source-stage
+          path: ${{ runner.temp }}/zm-fields-15-candidate/
+          retention-days: 7
+          if-no-files-found: error
       - name: Preserve browser screenshots as inspection evidence only
         if: always()
         uses: actions/upload-artifact@v4
