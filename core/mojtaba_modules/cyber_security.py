@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 BOT_ID = "mojtaba.bot.ai"
 MODULE_ID = "cyber_security"
@@ -112,7 +112,9 @@ def verify_authorization(engagement: dict, verify_key: bytes, *,
     issued = _timestamp(engagement.get("issued_at"))
     expires = _timestamp(engagement.get("expires_at"))
     now = now.astimezone(timezone.utc)
-    if not issued <= now < expires or expires <= issued:
+    if expires <= issued or expires - issued > timedelta(hours=24):
+        raise CyberModuleError("AUTHORIZATION_WINDOW_INVALID")
+    if not issued <= now < expires:
         raise CyberModuleError("AUTHORIZATION_EXPIRED_OR_FUTURE")
     return {**engagement, "allowed_assets": hosts}
 
