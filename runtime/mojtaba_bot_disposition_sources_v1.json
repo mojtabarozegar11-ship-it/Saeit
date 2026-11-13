@@ -531,6 +531,15 @@
       "runtime_verification": "not_available",
       "old_source_retention": "retained_until_backup_and_verified_replacement"
     },
+    "verification_route": {
+      "source_compile": "cTrader Desktop/Algo must compile and export the canonical .algo artifact",
+      "cli_prerequisites": [".NET 8", "cTrader ID/account", "credentials file"],
+      "metadata_check": "ctrader-cli metadata <canonical.algo>",
+      "backtest_check": "ctrader-cli backtest <canonical.algo> with explicit symbol, period, dates and data mode",
+      "demo_gate": "EnableDemoTrading=true only after compile, backtest and risk evidence",
+      "live_gate": "permanently_locked",
+      "current_status": "blocked_missing_algo_and_cli_runtime_evidence"
+    },
     "deletion_candidates": [
       {
         "path": "trading/MojTradeDemoBot.cs",
