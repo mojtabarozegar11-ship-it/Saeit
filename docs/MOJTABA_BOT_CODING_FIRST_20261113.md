@@ -97,3 +97,7 @@ This **4 of 8 source milestones** inventory is limited to the explicitly named
 milestones above. It is not a percentage of all source lines, all capabilities,
 QA acceptance or commercial completion. A source-staged milestone is NOT an
 assertion that code runs correctly; owner requested acceptance testing later.
+
+## Canonical chat approval flow (coding-only)
+
+A chat command is now **pending** even when entered by a Django superuser. The durable approval binds the existing ChatSession ID, requester, operation ID, action, exact risk tier and an allowlisted target/parameters contract. The existing Approvals API requires a separate owner decision, followed by an explicit `execute-chat` call. No duplicate scheduler or dashboard was added. The existing one-shot executor rejects ambiguous outcomes and prevents automatic replay. Source is not acceptance-tested or deployed.

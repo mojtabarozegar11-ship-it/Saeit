@@ -15,6 +15,7 @@ from django.db import transaction
 from command_center.models import MpwRecord, TENANT
 from .models import ApprovalRequest, AuditLog
 from .chat_operation_security import is_authorized_chat_operator
+from .chat_operation_scope import validate_chat_operation_scope
 from .newsletter_models import NewsletterSubmission
 
 
@@ -49,8 +50,8 @@ def _run_readonly(action: str) -> dict:
     return {"returncode": result.returncode, "stdout": output, "stderr": error}
 
 
-def _perform_chat_action(approval: ApprovalRequest) -> tuple[str, dict, dict]:
-    data = json.loads(approval.reason)
+def _perform_chat_action(approval: ApprovalRequest, data=None) -> tuple[str, dict, dict]:
+    data = validate_chat_operation_scope(approval) if data is None else data
     action = data["action"]
     params = data.get("parameters") or {}
     target = data.get("target", "")
@@ -145,6 +146,9 @@ def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
             raise ValueError("not_chat_operation")
         if not is_authorized_chat_operator(locked.requested_by):
             raise PermissionError("chat_operation_requires_active_superuser")
+        # Reject a forged, replayed or cross-session approval BEFORE claiming
+        # an execution attempt. Data is never supplied by the language model.
+        verified_operation = validate_chat_operation_scope(locked)
         if locked.status in {"executing", "executed", "execution_failed"}:
             return {
                 "status": (
@@ -164,7 +168,7 @@ def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
         locked.save(update_fields=["status", "updated_at"])
 
     try:
-        action, data, result = _perform_chat_action(locked)
+        action, data, result = _perform_chat_action(locked, verified_operation)
     except Exception as exc:
         # The side effect may have completed before an exception was raised.
         # Never retry this approval automatically, even when its outcome is unknown.

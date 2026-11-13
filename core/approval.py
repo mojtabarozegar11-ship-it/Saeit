@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
 from .task_approval_scope import approval_covers_task
+from .chat_operation_scope import validate_chat_operation_scope
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -27,6 +28,8 @@ class ApprovalService:
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
             if not is_authorized_chat_operator(operator) or approval.requested_by_id != actor_id:
                 raise ValueError("Chat operations require an active superuser owner")
+            if approved:
+                validate_chat_operation_scope(approval)
 
         approval.status = "approved" if approved else "rejected"
         approval.decision_note = str(note or "")[:5000]

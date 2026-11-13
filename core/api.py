@@ -586,6 +586,27 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(self.get_serializer(approval).data)
 
 
+    @action(detail=True, methods=["post"], url_path="execute-chat")
+    def execute_chat(self, request, pk=None):
+        """Separate explicit execution after an independently recorded decision."""
+        approval = self.get_object()
+        if approval.target_type != "ChatOperation":
+            return Response({"detail": "Not a chat operation."}, status=status.HTTP_409_CONFLICT)
+        if (not is_authorized_chat_operator(request.user)
+                or approval.requested_by_id != request.user.pk):
+            return Response({"detail": "Owner authorization required."},
+                            status=status.HTTP_403_FORBIDDEN)
+        if approval.status != "approved":
+            return Response({"detail": "Explicit approval required before execution."},
+                            status=status.HTTP_409_CONFLICT)
+        from .operation_executor import execute_approved_chat_operation
+        try:
+            result = execute_approved_chat_operation(approval)
+        except (ValueError, PermissionError, RuntimeError, KeyError, TypeError):
+            return Response({"detail": "Execution blocked or requires reconciliation."},
+                            status=status.HTTP_409_CONFLICT)
+        return Response(result)
+
 class MasterAgentChatViewSet(viewsets.ModelViewSet):
     queryset = ChatSession.objects.all()
     serializer_class = ChatSessionSerializer

@@ -76,11 +76,17 @@ def plan_chat_operation(text: str) -> ChatOperation | None:
     return None
 
 
-def approval_reason(operation: ChatOperation) -> str:
+def approval_reason(operation: ChatOperation, *, session_id: int | None = None) -> str:
+    """Durable approval payload bound to the authenticated existing chat."""
     import json
-    return json.dumps({
+    data = {
         "operation_id": operation.operation_id,
         "action": operation.action,
         "target": operation.target,
         "parameters": operation.parameters,
-    }, ensure_ascii=False, sort_keys=True)
+    }
+    if session_id is not None:
+        if type(session_id) is not int or session_id <= 0:
+            raise ValueError("Chat approval needs a valid session identity")
+        data["session_id"] = session_id
+    return json.dumps(data, ensure_ascii=False, sort_keys=True)
