@@ -35,6 +35,22 @@ jobs:
           python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py scripts/mpw_paid_provenance_readonly_20261105.py
           python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+  public-pr-readonly-observation:
+    # Public HTTPS GET only, no credentials, only an internal reviewed PR.
+    needs: isolated-safety-contract
+    if: "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout PR without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check public site, product and guest checkout GETs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_onepass_public_sales_audit_20261113.py --timeout 4
   public-buyer-journey:
     if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
     runs-on: [self-hosted, factory-vps]
