@@ -125,12 +125,7 @@ def _system_status(request):
 @transaction.atomic
 def integrated_ledger_api(request):
     if request.method == "GET":
-        for row in CommandRequest.objects.filter(status="pending", read_only=True).order_by("created_at")[:20]:
-            status, _, result = _auto_execute_command(request, row.domain, row.command)
-            if status == "executed":
-                row.status, row.result, row.executed_at = status, result, timezone.now()
-                row.save(update_fields=["status", "result", "executed_at"])
-                _audit("approve", "command", row.id, "فرمان read-only از صف خودکار اجرا شد.", request.user, result)
+        # HTTP GET is strictly read-only: never complete commands or write audit rows.
         return JsonResponse({"captured_at": timezone.now().isoformat(),
             "reports": [_report(x) for x in CycleReport.objects.all()],
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
