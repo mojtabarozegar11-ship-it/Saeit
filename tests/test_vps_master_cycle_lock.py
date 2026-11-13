@@ -34,6 +34,16 @@ class VpsMasterCycleLockTests(unittest.TestCase):
         syntax = subprocess.run(['bash', '-n'], input=script, text=True, capture_output=True)
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
+    def test_cycle_requires_fresh_readonly_policy_before_any_task(self):
+        # A wrapper that skips the policy check must never pass this guard,
+        # even if it still happens to enforce a filesystem lock.
+        script = _extract_runner()
+        self.assertIn('MASTER_EVOLUTION_CHECK_ONLY=', script)
+        self.assertIn('--check-only', script)
+        self.assertIn('preflight_passed=false', script)
+        self.assertIn('MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION', script)
+        self.assertLess(script.index('--check-only'), script.index('recover_stale_tasks'))
+
     def test_parallel_cron_starts_do_not_execute_overlapping_master_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -48,9 +58,19 @@ class VpsMasterCycleLockTests(unittest.TestCase):
             log = root / 'events.txt'
             py.write_text(
                 '#!/bin/sh\n'
-                'if [ "$1" = "-" ]; then echo 1; exit 0; fi\n'
-                'printf "%s\\n" "$2" >> "$MOJ_AGENT_LOCK_TEST_LOG"\n'
-                'sleep 0.35\n',
+                'if [ "$1" = "-" ]; then echo /fixture/read-only.sqlite3; exit 0; fi\n'
+                'if [ "$1" = "$HOME/factory-runtime/operations/master-agent/evolution.py" ]; then\n'
+                '  printf "MASTER_EVOLUTION_MAX_STEPS=1\\n"\n'
+                '  printf "MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=1\\n"\n'
+                '  printf "MASTER_EVOLUTION_CHECK_ONLY=true\\n"\n'
+                '  exit 0\n'
+                'fi\n'
+                'if [ "$1" = "manage.py" ]; then\n'
+                '  printf "%s\\n" "$2" >> "$MOJ_AGENT_LOCK_TEST_LOG"\n'
+                '  sleep 0.35\n'
+                '  exit 0\n'
+                'fi\n'
+                'exit 23\n',
                 encoding='utf-8',
             )
             py.chmod(0o700)
