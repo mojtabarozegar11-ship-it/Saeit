@@ -4,32 +4,26 @@ from django.utils import timezone
 from datetime import timedelta
 
 from core.approval import ApprovalService
-from core.models import ApprovalGrant, ApprovalRequest
+from core.models import Agent, AgentTask, ApprovalGrant, ApprovalRequest
 
 
 @pytest.mark.django_db
 def test_approved_request_can_issue_and_consume_scoped_one_time_grant():
-    User = get_user_model()
-    owner = User.objects.create_user(username="grant-owner", password="pass", is_staff=True)
+    owner = get_user_model().objects.create_user(username="grant-owner", password="pass", is_staff=True)
+    agent = Agent.objects.create(code="grant-publish-agent", name="Grant fixture", mission="Private", active=True)
+    task = AgentTask.objects.create(agent=agent, action_type="publish",
+                                    capability_code="publish", risk_snapshot="high", status="blocked")
     approval = ApprovalRequest.objects.create(
-        action_type="production_change",
-        target_type="AgentTask",
-        target_id="99",
-        reason="owner grant test",
-        risk="high",
-        status="approved",
-        requested_by=owner,
+        action_type="publish", target_type="AgentTask", target_id=str(task.pk),
+        reason="owner grant test", risk="high", status="approved", requested_by=owner,
     )
-
     service = ApprovalService()
-    grant = service.issue_grant(approval.pk, owner.pk, {"action": "publish", "target": "knowledge:1"}, ttl_seconds=300)
-
+    scope = {"action": "publish", "task_id": task.pk}
+    grant = service.issue_grant(approval.pk, owner.pk, scope, ttl_seconds=300)
     assert grant.used_at is None
-    consumed = service.authorize_grant(grant.pk, {"action": "publish", "target": "knowledge:1"})
-    assert consumed.used_at is not None
+    assert service.authorize_grant(grant.pk, scope).used_at is not None
     with pytest.raises(ValueError, match="already been used"):
-        service.authorize_grant(grant.pk, {"action": "publish", "target": "knowledge:1"})
-
+        service.authorize_grant(grant.pk, scope)
 
 @pytest.mark.django_db
 def test_grant_rejects_scope_mismatch_and_expiry():
