@@ -84,6 +84,24 @@ class TestSettlement(unittest.TestCase):
         self.data["settlements"][0]["status"] = "pending"
         self.data["settlements"][0].pop("amount")
         self.assertRaises(ValueError, reconcile, self.data)
+    def test_delivery_and_full_payment_without_refund_are_both_required(self):
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 0)
+        self.data["refunds"] = []
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 1)
+        self.data["orders"][0]["delivery_confirmed"] = False
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 0)
+    def test_paid_status_and_full_settlement_both_required(self):
+        self.data["refunds"] = []
+        self.data["orders"][0]["status"] = "pending"
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 0)
+        self.data["orders"][0]["status"] = "paid"
+        self.data["settlements"][0]["amount"] = "29.00"
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 0)
+    def test_zero_amount_never_counts_as_paid_delivered(self):
+        self.data["refunds"] = []
+        self.data["orders"][0]["amount"] = "0"
+        self.data["settlements"][0]["amount"] = "0"
+        self.assertEqual(reconcile(self.data)["fully_settled_delivered_unreversed_claims"], 0)
     def test_missing_collection_is_not_silently_reported_as_zero(self):
         for key in ("orders", "settlements", "refunds"):
             with self.subTest(key=key):
