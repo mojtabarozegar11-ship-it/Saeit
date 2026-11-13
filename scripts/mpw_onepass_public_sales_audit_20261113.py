@@ -168,12 +168,13 @@ def main(argv=None) -> int:
     result = audit(args.timeout)
     print("MPW_ONEPASS_PUBLIC_READONLY=" + json.dumps(
         result, sort_keys=True, separators=(",", ":")))
-    statuses = result["observed_routes"].values()
-    return 2 if any(s in (
-        "static_fallback_not_dynamic", "http_500", "http_502", "http_503",
-        "checkout_post_action_unverified", "checkout_csrf_unverified",
-        "legacy_email_requested"
-    ) for s in statuses) else 0
+    statuses = tuple(result["observed_routes"].values())
+    # Any missing observation, bad form, legacy email gate, timeout or
+    # static fallback is an INCOMPLETE public preflight. Do not let network
+    # isolation (or an HTTP 200 alone) produce a green commercial gate.
+    allowed = {"store_public_get_ok_not_sale", "detail_public_get_ok_not_sale",
+               "no_email_checkout_get_ok_not_paid"}
+    return 0 if statuses and all(status in allowed for status in statuses) else 2
 
 
 if __name__ == "__main__":
