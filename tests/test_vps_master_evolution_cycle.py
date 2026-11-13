@@ -22,7 +22,7 @@ class EvolutionTests(unittest.TestCase):
         state = root / "evolution.json"
         with sqlite3.connect(db) as conn:
             conn.execute("CREATE TABLE core_agent (id INTEGER PRIMARY KEY, code TEXT, active INTEGER)")
-            conn.execute("CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT, action_type TEXT, output_data TEXT)")
+            conn.execute("CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT, action_type TEXT, output_data TEXT, execution_id TEXT DEFAULT 'fixture-execution', attempt_count INTEGER DEFAULT 1)")
             conn.execute("INSERT INTO core_agent VALUES (1,'economic-master-agent',1)")
             for action in actions:
                 conn.execute("INSERT INTO core_agenttask(agent_id,status,action_type,output_data) VALUES (1,'completed',?,?)",
@@ -611,6 +611,163 @@ class EvolutionTests(unittest.TestCase):
             self.assertEqual(result["late_verified_completed_tasks"], 1)
             self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
             self.assertEqual(result["last_completed_task_id"], 3)
+
+    def test_completed_guard_detects_evidence_rewrite_without_losing_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET output_data=? WHERE id=1",
+                    (json.dumps({"verified_effect": False}),)
+                )
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_completed_guard_detects_execution_id_rewrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET execution_id='changed' WHERE id=1")
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_completed_guard_detects_action_rewrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET action_type='income_profit_optimize' WHERE id=1")
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_completed_guard_detects_attempt_number_rewrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET attempt_count=2 WHERE id=1")
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_newer_completed_task_cannot_mask_reopening_of_watermark(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            mod.evaluate(db, state)
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET status='queued' WHERE id=2")
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_profit_optimize',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["completed_tasks_net_change"], 0)
+            self.assertTrue(result["watermark_task_reopened"])
+            self.assertEqual(result["guarded_reopened_task_count"], 1)
+            self.assertEqual(result["max_steps"], 1)
+            self.assertEqual(result["decision"], "limit_serial_steps_after_regression")
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+
+    def test_newer_completion_cannot_mask_reopening_older_guarded_task(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            mod.evaluate(db, state)
+            with sqlite3.connect(db) as conn:
+                conn.execute("UPDATE core_agenttask SET status='queued' WHERE id=1")
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_profit_optimize',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["delta"]["completed_tasks_net_change"], 0)
+            self.assertFalse(result["watermark_task_reopened"])
+            self.assertEqual(result["guarded_reopened_task_count"], 1)
+            self.assertEqual(result["max_steps"], 1)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+
+    def test_missing_guarded_task_rejected_without_state_overwrite(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute("DELETE FROM core_agenttask WHERE id=1")
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_profit_optimize',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_GUARD_TASK_MISSING"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_invalid_completed_guard_digest_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            data = json.loads(state.read_text())
+            data["completed_guard"]["1"] = "not-a-valid-sha256"
+            state.write_text(json.dumps(data))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_GUARD_INVALID"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_forged_but_valid_guard_digest_fails_at_comparison(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            data = json.loads(state.read_text())
+            data["completed_guard"]["1"] = "f" * 64
+            state.write_text(json.dumps(data))
+            before = state.read_bytes()
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_legacy_state_creates_guard_without_recrediting_history(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            data = json.loads(state.read_text())
+            data["last_completed_task_id"] = 2
+            data["task_counts"]["completed"] = 2
+            state.write_text(json.dumps(data))
+            mod.evaluate(db, state)
+            first = json.loads(state.read_text())
+            self.assertFalse(first["previous_completed_guard_available"])
+            self.assertEqual(first["previous_completed_guard_rows_checked"], 0)
+            self.assertEqual(first["delta"]["verified_completed_tasks"], 0)
+            self.assertEqual(len(first["completed_guard"]), 2)
+            mod.evaluate(db, state)
+            second = json.loads(state.read_text())
+            self.assertTrue(second["previous_completed_guard_available"])
+            self.assertEqual(second["previous_completed_guard_rows_checked"], 2)
+            self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
