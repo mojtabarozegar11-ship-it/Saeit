@@ -1,5 +1,6 @@
 """Master runs up to 20 serial tasks without increasing product volume."""
 import importlib.util
+import io
 import json
 import os
 import stat
@@ -7,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/vps_master_evolution_cycle.py"
@@ -772,6 +774,57 @@ class EvolutionTests(unittest.TestCase):
             self.assertTrue(second["previous_completed_guard_available"])
             self.assertEqual(second["previous_completed_guard_rows_checked"], 2)
             self.assertEqual(second["delta"]["verified_completed_tasks"], 0)
+
+    def test_check_only_calculates_policy_without_changing_saved_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(
+                temp, ["income_market_research", "income_opportunity_score"],
+                previous_steps=20
+            )
+            before = state.read_bytes()
+            transcript = io.StringIO()
+            with redirect_stdout(transcript):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+            self.assertIn("MASTER_EVOLUTION_CHECK_ONLY=true", transcript.getvalue())
+            self.assertIn("MASTER_EVOLUTION_MAX_STEPS=20", transcript.getvalue())
+            self.assertIn("MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=20", transcript.getvalue())
+
+    def test_check_only_never_creates_missing_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"])
+            state.unlink()
+            with redirect_stdout(io.StringIO()):
+                mod.evaluate(db, state, check_only=True)
+            self.assertFalse(state.exists())
+
+    def test_check_only_refuses_tampered_prior_completion_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            mod.evaluate(db, state)
+            before = state.read_bytes()
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET output_data='{}' WHERE id=1"
+                )
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_COMPLETED_EVIDENCE_CHANGED"):
+                mod.evaluate(db, state, check_only=True)
+            self.assertEqual(state.read_bytes(), before)
+
+    def test_activation_wrapper_preflights_policy_before_every_master_cycle(self):
+        script = (SCRIPT.parent.parent / "deploy" / "activate_vps_master_agent.sh").read_text(
+            encoding="utf-8"
+        )
+        start = script.index('cat > "$master/run-cycle.sh.tmp"')
+        end = script.index("\nSH\n", start)
+        wrapper = script[start:end]
+        self.assertLess(wrapper.index('flock -n 9'), wrapper.index('--check-only'))
+        self.assertLess(wrapper.index('--check-only'), wrapper.index('recover_stale_tasks'))
+        self.assertLess(wrapper.index('recover_stale_tasks'), wrapper.index('autonomous_master_loop'))
+        self.assertIn('steps=1', wrapper)
+        self.assertIn('MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED', wrapper)
+        self.assertIn('if (( proposed < approved_before ))', wrapper)
+        self.assertIn('MASTER_EVOLUTION_PREVIOUS_MAX_STEPS', wrapper)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
