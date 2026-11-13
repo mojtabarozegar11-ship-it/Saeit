@@ -577,6 +577,41 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db, state)
             self.assertEqual(json.loads(state.read_text())["late_verified_completed_tasks"], 1)
 
+    def test_tracked_pending_survives_high_watermark_reopen(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research"], previous_steps=20)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'queued','income_profit_optimize','{}')"
+                )
+                conn.execute(
+                    "INSERT INTO core_agenttask(agent_id,status,action_type,output_data) "
+                    "VALUES (1,'completed','income_opportunity_score',?)",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            self.assertEqual(json.loads(state.read_text())["pending_prior_ids"], [2])
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='queued',output_data='{}' WHERE id=3"
+                )
+            mod.evaluate(db, state)
+            reopened = json.loads(state.read_text())
+            self.assertTrue(reopened["watermark_task_reopened"])
+            self.assertEqual(reopened["pending_prior_ids"], [2])
+            self.assertEqual(reopened["suppressed_unproven_prior_pending_count"], 1)
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE core_agenttask SET status='completed',output_data=? WHERE id=2",
+                    (json.dumps({"verified_effect": True}),)
+                )
+            mod.evaluate(db, state)
+            result = json.loads(state.read_text())
+            self.assertEqual(result["late_verified_completed_tasks"], 1)
+            self.assertEqual(result["delta"]["verified_completed_tasks"], 1)
+            self.assertEqual(result["last_completed_task_id"], 3)
+
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"],
