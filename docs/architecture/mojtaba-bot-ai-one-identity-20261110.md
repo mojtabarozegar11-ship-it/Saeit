@@ -71,6 +71,13 @@ payload, consumes the one-time grant, and reserves the invocation in one
 database transaction. Invalid/expired/used/cross-task grants **fail closed**;
 the grant ID is stripped from the adapter payload.
 
+The agent policy also treats named broker trades, withdrawals, transfers,
+funding, outbound SMS/email/messages, destructive changes and legal commitments
+as sensitive **regardless of an adapter's claimed low risk**. General-manager
+approval names and tool-gateway approval names use one shared policy list.
+Unknown external integrations must still be audited: no exact-name allowlist
+can substitute for adapter-level threat modeling and genuine host-side gates.
+
 This is a *code-review contract*, not approval to deploy, pay, withdraw, trade,
 publish, rotate credentials or edit production. The registered canonical
 capabilities in this branch still do not include a live deployment or broker
