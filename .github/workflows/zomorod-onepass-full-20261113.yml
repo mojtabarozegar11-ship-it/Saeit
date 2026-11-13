@@ -1,0 +1,395 @@
+name: Zomorod one-pass complete homepage + three actual rotating rows
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-vision-v3/**'
+      - 'scripts/zomorod_onepass_guarded_20261113.py'
+      - 'scripts/test_zomorod_onepass_20261113.py'
+      - '.github/workflows/zomorod-onepass-full-20261113.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'content/zomorod-vision-v3/**'
+      - 'scripts/zomorod_onepass_guarded_20261113.py'
+      - 'scripts/test_zomorod_onepass_20261113.py'
+      - '.github/workflows/zomorod-onepass-full-20261113.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  validate-and-visual:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare immutable baseline and full corrected package
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/zm-onepass-stage"
+          mkdir -p "$stage/old/assets" "$stage/new/assets" "$stage/new/ar"
+          for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
+            git show "6b4e460f65b556dcdb95fda8f9beaeaab996b3a8:content/zomorod-vision-v3/$rel" > "$stage/old/$rel"
+            cp "content/zomorod-vision-v3/$rel" "$stage/new/$rel"
+            test -s "$stage/old/$rel" && test -s "$stage/new/$rel"
+          done
+          cp content/zomorod-vision-v3/assets/zm-logo-transparent-v1.webp "$stage/new/assets/"
+          cp content/zomorod-vision-v3/ar/index.html "$stage/new/ar/index.html"
+          cp scripts/zomorod_onepass_guarded_20261113.py "$stage/guard.py"
+          echo "ZOMOROD_STAGE=$stage" >> "$GITHUB_ENV"
+      - name: Verify code syntax, release rollback and full feature contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_onepass_guarded_20261113.py scripts/test_zomorod_onepass_20261113.py
+          node --check content/zomorod-vision-v3/assets/zm-reference-v3.js
+          python3 scripts/test_zomorod_onepass_20261113.py "$ZOMOROD_STAGE"
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          h=Path('content/zomorod-vision-v3/index.html').read_text()
+          js=Path('content/zomorod-vision-v3/assets/zm-reference-v3.js').read_text()
+          css=Path('content/zomorod-vision-v3/assets/zm-reference-v3.css').read_text()
+          ar=Path('content/zomorod-vision-v3/ar/index.html').read_text()
+          for s in ('آبان ۱۳۹۸','کلیه حقوق مادی و معنوی محفوظ است','href="/search/"','hreflang="en"','hreflang="ar"','zm-logo-transparent-v1.webp'):
+              assert s in h,s
+          assert h.count('data-auto-strip=')==3
+          assert h.count('data-rotator-toggle=')==3
+          assert h.count('fetchpriority="high"')<=2
+          assert h.count('<h1')==1
+          assert '/en/' in h and '/ar/' in h and '<html lang="ar" dir="rtl">' in ar
+          assert 'requestAnimationFrame' in js and 'prefers-reduced-motion' in js
+          assert 'auto-scroll-row' in css and 'auto-rotator-toggle' in css
+          assert all(n not in h for n in ('Vancouver','ونکوور','ISO 9001','ISO 14001'))
+          print('ZM_ONEPASS_EXACT_FOOTER_LANG_SEARCH_LOGO_THREE_ROWS=PASS')
+          PY
+      - name: Build local faithful page (reuse existing reference art; do not generate images)
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/zm-onepass-preview"
+          mkdir -p "$root/assets" "$root/ar"
+          cp "$ZOMOROD_STAGE/new/index.html" "$root/index.html"
+          cp "$ZOMOROD_STAGE/new/assets/"* "$root/assets/"
+          cp "$ZOMOROD_STAGE/new/ar/index.html" "$root/ar/index.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,zipfile
+          root=Path(os.environ['RUNNER_TEMP'])/'zm-onepass-preview'
+          with zipfile.ZipFile('content/zomorod-vision-v3/artwork.zip') as arc:
+              for entry in arc.namelist():
+                  if entry.startswith('art/') and entry.endswith('.webp'):
+                      (root/'assets'/('zm-v3-'+entry.split('/')[-1])).write_bytes(arc.read(entry))
+          assert len(list((root/'assets').glob('zm-v3-*.webp')))==17
+          img=(root/'assets/zm-logo-transparent-v1.webp').read_bytes()
+          assert img[:4]==b'RIFF' and img[8:12]==b'WEBP' and len(img)>25000
+          print('ZM_ONEPASS_FIRST_PARTY_APPROVED_MEDIA=PASS')
+          PY
+      - name: Test real continuous motion, pause/play, RTL, search, logo and accessibility in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          python3 -m http.server 8099 --directory "$RUNNER_TEMP/zm-onepass-preview" > "$RUNNER_TEMP/zv-onepass-local-http.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [360,390,768,1024,1440]){
+              const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+              const errors=[],failed=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              page.on('requestfailed',r=>failed.push(r.url()));
+              await page.goto('http://127.0.0.1:8099/?width='+width,{waitUntil:'load',timeout:45000});
+              await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3',null,{timeout:12000});
+              const evidence=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,
+                h1:document.querySelectorAll('h1').length,rows:document.querySelectorAll('[data-auto-strip]').length,
+                controls:document.querySelectorAll('[data-rotator-toggle]').length,
+                footer:document.querySelector('.footer-bottom')?.textContent.includes('آبان ۱۳۹۸'),
+                logo:document.querySelector('.identity img')?.naturalWidth,
+                ar:document.querySelector('.lang-switch a[href="/ar/"]')!==null,
+                search:document.querySelector('.search-form')?.getAttribute('action')}));
+              if(evidence.scroll>width+3||evidence.h1!==1||evidence.rows!==3||evidence.controls!==3||!evidence.footer||evidence.logo!==512||!evidence.ar||evidence.search!=='/search/'||errors.length)throw Error('ZM_LAYOUT_BASE_FAIL '+JSON.stringify({width,evidence,errors,failed}));
+              const transparent=await page.evaluate(async()=>{
+                const img=new Image();img.src='/assets/zm-logo-transparent-v1.webp';await img.decode();
+                const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+                canvas.getContext('2d').drawImage(img,0,0);
+                return canvas.getContext('2d').getImageData(0,0,1,1).data[3]===0;
+              });
+              if(!transparent)throw Error('LOGO_NOT_TRULY_TRANSPARENT');
+              if(width===390){
+                await page.locator('.mobile-menu-btn').click();if(!await page.locator('#mobile-nav').isVisible())throw Error('MOBILE_MENU_NOT_OPEN');
+                await page.locator('.mobile-menu-btn').click();if(await page.locator('#mobile-nav').isVisible())throw Error('MOBILE_MENU_NOT_CLOSED');
+                await page.locator('.search-toggle').click();
+                const form=page.locator('.search-form');if(await form.getAttribute('method')!=='get'||await form.getAttribute('action')!=='/search/')throw Error('SEARCH_NOT_NATIVE');
+                await page.locator('.search-toggle').click();
+              }
+              for(const id of ['services-strip','products-strip','projects-strip']){
+                const row=page.locator('#'+id);
+                await row.scrollIntoViewIfNeeded();await page.waitForTimeout(450);
+                const from=await row.evaluate(x=>x.scrollLeft);
+                await page.waitForTimeout(1400);
+                const to=await row.evaluate(x=>x.scrollLeft);
+                if(!(to<from-8))throw Error('ROTATION_NOT_MOVING '+JSON.stringify({width,id,from,to}));
+                const control=page.locator('[data-rotator-toggle="'+id+'"]');
+                await control.click();
+                if(await control.getAttribute('aria-pressed')!=='false')throw Error('ROTATION_NOT_PAUSED '+id);
+                const stopped=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(450);
+                const after=await row.evaluate(x=>x.scrollLeft);
+                if(Math.abs(after-stopped)>2)throw Error('ROTATION_PAUSE_NOT_REAL '+id);
+                await control.click();
+                if(await control.getAttribute('aria-pressed')!=='true')throw Error('ROTATION_NOT_RESUMED '+id);
+              }
+              // Inspect all HTML images and major cards on the actual rendered page.
+              for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=900){
+                await page.evaluate(y=>window.scrollTo(0,y),y);await page.waitForTimeout(18);
+              }
+              await page.evaluate(()=>window.scrollTo(0,0));
+              await page.screenshot({path:'zomorod-onepass-preview-'+width+'.png',fullPage:true,animations:'disabled'});
+              console.log('ZM_ONEPASS_PREVIEW_BROWSER_PASS='+width);
+              await page.close();
+            }
+            const reduced=await browser.newPage({viewport:{width:390,height:800},reducedMotion:'reduce'});
+            await reduced.goto('http://127.0.0.1:8099/',{waitUntil:'load'});
+            const button=reduced.locator('[data-rotator-toggle="products-strip"]');
+            if(await button.getAttribute('aria-pressed')!=='false')throw Error('REDUCED_MOTION_NOT_PAUSED');
+            await reduced.close();
+            const ar=await browser.newPage();await ar.goto('http://127.0.0.1:8099/ar/',{waitUntil:'load'});
+            if(!await ar.locator('html[lang="ar"][dir="rtl"] h1').count())throw Error('ARABIC_LANDING_NOT_FUNCTIONAL');
+            await ar.close();await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Preserve browser screenshots as inspection evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-onepass-three-rotating-rows-preview
+          path: ${{ runner.temp }}/zomorod-onepass-preview-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  publish:
+    needs: validate-and-visual
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Prepare same pinned, locally validated files for publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-onepass-private"
+          install -d -m 700 "$d"
+          mkdir -p "$d/old/assets" "$d/new/assets" "$d/new/ar"
+          for rel in index.html assets/zm-reference-v3.css assets/zm-reference-v3.js; do
+            git show "6b4e460f65b556dcdb95fda8f9beaeaab996b3a8:content/zomorod-vision-v3/$rel" > "$d/old/$rel"
+            cp "content/zomorod-vision-v3/$rel" "$d/new/$rel"
+          done
+          cp content/zomorod-vision-v3/assets/zm-logo-transparent-v1.webp "$d/new/assets/"
+          cp content/zomorod-vision-v3/ar/index.html "$d/new/ar/"
+          cp scripts/zomorod_onepass_guarded_20261113.py "$d/guard.py"
+      - name: Validate cPanel identity with pinned ED25519 fingerprint
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${HOST_KEY:-}"
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          success=0
+          for attempt in 1 2 3; do
+            if timeout 15s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/candidate" 2>/dev/null && test -s "$d/candidate"; then
+              pin="$(ssh-keygen -lf "$d/candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              test "$pin" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_PIN_CHANGED_STOP' >&2; exit 1; }
+              mv "$d/candidate" "$d/known";success=1;break
+            fi
+            sleep "$attempt"
+          done
+          test "$success" = 1 || { echo 'CPANEL_UNREACHABLE_STOP' >&2; exit 1; }
+          cat > "$d/config" <<EOF
+          Host zm-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            RequestTTY no
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config" "$d/known"
+          timeout 35s ssh -T -F "$d/config" zm-cpanel 'id -un' | grep -Fxq 'zomorod2'
+          echo ZM_ONEPASS_TRUSTED_CPANEL_IDENTITY=VERIFIED
+      - name: Stage privately and prove exact live source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          dest="/home/zomorod2/.zm-onepass-stage-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" zm-cpanel "test ! -e '$dest' && test ! -L '$dest' && install -d -m 700 '$dest'"
+          tar -C "$RUNNER_TEMP/zomorod-onepass-private" -cf - . | timeout 80s ssh -T -F "$d/config" zm-cpanel "tar -C '$dest' -xf -"
+          timeout 55s ssh -T -F "$d/config" zm-cpanel "python3 '$dest/guard.py' check" > "$RUNNER_TEMP/zomorod-onepass-baseline.json"
+          python3 - <<'PY'
+          import os,json,pathlib
+          d=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'zomorod-onepass-baseline.json').read_text().splitlines()[-1])
+          assert len(d['replace'])==3 and len(d['create'])==2 and len(d['protected'])>=10
+          print('ZM_ONEPASS_OLD_SHA256_AND_INTERNAL_PATHS=VERIFIED')
+          PY
+      - name: Apply entire corrected bundle as one rollback-safe transaction
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          dest="/home/zomorod2/.zm-onepass-stage-$GITHUB_RUN_ID"
+          timeout 95s ssh -T -F "$d/config" zm-cpanel "python3 '$dest/guard.py' apply 'vision-$GITHUB_RUN_ID'"
+      - name: Verify installed checksums, public routes, Arabic and approved logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          dest="/home/zomorod2/.zm-onepass-stage-$GITHUB_RUN_ID"
+          timeout 55s ssh -T -F "$d/config" zm-cpanel "python3 '$dest/guard.py' verify 'vision-$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          ok=False
+          for attempt in range(7):
+              with urlopen(Request(base+'/?onepass_check='+str(attempt),headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+                  page=r.read(180000);assert r.status==200
+              if page.count(b'data-auto-strip=')==3 and b'zm-reference-v3.js?v=20261113-all1' in page and 'آبان ۱۳۹۸'.encode() in page:
+                  ok=True;break
+              time.sleep(2)
+          assert ok,'Live homepage still not displaying new bundle'
+          for path in ('/assets/zm-reference-v3.css?v=20261113-all1','/assets/zm-reference-v3.js?v=20261113-all1',
+                       '/assets/zm-logo-transparent-v1.webp','/ar/','/en/','/search/?q=%D8%B2%D9%85%D8%B1%D8%AF',
+                       '/agriculture/','/industry/','/research/','/services/','/store/','/contact/','/auctions/'):
+              with urlopen(base+path,timeout=24) as r:
+                  assert r.status==200 and len(r.read(1500))>80,path
+              print('ZM_ONEPASS_PUBLIC_CHECK_OK='+path)
+          print('ZM_ONEPASS_PUBLIC_RELEASE_VERIFIED=YES')
+          PY
+      - name: Restore exact previous page if any publication check fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          dest="/home/zomorod2/.zm-onepass-stage-$GITHUB_RUN_ID"
+          timeout 75s ssh -T -F "$d/config" zm-cpanel "python3 '$dest/guard.py' rollback 'vision-$GITHUB_RUN_ID'"
+      - name: Clear runner SSH private key
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-onepass-ssh"
+          if test -d "$d"; then rm -rf -- "$d"; fi
+  public-browser:
+    needs: publish
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - name: Real production browser proves three continuous motion rows, mobile and alpha logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          node - <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [360,390,768,1024,1440]){
+              const page=await browser.newPage({viewport:{width,height:900}}),errors=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('https://zomorodmelal.ir/?onepass_real='+width,{waitUntil:'load',timeout:55000});
+              await page.waitForFunction(()=>document.documentElement.dataset.rotatingRows==='3',null,{timeout:12000});
+              const p=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,
+                rights:document.querySelector('.footer-bottom')?.textContent.includes('کلیه حقوق مادی و معنوی محفوظ است'),
+                image:document.querySelector('.identity img')?.naturalWidth,
+                rows:document.querySelectorAll('[data-auto-strip]').length,h1:document.querySelectorAll('h1').length}));
+              if(p.scroll>width+3||!p.rights||p.image!==512||p.rows!==3||p.h1!==1||errors.length)throw Error('ZM_ONEPASS_LIVE_LAYOUT_FAIL '+JSON.stringify({width,p,errors}));
+              for(const id of ['services-strip','products-strip','projects-strip']){
+                const row=page.locator('#'+id);
+                await row.scrollIntoViewIfNeeded();await page.waitForTimeout(350);
+                const start=await row.evaluate(x=>x.scrollLeft);await page.waitForTimeout(1050);
+                const end=await row.evaluate(x=>x.scrollLeft);
+                if(!(end<start-5))throw Error('ZM_ONEPASS_LIVE_ROW_NOT_ROTATING '+id+' '+JSON.stringify({start,end}));
+              }
+              if(width===390){
+                await page.locator('.search-toggle').click();
+                await page.locator('#site-search').fill('ژنتیک');
+                await Promise.all([page.waitForURL(/\/search\/\?q=/,{timeout:30000}),page.locator('.search-form button[type=submit]').click()]);
+                if(!page.url().includes('/search/?q='))throw Error('GLOBAL_SITE_SEARCH_MISSING');
+                await page.goto('https://zomorodmelal.ir/?onepass_return=390',{waitUntil:'load'});
+              }
+              for(let y=0;y<await page.evaluate(()=>document.body.scrollHeight);y+=900){await page.evaluate(y=>scrollTo(0,y),y);await page.waitForTimeout(18);}
+              await page.evaluate(()=>scrollTo(0,0));
+              await page.screenshot({path:'zomorod-onepass-live-'+width+'.png',fullPage:true,animations:'disabled'});
+              console.log('ZM_ONEPASS_LIVE_BROWSER_PASS='+width);await page.close();
+            }
+            const ar=await browser.newPage();await ar.goto('https://zomorodmelal.ir/ar/',{waitUntil:'load'});
+            if(!await ar.locator('html[lang="ar"][dir="rtl"] h1').count())throw Error('LIVE_ARABIC_PAGE');
+            await ar.close();await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+      - name: Save actual production screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-onepass-live-three-moving-rows
+          path: ${{ runner.temp }}/zomorod-onepass-live-*.png
+          retention-days: 7
+          if-no-files-found: ignore
+  rollback-after-browser-failure:
+    needs: [publish,public-browser]
+    if: ${{ always() && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && needs.publish.result == 'success' && needs.public-browser.result != 'success' }}
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Restore original three files and remove only newly created logo/Arabic page
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-onepass-rollback"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "${HOST_KEY:-}"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          timeout 16s ssh-keyscan -T 9 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          stage="/home/zomorod2/.zm-onepass-stage-$GITHUB_RUN_ID"
+          timeout 80s ssh -T -i "$d/key" -p 1396 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 zomorod2@178.239.147.125 "python3 '$stage/guard.py' rollback 'vision-$GITHUB_RUN_ID'"
+          echo ZM_ONEPASS_FAILED_BROWSER_ROLLED_BACK=YES
