@@ -411,6 +411,12 @@ namespace Mojtaba.Bot.Ai
             Print("cBot error: {0}", error.Code);
         }
 
+        protected override void OnException(Exception exception)
+        {
+            Print("FATAL canonical cBot exception: {0}", exception.Message);
+            Stop();
+        }
+
         protected override void OnStop()
         {
             Print("mojtaba.bot.ai canonical trading core stopped. Existing positions remain open.");
