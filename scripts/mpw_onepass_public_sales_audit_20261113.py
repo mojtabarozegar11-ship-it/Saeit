@@ -101,7 +101,8 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
         if not forms:
             return "checkout_post_action_unverified"
         valid = any(any(name == "csrfmiddlewaretoken" and bool(value)
-                            for name, value, _ in form["inputs"])
+                            and type_ == "hidden"
+                            for name, value, type_ in form["inputs"])
                     for form in forms)
         if not valid:
             return "checkout_csrf_unverified"
@@ -112,6 +113,26 @@ def classify_html(kind: str, sku: int | None, html: str) -> str:
         return ("legacy_email_requested" if emails
                 else "no_email_checkout_get_ok_not_paid")
     return "unknown_route_kind"
+
+
+
+def checkout_header_status(headers) -> str:
+    """Fail closed if security/cache headers fail the public GET contract.
+
+    The checkout HTML contains a CSRF form and should not be stored by an
+    intermediary. Do not emit header values, cookies, or any sensitive data.
+    """
+    policy = (headers.get("Content-Security-Policy", "") or "").lower()
+    directives = {d.strip() for d in policy.split(";") if d.strip()}
+    expected = {"script-src 'none'", "form-action 'self'",
+                "frame-ancestors 'none'"}
+    if not expected.issubset(directives):
+        return "checkout_security_headers_unverified"
+    cache = (headers.get("Cache-Control", "") or "").lower()
+    controls = {token.strip().split("=", 1)[0] for token in cache.split(",")}
+    if "no-store" not in controls:
+        return "checkout_cache_policy_unverified"
+    return "checkout_headers_pass"
 
 
 class RejectRedirect(urllib.request.HTTPRedirectHandler):
@@ -138,6 +159,12 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener):
             content_type = response.headers.get("Content-Type", "").lower()
             if "text/html" not in content_type:
                 return "unexpected_content_type"
+            # Only classify checkout content after verifying its own response
+            # security headers. The observer never prints token or headers.
+            if kind == "checkout":
+                headers_status = checkout_header_status(response.headers)
+                if headers_status != "checkout_headers_pass":
+                    return headers_status
             return classify_html(kind, sku, data.decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         if 300 <= exc.code < 400:
