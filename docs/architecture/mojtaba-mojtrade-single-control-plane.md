@@ -118,6 +118,52 @@ a broker-connected DEMO forward test is considered. Any real account
 remains permanently rejected and owner authorization, reconciled demo
 fills, single-commander execution and costed OOS evidence remain required.
 
+## Operational proof console and receipt binding (review branch)
+
+The same Django control plane now includes a read-only, authenticated
+owner-only `GET /api/mojtrade/readiness/` endpoint. It does not start an
+agent, place orders, send messages, publish a signal, or generate a
+financial transaction. Ordinary users, anonymous visitors and staff
+without active superuser authority are denied. Responses are private,
+noncacheable and noindex.
+
+The operator sees distinct **evidence gates**, never one misleading
+"one bot = 100%" value:
+
+- Is the canonical `mojtaba-bot-ai` owner active in this database?
+- Is the latest canonical BTC/USD and ETH/USD **research-watch** receipt
+  fresh, with an exact matching audit receipt and source digest?
+- Is a local cTrader DEMO closed-deals log recorded as a canonical
+  task with its own audit receipt?
+- Is there a corresponding DEMO statement task whose **unverified**
+  source log SHA-256, account alias and symbol match that exact demo log?
+- Is a broker account independently authenticated, connected to
+  a canonical approved order controller, and evidenced by real broker
+  executions? **False until independently proven.**
+- Is a real site/subscriber signal delivered and receipt-authenticated?
+  **False until independently proven.**
+- Is a single live master/runtime cutover verified, real funds authorized,
+  or real settled revenue evidenced? **False until independently proven.**
+
+Two matching local files are explicitly labelled
+`local_two_unverified_demo_exports_matched_to_same_log`, NOT an
+authenticated broker statement. The overall operational completion
+percentage stays `null` without a full live runtime and independent
+external-delivery census.
+
+The private watch endpoint/export now also requires exactly one matching
+`mojtrade_private_research_ingested` `AuditLog` record with the same
+canonical AgentTask ID, owner row, source hash, two observations and no
+orders. Missing, duplicate, tampered or mismatched receipts fail closed,
+even if the stored draft JSON otherwise looks well-formed.
+
+**Remaining blockers to 100% production:** working authorized broker
+connection, broker-attested DEMO fills and costs, multi-instance/external
+scheduler coordination, signed canonical order authorization, authenticated
+site delivery and per-channel permission, tested production deployment,
+and externally reconciled economics. No live trade or paid publication
+is authorized by a successful offline test.
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
