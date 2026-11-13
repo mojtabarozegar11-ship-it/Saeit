@@ -294,6 +294,10 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
             if any(obs[k] != "observed" for k in
                    ("cron_read", "process_read", "user_services_read", "system_services_read")):
                 blockers.append("partial_host_topology_observation")
+            if snap.get("cron", {}).get("enumeration_truncated") is True:
+                blockers.append("host_cron_inventory_truncated")
+            if snap.get("processes", {}).get("enumeration_truncated") is True:
+                blockers.append("host_process_inventory_truncated")
             if any(v == "drift_or_mismatch" for v in obs["source_revisions"].values()):
                 blockers.append("installed_source_revision_differs_from_reviewed_pr")
             if any(v == "unknown" for v in obs["source_revisions"].values()):
@@ -314,8 +318,28 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
             "retirement_authorized": False,
             "historical_records_can_be_deleted": False,
         })
+    # These are intentionally separate denominators. Manifest registration
+    # can reach 100% while every live handoff remains unknown: never blend
+    # a source listing into an invented operational completion percentage.
+    registered = len(declared)
+    expected = len(GROUPS)
     return {
         "schema": SCHEMA, "canonical_bot": "mojtaba.bot.ai",
+        "evidence_progress": {
+            "known_source_group_registration": {
+                "registered": registered,
+                "expected_known_source_groups": expected,
+                "percent": round(100 * registered / expected, 1),
+                "scope": "checked_in_known_groups_only_not_a_complete_live_bot_census",
+            },
+            "verified_live_retirement": {
+                "groups_with_verified_handoff_and_retirement": 0,
+                "expected_known_source_groups": expected,
+                "proof_coverage_percent": 0.0,
+                "scope": "zero_verified_receipts_not_zero_actual_real_world_progress",
+            },
+            "overall_operational_completion_percent": None,
+        },
         "sources_in_manifest": len(declared),
         "sources_evaluated": len(groups), "groups": groups,
         "unscoped_runtime_scopes_not_attested": sorted(set(unresolved)),
