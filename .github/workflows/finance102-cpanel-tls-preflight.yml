@@ -1,14 +1,11 @@
 name: Finance102 one-shot unauthenticated TLS identity check
 on:
-  pull_request:
-    paths:
-      - 'scripts/finance102_cpanel_tls_preflight.py'
-      - 'tests/test_finance102_cpanel_tls_preflight.py'
-      - '.github/workflows/finance102-cpanel-tls-preflight.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   tls-diagnostic:
+    if: github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
