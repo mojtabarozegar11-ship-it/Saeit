@@ -233,25 +233,44 @@ test -x "$py" && test -f "$base/django-app/manage.py"
 export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$base/django-app"
-steps="$("$py" - "$base/private/master-agent/evolution.json" <<'PY'
-import json,sys
-from pathlib import Path
-p=Path(sys.argv[1])
-try:
-    steps=int(json.loads(p.read_text(encoding="utf-8")).get("max_steps",1))
-except (FileNotFoundError,ValueError,TypeError,KeyError):
-    steps=1
-# Execute up to 20 tasks serially. Product volume and approvals remain gated.
-print(min(20, max(1, steps)))
-PY
-)"
-# Hold one lock across recovery AND planning/execution. Two independent
-# flock invocations leave a race window that can spawn duplicate master work.
+# Hold the same lock across fresh preflight, recovery and serial execution.
+# Never execute the former 20-step budget solely from a stale JSON file.
 exec 9>"$root/master-cycle.lock"
 if ! flock -n 9; then
   echo MASTER_CYCLE_ALREADY_RUNNING
   exit 0
 fi
+steps=1
+if db="$("$py" - <<'PY'
+from django.conf import settings
+print(settings.DATABASES["default"]["NAME"])
+PY
+)"; then
+  if policy="$(timeout 90 "$py" "$root/evolution.py" \
+      --db "$db" --state "$base/private/master-agent/evolution.json" \
+      --check-only 2>&1)"; then
+    proposed="$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_MAX_STEPS=//p')"
+    approved_before="$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=//p')"
+    # A read-only check may tighten the policy immediately but cannot expand
+    # the last persisted budget before its scheduled audited evolution pass.
+    if [[ "$proposed" =~ ^(1|2|3|20)$ && "$approved_before" =~ ^(1|2|3|20)$ ]]; then
+      if (( proposed < approved_before )); then
+        steps="$proposed"
+      else
+        steps="$approved_before"
+      fi
+      echo "MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=$steps"
+    else
+      echo MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED
+    fi
+  else
+    echo MASTER_EVOLUTION_PREFLIGHT_FAIL_CLOSED
+  fi
+else
+  echo MASTER_EVOLUTION_DB_SETTINGS_FAIL_CLOSED
+fi
+# Always run at least one serial controlled task where the worker's own
+# approval and spending policy permits it; never expand on a failed check.
 timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
 timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH
