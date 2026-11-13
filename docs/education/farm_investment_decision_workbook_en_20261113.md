@@ -45,7 +45,7 @@ The minimum constant annual operating cash flow that yields NPV=0 is:
 ```
 CF_break_even = (I0 - S/(1+r)^n) / PV_annuity_factor
 ```
-Numerically this is approximately **$5,839.60 per year**. At the stated $7,500 expected contribution, the project has roughly **$1,660 per year** of contribution headroom before NPV turns negative, assuming unchanged salvage and discount rate.
+Numerically this is approximately **$5,839.75 per year**. At the stated $7,500 expected contribution, the project has roughly **$1,660.25 per year** of contribution headroom before NPV turns negative, assuming unchanged salvage and discount rate.
 
 ## 4. Stress scenarios: independent changes, not probability forecasts
 Keep the same horizon, discount rate, initial outlay, and salvage unless a row explicitly varies them.
