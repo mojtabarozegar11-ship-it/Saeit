@@ -137,7 +137,7 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                 "commerce/trx-easy/start/<str:product_id>/",
                 "commerce/trx-easy/start/<int:product_id>/extra/",
                 "commerce/trx-easy/invoice/<int:invoice_id>/download/",
-                "/commerce/trx-easy/start/<int:product_id>/",
+                "//commerce/trx-easy/start/<int:product_id>/",
             ):
                 with self.subTest(route=route):
                     namespace = dict(handlers, COMMERCIAL_URLPATTERNS=base + (
@@ -148,6 +148,21 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                         installer(namespace)
                     self.assertEqual(namespace, before)
                     self.assertNotIn("_mpw_guest_checkout_installed", namespace)
+
+            # The original server contract uses a leading slash plus string
+            # invoice/receipt IDs; an unrelated catalogue route stays intact.
+            legacy = (
+                ("/commerce/trx-easy/start/<int:product_id>/", lambda *a, **k: response),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/", lambda *a, **k: response),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/status/", lambda *a, **k: response),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/reconcile/", lambda *a, **k: response),
+                ("/commerce/trx-easy/download/<str:receipt_id>/", lambda *a, **k: response),
+                ("/commerce/trx-easy/catalogue/", lambda *a, **k: "catalogue"),
+            )
+            namespace = dict(handlers, COMMERCIAL_URLPATTERNS=legacy)
+            installer(namespace)
+            self.assertTrue(namespace["_mpw_guest_checkout_installed"])
+            self.assertIs(namespace["COMMERCIAL_URLPATTERNS"][-1][1], legacy[-1][1])
 
             # A superficially similar path outside the commerce namespace is
             # never rebound to a payment or download handler.
