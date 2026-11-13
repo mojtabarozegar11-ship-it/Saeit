@@ -30,7 +30,7 @@ OLD_BLOBS = dict(zip(FILES, (
 )))
 # Exact Git blobs from PR #2254 after its 4th carousel browser tests passed.
 NEW_BLOBS = dict(zip(FILES, (
-    'e0ab2643847f9a49f0a5a2ca15e66bb1e892bb5c',
+    '0640683589db69023b2a9bdaf66fcfd8db138549',
     '63559875709de300ffabbd148bfa76c22e88abfc',
     'b5f99cf18ad8b74a2854a837bcd252bf98a1a30e',
 )))
@@ -103,6 +103,20 @@ def candidates(stage: Path):
             b'const strips=Array.from(document.querySelectorAll(' in js and
             b'prefers-reduced-motion' in js):
         raise RuntimeError('Candidate lacks verified four-carousel behavior')
+    # The carousel MUST have ten different real cards, not four cards cloned by JavaScript.
+    starts = page.split(b'<div id="fields-carousel"', 1)
+    if len(starts) != 2:
+        raise RuntimeError('Missing original photo carousel')
+    body = starts[1].split(b'</div><button class="auto-rotator-toggle fields-rotator-toggle"', 1)
+    if len(body) != 2:
+        raise RuntimeError('Photo carousel markup boundary changed')
+    photo_region = body[0]
+    card_count = photo_region.count(b'class="field-card neon-panel"')
+    sources = re.findall(rb'<img\b[^>]*\bsrc="([^"]+)"', photo_region)
+    if (card_count != 10 or len(sources) != 10 or len(set(sources)) != 10 or
+            any(not source.startswith(b'/assets/zm-v3-') or not source.endswith(b'.webp')
+                for source in sources)):
+        raise RuntimeError('Release must contain ten original cards with distinct first-party photos')
     return old, new
 
 
