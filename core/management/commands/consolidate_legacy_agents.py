@@ -51,8 +51,9 @@ PROTECTED_AGENT_CODES = frozenset({
     BOT_CODE,
     "economic-master-agent",
     "moj_1ro_1",
-    "content-director",
-    "knowledge-content-director",
+    # Content and knowledge specialist identities are no longer permanently
+    # protected from merger. Their dependency and successor-proof gates
+    # apply in assess_agent(), and every write still needs an exact owner grant.
 })
 # A successor is not proven merely because its Agent row is active.
 # Each retiring newsletter role needs recent receipts for its own content type.
