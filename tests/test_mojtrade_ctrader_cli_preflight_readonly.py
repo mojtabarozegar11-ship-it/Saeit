@@ -255,3 +255,73 @@ def test_live_identity_blocks_all_followup_account_commands(private_cli):
     with pytest.raises(PreflightError, match="demo_identity_not_explicit"):
         run_readonly(config, cli_binary=sys.executable, runner=fake)
     assert [command[1] for command in calls] == ["accounts"]
+
+
+
+@pytest.mark.parametrize("account_data", [
+    {
+        "accounts": [{
+            "accountId": 12345678, "traderLogin": 999999,
+            "brokerName": "LiteFinance", "isLive": False,
+        }],
+    },
+    {
+        "accounts": [{
+            "traderLogin": 12345678,
+            "brokerName": "LiteFinance", "broker": "DifferentBroker",
+            "isLive": False,
+        }],
+    },
+    {
+        "accounts": [{
+            "traderLogin": 12345678,
+            "brokerName": "LiteFinance",
+            "brokerTitleShort": "DifferentBroker", "isLive": False,
+        }],
+    },
+])
+def test_account_aliases_must_not_contradict_broker_or_login(private_cli, account_data):
+    config, *_ = private_cli
+    with pytest.raises(PreflightError):
+        run_readonly(
+            config, cli_binary=sys.executable,
+            runner=runner_factory(account=account_data),
+        )
+
+
+def test_documented_trader_login_can_differ_from_internal_account_identifier(private_cli):
+    config, *_ = private_cli
+    evidence = run_readonly(
+        config, cli_binary=sys.executable,
+        runner=runner_factory(account={"accounts": [{
+            "accountId": 887766554433,
+            "traderLogin": 12345678,
+            "brokerName": "LiteFinance",
+            "isLive": False,
+        }]}),
+    )
+    assert evidence["cli_demo_account_identity_confirmed"] is True
+    assert evidence["trading_release_authorized"] is False
+
+
+@pytest.mark.parametrize("payload", [
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"accounts":[]}',
+    '{"accounts":[{"accountId":12345678,"accountId":12345678,"brokerName":"LiteFinance","isLive":false}]}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"success":false}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"error":"not-authorized"}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false}],"ok":false}',
+    '{"accounts":[{"accountId":12345678,"brokerName":"LiteFinance","isLive":false,"equity":NaN}]}',
+])
+def test_reject_duplicate_json_keys_and_cli_errors_before_any_trade_read(
+    private_cli, payload,
+):
+    config, *_ = private_cli
+    commands = []
+
+    def malicious_cli(argv, *, capture_output, text, timeout, check):
+        commands.append(argv[1])
+        return subprocess.CompletedProcess(argv, 0, payload, "")
+
+    with pytest.raises(PreflightError):
+        run_readonly(config, cli_binary=sys.executable, runner=malicious_cli)
+    assert commands == ["accounts"]
