@@ -126,6 +126,11 @@ jobs:
             core/tests/test_worker_runner.py \
             core/tests/test_queue_dispatcher.py \
             core/tests/test_task_runtime_lifecycle.py \
+            core/tests/test_task_runtime_identity.py \
+            tests/test_task_runtime.py \
+            tests/test_task_retry.py \
+            tests/test_task_policy_snapshot.py \
+            tests/test_agent_policy.py \
             core/tests/test_task_retry_identity.py \
             tests/test_action_policy.py \
             tests/test_ava_affect.py \
