@@ -87,7 +87,7 @@ def test_wrong_user_fails_before_any_host_inventory(tmp_path, role, user):
 def test_missing_cron_and_systemd_are_unknown_not_attested_absence(tmp_path):
     with patch.object(observer, "call_readonly", side_effect=[
         ("unavailable_or_empty", ""), ("observed", ""), ("unavailable", ""),
-        ("unavailable", ""),
+        ("unavailable", ""), ("unavailable", ""), ("unavailable", ""),
     ]):
         result = observer.collect("vps", username="githubops", home=tmp_path)
     assert result["cron"]["state"] == "unavailable_or_empty"
@@ -104,6 +104,7 @@ def test_both_known_roles_are_observed_without_database_or_network(tmp_path):
         ("observed", "python manage.py knowledge_agent_cycle\n"),
         ("observed", ""),
         ("observed", "mojtaba-bot-ai.service loaded active running Canonical worker\n"),
+        ("observed", ""), ("observed", ""),
     ]):
         out = observer.collect("cpanel", username="zomorod2", home=tmp_path)
     assert out["host_role"] == "cpanel"
@@ -151,6 +152,10 @@ def test_host_reads_are_fixed_commands_no_shell_or_remote_execution(tmp_path):
         ["systemctl", "--user", "list-units", "--type=service",
          "--all", "--plain", "--no-legend", "--no-pager"],
         ["systemctl", "list-units", "--type=service",
+         "--all", "--plain", "--no-legend", "--no-pager"],
+        ["systemctl", "--user", "list-units", "--type=timer",
+         "--all", "--plain", "--no-legend", "--no-pager"],
+        ["systemctl", "list-units", "--type=timer",
          "--all", "--plain", "--no-legend", "--no-pager"],
     ]
     assert result["external_network_used"] is False
@@ -280,6 +285,7 @@ def test_system_service_matches_are_not_live_execution_attestation(tmp_path):
         ("observed", ""),
         ("unavailable", ""),
         ("observed", "mojtaba-bot-ai.service loaded active running Single bot\n"),
+        ("observed", ""), ("observed", ""),
     ]):
         result = observer.collect("vps", username="githubops", home=tmp_path)
     assert result["system_services"]["state"] == "observed"
@@ -417,6 +423,7 @@ def test_truncated_cron_and_process_census_are_flagged_not_silently_complete(tmp
     with patch.object(observer, "call_readonly", side_effect=[
         ("observed", cron), ("observed", processes),
         ("observed", ""), ("observed", ""),
+        ("observed", ""), ("observed", ""),
     ]):
         report = observer.collect("vps", username="githubops", home=tmp_path)
     assert report["cron"]["enumeration_truncated"] is True
@@ -429,6 +436,7 @@ def test_cron_alias_reboot_is_preserved_as_route_indicator_in_snapshot(tmp_path)
     with patch.object(observer, "call_readonly", side_effect=[
         ("observed", "@reboot python manage.py autonomous_master_loop --debug\n"),
         ("observed", ""), ("observed", ""), ("observed", ""),
+        ("observed", ""), ("observed", ""),
     ]):
         report = observer.collect("cpanel", username="zomorod2", home=tmp_path)
     assert report["cron"]["enumerated_entries"] == 1
@@ -437,3 +445,66 @@ def test_cron_alias_reboot_is_preserved_as_route_indicator_in_snapshot(tmp_path)
         "autonomous_master_loop"
     ]
     assert report["attestation"]["handoff_verified"] is False
+
+
+
+def test_timer_unit_reader_redacts_names_and_reports_known_legacy_routes():
+    raw = (
+        "mojtrade_observer-secret.timer loaded active waiting private-token\n"
+        "mojcoin_rewards.timer loaded inactive dead private-customer\n"
+        "other.timer loaded active waiting unrelated\n"
+    )
+    rows = observer.safe_service_units(raw, suffix=".timer")
+    assert len(rows) == 2
+    assert rows[0]["known_route_flags"] == ["mojtrade_observer"]
+    assert rows[1]["known_route_flags"] == ["mojcoin"]
+    assert rows[0]["active"] == "active"
+    assert rows[1]["active"] == "inactive"
+    assert "private-token" not in json.dumps(rows)
+    assert "private-customer" not in json.dumps(rows)
+    assert "mojtrade_observer-secret.timer" not in json.dumps(rows)
+
+
+def test_user_and_system_timers_are_observed_without_claiming_active_work(tmp_path):
+    calls = [
+        ("observed", ""), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+        ("observed", "mojtrade_observer.timer loaded active waiting Test\n"),
+        ("observed", "mojcoin.timer loaded active waiting Test\n"),
+    ]
+    with patch.object(observer, "call_readonly", side_effect=calls):
+        report = observer.collect("vps", username="githubops", home=tmp_path)
+    assert report["user_timers"]["state"] == "observed"
+    assert report["system_timers"]["state"] == "observed"
+    assert report["user_timers"]["candidate_units"][0]["known_route_flags"] == [
+        "mojtrade_observer"
+    ]
+    assert report["system_timers"]["candidate_units"][0]["known_route_flags"] == [
+        "mojcoin"
+    ]
+    assert report["attestation"]["legacy_workers_retired"] is False
+    assert report["attestation"]["external_schedulers_fully_enumerated"] is False
+
+
+def test_unavailable_timer_interfaces_do_not_look_empty(tmp_path):
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+        ("unavailable", ""), ("unavailable", ""),
+    ]):
+        report = observer.collect("cpanel", username="zomorod2", home=tmp_path)
+    assert report["user_timers"]["state"] == "unavailable"
+    assert report["system_timers"]["state"] == "unavailable"
+    assert not report["user_timers"]["candidate_units"]
+    assert report["attestation"]["handoff_verified"] is False
+
+
+def test_timer_output_limit_is_explicitly_reported(tmp_path):
+    timer_lines = "unrelated.timer loaded active waiting Test\n" * 1001
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ""), ("observed", ""), ("observed", ""),
+        ("observed", timer_lines), ("observed", ""),
+    ]):
+        report = observer.collect("vps", username="githubops", home=tmp_path)
+    assert report["user_timers"]["enumeration_truncated"] is True
+    assert report["attestation"]["external_schedulers_fully_enumerated"] is False
