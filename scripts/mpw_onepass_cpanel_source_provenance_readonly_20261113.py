@@ -14,6 +14,7 @@ import os
 import pwd
 import re
 import stat
+from html.parser import HTMLParser
 from pathlib import Path
 
 HOME = Path("/home/zomorod2")
@@ -55,6 +56,32 @@ def _safe_read(root: Path, relative: str, limit: int = 240_000):
         return None
 
 
+class StaticCheckoutControlInspector(HTMLParser):
+    """Classify actual input/select/textarea tags, not CSS or HTML comments.
+
+    This is deliberately *not* a Django template renderer and gives no
+    assurance about the effective runtime template or purchase behavior.
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.email_controls = 0
+        self.forms = 0
+        self.post_forms = 0
+
+    def handle_starttag(self, tag, attrs):
+        values = {name.lower(): (value or "").strip().lower()
+                  for name, value in attrs if name}
+        if tag == "form":
+            self.forms += 1
+            if values.get("method") == "post":
+                self.post_forms += 1
+        if tag in ("input", "textarea", "select"):
+            if any("email" in values.get(key, "") for key in
+                   ("name", "id", "type", "autocomplete")):
+                self.email_controls += 1
+
+
 def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     """Use explicit roots in isolated tests; never expose raw file contents."""
     guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
@@ -71,14 +98,24 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     # These are disk-source observations, not proof of Django's effective
     # template selection (which needs a separate owner-gated loader probe).
     template_state = "missing_or_unsafe"
+    template_forms = None
+    template_post_forms = None
+    legacy_label_only = False
     if template is not None:
-        raw = template.lower()
-        email_control = bool(re.search(
-            rb'\b(?:name|id|type|autocomplete)\s*=\s*["\x27]?[^\s>"\x27]*email',
-            raw))
-        known_label = b"mpw-buy-email" in raw
-        template_state = ("email_field_present" if email_control or known_label
-                          else "email_not_found_static_source")
+        try:
+            inspector = StaticCheckoutControlInspector()
+            inspector.feed(template.decode("utf-8"))
+            inspector.close()
+            template_forms = min(inspector.forms, 100)
+            template_post_forms = min(inspector.post_forms, 100)
+            legacy_label_only = (
+                b"mpw-buy-email" in template.lower()
+                and inspector.email_controls == 0
+            )
+            template_state = ("email_field_present" if inspector.email_controls
+                              else "email_not_found_static_source")
+        except (UnicodeError, ValueError):
+            template_state = "unreadable_static_source"
     # Presence on disk does not establish the effective Apache or Passenger
     # routing. Accept the exact *leading* owned rule only, never a duplicate
     # or text merely embedded lower in the file.
@@ -96,6 +133,9 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "guest_source": guest_class,
         "guest_sha256_prefix": guest_hash[:16] if guest else None,
         "template_disk_source": template_state,
+        "template_forms_count_capped": template_forms,
+        "template_post_forms_count_capped": template_post_forms,
+        "template_legacy_email_label_without_control": legacy_label_only,
         "effective_django_template_origin_verified": False,
         "store_view_source_regular": store_view is not None,
         "store_view_sha256_prefix": (hashlib.sha256(store_view).hexdigest()[:16]
