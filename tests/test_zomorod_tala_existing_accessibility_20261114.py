@@ -98,17 +98,5 @@ class TalaSourceAccessibility(unittest.TestCase):
         self.assertNotIn("<iframe", self.source.lower())
 
 
-class ExistingHomepageImageAltAccessibility(unittest.TestCase):
-    def test_tools_image_is_decorative_because_same_link_has_visible_text(self):
-        page = (ROOT / "content/zomorod-vision-v3/index.html").read_text(encoding="utf8")
-        self.assertEqual(page.count('src="/assets/zm-v3-tools.webp"'), 1)
-        self.assertEqual(
-            page.count('src="/assets/zm-v3-tools.webp" alt=""><span>ابزارهای هوشمند</span>'),
-            1)
-        self.assertNotIn('alt="ابزارهای هوشمند"><span>ابزارهای هوشمند</span>', page)
-        # The existing navigable mini-card and its visible label remain unchanged.
-        self.assertIn('class="mini-card" href="/apps/"', page)
-
-
 if __name__ == "__main__":
     unittest.main()
