@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict
 from django.db import transaction
 
 from .agent_registry import AgentRegistry, RISK_ORDER
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import AgentTask, ApprovalGrant, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
 
@@ -143,6 +143,57 @@ class ToolGateway:
                 "Tool invocation already reserved for this execution; "
                 "receipt reconciliation is required before any retry"
             )
+
+        # The canonical bot must have an actual single-use owner grant for
+        # sensitive operations. An approved AgentTask request alone is not
+        # authorization to repeat a payment, publication or deployment.
+        # This check and grant consumption share the task-row transaction with
+        # the invocation reservation. Never acquire a remote lock or dispatch
+        # a provider call before this durable gate succeeds.
+        sensitive = (
+            requires_owner_approval(spec.code, spec.risk)
+            or requires_owner_approval(task.action_type, task.risk_snapshot)
+        )
+        if task.agent.code == "mojtaba-bot-ai" and sensitive:
+            payload = task.input_data
+            grant_id = (
+                payload.get("owner_approval_grant_id")
+                if isinstance(payload, dict) else None
+            )
+            if type(grant_id) is not int or grant_id <= 0:
+                raise ToolGatewayError(
+                    "Canonical sensitive operation requires an exact one-time owner grant"
+                )
+            grant = (
+                ApprovalGrant.objects.select_for_update()
+                .select_related("approval")
+                .filter(pk=grant_id)
+                .first()
+            )
+            if grant is None or (
+                grant.approval.status != "approved"
+                or grant.approval.action_type != normalize_action(task.action_type)
+                or grant.approval.target_type != "AgentTask"
+                or grant.approval.target_id != str(task.pk)
+                or grant.actor_id != grant.approval.requested_by_id
+            ):
+                raise ToolGatewayError(
+                    "Canonical sensitive operation grant has no matching owner approval"
+                )
+            from .approval import ApprovalService
+
+            required_scope = {
+                "action": normalize_action(task.action_type),
+                "agent_task_id": task.pk,
+                "execution_id": task.execution_id,
+                "tool_code": spec.code,
+            }
+            try:
+                ApprovalService().authorize_grant(grant_id, required_scope)
+            except ValueError as exc:
+                raise ToolGatewayError(
+                    "Canonical sensitive operation grant is invalid, expired or consumed"
+                ) from exc
 
         trace_id = f"tool-{task.pk}-{task.execution_id}-{spec.code}"
         AuditLog.objects.create(
