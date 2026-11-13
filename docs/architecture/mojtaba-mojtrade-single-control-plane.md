@@ -231,6 +231,8 @@ symbols:
 
 - Count total account positions against `MaxPositions` (1–3), not
   just labelled Omega X positions.
+- Hold new market orders whenever **any pending order** is present on
+  the account; a pending fill could otherwise breach the shared cap.
 - Refuse to add exposure if any open position is missing its
   broker-confirmed SL or TP, or if numeric/instrument data are invalid.
 - Estimate open-stop risk from the position's own symbol and SL
