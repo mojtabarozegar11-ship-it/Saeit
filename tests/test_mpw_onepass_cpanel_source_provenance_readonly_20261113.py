@@ -87,6 +87,59 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.assertEqual(r["template_disk_source"], "email_not_found_static_source")
         self.assertFalse(r["effective_django_template_origin_verified"])
 
+    def test_email_field_in_html_comment_not_reported_as_control(self):
+        self.template.write_bytes(
+            b'<!-- <input name="email" id="mpw-buy-email"> -->'
+            b'<form method="post"><input name="csrfmiddlewaretoken"></form>')
+        report = self.inspect()
+        self.assertEqual(report["template_disk_source"],
+                         "email_not_found_static_source")
+        self.assertTrue(report["template_legacy_email_label_without_control"])
+        self.assertEqual(report["template_forms_count_capped"], 1)
+        self.assertEqual(report["template_post_forms_count_capped"], 1)
+
+    def test_email_words_in_css_not_counted_as_form_fields(self):
+        self.template.write_bytes(
+            b'<style>.email-label {display:none}</style>'
+            b'<form method="get"><input name="query"></form>')
+        report = self.inspect()
+        self.assertEqual(report["template_disk_source"],
+                         "email_not_found_static_source")
+        self.assertEqual(report["template_post_forms_count_capped"], 0)
+
+    def test_textarea_email_control_detected(self):
+        self.template.write_bytes(
+            b'<form method="post"><textarea name="customer_email"></textarea></form>')
+        report = self.inspect()
+        self.assertEqual(report["template_disk_source"], "email_field_present")
+        self.assertEqual(report["template_post_forms_count_capped"], 1)
+
+    def test_select_email_control_detected(self):
+        self.template.write_bytes(
+            b'<select id="preferred-email"><option>No</option></select>')
+        self.assertEqual(self.inspect()["template_disk_source"],
+                         "email_field_present")
+
+    def test_uppercase_html_email_attribute_detected(self):
+        self.template.write_bytes(b'<INPUT TYPE="EMAIL" ID="BILLING"/>')
+        self.assertEqual(self.inspect()["template_disk_source"],
+                         "email_field_present")
+
+    def test_invalid_utf8_is_not_claimed_email_free(self):
+        self.template.write_bytes(b'<form method="post">\xff</form>')
+        self.assertEqual(self.inspect()["template_disk_source"],
+                         "unreadable_static_source")
+
+    def test_form_counts_are_bounded_and_never_replace_payment_proof(self):
+        self.template.write_bytes(
+            b'<form method="post"><input name="query"></form>' * 120)
+        report = self.inspect()
+        self.assertEqual(report["template_forms_count_capped"], 100)
+        self.assertEqual(report["template_post_forms_count_capped"], 100)
+        self.assertEqual(report["template_disk_source"],
+                         "email_not_found_static_source")
+        self.assertFalse(report["production_invoice_post_verified"])
+
     def test_other_email_control_aliases_are_detected(self):
         for field in (
             b"<input name='buyer_email'>",
