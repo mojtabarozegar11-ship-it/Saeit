@@ -1,0 +1,42 @@
+name: Mojtaba.Bot.Ai compile gate
+
+on:
+  pull_request:
+    paths:
+      - "trading/**"
+      - ".github/workflows/mojtaba-cbot-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        working-directory: trading
+        run: dotnet restore Mojtaba.Bot.Ai.csproj
+
+      - name: Build
+        working-directory: trading
+        run: dotnet build Mojtaba.Bot.Ai.csproj --configuration Release --no-restore
+
+      - name: Verify canonical output
+        working-directory: trading
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f bin/Release/net8.0/Mojtaba.Bot.Ai.algo
+          test ! -e bin/Release/net8.0/MojTradeOmegaXDemoBot.algo
