@@ -377,6 +377,56 @@ Official sources:
 - https://help.ctrader.com/ctrader-algo/references/HTTP/Http/
 - https://help.ctrader.com/ctrader-algo/references/Localstorage/LocalStorage/
 
+## Canonical private XAUUSD H1 setup calculator (new review-cycle module)
+
+The one-bot control plane now owns
+`core/mojtrade_demo_signal.py` and the protected private API:
+
+`POST /api/mojtrade/demo-gold-signal-plan/`
+
+This is **not a second bot**, not a broker adapter and not a trade command.
+A signed-in active superuser must pass a CSRF-protected, bounded JSON payload
+containing *explicitly unverified* DEMO XAUUSD data. The pure calculation
+rejects unknown fields, non-demo accounts, non-XAUUSD symbols, non-H1
+periods, timestamps lacking time zones, future/expired 2-minute snapshots,
+quotes older than 45 seconds, crossed/too-wide spreads, unexpected pip/tick
+sizes, 60–240 closed hourly candles with gaps/overlaps or invalid OHLC,
+and malformed risk or portfolio-exposure values.
+
+With a valid input the module produces a *private analysis preview*:
+
+- EMA8/EMA34 crossover on the last CLOSED H1 bar;
+- 20-prior-candle breakout confirmation in the matching direction;
+- RSI14 Wilder guard and EMA-smoothed ATR14 stop estimate;
+- indicative bid/ask entry, two-ATR protective stop and 1.8×
+  reward-to-risk target on an XAUUSD quote with validated tick/pip units;
+- portfolio cap screening against 0.25% per-trade, 2% daily and 1%
+  open-risk advisory budget through the existing canonical risk module;
+- a SHA-256 digest of the exact normalized input, multilingual FA/EN/AR
+  classification, source/expiry timestamps and explicit no-order status.
+
+No signal is published or delivered. An output price is **not** a broker
+guarantee and not a personalized entry recommendation. Since there is no
+broker-authenticated source receipt, account-currency conversion, lot-size,
+pip-value, actual margin, commission, slippage or pending-order execution
+reconciliation, output always includes:
+
+`broker_data_independently_authenticated=false`,
+`trade_execution_authorized=false`,
+`publication_authorized=false`,
+`order_intent=null`, `orders=0` and
+`levels.order_volume=null`.
+
+If risk is exhausted or pending orders exist, the preview contains **no**
+entry/stop/target levels. Owner-only submissions never create database
+orders/tasks or side effects. They are not a substitute for broker history
+or forward-tested performance. No model/strategy profitability is claimed.
+Before execution, a future authorized broker adapter must first
+authenticate origin of normalized candles/quotes, reconcile cBot parity
+and real contract economics, and obtain a bound per-order owner approval
+and atomic account-wide risk reservation. DEMO execution is still locked
+without this evidence; real funded trading is separately prohibited.
+
 ## Required work before unifying the trading engine
 
 | Gate | Acceptance evidence | Without it |
