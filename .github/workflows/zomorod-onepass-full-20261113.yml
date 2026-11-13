@@ -6,6 +6,7 @@ on:
       - 'scripts/zomorod_onepass_guarded_20261113.py'
       - 'scripts/test_zomorod_onepass_20261113.py'
       - 'scripts/zomorod_fields_guard_20261113.py'
+      - 'deploy/cpanel_direct_command.sh'
       - 'tests/test_zomorod_fields_release_guard.py'
       - '.github/workflows/zomorod-onepass-full-20261113.yml'
   # Validation only. Publishing requires separate, explicitly approved manual execution.
@@ -17,6 +18,32 @@ concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
+  readonly-live-cpanel-baseline:
+    # Host access only on this same-repository owner PR; NEVER on forks.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 2254 && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect production baseline with existing pinned VPS-to-cPanel relay (zero writes)
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Verify exactly reviewed read-only sources before use with deployment credentials.
+          test "$(git hash-object -- scripts/zomorod_fields_guard_20261113.py)" = "82f5ae3c339fecf7a29424424244af9f997c6f91"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "a307024c2229238eda4a8aa9c3531aa70d283291"
+          if [[ -z "$VPS_KEY" || -z "$HOST_KEY" ]]; then
+            echo "ZOMOROD_READONLY_CREDENTIALS_UNAVAILABLE"
+            exit 78
+          fi
+          # SSH stdin is Python source; -B suppresses bytecode; no stage/upload/write/merge.
+          timeout 180s bash deploy/cpanel_direct_command.sh zomorod_fields_audit_live
+          echo "ZOMOROD_ZERO_WRITE_BASELINE_AUDIT_FINISHED"
   validate-and-visual:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
