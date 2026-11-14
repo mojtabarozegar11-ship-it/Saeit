@@ -21,7 +21,7 @@ class CompanyInquiryValidationTests(TestCase):
         }
 
     def submit(self, payload, *, expected_status=422):
-        response = self.client.post(reverse("company"), data=payload)
+        response = self.client.post(reverse("company"), data=payload, HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, expected_status)
         return response
 
