@@ -72,10 +72,52 @@ class TenPlanFundingReadinessTests(SimpleTestCase):
         )}
         x=self.quote("MOJ-PROP-10",cash="40000",reserve="1000",
                      attestations=evidence)
-        self.assertTrue(x.eligible_for_external_legal_review)
+        # All capital/contract attestation booleans cannot override the
+        # owner's explicit temporary hold on Plans 2..10.
+        self.assertFalse(x.eligible_for_external_legal_review)
+        self.assertIn("plan_temporarily_inactive_pending_owner_funding", x.blockers)
         self.assertTrue(x.proposed_fee_not_live)
+        self.assertTrue(x.temporarily_inactive_pending_funding)
+        self.assertFalse(x.owner_declared_funded)
         self.assertFalse(x.checkout_enabled)
         self.assertFalse(x.invoice_created)
+
+    def test_plan_one_owner_declared_active_and_funded_not_equivalent_to_bank_proof(self):
+        decision = self.quote("MOJ-PROP-01", cash="300", reserve="100")
+        self.assertTrue(decision.eligible_for_external_legal_review)
+        self.assertEqual(decision.owner_declared_business_status, "owner_declared_active")
+        self.assertTrue(decision.owner_declared_funded)
+        self.assertFalse(decision.independent_capital_proof_on_record)
+        self.assertFalse(decision.temporarily_inactive_pending_funding)
+        self.assertFalse(decision.checkout_enabled)
+        self.assertFalse(decision.invoice_created)
+        self.assertFalse(decision.trading_enabled)
+
+    def test_all_nine_plans_remain_on_hold_even_with_every_attestation(self):
+        evidence = {key: True for key in (
+            "selected_plan_broker_lot_approved",
+            "selected_plan_customer_terms_approved",
+            "selected_plan_fee_approved",
+        )}
+        for plan in CHALLENGE_PLANS[1:]:
+            with self.subTest(code=plan.code):
+                x = self.quote(plan.code, cash="1000000", reserve="0", attestations=evidence)
+                self.assertIn("plan_temporarily_inactive_pending_owner_funding", x.blockers)
+                self.assertFalse(x.eligible_for_external_legal_review)
+                self.assertFalse(x.checkout_enabled)
+
+    def test_100_dollar_broker_rule_not_applied_to_larger_starts(self):
+        # The 100-USD minimum-lot certification is a Plan 1 contract,
+        # replaced by selected_plan_broker_lot_approved for Plans 2-10.
+        evidence = {"minimum_order_size_compatible_with_100_usd": False,
+                    "selected_plan_broker_lot_approved": True,
+                    "selected_plan_customer_terms_approved": True,
+                    "selected_plan_fee_approved": True}
+        large = self.quote("MOJ-PROP-10", cash="50000", reserve="0", attestations=evidence)
+        self.assertNotIn("minimum_order_size_compatible_with_100_usd", large.blockers)
+        self.assertIn("plan_temporarily_inactive_pending_owner_funding", large.blockers)
+        first = self.quote("MOJ-PROP-01", cash="50000", reserve="0", attestations=evidence)
+        self.assertIn("minimum_order_size_compatible_with_100_usd", first.blockers)
 
     def test_plan10_cohort_estimate_escrows_real_35000_per_passer(self):
         x=estimate_cohort(
