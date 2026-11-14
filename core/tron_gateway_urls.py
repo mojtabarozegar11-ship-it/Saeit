@@ -4,6 +4,7 @@ from . import tron_gateway_web as views
 from .tron_gateway_delivery import download_paid
 
 urlpatterns = [
+    path("", views.catalog, name="tron_gateway_catalog"),
     path("product/<int:product_id>/", views.checkout, name="tron_gateway_checkout"),
     path("email/<str:token>/", views.email_claim, name="tron_gateway_email_confirm"),
     path("invoice/<int:invoice_id>/", views.invoice_page, name="tron_gateway_invoice"),
