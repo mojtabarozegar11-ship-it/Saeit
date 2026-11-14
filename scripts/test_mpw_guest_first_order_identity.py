@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import hmac
+import re
 import secrets
 import sys
 import types
@@ -29,11 +30,12 @@ class Atomic:
 
 class Field:
     unique = True
+    max_length = 254
 
 
 class Meta:
     def get_field(self, name):
-        assert name == "username"
+        assert name in ("username", "email")
         return Field()
 
 
@@ -65,6 +67,7 @@ class User:
 
     def __init__(self, **kwargs):
         self.username = kwargs["username"]
+        self.email = kwargs.get("email", "")
         self.is_active = True
         self.pk = None
         self.unusable = False
@@ -85,7 +88,8 @@ class User:
 
 def install_fake_django():
     for name in ("django", "django.conf", "django.contrib",
-                 "django.contrib.auth", "django.db"):
+                 "django.contrib.auth", "django.db", "django.core",
+                 "django.core.exceptions", "django.core.validators"):
         sys.modules[name] = types.ModuleType(name)
     sys.modules["django.conf"].settings = types.SimpleNamespace(
         SECRET_KEY="regression-test-only"
@@ -93,6 +97,13 @@ def install_fake_django():
     sys.modules["django.contrib.auth"].get_user_model = lambda: User
     sys.modules["django.db"].IntegrityError = IntegrityError
     sys.modules["django.db"].transaction = types.SimpleNamespace(atomic=Atomic)
+    class ValidationError(Exception):
+        pass
+    def validate_email(value):
+        if not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", value):
+            raise ValidationError("Invalid")
+    sys.modules["django.core.exceptions"].ValidationError = ValidationError
+    sys.modules["django.core.validators"].validate_email = validate_email
 
 
 def load_real_functions():
@@ -102,9 +113,9 @@ def load_real_functions():
     functions = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name in ("_guest_username", "_new_user")
+        and node.name in ("_guest_username", "_new_user", "_buyer_email")
     ]
-    assert len(functions) == 2
+    assert len(functions) == 3
     namespace = {
         "hashlib": hashlib, "hmac": hmac, "secrets": secrets,
         "Http404": Http404, "SALT": "isolated-test", "MAX_COOKIE": 512,
@@ -122,25 +133,36 @@ def run():
     global STALE_LOOKUP
     install_fake_django()
     functions = load_real_functions()
-    request = lambda secret: types.SimpleNamespace(
-        META={"CSRF_COOKIE": secret}
-    )
+    def request(secret, email="buyer@domain.org", duplicate=False):
+        return types.SimpleNamespace(
+            META={"CSRF_COOKIE": secret},
+            POST=types.SimpleNamespace(
+                getlist=lambda key: [email, email] if duplicate else [email]
+            ),
+        )
     one, _ = functions["_new_user"](request("A" * 32))
     # Force a stale initial lookup to exercise the concurrent insert conflict.
     STALE_LOOKUP = True
     same, _ = functions["_new_user"](request("A" * 32))
     other, _ = functions["_new_user"](request("B" * 32))
     assert one.pk == same.pk and one.pk != other.pk
+    assert one.email == same.email == other.email == "buyer@domain.org"
     assert len(USERS) == 2
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
-    try:
-        functions["_new_user"](request(""))
-    except Http404:
-        pass
-    else:
-        raise AssertionError("missing CSRF session issued a guest")
-    print("MPW_GUEST_CONCURRENT_ORDER_IDENTITY=PASS;DATABASE_WRITES=0")
+    for invalid_request in (
+        request(""), request("A" * 32, "buyer@another.org"),
+        request("C" * 32, "nonsense"), request("D" * 32, "buyer@example.com"),
+        request("E" * 32, "buyer@domain.org", duplicate=True),
+    ):
+        try:
+            functions["_new_user"](invalid_request)
+        except Http404:
+            pass
+        else:
+            raise AssertionError("unsafe guest buyer input accepted")
+    assert len(USERS) == 2
+    print("MPW_GUEST_CONCURRENT_ORDER_IDENTITY=PASS;DATABASE_WRITES=2;NETWORK=0")
 
 
 if __name__ == "__main__":
