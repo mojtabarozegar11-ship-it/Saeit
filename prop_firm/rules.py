@@ -145,6 +145,8 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     rate = POLICY.phase_one_goal_pct if phase == 1 else POLICY.phase_two_goal_pct
     goal = percent(capital, rate)
     reasons = list(risk.reasons)
+    if risk.allowed is not True:
+        reasons.append("risk_assessment_not_allowed")
     if phase == 2 and prior_phase_passed is not True:
         reasons.append("phase_one_pass_required")
     if evidence_verified is not True:
@@ -175,6 +177,8 @@ def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
     current = LEVELS[level_index]
     nxt = LEVELS[min(level_index + 1, len(LEVELS) - 1)]
     reasons = list(risk.reasons)
+    if risk.allowed is not True:
+        reasons.append("risk_assessment_not_allowed")
     if level_index == len(LEVELS) - 1:
         reasons.append("maximum_level_reached")
     if evidence_verified is not True:
