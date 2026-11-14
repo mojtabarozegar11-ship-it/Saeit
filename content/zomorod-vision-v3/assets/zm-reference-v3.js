@@ -105,6 +105,7 @@
      if(next&&strip.scrollLeft<=-state.period+2)strip.scrollLeft=0;
      strip.scrollBy({left:next?-amount:amount,
        behavior:motionPreference.matches?'instant':'smooth'});
+     state.position=strip.scrollLeft;
    });
    const manualButtons=Array.from(document.querySelectorAll('[data-strip="'+strip.id+'"]'));
    for(const button of manualButtons){
