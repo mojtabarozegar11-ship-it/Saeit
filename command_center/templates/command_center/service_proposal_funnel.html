@@ -26,6 +26,7 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
   </div>
   <nav class="actions">
     <a class="link primary" href="{{ admin_leads_url }}">رسیدگی به درخواست‌ها در CRM</a>
+    <a class="link" href="{{ admin_workitems_url }}">پیگیری ارجاعات اجرایی</a>
     <a class="link" href="{% url 'command_center_service_proposal_funnel_api' %}">داده تجمیعی JSON</a>
     <a class="link" href="{% url 'command_center_dashboard' %}">مرکز فرماندهی</a>
   </nav>
@@ -35,6 +36,10 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
   <article class="metric"><span>منتظر بررسی اولیه</span><strong>{{ funnel.new }}</strong></article>
   <article class="metric"><span>در حال بررسی</span><strong>{{ funnel.reviewing }}</strong></article>
   <article class="metric"><span>پیش‌نویس داخلی آماده</span><strong>{{ funnel.draft_prepared_total }}</strong></article>
+  <article class="metric"><span>ارجاعات اجرایی در کارتابل</span><strong>{{ funnel.workitems_total }}</strong></article>
+  <article class="metric"><span>کارهای در حال پیگیری</span><strong>{{ funnel.workitems_in_progress }}</strong></article>
+  <article class="metric"><span>ارجاعات معوق</span><strong>{{ funnel.workitems_due_now }}</strong></article>
+  <article class="metric"><span>ارجاعات مسدود</span><strong>{{ funnel.workitems_blocked }}</strong></article>
   <article class="metric"><span>درخواست جدید قدیمی‌تر از ۲۴ ساعت</span><strong>{{ funnel.awaiting_initial_review_over_24h }}</strong></article>
   <article class="metric"><span>درخواست در حال بررسی قدیمی‌تر از ۷۲ ساعت</span><strong>{{ funnel.reviewing_over_72h }}</strong></article>
 </section>
@@ -66,7 +71,7 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
 {% if funnel.candidate_scan.scan_limit_reached %}
 <p><strong>هشدار:</strong> جست‌وجو به سقف {{ funnel.candidate_scan.max_records }} رسید. نبود مشتری واجد شرایط در کل پایگاه قابل نتیجه‌گیری نیست؛ پرونده‌های ناقص باید در CRM رسیدگی شوند.</p>
 {% endif %}
-<p><strong>مسیر عملیات:</strong> «رسیدگی به درخواست‌ها در CRM» ← انتخاب حداکثر ۲۰ پرونده ← اقدام «Mojtaba.bot.ai: آماده‌سازی پیش‌نویس داخلی» ← بررسی دامنه و ظرفیت ← قیمت‌گذاری و تأیید جداگانه ← ارتباط مجاز با مشتری.</p>
+<p><strong>مسیر عملیات:</strong> «رسیدگی به درخواست‌ها در CRM» ← انتخاب حداکثر ۲۰ پرونده ← اقدام «Mojtaba.bot.ai: آماده‌سازی پیش‌نویس داخلی» ← ایجاد ارجاع پیگیری در کارتابل با مهلت ۲۴ ساعت ← بررسی دامنه و ظرفیت ← قیمت‌گذاری و تأیید جداگانه ← ارتباط مجاز با مشتری.</p>
 <p>پرداخت وصول‌شده، تأیید سفارش، تحویل محصول و مجوز انتشار عمومی از این پیش‌نویس قابل استنتاج نیست.</p>
 </section>
 </main>
