@@ -12,6 +12,7 @@ from datetime import timedelta
 from django import forms
 from django.conf import settings
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http.request import RawPostDataException
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
@@ -92,9 +93,16 @@ def _request_size_allowed(request):
             return False
         if int(length) > MAX_POST_BYTES:
             return False
-    # Enforce the actual body as well; absent or fake CONTENT_LENGTH is not
-    # sufficient evidence that the incoming payload is within the limit.
-    return len(request.body) <= MAX_POST_BYTES
+        # Django's CSRF middleware may already have parsed a multipart
+        # stream; re-reading .body in that case raises RawPostDataException.
+        cached = getattr(request, "_body", None)
+        return cached is None or len(cached) <= MAX_POST_BYTES
+    # Missing or malformed transfer length: fail closed if the CSRF/form
+    # parser already consumed the underlying request stream.
+    try:
+        return len(request.body) <= MAX_POST_BYTES
+    except RawPostDataException:
+        return False
 
 
 def _host_allowed(request):
