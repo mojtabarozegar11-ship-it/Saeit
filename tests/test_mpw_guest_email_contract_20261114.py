@@ -39,12 +39,12 @@ def fake_django():
     return modules
 
 
-def source_function(name, injected=None):
-    parsed = ast.parse(SOURCE.read_text(encoding="utf8"))
+def source_function(name, injected=None, source=SOURCE):
+    parsed = ast.parse(source.read_text(encoding="utf8"))
     node = next(n for n in parsed.body if isinstance(n, ast.FunctionDef) and n.name == name)
     namespace = {"Http404": Http404, "hmac": hmac}
     namespace.update(injected or {})
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE), "exec"), namespace)
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), "exec"), namespace)
     return namespace[name]
 
 
@@ -142,6 +142,45 @@ class GuestInvoiceIdentityTests(unittest.TestCase):
         self.user = types.SimpleNamespace(username="existing_account", email="alice@buyer.org")
         self.assertIs(self.dispatch(request_values(), self.view, (), {}, create=True),
                       self.response)
+
+
+
+class CheckoutReleaseFormTests(unittest.TestCase):
+    """Reject a live release if the rendered checkout lacks its buyer email input."""
+
+    def setUp(self):
+        release = SOURCE.parents[1] / "scripts/mpw_guest_checkout_live_release.py"
+        self.check = source_function("has_buyer_email_form", source=release)
+
+    def test_accepts_required_email_in_post_form(self):
+        self.assertTrue(self.check(
+            '<form method="POST" action="/invoice/start/">'
+            '<input name="email" type="email" required></form>'
+        ))
+
+    def test_rejects_missing_email_field(self):
+        self.assertFalse(self.check(
+            '<form method="POST"><input name="name" required></form>'
+        ))
+
+    def test_rejects_disabled_field(self):
+        self.assertFalse(self.check(
+            '<form method="post"><input type="email" name="email" required disabled></form>'
+        ))
+
+    def test_rejects_email_outside_post_form(self):
+        self.assertFalse(self.check(
+            '<input type="email" name="email" required>'
+            '<form method="GET"><input type="email" name="email" required></form>'
+        ))
+
+    def test_rejects_optional_or_non_email_input(self):
+        for html in (
+            '<form method="post"><input type="email" name="email"></form>',
+            '<form method="post"><input type="text" name="email" required></form>',
+        ):
+            with self.subTest(html=html):
+                self.assertFalse(self.check(html))
 
 
 if __name__ == "__main__":
