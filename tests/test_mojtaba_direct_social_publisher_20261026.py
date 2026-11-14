@@ -61,6 +61,13 @@ class DirectSocialPublishingTests(unittest.TestCase):
         with self.assertRaises(pub.PublicationBlocked):
             pub.readiness(job(platform="discord", destination="https://discord.com"), env())
 
+    def test_ban_on_page_brand_and_metricool_numeric_alias_even_when_approved(self):
+        for token in ("7317306", "102203064721826", "dr.mojtaba.rozegar"):
+            with self.assertRaises(pub.PublicationBlocked):
+                pub.readiness(job(text="A post targeting "+token),env())
+            with self.assertRaises(pub.PublicationBlocked):
+                pub.readiness(job(destination=token),env())
+
     def test_no_external_call_when_unapproved(self):
         with tempfile.TemporaryDirectory() as d:
             called = []
