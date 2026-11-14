@@ -75,7 +75,14 @@ ROUTES = (
     "autonomous_master_loop",
     "SAEIT_MOJTRADE_OBSERVER_V1",
 )
-CRON_TOKENS = re.compile(r"^[0-9*/?,LW#-]{1,40}$", re.IGNORECASE)
+# Standard crontab may use named months/weekdays (JAN, MON-FRI). Their
+# omission would silently hide scheduled legacy workers in the host census.
+# Keep an explicit allowlist rather than accepting arbitrary alphabetic tokens.
+CRON_TOKENS = re.compile(
+    r"^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|"
+    r"mon|tue|wed|thu|fri|sat|sun)|[0-9*/?,lw#-]){1,40}$",
+    re.IGNORECASE,
+)
 # These are standard crontab shortcut schedules, not comments. Omitting them
 # silently hides possible legacy workers from a retirement readiness review.
 CRON_MACROS = frozenset({
