@@ -17,6 +17,8 @@
     <p><strong>مناسب برای:</strong> {{ offer.customer }}</p>
     <p><strong>دامنه درخواست:</strong> بررسی امکان ارائه خدمت است، نه سفارش قطعی یا قرارداد.</p>
     <a href="{{ contact.contact_url }}" class="scope-primary-cta" style="display:inline-block;padding:.8rem 1.2rem;background:#15584d;color:white;border-radius:.6rem;text-decoration:none">ثبت استعلام اولیه در فرم رسمی شرکت</a>
+    <p><a class="scope-email-fallback" href="{{ optional_company_email }}">راه دیگر: ایمیل اختیاری به شرکت با موضوع این خدمت</a></p>
+    <p><small>این لینک فقط نرم‌افزار ایمیل شما را باز می‌کند؛ از این صفحه پیام خودکار ارسال نمی‌شود. رمزها و اطلاعات پرداخت را در ایمیل قرار ندهید.</small></p>
     {% if not service_form_active %}
     <p style="font-size:.9rem">فرم اصلی فعال شرکت روی مسیر موجود PHP قرار دارد. برای تشخیص خدمت در توضیحات فرم، کد <strong>{{ service_scope_code }}</strong> را درج کنید. این صفحه مشخصات شخصی شما را ذخیره نمی‌کند.</p>
     {% endif %}
