@@ -59,6 +59,11 @@ def new_desk_token():
 
 
 class _VersionedActionForm(forms.Form):
+    def __init__(self, *args, case_kind=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if case_kind is not None and "service_code" in self.fields:
+            self.fields["service_code"].choices = SERVICE_BY_KIND.get(case_kind, ())
+
     request_token = forms.RegexField(
         regex=r"^[0-9a-f]{32}$", min_length=32, max_length=32,
         widget=forms.HiddenInput,
