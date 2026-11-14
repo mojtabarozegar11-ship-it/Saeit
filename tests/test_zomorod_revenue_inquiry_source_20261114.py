@@ -70,7 +70,7 @@ class RevenueInquirySource(unittest.TestCase):
         self.assertIn("قیمت، ظرفیت تولید و تحویل هنوز قطعی نیستند",self.cafe)
         self.assertIn("فرم پرداخت یا تعهد قطعی تأمین ندارد",self.cafe)
 
-    def test_preserve_templates_and_homepage():
+    def test_preserve_templates_and_homepage(self):
         for p in ("public/index.html","core/templates/base.html"):
             s=read(p)
             self.assertNotIn("ZM_OFFICIAL_INQUIRY_ACTION_GUARD_20261114",s)
