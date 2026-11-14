@@ -33,8 +33,9 @@ class AutonomousBrain:
         # income_market_research tool records `database_measurement` only.
         # Keep that useful inventory step, but do not promote it to proof of
         # external demand or allow it to unlock speculative offer creation.
-        latest_inventory = prerequisite_tasks.filter(
+        latest_inventory = economic_tasks.filter(
             capability_code="income_market_research",
+            status="completed",
             output_data__evidence__kind="database_measurement",
         ).order_by("-created_at", "-pk").first()
         latest_research = prerequisite_tasks.filter(
