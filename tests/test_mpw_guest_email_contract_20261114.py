@@ -256,14 +256,16 @@ class CheckoutReleaseFormTests(unittest.TestCase):
 
     def test_rendered_form_requires_csrf_in_same_form(self):
         valid = ('<form method="post" action="/commerce/trx-easy/start/72/">'
-                 '<input type="hidden" name="csrfmiddlewaretoken" value="token">'
+                 '<input type="hidden" name="csrfmiddlewaretoken" value="' 
+                 + "A"*64 + '">'
                  '<input type="email" name="email" required></form>')
         self.assertTrue(self.check(valid, require_csrf=True))
         self.assertFalse(self.check(
             valid.replace('name="csrfmiddlewaretoken"', 'name="not_csrf"'),
             require_csrf=True))
         with_other = ('<form method="post" action="/commerce/trx-easy/start/73/">'
-                      '<input type="hidden" name="csrfmiddlewaretoken"></form>'
+                      '<input type="hidden" name="csrfmiddlewaretoken" value="' 
+                      + "A"*64 + '"></form>'
                       '<form method="post" action="/commerce/trx-easy/start/72/">'
                       '<input name="email" type="email" required></form>')
         self.assertFalse(self.check(
@@ -279,6 +281,45 @@ class CheckoutReleaseFormTests(unittest.TestCase):
         self.assertTrue(self.check(
             markup.replace('<input type="email"', '{% csrf_token %}<input type="email"'),
             require_source_csrf=True))
+
+
+    def test_rejects_short_blank_or_duplicate_rendered_csrf(self):
+        form_open = '<form method="post" action="/commerce/trx-easy/start/72/">'
+        email = '<input type="email" name="email" required>'
+        csrf = lambda val: ('<input type="hidden" name="csrfmiddlewaretoken" '
+                            'value="' + val + '">')
+        for val in ("", "short", " " * 64):
+            with self.subTest(value=repr(val)):
+                self.assertFalse(self.check(form_open + csrf(val) + email + '</form>',
+                                            require_csrf=True))
+        self.assertFalse(self.check(
+            form_open + csrf("A"*64) + csrf("B"*64) + email + '</form>',
+            require_csrf=True))
+
+    def test_rejects_csrf_token_outside_invoice_form(self):
+        markup = ('<form method="post" action="/commerce/trx-easy/start/73/">'
+                  '<input type="hidden" name="csrfmiddlewaretoken" value="' +
+                  "A"*64 + '"></form>'
+                  '<form method="post" action="/commerce/trx-easy/start/72/">'
+                  '<input type="email" name="email" required></form>')
+        self.assertFalse(self.check(markup,
+                                    expected_action="/commerce/trx-easy/start/72/",
+                                    require_csrf=True))
+
+    def test_source_allows_only_product_id_or_pk_placeholders(self):
+        for variable in ("{{ product.pk }}", "{{product.id}}"):
+            form = ('<form method="post" action="/commerce/trx-easy/start/'
+                    + variable + '/">{% csrf_token %}'
+                    '<input type="email" name="email" required></form>')
+            with self.subTest(variable=variable):
+                self.assertTrue(self.check(form, require_source_csrf=True))
+                self.assertFalse(self.check(form, require_csrf=True))
+        for variable in ("{{ user.id }}", "{{ product.slug }}", "{{ next }}"):
+            form = ('<form method="post" action="/commerce/trx-easy/start/'
+                    + variable + '/">{% csrf_token %}'
+                    '<input type="email" name="email" required></form>')
+            with self.subTest(variable=variable):
+                self.assertFalse(self.check(form, require_source_csrf=True))
 
 
 
@@ -357,6 +398,14 @@ class CheckoutSourcePreflightTests(unittest.TestCase):
             encoding="utf8")
         with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
             self.preflight()
+
+    def test_preflight_accepts_canonical_django_product_placeholder(self):
+        self.template.write_text(
+            '<form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/">'
+            '{% csrf_token %}<input name="email" type="email" required>'
+            '</form>', encoding="utf8")
+        self.assertEqual(self.preflight(),
+                         hashlib.sha256(self.template.read_bytes()).hexdigest())
 
     def test_preflight_rejects_symlink(self):
         external = self.app / "external-template.html"
