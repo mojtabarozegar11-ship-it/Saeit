@@ -7,6 +7,12 @@ on:
       - 'tests/test_zomorod_interior_olive_source_20261114.py'
       - 'public/tala/index.html'
       - 'public/amozeshgah/index.html'
+      - 'public/ghanadi/index.html'
+      - 'public/ghanadi/cafe-shiraz/index.html'
+      - 'core/templates/core/ghanadi.html'
+      - 'core/templates/core/auctions.html'
+      - 'tests/test_zomorod_interiors_olive_expanded_20261114.py'
+      - 'scripts/zomorod_inner_live_css_attestation_20261114.py'
       - 'content/zomorod-v7/inner-v7.css'
       - '.github/workflows/zomorod-interior-palette-readonly-20261114.yml'
 permissions:
@@ -30,6 +36,16 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_zomorod_interior_olive_source_20261114.py' -v
+      - name: Verify Ghanadi, cafe and auctions existing-page color invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_interiors_olive_expanded_20261114.py' -v
+      - name: GET-only public CSS marker visibility check (no deploy)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/zomorod_inner_live_css_attestation_20261114.py
       - name: Simulate uniform olive CSS in browser ONLY
         shell: bash
         run: |
@@ -48,5 +64,6 @@ jobs:
           path: |
             ${{ runner.temp }}/zm-interior-olive-palette-readonly/
             ${{ runner.temp }}/zm-interior-palette-rehearsal/
+            ${{ runner.temp }}/zm-interior-css-attestation/
           retention-days: 7
           if-no-files-found: warn
