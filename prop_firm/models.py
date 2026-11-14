@@ -399,6 +399,7 @@ class PropSocialEvidence(models.Model):
             reviewed = aware_utc(self.reviewed_at, "reviewed_at")
             if (reviewed < published + timedelta(days=DURATION_DAYS)
                     or not self.reviewed_by_id
+                    or self.reviewed_by.is_staff is not True
                     or self.reviewed_by_id == self.account.trader.user_id
                     or not all((
                         self.author_verified, self.public_visible,
