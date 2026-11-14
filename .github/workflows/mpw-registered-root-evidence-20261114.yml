@@ -1,0 +1,70 @@
+name: MPW redacted registered Passenger root discovery — offline source only
+on:
+  push:
+    branches: [fix/mpw-registered-passenger-root-discovery-20261114]
+  pull_request:
+    branches: [fix/mpw-cpanel-source-provenance-bridge-only-20261114]
+permissions:
+  contents: read
+jobs:
+  source-evidence-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile all source-only inspectors and validate relay syntax
+        run: |
+          python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+          python3 -m py_compile scripts/mpw_readonly_app_root_evidence_join_20261114.py
+          bash -n deploy/cpanel_direct_command.sh
+      - name: Run all 70 new neighbor scan and evidence join regressions
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_passenger_neighbor_root_discovery_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_readonly_app_root_evidence_join_20261114.py' -v
+      - name: Retest existing provenance and pinned owner-only bridge safety
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_dispatch_boundaries_20261114.py' -v
+      - name: Assert actual SHA1 git blob is pinned in both SSH handlers
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          source=Path('scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py').read_bytes()
+          blob=hashlib.sha1(b'blob '+str(len(source)).encode()+b'\0'+source).hexdigest()
+          sh=Path('deploy/cpanel_direct_command.sh').read_text()
+          assert sh.count(blob)==2
+          assert sh.count('MPW_READONLY_SOURCE_NOT_PINNED')==2
+          assert 'StrictHostKeyChecking yes' in sh
+          assert 'CPANEL_DIRECT_OPERATION_DENIED' in sh
+          print('PINNED_READONLY_PROVENANCE=PASS; SSH_EXECUTION=NOT_ATTEMPTED')
+          PY
+      - name: Verify candidate match never authorizes commerce
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from scripts.mojplaywin_cpanel_readonly_inventory import sanitize
+          from scripts.mpw_readonly_app_root_evidence_join_20261114 import compare
+          root='/synthetic/demo'
+          fp=hashlib.sha256(root.encode()).hexdigest()[:16]
+          uapi=sanitize({'result':{'status':1,'data':[{'domain':'mojplaywin.com','base_uri':'/','app_root':root}]}})
+          source={'schema':'mpw.cpanel.source_provenance.readonly.v1',
+            'customer_data_read':False,'database_accessed':False,'files_modified':False,
+            'production_release_permitted_by_this_report':False,
+            'neighbor_root_fingerprints':{'status':'bounded_immediate_home_scan',
+             'candidate_count':1,'release_permitted':False,
+             'effective_passenger_worker_attested':False,
+             'candidates':[{'root_sha256_prefix':fp,'marker_class':'wsgi_marker_only',
+                            'registered_root_verified':False,'effective_checkout_verified':False}]}}
+          r=compare(uapi,source)
+          assert r['root_registration_source_correspondence_only']
+          assert not r['effective_passenger_worker_verified']
+          assert not r['effective_checkout_template_verified']
+          assert not r['payment_finality_verified']
+          assert not r['release_permitted']
+          assert r['actual_collected_revenue'] is None
+          print('SOURCE_FINGERPRINT_MATCH=CORROBORATIVE_ONLY; RELEASE=NO-GO')
+          PY

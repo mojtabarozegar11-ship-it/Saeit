@@ -93,7 +93,7 @@ EOF
     mpw_source_provenance)
     test -f scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     test ! -L scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
-    test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "f93556203417399e6c099f182cddea4432260532" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
+    test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "13e81eba1c76f9693638faa1a88686ffba816930" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
     PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
       < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     ;;
@@ -162,7 +162,7 @@ case "$operation" in
   mpw_source_provenance)
     test -f scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     test ! -L scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
-    test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "f93556203417399e6c099f182cddea4432260532" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
+    test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "13e81eba1c76f9693638faa1a88686ffba816930" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
     PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
       < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     ;;

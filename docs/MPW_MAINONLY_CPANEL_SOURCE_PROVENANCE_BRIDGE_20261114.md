@@ -8,7 +8,7 @@ The currently deployed `main` does not advertise `mpw_source_provenance` in the 
 ## Scope
 - Adds **one** allowlisted `mpw_source_provenance` operation to the already existing main-only `workflow_dispatch` choices; no new broad SSH commands or elevated capabilities.
 - Corrects only the known cPanel connection hostname, retaining the pinned expected ed25519 key fingerprint, `StrictHostKeyChecking yes`, no agent forwarding and a one-hourly owner-controlled run model.
-- Streams one exact immutable Git blob (pin `f93556203417399e6c099f182cddea4432260532`) to `python3 -B -` on the existing cPanel account; no source copied to server, no imports of Django, no SQL, payments, email or mutations.
+- Streams one exact immutable Git blob (pin `13e81eba1c76f9693638faa1a88686ffba816930`) to `python3 -B -` on the existing cPanel account; no source copied to server, no imports of Django, no SQL, payments, email or mutations.
 - Exposes redacted category labels and 16-character file digest prefixes, never raw paths, customer information or credentials.
 - The PR's own GitHub Actions uses only `ubuntu-latest` with `contents:read`; it does NOT access or authenticate to the owner's cPanel. The remote operation cannot run from a PR; requires manual workflow dispatch **from main after a separately authorized merge**.
 
@@ -34,7 +34,7 @@ addresses, raw forms, server paths or credentials are disclosed. The
 categories still only describe **disk source**, not active Passenger
 routing, Django rendering, customer checkout or payment settlement.
 
-The exact reviewed Git blob is `f93556203417399e6c099f182cddea4432260532`, pinned in **both existing
+The exact reviewed Git blob is `13e81eba1c76f9693638faa1a88686ffba816930`, pinned in **both existing
 cPanel SSH routes**. The previous pin is superseded; the pin
 verification itself remains mandatory and fail-closed.
 
@@ -42,3 +42,7 @@ verification itself remains mandatory and fail-closed.
 - [New 54 negative cases + 6 positive/source tests](https://github.com/mojtabarozegar11-ship-it/Saeit/blob/fix/mpw-cpanel-source-provenance-bridge-only-20261114/tests/test_mpw_cpanel_email_source_integrity_20261114.py).
 - Owner acceptance still requires authenticated, read-only cPanel source/Passenger inventory, followed by explicit release approval; this PR cannot run a private cPanel operation from a PR ref.
 - **Commercial and live impact remains unknown**: zero newly authorized customer POSTs, mail sends, purchases, DB writes, payment transfers or deployments were performed.
+
+
+## Cycle 10 — bounded, redacted immediate-home candidate inventory
+The existing pinned `mpw_source_provenance` command now also scans at most **96 immediate non-symlink entries** inside the authorized cPanel account's home and reports at most **16 source candidates** as SHA256[:16] fingerprints and fixed marker categories. It checks only file metadata for WSGI, Django and two commerce modules; it **never reads neighboring apps' source file contents**, prints directory names, or emits full paths. Any budget excess or unsafe root returns no candidate list. Candidate identity can be compared *offline* against the UAPI's separately redacted `app_root_fingerprint`, but neither matching nor absence certifies the live Passenger worker, Django view, template, payments, revenue, or permission to release. The Git blob at both read-only relay hops is now pinned to `13e81eba1c76f9693638faa1a88686ffba816930`. No cPanel remote command was executed during this code change.
