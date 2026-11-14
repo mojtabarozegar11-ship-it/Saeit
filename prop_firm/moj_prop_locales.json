@@ -72,6 +72,14 @@
         "title": "50 verified trades",
         "body": "At least 50 distinct, verified, closed trades across BOTH challenge stages, within 28 days from confirmed purchase. Not 50 per stage. The six trading-day minimum per stage still applies.",
         "bots": "Trader-owned trading bots and manual trading are both allowed, provided the broker or simulator permits them and all risk, anti-manipulation and verification rules are met. Automated activity does not guarantee profits or live access."
+      },
+      "plans": {
+        "title": "Choose from 10 MOJ PROP plans",
+        "body": "All ten share the same 28-day, two-stage, 50-verified-trade and social-proof rules. Only proposed starting funded capital and proposed TRX entry fee vary.",
+        "starting": "Starting capital after conditional approval",
+        "fee": "Proposed entry",
+        "maximum": "Maximum planned tier",
+        "notice": "Pre-launch estimates only. No checkout and no guaranteed funded account."
       }
     },
     "fa": {
@@ -144,6 +152,14 @@
         "title": "حداقل ۵۰ معامله معتبر",
         "body": "در مجموع هر دو مرحله چالش، حداقل ۵۰ معامله مستقل، بسته‌شده و تأییدشده باید در ۲۸ روز از خرید معتبر انجام شود؛ نه ۵۰ معامله برای هر مرحله. حداقل ۶ روز معاملاتی در هر مرحله برقرار است.",
         "bots": "ربات معاملاتی شخصی معامله‌گر و معاملات دستی هر دو مجازند، مشروط به پذیرش کارگزار یا شبیه‌ساز و رعایت تمام مقررات ریسک، منع معاملات ساختگی و اعتبارسنجی. استفاده از ربات تضمین سود یا دسترسی واقعی نیست."
+      },
+      "plans": {
+        "title": "انتخاب از ۱۰ پلن مج پراپ",
+        "body": "تمام ده پلن دارای قوانین مشترک ۲۸ روز، دو مرحله، ۵۰ معامله معتبر و دو پست اجتماعی هستند. فقط سرمایه شروع مشروط و هزینه ورود پیشنهادی تفاوت دارد.",
+        "starting": "سرمایه شروع پس از تأیید مشروط",
+        "fee": "ورودیه پیشنهادی",
+        "maximum": "بالاترین سطح برنامه‌ریزی‌شده",
+        "notice": "پیشنهاد پیش از راه‌اندازی؛ بدون امکان خرید و بدون تضمین سرمایه."
       }
     },
     "ar": {
@@ -216,6 +232,14 @@
         "title": "الحد الأدنى 50 صفقة موثقة",
         "body": "يلزم إتمام 50 صفقة مغلقة ومستقلة وموثّقة على الأقل خلال المرحلتين معاً، في 28 يوماً من الشراء المؤكد؛ وليس 50 صفقة في كل مرحلة. يبقى شرط ستة أيام تداول لكل مرحلة.",
         "bots": "يسمح بالتداول اليدوي وبروبوتات التداول التي يملكها المتداول إذا سمح بها الوسيط أو المحاكي والتزم الجميع بمخاطر التداول ومنع التلاعب والتوثيق. لا يضمن الروبوت الربح أو الحساب الحقيقي."
+      },
+      "plans": {
+        "title": "اختر من 10 خطط MOJ PROP",
+        "body": "تشترك الخطط العشر في 28 يوماً ومرحلتين و50 صفقة موثقة ومنشورين اجتماعيين. تختلف فقط رسوم الدخول المقترحة ورأس المال الأولي المشروط.",
+        "starting": "رأس المال الأولي بعد الموافقة",
+        "fee": "رسوم الدخول المقترحة",
+        "maximum": "الحد المخطط",
+        "notice": "تقديرات قبل الإطلاق؛ لا شراء ولا تمويل مضمون."
       }
     },
     "de": {
@@ -288,6 +312,14 @@
         "title": "Mindestens 50 geprüfte Trades",
         "body": "In beiden Challenge-Phasen zusammen sind innerhalb von 28 Tagen ab bestätigtem Kauf mindestens 50 verschiedene, abgeschlossene und verifizierte Trades nötig – nicht 50 pro Phase. Mindestens sechs Handelstage pro Phase bleiben Pflicht.",
         "bots": "Manuelles Trading und eigene Trading-Bots sind erlaubt, sofern Broker oder Simulator dies gestatten und Risiko-, Manipulations- und Nachweisregeln eingehalten werden. Bots garantieren weder Gewinne noch ein Echtgeldkonto."
+      },
+      "plans": {
+        "title": "Wählen Sie aus 10 MOJ PROP Plänen",
+        "body": "Alle Pläne haben dieselben 28 Tage, zwei Phasen, 50 bestätigte Trades und zwei Social-Media-Posts. Nur Startkapital und TRX-Gebühr unterscheiden sich.",
+        "starting": "Bedingtes Startkapital",
+        "fee": "Vorgeschlagene Gebühr",
+        "maximum": "Geplantes Maximum",
+        "notice": "Nur vorläufige Pläne. Kein Checkout, keine Finanzierungsgarantie."
       }
     },
     "fr": {
@@ -360,6 +392,14 @@
         "title": "Au moins 50 opérations vérifiées",
         "body": "Au moins 50 opérations distinctes, clôturées et vérifiées doivent être réalisées au total sur les deux phases, dans les 28 jours suivant l'achat confirmé, et non 50 par phase. Un minimum de six jours de trading par phase reste requis.",
         "bots": "Le trading manuel et les robots du participant sont autorisés si le courtier ou le simulateur le permet et si toutes les règles de risque, de lutte contre la manipulation et de vérification sont respectées. Aucun gain n'est garanti."
+      },
+      "plans": {
+        "title": "Choisissez parmi 10 formules MOJ PROP",
+        "body": "Les dix formules partagent 28 jours, deux étapes, 50 opérations vérifiées et deux publications sociales. Seuls le capital initial conditionnel et les frais TRX proposés changent.",
+        "starting": "Capital initial conditionnel",
+        "fee": "Frais d'entrée proposés",
+        "maximum": "Plafond prévu",
+        "notice": "Offres préliminaires. Aucun paiement ni financement garanti."
       }
     },
     "es": {
@@ -432,6 +472,14 @@
         "title": "Mínimo 50 operaciones verificadas",
         "body": "Se exigen al menos 50 operaciones distintas, cerradas y verificadas en ambas fases combinadas, dentro de los 28 días posteriores a la compra confirmada, no 50 por fase. Siguen siendo obligatorios seis días de trading por fase.",
         "bots": "Se permiten operaciones manuales y bots propios del participante si el corredor o simulador los admite y se respetan las reglas de riesgo, antifraude y verificación. Un bot no garantiza ganancias ni acceso real."
+      },
+      "plans": {
+        "title": "Elija entre 10 planes MOJ PROP",
+        "body": "Los diez planes comparten 28 días, dos etapas, 50 operaciones verificadas y dos publicaciones sociales. Solo cambian el capital inicial condicional y la tarifa TRX propuesta.",
+        "starting": "Capital inicial condicional",
+        "fee": "Tarifa de entrada propuesta",
+        "maximum": "Máximo previsto",
+        "notice": "Planes preliminares, sin cobros ni financiación garantizada."
       }
     },
     "pt": {
@@ -504,6 +552,14 @@
         "title": "Mínimo de 50 operações verificadas",
         "body": "São necessárias pelo menos 50 operações distintas, encerradas e verificadas nas duas fases juntas, nos 28 dias após a compra confirmada; não 50 por fase. Continuam obrigatórios seis dias de negociação por fase.",
         "bots": "Negociação manual e bots próprios são permitidos quando o corretor ou simulador autorizar e as regras de risco, antimanipulação e verificação forem respeitadas. Bots não garantem ganhos ou conta real."
+      },
+      "plans": {
+        "title": "Escolha entre 10 planos MOJ PROP",
+        "body": "Os dez planos seguem 28 dias, duas etapas, 50 negociações verificadas e duas publicações sociais. Só variam o capital inicial condicional e a taxa TRX proposta.",
+        "starting": "Capital inicial condicional",
+        "fee": "Taxa de entrada proposta",
+        "maximum": "Máximo planejado",
+        "notice": "Planos preliminares; sem pagamento ou financiamento garantido."
       }
     },
     "it": {
@@ -576,6 +632,14 @@
         "title": "Almeno 50 operazioni verificate",
         "body": "Occorrono almeno 50 operazioni distinte, chiuse e verificate in totale nelle due fasi, entro 28 giorni dall'acquisto confermato, non 50 per fase. Restano necessari almeno sei giorni di trading per fase.",
         "bots": "Sono ammessi trading manuale e bot propri del partecipante se il broker o simulatore lo consente e se sono rispettate le regole su rischio, manipolazione e verifica. I bot non garantiscono profitti o accesso reale."
+      },
+      "plans": {
+        "title": "Scegli tra 10 piani MOJ PROP",
+        "body": "Tutti i piani prevedono 28 giorni, due fasi, 50 operazioni verificate e due post social. Cambiano solo il capitale iniziale condizionato e la quota TRX proposta.",
+        "starting": "Capitale iniziale condizionato",
+        "fee": "Costo d'ingresso proposto",
+        "maximum": "Massimo previsto",
+        "notice": "Piani preliminari: nessun pagamento o capitale garantito."
       }
     },
     "tr": {
@@ -648,6 +712,14 @@
         "title": "En az 50 doğrulanmış işlem",
         "body": "Onaylı satın alımdan sonraki 28 günde iki aşamanın toplamında en az 50 ayrı, kapatılmış ve doğrulanmış işlem gerekir; her aşama için 50 değil. Aşama başına en az altı işlem günü şartı sürer.",
         "bots": "Aracı kurum veya simülatör izin veriyorsa ve risk, manipülasyon yasağı ile doğrulama kurallarına uyuluyorsa hem manuel işlemler hem yatırımcının kendi botları kabul edilir. Botlar kazanç veya gerçek hesap garantisi değildir."
+      },
+      "plans": {
+        "title": "10 MOJ PROP planından birini seçin",
+        "body": "On planın tamamında 28 gün, iki aşama, 50 doğrulanmış işlem ve iki sosyal gönderi şartı aynıdır. Yalnızca koşullu başlangıç sermayesi ve önerilen TRX ücreti değişir.",
+        "starting": "Koşullu başlangıç sermayesi",
+        "fee": "Önerilen giriş ücreti",
+        "maximum": "Planlanan en yüksek tutar",
+        "notice": "Ön lansman planıdır; ödeme ve sermaye garantisi yoktur."
       }
     },
     "ru": {
@@ -720,6 +792,14 @@
         "title": "Не менее 50 подтверждённых сделок",
         "body": "Нужно минимум 50 отдельных, закрытых и подтверждённых сделок суммарно за оба этапа в течение 28 дней после подтверждённой покупки, а не по 50 на этап. Минимум шесть торговых дней на каждый этап сохраняется.",
         "bots": "Ручная торговля и собственные боты трейдера разрешены, если их допускает брокер или симулятор и выполняются правила риска, противодействия манипуляциям и проверки. Боты не гарантируют доход."
+      },
+      "plans": {
+        "title": "Выберите один из 10 планов MOJ PROP",
+        "body": "У всех десяти планов одинаковые 28 дней, два этапа, 50 проверенных сделок и два поста. Различаются лишь условный начальный капитал и предлагаемая цена в TRX.",
+        "starting": "Условный стартовый капитал",
+        "fee": "Предлагаемый взнос",
+        "maximum": "Плановый максимум",
+        "notice": "Предварительные планы без оплаты и гарантии финансирования."
       }
     },
     "zh": {
@@ -792,6 +872,14 @@
         "title": "至少50笔已核验交易",
         "body": "在确认购买后的28天内，两个挑战阶段合计至少完成50笔不同的、已平仓且经核验的交易；不是每阶段50笔。每个阶段至少六个交易日的要求不变。",
         "bots": "允许手动交易和交易者自有的交易机器人，但须获得经纪商或模拟平台许可，并遵守风险、防操纵和核验规则。机器人不保证利润或真实账户资格。"
+      },
+      "plans": {
+        "title": "选择10种MOJ PROP方案",
+        "body": "全部十种方案均采用28天、两个阶段、50笔已核验交易及两条社交帖子规则。仅附条件的初始资金和拟定TRX费用不同。",
+        "starting": "附条件的初始资金",
+        "fee": "拟定报名费用",
+        "maximum": "计划最高级别",
+        "notice": "仅为预上线方案，暂不收款，也不保证提供资金。"
       }
     },
     "ja": {
@@ -864,6 +952,14 @@
         "title": "最低50件の確認済み取引",
         "body": "購入確認から28日以内に、2段階合計で異なる決済済み・確認済み取引を最低50件行う必要があります。各段階50件ではありません。各段階最低6取引日の条件は維持されます。",
         "bots": "手動取引および参加者自身の取引ボットは、ブローカーやシミュレーターが許可し、リスク・不正操作防止・検証規則を守る場合に認めます。利益や実口座を保証しません。"
+      },
+      "plans": {
+        "title": "10種類のMOJ PROPプラン",
+        "body": "全10プランとも28日間、2段階、確認済み取引50件、SNS投稿2件が共通です。異なるのは条件付き初期資金と提案中のTRX参加費のみです。",
+        "starting": "条件付き初期資金",
+        "fee": "提案参加費",
+        "maximum": "予定上限",
+        "notice": "公開前の案です。決済はできず、資金提供を保証しません。"
       }
     },
     "ko": {
@@ -936,6 +1032,14 @@
         "title": "확인된 거래 최소 50건",
         "body": "구매 확인 후 28일 이내에 두 단계 전체에서 각각 독립적으로 청산되고 검증된 거래가 최소 50건 필요합니다. 단계마다 50건이 아닙니다. 각 단계 최소 6거래일 요건은 유지됩니다.",
         "bots": "수동 거래와 참가자 본인의 거래 봇은 중개사 또는 시뮬레이터가 허용하고 위험·조작 방지·검증 규칙을 지킬 때 허용됩니다. 수익이나 실제 계좌를 보장하지 않습니다."
+      },
+      "plans": {
+        "title": "MOJ PROP 10개 플랜 선택",
+        "body": "10개 플랜 모두 28일, 2단계, 확인된 거래 50건, 소셜 게시물 2건의 규칙이 같습니다. 조건부 시작 자본과 제안 TRX 요금만 다릅니다.",
+        "starting": "조건부 시작 자본",
+        "fee": "제안 참가비",
+        "maximum": "계획 최고 단계",
+        "notice": "출시 전 계획으로 결제 및 자금 지원을 보장하지 않습니다."
       }
     },
     "hi": {
@@ -1008,6 +1112,14 @@
         "title": "कम से कम 50 सत्यापित ट्रेड",
         "body": "खरीद की पुष्टि के बाद 28 दिनों में दोनों चरण मिलाकर कम से कम 50 अलग, बंद और सत्यापित ट्रेड आवश्यक हैं; प्रत्येक चरण में 50 नहीं। प्रत्येक चरण में कम से कम छह ट्रेडिंग दिन की शर्त बनी रहेगी।",
         "bots": "मैनुअल ट्रेडिंग और ट्रेडर के अपने बॉट दोनों मान्य हैं, यदि ब्रोकर या सिमुलेटर अनुमति दे और जोखिम, हेरफेर-रोधी तथा सत्यापन नियमों का पालन हो। बॉट लाभ या वास्तविक खाते की गारंटी नहीं है।"
+      },
+      "plans": {
+        "title": "10 MOJ PROP योजनाओं में से चुनें",
+        "body": "सभी दस योजनाओं में 28 दिन, दो चरण, 50 सत्यापित ट्रेड और दो सोशल पोस्ट समान हैं। केवल सशर्त आरंभिक पूँजी और प्रस्तावित TRX शुल्क अलग हैं।",
+        "starting": "सशर्त आरंभिक पूँजी",
+        "fee": "प्रस्तावित प्रवेश शुल्क",
+        "maximum": "योजनाबद्ध अधिकतम",
+        "notice": "लॉन्च-पूर्व प्रस्ताव; भुगतान या वित्तपोषण की गारंटी नहीं।"
       }
     },
     "id": {
@@ -1080,6 +1192,14 @@
         "title": "Minimal 50 transaksi terverifikasi",
         "body": "Diperlukan sedikitnya 50 transaksi berbeda yang telah ditutup dan diverifikasi di kedua tahap secara keseluruhan, dalam 28 hari setelah pembelian dikonfirmasi; bukan 50 per tahap. Minimal enam hari trading per tahap tetap berlaku.",
         "bots": "Trading manual dan bot milik trader diizinkan jika broker atau simulator mengizinkan serta semua aturan risiko, anti-manipulasi dan verifikasi dipatuhi. Bot tidak menjamin profit atau akun nyata."
+      },
+      "plans": {
+        "title": "Pilih dari 10 paket MOJ PROP",
+        "body": "Kesepuluh paket memiliki aturan sama: 28 hari, dua tahap, 50 transaksi terverifikasi, dan dua unggahan sosial. Hanya modal awal bersyarat dan biaya TRX usulan yang berbeda.",
+        "starting": "Modal awal bersyarat",
+        "fee": "Biaya masuk usulan",
+        "maximum": "Batas rencana",
+        "notice": "Hanya rencana prapeluncuran; belum ada pembayaran atau jaminan modal."
       }
     },
     "vi": {
@@ -1152,6 +1272,14 @@
         "title": "Tối thiểu 50 giao dịch đã xác minh",
         "body": "Cần ít nhất 50 giao dịch riêng biệt đã đóng và được xác minh trong cả hai giai đoạn cộng lại, trong 28 ngày kể từ khi mua được xác nhận, không phải 50 mỗi giai đoạn. Mỗi giai đoạn vẫn phải có ít nhất sáu ngày giao dịch.",
         "bots": "Cho phép giao dịch thủ công và bot của chính người tham gia khi nhà môi giới hoặc hệ mô phỏng cho phép và tuân thủ quy tắc rủi ro, chống thao túng, xác minh. Bot không bảo đảm lợi nhuận hay tài khoản thật."
+      },
+      "plans": {
+        "title": "Chọn trong 10 gói MOJ PROP",
+        "body": "Cả mười gói đều có 28 ngày, hai giai đoạn, 50 giao dịch đã xác minh và hai bài đăng mạng xã hội. Chỉ vốn khởi đầu có điều kiện và phí TRX đề xuất khác nhau.",
+        "starting": "Vốn khởi đầu có điều kiện",
+        "fee": "Phí tham gia đề xuất",
+        "maximum": "Mức tối đa dự kiến",
+        "notice": "Gói trước khi ra mắt, chưa thu phí và không bảo đảm cấp vốn."
       }
     },
     "th": {
@@ -1224,6 +1352,14 @@
         "title": "อย่างน้อย 50 ธุรกรรมที่ตรวจสอบแล้ว",
         "body": "ต้องมีธุรกรรมที่ปิดแล้วและตรวจสอบได้อย่างน้อย 50 รายการรวมกันจากทั้งสองขั้นตอนภายใน 28 วันนับจากยืนยันการซื้อ ไม่ใช่ขั้นตอนละ 50 รายการ เงื่อนไขอย่างน้อยหกวันซื้อขายต่อขั้นตอนยังคงใช้",
         "bots": "อนุญาตทั้งการซื้อขายด้วยตนเองและบอทของผู้เข้าร่วม หากโบรกเกอร์หรือระบบจำลองยอมรับและปฏิบัติตามกฎความเสี่ยง การป้องกันการปั่นธุรกรรม และการตรวจสอบ บอทไม่รับประกันผลกำไรหรือบัญชีจริง"
+      },
+      "plans": {
+        "title": "เลือกจาก 10 แผน MOJ PROP",
+        "body": "ทั้งสิบแผนใช้กฎเดียวกัน คือ 28 วัน สองขั้นตอน 50 ธุรกรรมที่ตรวจสอบแล้ว และโพสต์โซเชียลสองโพสต์ ต่างกันเฉพาะเงินทุนเริ่มต้นแบบมีเงื่อนไขและค่าธรรมเนียม TRX ที่เสนอ",
+        "starting": "ทุนเริ่มต้นแบบมีเงื่อนไข",
+        "fee": "ค่าธรรมเนียมที่เสนอ",
+        "maximum": "ระดับสูงสุดที่วางแผนไว้",
+        "notice": "ยังไม่เปิดขาย ไม่มีการชำระเงินหรือรับประกันเงินทุน"
       }
     },
     "nl": {
@@ -1296,6 +1432,14 @@
         "title": "Minimaal 50 geverifieerde trades",
         "body": "In beide fasen samen zijn binnen 28 dagen na bevestigde aankoop minstens 50 afzonderlijke, gesloten en geverifieerde trades vereist, niet 50 per fase. Minstens zes handelsdagen per fase blijven verplicht.",
         "bots": "Handmatig handelen en eigen tradingbots zijn toegestaan als de broker of simulator ze accepteert en risico-, antimanipulatie- en verificatieregels worden gevolgd. Een bot garandeert geen winst of echte rekening."
+      },
+      "plans": {
+        "title": "Kies uit 10 MOJ PROP-plannen",
+        "body": "Alle tien hebben dezelfde 28 dagen, twee fasen, 50 geverifieerde trades en twee socialmediaberichten. Alleen voorwaardelijk startkapitaal en voorgestelde TRX-prijs verschillen.",
+        "starting": "Voorwaardelijk startkapitaal",
+        "fee": "Voorgestelde deelnameprijs",
+        "maximum": "Gepland maximum",
+        "notice": "Voorlopige plannen zonder betaling of gegarandeerd kapitaal."
       }
     },
     "pl": {
@@ -1368,6 +1512,14 @@
         "title": "Co najmniej 50 zweryfikowanych transakcji",
         "body": "W obu etapach łącznie należy wykonać co najmniej 50 odrębnych, zamkniętych i zweryfikowanych transakcji w ciągu 28 dni od potwierdzonego zakupu, a nie 50 na etap. Minimum sześć dni handlowych w każdym etapie pozostaje wymagane.",
         "bots": "Dozwolony jest handel ręczny i własne boty uczestnika, jeśli broker lub symulator je dopuszcza oraz przestrzegane są zasady ryzyka, zakazu manipulacji i weryfikacji. Bot nie gwarantuje zysku ani rachunku rzeczywistego."
+      },
+      "plans": {
+        "title": "Wybierz spośród 10 planów MOJ PROP",
+        "body": "Wszystkie dziesięć mają 28 dni, dwa etapy, 50 zweryfikowanych transakcji i dwa posty społecznościowe. Różnią się tylko warunkowym kapitałem początkowym i proponowaną opłatą TRX.",
+        "starting": "Warunkowy kapitał startowy",
+        "fee": "Proponowana opłata",
+        "maximum": "Planowany limit",
+        "notice": "Plan przed wdrożeniem; brak płatności i gwarancji kapitału."
       }
     },
     "ur": {
@@ -1440,6 +1592,14 @@
         "title": "کم از کم 50 تصدیق شدہ معاملات",
         "body": "تصدیق شدہ خریداری کے بعد 28 دن کے اندر دونوں مراحل ملا کر کم از کم 50 الگ، بند اور تصدیق شدہ معاملات ضروری ہیں؛ ہر مرحلے میں الگ 50 نہیں۔ ہر مرحلے کے کم از کم چھ تجارتی دن کی شرط برقرار رہے گی۔",
         "bots": "دستی تجارت اور تاجر کے اپنے بوٹس دونوں مجاز ہیں بشرطیکہ بروکر یا سمیولیٹر اجازت دے اور خطرے، جعلی معاملات سے بچاؤ اور تصدیق کے قواعد کی پابندی ہو۔ بوٹ منافع یا حقیقی اکاؤنٹ کی ضمانت نہیں۔"
+      },
+      "plans": {
+        "title": "MOJ PROP کے 10 پلان منتخب کریں",
+        "body": "تمام دس پلان میں 28 دن، دو مراحل، 50 تصدیق شدہ تجارتیں اور دو سوشل پوسٹ کی شرائط یکساں ہیں۔ صرف مشروط ابتدائی سرمایہ اور مجوزہ TRX فیس مختلف ہے۔",
+        "starting": "مشروط ابتدائی سرمایہ",
+        "fee": "مجوزہ فیس",
+        "maximum": "منصوبہ شدہ زیادہ سے زیادہ",
+        "notice": "صرف پیشکش؛ ادائیگی یا سرمایہ فراہم کرنے کی ضمانت نہیں۔"
       }
     }
   }
