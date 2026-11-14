@@ -23,8 +23,14 @@ def stub_modules(record, product):
         "django", "django.views", "django.views.decorators", "django.views.decorators.cache",
         "django.views.decorators.csrf", "django.views.decorators.http", "core", "core.models",
         "core.commerce_funnel",
+        "services", "services.mpw_trx_email_recovery",
     )
     result = {name: types.ModuleType(name) for name in names}
+    result["services"].__path__ = []
+    for handler in ("recovery_request", "recovery_verify", "recovery_orders",
+                    "recovery_download"):
+        setattr(result["services.mpw_trx_email_recovery"], handler,
+                lambda request, **kwargs: None)
     identity = lambda view: view
     result["django.views.decorators.cache"].never_cache = identity
     result["django.views.decorators.csrf"].csrf_protect = identity
@@ -88,6 +94,10 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                           namespace["start_order"])
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
+            self.assertEqual(
+                len([key for key in routes if key.startswith("commerce/trx-easy/recover/")]),
+                4,
+            )
             self.assertEqual(record.call_count, 1)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)

@@ -413,6 +413,27 @@ def patch_commercial(namespace):
     missing = [name for name in targets if seen[name] != 1]
     if missing:
         raise RuntimeError("Missing guest commercial routes: " + ",".join(missing))
+
+    # Register only reviewed, exact recovery routes. Registration itself sends
+    # no mail and grants no access; every recovery handler separately checks
+    # MPW_GUEST_RECOVERY_ENABLED and MPW_GUEST_RECOVERY_EMAIL_APPROVED.
+    # Never use substring matching or replace an existing checkout endpoint.
+    from services.mpw_trx_email_recovery import (
+        recovery_request, recovery_verify, recovery_orders, recovery_download,
+    )
+    recovery_extra = (
+        ("commerce/trx-easy/recover/", recovery_request),
+        ("commerce/trx-easy/recover/verify/", recovery_verify),
+        ("commerce/trx-easy/recover/orders/", recovery_orders),
+        ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+    )
+    existing_routes = {
+        route[1:] if route.startswith("/") else route
+        for route, _view in rebuilt
+    }
+    if any(route in existing_routes for route, _view in recovery_extra):
+        raise RuntimeError("Guest recovery URL collision")
+    rebuilt.extend(recovery_extra)
     namespace.update(pending)
     namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
