@@ -24,88 +24,96 @@ def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 
 def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
                          require_csrf=False, require_source_csrf=False):
- """Validate ONE email input and CSRF token in the SAME TRX invoice POST form.
-
- This does not prove browser visibility, email ownership or chain settlement.
- """
- from html.parser import HTMLParser
- import re
-
+ """Conservative same-form check, not proof of email ownership or live settlement."""
  if type(markup) is not str or len(markup)>180000:
   return False
 
  class InvoiceFormParser(HTMLParser):
+  _VOID={'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}
+  _INERT={'script','style','textarea','template','noscript'}
   def __init__(self):
    super().__init__(convert_charrefs=True)
    self.forms=[]
-   self.found=False
+   self.matches=0
+   self.malformed=False
+
+  @staticmethod
+  def _concealed(tag,attributes):
+   style=re.sub(r'\s+','',str(attributes.get('style') or '').lower())
+   return (tag in InvoiceFormParser._INERT or 'hidden' in attributes
+      or 'inert' in attributes
+      or str(attributes.get('aria-hidden') or '').lower()=='true'
+      or 'display:none' in style or 'visibility:hidden' in style
+      or 'opacity:0' in style)
+
+  def _accessible(self):
+   return self.forms and not any(h or d for _,h,d in self.forms[-1]['parents'])
 
   def handle_starttag(self,tag,attrs):
-   if self.found:
-    return
-   names=[key for key,_ in attrs]
+   keys=[k for k,_ in attrs]
    attributes=dict(attrs)
    if tag=='form':
+    if self.forms:
+     self.forms[-1]['valid']=False
+     self.malformed=True
     method=str(attributes.get('method') or '').lower()
     action=str(attributes.get('action') or '')
-    # Static Django source may contain the canonical product.pk/id variable;
-    # rendered checkout MUST still resolve to the exact numeric product route.
-    invoice_route=(r'/commerce/trx-easy/start/'
-                   r'(?:[1-9][0-9]*'
-                   r'|\{\{\s*product\.(?:pk|id)\s*\}\})/')
-    valid=(method=='post' and re.fullmatch(
-      invoice_route if require_source_csrf else
-      r'/commerce/trx-easy/start/[1-9][0-9]*/',action) is not None
-      and (expected_action is None or action==expected_action)
-      and (action_prefix is None or action.startswith(action_prefix))
-      and len(names)==len(set(names)))
-    self.forms.append({'valid':valid,'email':0,'csrf':0,
-                       'source_csrf':False,'fieldset_disabled':0})
+    template_pattern=(r'/commerce/trx-easy/start/'
+                      r'(?:[1-9][0-9]*|\{\{\s*product\.(?:pk|id)\s*\}\})/')
+    rendered_pattern=r'/commerce/trx-easy/start/[1-9][0-9]*/'
+    valid=(method=='post' and re.fullmatch(template_pattern if require_source_csrf else rendered_pattern,action) is not None
+       and (expected_action is None or expected_action==action)
+       and (action_prefix is None or action.startswith(action_prefix))
+       and len(keys)==len(set(keys)))
+    self.forms.append({'valid':valid,'email':0,'csrf':0,'source_csrf':0,'parents':[]})
    elif self.forms:
     form=self.forms[-1]
-    if tag=='fieldset' and 'disabled' in attributes:
-     form['fieldset_disabled']+=1
+    if tag not in self._VOID:
+     form['parents'].append((tag,self._concealed(tag,attributes),tag=='fieldset' and 'disabled' in attributes))
     if tag=='input':
+     accessible=self._accessible()
      if attributes.get('name')=='csrfmiddlewaretoken':
       value=str(attributes.get('value') or '')
-      csrf_valid=(str(attributes.get('type') or '').lower()=='hidden'
-                  and 'disabled' not in attributes
-                  and 32<=len(value)<=128 and value.isascii()
-                  and value.isalnum() and len(names)==len(set(names)))
-      form['csrf']+=1 if csrf_valid else 2
+      ok=(str(attributes.get('type') or '').lower()=='hidden'
+          and 'disabled' not in attributes and accessible
+          and 32<=len(value)<=128 and value.isascii() and value.isalnum()
+          and len(keys)==len(set(keys)))
+      form['csrf']+=1 if ok else 2
      if attributes.get('name')=='email':
-      valid_email=(str(attributes.get('type') or '').lower()=='email'
-        and 'required' in attributes and 'disabled' not in attributes
-        and 'hidden' not in attributes and form['fieldset_disabled']==0
-        and str(attributes.get('aria-hidden') or '').lower()!='true'
-        and 'display:none' not in re.sub(
-            r'\s+','',str(attributes.get('style') or '').lower())
-        and len(names)==len(set(names)))
-      # Count EVERY email input: a duplicate, hidden or malformed input
-      # cannot make the corresponding form pass.
-      form['email']+=1 if valid_email else 2
+      ok=(str(attributes.get('type') or '').lower()=='email'
+          and 'required' in attributes and 'disabled' not in attributes
+          and 'readonly' not in attributes and 'hidden' not in attributes
+          and 'inert' not in attributes and accessible
+          and not self._concealed(tag,attributes)
+          and len(keys)==len(set(keys)))
+      form['email']+=1 if ok else 2
 
   def handle_data(self,data):
-   if self.forms and re.search(r'{%\s*csrf_token\s*%}',data):
-    self.forms[-1]['source_csrf']=True
+   if self.forms and self._accessible() and re.search(r'{%\s*csrf_token\s*%}',data):
+    self.forms[-1]['source_csrf']+=len(re.findall(r'{%\s*csrf_token\s*%}',data))
 
   def handle_endtag(self,tag):
    if not self.forms:
     return
-   if tag=='fieldset' and self.forms[-1]['fieldset_disabled']:
-    self.forms[-1]['fieldset_disabled']-=1
    if tag=='form':
     form=self.forms.pop()
+    if form['parents']:
+     form['valid']=False
     if (form['valid'] and form['email']==1
-        and (not require_csrf or form['csrf']==1)
-        and (not require_source_csrf or form['source_csrf'])):
-     self.found=True
+       and (not require_csrf or form['csrf']==1)
+       and (not require_source_csrf or form['source_csrf']==1)):
+     self.matches+=1
+   else:
+    parents=self.forms[-1]['parents']
+    if parents and parents[-1][0]==tag:
+     parents.pop()
+    elif any(t==tag for t,_,_ in parents):
+     self.forms[-1]['valid']=False
 
  parser=InvoiceFormParser()
  parser.feed(markup)
  parser.close()
- return parser.found
-
+ return parser.matches==1 and not parser.malformed and not parser.forms
 
 def preflight_checkout_email_template():
  """Fail before any production write if buyer form or CSRF is absent."""
