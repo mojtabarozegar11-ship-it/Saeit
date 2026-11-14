@@ -11,7 +11,8 @@ START = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
 
 def event(*, days, dollars, hours=0):
     return SimpleNamespace(closed_at=START + timedelta(days=days, hours=hours),
-                           net_realized_usd=Decimal(str(dollars)))
+                           net_realized_usd=Decimal(str(dollars)),
+                           reconciliation_status="verified")
 
 
 class MojPropPeriodsTests(unittest.TestCase):
@@ -120,6 +121,54 @@ class MojPropPeriodsTests(unittest.TestCase):
                     opened_at=START, as_of=START + timedelta(days=100),
                     period_number=number,
                 ))
+
+
+    def test_pending_positive_trade_never_counts_for_promotion(self):
+        p = self.period(30)
+        pending = event(days=12, dollars=10000)
+        pending.reconciliation_status = "pending"
+        self.assertIsNone(period_statistics([pending], p))
+
+    def test_rejected_trade_never_counts_for_profit(self):
+        p = self.period(30)
+        rejected = event(days=4, dollars=10000)
+        rejected.reconciliation_status = "rejected"
+        self.assertIsNone(period_statistics([rejected], p))
+
+    def test_verified_and_pending_mixed_stream_fails_closed(self):
+        p = self.period(30)
+        pending = event(days=6, dollars=10000)
+        pending.reconciliation_status = "pending"
+        self.assertIsNone(period_statistics([event(days=2, dollars=12), pending], p))
+
+    def test_missing_reconciliation_state_fails_closed(self):
+        p = self.period(30)
+        missing = event(days=4, dollars=10000)
+        del missing.reconciliation_status
+        self.assertIsNone(period_statistics([missing], p))
+
+    def test_nan_profit_fails_closed(self):
+        p = self.period(30)
+        bad = event(days=4, dollars="NaN")
+        self.assertIsNone(period_statistics([bad], p))
+
+    def test_float_profit_fails_closed(self):
+        p = self.period(30)
+        bad = event(days=4, dollars=10)
+        bad.net_realized_usd = 10.0
+        self.assertIsNone(period_statistics([bad], p))
+
+    def test_naive_execution_timestamp_fails_closed(self):
+        p = self.period(30)
+        bad = event(days=4, dollars=12)
+        bad.closed_at = bad.closed_at.replace(tzinfo=None)
+        self.assertIsNone(period_statistics([bad], p))
+
+    def test_invalid_period_bounds_fail_closed(self):
+        from prop_firm.periods import CompletedPeriod
+        bad = CompletedPeriod(number=1, start=START + timedelta(days=30), end=START)
+        self.assertIsNone(period_statistics([event(days=5, dollars=1)], bad))
+
 
 
 if __name__ == "__main__":
