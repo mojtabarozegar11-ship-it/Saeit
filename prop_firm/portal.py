@@ -9,7 +9,8 @@ from django.utils import timezone as django_timezone
 from .periods import most_recent_completed_period, period_statistics
 from decimal import Decimal
 
-from .models import PropAccount, PropEquityObservation, PropExecution
+from .models import PropAccount, PropEquityObservation, PropExecution, PropSocialEvidence
+from .social_policy import check_social_posting, LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
 from .rules import (
     POLICY, LEVELS, RiskDecision, assess_risk, assess_challenge, assess_promotion,
 )
@@ -19,7 +20,6 @@ ZERO = Decimal("0")
 
 def _day(value):
     return value.astimezone(utc_timezone.utc).date()
-
 
 
 def completed_prior_phase_one(account):
@@ -36,7 +36,7 @@ def completed_prior_phase_one(account):
         kind=PropAccount.Kind.PHASE_ONE,
         status=PropAccount.Status.PASSED,
         reconciled_by_operator=True,
-        policy_version=POLICY.version,
+        policy_version=account.policy_version,
         closed_at__isnull=False,
         closed_at__lte=account.opened_at,
     ).exclude(pk=account.pk).exists()
@@ -125,18 +125,44 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         and not partial_trades and not partial_equity
         and not reasons and not historical_breach
         and account.status not in {PropAccount.Status.BREACHED, PropAccount.Status.CLOSED}
-        and account.policy_version == POLICY.version
+        and account.policy_version in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION)
         and bool(executions)
     )
     assessment = None
     promotion_period = None
     promotion_stats = None
+    social_decision = None
+    if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
+        social_records = PropSocialEvidence.objects.filter(
+            account=account,
+            review_status=PropSocialEvidence.Review.VERIFIED,
+        ).select_related("reviewed_by")
+        if evidence_cutoff is not None:
+            social_records = social_records.filter(
+                posted_at__lt=evidence_cutoff, reviewed_at__lt=evidence_cutoff
+            )
+        social_decision = check_social_posting(
+            verified_trading_dates=set(day_totals),
+            verified_posts=[{
+                "trading_day": item.trading_day,
+                "platform": item.platform,
+                "post_url": item.post_url,
+                "review_status": item.review_status,
+                "reviewed_by_operator": bool(
+                    item.reviewed_by_id and item.reviewed_at is not None
+                    and item.reviewed_by.is_staff
+                    and item.reviewed_by_id != account.trader.user_id
+                ),
+                "author_verified": item.author_verified,
+                "public_visible": item.public_visible,
+                "disclosure_verified": item.disclosure_verified,
+                "content_compliant": item.content_compliant,
+                "date_verified": item.date_verified,
+            } for item in social_records],
+        )
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-            # Phase-two qualification must be based on a *previously
-            # completed* phase-one of this same trader. A phase-one passed
-            # after phase-two opened, or a passed row with no completion time,
-            # must never retroactively qualify a challenge.
+            # Stage one must have finished before this exact stage two opened.
             prior = completed_prior_phase_one(account)
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
@@ -147,6 +173,10 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
                 risk=risk,
                 evidence_verified=fully_verified,
                 prior_phase_passed=prior,
+                social_posts_verified=(
+                    social_decision.satisfied if social_decision is not None else False
+                ),
+                contract_version=account.policy_version,
             )
         elif account.kind == PropAccount.Kind.FUNDED:
             # Never reuse lifetime P&L to qualify a specific monthly promotion.
@@ -176,6 +206,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         "best_day": best_day,
         "risk": risk,
         "assessment": assessment,
+        "social_posting": social_decision,
         "promotion_period": promotion_period,
         "promotion_statistics": promotion_stats,
         "verified": fully_verified,
