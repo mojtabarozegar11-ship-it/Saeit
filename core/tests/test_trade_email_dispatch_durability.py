@@ -79,6 +79,46 @@ def test_smtp_acceptance_never_claims_inbox_delivery(ready_email):
     assert audit.metadata["delivery_confirmed"] is False
 
 
+
+@pytest.mark.parametrize("bad_kind, error_code", [
+    ("sender", "TRADE_EMAIL_SENDER_INVALID"),
+    ("recipient", "TRADE_EMAIL_RECIPIENT_INVALID"),
+])
+@override_settings(TRADE_EMAIL_ENABLED=True)
+def test_legacy_invalid_address_never_spends_owner_grant_or_calls_smtp(
+    transactional_db, bad_kind, error_code
+):
+    owner = get_user_model().objects.create_user(username="invalid-" + bad_kind)
+    with override_settings(COMPANY_TRADE_EMAIL="company@example.test"):
+        outbox = queue_trade_email(
+            recipient="buyer@example.test", subject="Quote", body="Nonbinding proposal"
+        )
+    outbox.mailbox.active = True
+    outbox.mailbox.allow_outbound = True
+    if bad_kind == "sender":
+        outbox.mailbox.email_address = "invalid-sender"
+    outbox.mailbox.save(update_fields=["active", "allow_outbound", "email_address"])
+    if bad_kind == "recipient":
+        outbox.recipient = "invalid-recipient"
+        outbox.save(update_fields=["recipient"])
+    review = authorize_external_trade(owner_id=owner.pk, outbox_id=outbox.pk)
+    ApprovalService().decide(review.pk, True, actor_id=owner.pk)
+    grant = ApprovalService().issue_grant(
+        review.pk, owner.pk, {
+            "action": "external_write", "outbox_id": outbox.pk,
+            "message_sha256": trade_email_fingerprint(outbox),
+        },
+    )
+    with patch("core.economic_trade_email.EmailMessage.send") as smtp:
+        with pytest.raises(RuntimeError, match=error_code):
+            send_queued_trade_email(outbox.pk, grant_id=grant.pk)
+    smtp.assert_not_called()
+    outbox.refresh_from_db()
+    grant.refresh_from_db()
+    assert outbox.status == "queued"
+    assert grant.used_at is None
+
+
 @override_settings(TRADE_EMAIL_ENABLED=True)
 def test_provider_exception_does_not_roll_back_one_shot_reservation(ready_email):
     outbox, grant = ready_email
