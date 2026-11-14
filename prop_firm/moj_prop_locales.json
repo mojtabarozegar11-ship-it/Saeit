@@ -65,7 +65,7 @@
       ],
       "social": {
         "title": "Social posting condition",
-        "body": "For each verified trading day in each challenge phase, publish one original Instagram post and one original Facebook post. Clearly disclose that posting is a challenge participation condition. Neutral, truthful content is accepted; no profit claims or positive reviews are required. Each post must be independently reviewed before the phase can pass. This applies only to newly enrolled v1.2 cohorts.",
+        "body": "Only ONE Instagram post and ONE Facebook post are required for the entire two-phase challenge, not one per trading day. Publish both within 24 hours after confirmed purchase and keep each publicly visible for at least 28 days. The trading challenge lasts exactly four weeks (28 days) from the confirmed purchase timestamp. Completion requires independent verification of both posts and the trading rules. Disclose that posting is a participation condition; neutral honest content is acceptable. Applies only to new v1.2 purchases.",
         "disclosure": "Required promotional participation in MOJ PROP challenge; this is not an independent endorsement."
       }
     },
@@ -132,7 +132,7 @@
       ],
       "social": {
         "title": "شرط انتشار در شبکه‌های اجتماعی",
-        "body": "در هر روز معاملاتی معتبر از هر مرحله چالش، یک پست اصلی در اینستاگرام و یک پست اصلی در فیسبوک منتشر کنید. اجباری‌بودن انتشار برای شرکت در چالش را آشکارا اعلام کنید. متن صادقانه و بی‌طرفانه پذیرفته است و تعریف مثبت یا ادعای سود لازم نیست. قبولی هر مرحله منوط به تأیید مستقل پست‌هاست. این شرط فقط شامل خریداران جدید نسخه ۱٫۲ می‌شود.",
+        "body": "برای کل چالش دومرحله‌ای فقط یک پست اینستاگرام و یک پست فیسبوک لازم است، نه پست روزانه. هر دو را حداکثر تا ۲۴ ساعت پس از خرید تأییدشده منتشر کنید و دست‌کم ۲۸ روز عمومی نگه دارید. دوره معاملاتی چالش دقیقاً چهار هفته (۲۸ روز) از زمان خرید تأییدشده است. قبولی نیازمند تأیید مستقل هر دو پست و احراز قوانین معامله است. اعلام کنید انتشار شرط شرکت در چالش است؛ محتوای بی‌طرفانه و صادقانه پذیرفته می‌شود. فقط برای خریداران جدید نسخه ۱٫۲.",
         "disclosure": "این انتشار طبق شرایط شرکت در چالش MOJ PROP انجام شده و نظر مستقل تبلیغاتی نیست."
       }
     },
@@ -199,7 +199,7 @@
       ],
       "social": {
         "title": "شرط النشر على الشبكات الاجتماعية",
-        "body": "في كل يوم تداول موثّق من كل مرحلة تحدٍّ، انشر منشوراً أصلياً على إنستغرام وآخر على فيسبوك. أفصح بوضوح عن أن النشر شرط للمشاركة. يُقبل المحتوى الصادق والمحايد، ولا يُشترط الترويج الإيجابي أو الادعاء بأرباح. يجب مراجعة المنشورين بشكل مستقل قبل اجتياز المرحلة. يُطبق فقط على المشاركين الجدد وفق الإصدار 1.2.",
+        "body": "يلزم منشور واحد على إنستغرام ومنشور واحد على فيسبوك طوال التحدي ذي المرحلتين، وليس يومياً. انشرهما خلال 24 ساعة من الشراء المؤكد وأبقِ كليهما متاحاً للجمهور لمدة 28 يوماً على الأقل. يستمر التحدي التداولي أربعة أسابيع (28 يوماً) من وقت الشراء المؤكد. يعتمد الاجتياز على التحقق المستقل من المنشورين واستيفاء قواعد التداول. يجب الإفصاح بأن النشر شرط للمشاركة؛ والمحتوى الصادق والمحايد مقبول. للمشترين الجدد في الإصدار 1.2 فقط.",
         "disclosure": "هذا المنشور مطلوب ضمن شروط المشاركة في تحدّي MOJ PROP وليس تأييداً مستقلاً."
       }
     },
@@ -266,7 +266,7 @@
       ],
       "social": {
         "title": "Pflicht zur Veröffentlichung in sozialen Medien",
-        "body": "Für jeden bestätigten Handelstag jeder Challenge-Phase ist ein eigener Instagram- und ein eigener Facebook-Beitrag zu veröffentlichen. Kennzeichnen Sie klar, dass dies eine Teilnahmebedingung ist. Sachliche, wahrheitsgemäße Beiträge genügen; positive Bewertungen oder Gewinnversprechen sind nicht erforderlich. Vor dem Bestehen müssen die Beiträge unabhängig geprüft werden. Nur für neue Teilnehmer nach Version 1.2.",
+        "body": "Für die gesamte zweistufige Challenge ist nur EIN Instagram-Beitrag und EIN Facebook-Beitrag nötig, nicht täglich. Beide innerhalb von 24 Stunden nach bestätigtem Kauf veröffentlichen und mindestens 28 Tage öffentlich sichtbar lassen. Die Handels-Challenge dauert genau vier Wochen (28 Tage) ab bestätigtem Kauf. Bestehen setzt die unabhängige Prüfung beider Beiträge sowie die Handelsregeln voraus. Die Veröffentlichung als Teilnahmebedingung offenlegen; ehrliche neutrale Inhalte sind zulässig. Nur für neue Käufe gemäß Version 1.2.",
         "disclosure": "Dieser Beitrag ist eine Teilnahmebedingung der MOJ PROP Challenge und keine unabhängige Empfehlung."
       }
     },
@@ -333,7 +333,7 @@
       ],
       "social": {
         "title": "Condition de publication sur les réseaux sociaux",
-        "body": "Pour chaque journée de négociation vérifiée de chaque phase, publiez une publication originale sur Instagram et une sur Facebook. Indiquez clairement qu'il s'agit d'une condition de participation. Un contenu neutre et véridique suffit ; aucun avis positif ni promesse de gain n'est exigé. Les publications doivent être vérifiées avant la validation. Réservé aux nouveaux participants sous la version 1.2.",
+        "body": "Un SEUL post Instagram et un SEUL post Facebook sont requis pour l'ensemble du défi en deux phases, et non chaque jour. Publiez-les dans les 24 heures suivant l'achat confirmé et maintenez-les publics pendant au moins 28 jours. Le défi de trading dure exactement quatre semaines (28 jours) à compter de l'achat confirmé. La réussite exige la vérification indépendante des deux publications et des règles de trading. Indiquez que publier est une condition de participation ; un contenu neutre et véridique est admis. Uniquement pour les nouveaux achats version 1.2.",
         "disclosure": "Cette publication est exigée pour participer au défi MOJ PROP ; ce n'est pas une recommandation indépendante."
       }
     },
@@ -400,7 +400,7 @@
       ],
       "social": {
         "title": "Requisito de publicaciones en redes sociales",
-        "body": "Por cada día de operaciones verificado de cada fase, publique una entrada original en Instagram y otra en Facebook. Indique claramente que es un requisito de participación. Se admite contenido neutral y veraz; no se exige una opinión positiva ni promesas de beneficios. Las publicaciones deben verificarse antes de aprobar la fase. Solo para nuevos participantes de la versión 1.2.",
+        "body": "Solo se exige UNA publicación en Instagram y UNA en Facebook para todo el reto de dos fases, no diariamente. Publíquelas dentro de las 24 horas posteriores a la compra confirmada y manténgalas públicas al menos 28 días. El reto de trading dura exactamente cuatro semanas (28 días) desde la compra confirmada. La aprobación requiere comprobar de forma independiente ambas publicaciones y las reglas de trading. Aclare que publicar es condición de participación; se acepta contenido veraz y neutral. Solo nuevas compras versión 1.2.",
         "disclosure": "Esta publicación es un requisito para participar en el reto MOJ PROP; no es una recomendación independiente."
       }
     },
@@ -467,7 +467,7 @@
       ],
       "social": {
         "title": "Condição de publicação nas redes sociais",
-        "body": "Para cada dia de negociação verificado de cada fase, publique uma postagem original no Instagram e outra no Facebook. Informe claramente que a publicação é uma condição de participação. Conteúdo neutro e verdadeiro é aceito; não são exigidos elogios nem promessas de lucro. As publicações devem ser verificadas antes da aprovação. Apenas para novos participantes da versão 1.2.",
+        "body": "É exigida apenas UMA publicação no Instagram e UMA no Facebook para todo o desafio de duas fases, não por dia. Publique ambas até 24 horas após a compra confirmada e mantenha-as públicas por pelo menos 28 dias. O desafio de trading dura exatamente quatro semanas (28 dias) a partir da compra confirmada. A aprovação exige verificação independente das duas publicações e das regras de trading. Informe que publicar é condição de participação; conteúdo verdadeiro e neutro é aceito. Apenas novas compras versão 1.2.",
         "disclosure": "Esta publicação é exigida para participar do desafio MOJ PROP e não é uma recomendação independente."
       }
     },
@@ -534,7 +534,7 @@
       ],
       "social": {
         "title": "Requisito di pubblicazione sui social",
-        "body": "Per ogni giorno di trading verificato di ciascuna fase, pubblica un post originale su Instagram e uno su Facebook. Dichiara chiaramente che è una condizione di partecipazione. Sono ammessi contenuti neutrali e veritieri; non sono richieste recensioni positive o promesse di profitto. I post devono essere verificati prima del superamento della fase. Solo per i nuovi iscritti alla versione 1.2.",
+        "body": "È richiesto UN solo post Instagram e UN solo post Facebook per l'intera sfida in due fasi, non ogni giorno. Pubblicali entro 24 ore dall'acquisto confermato e mantienili pubblici per almeno 28 giorni. La sfida di trading dura esattamente quattro settimane (28 giorni) dall'acquisto confermato. Il superamento richiede verifica indipendente dei post e delle regole di trading. Dichiara che pubblicare è una condizione di partecipazione; contenuti sinceri e neutrali sono ammessi. Solo nuovi acquisti versione 1.2.",
         "disclosure": "Questo post è richiesto per partecipare alla sfida MOJ PROP e non costituisce una raccomandazione indipendente."
       }
     },
@@ -601,7 +601,7 @@
       ],
       "social": {
         "title": "Sosyal medya paylaşım şartı",
-        "body": "Her aşamadaki doğrulanmış işlem günü için Instagram'da bir ve Facebook'ta bir özgün gönderi yayımlayın. Paylaşımın katılım koşulu olduğunu açıkça belirtin. Dürüst ve tarafsız içerik kabul edilir; olumlu yorum veya kazanç vaadi gerekmez. Aşama geçilmeden önce gönderiler bağımsız olarak doğrulanmalıdır. Yalnızca 1.2 sürümündeki yeni katılımcılar içindir.",
+        "body": "İki aşamalı sınavın tamamı için günlük değil, yalnızca BİR Instagram ve BİR Facebook gönderisi gereklidir. İkisini de onaylanmış satın almadan sonraki 24 saat içinde yayımlayın ve en az 28 gün herkese açık tutun. İşlem sınavı satın alma anından itibaren tam dört hafta (28 gün) sürer. Geçmek için her iki gönderinin bağımsız doğrulaması ve işlem kuralları gerekir. Paylaşımın katılım şartı olduğunu belirtin; doğru ve tarafsız içerik kabul edilir. Yalnızca v1.2 yeni alımlar.",
         "disclosure": "Bu gönderi MOJ PROP değerlendirmesine katılım şartıdır; bağımsız bir tavsiye değildir."
       }
     },
@@ -668,7 +668,7 @@
       ],
       "social": {
         "title": "Условие публикаций в социальных сетях",
-        "body": "За каждый подтверждённый торговый день каждого этапа опубликуйте по одному оригинальному посту в Instagram и Facebook. Ясно укажите, что публикация обязательна для участия. Допускается честный нейтральный текст; положительные отзывы и обещания прибыли не требуются. До зачёта этапа публикации должны быть независимо проверены. Только для новых участников версии 1.2.",
+        "body": "Для всего двухэтапного испытания требуется только ОДИН пост в Instagram и ОДИН в Facebook, не ежедневно. Опубликуйте оба в течение 24 часов после подтверждённой покупки и сохраняйте публичными не менее 28 дней. Торговый этап длится ровно четыре недели (28 дней) с момента подтверждённой покупки. Прохождение требует независимой проверки обоих постов и торговых условий. Укажите, что публикация обязательна для участия; допускается честный нейтральный текст. Только для новых покупок версии 1.2.",
         "disclosure": "Эта публикация обязательна по условиям участия в MOJ PROP и не является независимой рекомендацией."
       }
     },
@@ -735,7 +735,7 @@
       ],
       "social": {
         "title": "社交媒体发帖要求",
-        "body": "每个挑战阶段的每一个已核实交易日，须分别在 Instagram 和 Facebook 发布一条原创帖子。请明确说明发帖是参与挑战的条件。允许真实、中立的内容；无需好评或收益承诺。通过阶段考核前，帖子须经独立核验。仅适用于 1.2 版新报名者。",
+        "body": "整个两阶段挑战只需一条 Instagram 帖子和一条 Facebook 帖子，无需每天发布。请在确认购买后24小时内发布两条帖子，并保持公开至少28天。交易挑战从确认购买时起恰好持续四周（28天）。通过挑战需要独立核验两条帖子并满足交易规则。请明确说明发帖属于参与条件；真实、中立的内容可以接受。仅适用于1.2版新购买者。",
         "disclosure": "本帖为参加 MOJ PROP 挑战的规定要求，并非独立推荐。"
       }
     },
@@ -802,7 +802,7 @@
       ],
       "social": {
         "title": "SNS投稿条件",
-        "body": "各チャレンジ段階の確認済み取引日ごとに、InstagramとFacebookへそれぞれオリジナル投稿を1件公開してください。投稿が参加条件であることを明示してください。正確で中立的な内容で構いません。好意的な評価や利益の保証は不要です。各段階の合格前に独立した確認が必要です。バージョン1.2の新規参加者のみ対象です。",
+        "body": "2段階チャレンジ全体で必要なのはInstagram投稿1件とFacebook投稿1件のみで、毎日の投稿は不要です。購入確認後24時間以内に投稿し、それぞれを28日以上公開してください。取引チャレンジは購入確認時からちょうど4週間（28日間）です。両投稿の独立確認と取引規則の達成が合格条件です。投稿が参加条件であると明示し、誠実で中立な内容も認めます。v1.2の新規購入者のみ対象です。",
         "disclosure": "この投稿はMOJ PROPチャレンジの参加条件によるもので、独立した推薦ではありません。"
       }
     },
@@ -869,7 +869,7 @@
       ],
       "social": {
         "title": "소셜 미디어 게시 조건",
-        "body": "각 챌린지 단계에서 확인된 거래일마다 Instagram과 Facebook에 각각 원본 게시물 하나를 올려야 합니다. 게시가 참여 조건임을 명확히 밝히세요. 사실에 근거한 중립적인 내용도 인정되며 긍정적 후기나 수익 보장은 요구되지 않습니다. 단계 통과 전 각 게시물의 독립적 확인이 필요합니다. 버전 1.2 신규 참가자에게만 적용됩니다.",
+        "body": "2단계 챌린지 전체에 Instagram 게시물 한 개와 Facebook 게시물 한 개만 필요하며 매일 게시할 필요는 없습니다. 구매 확인 후 24시간 안에 각각 게시하고 최소 28일 동안 공개 상태를 유지하세요. 거래 챌린지는 구매 확인 시점부터 정확히 4주(28일)입니다. 합격하려면 두 게시물의 독립적 확인과 거래 규칙 충족이 필요합니다. 게시가 참가 조건임을 명시해야 하며 사실에 근거한 중립적 내용도 가능합니다. v1.2 신규 구매자에게만 적용됩니다.",
         "disclosure": "이 게시물은 MOJ PROP 챌린지의 참여 조건에 따른 것이며 독립적인 추천이 아닙니다."
       }
     },
@@ -936,7 +936,7 @@
       ],
       "social": {
         "title": "सोशल मीडिया पोस्ट की शर्त",
-        "body": "हर चरण के प्रत्येक सत्यापित ट्रेडिंग दिन पर Instagram और Facebook पर एक-एक मौलिक पोस्ट डालें। स्पष्ट करें कि पोस्ट करना चुनौती में भाग लेने की शर्त है। सत्य और तटस्थ सामग्री मान्य है; सकारात्मक समीक्षा या लाभ का वादा आवश्यक नहीं। चरण पास करने से पहले पोस्ट की स्वतंत्र जाँच होगी। यह केवल संस्करण 1.2 के नए प्रतिभागियों पर लागू है।",
+        "body": "पूरी दो-चरणीय चुनौती के लिए केवल एक Instagram और एक Facebook पोस्ट ज़रूरी है, रोज़ पोस्ट नहीं। पुष्टि की गई खरीद के 24 घंटे के अंदर दोनों पोस्ट करें और उन्हें कम से कम 28 दिनों तक सार्वजनिक रखें। ट्रेडिंग चुनौती खरीद की पुष्टि के समय से ठीक चार सप्ताह (28 दिन) चलेगी। सफलता के लिए दोनों पोस्ट की स्वतंत्र पुष्टि और ट्रेडिंग नियमों का पालन आवश्यक है। स्पष्ट करें कि पोस्ट भागीदारी की शर्त है; सच्ची और निष्पक्ष सामग्री स्वीकार्य है। केवल संस्करण 1.2 की नई खरीदों पर लागू।",
         "disclosure": "यह पोस्ट MOJ PROP चुनौती की भागीदारी शर्त के कारण है; यह स्वतंत्र अनुशंसा नहीं है।"
       }
     },
@@ -1003,7 +1003,7 @@
       ],
       "social": {
         "title": "Ketentuan unggahan media sosial",
-        "body": "Pada setiap hari trading terverifikasi di tiap tahap, buat satu unggahan asli di Instagram dan satu di Facebook. Nyatakan dengan jelas bahwa unggahan merupakan syarat partisipasi. Konten jujur dan netral diterima; ulasan positif atau janji keuntungan tidak diwajibkan. Unggahan harus ditinjau secara independen sebelum tahap dinyatakan lulus. Hanya berlaku bagi peserta baru versi 1.2.",
+        "body": "Untuk seluruh tantangan dua tahap cukup SATU unggahan Instagram dan SATU unggahan Facebook, bukan tiap hari. Unggah keduanya dalam 24 jam setelah pembelian terkonfirmasi dan biarkan terbuka untuk umum minimal 28 hari. Tantangan trading berlangsung tepat empat minggu (28 hari) sejak pembelian dikonfirmasi. Kelulusan memerlukan verifikasi independen atas kedua unggahan dan kepatuhan aturan trading. Nyatakan bahwa unggahan adalah syarat partisipasi; konten jujur dan netral diterima. Khusus pembeli baru versi 1.2.",
         "disclosure": "Unggahan ini merupakan syarat partisipasi tantangan MOJ PROP, bukan dukungan independen."
       }
     },
@@ -1070,7 +1070,7 @@
       ],
       "social": {
         "title": "Điều kiện đăng bài mạng xã hội",
-        "body": "Với mỗi ngày giao dịch đã xác minh ở từng giai đoạn, hãy đăng một bài gốc trên Instagram và một bài trên Facebook. Nêu rõ việc đăng bài là điều kiện tham gia. Nội dung trung thực, trung lập được chấp nhận; không bắt buộc đánh giá tích cực hay hứa hẹn lợi nhuận. Bài đăng phải được kiểm tra độc lập trước khi qua giai đoạn. Chỉ áp dụng cho người tham gia mới theo phiên bản 1.2.",
+        "body": "Trong toàn bộ thử thách hai giai đoạn chỉ cần MỘT bài Instagram và MỘT bài Facebook, không phải mỗi ngày. Đăng cả hai trong 24 giờ sau khi xác nhận mua và giữ công khai ít nhất 28 ngày. Thử thách giao dịch kéo dài đúng bốn tuần (28 ngày) kể từ thời điểm mua được xác nhận. Để vượt qua cần xác minh độc lập cả hai bài và đáp ứng các quy tắc giao dịch. Hãy nêu rõ đăng bài là điều kiện tham gia; nội dung trung thực, trung lập được chấp nhận. Chỉ dành cho người mua mới phiên bản 1.2.",
         "disclosure": "Bài đăng này là điều kiện tham gia thử thách MOJ PROP, không phải lời giới thiệu độc lập."
       }
     },
@@ -1137,7 +1137,7 @@
       ],
       "social": {
         "title": "เงื่อนไขการโพสต์สื่อสังคมออนไลน์",
-        "body": "ในแต่ละวันซื้อขายที่ตรวจสอบแล้วของแต่ละด่าน ต้องโพสต์เนื้อหาต้นฉบับหนึ่งโพสต์บน Instagram และหนึ่งโพสต์บน Facebook ระบุชัดเจนว่าการโพสต์เป็นเงื่อนไขการเข้าร่วม ยอมรับเนื้อหาที่เป็นกลางและตรงความจริง ไม่บังคับรีวิวเชิงบวกหรือรับประกันกำไร โพสต์ต้องผ่านการตรวจสอบอิสระก่อนผ่านด่าน ใช้เฉพาะผู้สมัครใหม่ตามเวอร์ชัน 1.2",
+        "body": "ตลอดการแข่งขันสองด่านต้องโพสต์ Instagram เพียงหนึ่งโพสต์และ Facebook เพียงหนึ่งโพสต์ ไม่ต้องโพสต์ทุกวัน โพสต์ทั้งสองภายใน 24 ชั่วโมงหลังยืนยันการซื้อ และคงไว้เป็นสาธารณะอย่างน้อย 28 วัน การแข่งขันเทรดมีระยะเวลา 4 สัปดาห์ (28 วัน) นับจากเวลาที่ซื้อสำเร็จ การผ่านต้องได้รับการตรวจสอบทั้งสองโพสต์อย่างอิสระและปฏิบัติตามกฎเทรด ระบุชัดว่าการโพสต์เป็นเงื่อนไขเข้าร่วม เนื้อหาที่ตรงจริงและเป็นกลางยอมรับได้ เฉพาะผู้ซื้อใหม่เวอร์ชัน 1.2",
         "disclosure": "โพสต์นี้เป็นเงื่อนไขการเข้าร่วม MOJ PROP ไม่ใช่คำแนะนำอิสระ"
       }
     },
@@ -1204,7 +1204,7 @@
       ],
       "social": {
         "title": "Voorwaarde voor berichten op sociale media",
-        "body": "Plaats voor elke geverifieerde handelsdag van elke fase één origineel bericht op Instagram en één op Facebook. Vermeld duidelijk dat dit een deelnamevoorwaarde is. Eerlijke, neutrale inhoud volstaat; positieve beoordelingen of winstbeloften zijn niet vereist. De berichten worden onafhankelijk gecontroleerd voordat de fase slaagt. Alleen voor nieuwe deelnemers volgens versie 1.2.",
+        "body": "Voor de hele challenge met twee fasen zijn slechts ÉÉN Instagram-bericht en ÉÉN Facebook-bericht vereist, niet elke dag. Plaats beide binnen 24 uur na de bevestigde aankoop en houd ze minstens 28 dagen openbaar. De handelschallenge duurt precies vier weken (28 dagen) vanaf de bevestigde aankoop. Slagen vereist onafhankelijke controle van beide berichten en naleving van de handelsregels. Vermeld dat posten een deelnamevoorwaarde is; eerlijke neutrale inhoud volstaat. Alleen voor nieuwe kopers versie 1.2.",
         "disclosure": "Dit bericht is verplicht voor deelname aan de MOJ PROP-challenge en is geen onafhankelijke aanbeveling."
       }
     },
@@ -1271,7 +1271,7 @@
       ],
       "social": {
         "title": "Warunek publikacji w mediach społecznościowych",
-        "body": "Za każdy zweryfikowany dzień handlowy każdego etapu opublikuj jeden oryginalny post na Instagramie i jeden na Facebooku. Wyraźnie ujawnij, że jest to warunek uczestnictwa. Wystarczy prawdziwa, neutralna treść; pozytywne opinie ani obietnice zysku nie są wymagane. Posty muszą zostać niezależnie zweryfikowane przed zaliczeniem etapu. Dotyczy wyłącznie nowych uczestników wersji 1.2.",
+        "body": "W całym dwuetapowym wyzwaniu wymagany jest tylko JEDEN post na Instagramie i JEDEN na Facebooku, nie codziennie. Opublikuj oba w ciągu 24 godzin od potwierdzonego zakupu i zachowaj publiczny dostęp przez co najmniej 28 dni. Wyzwanie handlowe trwa dokładnie cztery tygodnie (28 dni) od potwierdzonego zakupu. Zaliczenie wymaga niezależnego potwierdzenia obu postów i spełnienia zasad handlu. Ujawnij, że publikacja jest warunkiem udziału; dopuszczalny jest uczciwy, neutralny przekaz. Tylko nowi nabywcy wersji 1.2.",
         "disclosure": "Publikacja jest wymagana do udziału w wyzwaniu MOJ PROP; nie jest niezależną rekomendacją."
       }
     },
@@ -1338,7 +1338,7 @@
       ],
       "social": {
         "title": "سوشل میڈیا پوسٹ کی شرط",
-        "body": "ہر مرحلے کے ہر تصدیق شدہ تجارتی دن پر Instagram اور Facebook پر ایک ایک اصل پوسٹ شائع کریں۔ واضح کریں کہ یہ پوسٹ چیلنج میں شرکت کی شرط ہے۔ سچا اور غیر جانب دار مواد قابل قبول ہے؛ مثبت تعریف یا منافع کی ضمانت لازم نہیں۔ مرحلہ پاس ہونے سے پہلے پوسٹس کی آزادانہ تصدیق ضروری ہے۔ یہ شرط صرف ورژن 1.2 کے نئے شرکا پر لاگو ہے۔",
+        "body": "پورے دو مرحلہ جاتی چیلنج کے لیے صرف ایک Instagram پوسٹ اور ایک Facebook پوسٹ ضروری ہے، روزانہ نہیں۔ تصدیق شدہ خریداری کے 24 گھنٹے کے اندر دونوں شائع کریں اور کم از کم 28 دن تک عوامی رکھیں۔ تجارتی چیلنج خریداری کی تصدیق کے لمحے سے پورے چار ہفتے (28 دن) جاری رہے گا۔ کامیابی کے لیے دونوں پوسٹس کی آزادانہ تصدیق اور تجارتی قواعد کی پابندی لازمی ہے۔ واضح کریں کہ پوسٹ کرنا شرکت کی شرط ہے؛ سچا اور غیر جانب دار مواد قابل قبول ہے۔ صرف ورژن 1.2 کے نئے خریداروں کے لیے۔",
         "disclosure": "یہ پوسٹ MOJ PROP چیلنج میں شرکت کی شرط کے تحت ہے، آزادانہ توثیق یا سفارش نہیں۔"
       }
     }
