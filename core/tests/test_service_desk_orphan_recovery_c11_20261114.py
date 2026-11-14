@@ -222,3 +222,19 @@ def test_no_orphan_does_not_create_an_inactive_user_account(db):
     assert result["verified_effect"] is False
     from django.contrib.auth import get_user_model
     assert get_user_model().objects.filter(username=SERVICE_ACTOR_USERNAME).count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("corrupt", [
+    {"request_sha256_prefix": ["not", "a", "digest"], "service_code": "AGR-01"},
+    {"request_sha256_prefix": "bad", "service_code": {"not": "a string"}},
+    {"request_sha256_prefix": None, "service_code": ["AGR-01"]},
+])
+def test_corrupted_legacy_audit_json_never_crashes_or_creates_fake_task(prepared, corrupt):
+    AuditLog.objects.filter(
+        action="service_response_draft_prepared", target_id=str(prepared.pk),
+    ).update(after_state=corrupt)
+    snapshot = orphaned_handoff_snapshot()
+    assert snapshot["verified_candidate_count"] == 0
+    assert recover_one_orphaned_handoff()["verified_effect"] is False
+    assert WorkItem.objects.count() == 0
