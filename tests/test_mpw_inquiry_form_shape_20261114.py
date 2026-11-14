@@ -205,5 +205,24 @@ class InquiryFormShapeTests(unittest.TestCase):
     def test_gate_25_mismatched_raw_body_fields(self):
         self.assertFalse(self.evaluate(**{'raw_body': 'service=website-doctor&name=Test'}))
 
+    def test_gate_26_raw_value_disagrees_with_php_parsed_value(self):
+        self.assertFalse(self.evaluate(post_extra={"name": "Tampered name"}))
+
+    def test_literal_percent_in_details_accepted_when_encoded(self):
+        post=self.valid_post()
+        post["details"]="A 100% complete scoped audit including deployment validation."
+        self.assertTrue(self.evaluate(post_extra={"details":post["details"]},
+                                      raw_body=urlencode(post)))
+
+    def test_plus_encoded_spaces_match_parsed_names(self):
+        post=self.valid_post()
+        post["name"]="Buyer With Spaces"
+        raw=urlencode(post)
+        self.assertIn("Buyer+With+Spaces",raw)
+        self.assertTrue(self.evaluate(post_extra={"name":post["name"]},raw_body=raw))
+
+    def test_duplicate_percent_encoded_field_alias_rejected(self):
+        self.assertFalse(self.evaluate(raw_body_suffix="&%65mail=other%40example.org"))
+
 if __name__ == "__main__":
     unittest.main()
