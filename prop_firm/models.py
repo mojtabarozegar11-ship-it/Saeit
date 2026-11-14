@@ -12,6 +12,7 @@ from django.db import models
 from django.db.models import Q
 
 from .rules import LEVELS, POLICY
+from .plans import DEFAULT_PLAN_CODE, plan_for_code
 
 
 class PropTrader(models.Model):
@@ -98,10 +99,25 @@ class PropAccount(models.Model):
             if not self.reference:
                 raise ValidationError({"reference": "Broker reference required for funded accounts"})
         else:
-            if self.tier_index != 0:
-                raise ValidationError({"tier_index": "Simulated evaluation has no funded tier"})
-            if self.starting_capital_usd != Decimal("100"):
-                raise ValidationError({"starting_capital_usd": "Simulation assessment uses a $100 baseline"})
+            # Historical and unpurchased accounts retain their $100 baseline.
+            # New accounts must use their immutable purchased plan's tier.
+            plan = None
+            if self.challenge_enrollment_id is not None:
+                enrollment = self.challenge_enrollment
+                if self.trader_id != enrollment.trader_id:
+                    raise ValidationError("The plan enrollment belongs to a different trader")
+                if self.policy_version != enrollment.terms_version:
+                    raise ValidationError("Account terms differ from buyer's contract")
+                try:
+                    plan = plan_for_code(enrollment.plan_code)
+                except ValueError as exc:
+                    raise ValidationError("Unknown purchased challenge plan") from exc
+            required_index = plan.starting_tier_index if plan else 0
+            required_capital = plan.starting_capital_usd if plan else LEVELS[0]
+            if self.tier_index != required_index:
+                raise ValidationError({"tier_index": "Challenge tier must match purchased plan"})
+            if self.starting_capital_usd != required_capital:
+                raise ValidationError({"starting_capital_usd": "Challenge capital must match purchased plan"})
 
     def save(self, *args, **kwargs):
         # The ORM save path must not bypass tier consistency.
@@ -303,6 +319,7 @@ class PropChallengeEnrollment(models.Model):
         PropTrader, on_delete=models.PROTECT, related_name="challenge_enrollments"
     )
     verified_invoice_ref = models.CharField(max_length=96, unique=True)
+    plan_code = models.CharField(max_length=16, default=DEFAULT_PLAN_CODE)
     confirmed_at = models.DateTimeField(db_index=True)
     settlement_verified = models.BooleanField(default=False)
     terms_version = models.CharField(max_length=32, default=POLICY.version)
@@ -313,6 +330,21 @@ class PropChallengeEnrollment(models.Model):
         from .social_policy import NEW_CONTRACT_VERSION, aware_utc
         if self.terms_version != NEW_CONTRACT_VERSION:
             raise ValidationError("New enrollment uses pre-disclosed v1.2 contract")
+        try:
+            plan_for_code(self.plan_code)
+        except ValueError as exc:
+            raise ValidationError({"plan_code": "Unknown challenge plan"}) from exc
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).values(
+                "plan_code", "verified_invoice_ref", "confirmed_at", "trader_id"
+            ).first()
+            if previous and (
+                previous["plan_code"] != self.plan_code
+                or previous["verified_invoice_ref"] != self.verified_invoice_ref
+                or previous["confirmed_at"] != self.confirmed_at
+                or previous["trader_id"] != self.trader_id
+            ):
+                raise ValidationError("Confirmed purchase and plan are immutable")
         if self.trader_id and self.trader.user.is_active is not True:
             raise ValidationError("Inactive buyer cannot enter a funded challenge")
         import re
