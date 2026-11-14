@@ -71,14 +71,18 @@ def compute_quote_scenario(data: dict) -> dict:
     unit_sale_price = (base * (Decimal("100") - discount) / Decimal("100")).quantize(
         quantum, rounding=ROUND_HALF_UP
     )
-    variable_unit = sum((
-        amounts["direct_unit_cost"],
-        amounts["delivery_unit_cost"],
-        amounts["payment_unit_fee"],
-        amounts["refund_unit_reserve"],
-        amounts["tax_unit_reserve"],
-    ), Decimal("0")).quantize(quantum, rounding=ROUND_HALF_UP)
-    fixed = amounts["period_fixed_cost"].quantize(quantum, rounding=ROUND_HALF_UP)
+    # Round every non-negative cost component UP to its payment currency tick:
+    # a quoted margin must not look better by rounding real costs downward.
+    cost_fields = (
+        "direct_unit_cost", "delivery_unit_cost", "payment_unit_fee",
+        "refund_unit_reserve", "tax_unit_reserve",
+    )
+    rounded_costs = {
+        field: amounts[field].quantize(quantum, rounding=ROUND_CEILING)
+        for field in cost_fields
+    }
+    variable_unit = sum(rounded_costs.values(), Decimal("0"))
+    fixed = amounts["period_fixed_cost"].quantize(quantum, rounding=ROUND_CEILING)
     contribution = unit_sale_price - variable_unit
     break_even = None
     if contribution > 0:
@@ -87,6 +91,22 @@ def compute_quote_scenario(data: dict) -> dict:
     variable_total = variable_unit * units
     expected_contribution = contribution * units
     operating_result = expected_contribution - fixed
+    shortfall = None if break_even is None else max(0, break_even - units)
+    # A quote with zero expected sales has no demonstrable selling-price floor.
+    minimum_coverage_price = (
+        variable_unit + (fixed / Decimal(units))
+        if units else None
+    )
+    if minimum_coverage_price is not None:
+        minimum_coverage_price = minimum_coverage_price.quantize(
+            quantum, rounding=ROUND_CEILING
+        )
+    # Contribution margin % is diagnostic; does not convert scenarios to cash.
+    margin_pct = (
+        (contribution / unit_sale_price * Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        ) if unit_sale_price else None
+    )
 
     def show(value: Decimal) -> str:
         return format(value.quantize(quantum, rounding=ROUND_HALF_UP), "f")
@@ -99,6 +119,12 @@ def compute_quote_scenario(data: dict) -> dict:
         "discount_percent": show(discount),
         "unit_price": show(unit_sale_price),
         "variable_unit_cost": show(variable_unit),
+        "cost_components_rounded_up": {
+            field: show(rounded_costs[field]) for field in cost_fields
+        },
+        "contribution_margin_percent": (
+            format(margin_pct, ".2f") if margin_pct is not None else None
+        ),
         "unit_contribution": show(contribution),
         "estimated_gross_sales": show(gross),
         "estimated_variable_cost": show(variable_total),
@@ -106,6 +132,11 @@ def compute_quote_scenario(data: dict) -> dict:
         "period_fixed_cost": show(fixed),
         "estimated_operating_result": show(operating_result),
         "break_even_units": break_even,
+        "break_even_units_shortfall": shortfall,
+        "minimum_unit_sale_price_for_expected_units": (
+            show(minimum_coverage_price) if minimum_coverage_price is not None
+            else None
+        ),
         "unit_economics_viable": contribution > 0,
         "scenario_reaches_break_even": bool(
             break_even is not None and units >= break_even
