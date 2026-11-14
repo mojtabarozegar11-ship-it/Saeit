@@ -69,6 +69,11 @@ function inquiry_input_violations(array $post, $contentType, $rawBody): array {
     }
     if (isset($seen[$key])) $errors[]='A form field was repeated.';
     $seen[$key]=true;
+    $rawValue=explode('=',$pair,2)[1]??'';
+    $decoded=rawurldecode(str_replace('+',' ',$rawValue));
+    if (!array_key_exists($key,$post) || !is_string($post[$key]) || $post[$key]!==$decoded) {
+      $errors[]='The form payload did not match the submitted fields.';
+    }
   }
   if (count($post)>count($caps)) $errors[]='Too many form fields.';
   foreach ($post as $key=>$value) {
