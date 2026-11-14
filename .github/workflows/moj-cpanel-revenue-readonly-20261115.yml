@@ -1,0 +1,70 @@
+name: MOJ commerce Passenger source presence — VPS read-only
+on:
+  push:
+    branches:
+      - fix/moj-revenue-current-base-20261115
+    paths:
+      - .github/workflows/moj-cpanel-revenue-readonly-20261115.yml
+permissions:
+  contents: read
+concurrency:
+  group: moj-cpanel-readonly-snapshot-20261115
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: "github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/moj-revenue-current-base-20261115'"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Pinned read-only SSH source-presence proof; no database or wallet
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-commerce-src-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 45s ssh -T -i "$d/key" -p 1396 \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 \
+            -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no \
+            zomorod2@zohal.pws-dns.net 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('/home/zomorod2/Saeit-staging')
+          passenger = pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          modules = (
+              'services/mpw_trx_commercial_web.py',
+              'services/mpw_trx_public_catalog.py',
+              'services/mpw_trx_asset_integrity.py',
+              'services/mpw_trx_guest_commerce.py',
+              'config/urls.py',
+          )
+          def file_digest(rel):
+              p = root / rel
+              try:
+                  if p.is_symlink() or not p.is_file() or not (0 < p.stat().st_size <= 524288):
+                      return None
+                  return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+              except (OSError, ValueError):
+                  return None
+          result = {
+              'read_only': True,
+              'merchant_app_dir_present': bool(root.is_dir() and not root.is_symlink()),
+              'passenger_entry_present': bool(passenger.is_file() and not passenger.is_symlink()),
+              'effective_module_hash_prefix': {key: file_digest(key) for key in modules},
+              'database_or_payment_access': False,
+              'orders_or_emails_created': 0,
+              'publication_or_restarts': 0,
+              'verified_revenue': None,
+          }
+          print(json.dumps(result, sort_keys=True))
+          PY
