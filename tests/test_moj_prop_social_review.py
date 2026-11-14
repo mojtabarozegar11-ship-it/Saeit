@@ -82,6 +82,8 @@ class FourWeekProofTests(TestCase):
                 closed_at=at+timedelta(hours=12), data_source="verified-ci",
                 symbol="XAUUSD",gross_realized_usd=Decimal(pnl),
                 total_fees_usd=0,reconciliation_status="verified",
+                external_position_id=f"position-{first_day+i}",
+                execution_origin="manual" if i%2 == 0 else "bot",
             )
             PropEquityObservation.objects.create(
                 account=account, external_event_id=f"close-{first_day+i}",
@@ -91,6 +93,22 @@ class FourWeekProofTests(TestCase):
             )
         account.reconciled_by_operator=True
         account.save()
+
+    def extra_positions(self, account, first_day, amount, *, same_position=False):
+        for i in range(amount):
+            PropExecution.objects.create(
+                account=account,
+                external_event_id=f"extra-close-{first_day}-{i}",
+                external_position_id=(
+                    "one-split-position" if same_position
+                    else f"extra-position-{first_day}-{i}"
+                ),
+                execution_origin="bot" if i % 2 else "manual",
+                closed_at=START+timedelta(days=first_day+i%6, hours=13),
+                data_source="verified-ci", symbol="XAUUSD",
+                gross_realized_usd=Decimal("0.00"), total_fees_usd=0,
+                reconciliation_status="verified",
+            )
 
     def test_one_post_per_platform_for_entire_purchase(self):
         self.submit("instagram")
@@ -168,16 +186,18 @@ class FourWeekProofTests(TestCase):
         with self.assertRaises(SocialEvidenceRejected):
             self.review(row)
 
-    def test_six_trading_days_no_posts_cannot_pass(self):
+    def test_phase_one_can_finish_without_waiting_four_weeks_for_posts(self):
         self.trades(self.phase1,0,"1.60")
         result=account_projection(self.phase1)
-        self.assertFalse(result["assessment"].passed)
+        self.assertTrue(result["assessment"].passed)
         self.assertEqual(result["social_posting"].reviewed_instagram,0)
         self.assertEqual(result["social_posting"].required_instagram,1)
 
     def test_two_posts_once_unlock_phase_one_and_phase_two(self):
         self.trades(self.phase1,0,"1.60")
         self.trades(self.phase2,7,"1.00")
+        self.extra_positions(self.phase1,0,19)
+        self.extra_positions(self.phase2,7,19)
         self.review(self.submit("instagram"))
         self.review(self.submit("facebook"))
         phase_one=account_projection(self.phase1)
@@ -188,7 +208,35 @@ class FourWeekProofTests(TestCase):
         phase_two=account_projection(self.phase2)
         self.assertTrue(phase_two["social_posting"].satisfied)
         self.assertTrue(phase_two["assessment"].passed)
+        self.assertEqual(phase_two["challenge_trade_count"].valid_closed_positions,50)
         self.assertEqual(PropSocialEvidence.objects.count(),2)
+
+    def test_forty_nine_closed_positions_cannot_unlock_phase_two(self):
+        self.trades(self.phase1,0,"1.60")
+        self.trades(self.phase2,7,"1.00")
+        self.extra_positions(self.phase1,0,19)
+        self.extra_positions(self.phase2,7,18)
+        self.review(self.submit("instagram"))
+        self.review(self.submit("facebook"))
+        self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.save()
+        result=account_projection(self.phase2)
+        self.assertEqual(result["challenge_trade_count"].valid_closed_positions,49)
+        self.assertFalse(result["assessment"].passed)
+        self.assertIn("minimum_50_distinct_closed_trades_not_met",
+                      result["assessment"].reasons)
+
+    def test_split_fills_do_not_inflate_challenge_trade_total(self):
+        self.trades(self.phase1,0,"1.60")
+        self.trades(self.phase2,7,"1.00")
+        self.extra_positions(self.phase1,0,38,same_position=True)
+        self.review(self.submit("instagram"))
+        self.review(self.submit("facebook"))
+        self.phase1.status=PropAccount.Status.PASSED
+        self.phase1.save()
+        result=account_projection(self.phase2)
+        self.assertEqual(result["challenge_trade_count"].valid_closed_positions,13)
+        self.assertFalse(result["assessment"].passed)
 
     def test_trade_after_day_28_cannot_qualify(self):
         self.trades(self.phase1,26,"1.60")
