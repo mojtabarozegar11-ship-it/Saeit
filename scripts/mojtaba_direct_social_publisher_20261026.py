@@ -26,7 +26,7 @@ PLATFORM_LIMITS = {
     "telegram": "Bot API: bot must administer the destination",
     "discord": "Bot API: bot must have send-message permission",
 }
-_RESTRICTED = "dr.mojtaba.rozegar"
+_RESTRICTED = ("dr.mojtaba.rozegar", "7317306", "102203064721826")
 
 
 class PublicationBlocked(ValueError):
@@ -52,7 +52,7 @@ def _validated(job: dict) -> dict:
         raise PublicationBlocked("invalid text or platform length")
     if not isinstance(destination, str) or not destination or len(destination) > 120:
         raise PublicationBlocked("invalid destination")
-    if _RESTRICTED in (destination + " " + text).casefold():
+    if any(x in (destination + " " + text).casefold() for x in _RESTRICTED):
         raise PublicationBlocked("restricted Instagram account cannot be promoted")
     if platform == "telegram":
         if not re.fullmatch(r"(?:-?[0-9]{5,20}|@[A-Za-z][A-Za-z0-9_]{4,31})", destination):
