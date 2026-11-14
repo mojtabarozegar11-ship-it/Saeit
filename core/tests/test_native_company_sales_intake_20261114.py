@@ -214,7 +214,7 @@ class NativeCompanySalesTests(TestCase):
     def test_39_contact_get_no_cache(self):
         r = self.client.get("/contact/", HTTP_HOST="zomorodmelal.ir")
         self.assertIn("no-store", r["Cache-Control"])
-        self.assertIn("noindex", r["X-Robots-Tag"])
+        self.assertNotIn("X-Robots-Tag", r)
 
     def test_40_contact_rejects_unintended_put(self):
         r = self.client.put("/contact/", {}, HTTP_HOST="zomorodmelal.ir")
