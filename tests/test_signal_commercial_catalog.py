@@ -73,6 +73,20 @@ class SignalsPolicyTests(SimpleTestCase):
     def test_buyer_supplied_float_prices_rejected(self):
         self.assertFalse(inspect_signal_record(self.valid_record(entry=4000.0)))
 
+    def test_exponential_and_extreme_signal_prices_rejected_globally(self):
+        for price in ("1e10000000", "0."+"1"*20000, "1"*19, "۱۲۳",
+                      "+1.0", "1.000000001"):
+            with self.subTest(length=len(price)):
+                self.assertFalse(inspect_signal_record(
+                    self.valid_record(entry=price),
+                ))
+
+    def test_bounded_eight_decimal_signal_prices_supported(self):
+        self.assertTrue(inspect_signal_record(self.valid_record(
+            entry="0.00000120", stop_loss="0.00000119",
+            take_profit="0.00000121",
+        )))
+
     def test_nonfinite_prices_rejected(self):
         self.assertFalse(inspect_signal_record(self.valid_record(entry="NaN")))
         self.assertFalse(inspect_signal_record(self.valid_record(entry="Infinity")))
