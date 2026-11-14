@@ -315,7 +315,10 @@ class PropChallengeEnrollment(models.Model):
             raise ValidationError("New enrollment uses pre-disclosed v1.2 contract")
         if not self.verified_invoice_ref or not self.verified_invoice_ref.strip():
             raise ValidationError("Trusted payment receipt reference required")
-        aware_utc(self.confirmed_at, "confirmed_at")
+        from django.utils import timezone as _django_timezone
+        confirmed = aware_utc(self.confirmed_at, "confirmed_at")
+        if confirmed > _django_timezone.now():
+            raise ValidationError("Purchase confirmation cannot be dated in the future")
 
     def save(self, *args, **kwargs):
         self.full_clean()
