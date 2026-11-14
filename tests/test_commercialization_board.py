@@ -286,3 +286,29 @@ class CommercializationBoardApiTests(TestCase):
             "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
         ])
         self.assertContains(response, "۱۰ بخش")
+
+    def test_price_mismatched_catalog_is_excluded_from_price_verified_count(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", currency="USD", price="8.00",
+        )
+        self.client.force_login(self.staff)
+        observed = self.client.get(self.endpoint()).json()["observed"]
+        self.assertEqual(observed["catalog_products_active_title_matched"], 1)
+        self.assertEqual(observed["catalog_products_active_price_matched"], 0)
+        self.assertEqual(observed["catalog_price_verified_listing_ids"], [])
+
+    def test_exact_currency_and_price_are_required_for_commercial_listing(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", currency="USD", price="7.50",
+        )
+        Product.objects.create(
+            pk=225, title=PUBLIC_CATALOG[225]["title"], active=True,
+            product_type="book", currency="EUR", price="4.00",
+        )
+        self.client.force_login(self.staff)
+        observed = self.client.get(self.endpoint()).json()["observed"]
+        self.assertEqual(observed["catalog_products_active_title_matched"], 2)
+        self.assertEqual(observed["catalog_products_active_price_matched"], 1)
+        self.assertEqual(observed["catalog_price_verified_listing_ids"], [72])
