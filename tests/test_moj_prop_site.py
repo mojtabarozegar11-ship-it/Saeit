@@ -56,6 +56,22 @@ class MojPropCatalogTests(unittest.TestCase):
         self.assertIn("Instagram", page_context("en")["social"]["body"])
         self.assertIn("اینستاگرام", page_context("fa")["social"]["body"])
 
+    def test_ten_distinct_plans_appear_in_all_twenty_languages(self):
+        for code in SUPPORTED_CODES:
+            with self.subTest(locale=code):
+                context=page_context(code)
+                self.assertEqual(context["number_of_plans"],10)
+                self.assertEqual(len(context["challenge_plans"]),10)
+                self.assertEqual(len({p["code"] for p in context["challenge_plans"]}),10)
+                self.assertEqual(set(context["plans_copy"]),
+                    {"title","body","starting","fee","maximum","notice"})
+                self.assertTrue(all(context["plans_copy"].values()))
+                self.assertEqual(context["challenge_plans"][0]["fee_trx_proposed"],"30")
+                self.assertEqual(context["challenge_plans"][-1]["starting_capital_usd"],"35000")
+                self.assertTrue(all(not item["checkout_enabled"]
+                                    for item in context["challenge_plans"]))
+        self.assertIn("پیشنهاد",page_context("fa")["plans_copy"]["notice"])
+
     def test_urls_and_breadcrumb_identity(self):
         self.assertEqual(page_context()["canonical_url"], "/moj-prop/")
         self.assertEqual(page_context("ar")["canonical_url"], "/moj-prop/ar/")
@@ -99,6 +115,10 @@ class MojPropCatalogTests(unittest.TestCase):
         self.assertIn('data-availability="preview-only"', page)
         self.assertIn("mp-social-requirement", page)
         self.assertIn("social.disclosure", page)
+        self.assertIn("mp-plan-grid", page)
+        self.assertIn("{% for plan in challenge_plans %}", page)
+        self.assertIn("plans_copy.notice", page)
+
 
 
 try:
@@ -114,6 +134,13 @@ else:
             self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
             self.assertContains(result, "MOJ PROP")
             self.assertContains(result, 'lang="en"')
+
+        def test_web_landing_shows_all_ten_nonpayable_plan_ids(self):
+            response=self.client.get("/moj-prop/",HTTP_HOST="mojplaywin.com")
+            self.assertEqual(response.status_code,200)
+            for number in range(1,11):
+                self.assertContains(response,f"MOJ-PROP-{number:02d}")
+            self.assertNotContains(response,"Continue to checkout")
 
         def test_farsi_route_is_rtl_and_same_brand(self):
             result = self.client.get("/moj-prop/fa/", HTTP_HOST="www.mojplaywin.com")
