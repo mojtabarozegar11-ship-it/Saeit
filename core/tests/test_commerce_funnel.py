@@ -26,6 +26,33 @@ class CommerceFunnelTests(TestCase):
         self.assertFalse(hasattr(event, "ip_address"))
         self.assertFalse(hasattr(event, "wallet_address"))
 
+    def test_utm_email_and_full_url_are_rejected_before_storage(self):
+        for candidate in ("customer@example.com", "https://example.com/?token=x",
+                          "a b c", "<script>alert(1)</script>"):
+            with self.subTest(candidate=candidate):
+                request = self.client.get(
+                    "/", {"utm_source": candidate}, HTTP_HOST="mojplaywin.com",
+                ).wsgi_request
+                record_funnel_event(request, "view_item", self.product)
+                self.assertEqual(CommerceFunnelEvent.objects.order_by("-id").first().source, "")
+
+    def test_oversized_campaign_value_is_not_silently_truncated(self):
+        request = self.client.get(
+            "/", {"utm_campaign": "x" * 81}, HTTP_HOST="mojplaywin.com",
+        ).wsgi_request
+        record_funnel_event(request, "view_item", self.product)
+        self.assertEqual(CommerceFunnelEvent.objects.last().campaign, "")
+
+    def test_normal_campaign_code_remains_trackable(self):
+        request = self.client.get(
+            "/", {"utm_source": "email_newsletter-2026", "utm_campaign": "book_v2"},
+            HTTP_HOST="mojplaywin.com",
+        ).wsgi_request
+        record_funnel_event(request, "view_item", self.product)
+        row = CommerceFunnelEvent.objects.last()
+        self.assertEqual(row.source, "email_newsletter-2026")
+        self.assertEqual(row.campaign, "book_v2")
+
     def test_store_page_does_not_depend_on_optional_funnel_module(self):
         """Missing live analytics must not turn the product store into HTTP 500."""
         from unittest.mock import patch
