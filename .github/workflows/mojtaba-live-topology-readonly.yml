@@ -176,6 +176,8 @@ jobs:
                   "php_registry_rows": php.get("records"),
                   "php_known_roles_found": php.get("known_roles_found"),
                   "php_enabled_rows": php.get("enabled_count"),
+                  "php_known_enabled_rows": php.get("known_enabled_count"),
+                  "php_unknown_enabled_rows": php.get("unknown_enabled_count"),
                   "php_run_status_counts": php.get("run_status_counts", {}),
                   "php_worker_output_status_counts": php.get(
                       "recent_worker_output_status_counts", {}
