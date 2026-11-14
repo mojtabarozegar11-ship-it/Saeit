@@ -56,7 +56,7 @@ class SignalEvidenceTests(unittest.TestCase):
             with self.subTest(field=field):
                 tampered = {**record, field: value}
                 self.assertFalse(verify_source_integrity(
-                    tampered, source_id="source_main",
+                    tampered, source_id="source_main", brand="saman",
                     signing_key=KEY, digest=digest,
                 ))
 
@@ -75,7 +75,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_blank_short_keys_cannot_authenticate(self):
         for key in (b"", b"short", "not-bytes", 123, None):
             with self.subTest(key=key), self.assertRaises(SignalHistoryRejected):
-                source_digest(signal(), source_id="source_main", signing_key=key)
+                source_digest(signal(), source_id="source_main", brand="saman", signing_key=key)
 
     def test_duplicate_ids_in_history_are_refused_even_if_each_signed(self):
         event = signal(1)
