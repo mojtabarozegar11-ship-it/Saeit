@@ -80,9 +80,9 @@ COPY = {
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
     if locale == "host":
-        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
-        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
-        locale = "fa" if "zomorodmelal.ir" in host else "en"
+        from core.finance102_guides import locale_from_public_host
+        host = request.META.get("HTTP_HOST") or request.META.get("SERVER_NAME") or ""
+        locale = locale_from_public_host(host)
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
@@ -98,10 +98,21 @@ def financial_brand_page(request, brand, locale, page_type):
     else:
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
+    if page_type in {"signals", "store"}:
+        from core.finance102_guides import compose_page_copy
+        intro, notice = compose_page_copy(slug, locale, page_type, notice)
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    return render(request, "core/financial_brand_page.html", {
+    response = render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
+    if page_type in {"signals", "store"}:
+        from core.finance102_guides import canonical_url
+        # Search indexing metadata is added as an HTTP response header; HTML,
+        # CSS, currently published route names, and payment logic remain intact.
+        response["Link"] = '<' + canonical_url(slug, locale, page_type) + '>; rel="canonical"'
+        response["Content-Language"] = locale
+        response["X-Finance102-Editorial-Revision"] = "finance102-20261113-v2"
+    return response

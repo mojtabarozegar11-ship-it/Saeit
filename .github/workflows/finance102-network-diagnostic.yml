@@ -1,0 +1,21 @@
+name: Finance102 one-off owner network diagnostic (read-only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connectivity:
+    if: github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify allowlist and no-authentication assertions
+        run: python3 -B -m unittest discover -s tests -p 'test_finance102_network_preflight.py' -v
+      - name: Measure exactly four owner infrastructure TCP ports
+        run: python3 -B scripts/finance102_network_preflight.py
