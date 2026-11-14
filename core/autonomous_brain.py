@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
+from core.service_quote_draft import preview_candidates
 
 @dataclass(frozen=True)
 class Candidate:
@@ -76,7 +77,9 @@ class AutonomousBrain:
             seen_at is not None and (last_review_at is None or seen_at > last_review_at)
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
+        consented_proposal_candidates = preview_candidates(limit=20)["eligible_count"]
         return {
+            "consented_service_draft_candidates": consented_proposal_candidates,
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
@@ -102,6 +105,15 @@ class AutonomousBrain:
         # prerequisite. Check evidence first; never infer settled revenue.
         if s.get("financial_event_needs_reconcile", False):
             return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+        # A first-party customer request with recorded processing consent is a
+        # real acquisition signal. Prepare only an internal service response;
+        # never treat this as authorization to email, price or take payment.
+        if s.get("consented_service_draft_candidates", 0):
+            return [Candidate(
+                "income_service_proposal_prepare",
+                "Prepare a nonbinding scoped internal response to a consented real service inquiry.",
+                10, 10, 10, 1,
+            )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
             return [Candidate(
                 "await_external_self_improvement_review",
