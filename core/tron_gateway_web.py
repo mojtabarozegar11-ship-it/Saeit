@@ -101,8 +101,10 @@ def _limit(request, email, purpose="email"):
         raise Http404("Rate limit unavailable") from exc
 
 
-def _read_product(product_id, locale):
+def _read_product(product_id, locale, *, lock=False):
     query = Product.objects.filter(pk=product_id, active=True)
+    if lock:
+        query = query.select_for_update()
     product = query.first()
     if product is None or not Decimal("0") < product.price:
         raise Http404("Product unavailable")
@@ -133,9 +135,29 @@ def _read_product(product_id, locale):
             md.get("tron_price_reference_amount") != str(product.price)):
         raise Http404("Current TRX quotation not approved")
     # Approved fixed merchant quote prevents speculative or invented FX rates.
-    fingerprint = hashlib.sha256(
-        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}".encode()
-    ).hexdigest()
+    # Freeze all fields defining the offer/asset, not just price and digest.
+    # Otherwise a paid invoice could serve a later substituted path or SKU.
+    import json
+    approved_snapshot = {
+        "product_id": product.pk,
+        "price": str(product.price),
+        "currency": product.currency,
+        "sun": base_sun,
+        "kind": kind,
+        "rights_cleared": md.get("rights_cleared"),
+        "publication_approved": md.get("publication_approved"),
+        "sales_enabled": md.get("sales_enabled"),
+        "in_stock": md.get("in_stock"),
+        "fulfillment_ready": md.get("fulfillment_ready"),
+        "asset_relpath": md.get("asset_relpath"),
+        "sha256": md.get("sha256"),
+        "rights_asset_sha256": md.get("rights_asset_sha256"),
+        "rights_document_sha256": md.get("rights_document_sha256"),
+    }
+    fingerprint = hashlib.sha256(json.dumps(
+        approved_snapshot, sort_keys=True, ensure_ascii=True,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")).hexdigest()
     return product, base_sun, fingerprint
 
 
@@ -159,10 +181,30 @@ def _guest(email):
     return user
 
 
+def _preflight_digital_before_charge(product):
+    """No payable invoice for a missing, unsafe or corrupted private file."""
+    md = product.metadata if type(product.metadata) is dict else {}
+    if md.get("fulfillment_type") != "digital":
+        return
+    from .tron_gateway_delivery import _file_from_private_root
+    try:
+        with _file_from_private_root(md.get("asset_relpath"), md.get("sha256")):
+            pass
+    except Http404:
+        raise ValueError("Private digital asset is not ready") from None
+
+
 def _new_invoice(email, host, language, product_id):
-    # All database writes are atomic and rolling back a full cart on failure.
+    # Avoid a lengthy digest read while a financial DB transaction is open.
+    product, base_sun, fingerprint = _read_product(product_id, language)
+    _preflight_digital_before_charge(product)
+    # Lock and recheck the exact offer after reading the local private file.
     with transaction.atomic():
-        product, base_sun, fingerprint = _read_product(product_id, language)
+        product, locked_sun, locked_fingerprint = _read_product(
+            product_id, language, lock=True,
+        )
+        if locked_sun != base_sun or locked_fingerprint != fingerprint:
+            raise ValueError("Product changed during checkout")
         user = _guest(email)
         order = Order.objects.create(customer=user, status="pending",
                                      total=product.price, currency=product.currency)
