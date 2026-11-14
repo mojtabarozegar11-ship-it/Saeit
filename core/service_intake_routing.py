@@ -78,6 +78,13 @@ def service_intake_source_snapshot() -> dict:
         "authoritative_catalogue_count": len(SERVICE_CARDS),
         "django_new_leads_enabled": activated,
         "routing_mode": EXPECTED_SOURCE if activated else "legacy_ask_master_unverified",
+        # The historic /company/ form used to bypass the same source policy.
+        # Expose the actual POST and UI behavior without accessing customer PII.
+        "company_portal_django_form_visible": activated,
+        "company_portal_django_post_enabled": activated,
+        "company_portal_post_when_disabled": "503_no_store_no_pii_forward",
+        "company_portal_external_fallback": LEGACY_INQUIRY_PATH,
+        "company_portal_legacy_php_health_verified": None,
         "fallback_path": LEGACY_INQUIRY_PATH,
         "django_gate_flags": flags,
         "source_configuration_match": (
