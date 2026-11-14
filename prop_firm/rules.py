@@ -156,7 +156,7 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
         raise ValueError("Unknown immutable challenge contract version")
     if version == NEW_CONTRACT_VERSION and social_posts_verified is not True:
-        reasons.append("social_single_post_each_platform_unverified")
+        reasons.append("social_one_post_four_weeks_unverified")
     if days < POLICY.min_challenge_days:
         reasons.append("minimum_trading_days_not_met")
     if profit < goal:
