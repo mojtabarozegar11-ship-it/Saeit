@@ -119,6 +119,10 @@ class BrokerSignedEvidenceTests(TestCase):
         row=PropExecution.objects.get(account=self.account)
         self.assertEqual(row.external_position_id,"")
         self.assertEqual(row.execution_origin,"unknown")
+        # Even a later independent reconciliation cannot invent a distinct
+        # closed position from legacy execution packets lacking a position ID.
+        row.reconciliation_status="verified"
+        row.save(update_fields=["reconciliation_status"])
         from prop_firm.trade_count import count_challenge_trades
         stats=count_challenge_trades([row],paid_at=NOW-timedelta(days=1))
         self.assertEqual(stats.valid_closed_positions,0)
