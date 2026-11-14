@@ -7,6 +7,8 @@ from .chat_operation_security import is_authorized_chat_operator
 from .task_approval_scope import approval_covers_task
 from .chat_operation_scope import validate_chat_operation_scope
 from .grant_scope_policy import require_exact_grant_scope, require_exact_consumption_scope
+from .trade_outbox_scope import validate_outbox_for_owner_grant
+from .economic_trade_models import TradeEmailOutbox
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -162,6 +164,17 @@ class ApprovalService:
                     or type(input_data.get("run_id")) is not int):
                 raise ValueError("GRANT_PAID_MODEL_TASK_RUN_MISMATCH")
 
+        if approval.action_type == "external_write":
+            outbox = (
+                TradeEmailOutbox.objects.select_for_update()
+                .select_related("mailbox")
+                .filter(pk=approval.target_id)
+                .first()
+            )
+            if outbox is None:
+                raise ValueError("GRANT_OUTBOX_NOT_FOUND")
+            validate_outbox_for_owner_grant(outbox, approved_scope)
+
         # A one-time token is not enough if the SAME owner approval can mint
         # limitless fresh tokens. Serialize on approval row and deny reissues.
         if ApprovalGrant.objects.filter(approval=approval).exists():
@@ -218,6 +231,16 @@ class ApprovalService:
                     or inputs.get("run_id") != checked["run_id"]
                     or type(inputs.get("run_id")) is not int):
                 raise ValueError("GRANT_PAID_MODEL_TASK_RUN_MISMATCH")
+        if grant.approval.action_type == "external_write":
+            outbox = (
+                TradeEmailOutbox.objects.select_for_update()
+                .select_related("mailbox")
+                .filter(pk=grant.approval.target_id)
+                .first()
+            )
+            if outbox is None:
+                raise ValueError("GRANT_OUTBOX_NOT_FOUND")
+            validate_outbox_for_owner_grant(outbox, checked)
         grant.used_at = timezone.now()
         grant.save(update_fields=["used_at", "updated_at"])
         AuditLog.objects.create(
