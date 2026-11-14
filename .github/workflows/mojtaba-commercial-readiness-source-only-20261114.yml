@@ -1,0 +1,59 @@
+name: Mojtaba.bot.ai commercial portfolio source-only quality gate
+on:
+  pull_request:
+    paths:
+      - 'ops/revenue/mojtaba_commercial_readiness_v1.py'
+      - 'ops/revenue/mojtaba_commercial_offers_v1.json'
+      - 'docs/operations/mojtaba-commercial-cash-first-20261114.md'
+      - 'tests/test_mojtaba_commercial_readiness_v1.py'
+      - '.github/workflows/mojtaba-commercial-readiness-source-only-20261114.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-commercial-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  commercial-source-quality:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify 50 business and safety contract cases without secrets or external APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mojtaba_commercial_readiness_v1.py' -v
+          python3 -B -m py_compile ops/revenue/mojtaba_commercial_readiness_v1.py
+          python3 -m json.tool ops/revenue/mojtaba_commercial_offers_v1.json >/dev/null
+      - name: Emit sanitized readiness evidence, no customer records or revenue assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B ops/revenue/mojtaba_commercial_readiness_v1.py > "$RUNNER_TEMP/mojtaba-commercial-readiness.json"
+          python3 - "$RUNNER_TEMP/mojtaba-commercial-readiness.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf8"))
+          assert d["canonical_bot_id"]=="mojtaba.bot.ai"
+          assert d["offer_count"]==15
+          assert d["repository_source_verified_count"]==15
+          assert d["inquiry_candidates_source_only"]==11
+          assert d["free_acquisition_candidates_source_only"]==1
+          assert d["release_blocked_offers"]==3
+          assert d["commercial_releases_authorized_count"]==0
+          assert d["revenue_received_irr"] is None
+          assert d["purchases_verified_count"] is None
+          assert d["transactions_created"]==d["orders_created"]==0
+          print("MOJTABA_COMMERCIAL_SOURCE_GATE=PASS")
+          print("MOJTABA_COMMERCIAL_SALES=UNVERIFIED")
+          PY
+      - name: Upload summary only with seven-day retention
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojtaba-commercial-source-evidence
+          path: ${{ runner.temp }}/mojtaba-commercial-readiness.json
+          retention-days: 7
+          if-no-files-found: warn
