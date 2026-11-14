@@ -40,7 +40,8 @@ def build_cyber_gateway_tools(verify_key: bytes, *, enable_offline: bool = False
     client consent. The existing task gate, signed scope, tenant isolation and
     independent provenance checks all remain mandatory.
     """
-    if not isinstance(verify_key, bytes) or len(verify_key) < 32:
+    if (not isinstance(verify_key, bytes) or len(verify_key) < 32
+            or len(set(verify_key)) < 2):
         raise CyberModuleError("VERIFIER_KEY_INVALID")
     if type(enable_offline) is not bool:
         raise CyberModuleError("ENABLED_FLAG_INVALID")
