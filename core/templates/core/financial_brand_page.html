@@ -19,5 +19,15 @@ a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{displ
 <nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
 <section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% elif page_type == "game" %}Game world{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
 <section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
+{% if signal_offer %}
+<section class="card" aria-label="Signal subscription evidence" data-signal-subscription="not-released">
+<h2>{{ signal_offer.title }}</h2>
+<p>{% if locale == "fa" %}اشتراک سیگنال هنوز برای فروش فعال نیست. سوابق عملکرد، هزینه‌ها، افت سرمایه، شرایط ارائه و تحویل اشتراک باید مستقلاً احراز شوند.
+{% elif locale == "ar" %}الاشتراك في إشارات السوق غير متاح للبيع بعد؛ يجب التحقق بصورة مستقلة من سجل الأداء والتكاليف والسحب وشروط الاشتراك والتسليم.
+{% else %}Signal subscriptions are not for sale yet. Independent signal history, performance including losses and fees, service terms, and subscriber delivery must be verified first.{% endif %}</p>
+<p><small>MOJTABA.BOT.AI · {{ brand_slug }} · {{ locale|upper }} ·
+{% if signal_offer.checkout_enabled %}Subscription availability verified{% else %}No live subscription, checkout or guaranteed return{% endif %}</small></p>
+</section>
+{% endif %}
 <footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
 </main></body></html>
