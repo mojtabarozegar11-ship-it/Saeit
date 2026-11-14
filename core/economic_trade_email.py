@@ -87,7 +87,12 @@ def _finalize_dispatch(outbox_id, *, status, error=""):
             outbox=item,
             action=status,
             trace_id=_trace_id(),
-            metadata={"provider": "django-email", "delivery_confirmed": status == "sent"},
+            metadata={
+                "provider": "django-email",
+                "smtp_accepted": status == "sent",
+                # SMTP acceptance is not proof of inbox delivery or a sale.
+                "delivery_confirmed": False,
+            },
         )
         return item
 
