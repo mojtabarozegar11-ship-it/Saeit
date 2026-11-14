@@ -62,7 +62,7 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
 <section class="panel notice" style="margin-top:15px">
 <h2>موانع عملیاتی و اقدام بعدی</h2>
 <p>منبع تنظیم‌شده ثبت درخواست: <strong>{{ funnel.source_configuration }}</strong>. این مقدار تنها تنظیمات کد است؛ سلامت فرم PHP یا Django روی میزبان از این گزارش احراز نمی‌شود.</p>
-<p>از {{ funnel.candidate_scan.inspected }} رکورد بررسی‌شده، {{ funnel.candidate_scan.eligible }} مورد برای آماده‌سازی پیش‌نویس واجد شرایط دیده شد و {{ funnel.candidate_scan.requires_human_review }} مورد نیازمند بررسی انسانی است.</p>
+<p>از {{ funnel.candidate_scan.queue_total_candidates }} پرونده در صف بررسی، {{ funnel.candidate_scan.inspected }} رکورد بررسی‌شده است؛ {{ funnel.candidate_scan.eligible }} مورد برای آماده‌سازی پیش‌نویس واجد شرایط دیده شد و {{ funnel.candidate_scan.requires_human_review }} مورد نیازمند بررسی انسانی است. <strong>{{ funnel.candidate_scan.queue_uninspected }} پرونده هنوز در این نوبت بررسی نشده‌اند.</strong></p>
 {% if funnel.candidate_scan.scan_limit_reached %}
 <p><strong>هشدار:</strong> جست‌وجو به سقف {{ funnel.candidate_scan.max_records }} رسید. نبود مشتری واجد شرایط در کل پایگاه قابل نتیجه‌گیری نیست؛ پرونده‌های ناقص باید در CRM رسیدگی شوند.</p>
 {% endif %}
