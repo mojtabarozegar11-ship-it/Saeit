@@ -608,8 +608,13 @@ def verify_public_buyer_routes(run_id: str) -> bool:
             try:
                 with urllib.request.urlopen(request, timeout=min(7, remaining)) as reply:
                     if reply.status == 200 and reply.geturl() == url:
-                        body = reply.read(250_000)
-                        if title in body and action in body:
+                        from services.mpw_checkout_release_assurance import (
+                            read_bounded_response,
+                        )
+                        body, body_issue = read_bounded_response(reply)
+                        if body_issue is not None:
+                            category = body_issue
+                        elif title in body and action in body:
                             checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
                             if not checkout:
                                 checked += 1
