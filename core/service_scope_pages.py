@@ -6,6 +6,7 @@ customer record, outbound message, quote, invoice, gateway or spend.
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 from django.http import Http404
 from django.shortcuts import render
@@ -144,6 +145,9 @@ def service_scope_page(request, service_code):
             "guide": guide,
             "contact": contact,
             "service_scope_code": service_code,
+            "optional_company_email": "mailto:zomorodmelal@gmail.com?subject=" + quote(
+                f"[{service_code}] درخواست بررسی اولیه {offer['title_fa']}", safe=""
+            ),
             "structured_data": schema_json,
             "canonical": structured["url"],
             "service_form_active": contact["intake_source"] == "django_company_inquiry_v1",
