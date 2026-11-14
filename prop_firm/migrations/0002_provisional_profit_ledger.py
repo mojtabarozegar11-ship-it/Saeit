@@ -56,7 +56,7 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("allocation", models.ForeignKey(
                     on_delete=django.db.models.deletion.PROTECT,
-                    related_name="journal_lines", to="prop_firm.profitallocation")),
+                    related_name="journal_lines", to="prop_firm.propprofitallocation")),
             ],
         ),
         migrations.AddConstraint(
