@@ -43,8 +43,8 @@ def _safe_root():
         raise Http404("Private digital root not configured")
     root = Path(raw)
     if (not root.is_absolute() or ".." in root.parts
-            or str(root) == "/" or not hasattr(os, "O_NOFOLLOW")
-            or not hasattr(os, "O_DIRECTORY")):
+            or str(root) == "/" or not getattr(os, "O_NOFOLLOW", 0)
+            or not getattr(os, "O_DIRECTORY", 0)):
         raise Http404("Private digital root not configured")
     for p in (root, *root.parents):
         if p.is_symlink():
