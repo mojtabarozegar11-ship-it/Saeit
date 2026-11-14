@@ -29,6 +29,14 @@ class CyberModuleError(ValueError):
     """Reject unauthorized or malformed offline evidence, fail closed."""
 
 
+def _periodic_key(key: bytes) -> bool:
+    """Reject short-period repeated HMAC keys without pretending to estimate entropy."""
+    return any(
+        len(key) % period == 0 and key == key[:period] * (len(key) // period)
+        for period in range(1, min(8, len(key) - 1) + 1)
+    )
+
+
 def descriptor() -> dict:
     """Metadata for canonical bot's internal capability registry."""
     return {
@@ -83,7 +91,8 @@ def _redact(value: str, limit: int = 3000) -> str:
 def verify_authorization(engagement: dict, verify_key: bytes, *,
                          now: datetime | None = None) -> dict:
     """Key must come from the canonical bot's trusted secret store."""
-    if not isinstance(verify_key, bytes) or len(verify_key) < 32:
+    if (not isinstance(verify_key, bytes) or len(verify_key) < 32
+            or _periodic_key(verify_key)):
         raise CyberModuleError("VERIFIER_KEY_INVALID")
     if not isinstance(engagement, dict) or engagement.get("schema") != MANIFEST_SCHEMA:
         raise CyberModuleError("AUTHORIZATION_INVALID")
