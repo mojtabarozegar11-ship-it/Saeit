@@ -83,3 +83,37 @@ def provenance(kind, subject, internal_note):
         and initial_stamp.startswith(CONSENT_MARKER + "; confirmed_at=")
         and initial_stamp.endswith("; source=farm")
     )
+
+
+def normalize_customer_text(value, *, multiline=False):
+    """Normalize human-provided text; deny bidi/control spoofing without losing Persian."""
+    if type(value) is not str:
+        raise ValueError("Invalid customer text")
+    value = value.strip()
+    if multiline:
+        value = value.replace("\r\n", "\n").replace("\r", "\n")
+    for ch in value:
+        code = ord(ch)
+        if (code < 32 and not (multiline and ch in ("\n", "\t"))
+                or code == 127 or code == 0x200B
+                or 0x202A <= code <= 0x202E or 0x2066 <= code <= 0x2069):
+            raise ValueError("Invalid control character in customer text")
+    return value if multiline else " ".join(value.split())
+
+
+def normalize_customer_email(value):
+    if type(value) is not str:
+        raise ValueError("Invalid customer email")
+    local, sep, domain = value.strip().rpartition("@")
+    if not sep or not local or not domain:
+        raise ValueError("Invalid customer email")
+    return local + "@" + domain.lower()
+
+
+def normalize_optional_phone(value):
+    number = normalize_customer_text(value)
+    if not number:
+        return ""
+    if not re.fullmatch(r"\+?[\d\s().-]+", number) or not 7 <= sum(c.isdigit() for c in number) <= 15:
+        raise ValueError("Invalid customer phone")
+    return number
