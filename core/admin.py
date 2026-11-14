@@ -270,7 +270,11 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
 
 from .company_inquiry_models import CompanyInquiry
 from django.contrib import messages as django_messages
-from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, prepare_one
+from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, _code_for, prepare_one
+from command_center.models import WorkItem
+from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
@@ -337,18 +341,66 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
             return
         prepared = 0
         skipped = 0
+        workitems_created = 0
+        workitems_existing = 0
         for record_id in queryset.order_by("pk").values_list("pk", flat=True):
-            result = prepare_one(record_id)
-            if result["state"] == "prepared_internal_draft":
-                prepared += 1
-            else:
-                skipped += 1
+            # Acquire the same source inquiry row lock used by prepare_one.
+            # This makes the internal handoff atomic on transactional databases
+            # without creating a new agent or a duplicate customer store.
+            with transaction.atomic():
+                row = CompanyInquiry.objects.select_for_update().filter(
+                    pk=record_id,
+                ).first()
+                if row is None:
+                    skipped += 1
+                    continue
+                result = prepare_one(record_id)
+                if result["state"] == "prepared_internal_draft":
+                    prepared += 1
+                row.refresh_from_db()
+                if not (
+                    row.status == "reviewing"
+                    and row.internal_note.startswith(SOURCE_MARKER)
+                    and DRAFT_MARKER in row.internal_note
+                    and _code_for(row) is not None
+                ):
+                    skipped += 1 if result["state"] != "prepared_internal_draft" else 0
+                    continue
+
+                source_id = str(row.pk)
+                existing = WorkItem.objects.filter(
+                    source_type="company_service_proposal",
+                    source_id=source_id,
+                ).order_by("pk").first()
+                if existing:
+                    workitems_existing += 1
+                    continue
+                code = _code_for(row)
+                WorkItem.objects.create(
+                    source_type="company_service_proposal",
+                    source_id=source_id,
+                    title=f"بررسی و قیمت‌گذاری خدمت {code} — پرونده #{row.pk}",
+                    description=(
+                        "درخواست دارای رضایت ثبت‌شده و پیش‌نویس داخلی است. "
+                        "اطلاعات مشتری را فقط در CRM اصلی مشاهده کنید. "
+                        "دامنه، ظرفیت، حقوق داده، هزینه و مجوز قیمت را جداگانه "
+                        "بررسی کنید؛ این کارتابل مجوز ارسال، قرارداد یا دریافت وجه نیست."
+                    ),
+                    status="open",
+                    priority="high",
+                    created_by=request.user,
+                    due_at=timezone.now() + timedelta(hours=24),
+                )
+                workitems_created += 1
         self.message_user(
             request,
             (
-                f"پیش‌نویس داخلی آماده: {prepared} | "
-                f"نیازمند بررسی یا نامعتبر: {skipped} | "
+                f"پیش‌نویس داخلی جدید: {prepared} | "
+                f"ارجاع واقعی به کارتابل: {workitems_created} | "
+                f"ارجاع موجود: {workitems_existing} | "
+                f"نیازمند اصلاح: {skipped} | "
                 "ارسال پیام: ۰ | وصول وجه: تأییدنشده"
             ),
-            level=django_messages.SUCCESS if prepared else django_messages.WARNING,
+            level=django_messages.SUCCESS if (prepared or workitems_created)
+            else django_messages.WARNING,
         )
