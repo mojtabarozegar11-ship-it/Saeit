@@ -30,7 +30,7 @@ class EconomicTradeEmailTests(TestCase):
 
     def test_invalid_recipient_cannot_create_unusable_trade_draft(self):
         for recipient in ("", "not-an-address", " buyer@example.test",
-                          "buyer@example.test\\nBcc: victim@example.test", None):
+                          "buyer@example.test\nBcc: victim@example.test", None):
             with self.subTest(recipient=recipient):
                 with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_RECIPIENT_INVALID"):
                     queue_trade_email(recipient=recipient, subject="Inquiry", body="Quote please")
@@ -38,7 +38,7 @@ class EconomicTradeEmailTests(TestCase):
         self.assertEqual(TradeMailbox.objects.count(), 0)
 
     def test_header_injection_and_oversized_subject_cannot_queue(self):
-        for subject in ("", "Inquiry\\r\\nBcc: victim@example.test", "A" * 301, None):
+        for subject in ("", "Inquiry\r\nBcc: victim@example.test", "A" * 301, None):
             with self.subTest(subject=str(subject)[:25]):
                 with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_SUBJECT_INVALID"):
                     queue_trade_email(recipient="buyer@example.test", subject=subject, body="Quote")
