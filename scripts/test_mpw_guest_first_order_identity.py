@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import hashlib
 import hmac
-import re
 import secrets
 import sys
 import types
@@ -100,7 +99,9 @@ def install_fake_django():
     class ValidationError(Exception):
         pass
     def validate_email(value):
-        if not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", value):
+        parts = value.split("@")
+        if (len(parts) != 2 or not parts[0] or "." not in parts[1]
+                or any(char.isspace() for char in value)):
             raise ValidationError("Invalid")
     sys.modules["django.core.exceptions"].ValidationError = ValidationError
     sys.modules["django.core.validators"].validate_email = validate_email
@@ -162,7 +163,7 @@ def run():
         else:
             raise AssertionError("unsafe guest buyer input accepted")
     assert len(USERS) == 2
-    print("MPW_GUEST_CONCURRENT_ORDER_IDENTITY=PASS;DATABASE_WRITES=2;NETWORK=0")
+    print("MPW_GUEST_CONCURRENT_ORDER_IDENTITY=PASS;SIMULATED_USERS=2;REAL_DB_WRITES=0;NETWORK=0")
 
 
 if __name__ == "__main__":
