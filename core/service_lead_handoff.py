@@ -147,3 +147,103 @@ def handoff_prepared_inquiry(inquiry_id, *, created_by=None):
         "payment_received": None,
         "next_action": "owner_review_real_desk_workitem",
     }
+
+MAX_ORPHAN_SCAN = 500
+
+
+def orphaned_handoff_snapshot():
+    """Bounded evidence of prepared, audited leads lacking a desk WorkItem.
+
+    Older drafts are not lost when a previous cycle completed a proposal but
+    did not dispatch a task. Both queue ends get a chance; uninspected middle
+    is disclosed explicitly. Customer contact fields never leave this module.
+    """
+    queue = CompanyInquiry.objects.filter(
+        status="reviewing",
+        internal_note__startswith=SOURCE_MARKER,
+        internal_note__contains=DRAFT_MARKER,
+    )
+    total = queue.count()
+    if total <= MAX_ORPHAN_SCAN:
+        rows = list(queue.order_by("created_at", "pk")[:MAX_ORPHAN_SCAN])
+    else:
+        rows = (
+            list(queue.order_by("created_at", "pk")[:MAX_ORPHAN_SCAN // 2])
+            + list(queue.order_by("-created_at", "-pk")[:MAX_ORPHAN_SCAN // 2])
+        )
+    source_ids = [str(row.pk) for row in rows]
+    existing = set(
+        WorkItem.objects.filter(
+            source_type=SOURCE_TYPE,
+            source_id__in=source_ids,
+        ).values_list("source_id", flat=True)
+    )
+    possible = [row for row in rows if str(row.pk) not in existing]
+    proofs = AuditLog.objects.filter(
+        actor_type="agent", actor_id=BOT_ID,
+        action="service_response_draft_prepared",
+        target_type="CompanyInquiry",
+        target_id__in=[str(row.pk) for row in possible],
+    ).values("target_id", "trace_id", "after_state")
+    proof_keys = set()
+    for proof in proofs:
+        state = proof["after_state"]
+        if isinstance(state, dict):
+            proof_keys.add((
+                proof["target_id"],
+                proof["trace_id"],
+                state.get("request_sha256_prefix"),
+                state.get("service_code"),
+            ))
+    eligible = []
+    for row in possible:
+        code = _code_for(row)
+        if code is None:
+            continue
+        digest = _fingerprint(row)[:20]
+        if (
+            str(row.pk), f"service-draft-{row.pk}-{digest}",
+            digest, code,
+        ) in proof_keys:
+            eligible.append(row.pk)
+    return {
+        "inspected": len(rows),
+        "queue_total": total,
+        "uninspected": max(0, total - len(rows)),
+        "verified_candidate_count": len(eligible),
+        "verified_inquiry_ids_internal": eligible,
+        "scan_complete": total <= MAX_ORPHAN_SCAN,
+        "cash_received": None,
+        "customer_contacted": False,
+    }
+
+
+def recover_one_orphaned_handoff():
+    """Restore one missing, already evidenced desk task for the existing bot."""
+    inventory = orphaned_handoff_snapshot()
+    for pk in inventory["verified_inquiry_ids_internal"]:
+        result = handoff_prepared_inquiry(pk)
+        if result.get("verified_effect") is True:
+            return {
+                "state": "evidenced_draft_handoff_recovered",
+                "verified_effect": True,
+                "action_performed": "Recovered one missing real owner-desk follow-up for an existing audited CRM scope.",
+                "evidence": {
+                    "kind": "company_service_proposal_recovery",
+                    "inquiry_id": pk,
+                    "workitem_id": result["workitem_id"],
+                    "desk_handoff_verified": True,
+                    "customer_contacted": False,
+                    "cash_reconciled": False,
+                },
+                "next_action": "owner_review_real_desk_workitem",
+            }
+    return {
+        "state": "orphan_queue_incomplete_requires_review" if not inventory["scan_complete"]
+        else "no_verified_orphaned_service_handoff",
+        "verified_effect": False,
+        "inspected": inventory["inspected"],
+        "uninspected": inventory["uninspected"],
+        "customer_contacted": False,
+        "cash_received": None,
+    }
