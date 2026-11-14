@@ -122,14 +122,6 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_cpanel_source_attestation_readonly.py
-      - name: Run read-only live sales and checkout audit
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
-          timeout 150s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_sales_intake_readonly_20261024.py
-          echo MPW_INTAKE_AUDIT=PASS
       - name: Read encrypted service inquiry backlog counts, no customer contents
         continue-on-error: true
         env:
@@ -138,6 +130,15 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 55s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_encrypted_inquiry_queue_readonly.py
+      - name: Run read-only live sales and checkout audit
+        continue-on-error: true
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_sales_intake_readonly_20261024.py
+          echo MPW_INTAKE_AUDIT=PASS
       - name: Check payment reconciler heartbeat from live cPanel, read only
         continue-on-error: true
         run: |
