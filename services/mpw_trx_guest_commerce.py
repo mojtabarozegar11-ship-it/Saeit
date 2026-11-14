@@ -328,7 +328,11 @@ def patch_commercial(namespace):
         route, view = entry
         if not isinstance(route, str):
             raise RuntimeError("Non-string TRX URL route")
-        matches = [name for token, name in route_names if token in route]
+        # Match a route's terminal action, not an incidental substring.
+        # For example /start/archive/ must not be mistaken for /start/.
+        normalized = route.rstrip("/") + "/"
+        matches = [name for token, name in route_names
+                   if normalized.endswith(token)]
         if len(matches) > 1:
             raise RuntimeError("Ambiguous TRX URL route")
         if matches:
