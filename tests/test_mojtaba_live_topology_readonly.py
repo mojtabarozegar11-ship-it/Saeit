@@ -522,3 +522,257 @@ def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
     assert 'echo "$VPS_KEY"' not in workflow
     assert 'sudo ' not in workflow
     assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in workflow
+
+
+def test_cron_macro_shortcuts_are_recorded_and_redacted():
+    secret = "PRIVATE_CRON_TOKEN_NOT_FOR_LOGS"
+    raw = (
+        f"@reboot python manage.py run_economic_worker --secret {secret}\n"
+        "@daily\tpython manage.py knowledge_agent_cycle\n"
+        "@hourly python manage.py newsletter_process_queue\n"
+        "@monthly python unrelated.py\n"
+    )
+    rows = observer.safe_cron(raw)
+    assert [row["schedule"] for row in rows] == [
+        "@reboot", "@daily", "@hourly", "@monthly",
+    ]
+    assert rows[0]["known_route_flags"] == ["run_economic_worker"]
+    assert rows[1]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert rows[2]["known_route_flags"] == ["newsletter_process_queue"]
+    assert rows[3]["known_route_flags"] == []
+    assert all(len(row["command_digest"]) == 16 for row in rows)
+    assert secret not in json.dumps(rows)
+    assert "python" not in json.dumps(rows)
+
+
+def test_cron_macro_rejects_unknown_malformed_and_empty_shortcuts():
+    rows = observer.safe_cron(
+        "@random python manage.py run_economic_worker\n"
+        "@reboot\n"
+        "@hourly    \n"
+        "# @daily python manage.py knowledge_agent_cycle\n"
+        "@annually\tpython manage.py weather_agent_cycle\n"
+    )
+    assert len(rows) == 1
+    assert rows[0]["schedule"] == "@annually"
+    assert rows[0]["known_route_flags"] == ["weather_agent_cycle"]
+
+
+def test_cpanel_collect_reports_successful_sqlite_aggregate_query(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)")
+        conn.execute("INSERT INTO agents VALUES ('master', 1)")
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("cpanel", home=tmp_path, username="zomorod2")
+    assert row["database_queried"] is True
+    assert row["private_php_site_registry"]["state"] == "source_registry_snapshot_only"
+    assert row["private_php_site_registry"]["known_roles_found"] == 1
+    assert row["attestation"]["canonical_worker_executed"] is False
+    assert row["attestation"]["legacy_workers_retired"] is False
+
+
+def test_cpanel_missing_sqlite_does_not_claim_database_query(tmp_path):
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("cpanel", home=tmp_path, username="zomorod2")
+    assert row["database_queried"] is False
+    assert row["private_php_site_registry"]["state"] == "private_database_not_observed"
+    assert row["attestation"]["source_code_deployment_matches_pr"] is False
+
+
+def test_vps_collector_never_claims_sqlite_query(tmp_path):
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["database_queried"] is False
+    assert row["private_php_site_registry"]["state"] == "not_applicable"
+
+
+def test_macro_cron_inventory_is_not_live_worker_attestation(tmp_path):
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", "@reboot python manage.py run_economic_worker\n"),
+        ("unavailable", ""), ("unavailable", ""), ("unavailable", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["enumerated_entries"] == 1
+    assert row["cron"]["entries"][0]["schedule"] == "@reboot"
+    assert row["attestation"]["canonical_worker_executed"] is False
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+    assert row["attestation"]["automatic_deactivation_authorized"] is False
+
+
+@pytest.mark.parametrize("argv", [
+    ["crontab", "-l"],
+    ["ps", "-eo", "args="],
+    ["systemctl", "list-units"],
+])
+def test_oversize_subprocess_output_is_not_a_complete_observation(argv):
+    from subprocess import CompletedProcess
+    huge_private_output = (
+        "python manage.py knowledge_agent_cycle --key=PRIVATE_VALUE\n" * 12000
+    )
+    assert len(huge_private_output) > observer.MAX_STDOUT_CHARS
+    with patch.object(observer.subprocess, "run", return_value=CompletedProcess(
+        args=argv, returncode=0, stdout=huge_private_output, stderr="",
+    )):
+        state, output = observer.call_readonly(argv)
+    assert state == "observed_truncated"
+    assert output == ""
+
+
+def test_exact_stdout_character_boundary_is_not_accidentally_rejected():
+    from subprocess import CompletedProcess
+    output = "X" * observer.MAX_STDOUT_CHARS
+    with patch.object(observer.subprocess, "run", return_value=CompletedProcess(
+        args=["crontab", "-l"], returncode=0, stdout=output, stderr="",
+    )):
+        state, returned = observer.call_readonly(["crontab", "-l"])
+    assert state == "observed"
+    assert returned == output
+
+
+def test_cron_501_lines_are_not_a_complete_worker_census(tmp_path):
+    cron = "@reboot python manage.py run_economic_worker\n" * 501
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", cron), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["state"] == "observed_truncated"
+    assert row["cron"]["enumerated_entries"] is None
+    assert row["cron"]["entries"] == []
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+    assert row["attestation"]["legacy_workers_retired"] is False
+
+
+def test_cron_exact_500_line_boundary_is_observed_not_attested(tmp_path):
+    cron = "@daily python manage.py knowledge_agent_cycle\n" * 500
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", cron), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["state"] == "observed"
+    assert row["cron"]["enumerated_entries"] == 500
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+
+
+def test_process_20001_lines_do_not_claim_no_known_workers(tmp_path):
+    ps = "python unrelated-script\n" * 20000 + (
+        "python manage.py run_economic_worker\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ps),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["processes"]["state"] == "observed_truncated"
+    assert row["processes"]["inspected"] is None
+    assert row["processes"]["route_match_counts"] == {}
+    assert row["attestation"]["canonical_worker_executed"] is False
+
+
+def test_systemd_1001_lines_fail_closed_instead_of_hiding_last_worker(tmp_path):
+    systemd = "unrelated.service loaded active running\n" * 1000 + (
+        "mojtaba-bot-ai.service loaded active running\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ""),
+        ("observed", systemd), ("observed", systemd),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["user_services"]["state"] == "observed_truncated"
+    assert row["system_services"]["state"] == "observed_truncated"
+    assert row["user_services"]["candidate_units"] == []
+    assert row["system_services"]["candidate_units"] == []
+    assert row["attestation"]["handoff_verified"] is False
+
+
+@pytest.mark.parametrize("spec_line,expected_schedule", [
+    ("0 9 * JAN,DEC MON-FRI python manage.py knowledge_agent_cycle",
+     "0 9 * JAN,DEC MON-FRI"),
+    ("30 6 * JAN-MAR/2 MON,WED,FRI python manage.py knowledge_agent_cycle",
+     "30 6 * JAN-MAR/2 MON,WED,FRI"),
+    ("5 2 * MAY SUN python manage.py knowledge_agent_cycle",
+     "5 2 * MAY SUN"),
+    ("0 0 * * mon-fri python manage.py knowledge_agent_cycle",
+     "0 0 * * mon-fri"),
+    ("15 20 * nov SAT python manage.py knowledge_agent_cycle",
+     "15 20 * nov SAT"),
+    ("0 1 1 FEB * python manage.py knowledge_agent_cycle",
+     "0 1 1 FEB *"),
+])
+def test_cron_named_month_weekday_ranges_are_included(spec_line, expected_schedule):
+    row = observer.safe_cron(spec_line + "\n")
+    assert len(row) == 1
+    assert row[0]["schedule"] == expected_schedule
+    assert row[0]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert len(row[0]["command_digest"]) == 16
+
+
+@pytest.mark.parametrize("spec_line", [
+    "0 9 * MARCH MON python manage.py knowledge_agent_cycle",
+    "0 9 * APRIL MON python manage.py knowledge_agent_cycle",
+    "0 9 * JAN HOLIDAY python manage.py knowledge_agent_cycle",
+    "0 9 * JAN MONDAY python manage.py knowledge_agent_cycle",
+])
+def test_cron_named_tokens_still_reject_unrecognized_words(spec_line):
+    assert observer.safe_cron(spec_line + "\n") == []
+
+
+@pytest.mark.parametrize("command,expected", [
+    ("python manage.py knowledge_agent_cycle", ["knowledge_agent_cycle"]),
+    ("python manage.py knowledge_agent_cycle.py", ["knowledge_agent_cycle"]),
+    ("/home/runner/knowledge_agent_cycle", ["knowledge_agent_cycle"]),
+    ("MoJTaBa-BoT-AI.service", ["mojtaba-bot-ai"]),
+    ("python /srv/site_agents.php", ["site_agents.php"]),
+    ("exec /srv/SAEIT_MOJTRADE_OBSERVER_V1", ["SAEIT_MOJTRADE_OBSERVER_V1"]),
+    ("python /srv/knowledge_agent_cycle_backup.py", []),
+    ("python /srv/knowledge_agent_cycle-old.py", []),
+    ("python /srv/backup_knowledge_agent_cycle.py", []),
+    ("python /srv/xmojtaba-bot-ai", []),
+    ("python /srv/mojtaba-bot-aiold", []),
+    ("python /srv/backup-site_agents.php", []),
+    ("python /srv/run_economic_worker_v2", []),
+    ("python /srv/newsletter_process_queue2", []),
+])
+def test_route_flag_boundaries_preserve_real_candidates(command, expected):
+    assert observer.route_flags(command) == expected
+
+
+def test_route_substring_false_positive_does_not_enter_census(tmp_path):
+    raw = (
+        "python /srv/knowledge_agent_cycle_backup.py --secret=PRIVATE_DATA\n"
+        "python /srv/backup_site_agents.php\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", raw),
+        ("observed", ""), ("observed", ""),
+    ]):
+        report = observer.collect("vps", home=tmp_path, username="githubops")
+    assert report["processes"]["inspected"] == 2
+    assert report["processes"]["route_match_counts"] == {}
+    assert "PRIVATE_DATA" not in json.dumps(report)
+    assert report["attestation"]["canonical_worker_executed"] is False
+
+
+def test_suffixed_systemd_units_remain_indicators_only():
+    input_rows = (
+        "newsletter_process_queue-private.service loaded active running Private worker\n"
+        "knowledge_agent_cycle-legacy.service loaded inactive dead Old worker\n"
+        "backup_newsletter_process_queue-private.service loaded active running Unrelated\n"
+        "not-a-related.service loaded active running Unrelated\n"
+    )
+    units = observer.safe_service_units(input_rows)
+    assert len(units) == 2
+    assert units[0]["known_route_flags"] == ["newsletter_process_queue"]
+    assert units[1]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert units[0]["active"] == "active"
+    assert units[1]["active"] == "inactive"
+    assert "newsletter_process_queue-private.service" not in json.dumps(units)
+    assert "knowledge_agent_cycle-legacy.service" not in json.dumps(units)
+    assert observer.route_flags("knowledge_agent_cycle-legacy.py") == []
