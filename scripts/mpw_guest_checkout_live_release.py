@@ -25,6 +25,8 @@ def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
                          require_csrf=False, require_source_csrf=False):
  """Conservative same-form check, not proof of email ownership or live settlement."""
+ from html.parser import HTMLParser
+ import re
  if type(markup) is not str or len(markup)>180000:
   return False
 
