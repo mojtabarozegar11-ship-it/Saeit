@@ -346,6 +346,16 @@ def test_disposition_rejects_malformed_cron_inventory(entries):
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+@pytest.mark.parametrize("counts", [None, [], "mojcoin", 1])
+def test_disposition_rejects_malformed_process_route_counts(counts):
+    vps = snap("vps")
+    vps["processes"]["state"] = "observed"
+    vps["processes"]["route_match_counts"] = counts
+    with pytest.raises(ValueError, match="TOPOLOGY_PROCESS_COUNTS_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
