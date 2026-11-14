@@ -7,6 +7,9 @@ mojtaba.bot.ai remains the only automation brand.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+import re
+
+_SIGNAL_PRICE = re.compile(r"[0-9]{1,18}(?:\.[0-9]{1,8})?\Z")
 
 from .financial_brand_pages import BRANDS
 
@@ -92,7 +95,7 @@ def inspect_signal_record(record):
         nums = []
         for field in ("entry", "stop_loss", "take_profit"):
             value = record[field]
-            if type(value) is not str:
+            if type(value) is not str or _SIGNAL_PRICE.fullmatch(value) is None:
                 return False
             num = Decimal(value)
             if not num.is_finite() or num <= 0:
