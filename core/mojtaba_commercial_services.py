@@ -207,7 +207,7 @@ HANDLERS = dict(zip(CODES, (farm, research, irrigation, experiment, web_funnel, 
 def generate(payload, digest):
     exact(payload, ("service_code", "data"))
     code = payload["service_code"]
-    if code not in CODES:
+    if type(code) is not str or code not in CODES:
         raise InvalidService("unknown service")
     result = HANDLERS[code](payload["data"])
     return "\n".join((
