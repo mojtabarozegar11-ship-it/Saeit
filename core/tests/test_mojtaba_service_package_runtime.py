@@ -177,3 +177,12 @@ def test_concurrent_different_bytes_never_clobber_prior_private_work(tmp_path):
     files = list(tmp_path.rglob("*.md"))
     assert len(files) == 1
     assert files[0].read_text(encoding="utf-8") == "other trusted content"
+
+
+@pytest.mark.parametrize("code,data", [
+    ("AGR-01", {**EXAMPLES["AGR-01"], "unit_price_toman": 0.1}),
+    ("RS-02", {**EXAMPLES["RS-02"], "area_m2": 0.1}),
+])
+def test_monetary_and_irrigation_calculations_reject_binary_floats(code, data):
+    with pytest.raises(InvalidService, match="exact numeric"):
+        generate({"service_code": code, "data": data}, "0" * 64)
