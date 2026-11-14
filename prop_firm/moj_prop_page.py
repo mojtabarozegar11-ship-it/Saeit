@@ -50,6 +50,11 @@ def catalog():
                 or set(plan_copy) != {"title", "body", "starting", "fee", "maximum", "notice"}
                 or any(not isinstance(v, str) or not v.strip() for v in plan_copy.values())):
             raise ValueError(f"Missing localized ten-plan selection disclosure: {code}")
+        status = item.get("plan_status")
+        if (not isinstance(status, dict)
+                or set(status) != {"owner_active", "funding_hold", "owner_disclosure"}
+                or any(type(v) is not str or not v.strip() for v in status.values())):
+            raise ValueError(f"Missing verified plan status disclosure: {code}")
         social = item.get("social")
         if (not isinstance(social, dict) or set(social) != {"title", "body", "disclosure"}
                 or any(not isinstance(v, str) or not v.strip() for v in social.values())):
@@ -111,6 +116,9 @@ def page_context(code="en"):
         "footer": t["footer"],
         "social": t["social"],
         "plans_copy": t["plans"],
+        "plan_status_copy": t["plan_status"],
+        "owner_active_plans": sum(p.business_active_owner_declared for p in CHALLENGE_PLANS),
+        "temporary_funding_hold_plans": sum(p.temporary_owner_hold for p in CHALLENGE_PLANS),
         "challenge_plans": [plan_public_summary(plan) for plan in CHALLENGE_PLANS],
         "number_of_plans": len(CHALLENGE_PLANS),
         "trading": t["trading"],
