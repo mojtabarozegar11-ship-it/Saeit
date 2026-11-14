@@ -149,7 +149,10 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         for row in entries:
             if not isinstance(row, dict) or not isinstance(row.get("known_route_flags", []), list):
                 raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
-            for tag in set(row.get("known_route_flags", [])):
+            flags = row.get("known_route_flags", [])
+            if any(not isinstance(tag, str) for tag in flags):
+                raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
+            for tag in set(flags):
                 if tag in allowed:
                     hit_counts[("user_cron", tag)] += 1
     processes = snapshot.get("processes", {})
@@ -164,8 +167,16 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         status = snapshot.get(layer, {})
         if status.get("state") != "observed":
             continue
-        for unit in status.get("candidate_units", []):
-            for tag in set(unit.get("known_route_flags", [])):
+        units = status.get("candidate_units", [])
+        if not isinstance(units, list):
+            raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
+        for unit in units:
+            if not isinstance(unit, dict):
+                raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
+            flags = unit.get("known_route_flags", [])
+            if not isinstance(flags, list) or any(not isinstance(tag, str) for tag in flags):
+                raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
+            for tag in set(flags):
                 if tag in allowed:
                     hit_counts[(layer + "_candidate", tag)] += 1
     return {
