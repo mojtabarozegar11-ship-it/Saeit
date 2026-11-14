@@ -10,6 +10,8 @@ class CompanyInquiryValidationTests(TestCase):
     def payload(self):
         return {
             "kind": "commercial",
+            "consent": "yes",
+            "website": "",
             "name": "Customer",
             "organization": "Partner",
             "email": "customer@example.org",
@@ -18,9 +20,9 @@ class CompanyInquiryValidationTests(TestCase):
             "message": "Please tell me about the available service.",
         }
 
-    def submit(self, payload):
+    def submit(self, payload, expected_status=302):
         response = self.client.post(reverse("company"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, expected_status)
         return response
 
     def test_valid_inquiry_creates_one_lead(self):
@@ -33,29 +35,29 @@ class CompanyInquiryValidationTests(TestCase):
     def test_invalid_email_does_not_create_lead(self):
         payload = self.payload()
         payload["email"] = "not-an-email"
-        self.submit(payload)
+        self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
 
     def test_unlisted_inquiry_kind_does_not_create_lead(self):
         payload = self.payload()
         payload["kind"] = "unknown-kind"
-        self.submit(payload)
+        self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
 
     def test_overlong_subject_does_not_create_lead(self):
         payload = self.payload()
         payload["subject"] = "x" * 301
-        self.submit(payload)
+        self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
 
     def test_oversized_message_does_not_create_lead(self):
         payload = self.payload()
         payload["message"] = "x" * 5001
-        self.submit(payload)
+        self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
 
     def test_missing_required_name_does_not_create_lead(self):
         payload = self.payload()
         payload["name"] = " "
-        self.submit(payload)
+        self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
