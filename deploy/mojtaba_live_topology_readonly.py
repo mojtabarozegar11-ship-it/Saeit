@@ -357,13 +357,21 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
     }
+    php_snapshot = (
+        cpanel_php_registry_snapshot(root) if role == "cpanel"
+        else {"state": "not_applicable", "database_state_proves_live_workers": False}
+    )
+    db_query_attempted = php_snapshot.get("state") in {
+        "source_registry_snapshot_only", "agents_table_unavailable",
+        "invalid_registry_enabled_flag", "sqlite_read_failed",
+    }
     return {
         "schema": SCHEMA,
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "host_role": role,
         "expected_user_verified": True,
         "read_only": True,
-        "database_queried": False,
+        "database_queried": db_query_attempted,
         "external_network_used": False,
         "cron": {
             "state": cron_state, "enumerated_entries": len(cron_rows)
@@ -416,10 +424,7 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             ),
         },
         "installed_source_digests": safe_source_digests(root, role),
-        "private_php_site_registry": (
-            cpanel_php_registry_snapshot(root) if role == "cpanel"
-            else {"state": "not_applicable", "database_state_proves_live_workers": False}
-        ),
+        "private_php_site_registry": php_snapshot,
         "attestation": {
             "source_code_deployment_matches_pr": False,
             "canonical_worker_executed": False,
