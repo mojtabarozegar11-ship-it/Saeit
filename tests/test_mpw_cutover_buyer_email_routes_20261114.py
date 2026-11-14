@@ -86,14 +86,17 @@ class RouteEmailGates(unittest.TestCase):
         passed, log, paths=self._mutate(lambda b,h:(change(b),h))
         self.assertFalse(passed)
         self.assertIn('"category": "'+expected+'"',log)
+        # BUYER_ROUTE_PROBES lists three details first, then three
+        # canonical checkouts, then three aliases. First checkout is fourth.
         self.assertEqual(paths[0], "/store/product/72/")
-        self.assertEqual(paths[1], TARGET)
+        self.assertEqual(paths[3], TARGET)
+        self.assertEqual(len(paths), 4)
 
     def _header(self, update, expected):
         passed,log,paths=self._mutate(lambda b,h:(b,update(h)))
         self.assertFalse(passed)
         self.assertIn('"category": "'+expected+'"',log)
-        self.assertEqual(len(paths),2)
+        self.assertEqual(len(paths),4)
 
     def test_01_all_nine_real_routes_verified_get_only(self):
         passed,log,paths=self._run()
@@ -201,7 +204,7 @@ class RouteEmailGates(unittest.TestCase):
                     "/commerce/book/72/")
         self.assertFalse(passed)
         self.assertIn('"category": "checkout_form_invalid"',log)
-        self.assertEqual(len(paths),3)
+        self.assertEqual(len(paths),7)
 
     def test_32_sku_879_checkout_wrong_email_blocks(self):
         passed,log,paths=self._mutate(lambda b,h:(b.replace(EMAIL,b""),h),
