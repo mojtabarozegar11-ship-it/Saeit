@@ -10,6 +10,8 @@ class Migration(migrations.Migration):
             fields=[
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("buyer_email", models.EmailField(max_length=254)),
+                ("buyer_email_sha", models.CharField(db_index=True, max_length=64)),
+                ("candidate_txid", models.CharField(blank=True, default="", max_length=64)),
                 ("source_host", models.CharField(max_length=150)),
                 ("language", models.CharField(max_length=2)),
                 ("receiver", models.CharField(max_length=34)),
