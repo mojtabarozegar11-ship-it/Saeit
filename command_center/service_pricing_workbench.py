@@ -93,8 +93,16 @@ class ServicePricingScenarioForm(forms.Form):
 def service_pricing_workbench(request):
     if request.method == "POST" and len(request.body) > 12_288:
         return HttpResponse("invalid_request_size", status=413)
+    # Only a vetted service code may travel in a GET shortcut. Do not put
+    # customer IDs or any monetary amount in a URL or browser history.
+    initial = {}
+    if request.method == "GET":
+        proposed = request.GET.get("service_code", "")
+        if proposed in SERVICE_CARDS:
+            initial["service_code"] = proposed
     form = ServicePricingScenarioForm(
-        request.POST if request.method == "POST" else None
+        request.POST if request.method == "POST" else None,
+        initial=initial,
     )
     scenario = None
     selected_offer = None
