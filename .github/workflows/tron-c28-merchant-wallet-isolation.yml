@@ -29,7 +29,8 @@ jobs:
                  'core/management/commands/tron_discover.py',
                  'core/management/commands/tron_revenue_audit.py',
                  'core/migrations/0042_trongatewayinvoice_merchant_tenant_id.py',
-                 'tests/test_tron_c28_site_merchant_isolation.py')
+                 'tests/test_tron_c28_site_merchant_isolation.py',
+                 'tests/test_tron_c28_two_site_paid_invoice_flow.py')
           for p in files: ast.parse(Path(p).read_text(),filename=p)
           settings=Path('config/settings.py').read_text()
           assert 'TRON_UNIFIED_SITE_MERCHANTS = env.json(' in settings
@@ -57,6 +58,7 @@ jobs:
         run: |
           python3 manage.py test \
             tests.test_tron_c28_site_merchant_isolation \
+            tests.test_tron_c28_two_site_paid_invoice_flow \
             tests.test_tron_gateway_commerce_integrity \
             tests.test_unified_tron_gateway_verify \
             tests.test_tron_gateway_discovery \
