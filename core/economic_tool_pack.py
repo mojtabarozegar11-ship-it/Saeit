@@ -7,6 +7,9 @@ import hashlib
 import html
 import os
 import importlib.util
+import json
+import re
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP, localcontext
 from pathlib import Path
 import tempfile
 
@@ -423,6 +426,117 @@ def factory_native_review(payload):
     return inspect_family(root, payload)
 
 
+
+# A bounded, privacy-minimized economic decision capability INSIDE the sole
+# Mojtaba.bot.ai ToolGateway. Disabled until a separate owner-approved case,
+# source-of-data review, and canonical runtime handoff are established.
+_GREENHOUSE_COST_FIELDS = (
+    "area_m2", "harvested_kg", "saleable_kg", "sale_price_per_kg",
+    "production_cost_per_harvested_kg", "fixed_cost", "energy_cost",
+    "water_cost", "labor_cost", "other_cost",
+)
+_NONNEGATIVE_DECIMAL = re.compile(r"(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,4})?\\Z")
+_MONEY_CENT = Decimal("0.01")
+_MASS_CENT = Decimal("0.01")
+
+
+def greenhouse_unit_economics(payload):
+    """Offline, data-minimized B2B unit economics for ONE crop and period.
+
+    All observations are supplied by an authorized operator; none is a
+    verified invoice, farm measurement, legal price, sale or payment receipt.
+    This is a calculation, not an autonomous commercial transaction.
+    """
+    required = set(_GREENHOUSE_COST_FIELDS) | {"currency"}
+    if type(payload) is not dict or set(payload) != required:
+        raise ValueError("GREENHOUSE_EXACT_INPUTS_REQUIRED")
+    currency = payload["currency"]
+    if type(currency) is not str or re.fullmatch(r"[A-Z]{3}", currency) is None:
+        raise ValueError("GREENHOUSE_CURRENCY_INVALID")
+    numbers = {}
+    for field in _GREENHOUSE_COST_FIELDS:
+        raw = payload[field]
+        if type(raw) is not str or _NONNEGATIVE_DECIMAL.fullmatch(raw) is None:
+            raise ValueError("GREENHOUSE_INPUT_INVALID:" + field)
+        value = Decimal(raw)
+        if value > Decimal("1000000000"):
+            raise ValueError("GREENHOUSE_INPUT_EXCEEDS_BOUND:" + field)
+        numbers[field] = value
+    if numbers["area_m2"] <= 0 or numbers["sale_price_per_kg"] <= 0:
+        raise ValueError("GREENHOUSE_AREA_OR_PRICE_REQUIRED")
+    if numbers["saleable_kg"] > numbers["harvested_kg"]:
+        raise ValueError("GREENHOUSE_SALEABLE_EXCEEDS_HARVEST")
+    with localcontext() as ctx:
+        ctx.prec = 40
+        revenue = numbers["saleable_kg"] * numbers["sale_price_per_kg"]
+        variable_cost = (
+            numbers["harvested_kg"] * numbers["production_cost_per_harvested_kg"]
+        )
+        period_overheads = sum((
+            numbers["fixed_cost"], numbers["energy_cost"], numbers["water_cost"],
+            numbers["labor_cost"], numbers["other_cost"],
+        ), Decimal("0"))
+        total_cost = variable_cost + period_overheads
+        operating_surplus = revenue - total_cost
+        # Observed-cost break-even holds total period costs constant; it is
+        # not a yield forecast or a marginal contribution model.
+        break_even = (
+            total_cost / numbers["sale_price_per_kg"]
+        ).quantize(_MASS_CENT, rounding=ROUND_CEILING)
+        marketable_rate = (
+            (numbers["saleable_kg"] / numbers["harvested_kg"] * 100)
+            .quantize(_MONEY_CENT, rounding=ROUND_HALF_UP)
+            if numbers["harvested_kg"] else None
+        )
+        operating_margin = (
+            (operating_surplus / revenue * 100).quantize(
+                _MONEY_CENT, rounding=ROUND_HALF_UP
+            ) if revenue else None
+        )
+        yield_density = (
+            numbers["harvested_kg"] / numbers["area_m2"]
+        ).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    canonical = json.dumps(
+        {field: str(numbers[field]) for field in _GREENHOUSE_COST_FIELDS}
+        | {"currency": currency},
+        sort_keys=True, ensure_ascii=True, separators=(",", ":"),
+    )
+    def money(amount):
+        return str(amount.quantize(_MONEY_CENT, rounding=ROUND_HALF_UP))
+    return {
+        "bot_id": "mojtaba.bot.ai",
+        "capability": "income_greenhouse_economics",
+        "mode": "offline_customer_data_unverified",
+        "currency": currency,
+        "input_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "harvested_kg": str(numbers["harvested_kg"]),
+        "saleable_kg": str(numbers["saleable_kg"]),
+        "marketable_rate_percent": str(marketable_rate) if marketable_rate is not None else None,
+        "harvested_kg_per_m2": str(yield_density),
+        "gross_revenue_estimate": money(revenue),
+        "harvest_production_cost": money(variable_cost),
+        "period_overheads": money(period_overheads),
+        "period_total_cost": money(total_cost),
+        "operating_surplus_estimate": money(operating_surplus),
+        "operating_margin_percent": str(operating_margin) if operating_margin is not None else None,
+        "break_even_saleable_kg_at_same_period_cost": str(break_even),
+        "break_even_within_observed_harvest": break_even <= numbers["harvested_kg"],
+        "input_evidence_verified": False,
+        "independent_cash_settlement_verified": False,
+        "customer_delivery_confirmed": False,
+        "requires_human_review": True,
+        "external_actions": 0,
+        "commercial_release": "blocked_pending_owner_and_payment_review",
+        "method": (
+            "Revenue=saleable_kg*sale_price_per_kg; production cost="
+            "harvested_kg*production_cost_per_harvested_kg; overheads are "
+            "the period's separately reported other costs. Break-even "
+            "holds observed period cost constant and is not a forecast. "
+            "All monetary figures rounded half-up to two decimals."
+        ),
+    }
+
+
 def build_economic_gateway():
     return ToolGateway([
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
@@ -436,5 +550,9 @@ def build_economic_gateway():
         ToolSpec(code="income_growth_experiment", handler=growth_experiment, risk="medium"),
         ToolSpec(code="income_revenue_verify", handler=revenue_verify, risk="medium"),
         ToolSpec(code="income_profit_optimize", handler=profit_optimize, risk="medium"),
+        # Only ONE canonical bot may eventually use this internal function;
+        # source addition neither enables it nor creates an agent or queue.
+        ToolSpec(code="income_greenhouse_economics",
+                 handler=greenhouse_unit_economics, risk="medium", enabled=False),
         ToolSpec(code="master_self_improvement", handler=master_self_improvement, risk="medium"),
     ])
