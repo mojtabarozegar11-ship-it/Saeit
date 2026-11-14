@@ -4,6 +4,8 @@ These records mirror the public store's declared descriptions. The presence
 of a product page is NOT proof of license, inventory, TRX checkout or delivery.
 Zomorod Melal product SEO stays on its existing view and separate host.
 """
+from decimal import Decimal
+
 from django.http import Http404
 from django.shortcuts import render
 from django.db import DatabaseError
@@ -27,6 +29,7 @@ PUBLIC_CATALOG = {
             "Progress tracking for chess learners",
         ],
         "listed_price": "US $7.50",
+        "expected_price_usd": "7.50",
     },
     225: {
         "title": "Taniya and the Little Baker Worms",
@@ -38,6 +41,7 @@ PUBLIC_CATALOG = {
             "Suggested ages 3–8 with adult guidance",
         ],
         "listed_price": "US $4.00",
+        "expected_price_usd": "4.00",
     },
     879: {
         "title": "Atelier Interior — Client-Ready Website Kit",
@@ -50,6 +54,7 @@ PUBLIC_CATALOG = {
             "One-site/client license; demo photography is not included",
         ],
         "listed_price": "US $6.80",
+        "expected_price_usd": "6.80",
     },
 }
 
@@ -102,7 +107,15 @@ def brand_product_detail(request, product_id):
         db_product = None
     # Matching the public product name is necessary; a reused database ID
     # must not be associated with someone else's digital product.
-    matched = bool(db_product and db_product.title.strip() == item["title"])
+    # The card must also match the actual database currency and exact price.
+    # Title-only matching can show a stale/false USD offer or count it as
+    # verified when a changed listing now charges a different amount.
+    matched = bool(
+        db_product
+        and db_product.title.strip() == item["title"]
+        and db_product.currency == "USD"
+        and db_product.price == Decimal(item["expected_price_usd"])
+    )
     if matched:
         try:
             from .commerce_funnel import record_funnel_event
