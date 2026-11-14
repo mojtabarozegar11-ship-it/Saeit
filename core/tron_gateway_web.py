@@ -31,6 +31,7 @@ from django.views.decorators.http import require_http_methods
 
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 from .tron_gateway_invoice import TronGatewayInvoice
+from .tron_gateway_catalog import CatalogueScanLimit, paginate_eligible
 from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, verify_native_trx
 
 PROVIDER = "zomorod_tron_mainnet_v1"
@@ -126,10 +127,13 @@ def _limit(request, email, purpose="email"):
         raise Http404("Rate limit unavailable") from exc
 
 
-def _read_product(product_id, locale):
-    query = Product.objects.filter(pk=product_id, active=True)
-    product = query.first()
-    if product is None or not Decimal("0") < product.price:
+def _read_product(product_id, locale, *, candidate=None):
+    # The catalogue reuses its already-fetched product; checkout still reads
+    # the authoritative active record afresh under its order transaction.
+    product = (candidate if candidate is not None
+               else Product.objects.filter(pk=product_id, active=True).first())
+    if (product is None or product.pk != product_id or product.active is not True
+            or not Decimal("0") < product.price):
         raise Http404("Product unavailable")
     md = product.metadata if type(product.metadata) is dict else {}
     # Assets, legitimate rights and service fulfillment remain the catalogue
@@ -475,15 +479,24 @@ def catalog(request):
         raise Http404("Invalid page")
     if not 1 <= page <= 100:
         raise Http404("Invalid page")
-    # Small, bounded server-side slice; no direct HTML rendering of metadata.
-    start = (page - 1) * 50
-    products = []
-    for product in Product.objects.filter(active=True).order_by("id")[start:start + 50]:
+    # A raw active-row offset can hide ready products behind unapproved SKUs
+    # and produce misleading next links. Count only rights-approved products.
+    # The policy helper caps work and looks ahead to one additional *eligible*
+    # product. No file/payment/SMTP operation occurs during listing.
+    def approved(product):
         try:
-            p, sun, _ = _read_product(product.pk, language)
-            products.append((p, f"{Decimal(sun)/Decimal(1000000):.6f}"))
+            p, sun, _ = _read_product(product.pk, language, candidate=product)
         except Http404:
-            continue
+            return None
+        return (p, f"{Decimal(sun)/Decimal(1000000):.6f}")
+
+    try:
+        products, has_more = paginate_eligible(
+            Product.objects.filter(active=True).order_by("id").iterator(chunk_size=200),
+            approved, page=page,
+        )
+    except CatalogueScanLimit as exc:
+        raise Http404("Catalogue exceeds safe scan budget") from exc
     return _page(request, _context(None, "catalog", language,
-                                    products=products, next_page=page + 1,
-                                    has_more=Product.objects.filter(active=True).count() > start + 50))
+                                   products=products, next_page=page + 1,
+                                   has_more=has_more))
