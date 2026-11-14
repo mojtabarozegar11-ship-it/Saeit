@@ -247,9 +247,9 @@ class BrokerSignedEvidenceTests(TestCase):
     def _signed_raw(self, raw):
         packet = self.packet()
         packet["raw"] = raw
-        msg = (b"MOJPROP-EVIDENCE-v1\\n" + SOURCE.encode() + b"\\n"
-               + str(self.account.id).encode() + b"\\n" + ISSUED.encode()
-               + b"\\n" + raw)
+        msg = (b"MOJPROP-EVIDENCE-v1\n" + SOURCE.encode() + b"\n"
+               + str(self.account.id).encode() + b"\n" + ISSUED.encode()
+               + b"\n" + raw)
         packet["signature"] = hmac.new(KEY.encode(), msg, hashlib.sha256).hexdigest()
         return packet
 
