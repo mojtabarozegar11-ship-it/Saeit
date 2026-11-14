@@ -308,6 +308,7 @@ def test_economic_worker_redacts_raw_tool_failure_and_preserves_queue(bot):
             call_command("run_economic_worker")
     assert secret not in str(raised.value)
     assert "worker_execution_error" in str(raised.value)
+    assert raised.value.__suppress_context__ is True
     task.refresh_from_db()
     assert task.status == "queued"
 
