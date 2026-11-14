@@ -11,6 +11,7 @@ def validate_csv(text):
     if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)) or set(reader.fieldnames) != set(FIELDS):
         raise ValueError("invalid CSV header")
     result = []
+    seen_enterprise_periods = set()
     for line, row in enumerate(reader, 2):
         if None in row or any(value is None or not value.strip() for value in row.values()):
             raise ValueError(f"line {line}: incomplete/extra field")
@@ -32,6 +33,16 @@ def validate_csv(text):
             raise ValueError(f"line {line}: negative or nonfinite value")
         if values["sold_quantity"] > values["production_quantity"]:
             raise ValueError(f"line {line}: sold exceeds produced; inventory reconciliation required")
+        # A dataset row covers one enterprise/type/unit/currency/reporting period.
+        # Repeated periods can silently double-count income and costs downstream.
+        # Keep different enterprise types, units, currencies or periods independent.
+        report_key = (
+            row["enterprise_id"].strip(), row["enterprise_type"].strip(),
+            start, end, row["currency"], row["output_unit"].strip(),
+        )
+        if report_key in seen_enterprise_periods:
+            raise ValueError(f"line {line}: duplicate enterprise reporting period")
+        seen_enterprise_periods.add(report_key)
         revenue = values["sales_revenue"] + values["other_revenue"]
         contribution = revenue - values["variable_cost"]
         operating = contribution - values["fixed_cost"]
