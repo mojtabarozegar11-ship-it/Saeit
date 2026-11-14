@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from .models import PropAccount, PropEquityObservation, PropExecution, PropSocialEvidence
 from .social_policy import check_social_posting, LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+from .trade_count import count_challenge_trades
 from .rules import (
     POLICY, LEVELS, RiskDecision, assess_risk, assess_challenge, assess_promotion,
 )
@@ -113,6 +114,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     promotion_period = None
     promotion_stats = None
     social_decision = None
+    challenge_trade_count = None
     purchase_window_valid = True
     purchase = account.challenge_enrollment if account.kind in (
         PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO
@@ -131,6 +133,16 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
             # Invalid events cannot be silently excluded to improve results.
             if any(not start <= event.closed_at < end for event in executions):
                 purchase_window_valid = False
+            cohort_executions = PropExecution.objects.filter(
+                account__challenge_enrollment=purchase,
+                account__kind__in=(PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO),
+            )
+            if evidence_cutoff is not None:
+                cohort_executions = cohort_executions.filter(closed_at__lt=evidence_cutoff)
+            challenge_trade_count = count_challenge_trades(
+                cohort_executions, paid_at=start,
+                required=POLICY.min_closed_trades_per_challenge,
+            )
             social_records = PropSocialEvidence.objects.filter(
                 enrollment=purchase,
                 review_status=PropSocialEvidence.Review.VERIFIED,
@@ -187,6 +199,10 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
                     social_decision.satisfied if social_decision is not None else False
                 ),
                 contract_version=account.policy_version,
+                verified_cumulative_trades=(
+                    challenge_trade_count.valid_closed_positions
+                    if challenge_trade_count is not None else 0
+                ),
             )
         elif account.kind == PropAccount.Kind.FUNDED:
             # Never reuse lifetime P&L to qualify a specific monthly promotion.
@@ -217,6 +233,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         "risk": risk,
         "assessment": assessment,
         "social_posting": social_decision,
+        "challenge_trade_count": challenge_trade_count,
         "purchase_window_valid": purchase_window_valid,
         "challenge_purchase": purchase,
         "promotion_period": promotion_period,
