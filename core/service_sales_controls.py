@@ -6,7 +6,6 @@ or permission to bind a customer or spend funds.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from types import MappingProxyType
 
 
@@ -72,7 +71,9 @@ _SERVICES = {
         "limitation": "رتبه یا تعداد مشتری تضمین نمی‌شود",
     },
 }
-SERVICE_CARDS = MappingProxyType(_SERVICES)
+SERVICE_CARDS = MappingProxyType({
+    code: MappingProxyType(record) for code, record in _SERVICES.items()
+})
 REQUIRED_OFFER_EVIDENCE = (
     "customer_problem_defined",
     "service_delivery_capacity_verified",
@@ -90,7 +91,7 @@ def service_card(service_code: str) -> dict:
     """Return copy: callers cannot alter the master catalogue by mutation."""
     if not isinstance(service_code, str) or service_code not in SERVICE_CARDS:
         raise ValueError("unknown service code")
-    record = deepcopy(SERVICE_CARDS[service_code])
+    record = dict(SERVICE_CARDS[service_code])
     return {"service_code": service_code, **record, "price": None,
             "price_state": "REQUIRES_COSTING_AND_OWNER_APPROVAL",
             "external_sale_enabled": False}
