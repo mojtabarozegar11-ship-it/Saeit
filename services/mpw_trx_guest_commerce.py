@@ -332,8 +332,9 @@ def patch_commercial(namespace):
         # For example /start/archive/ must not be mistaken for /start/.
         normalized = route.rstrip("/") + "/"
         matches = [name for token, name in route_names
-                   if normalized.endswith(token)]
-        if len(matches) > 1:
+                   if token in normalized]
+        if len(matches) > 1 or (matches and not any(
+                normalized.endswith(token) for token, _ in route_names)):
             raise RuntimeError("Ambiguous TRX URL route")
         if matches:
             name = matches[0]
