@@ -170,6 +170,92 @@ class RevenueOperationsTests(TestCase):
         self.assertIsNone(x["commercial_evidence"]["externally_settled_cash"])
 
 
+
+    def test_unreviewed_open_count(self):
+        self._lead(status="new")
+        self._lead(status="new")
+        self._lead(status="reviewing")
+        self._lead(status="closed")
+        self.assertEqual(self._get().json()["inquiries"]["unreviewed_open"], 2)
+
+    def test_stale_lead_over_week(self):
+        self._lead(status="reviewing", age_days=8)
+        self._lead(status="reviewing", age_days=3)
+        self.assertEqual(self._get().json()["inquiries"]["stale_open_over_7_days"], 1)
+
+    def test_stale_lead_over_month(self):
+        self._lead(status="reviewing", age_days=31)
+        self._lead(status="reviewing", age_days=12)
+        x = self._get().json()["inquiries"]
+        self.assertEqual(x["stale_open_over_30_days"], 1)
+        self.assertEqual(x["stale_open_over_7_days"], 2)
+
+    def test_stale_closed_not_flagged_for_follow_up(self):
+        self._lead(status="closed", age_days=60)
+        x = self._get().json()["inquiries"]
+        self.assertEqual(x["stale_open_over_30_days"], 0)
+
+    def test_backlog_by_kind_carries_old_demand(self):
+        self._lead(kind="research", age_days=50, status="reviewing")
+        self._lead(kind="commercial", age_days=2, status="new")
+        x = self._get().json()["inquiries"]
+        self.assertEqual(x["open_backlog_by_kind"]["research"], 1)
+        self.assertEqual(x["open_backlog_by_kind"]["commercial"], 1)
+
+    def test_backlog_by_kind_excludes_closed(self):
+        self._lead(kind="research", age_days=50, status="closed")
+        self.assertEqual(self._get().json()["inquiries"]["open_backlog_by_kind"]["research"], 0)
+
+    def test_unknown_kind_retained_without_exposure(self):
+        self._lead(kind="private-unlisted-field")
+        x = self._get().json()["inquiries"]
+        self.assertEqual(x["unknown_kind"], 1)
+        self.assertEqual(x["open_backlog_unknown_kind"], 1)
+
+    def test_approved_percentage_is_preliminary_only(self):
+        self._lead(status="approved")
+        self._lead(status="new")
+        x = self._get().json()["inquiries"]
+        self.assertEqual(x["preliminary_approval_rate_percent"], 50)
+        self.assertTrue(x["preliminary_approval_rate_is_not_conversion_rate"])
+
+    def test_approved_percentage_undefined_when_empty(self):
+        self.assertIsNone(self._get().json()["inquiries"]["preliminary_approval_rate_percent"])
+
+    def test_robots_tag_prevents_accidental_indexing(self):
+        r = self._get()
+        self.assertIn("noindex", r["X-Robots-Tag"])
+        self.assertEqual(r["Vary"], "Cookie")
+
+    def test_single_agent_can_inspect_operational_aggregates(self):
+        from core.economic_master_agent import EconomicMasterAgent
+        self._lead(kind="research")
+        x = EconomicMasterAgent().inspect_revenue_operations_readonly(days=7)
+        self.assertEqual(x["agent"], "mojtaba.bot.ai")
+        self.assertEqual(x["inquiries"]["kinds"]["research"], 1)
+
+    def test_single_agent_can_cost_without_payment(self):
+        from core.economic_master_agent import EconomicMasterAgent
+        from core.tests.test_revenue_unit_economics_20261114 import quote
+        x = EconomicMasterAgent().calculate_quote_scenario_readonly(quote())
+        self.assertIsNone(x["external_cash_settlement"])
+
+    def test_single_agent_reuses_same_service_catalogue(self):
+        from core.economic_master_agent import EconomicMasterAgent
+        cards = EconomicMasterAgent().list_service_drafts_readonly()
+        self.assertEqual(len(cards), 6)
+        self.assertTrue(all(not card["external_sale_enabled"] for card in cards))
+
+    def test_single_agent_assesses_not_sells_service(self):
+        from core.economic_master_agent import EconomicMasterAgent
+        from core.service_sales_controls import REQUIRED_OFFER_EVIDENCE
+        r = EconomicMasterAgent().assess_service_draft_readonly(
+            "RS-01", {key: True for key in REQUIRED_OFFER_EVIDENCE}
+        )
+        self.assertTrue(r["internal_review_ready"])
+        self.assertFalse(r["external_sale_enabled"])
+
+
 class CommerceFunnelSafetyTests(TestCase):
     @classmethod
     def setUpTestData(cls):
