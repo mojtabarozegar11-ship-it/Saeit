@@ -189,12 +189,17 @@ def orphaned_handoff_snapshot():
     for proof in proofs:
         state = proof["after_state"]
         if isinstance(state, dict):
-            proof_keys.add((
-                proof["target_id"],
-                proof["trace_id"],
-                state.get("request_sha256_prefix"),
-                state.get("service_code"),
-            ))
+            digest = state.get("request_sha256_prefix")
+            code = state.get("service_code")
+            # JSON audit state can contain malformed arrays/objects from
+            # legacy imports. Never hash untrusted values as tuple members.
+            if isinstance(digest, str) and isinstance(code, str):
+                proof_keys.add((
+                    proof["target_id"],
+                    proof["trace_id"],
+                    digest,
+                    code,
+                ))
     eligible = []
     for row in possible:
         code = _code_for(row)
