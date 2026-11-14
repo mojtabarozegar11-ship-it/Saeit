@@ -31,4 +31,4 @@ jobs:
           python manage.py collectstatic --noinput
       - name: Target all revenue consolidation regressions
         run: |
-          pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py tests/test_signal_source_admin.py tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py tests/test_moj_prop_challenge_commerce.py tests/test_moj_prop_site.py tests/test_prop_firm_policy.py
+          pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py tests/test_signal_source_admin.py tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py tests/test_moj_prop_challenge_commerce.py tests/test_moj_prop_site.py tests/test_prop_firm_policy.py tests/test_mpw_checkout_import_closure_readonly_20261115.py
