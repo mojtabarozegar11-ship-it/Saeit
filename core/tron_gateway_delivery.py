@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from .models import LedgerEntry, OrderItem, PaymentWebhookEvent
-from .tron_gateway_web import PROVIDER, _host, _owner, _private, _read_product
+from .tron_gateway_web import PROVIDER, _host, _owner, _private
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,220}\Z")
 
@@ -87,10 +87,21 @@ def download_paid(request, invoice_id):
     items = list(OrderItem.objects.filter(order=order).select_related("product")[:2])
     if len(items) != 1:
         raise Http404("Unrecognized invoice items")
-    product, _, _ = _read_product(items[0].product_id, language)
-    md = product.metadata
-    if md.get("fulfillment_type") != "digital":
-        raise Http404("This purchase has no digital download")
-    stream = _file_from_private_root(md.get("asset_relpath"), md.get("sha256"))
-    resp = FileResponse(stream, as_attachment=True, filename=Path(md["asset_relpath"]).name)
+    # Paid entitlement is pinned to the invoice snapshot. Later catalogue
+    # price changes, re-quoting or an inactive listing must not erase a
+    # customer's valid existing purchase.
+    product = items[0].product
+    md = product.metadata if type(product.metadata) is dict else {}
+    if invoice.fulfillment_kind != "digital":
+        raise Http404("No digital entitlement for this invoice")
+    if md.get("rights_revoked") is True or md.get("delivery_suspended") is True:
+        raise Http404("Purchased asset is under rights review")
+    if (not invoice.asset_relpath_snapshot or
+            not invoice.asset_sha256_snapshot or
+            not invoice.rights_document_sha256_snapshot):
+        raise Http404("Original digital entitlement is incomplete")
+    stream = _file_from_private_root(
+        invoice.asset_relpath_snapshot, invoice.asset_sha256_snapshot)
+    resp = FileResponse(stream, as_attachment=True,
+                        filename=Path(invoice.asset_relpath_snapshot).name)
     return _private(resp)
