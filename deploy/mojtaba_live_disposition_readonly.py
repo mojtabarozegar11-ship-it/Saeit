@@ -161,8 +161,11 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         if not isinstance(counts, dict):
             raise ValueError("TOPOLOGY_PROCESS_COUNTS_INVALID")
         for tag, n in counts.items():
+            # Even an unrecognized route must have a valid nonnegative count:
+            # otherwise a corrupt inventory could be silently discarded.
+            count = trusted_count(n)
             if tag in allowed:
-                hit_counts[("process_argv_indicator", tag)] += trusted_count(n)
+                hit_counts[("process_argv_indicator", tag)] += count
     for layer in ("user_services", "system_services", "user_timers", "system_timers"):
         status = snapshot.get(layer, {})
         if status.get("state") != "observed":
