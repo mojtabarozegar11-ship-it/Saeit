@@ -373,7 +373,7 @@ def revenue_verify(payload):
         }),
         "verified_revenue": None,
         "revenue_status": "external_settlement_evidence_required",
-        "next_action": "income_profit_optimize",
+        "next_action": "await_external_settlement_evidence",
     }
 
 
@@ -384,7 +384,7 @@ def profit_optimize(payload):
         "verified_effect": False,
         "business_effect_verified": False,
         "evidence": _evidence("profit_baseline", {"active_products": len(active), "products": active}),
-        "next_action": "income_market_research",
+        "next_action": "await_real_cost_and_customer_evidence",
     }
 
 
