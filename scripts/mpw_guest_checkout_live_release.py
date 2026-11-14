@@ -22,8 +22,12 @@ def digest(b): return hashlib.sha256(b).hexdigest()
 def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 
 
-def has_buyer_email_form(markup):
- """Require a browser-visible contractual email input in a POST invoice form."""
+def has_buyer_email_form(markup, expected_action=None):
+ """Require buyer-email input within the actual invoice POST form.
+
+ expected_action is an exact path match for the rendered checkout. A separate
+ template-source preflight checks presence before mutating any remote file.
+ """
  from html.parser import HTMLParser
 
  class EmailFormParser(HTMLParser):
@@ -35,7 +39,9 @@ def has_buyer_email_form(markup):
   def handle_starttag(self, tag, attrs):
    attributes = dict(attrs)
    if tag == 'form':
-    self.forms.append(str(attributes.get('method') or '').lower() == 'post')
+    method_ok = str(attributes.get('method') or '').lower() == 'post'
+    action_ok = expected_action is None or attributes.get('action') == expected_action
+    self.forms.append(method_ok and action_ok)
    elif tag == 'input' and self.forms and self.forms[-1]:
     if (attributes.get('name') == 'email'
         and str(attributes.get('type') or '').lower() == 'email'
@@ -51,6 +57,28 @@ def has_buyer_email_form(markup):
  parser.feed(markup)
  parser.close()
  return parser.found
+
+
+def preflight_checkout_email_template():
+ """Block a release before any backup, file mutation or Passenger restart.
+
+ This is a conservative source gate, NOT proof of successful rendered checkout.
+ Its exact runtime route binding is checked by verify() after installation.
+ """
+ path=APP/'mpw_commerce/templates/mpw_commerce/product_checkout.html'
+ if path.is_symlink() or not path.is_file() or APP not in path.parents:
+  fail('CHECKOUT_TEMPLATE_MISSING_OR_UNSAFE')
+ if path.stat().st_size>180000:
+  fail('CHECKOUT_TEMPLATE_OVERSIZE')
+ try:
+  markup=path.read_text('utf8')
+ except (OSError, UnicodeError) as exc:
+  fail('CHECKOUT_TEMPLATE_UNREADABLE:'+type(exc).__name__)
+ if not has_buyer_email_form(markup):
+  fail('GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING')
+ return True
+
+
 def guard():
  if pwd.getpwuid(os.geteuid()).pw_name!='zomorod2': fail('WRONG_ACCOUNT')
  for p in (APP,PUBLIC):
@@ -152,6 +180,7 @@ def restart():
 
 def publish(run,src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
+ preflight_checkout_email_template()
  if not needed:
   print('MPW_GUEST_RELEASE=ALREADY_INSTALLED')
   return
@@ -202,6 +231,7 @@ def publish_onefile(run,src_path):
 
 def preview(src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
+ preflight_checkout_email_template()
  print('MPW_GUEST_RELEASE_PREFLIGHT='+json.dumps({'needs_install':needed,
   'existing':{k:digest(v) for k,v in old.items()},
   'candidate':{k:digest(v) for k,v in new.items()},
@@ -226,7 +256,8 @@ def verify():
   if response.status_code!=200: fail('ANONYMOUS_CHECKOUT_HTTP:'+str(pid)+':'+str(response.status_code))
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
-  if not has_buyer_email_form(body): fail('GUEST_EMAIL_POST_FORM_MISSING:'+str(pid))
+  if not has_buyer_email_form(body,expected_action=f'/commerce/trx-easy/start/{pid}/'):
+   fail('GUEST_EMAIL_POST_FORM_MISSING_OR_WRONG_ACTION:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
  try:
