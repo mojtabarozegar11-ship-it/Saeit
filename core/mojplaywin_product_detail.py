@@ -6,6 +6,8 @@ Zomorod Melal product SEO stays on its existing view and separate host.
 """
 from django.http import Http404
 from django.shortcuts import render
+from django.db import DatabaseError
+import logging
 
 from .product_seo_views import product_detail as zomorod_product_detail
 from .models import Product
@@ -62,10 +64,27 @@ def brand_product_detail(request, product_id):
     if product_id not in PUBLIC_CATALOG:
         raise Http404("Catalog product not listed")
     item = PUBLIC_CATALOG[product_id]
-    db_product = Product.objects.filter(pk=product_id, active=True).first()
+    try:
+        db_product = Product.objects.filter(pk=product_id, active=True).first()
+    except DatabaseError:
+        # Optional catalog migrations must not turn product discovery into 500.
+        # This is a noindex preview, never a claim of sale readiness.
+        logging.getLogger(__name__).warning(
+            "MojPlayWin catalog lookup unavailable; page remains informational"
+        )
+        db_product = None
     # Matching the public product name is necessary; a reused database ID
     # must not be associated with someone else's digital product.
     matched = bool(db_product and db_product.title.strip() == item["title"])
+    if matched:
+        try:
+            from .commerce_funnel import record_funnel_event
+            record_funnel_event(request, "view_item", db_product)
+        except Exception:
+            # Analytics must not take down a validated product detail page.
+            logging.getLogger(__name__).warning(
+                "MojPlayWin product view telemetry unavailable"
+            )
     # No sales-enabled flag is sufficient proof of TRX mainnet receipt and
     # protected downloadable content; all CTAs stay informational.
     available_for_checkout = False
