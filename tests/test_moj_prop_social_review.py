@@ -17,7 +17,7 @@ from prop_firm.social_review_service import (
     SocialEvidenceRejected, submit_social_evidence, review_social_evidence,
 )
 
-START = datetime(2026,11,16,0,0,tzinfo=timezone.utc)
+START = datetime(2026,11,1,0,0,tzinfo=timezone.utc)
 CHECKED = {
     "author_verified": True,
     "public_visible": True,
