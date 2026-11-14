@@ -1,0 +1,53 @@
+name: Mojtaba.bot.ai revenue cycle2 source and economic evidence only
+on:
+  push:
+    branches:
+      - work/revenue-p0-cycle2-evidence-20261114
+    paths:
+      - "scripts/revenue_cycle2_*.py"
+      - "tests/test_revenue_cycle2_*.py"
+      - "docs/revenue-p0/cycle2/**"
+      - ".github/workflows/revenue-cycle2-proof-only.yml"
+  pull_request:
+    branches:
+      - work/revenue-dual-offer-readiness-20261114
+    paths:
+      - "scripts/revenue_cycle2_*.py"
+      - "tests/test_revenue_cycle2_*.py"
+      - "docs/revenue-p0/cycle2/**"
+      - ".github/workflows/revenue-cycle2-proof-only.yml"
+permissions:
+  contents: read
+jobs:
+  evidence-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run only cycle2 offline contracts
+        run: python3 -m unittest discover -s tests -p 'test_revenue_cycle2_*.py' -v
+      - name: Produce deterministic offline internal evidence
+        run: |
+          python3 scripts/revenue_cycle2_quote.py docs/revenue-p0/cycle2/examples/website_diagnosis.synthetic.json > /tmp/cycle2_website.json
+          python3 scripts/revenue_cycle2_quote.py docs/revenue-p0/cycle2/examples/farm_economics.synthetic.json > /tmp/cycle2_farm.json
+          python3 scripts/revenue_cycle2_quote.py docs/revenue-p0/cycle2/examples/digital_publication.synthetic.json > /tmp/cycle2_digital.json
+          python3 scripts/revenue_cycle2_farm_preview.py docs/revenue-p0/example-farm-model.synthetic.json > /tmp/cycle2_farm_calculated.json
+          python3 scripts/revenue_cycle2_source_audit.py > /tmp/cycle2_source.json
+          python3 scripts/revenue_cycle2_manifest.py > /tmp/cycle2_manifest.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for kind in ('website','farm','digital'):
+              row=json.loads(Path('/tmp/cycle2_'+kind+'.json').read_text())
+              assert row['canonical_bot']=='mojtaba.bot.ai'
+              assert row['payment_verified'] is False
+              assert row['quote_sent'] is False
+          demo=json.loads(Path('/tmp/cycle2_farm_calculated.json').read_text())
+          assert demo['portfolio']['operating_profit']=='63000000.00'
+          assert demo['sample_only'] is True
+          audit=json.loads(Path('/tmp/cycle2_source.json').read_text())
+          assert audit['source_contract_ok'] is True
+          manifest=json.loads(Path('/tmp/cycle2_manifest.json').read_text())
+          assert len(manifest['assets'])==4
+          print('CYCLE2_EVIDENCE=source_only; receipts=UNKNOWN; delivery=UNKNOWN')
+          PY
