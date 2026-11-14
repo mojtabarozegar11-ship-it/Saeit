@@ -20,6 +20,20 @@ MAX_RECORDS = 10000
 MAX_HISTORY_DAYS = 366 * 5
 SOURCE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,79}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+PRICE_FIELD = re.compile(r"[0-9]{1,18}(?:\.[0-9]{1,8})?\Z")
+
+
+def _bounded_prices(event):
+    # Reject huge exponents, Unicode numerals, and unbounded decimal strings
+    # *before* Decimal parsing/formatting can exhaust a worker's memory.
+    return (
+        type(event) is dict
+        and all(
+            type(event.get(name)) is str
+            and PRICE_FIELD.fullmatch(event[name]) is not None
+            for name in ("entry", "stop_loss", "take_profit")
+        )
+    )
 
 
 class SignalHistoryRejected(ValueError):
@@ -49,7 +63,7 @@ def _canonical(event, source_id, brand):
     _source(source_id)
     if type(brand) is not str or brand not in SIGNAL_BRANDS:
         raise SignalHistoryRejected("brand_not_registered")
-    if not inspect_signal_record(event):
+    if not _bounded_prices(event) or not inspect_signal_record(event):
         raise SignalHistoryRejected("invalid_signal_record")
     ts = event["created_at"]
     if ts.tzinfo is None or ts.utcoffset() != timedelta(0):
@@ -124,7 +138,7 @@ def audit_history(entries, *, source_id, brand, signing_key, now_utc):
         if not isinstance(item, dict) or set(item) != {"record", "source_digest"}:
             raise SignalHistoryRejected("history_envelope_invalid")
         record = item["record"]
-        if not isinstance(record, dict) or not inspect_signal_record(record):
+        if not _bounded_prices(record) or not inspect_signal_record(record):
             raise SignalHistoryRejected("signal_record_invalid")
         event_id = record["event_id"]
         if event_id in seen:
