@@ -1,0 +1,94 @@
+name: MojPlayWin reviewed buyer-email source restoration — no mail or payment
+on:
+  push:
+    branches: [fix/mpw-restore-reviewed-email-recovery-source-20261114]
+  pull_request:
+    branches: [fix/mpw-live-checkout-csp-source-gaps-20261114]
+permissions:
+  contents: read
+jobs:
+  owner-email-source-restoration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile migration, model, service, safe manifest and regression tests
+        run: |
+          python3 -m py_compile core/models.py core/guest_recovery_models.py
+          python3 -m py_compile core/migrations/0049_mpw_guest_email_recovery.py
+          python3 -m py_compile services/mpw_trx_email_recovery.py
+          python3 -m py_compile tests/test_mpw_reviewed_email_recovery_restore_20261114.py
+          python3 -m py_compile scripts/mpw_checkout_source_coverage_20261114.py
+      - name: Run 44 reviewed buyer email source invariants without Django/database
+        run: python3 -m unittest discover -s tests -p 'test_mpw_reviewed_email_recovery_restore_20261114.py' -v
+      - name: Preserve 105 checkout CSP and source graph regressions
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_security_middleware_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_source_coverage_20261114.py' -v
+      - name: Validate exact known recovery improvements and refuse commerce release
+        run: |
+          python3 - <<'PY'
+          from scripts.mpw_checkout_source_coverage_20261114 import audit,ROOT
+          r=audit(ROOT)
+          assert r['source_files_present']==8 and r['source_files_required']==11
+          assert r['explicit_source_routes_count']==1
+          assert r['files']['services/mpw_trx_email_recovery.py']=='present_regular_bounded'
+          assert r['files']['core/migrations/0049_mpw_guest_email_recovery.py']=='present_regular_bounded'
+          for f in ('mpw_commerce/buyer_orders.py','mpw_commerce/product_checkout_page.py',
+                    'mpw_commerce/templates/mpw_commerce/product_checkout.html'):
+              assert r['files'][f]=='missing_or_unsafe'
+          assert not r['commerce_app_installed_in_reviewed_settings_source']
+          assert not r['complete_versioned_buyer_checkout_source_candidate']
+          assert not r['release_permitted']
+          assert r['actual_collected_revenue'] is None
+          print('REVIEWED_EMAIL_RECOVERY_SOURCE=RESTORED; COMPONENTS=8/11; ROUTES=1/4; RELEASE=NO-GO')
+          PY
+      - name: Confirm no SMTP/SSH/migration execution or production money
+        run: echo 'EMAIL_SENT=NO; MIGRATIONS_EXECUTED=NO; DB_READ=NO; SSH=NO; TRX=NO; PRODUCTION_EDIT=NO'
+  django-temporary-schema-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      SECRET_KEY: temporary-ci-schema-only-not-production
+      DEBUG: 'False'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: sqlite:////tmp/mpw-guest-email-schema-ci.sqlite3
+      MPW_GUEST_RECOVERY_ENABLED: 'false'
+      MPW_GUEST_RECOVERY_EMAIL_APPROVED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing project requirements only
+        run: python -m pip install -r requirements.txt
+      - name: Validate all Django models and existing URL graph
+        run: python manage.py check
+      - name: Require fully matching models and migrations with no generated source
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply reviewed migrations only to disposable isolated CI SQLite
+        run: python manage.py migrate --noinput
+      - name: Verify exact three guest email tables exist in disposable SQLite
+        run: |
+          python - <<'PY'
+          import os
+          import django
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          django.setup()
+          from django.apps import apps
+          from django.db import connection
+          from django.conf import settings
+          expected={'GuestOrderEmail','GuestRecoveryToken','GuestRecoveryRate'}
+          models={m.__name__:m for m in apps.get_app_config('core').get_models() if m.__name__ in expected}
+          assert set(models)==expected
+          existing=set(connection.introspection.table_names())
+          assert all(model._meta.db_table in existing for model in models.values())
+          assert getattr(settings,'MPW_GUEST_RECOVERY_ENABLED',False) is False
+          assert getattr(settings,'MPW_GUEST_RECOVERY_EMAIL_APPROVED',False) is False
+          assert 'sqlite' in connection.vendor
+          print('CI_SCHEMA=3/3_PRESENT; MAIL=DISABLED; PRODUCTION_DB=NOT_TOUCHED')
+          PY
