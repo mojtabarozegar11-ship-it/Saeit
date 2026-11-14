@@ -45,6 +45,20 @@ class CheckoutTraceTests(unittest.TestCase):
     def test_normal_lifecycle_order_has_no_ordering_issue(self):
         events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),event('e3','fulfilled','server')]
         self.assertEqual(audit_checkout_trace(payload(events))['issues_count'],0)
+    def test_refund_after_delivery_flags_entitlement_review(self):
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),
+                event('e3','fulfilled','server'),event('e4','refund_confirmed','gateway',PAY)]
+        issues=audit_checkout_trace(payload(events))['orders'][0]['issues']
+        self.assertIn('REFUND_AFTER_FULFILLMENT_ACCESS_REVIEW',issues)
+    def test_refund_before_any_verified_payment_is_suspicious(self):
+        events=[event('e1','checkout_created'),event('e2','refund_confirmed','gateway',PAY)]
+        issues=audit_checkout_trace(payload(events))['orders'][0]['issues']
+        self.assertIn('REFUND_WITHOUT_MATCHED_GATEWAY_PAYMENT',issues)
+    def test_delivery_after_refund_flags_review(self):
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),
+                event('e3','refund_confirmed','gateway',PAY),event('e4','fulfilled','server')]
+        issues=audit_checkout_trace(payload(events))['orders'][0]['issues']
+        self.assertIn('FULFILLMENT_AFTER_REFUND_REQUIRES_REVIEW',issues)
     def test_paid_but_no_fulfillment_is_not_declared_clean(self):
         events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY)]
         result=audit_checkout_trace(payload(events))
