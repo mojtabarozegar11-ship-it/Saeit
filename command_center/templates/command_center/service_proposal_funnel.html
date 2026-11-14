@@ -41,6 +41,7 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
   <article class="metric"><span>کارهای در حال پیگیری</span><strong>{{ funnel.workitems_in_progress }}</strong></article>
   <article class="metric"><span>ارجاعات معوق</span><strong>{{ funnel.workitems_due_now }}</strong></article>
   <article class="metric"><span>ارجاعات مسدود</span><strong>{{ funnel.workitems_blocked }}</strong></article>
+  <article class="metric"><span>پیشنهادهای دارای سند اما بدون ارجاع اجرایی</span><strong>{{ funnel.stranded_desk_handoff.verified_count }}</strong></article>
   <article class="metric"><span>درخواست جدید قدیمی‌تر از ۲۴ ساعت</span><strong>{{ funnel.awaiting_initial_review_over_24h }}</strong></article>
   <article class="metric"><span>درخواست در حال بررسی قدیمی‌تر از ۷۲ ساعت</span><strong>{{ funnel.reviewing_over_72h }}</strong></article>
 </section>
@@ -71,6 +72,12 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
 <p>از {{ funnel.candidate_scan.queue_total_candidates }} پرونده در صف بررسی، {{ funnel.candidate_scan.inspected }} رکورد بررسی‌شده است؛ {{ funnel.candidate_scan.eligible }} مورد برای آماده‌سازی پیش‌نویس واجد شرایط دیده شد و {{ funnel.candidate_scan.requires_human_review }} مورد نیازمند بررسی انسانی است. <strong>{{ funnel.candidate_scan.queue_uninspected }} پرونده هنوز در این نوبت بررسی نشده‌اند.</strong></p>
 {% if funnel.candidate_scan.scan_limit_reached %}
 <p><strong>هشدار:</strong> جست‌وجو به سقف {{ funnel.candidate_scan.max_records }} رسید. نبود مشتری واجد شرایط در کل پایگاه قابل نتیجه‌گیری نیست؛ پرونده‌های ناقص باید در CRM رسیدگی شوند.</p>
+{% endif %}
+{% if funnel.stranded_desk_handoff.verified_count %}
+<p><strong>اقدام فوری:</strong> {{ funnel.stranded_desk_handoff.verified_count }} پیشنهاد واقعی دارای سند حسابرسی هنوز در کارتابل ارجاع ندارند. عامل واحد می‌تواند با ابزار بازیابی داخلی آنها را به کار اجرایی وصل کند.</p>
+{% endif %}
+{% if not funnel.stranded_desk_handoff.scan_complete %}
+<p><strong>هشدار شمارش:</strong> {{ funnel.stranded_desk_handoff.uninspected }} رکورد آماده هنوز از نظر ارجاع در این نوبت بررسی نشده است؛ شمارش فعلی کامل نیست.</p>
 {% endif %}
 <p><strong>مسیر عملیات:</strong> «رسیدگی به درخواست‌ها در CRM» ← انتخاب حداکثر ۲۰ پرونده ← اقدام «Mojtaba.bot.ai: آماده‌سازی پیش‌نویس داخلی» ← ایجاد ارجاع پیگیری در کارتابل با مهلت ۲۴ ساعت ← بررسی دامنه و ظرفیت ← قیمت‌گذاری و تأیید جداگانه ← ارتباط مجاز با مشتری.</p>
 <p>پرداخت وصول‌شده، تأیید سفارش، تحویل محصول و مجوز انتشار عمومی از این پیش‌نویس قابل استنتاج نیست.</p>
