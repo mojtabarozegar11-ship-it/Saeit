@@ -266,6 +266,14 @@ class CommercializationBoardApiTests(TestCase):
         response = self.client.get(self.endpoint())
         self.assertEqual(response.status_code, 200)
         payload = response.json()["financial_commerce"]
+        prop = payload["moj_prop"]
+        self.assertEqual(prop["plan_products_configured"], 10)
+        self.assertEqual(prop["additional_plan_prices_proposed_not_live"], 9)
+        self.assertEqual(prop["plan_one_owner_fee_trx"], "30")
+        self.assertEqual(prop["valid_closed_trades_required"], 50)
+        self.assertEqual(prop["duration_days"], 28)
+        self.assertFalse(prop["live_challenge_checkout_verified"])
+        self.assertFalse(prop["real_broker_funding_verified"])
         self.assertEqual(payload["owner_priority_order"][:4], [
             "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
         ])
