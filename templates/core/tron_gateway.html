@@ -15,7 +15,15 @@ footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
 {% if language == 'fa' %}<p>زمرد ملل · درگاه پرداخت مستقیم TRON</p><h1>پرداخت با TRX</h1>
 {% else %}<p>MojPlayWin · Direct TRON merchant gateway</p><h1>Pay securely with TRX</h1>{% endif %}
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-{% if stage == 'start' %}
+{% if stage == 'catalog' %}
+<h2>{% if language == 'fa' %}محصولات آماده فروش{% else %}Verified, ready-to-sell products{% endif %}</h2>
+{% for product, amount in products %}
+<section style="border-block-end:1px solid #48615c;padding:15px 0">
+<strong>{{ product.title }}</strong><p>{{ product.price }} {{ product.currency }} · {% if language == 'fa' %}قیمت پایه تقریبی{% else %}Base quoted amount{% endif %}: {{ amount }} TRX</p>
+<a class="link" href="/pay/tron/product/{{ product.pk }}/">{% if language == 'fa' %}خرید با TRX{% else %}Buy with TRX{% endif %}</a></section>
+{% empty %}<p>{% if language == 'fa' %}در حال حاضر محصول تأییدشده و آماده فروش در این صفحه وجود ندارد.{% else %}No rights-approved, fulfillment-ready products are listed on this page.{% endif %}</p>{% endfor %}
+{% if has_more %}<a href="?page={{ next_page }}">{% if language == 'fa' %}صفحه بعد{% else %}Next page{% endif %}</a>{% endif %}
+{% elif stage == 'start' %}
 <h2>{{ product.title }}</h2>
 <p class="muted">{% if language == 'fa' %}قیمت فهرست: {{ product.price }} {{ product.currency }}. مبلغ قطعی TRX پس از ساخت صورتحساب مشخص می‌شود.{% else %}List price: {{ product.price }} {{ product.currency }}. Your precise TRX amount is locked on the invoice.{% endif %}</p>
 <form method="post">{% csrf_token %}
