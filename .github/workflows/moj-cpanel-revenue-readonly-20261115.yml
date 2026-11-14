@@ -90,7 +90,7 @@ jobs:
               )
               prefixes = ('services.mpw_', 'mpw_commerce.', 'mpw_native_checkout.', 'core.models', 'config.urls')
               pending = list(starts)
-              seen, absent, malformed = set(), set(), set()
+              seen, absent, malformed, importers = set(), set(), set(), {}
               while pending and len(seen) < 160:
                   module = pending.pop(0)
                   if module in seen or not any(module.startswith(k) for k in prefixes):
@@ -118,12 +118,15 @@ jobs:
                       elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                           found = (node.module,)
                       for candidate in found:
-                          if any(candidate.startswith(k) for k in prefixes) and candidate not in seen and candidate not in pending:
-                              pending.append(candidate)
+                          if any(candidate.startswith(k) for k in prefixes):
+                              importers.setdefault(candidate, set()).add(module)
+                              if candidate not in seen and candidate not in pending:
+                                  pending.append(candidate)
               return {
                   'analyzed': len(seen),
                   'static_missing_count': len(absent),
                   'static_missing_modules': sorted(absent)[:30],
+                  'missing_module_importers': {name: sorted(importers.get(name, ())) for name in sorted(absent)[:30]},
                   'syntax_errors': len(malformed),
                   'bounded_complete': not pending,
                   'not_runtime_import_proof': True,
