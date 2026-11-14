@@ -160,6 +160,12 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
                 reconciliation_status="pending", evidence_digest=digest,
             )
 
+        # Upstream IDs must be unique across both evidence event types.
+        other = (PropEquityObservation if event_type == "execution"
+                 else PropExecution)
+        if other.objects.filter(account=account, external_event_id=event_id).exists():
+            raise EvidenceRejected("Upstream event ID reused across event types")
+
         existing = target.objects.filter(account=account, external_event_id=event_id).first()
         if existing:
             if existing.evidence_digest != digest:
