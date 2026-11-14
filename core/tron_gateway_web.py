@@ -348,9 +348,11 @@ def _record_paid(invoice_id, proof):
                 or invoice.payment_intent.currency != invoice.order.currency):
             return False
         # Old MojPlayWin's independent walletless provider may already have
-        # attributed the same on-chain hash. Never knowingly credit twice.
-        if (PaymentWebhookEvent.objects.filter(event_id=proof["txid"]).exists()
-                or LedgerEntry.objects.filter(reference__endswith=":" + proof["txid"]).exists()):
+        # attributed the same on-chain hash. Compare case-insensitively:
+        # legacy event/reference casing is not guaranteed canonical.
+        # This protects prior persisted credits, not simultaneous legacy writers.
+        if (PaymentWebhookEvent.objects.filter(event_id__iexact=proof["txid"]).exists()
+                or LedgerEntry.objects.filter(reference__iendswith=":" + proof["txid"]).exists()):
             return False
         event = PaymentWebhookEvent.objects.create(
             provider=PROVIDER, event_id=proof["txid"], event_type="tron_finalized",
