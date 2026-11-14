@@ -108,6 +108,21 @@ class InternalCyberModuleTests(unittest.TestCase):
         with self.assertRaisesRegex(CyberModuleError, "ASSET_OUT_OF_SCOPE"):
             self.run_review(data=bad)
 
+    def test_unsafe_signed_context_identifiers_rejected(self):
+        for field, error in (("tenant_id", "TENANT_INVALID"),
+                             ("engagement_id", "ENGAGEMENT_INVALID")):
+            for invalid in ("contact@example.com", "<script>", "a\\nb", " ", "a" * 101):
+                with self.subTest(field=field, invalid=invalid):
+                    with self.assertRaisesRegex(CyberModuleError, error):
+                        self.run_review(auth=signed(**{field: invalid}))
+
+    def test_safe_signed_context_identifiers_accepted(self):
+        auth = signed(tenant_id="customer_01", engagement_id="audit-2026.11")
+        data = evidence(tenant_id="customer_01", engagement_id="audit-2026.11")
+        report = self.run_review(auth=auth, data=data)
+        self.assertEqual(report["tenant_id"], "customer_01")
+        self.assertEqual(report["engagement_id"], "audit-2026.11")
+
     def test_cross_tenant_forbidden(self):
         with self.assertRaisesRegex(CyberModuleError, "CROSS_TENANT_EVIDENCE_FORBIDDEN"):
             self.run_review(data=evidence(tenant_id="tenant-2"))
