@@ -12,6 +12,8 @@ on:
       - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
       - "scripts/mpw_runner_port_reachability_readonly.py"
       - "tests/test_mpw_runner_port_reachability_readonly.py"
+      - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
   push:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
       - "scripts/mpw_runner_port_reachability_readonly.py"
       - "tests/test_mpw_runner_port_reachability_readonly.py"
+      - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -52,6 +56,7 @@ jobs:
              'scripts/mpw_cpanel_direct_first_transport_readonly.py',
              'scripts/mpw_cpanel_source_attestation_readonly.py',
              'scripts/mpw_encrypted_inquiry_queue_readonly.py',
+             'scripts/mpw_cpanel_uapi_https_revenue_readonly.py',
           ):
              ast.parse(Path(name).read_text(encoding='utf8'),filename=name)
           print('MPW_SAFE_READONLY_SOURCE_SYNTAX=PASS')
@@ -63,6 +68,13 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p 'test_mpw_runner_port_reachability_readonly.py' -v
           python3 -B scripts/mpw_runner_port_reachability_readonly.py
+      - name: Audit HTTPS UAPI fail-closed protocol and 30 nonmutating cases
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_uapi_https_revenue_readonly.py' -v
+          echo 'MPW_UAPI_30_SAFE_REGRESSIONS=PASS'
       - name: Execute 70 offline regressions without SSH or customer access
         env:
           PYTHONDONTWRITEBYTECODE: "1"
@@ -72,6 +84,21 @@ jobs:
           python3 -B -m unittest discover -s tests -p 'test_cpanel_source_attestation_readonly.py' -v
           python3 -B -m unittest discover -s tests -p 'test_mpw_encrypted_inquiry_queue_readonly.py' -v
           echo 'MPW_70_OFFLINE_REGRESSIONS=PASS'
+  audit-https-uapi-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independent HTTPS cPanel summary when SSH ports are blocked
+        env:
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_cpanel_uapi_https_revenue_readonly.py
   audit-live:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
