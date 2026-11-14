@@ -77,25 +77,25 @@ class MojPropOnePostFourWeekEvidenceTests(TestCase):
         )
 
     def seed_verified_trading_days(self):
-        # Realistic synthetic *test-only* six-day net of $12, best $2/day.
+        # Synthetic six-day $12 net; every open, trade and close stays in ONE UTC day.
         for i in range(6):
             date = START + timedelta(days=i)
             opening = Decimal("100") + Decimal(i * 2)
             PropEquityObservation.objects.create(
                 account=self.account, external_event_id=f"open-{i}",
-                observed_at=date + timedelta(hours=8), is_session_open=True,
+                observed_at=date + timedelta(hours=1), is_session_open=True,
                 equity_usd=opening, reconciliation_status="verified",
             )
             PropExecution.objects.create(
                 account=self.account, external_event_id=f"trade-{i}",
                 data_source="fixture-no-broker", symbol="XAUUSD",
-                closed_at=date + timedelta(hours=12),
+                closed_at=date + timedelta(hours=5),
                 gross_realized_usd=Decimal("2"),
                 total_fees_usd=Decimal("0"), reconciliation_status="verified",
             )
             PropEquityObservation.objects.create(
                 account=self.account, external_event_id=f"close-{i}",
-                observed_at=date + timedelta(hours=14), equity_usd=opening + 2,
+                observed_at=date + timedelta(hours=6), equity_usd=opening + 2,
                 reconciliation_status="verified",
             )
         self.account.reconciled_by_operator = True
