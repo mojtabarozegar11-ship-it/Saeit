@@ -157,8 +157,20 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
             PropAccount.Status.BREACHED, PropAccount.Status.CLOSED):
             raise EvidenceRejected("Account not eligible for ingestion")
         if event_type == "execution":
-            if set(data) != {"symbol", "gross_usd", "fees_usd"}:
+            base = {"symbol", "gross_usd", "fees_usd"}
+            enriched = base | {"position_id", "execution_origin"}
+            if set(data) not in (base, enriched):
                 raise EvidenceRejected("Execution schema mismatch")
+            # Legacy signed events remain usable for P&L, but do NOT qualify
+            # as uniquely closed trades unless a signed position ID exists.
+            if set(data) == enriched:
+                position_id = _id(data["position_id"], "position_id")
+                if data["execution_origin"] not in ("manual", "bot", "unknown"):
+                    raise EvidenceRejected("Execution origin must be manual, bot or unknown")
+                origin = data["execution_origin"]
+            else:
+                position_id = ""
+                origin = "unknown"
             symbol = _id(data["symbol"], "symbol", 32)
             gross = _value(data["gross_usd"], "gross_usd")
             fees = _value(data["fees_usd"], "fees_usd")
@@ -168,6 +180,7 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
             incoming = dict(
                 account=account, external_event_id=event_id,
                 data_source=source, symbol=symbol, closed_at=occurred,
+                external_position_id=position_id, execution_origin=origin,
                 gross_realized_usd=gross, total_fees_usd=fees,
                 reconciliation_status="pending", evidence_digest=digest,
             )
