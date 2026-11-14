@@ -51,15 +51,15 @@ No row above represents a completed SKU audit, legal approval, deployed route, m
 - `21/21` new model/funnel/CLI tests passed.
 - `15/15` new strict intake file I/O security tests passed.
 - `12/12` direct integration tests of the existing two-service CLI passed.
-- **48/48** new local tests passed in the latest consolidated run, with six changed/created Python source and test files re-read from GitHub and matched to local `git hash-object` SHA.
-- Two CLI commands ran: `--catalogue` returned **11** candidates, **2** repository-draft inquiry sources and **null** collected revenue; `--synthetic-funnel` returned illustrative ratios for a 100→10→5→4→2→1 fake cohort, not real conversion.
+- **56/56** local tests passed in the final consolidated run: 21 portfolio, 15 intake-I/O, 12 direct CLI integration, and 8 service-to-portfolio cross-contract cases. Seven changed/created Python source and test files were compared to GitHub blob SHA via local `git hash-object`.
+- Eight additional cross-contract tests proved the portfolio's only source-backed draft codes equal the two existing allowlisted service offers; all other nine remain unverified candidates. Two CLI commands ran: `--catalogue` returned **11** candidates, **2** repository-draft inquiry sources and **null** collected revenue; `--synthetic-funnel` returned illustrative ratios for a 100→10→5→4→2→1 fake cohort, not real conversion.
 - Reviewed existing two site CTA code and the isolated source-only workflow; **no new GitHub Actions workflow was triggered** by writing to the new branch. The workflow definition was updated for eventual review, but no CI success is inferred.
 - No real user data, support message, sale, receipt, payment, payout, broker order, email, database migration, PR merge or deployment occurred.
 
 ## Local command and acceptance evidence
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py' -q
-# Ran 48 tests — OK (isolated local fixture of the six changed/created Python files)
+# Ran 56 tests — OK (isolated local fixture of seven changed/created Python files)
 python3 scripts/mojtaba_revenue_portfolio.py --catalogue
 python3 scripts/mojtaba_revenue_portfolio.py --synthetic-funnel docs/revenue-p0/synthetic-funnel-onebot-20261114.json
 ```
@@ -79,7 +79,7 @@ Existing repository-wide/Django source tests were **not** executed in the local 
 | Source-audited candidate revenue models | 0 in new module | 11/11 catalogued | 100% of *new catalogue* only |
 | Existing source inquiry drafts recognized | 0 | 2/2 | Both pre-existing draft CTAs, **not live verified** |
 | Release gates independently verified here | 0 | 0/88 | 0% evidence gates in this isolated audit; not proof no prior progress |
-| New tested local executable tests | 0 | 48/48 PASS | 100% of newly created offline test suite |
+| New tested local executable tests | 0 | 56/56 PASS | 100% of newly created offline test suite |
 | Site HTTP/checkout proof verified | UNKNOWN | UNKNOWN | Public GET attempts failed; no live claim |
 | Collected real revenue | UNKNOWN | UNKNOWN | No trustworthy payment, balance or settlement data |
 | Deployments/merges/payment/expenses | 0 | 0 | None undertaken |
