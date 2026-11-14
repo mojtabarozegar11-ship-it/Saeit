@@ -8,6 +8,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from .company_inquiry_models import CompanyInquiry
+from .models import AuditLog
 
 MAX_DAYS = 90
 
