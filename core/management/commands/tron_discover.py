@@ -30,6 +30,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if (getattr(settings, "TRON_UNIFIED_DISCOVERY_ENABLED", False) is not True
+                or getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True
                 or getattr(settings, "TRON_UNIFIED_RECEIVER", "") != MAINNET_RECEIVER):
             self.stdout.write("tron_discover disabled")
             return
