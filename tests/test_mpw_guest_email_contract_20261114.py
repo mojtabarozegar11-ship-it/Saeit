@@ -251,6 +251,14 @@ class CheckoutSourcePreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
             self.preflight()
 
+    def test_preflight_rejects_unrelated_email_newsletter_form(self):
+        self.template.write_text(
+            '<form method="post" action="/newsletter/subscribe/">'
+            '<input type="email" name="email" required></form>',
+            encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
+            self.preflight()
+
     def test_preflight_accepts_source_contract(self):
         self.template.write_text(
             '<form method="POST" action="/commerce/trx-easy/start/72/">'
