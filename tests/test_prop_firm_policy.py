@@ -68,6 +68,25 @@ class PropFirmPolicyTests(unittest.TestCase):
         self.assertIn("profit_consistency_not_met",
                       self.challenge(max_profitable_day="3.1").reasons)
 
+    def test_challenge_refuses_failed_risk_decision_even_if_reasons_empty(self):
+        from prop_firm.rules import RiskDecision
+        blocked = RiskDecision(False, (), D("96"), D("92"))
+        result = self.challenge(risk=blocked)
+        self.assertFalse(result.passed)
+        self.assertIn("risk_assessment_not_allowed", result.reasons)
+
+    def test_promotion_refuses_failed_risk_without_reason_text(self):
+        from prop_firm.rules import RiskDecision
+        blocked = RiskDecision(False, (), D("96"), D("92"))
+        result = assess_promotion(
+            level_index=0, realized_monthly_profit="4",
+            trading_days=12, max_profitable_day="1",
+            risk=blocked, evidence_verified=True,
+            funding_for_next_level=True,
+        )
+        self.assertFalse(result.eligible)
+        self.assertIn("risk_assessment_not_allowed", result.reasons)
+
     def test_challenge_loss_breach_cannot_be_overridden_by_profit(self):
         self.assertFalse(self.challenge(risk=self.risk(equity=95)).passed)
 
@@ -208,9 +227,6 @@ class PropFirmPolicyTests(unittest.TestCase):
                     self.assertFalse(decision.allowed)
                     self.assertIn(reason, decision.reasons)
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_new_cohort_requires_both_social_platforms(self):
         decision = self.challenge(social_posts_verified=False)
         self.assertFalse(decision.passed)
@@ -241,3 +257,6 @@ if __name__ == "__main__":
     def test_unknown_contract_version_fails_closed(self):
         with self.assertRaises(ValueError):
             self.challenge(contract_version="v1.0-user-supplied")
+
+if __name__ == "__main__":
+    unittest.main()
