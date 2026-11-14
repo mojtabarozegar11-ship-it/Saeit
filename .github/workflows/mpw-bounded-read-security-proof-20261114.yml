@@ -1,0 +1,46 @@
+name: MPW bounded checkout GET and duplicate security header gate — source only
+on:
+  push:
+    branches: [fix/mpw-bounded-read-release-gate-20261114]
+  pull_request:
+    branches: [fix/mpw-dynamic-cutover-buyer-email-proof-20261114]
+permissions:
+  contents: read
+jobs:
+  release-acceptance-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile bounded GET path
+        run: |
+          python3 -m py_compile services/mpw_checkout_release_assurance.py scripts/mpw_dynamic_store_cutover_20261108.py
+      - name: Verify all eight previously proven checkout suites
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_email_required_preflight_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_inert_control_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_public_checkout_hidden_controls_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_release_assurance_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cutover_buyer_email_routes_20261114.py' -v
+      - name: Run 40 response integrity regressions
+        run: python3 -m unittest discover -s tests -p 'test_mpw_checkout_response_integrity_20261114.py' -v
+      - name: Source-only release denial and strict buyer email policy
+        run: |
+          python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/source-preflight.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/source-preflight.json').read_text().split('=',1)[1])
+          assert r['source_candidate_complete']
+          assert r['canonical_bot']=='mojtaba.bot.ai'
+          assert not r['release_authorized']
+          assert not r['settled_payment_verified']
+          assert not r['paid_delivery_verified']
+          assert r['actual_collected_revenue'] is None
+          print('BOUNDED_GET=SOURCE_ONLY; PROD=UNKNOWN; TRX_SETTLEMENT=UNKNOWN; LIVE_RELEASE=DENIED')
+          PY
