@@ -53,6 +53,17 @@
           <div><dt>{{ labels.10 }}</dt><dd dir="ltr">{% if record.last_equity is not None %}${{ record.last_equity|floatformat:"2" }}{% else %}—{% endif %}</dd></div>
           <div><dt>{{ labels.11 }}</dt><dd>{% if record.verified %}✓{% else %}{{ labels.17 }}{% endif %}</dd></div>
         </dl>
+        {% if record.challenge_trade_count %}
+        <section class="mp-desk-trades" aria-label="{{ trading.title }}">
+          <h4>{{ trading.title }}</h4>
+          <p dir="ltr">{{ record.challenge_trade_count.valid_closed_positions }} / {{ minimum_closed_trades }} verified closed trades</p>
+          <p>{{ trading.body }}</p>
+          <p>{{ trading.bots }}</p>
+          <p dir="ltr">MANUAL {{ record.challenge_trade_count.manual_positions }} ·
+             BOT {{ record.challenge_trade_count.bot_positions }} ·
+             UNKNOWN {{ record.challenge_trade_count.unknown_origin_positions }}</p>
+        </section>
+        {% endif %}
         {% if record.social_posting and record.account.policy_version == policy_version %}
         <section class="mp-desk-social" aria-label="{{ social.title }}">
           <h4>{{ social.title }}</h4>
