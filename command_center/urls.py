@@ -21,6 +21,7 @@ from .integrated_ledger_api import integrated_ledger_api
 from .commerce_funnel import commerce_funnel_api
 from .revenue_evidence import revenue_evidence_api
 from .fulfillment_preflight import fulfillment_preflight_api
+from .company_sales_pipeline import company_sales_pipeline_api
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
