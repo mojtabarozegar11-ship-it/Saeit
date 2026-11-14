@@ -33,6 +33,12 @@ def _validated_payload(data: dict, field: str) -> tuple[dict, dict]:
     return engagement, evidence
 
 
+def _periodic_key(key: bytes) -> bool:
+    """Reject trivial repeated short-pattern HMAC keys, not estimate entropy."""
+    return any(len(key) % n == 0 and key == key[:n] * (len(key) // n)
+               for n in range(1, min(8, len(key) - 1) + 1))
+
+
 def build_cyber_gateway_tools(verify_key: bytes, *, enable_offline: bool = False) -> tuple[ToolSpec, ...]:
     """Provide bound handlers for ToolGateway; disabled by default.
 
@@ -41,7 +47,7 @@ def build_cyber_gateway_tools(verify_key: bytes, *, enable_offline: bool = False
     independent provenance checks all remain mandatory.
     """
     if (not isinstance(verify_key, bytes) or len(verify_key) < 32
-            or len(set(verify_key)) < 2):
+            or _periodic_key(verify_key)):
         raise CyberModuleError("VERIFIER_KEY_INVALID")
     if type(enable_offline) is not bool:
         raise CyberModuleError("ENABLED_FLAG_INVALID")
