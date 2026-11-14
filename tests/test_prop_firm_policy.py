@@ -131,6 +131,29 @@ class PropFirmPolicyTests(unittest.TestCase):
             kyc_approved=True,contracts_signed=True)
         self.assertTrue(confirmed.authorized)
 
+    def test_funding_rejects_capital_not_listed_in_fourteen_tiers(self):
+        for capital in ("1", "99.99", "150", "100001"):
+            with self.subTest(capital=capital):
+                decision = authorize_funding(
+                    requested_capital=capital,
+                    unencumbered_cash="1000000", payout_reserve="100",
+                    legal_approved=True, broker_approved=True,
+                    kyc_approved=True, contracts_signed=True,
+                )
+                self.assertFalse(decision.authorized)
+                self.assertIn("unsupported_capital_tier", decision.reasons)
+
+    def test_order_rejects_arbitrary_nonexistent_funded_tier(self):
+        decision = authorize_order(
+            account_capital="150", equity="150",
+            day_open_equity="150", risk_at_stop="0.4",
+            open_risk_before=0, broker_minimum_risk="0.2",
+            verified_stop=True, authoritative_snapshot=True,
+            mode="challenge",
+        )
+        self.assertFalse(decision.allowed)
+        self.assertIn("unsupported_capital_tier", decision.reasons)
+
     def test_real_orders_hard_disabled_even_with_external_claims(self):
         result=authorize_order(account_capital=100,equity=100,day_open_equity=100,
              risk_at_stop="0.4",open_risk_before=0,broker_minimum_risk="0.2",
