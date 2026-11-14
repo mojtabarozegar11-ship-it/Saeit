@@ -82,6 +82,27 @@ def commercialization_board_api(request):
     data["financial_commerce"] = {
         "moj_prop": {
             "plan_products_configured": len(CHALLENGE_PLANS),
+            "owner_declared_active_plans": sum(
+                plan.business_active_owner_declared for plan in CHALLENGE_PLANS
+            ),
+            "owner_declared_funded_plans": sum(
+                plan.capital_funded_owner_declared for plan in CHALLENGE_PLANS
+            ),
+            "temporary_funding_hold_plans": sum(
+                plan.temporary_owner_hold for plan in CHALLENGE_PLANS
+            ),
+            "independently_verified_funded_plans_in_catalog": sum(
+                plan.funding_independently_verified for plan in CHALLENGE_PLANS
+            ),
+            "plan_statuses": [
+                {"code": plan.code, "owner_declared_status": plan.business_status,
+                 "owner_funding_attested": plan.capital_funded_owner_declared,
+                 "temporarily_inactive": plan.temporary_owner_hold,
+                 "independent_funding_evidence_in_catalog":
+                     plan.funding_independently_verified,
+                 "checkout_enabled": plan.checkout_enabled}
+                for plan in CHALLENGE_PLANS
+            ],
             "plan_one_owner_fee_trx": str(CHALLENGE_PLANS[0].entry_fee_trx),
             "additional_plan_prices_proposed_not_live": 9,
             "same_policy_all_plans": True,
