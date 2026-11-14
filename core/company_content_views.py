@@ -1,4 +1,5 @@
 from django import forms
+from django.views.decorators.csrf import csrf_protect
 from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
@@ -77,6 +78,7 @@ def _company_response_headers(response):
     return response
 
 
+@csrf_protect
 def company_portal_home(request):
     """Handle POST; a disabled Django source NEVER stores a shadow lead."""
     from datetime import timedelta
