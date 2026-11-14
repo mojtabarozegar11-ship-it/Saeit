@@ -123,5 +123,81 @@ class RevenueOfferQualificationTests(unittest.TestCase):
             self.assertIn("refusing to overwrite", proc.stderr)
 
 
+    def test_cli_rejects_symlinked_customer_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "intake.json"
+            source.write_text(json.dumps(self.entry()), encoding="utf-8")
+            link = Path(tmp) / "alias.json"
+            link.symlink_to(source)
+            proc = subprocess.run([sys.executable, str(ENGINE), str(link)],
+                                  capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("intake symlink rejected", proc.stderr)
+
+    def test_cli_duplicate_consent_cannot_overwrite_denial(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "intake.json"
+            data = json.dumps(self.entry()).replace(
+                '"consent_to_contact": true',
+                '"consent_to_contact": false, "consent_to_contact": true',
+            )
+            source.write_text(data, encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(ENGINE), str(source)],
+                                  capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("ambiguous JSON intake", proc.stderr)
+
+    def test_cli_nonfinite_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "intake.json"
+            data = json.dumps(self.entry()).replace('"evidence_items": 2',
+                                                    '"evidence_items": NaN')
+            source.write_text(data, encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(ENGINE), str(source)],
+                                  capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("ambiguous JSON intake", proc.stderr)
+
+    def test_cli_does_not_overwrite_existing_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src, output = Path(tmp) / "in.json", Path(tmp) / "existing.json"
+            src.write_text(json.dumps(self.entry()), encoding="utf-8")
+            output.write_text("ORIGINAL", encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(ENGINE), str(src),
+                                   "--output", str(output)],
+                                  capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("refusing to overwrite", proc.stderr)
+            self.assertEqual(output.read_text(encoding="utf-8"), "ORIGINAL")
+
+    def test_cli_output_keeps_only_anonymized_bot_triage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src, output = Path(tmp) / "in.json", Path(tmp) / "new.json"
+            src.write_text(json.dumps(self.entry()), encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(ENGINE), str(src),
+                                   "--output", str(output)],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            saved = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(saved["canonical_bot"], "mojtaba.bot.ai")
+            self.assertEqual(saved["order_state"], "inquiry_only")
+            self.assertEqual(saved["payment_state"], "not_requested")
+            self.assertNotIn("personal_email", saved)
+            self.assertFalse(saved["auto_send_enabled"])
+
+    def test_cli_output_access_is_private(self):
+        import os
+        import stat
+        with tempfile.TemporaryDirectory() as tmp:
+            src, output = Path(tmp) / "in.json", Path(tmp) / "new.json"
+            src.write_text(json.dumps(self.entry()), encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(ENGINE), str(src),
+                                   "--output", str(output)],
+                                  capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            if os.name == "posix":
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode) & 0o077, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
