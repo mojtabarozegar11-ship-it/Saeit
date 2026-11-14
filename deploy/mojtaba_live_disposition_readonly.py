@@ -245,18 +245,31 @@ def identity_dispositions(cpanel: dict) -> list[dict]:
     role_rows = php.get("agent_roles")
     has_role_rows = isinstance(role_rows, list)
     seen_php = {}
+    role_codes_seen = set()
+    duplicate_role_codes = set()
+    invalid_enabled_codes = set()
     if observed_php and has_role_rows:
         for row in role_rows:
-            if (isinstance(row, dict)
-                    and row.get("code") in PHP_ROLE_CODES
-                    and type(row.get("enabled")) is bool):
-                seen_php[row["code"]] = row["enabled"]
+            if not isinstance(row, dict) or row.get("code") not in PHP_ROLE_CODES:
+                continue
+            code = row["code"]
+            if code in role_codes_seen:
+                duplicate_role_codes.add(code)
+            role_codes_seen.add(code)
+            if type(row.get("enabled")) is not bool:
+                invalid_enabled_codes.add(code)
+            else:
+                seen_php[code] = row["enabled"]
     identities = []
     for code in PHP_ROLE_CODES:
         if not observed_php:
             registered = "unknown_registry_unobserved"
         elif not has_role_rows:
             registered = "unknown_role_rows_unavailable"
+        elif code in duplicate_role_codes:
+            registered = "duplicate_role_records_unreconciled"
+        elif code in invalid_enabled_codes:
+            registered = "invalid_enabled_role_record_unreconciled"
         elif code not in seen_php:
             registered = "not_in_observed_private_registry"
         elif seen_php[code]:
