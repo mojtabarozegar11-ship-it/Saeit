@@ -1,26 +1,28 @@
-"""No platform access, fabricated testimonials or automatic social posting."""
+"""One Instagram and one Facebook post kept public for four weeks, not daily."""
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+
 from prop_firm.social_policy import (
-    PLATFORMS, NEW_CONTRACT_VERSION, LEGACY_CONTRACT_VERSION,
-    valid_platform_post_url, check_social_posting, utc_day,
+    DURATION_DAYS, PLATFORMS, POST_START_GRACE_HOURS,
+    NEW_CONTRACT_VERSION, LEGACY_CONTRACT_VERSION,
+    check_social_posting, valid_platform_post_url,
 )
 
+PURCHASE = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+MATURITY = PURCHASE + timedelta(days=28)
 
-class SocialPostingPolicyTests(unittest.TestCase):
-    DAYS = (date(2026,11,16), date(2026,11,17), date(2026,11,18),
-            date(2026,11,19), date(2026,11,20), date(2026,11,21))
 
-    @staticmethod
-    def example(day, platform, **changes):
-        original = {
-            "trading_day": day,
+class SinglePostFourWeekTests(unittest.TestCase):
+    def evidence(self, platform, **extra):
+        data = {
             "platform": platform,
             "post_url": (
-                "https://www.instagram.com/p/example123/"
-                if platform == "instagram"
-                else "https://www.facebook.com/trader/posts/12345"
+                "https://www.instagram.com/p/abc123"
+                if platform == "instagram" else
+                "https://www.facebook.com/trader/posts/123456"
             ),
+            "posted_at": PURCHASE,
+            "reviewed_at": MATURITY,
             "review_status": "verified",
             "reviewed_by_operator": True,
             "author_verified": True,
@@ -28,133 +30,121 @@ class SocialPostingPolicyTests(unittest.TestCase):
             "disclosure_verified": True,
             "content_compliant": True,
             "date_verified": True,
+            "continued_visibility_verified": True,
         }
-        original.update(changes)
-        return original
+        data.update(extra)
+        return data
 
-    def test_two_distinct_platforms_required(self):
-        self.assertEqual(PLATFORMS, ("instagram", "facebook"))
-
-    def test_six_valid_days_require_six_per_platform(self):
-        rows = [self.example(day, p) for day in self.DAYS for p in PLATFORMS]
-        state = check_social_posting(
-            verified_trading_dates=self.DAYS, verified_posts=rows,
+    def check(self, *, as_of=MATURITY, posts=None):
+        return check_social_posting(
+            purchase_confirmed_at=PURCHASE, as_of=as_of,
+            verified_posts=([self.evidence(p) for p in PLATFORMS]
+                            if posts is None else posts),
         )
-        self.assertTrue(state.satisfied)
-        self.assertEqual(state.trading_days, 6)
-        self.assertEqual(state.required_instagram, 6)
-        self.assertEqual(state.required_facebook, 6)
-        self.assertEqual(state.reviewed_instagram, 6)
-        self.assertEqual(state.reviewed_facebook, 6)
-        self.assertFalse(state.automated_publishing_allowed)
 
-    def test_missing_one_facebook_post_blocks_phase(self):
-        rows = [self.example(day,p) for day in self.DAYS for p in PLATFORMS]
-        rows.pop()
-        state = check_social_posting(verified_trading_dates=self.DAYS, verified_posts=rows)
-        self.assertFalse(state.satisfied)
-        self.assertEqual(len(state.missing_days), 1)
-        self.assertTrue(state.missing_days[0].endswith(":facebook"))
+    def test_only_two_total_posts_per_purchase(self):
+        result = self.check()
+        self.assertTrue(result.satisfied)
+        self.assertEqual((result.required_instagram, result.required_facebook), (1,1))
+        self.assertEqual((result.reviewed_instagram, result.reviewed_facebook), (1,1))
 
-    def test_extra_trade_day_requires_extra_posts(self):
-        days = self.DAYS + (date(2026,11,22),)
-        rows = [self.example(day,p) for day in self.DAYS for p in PLATFORMS]
-        state = check_social_posting(verified_trading_dates=days, verified_posts=rows)
-        self.assertFalse(state.satisfied)
-        self.assertEqual(len(state.missing_days), 2)
-        self.assertEqual(state.required_instagram, 7)
+    def test_challenge_exactly_twenty_eight_days(self):
+        self.assertEqual(DURATION_DAYS, 28)
+        self.assertEqual(self.check().challenge_ends_at, MATURITY)
+        self.assertTrue(self.check().challenge_window_complete)
+        self.assertFalse(self.check(as_of=MATURITY-timedelta(seconds=1)).satisfied)
 
-    def test_no_trade_dates_never_produce_pass(self):
-        state = check_social_posting(verified_trading_dates=(), verified_posts=())
-        self.assertFalse(state.satisfied)
+    def test_one_post_per_network_enough_with_any_number_of_trade_days(self):
+        # No trading-day field exists in this requirement.
+        self.assertTrue(self.check().satisfied)
 
-    def test_posts_on_nontrading_days_do_not_substitute(self):
-        rows = [self.example(date(2026,11,22),p) for p in PLATFORMS]
-        state = check_social_posting(
-            verified_trading_dates=(self.DAYS[0],), verified_posts=rows,
-        )
-        self.assertFalse(state.satisfied)
+    def test_one_instagram_alone_cannot_pass(self):
+        result = self.check(posts=[self.evidence("instagram")])
+        self.assertFalse(result.satisfied)
+        self.assertEqual(result.missing_platforms, ("facebook",))
 
-    def test_pending_or_rejected_posts_never_count(self):
-        for status in ("pending", "rejected", "paid", "approved", 1):
-            with self.subTest(status=status):
-                rows = [self.example(self.DAYS[0],"instagram",review_status=status)]
-                self.assertEqual(check_social_posting(
-                    verified_trading_dates=(self.DAYS[0],), verified_posts=rows
-                ).reviewed_instagram,0)
+    def test_one_facebook_alone_cannot_pass(self):
+        result = self.check(posts=[self.evidence("facebook")])
+        self.assertEqual(result.missing_platforms, ("instagram",))
 
-    def test_each_operator_review_fact_required(self):
-        for key in ("reviewed_by_operator","author_verified","public_visible",
-                    "disclosure_verified","content_compliant","date_verified"):
-            with self.subTest(field=key):
-                rows = [self.example(self.DAYS[0],p) for p in PLATFORMS]
-                rows[0][key] = False
-                self.assertFalse(check_social_posting(
-                    verified_trading_dates=(self.DAYS[0],), verified_posts=rows
-                ).satisfied)
+    def test_one_hour_late_post_needs_full_lifetime_from_actual_post(self):
+        late = PURCHASE + timedelta(hours=1)
+        posts = [
+            self.evidence("instagram", posted_at=late, reviewed_at=late+timedelta(days=28)),
+            self.evidence("facebook"),
+        ]
+        self.assertFalse(self.check(as_of=MATURITY, posts=posts).satisfied)
+        self.assertTrue(self.check(as_of=late+timedelta(days=28), posts=posts).satisfied)
 
-    def test_truthy_reviewer_flags_are_not_verified(self):
-        row = self.example(self.DAYS[0],"instagram",reviewed_by_operator="yes")
-        result = check_social_posting(
-            verified_trading_dates=(self.DAYS[0],),verified_posts=[row]
-        )
-        self.assertEqual(result.reviewed_instagram, 0)
+    def test_at_twenty_seven_days_posts_are_not_mature(self):
+        posts = [self.evidence(p, reviewed_at=MATURITY-timedelta(days=1)) for p in PLATFORMS]
+        self.assertFalse(self.check(posts=posts).satisfied)
 
-    def test_instagram_post_or_reel_but_not_profile(self):
-        self.assertTrue(valid_platform_post_url("https://instagram.com/p/abc123/", "instagram"))
-        self.assertTrue(valid_platform_post_url("https://www.instagram.com/reel/abc123", "instagram"))
-        self.assertFalse(valid_platform_post_url("https://www.instagram.com/trader", "instagram"))
+    def test_post_too_late_after_purchase_rejected(self):
+        later = PURCHASE + timedelta(hours=25)
+        posts = [
+            self.evidence("instagram",posted_at=later, reviewed_at=later+timedelta(days=28)),
+            self.evidence("facebook"),
+        ]
+        self.assertFalse(self.check(as_of=later+timedelta(days=28), posts=posts).satisfied)
 
-    def test_facebook_post_url_not_external_shorteners(self):
+    def test_missing_public_visibility_blocks_pass(self):
+        rows = [self.evidence("instagram",continued_visibility_verified=False),
+                self.evidence("facebook")]
+        self.assertFalse(self.check(posts=rows).satisfied)
+
+    def test_no_fake_reviews_or_ad_disclosure_omission(self):
+        for flag in (
+            "reviewed_by_operator","author_verified","public_visible",
+            "disclosure_verified","content_compliant","date_verified",
+            "continued_visibility_verified",
+        ):
+            with self.subTest(flag=flag):
+                rows = [self.evidence("instagram",**{flag:False}),self.evidence("facebook")]
+                self.assertFalse(self.check(posts=rows).satisfied)
+
+    def test_approval_like_strings_do_not_count(self):
+        rows = [self.evidence("instagram",reviewed_by_operator="yes"),
+                self.evidence("facebook")]
+        self.assertFalse(self.check(posts=rows).satisfied)
+
+    def test_review_cannot_be_future_dated_for_as_of(self):
+        rows = [self.evidence("instagram",reviewed_at=MATURITY+timedelta(days=1)),
+                self.evidence("facebook")]
+        self.assertFalse(self.check(posts=rows).satisfied)
+
+    def test_no_challenge_without_both_posts(self):
+        self.assertFalse(self.check(posts=[]).satisfied)
+
+    def test_malformed_record_does_not_forge_approval(self):
+        self.assertFalse(self.check(posts=[{"platform":"instagram"}]).satisfied)
+
+    def test_valid_https_domains_and_no_owner_profile(self):
+        self.assertTrue(valid_platform_post_url("https://instagram.com/p/abc123","instagram"))
         self.assertTrue(valid_platform_post_url(
-            "https://www.facebook.com/trader/posts/12345", "facebook"
-        ))
-        for url in ("https://facebook.com.evil.net/trader/posts/123",
-                    "http://facebook.com/trader/posts/123",
-                    "https://evil.com/trader/posts/123"):
-            self.assertFalse(valid_platform_post_url(url,"facebook"))
-
-    def test_owner_banned_profile_not_a_valid_post(self):
-        self.assertFalse(valid_platform_post_url(
-            "https://instagram.com/p/dr.mojtaba.rozegar", "instagram"
-        ))
-
-    def test_url_query_tracking_and_fragments_are_rejected(self):
+            "https://www.facebook.com/trader/posts/12345","facebook"))
         for url in (
-            "https://instagram.com/p/abcdef/?email=trader@example.com",
-            "https://instagram.com/p/abcdef/#fragment",
-            "https://attacker@instagram.com/p/abc123",
+            "https://instagram.com.evil.org/p/x",
+            "http://instagram.com/p/x",
+            "https://www.instagram.com/dr.mojtaba.rozegar",
         ):
             self.assertFalse(valid_platform_post_url(url,"instagram"))
 
-    def test_consent_and_legacy_contract_version_distinct(self):
+    def test_no_automatic_social_publishing(self):
+        self.assertFalse(self.check().automated_publishing_allowed)
+
+    def test_legacy_version_is_distinct(self):
         self.assertNotEqual(NEW_CONTRACT_VERSION, LEGACY_CONTRACT_VERSION)
 
-    def test_utc_date_normalization_requires_aware_datetime(self):
-        self.assertEqual(utc_day(datetime(2026,11,16,0,30,tzinfo=timezone.utc)),
-                         self.DAYS[0])
+    def test_no_unaudited_or_naive_purchase_timestamp(self):
         with self.assertRaises(ValueError):
-            utc_day(datetime(2026,11,16,12,0))
+            check_social_posting(
+                purchase_confirmed_at=datetime(2026,10,1,12), as_of=MATURITY,
+                verified_posts=[],
+            )
 
-    def test_untrusted_post_record_is_ignored(self):
-        state = check_social_posting(
-            verified_trading_dates=(self.DAYS[0],),
-            verified_posts=[{"platform":"instagram"}],
-        )
-        self.assertFalse(state.satisfied)
-
-    def test_duplicated_posts_do_not_count_twice(self):
-        rows = [self.example(self.DAYS[0], "instagram")] * 5
-        result = check_social_posting(
-            verified_trading_dates=(self.DAYS[0],), verified_posts=rows
-        )
-        self.assertEqual(result.reviewed_instagram, 1)
-        self.assertFalse(result.satisfied)
-
-    def test_bad_trading_days_rejected(self):
-        for dates in ("2026-11-16", (datetime.now(timezone.utc),), (1,)):
-            with self.subTest(dates=str(dates)), self.assertRaises(ValueError):
-                check_social_posting(verified_trading_dates=dates,verified_posts=())
+    def test_24_hour_initial_publication_window(self):
+        self.assertEqual(POST_START_GRACE_HOURS,24)
 
 
 if __name__ == "__main__":
