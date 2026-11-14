@@ -92,6 +92,42 @@ class GuestAtomicPatchTests(SimpleTestCase):
         for name, original in installed.items():
             self.assertIs(namespace[name], original)
 
+    def test_missing_url_route_rejects_without_partial_install(self):
+        namespace = _namespace()
+        namespace["COMMERCIAL_URLPATTERNS"] = namespace["COMMERCIAL_URLPATTERNS"][:-1]
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Missing TRX URL routes: download_paid"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
+    def test_duplicate_url_route_rejects_without_partial_install(self):
+        namespace = _namespace()
+        namespace["COMMERCIAL_URLPATTERNS"] += (
+            ("/commerce/trx-easy/2/start/", _handler),
+        )
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Duplicate TRX URL route: start_order"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
+    def test_non_tuple_url_routes_rejects_without_partial_install(self):
+        namespace = _namespace()
+        namespace["COMMERCIAL_URLPATTERNS"] = list(namespace["COMMERCIAL_URLPATTERNS"])
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Expected immutable TRX URL pattern tuple"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
+    def test_ambiguous_url_route_rejects_without_partial_install(self):
+        namespace = _namespace()
+        patterns = list(namespace["COMMERCIAL_URLPATTERNS"])
+        patterns[0] = ("/commerce/trx-easy/start/invoice/", _handler)
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(patterns)
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous TRX URL route"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
     def test_rejected_invoice_does_not_record_created_event(self):
         namespace = _namespace()
         patch_commercial(namespace)
