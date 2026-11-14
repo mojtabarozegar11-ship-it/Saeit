@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import DatabaseError, transaction
 
 from .economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
 from .models import ApprovalGrant
@@ -29,10 +29,35 @@ TRADE_EMAIL_POLICY = {
 
 def mailbox_status():
     address = getattr(settings, "COMPANY_TRADE_EMAIL", "")
+    enabled_setting = bool(getattr(settings, "TRADE_EMAIL_ENABLED", False))
+    valid_sender = type(address) is str and address == address.strip()
+    if valid_sender:
+        try:
+            validate_email(address)
+        except ValidationError:
+            valid_sender = False
+    try:
+        mailbox = TradeMailbox.objects.filter(code="company-trade").only(
+            "active", "allow_outbound", "email_address",
+        ).first()
+        db_observed = True
+    except DatabaseError:
+        mailbox = None
+        db_observed = False
+    outbound_policy_ready = bool(
+        mailbox and mailbox.active and mailbox.allow_outbound
+        and mailbox.email_address == address
+    )
     return {
-        "configured": bool(address),
+        "configured": bool(valid_sender),
         "address": address,
-        "active": bool(getattr(settings, "TRADE_EMAIL_ENABLED", False)),
+        # A setting alone does not mean the mailbox can send, much less that
+        # any recipient got a message. This is only configuration readiness.
+        "active": bool(valid_sender and enabled_setting and outbound_policy_ready),
+        "transport_flag_enabled": enabled_setting,
+        "mailbox_policy_ready": outbound_policy_ready,
+        "mailbox_db_observed": db_observed,
+        "delivery_verified": False,
         "policy": dict(TRADE_EMAIL_POLICY),
     }
 
