@@ -154,9 +154,20 @@ def _scan_candidates():
     A failed record is counted with a fixed reason code, never printed. The
     extra row distinguishes 'no buyer' from 'more queue not yet inspected'.
     """
-    rows = list(_candidate_filter()[:MAX_SCAN + 1])
-    limit_reached = len(rows) > MAX_SCAN
-    inspected = rows[:MAX_SCAN]
+    query = _candidate_filter()
+    total = query.count()
+    limit_reached = total > MAX_SCAN
+    if not limit_reached:
+        inspected = list(query[:MAX_SCAN])
+    else:
+        # Never let hundreds of malformed legacy entries at the front starve
+        # today's real inquiry. Observe both ends under the same bounded
+        # budget, then expose the remaining unseen middle as incomplete.
+        head = list(query[:MAX_SCAN // 2])
+        tail = list(query.order_by("-created_at", "-pk")[
+            :MAX_SCAN - len(head)
+        ])
+        inspected = head + tail
     eligible_ids = []
     reasons = {}
     for row in inspected:
@@ -165,18 +176,20 @@ def _scan_candidates():
             eligible_ids.append(row.pk)
         else:
             reasons[state] = reasons.get(state, 0) + 1
-    return eligible_ids, reasons, len(inspected), limit_reached
+    return eligible_ids, reasons, len(inspected), limit_reached, total
 
 
 def preview_candidates(limit=MAX_BATCH) -> dict:
     """Read-only lead quality census across up to MAX_SCAN candidate rows."""
     if type(limit) is not int or not 1 <= limit <= MAX_BATCH:
         raise ValueError("invalid_batch_limit")
-    eligible_ids, reasons, inspected, limited = _scan_candidates()
+    eligible_ids, reasons, inspected, limited, total = _scan_candidates()
     return {
         "bot": BOT_ID,
         "mode": "read_only",
         "candidate_count": inspected,
+        "queue_total_candidates": total,
+        "queue_uninspected": max(0, total - inspected),
         "eligible_count": min(len(eligible_ids), limit),
         "eligible_seen_in_scan": len(eligible_ids),
         "requires_human_review_count": sum(reasons.values()),
@@ -258,7 +271,7 @@ def prepare_next() -> dict:
     reached the end of the queue. A large malformed backlog needs operator
     triage, not fabricated progress or a parallel worker.
     """
-    eligible_ids, reasons, inspected, limited = _scan_candidates()
+    eligible_ids, reasons, inspected, limited, total = _scan_candidates()
     for inquiry_id in eligible_ids:
         result = prepare_one(inquiry_id)
         if result.get("verified_effect") is True:
@@ -272,6 +285,8 @@ def prepare_next() -> dict:
         ),
         "verified_effect": False,
         "candidate_count_inspected": inspected,
+        "queue_total_candidates": total,
+        "queue_uninspected": max(0, total - inspected),
         "requires_human_review_count": sum(reasons.values()),
         "scan_limit_reached": limited,
         "customer_contacted": False,
