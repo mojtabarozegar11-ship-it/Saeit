@@ -101,6 +101,31 @@
     <p class="mp-fineprint">{{ ladder.3 }}</p>
   </section>
 
+  <section class="mp-section mp-plans" id="plans" aria-labelledby="mp-plans-title">
+    <div class="mp-section-head">
+      <p class="mp-index">10 OPTIONS / PRE-LAUNCH</p>
+      <h2 id="mp-plans-title">{{ plans_copy.title }}</h2>
+      <p>{{ plans_copy.body }}</p>
+    </div>
+    <div class="mp-plan-grid">
+      {% for plan in challenge_plans %}
+      <article class="mp-plan-card" aria-label="MOJ PROP {{ plan.code }}">
+        <div class="mp-plan-top"><span>MOJ PROP {{ plan.number|stringformat:"02d" }}</span>
+          <span class="mp-plan-code" dir="ltr">{{ plan.code }}</span>
+        </div>
+        <p class="mp-plan-field">{{ plans_copy.starting }}</p>
+        <strong class="mp-plan-capital" dir="ltr">&#36;{{ plan.starting_capital_usd }}</strong>
+        <p class="mp-plan-field">{{ plans_copy.fee }}</p>
+        <strong class="mp-plan-fee" dir="ltr">{{ plan.fee_trx_proposed }} TRX</strong>
+        <p class="mp-plan-field">{{ plans_copy.maximum }}: <b dir="ltr">&#36;{{ plan.maximum_capital_usd }}</b></p>
+        <p class="mp-plan-meta" dir="ltr">{{ plan.duration_days }} DAYS · {{ plan.minimum_trades }} TRADES · 2 STAGES</p>
+        <span class="mp-plan-lock" role="status">{{ plans_copy.notice }}</span>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="mp-fineprint">{{ plans_copy.notice }}</p>
+  </section>
+
   <section class="mp-section mp-rules" id="rules" aria-labelledby="mp-rules-title">
     <div class="mp-section-head">
       <p class="mp-index">03 / {{ rule_title }}</p>
