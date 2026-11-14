@@ -38,7 +38,7 @@ jobs:
             -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 \
             -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no \
             zomorod2@zohal.pws-dns.net 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' <<'PY'
-          import hashlib, json, pathlib
+          import ast, hashlib, json, pathlib
           root = pathlib.Path('/home/zomorod2/Saeit-staging')
           passenger = pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
           modules = (
@@ -80,10 +80,59 @@ jobs:
               )
           except (OSError, ValueError, UnicodeError):
               passenger_staging = None
+          def import_gap_summary():
+              starts = (
+                  'services.mpw_trx_commercial_web',
+                  'services.mpw_trx_public_catalog',
+                  'services.mpw_trx_guest_commerce',
+                  'services.mpw_trx_guest_delivery',
+                  'config.urls',
+              )
+              prefixes = ('services.mpw_', 'mpw_commerce.', 'mpw_native_checkout.', 'core.models', 'config.urls')
+              pending = list(starts)
+              seen, absent, malformed = set(), set(), set()
+              while pending and len(seen) < 160:
+                  module = pending.pop(0)
+                  if module in seen or not any(module.startswith(k) for k in prefixes):
+                      continue
+                  if not all(part.isidentifier() for part in module.split('.')):
+                      continue
+                  seen.add(module)
+                  target = root.joinpath(*module.split('.')).with_suffix('.py')
+                  try:
+                      if target.is_symlink() or not target.is_file() or target.stat().st_size > 524288:
+                          absent.add(module)
+                          continue
+                      content = target.read_text(encoding='utf8')
+                      tree = ast.parse(content)
+                  except SyntaxError:
+                      malformed.add(module)
+                      continue
+                  except (OSError, UnicodeError, ValueError):
+                      absent.add(module)
+                      continue
+                  for node in ast.walk(tree):
+                      found = ()
+                      if isinstance(node, ast.Import):
+                          found = tuple(alias.name for alias in node.names)
+                      elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                          found = (node.module,)
+                      for candidate in found:
+                          if any(candidate.startswith(k) for k in prefixes) and candidate not in seen and candidate not in pending:
+                              pending.append(candidate)
+              return {
+                  'analyzed': len(seen),
+                  'static_missing_count': len(absent),
+                  'static_missing_modules': sorted(absent)[:30],
+                  'syntax_errors': len(malformed),
+                  'bounded_complete': not pending,
+                  'not_runtime_import_proof': True,
+              }
           result = {
               'read_only': True,
               'passenger_entry_mentions_examined_app_root': passenger_staging,
               'asset_integrity_file_state': integrity_file_state(),
+              'static_checkout_import_gap': import_gap_summary(),
               'merchant_app_dir_present': bool(root.is_dir() and not root.is_symlink()),
               'passenger_entry_present': bool(passenger.is_file() and not passenger.is_symlink()),
               'effective_module_hash_prefix': {key: file_digest(key) for key in modules},
