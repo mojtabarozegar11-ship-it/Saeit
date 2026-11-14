@@ -6,6 +6,8 @@ on:
       - 'ops/revenue/mojtaba_commercial_offers_v1.json'
       - 'docs/operations/mojtaba-commercial-cash-first-20261114.md'
       - 'tests/test_mojtaba_commercial_readiness_v1.py'
+      - 'ops/revenue/mojtaba_bot_public_readonly_preflight_v1.py'
+      - 'tests/test_mojtaba_bot_public_readonly_preflight_v1.py'
       - '.github/workflows/mojtaba-commercial-readiness-source-only-20261114.yml'
 permissions:
   contents: read
@@ -26,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p 'test_mojtaba_commercial_readiness_v1.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_mojtaba_bot_public_readonly_preflight_v1.py' -v
           python3 -B -m py_compile ops/revenue/mojtaba_commercial_readiness_v1.py
           python3 -m json.tool ops/revenue/mojtaba_commercial_offers_v1.json >/dev/null
       - name: Emit sanitized readiness evidence, no customer records or revenue assertions
@@ -55,5 +58,39 @@ jobs:
         with:
           name: mojtaba-commercial-source-evidence
           path: ${{ runner.temp }}/mojtaba-commercial-readiness.json
+          retention-days: 7
+          if-no-files-found: warn
+  public-canonical-bot-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: GET canonical bot homepage only; do not infer live bot service
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B ops/revenue/mojtaba_bot_public_readonly_preflight_v1.py |
+            tee "$RUNNER_TEMP/mojtaba-public-domain-readonly.jsonl"
+          python3 - "$RUNNER_TEMP/mojtaba-public-domain-readonly.jsonl" <<'PY'
+          import json,sys
+          line=open(sys.argv[1],encoding="utf8").read().strip()
+          assert line.startswith("MOJTABA_PUBLIC_DOMAIN_GET=")
+          obj=json.loads(line.split("=",1)[1])
+          assert obj["canonical_bot_id"]=="mojtaba.bot.ai"
+          assert not obj["bot_backend_runtime_verified"]
+          assert not obj["subscription_billing_verified"]
+          assert obj["forms_submitted"]==obj["site_writes"]==0
+          print("MOJTABA_DOMAIN_GET_OBSERVED=" + str(obj["http_status"]))
+          print("MOJTABA_BOT_RUNTIME=NOT_VERIFIED")
+          PY
+      - name: Retain sanitized public metadata, no user content
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojtaba-public-domain-get-metadata
+          path: ${{ runner.temp }}/mojtaba-public-domain-readonly.jsonl
           retention-days: 7
           if-no-files-found: warn
