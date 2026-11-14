@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
+from django.db import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -17,7 +18,7 @@ from django.views.decorators.http import require_GET
 from core.commercialization_readiness import build_board
 from core.models import (
     CommerceFunnelEvent, Product, Order, PaymentIntent,
-    LedgerEntry, PaymentWebhookEvent,
+    LedgerEntry, PaymentWebhookEvent, SignalSourceEvent,
 )
 from core.mojplaywin_product_detail import PUBLIC_CATALOG
 from core.signal_commercial_catalog import catalog as signal_catalog
@@ -73,11 +74,21 @@ def commercialization_board_api(request):
         "funnel_window_days": 30,
     }
     signal_rows = signal_catalog()
+    # Distinguish durable source receipts from subscriptions and paid delivery.
+    # A legacy site without the 0041 migration is UNKNOWN, never "0".
+    try:
+        signed_signal_pending_count = SignalSourceEvent.objects.filter(
+            state="pending_audit",
+        ).count()
+    except (OperationalError, ProgrammingError):
+        signed_signal_pending_count = None
     rollout = inspect_rollout()
     data["financial_commerce"] = {
         "signals": {
             "known_financial_brands": len({row.brand for row in signal_rows}),
             "localization_contexts": len(signal_rows),
+            "signed_signal_pending_count": signed_signal_pending_count,
+            "signed_events_are_not_sales": True,
             "live_subscriptions_verified": sum(
                 row.checkout_enabled is True for row in signal_rows
             ),

@@ -1,7 +1,7 @@
 """Moj Prop 28-day single-post evidence policy, prospective v1.2 only.
 
-Exactly one original Instagram and one original Facebook post for the *entire*
-challenge enrollment (two phases combined), not per trade or per phase.
+Exactly ONE original post on EITHER Instagram OR Facebook for the entire
+challenge enrollment (both phases combined), never two compulsory posts.
 The four-week trading window begins at an independently confirmed paid invoice,
 not at a user-supplied browser timestamp. Posts must remain visible for at
 least 28 x 24 hours. A completed trading window never substitutes for confirmed
@@ -66,12 +66,14 @@ class SocialPostingDecision:
     challenge_ends_at: datetime
     required_visible_until: datetime
     challenge_window_complete: bool
+    required_total_posts: int = 1
+    reviewed_total_posts: int = 0
     manual_review_required: bool = True
     automated_publishing_allowed: bool = False
 
 
 def check_social_posting(*, purchase_confirmed_at, as_of, verified_posts):
-    """Evaluate one retained post per network for one complete 28-day cohort.
+    """Evaluate one retained post on either eligible network for a 28-day cohort.
 
     Trader-supplied URLs are never considered verified without an independent
     operator review, confirming actual public visibility at 28+ day maturity.
@@ -114,15 +116,17 @@ def check_social_posting(*, purchase_confirmed_at, as_of, verified_posts):
             continue
         accepted.add(platform)
         maturity[platform] = mature_at
-    missing = tuple(platform for platform in PLATFORMS if platform not in accepted)
+    missing = () if accepted else ("one_post_on_either_platform",)
     return SocialPostingDecision(
         satisfied=now >= end and not missing,
-        required_instagram=1,
-        required_facebook=1,
+        required_instagram=0,  # either platform is allowed; neither individually mandatory
+        required_facebook=0,
         reviewed_instagram=int("instagram" in accepted),
         reviewed_facebook=int("facebook" in accepted),
         missing_platforms=missing,
         challenge_ends_at=end,
         required_visible_until=max((start + timedelta(days=DURATION_DAYS), *maturity.values())),
         challenge_window_complete=now >= end,
+        required_total_posts=1,
+        reviewed_total_posts=int(bool(accepted)),
     )
