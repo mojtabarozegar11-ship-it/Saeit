@@ -75,3 +75,18 @@ The policy now validates/normalizes customer names and organizations, Persian/En
 **Live reality:** incoming `ZM-FARM` customer inquiries remain unverified in the connected company inbox; effective live PHP/Django intake and MariaDB are not accessible for proof. Company Gmail shows a **sent supplier follow-up** to DarooGostar, but this cycle did not send it and it is not a paying farm buyer or collected income. **Do not flip payment or deployment gates.**
 
 **Deployment readiness: NO-GO.** Requires CI/DB integration, lead routing proof, owner-scoped release approval, genuine consented customer, real order/contract and independent bank/merchant reconciliation.
+
+
+## Continued cycle — strict provenance and actionable owner triage (2026-11-14)
+
+**A new source-level defect was fixed:** the previous `provenance()` function accepted an arbitrary `confirmed_at=x` value. A user-controlled company-form subject cannot establish a farm lead, and an incomplete timestamp is also insufficient. The pure admission policy now requires a valid ISO-like timezone-aware timestamp in the actual server-stamped `INTAKE_CONSENT_V1; confirmed_at=...; source=farm` first line, accepts legal UTC offsets through 14 hours, and rejects malformed dates, naive times, injected extra metadata, and non-farm subjects. `config/settings.py` sets `USE_TZ=True`, compatible with the timestamp written by `company_portal_home`.
+
+The read-only `farm_inquiry_pipeline` ORM query now narrows DB records to the exact `FARM_SUBJECT` and the server marker prefix before applying the full Python `provenance` predicate to every candidate. It still prints only aggregate status counts, no identities or invented received income.
+
+Authorized company Django admins now have a bulk action `begin_review` that moves only *new* requests into the *reviewing* stage and writes `updated_at`. Existing `approved` or `closed` requests remain unchanged. This action cannot mark any request paid, create a contract or send email.
+
+**Current tested source evidence:** the dependency-free policy module's Git blob SHA `1c0f33d311005e77797652a45842e5c90b528ac7` was matched against the same source executed locally; **61/61 real portable Python unit tests passed**. Additionally, **42/42 structural integration assertions** against the connected GitHub branch source passed. These are not Django/MariaDB runtime results. The branch currently contains 63 new Django test methods (22 receipt + 17 farm + 18 pipeline + 6 admin) plus 10 adapted existing Django tests, **0/73 executed** in the present environment due to Django/database unavailability; no CI success or payment claim is inferred.
+
+The company's mailbox was inspected with two bounded searches: no inbound `ZM-FARM` message or matching recent farm-economic consultation subject was found. This **does not establish zero requests in the actual server CRM**, which remains inaccessible. The 3 company-domain public URLs tested from a separate web client could not be verified.
+
+**Not executed:** live site deployment, repository merge, database migration, customer email, real payment, customer order, or release of private data. Another open draft PR #2306 modifies overlapping CRM files and must be reconciled before integration. **Commercial release remains NO-GO until Django tests, host source of truth and actual buyer acceptance are verified.**
