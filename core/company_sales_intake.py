@@ -42,7 +42,7 @@ class CompanySalesInquiryForm(forms.ModelForm):
 
     consent = forms.BooleanField(
         required=True,
-        label="با ثبت اطلاعات برای بررسی همین درخواست و تماس درباره آن موافقم.",
+        label="می‌پذیرم نام، ایمیل و شرح درخواست من برای بررسی همین استعلام و پیگیری مرتبط در سامانهٔ داخلی نگهداری شود؛ این فرم مجوز پیام تبلیغاتی نیست.",
     )
     website = forms.CharField(
         required=False, max_length=200,
