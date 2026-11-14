@@ -22,7 +22,7 @@ def digest(b): return hashlib.sha256(b).hexdigest()
 def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 
 
-def has_buyer_email_form(markup, expected_action=None):
+def has_buyer_email_form(markup, expected_action=None, action_prefix=None):
  """Require buyer-email input within the actual invoice POST form.
 
  expected_action is an exact path match for the rendered checkout. A separate
@@ -40,7 +40,9 @@ def has_buyer_email_form(markup, expected_action=None):
    attributes = dict(attrs)
    if tag == 'form':
     method_ok = str(attributes.get('method') or '').lower() == 'post'
-    action_ok = expected_action is None or attributes.get('action') == expected_action
+    action = str(attributes.get('action') or '')
+    action_ok = (expected_action is None or action == expected_action)
+    action_ok = action_ok and (action_prefix is None or action.startswith(action_prefix))
     self.forms.append(method_ok and action_ok)
    elif tag == 'input' and self.forms and self.forms[-1]:
     if (attributes.get('name') == 'email'
@@ -74,7 +76,8 @@ def preflight_checkout_email_template():
   markup=path.read_text('utf8')
  except (OSError, UnicodeError) as exc:
   fail('CHECKOUT_TEMPLATE_UNREADABLE:'+type(exc).__name__)
- if not has_buyer_email_form(markup):
+ if not has_buyer_email_form(markup,
+                             action_prefix='/commerce/trx-easy/start/'):
   fail('GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING')
  return True
 
