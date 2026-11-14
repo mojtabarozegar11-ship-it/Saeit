@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
 from core.economic_tool_pack import build_economic_gateway
+from core.management.commands.autonomous_master_loop import registered_economic_tools
 from core.models import AgentTask
 from core.worker_runner import WorkerRunner
 
@@ -30,11 +31,9 @@ class Command(BaseCommand):
         executed = 0
         attempted_ids = []
         gateway = build_economic_gateway()
-        supported = frozenset(
-            code for code, spec in gateway.describe().items()
-            if spec.get("enabled", True)
-            and (code.startswith("income_") or code == "master_self_improvement")
-        )
+        # Share the strict allowlist with the autonomous master loop.
+        # A missing or non-boolean enabled flag is never permission to execute.
+        supported = registered_economic_tools(gateway)
         runner = None
         for _ in range(limit):
             # Never retry the same queued identity within this invocation.
@@ -82,14 +81,27 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"Task {task.pk} execution failed: worker_execution_error"
                 ) from None
-            if completed.status != "completed":
-                raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
-            executed += 1
+            if getattr(completed, "pk", None) != task.pk:
+                raise CommandError(f"Task {task.pk} rejected: worker_task_identity_mismatch")
+            if getattr(completed, "status", None) != "completed":
+                raise CommandError(f"Task {task.pk} rejected: worker_result_not_completed")
+            if getattr(completed, "action_type", task.action_type) != task.action_type:
+                raise CommandError(f"Task {task.pk} rejected: worker_action_mismatch")
             output = completed.output_data if isinstance(completed.output_data, dict) else {}
             verified_effect = output.get("verified_effect") is True
+            if not verified_effect:
+                # A database status of completed is NOT proof of a real effect.
+                # Stop draining rather than reporting fake successful work.
+                self.stdout.write(
+                    f"EXECUTED_UNVERIFIED task={task.pk} "
+                    "internal_effect_verified=0 revenue_not_assessed=true "
+                    "requires_review=true"
+                )
+                break
+            executed += 1
             self.stdout.write(self.style.SUCCESS(
-                f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
-                f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
+                f"EXECUTED task={task.pk} action={task.action_type} status=completed "
+                "internal_effect_verified=1 revenue_not_assessed=true"
             ))
         if options["drain"]:
             self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
