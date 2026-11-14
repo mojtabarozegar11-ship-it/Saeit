@@ -1,0 +1,116 @@
+"""MOJ commercial release board: evidence-gated decisions, not a sales engine.
+
+A published URL, successful test, marketing copy or database payment status
+alone does not prove a commercial service is ready to accept customer funds.
+All attestations must come from independently reconciled operational evidence.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+# Explicit release obligations across the owner's product/service lines.
+# No account/payment/deploy operation is performed by this module.
+SECTORS = {
+    "digital_books": (
+        "content_final", "rights_cleared", "catalog_approved",
+        "payment_reconciled", "delivery_verified", "recovery_verified",
+    ),
+    "website_kits": (
+        "artifact_complete", "license_reviewed", "support_ready",
+        "payment_reconciled", "delivery_verified",
+    ),
+    "games": (
+        "build_approved", "rights_cleared", "payment_reconciled",
+        "entitlement_verified", "support_ready",
+    ),
+    "agriculture_services": (
+        "service_scope_approved", "provider_capacity_verified",
+        "price_approved", "billing_approved", "customer_delivery_ready",
+    ),
+    "ai_services": (
+        "service_scope_approved", "privacy_reviewed",
+        "capacity_verified", "billing_approved", "customer_support_ready",
+    ),
+    "education_courses": (
+        "course_content_approved", "access_verified", "rights_cleared",
+        "billing_approved", "refund_policy_approved",
+    ),
+    "research_publications": (
+        "editorial_approved", "citation_and_rights_verified",
+        "file_delivery_verified", "price_approved", "billing_approved",
+    ),
+    "moj_prop": (
+        "jurisdiction_legal_approval", "broker_contract_verified",
+        "funding_and_reserves_attested", "trader_kyc_aml_ready",
+        "signed_broker_evidence_reconciled", "payout_and_trx_controls_live",
+    ),
+}
+
+# Commercialization ordering is evidence-based. The first three categories
+# already have public catalog references; that is not proof of payable stock.
+PRIORITY = (
+    "digital_books", "website_kits", "agriculture_services",
+    "ai_services", "education_courses", "research_publications",
+    "games", "moj_prop",
+)
+
+
+@dataclass(frozen=True)
+class SectorAssessment:
+    code: str
+    outcome: str
+    completed: int
+    required: int
+    percent_evidenced: int
+    missing: tuple[str, ...]
+
+
+def assess_sector(code, attestations=None):
+    """Only literal True counts; a flag does not replace independent proof."""
+    if code not in SECTORS:
+        raise ValueError("Unknown business line")
+    attestations = {} if attestations is None else attestations
+    if not isinstance(attestations, dict):
+        raise ValueError("Attestations must be a dict")
+    required = SECTORS[code]
+    missing = tuple(key for key in required if attestations.get(key) is not True)
+    completed = len(required) - len(missing)
+    return SectorAssessment(
+        code=code,
+        outcome="eligible_for_commercial_review" if not missing else "not_released",
+        completed=completed,
+        required=len(required),
+        percent_evidenced=100 * completed // len(required),
+        missing=missing,
+    )
+
+
+def build_board(attestations_by_sector=None):
+    attestations_by_sector = {} if attestations_by_sector is None else attestations_by_sector
+    if not isinstance(attestations_by_sector, dict):
+        raise ValueError("Malformed sector attestations")
+    decisions = tuple(
+        assess_sector(code, attestations_by_sector.get(code, {}))
+        for code in PRIORITY
+    )
+    return {
+        "ready_for_live_payment": False,  # an independent operator must authorize launch
+        "eligible_for_commercial_review": sum(
+            x.outcome == "eligible_for_commercial_review" for x in decisions
+        ),
+        "sectors": [
+            {
+                "code": x.code,
+                "outcome": x.outcome,
+                "complete": x.completed,
+                "required": x.required,
+                "percent_evidenced": x.percent_evidenced,
+                "missing": list(x.missing),
+            }
+            for x in decisions
+        ],
+        "method": "evidence_attestation_not_revenue",
+        "verified_income_usd": None,  # no audited settlement source connected
+        "never_auto_post_social": True,
+        "excluded_instagram_profile": "Dr.mojtaba.rozegar",
+    }
