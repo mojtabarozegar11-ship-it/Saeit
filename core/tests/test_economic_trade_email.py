@@ -4,7 +4,7 @@ from django.test import TestCase, override_settings
 from core.approval import ApprovalService
 from core.autonomous_external_trade import authorize_external_trade
 from core.economic_trade_email import mailbox_status, queue_trade_email, send_queued_trade_email
-from core.economic_trade_models import TradeEmailAudit, TradeMailbox
+from core.economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
 from core.models import ApprovalRequest
 
 
@@ -27,6 +27,37 @@ class EconomicTradeEmailTests(TestCase):
         self.assertEqual(TradeMailbox.objects.count(), 1)
         self.assertEqual(TradeEmailAudit.objects.count(), 2)
         self.assertEqual(first.status, "queued")
+
+    def test_invalid_recipient_cannot_create_unusable_trade_draft(self):
+        for recipient in ("", "not-an-address", " buyer@example.test",
+                          "buyer@example.test\\nBcc: victim@example.test", None):
+            with self.subTest(recipient=recipient):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_RECIPIENT_INVALID"):
+                    queue_trade_email(recipient=recipient, subject="Inquiry", body="Quote please")
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+        self.assertEqual(TradeMailbox.objects.count(), 0)
+
+    def test_header_injection_and_oversized_subject_cannot_queue(self):
+        for subject in ("", "Inquiry\\r\\nBcc: victim@example.test", "A" * 301, None):
+            with self.subTest(subject=str(subject)[:25]):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_SUBJECT_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject=subject, body="Quote")
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+
+    def test_blank_and_oversized_body_cannot_queue(self):
+        for body in ("", "   ", "B" * 100001, None):
+            with self.subTest(length=len(body) if body is not None else None):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_BODY_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject="Quote", body=body)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+
+    def test_trade_context_must_be_a_structured_object(self):
+        for context in ("opaque", [], 1, True):
+            with self.subTest(context=context):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_CONTEXT_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject="Quote",
+                                      body="Details", trade_context=context)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
 
     @override_settings(TRADE_EMAIL_ENABLED=True)
     def test_direct_send_requires_owner_grant_even_if_mail_is_enabled(self):
