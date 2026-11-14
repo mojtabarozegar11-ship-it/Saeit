@@ -19,7 +19,10 @@ from django.views.decorators.http import require_POST
 COOKIE = "mpw_trx_guest_owner"
 SALT = "mpw.trx.guest.owner.v1"
 COOKIE_AGE = 30 * 86400
-COOKIE_PATH = "/commerce/trx-easy/"
+# Purchases and receipt recovery are served outside the checkout prefix.
+# A checkout-only cookie would not accompany those requests, making paid
+# purchases appear lost even in the same browser. Keep Secure/HttpOnly/Lax.
+COOKIE_PATH = "/"
 MAX_COOKIE = 512
 
 
