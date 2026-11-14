@@ -106,13 +106,13 @@ class PersistedSignalEvidenceTests(TestCase):
     def test_incorrect_source_verified_boolean_rejected(self):
         modified = {**self.record, "verified_source": False}
         with self.assertRaises(SignalReceiptRejected):
-            self.stage(record=modified)
+            self.stage(record=modified, signature=self.sign())
         self.assertFalse(SignalSourceEvent.objects.exists())
 
     def test_fake_customer_payment_field_rejected(self):
         modified = {**self.record, "paid": True}
         with self.assertRaises(SignalReceiptRejected):
-            self.stage(record=modified)
+            self.stage(record=modified, signature=self.sign())
         self.assertFalse(SignalSourceEvent.objects.exists())
 
     def test_database_composite_uniqueness_enforced(self):
