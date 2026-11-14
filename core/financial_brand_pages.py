@@ -99,9 +99,14 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
+    signal_offer = None
+    if page_type == "signals":
+        from .signal_commercial_catalog import offer
+        signal_offer = offer(slug, locale)
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
+        "signal_offer": signal_offer,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
