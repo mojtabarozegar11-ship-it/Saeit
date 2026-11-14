@@ -125,6 +125,11 @@ class EconomicMasterAgent:
             "autonomous_spend_scope": "preauthorized_operating_budget_and_allowlisted_recurring_services_only",
         }
 
+    def inspect_revenue_evidence_readonly(self):
+        """The sole canonical agent can inspect evidence; it cannot mint cash."""
+        from .revenue_evidence_gate import revenue_evidence_snapshot
+        return revenue_evidence_snapshot()
+
     def authorize_self_funded_expense(self, **evidence):
         """Apply the bounded self-funding gate; payment execution stays separate."""
         return authorize_operating_expense(**evidence)
