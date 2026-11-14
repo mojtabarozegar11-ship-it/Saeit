@@ -405,8 +405,18 @@ def factory_native_review(payload):
     return inspect_family(root, payload)
 
 
+def service_proposal_prepare(payload):
+    """Same master bot: prepare one internal consented service proposal."""
+    # Payload intentionally cannot specify an arbitrary contact or recipient.
+    # This action has no network, billing, SMS, email or publication effect.
+    from .service_quote_draft import prepare_next
+    return prepare_next()
+
+
 def build_economic_gateway():
     return ToolGateway([
+        ToolSpec(code="income_service_proposal_prepare",
+                 handler=service_proposal_prepare, risk="low"),
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
