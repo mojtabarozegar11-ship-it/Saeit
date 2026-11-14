@@ -162,7 +162,7 @@ class BuyerSourceCoverageTests(unittest.TestCase):
     def test_27_missing_invoice_start_path_visible(self):
         self.fixture()
         p=self.root/"config/urls.py"
-        p.write_text(ROUTES.replace('  path("commerce/trx-easy/start/<int:product_id>/", lambda request: None)]','')]'))
+        p.write_text(ROUTES.replace('  path("commerce/trx-easy/start/<int:product_id>/", lambda request: None)]', ']'))
         self.assertFalse(m.audit(self.root)["explicit_source_routes"]["commerce/trx-easy/start/<int:product_id>/"])
 
     def test_28_missing_store_route_visible(self):
