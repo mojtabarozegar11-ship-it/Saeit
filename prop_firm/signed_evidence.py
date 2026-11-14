@@ -121,7 +121,8 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
         envelope = json.loads(raw.decode("utf-8"),
                               object_pairs_hook=_unique_json_pairs,
                               parse_constant=_reject_json_constant)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+        # A signed but excessively nested packet must fail closed, not raise HTTP 500.
         raise EvidenceRejected("Invalid UTF-8 JSON evidence") from exc
     if not isinstance(envelope, dict) or set(envelope) != {
         "account_id", "event_id", "event_type", "recorded_at", "data"
