@@ -1,0 +1,63 @@
+name: Unified TRON private buyer delivery — isolated proofs
+
+on:
+  push:
+    branches:
+      - fix/tron-buyer-private-delivery-20261114
+    paths:
+      - core/tron_gateway_delivery.py
+      - core/tron_gateway_web.py
+      - tests/test_tron_private_paid_asset_20261114.py
+      - core/tests/test_tron_buyer_paid_delivery_20261114.py
+      - .github/workflows/tron-private-buyer-delivery-20261114.yml
+  pull_request:
+    paths:
+      - core/tron_gateway_delivery.py
+      - core/tron_gateway_web.py
+      - tests/test_tron_private_paid_asset_20261114.py
+      - core/tests/test_tron_buyer_paid_delivery_20261114.py
+      - .github/workflows/tron-private-buyer-delivery-20261114.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tron-private-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-readonly-and-synthetic-django:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 18
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "synthetic-tron-no-wallet-only"
+      ALLOWED_HOSTS: "testserver,localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir"
+      EMAIL_BACKEND: "django.core.mail.backends.locmem.EmailBackend"
+      TRON_UNIFIED_PUBLIC_ENABLED: "false"
+      TRADE_EMAIL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Syntax check only — no activation
+        run: |
+          python -m py_compile \
+            core/tron_gateway_delivery.py core/tron_gateway_web.py \
+            tests/test_tron_private_paid_asset_20261114.py \
+            core/tests/test_tron_buyer_paid_delivery_20261114.py
+      - name: Offline private filesystem FD tests
+        run: python -m unittest discover -s tests -p 'test_tron_private_paid_asset_20261114.py' -v
+      - name: Install pinned Django and isolated database test tools
+        run: python -m pip install -r requirements.txt
+      - name: Django system check
+        run: python manage.py check
+      - name: Synthetic paid quote and recovery tests — no network, emails or transfers
+        run: |
+          python -m pytest -q \
+            core/tests/test_tron_buyer_paid_delivery_20261114.py \
+            tests/test_unified_tron_gateway_verify.py
