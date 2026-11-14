@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>درخواست تحلیل اقتصادی مزرعه | زمرد ملل</title>
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f3f5f0;color:#173d2d;font:16px/1.85 Tahoma,Arial,sans-serif}
+main{max-width:800px;padding:20px;margin:3vw auto}header,form,.note{background:#fff;border:1px solid #c6dacb;border-radius:16px;padding:clamp(20px,4vw,32px);margin-bottom:18px}
+h1{font-size:clamp(23px,4vw,34px);line-height:1.5}label{display:block;font-weight:700;margin:14px 0 4px}
+input:not([type=checkbox]),select,textarea{width:100%;padding:12px;border:1px solid #a1b5aa;border-radius:8px;font:inherit}
+textarea{min-height:140px}input[type=checkbox]{width:auto}button{border:0;background:#186748;color:#fff;border-radius:9px;padding:14px 22px;font:700 16px Tahoma,Arial;cursor:pointer}
+a{color:#186748}small{color:#62756a}.hint{padding:12px;background:#edf4ed;border-right:4px solid #b78e37}
+</style></head><body><main><header>
+<p>شرکت کشت و صنعت زمرد ملل · خدمات اقتصاد تولید</p>
+<h1>ثبت درخواست تحلیل اقتصادی مزرعه</h1>
+<p>اطلاعات اولیه را وارد کنید تا مستقیماً در سامانه درخواست‌های شرکت ثبت و رسید پیگیری صادر شود. این صفحه از همان CRM اصلی استفاده می‌کند و سامانه دریافت دوم ایجاد نمی‌کند.</p>
+<p class="hint">مرحله فعلی فقط درخواست بررسی است؛ مبلغ، زمان تحویل و قرارداد باید پس از تعیین دامنه و تأیید جداگانه مشخص شوند. **هیچ پرداختی در این فرم دریافت نمی‌شود.**</p>
+</header><form method="post" action="/company/farm-economics/request/" novalidate>
+{% csrf_token %}
+{{ form.kind.as_hidden }}
+{{ form.subject.as_hidden }}
+{{ form.website }}
+<label for="{{ form.name.id_for_label }}">نام درخواست‌دهنده</label>{{ form.name }}
+<label for="{{ form.organization.id_for_label }}">نام مجموعه (اختیاری)</label>{{ form.organization }}
+<label for="{{ form.email.id_for_label }}">ایمیل تماس</label>{{ form.email }}
+<label for="{{ form.phone.id_for_label }}">شماره تماس (اختیاری)</label>{{ form.phone }}
+<label for="{{ form.message.id_for_label }}">نوع مزرعه، تعداد فعالیت‌ها، دوره مالی و هدف تحلیل</label>{{ form.message }}
+<label>{{ form.consent }} با ثبت اطلاعات برای بررسی و پاسخ‌گویی موافقم. </label>
+<p><small>اطلاعات محرمانه مزرعه، صورتحساب‌ها، کدهای مالی و مشخصات کامل مالکیت را در مرحله اولیه وارد نکنید.</small></p>
+<button type="submit">ثبت واقعی درخواست و دریافت رسید پیگیری</button>
+</form><section class="note">
+<p>پس از ارسال معتبر، رسید امضاشده وضعیت درخواست صادر می‌شود. رسید فقط تأیید ثبت اولیه است، نه پذیرش قرارداد، دریافت وجه یا تعهد ارائه خدمت.</p>
+<p>اگر به سامانه شرکت دسترسی ندارید، نسخه عمومی <a href="https://github.com/mojtabarozegar11-ship-it/Saeit/tree/public/farm-economics-enquiry-20261114/public/farm-economics-enquiry-20261114">صفحه معرفی آفلاین</a> را ببینید. تا استقرار و اعتبارسنجی دامنه، دسترس‌پذیری این فرم در سایت زنده تأیید نشده است.</p>
+<p><a href="/company/">بازگشت به صفحه شرکت</a> · تنها ربات سازمانی <strong>mojtaba.bot.ai</strong></p>
+</section></main></body></html>
