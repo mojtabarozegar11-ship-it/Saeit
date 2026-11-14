@@ -28,6 +28,7 @@ jobs:
           python manage.py check
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
       - name: Target all revenue consolidation regressions
         run: |
           pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py tests/test_signal_source_admin.py
