@@ -5,6 +5,7 @@ An accepted request is an internal unqualified inquiry, NOT a verified sale.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import timedelta
 
