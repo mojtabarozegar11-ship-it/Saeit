@@ -77,14 +77,14 @@ async function main(){
      check(submissions.length===before,'main_no_post_before_customer_submit_'+width);
      await page.locator('#inquiryName').fill('Synthetic Buyer');
      await page.locator('#inquiryEmail').fill('synthetic1@example.test');
-     const pending=page.waitForRequest(r=>r.method()==='POST'&&r.url().includes('/ask-master/index.php'),{timeout:15000});
+     const overflowBefore=await page.evaluate(()=>Math.max(0,document.documentElement.scrollWidth-innerWidth));
+     const pending=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('/ask-master/index.php'),{timeout:15000});
      await page.locator('#submitInquiry').click();
      await pending;
      check(submissions.length===before+1,'main_post_once_'+width);
      const sent=submissions.at(-1);
      check(sent.csrfValid&&sent.requiredFields&&sent.questionHasQuantity&&sent.emailValid&&!sent.extraPaths,'main_payload_'+width);
-     const overflow=await page.evaluate(()=>Math.max(0,document.documentElement.scrollWidth-innerWidth));
-     reports.push({case:'ghanadi inquiry',width,ok:true,postsToLoopback:1,externalPosts:0,jsErrors:jsErrors.length,overflow});
+     reports.push({case:'ghanadi inquiry',width,ok:true,postsToLoopback:1,externalPosts:0,jsErrors:jsErrors.length,overflowBefore});
      check(jsErrors.length===0,'main_js_'+width);
      await context.close();
    }
@@ -94,7 +94,7 @@ async function main(){
      const before=submissions.length;
      await fillCafe(page,index+2);
      check(submissions.length===before,'cafe_no_auto_post_'+width);
-     const pending=page.waitForRequest(r=>r.method()==='POST'&&r.url().includes('/ask-master/index.php'),{timeout:15000});
+     const pending=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('/ask-master/index.php'),{timeout:15000});
      await page.locator('#cafeInquirySubmit').click();await pending;
      check(submissions.length===before+1,'cafe_post_once_'+width);
      const sent=submissions.at(-1);
