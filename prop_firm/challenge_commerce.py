@@ -43,6 +43,11 @@ class ChallengeOfferDecision:
 def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
                               protected_reserves_usd, existing_commitments_usd=0,
                               required_first_tier_accounts=1, attestations=None):
+    # A zero-account "launch" can satisfy every other boolean attestation
+    # without backing a single promised $100 trader allocation. Reject it.
+    if (type(required_first_tier_accounts) is not int
+            or not 1 <= required_first_tier_accounts <= 10000):
+        raise ValueError("At least one funded account with bounded capital is required")
     if not isinstance(merchant_tenant, TenantDecision):
         raise ValueError("Trusted merchant scope needed")
     if attestations is None:
