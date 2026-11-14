@@ -108,6 +108,26 @@ class EconomicMasterAgent:
             },
         }
 
+    def inspect_revenue_operations_readonly(self, *, days=30):
+        """Aggregate existing CRM/funnel records; never imply settled revenue."""
+        from command_center.revenue_operations import build_operations_snapshot
+        return build_operations_snapshot(days=days)
+
+    def calculate_quote_scenario_readonly(self, scenario):
+        """Cost a proposal without creating orders, prices, bills or transfers."""
+        from .revenue_unit_economics import compute_quote_scenario
+        return compute_quote_scenario(scenario)
+
+    def list_service_drafts_readonly(self):
+        """Verified offer definitions, not public live listings."""
+        from .service_sales_controls import list_service_cards
+        return list_service_cards()
+
+    def assess_service_draft_readonly(self, service_code, evidence):
+        """Evidence gate is an internal review; NEVER an external sale permission."""
+        from .service_sales_controls import assess_service_offer
+        return assess_service_offer(service_code, evidence)
+
     def report_contract(self):
         return {
             "agent": self.code,

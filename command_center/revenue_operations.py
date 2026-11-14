@@ -49,6 +49,19 @@ def build_operations_snapshot(*, days=30, now=None):
     backlog_size = backlog.count()
     oldest = backlog.order_by("created_at").values_list("created_at", flat=True).first()
     oldest_age = max(0, (end - oldest).days) if oldest is not None else None
+    # Actionable queue without disclosing a single customer's identity.
+    seven_days_ago = end - timedelta(days=7)
+    thirty_days_ago = end - timedelta(days=30)
+    stale_7 = backlog.filter(created_at__lt=seven_days_ago).count()
+    stale_30 = backlog.filter(created_at__lt=thirty_days_ago).count()
+    new_unreviewed = backlog.filter(status="new").count()
+    kind_backlog = {name: 0 for name in KINDS}
+    backlog_unknown_kind = 0
+    for item in backlog.values("kind").annotate(n=Count("pk")):
+        if item["kind"] in kind_backlog:
+            kind_backlog[item["kind"]] = item["n"]
+        else:
+            backlog_unknown_kind += item["n"]
 
     events = {name: 0 for name in EVENTS}
     unattributed_events = 0
@@ -78,6 +91,16 @@ def build_operations_snapshot(*, days=30, now=None):
             "unknown_kind": unknown_kind,
             "open_backlog_all_time": backlog_size,
             "oldest_open_age_days": oldest_age,
+            "unreviewed_open": new_unreviewed,
+            "stale_open_over_7_days": stale_7,
+            "stale_open_over_30_days": stale_30,
+            "open_backlog_by_kind": kind_backlog,
+            "open_backlog_unknown_kind": backlog_unknown_kind,
+            "preliminary_approval_rate_percent": (
+                round(by_status["approved"] * 100 / (sum(by_status.values()) + unknown_status), 2)
+                if sum(by_status.values()) + unknown_status else None
+            ),
+            "preliminary_approval_rate_is_not_conversion_rate": True,
             "approved_means": "preliminary_review_only_not_contract_or_payment",
         },
         "funnel": {
@@ -113,4 +136,6 @@ def revenue_operations_api(request):
     response["Cache-Control"] = "no-store, private, max-age=0"
     response["Pragma"] = "no-cache"
     response["X-Content-Type-Options"] = "nosniff"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    response["Vary"] = "Cookie"
     return response
