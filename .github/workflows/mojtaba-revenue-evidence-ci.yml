@@ -11,6 +11,8 @@ on:
       - core/management/commands/mojtaba_revenue_evidence_readonly.py
       - core/economic_master_agent.py
       - core/tests/test_mojtaba_revenue_evidence_20261114.py
+      - core/tests/test_commerce_funnel.py
+      - tests/test_crown_tron_receipts.py
       - .github/workflows/mojtaba-revenue-evidence-ci.yml
 
 permissions:
