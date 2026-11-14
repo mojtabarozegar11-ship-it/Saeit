@@ -24,10 +24,17 @@ class CheckoutTraceTests(unittest.TestCase):
         events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),event('e3','fulfilled','server'),event('e4','fulfilled','server')]
         self.assertIn('MULTIPLE_FULFILLMENTS',audit_checkout_trace(payload(events))['orders'][0]['issues'])
     def test_exact_webhook_replay_is_ignored(self):
-        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),event('e2','payment_confirmed','gateway',PAY)]
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),event('e2','payment_confirmed','gateway',PAY),event('e3','fulfilled','server')]
         result=audit_checkout_trace(payload(events))
         self.assertEqual(result['replayed_events_ignored'],1)
         self.assertEqual(result['issues_count'],0)
+    def test_paid_but_no_fulfillment_is_not_declared_clean(self):
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY)]
+        result=audit_checkout_trace(payload(events))
+        self.assertIn('PAYMENT_WITHOUT_FULFILLMENT_IN_TRACE',result['orders'][0]['issues'])
+    def test_unpaid_started_checkout_is_not_false_missing_fulfillment(self):
+        result=audit_checkout_trace(payload([event('e1','checkout_created')]))
+        self.assertNotIn('PAYMENT_WITHOUT_FULFILLMENT_IN_TRACE',result['orders'][0]['issues'])
     def test_id_collision_with_changed_payload_is_detected(self):
         events=[event('e1','checkout_created'),event('e1','fulfilled','server')]
         self.assertIn('EVENT_ID_COLLISION',audit_checkout_trace(payload(events))['orders'][0]['issues'])
