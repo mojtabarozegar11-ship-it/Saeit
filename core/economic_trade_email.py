@@ -1,5 +1,6 @@
 """Company trade mailbox: policy-gated email outbox for Economic Master Agent."""
 import hashlib
+import json
 import uuid
 
 from django.conf import settings
@@ -41,6 +42,16 @@ def _trace_id():
 
 
 def _idempotency(recipient, subject, body):
+    # A delimiter-joined triple collides for distinct subjects and bodies.
+    # JSON's array framing is unambiguous, and the v2 prefix separates formats.
+    payload = json.dumps(
+        [recipient.strip().lower(), subject.strip(), body.strip()],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    return hashlib.sha256(("v2:" + payload).encode("utf-8")).hexdigest()
+
+
+def _legacy_idempotency(recipient, subject, body):
     raw = "|".join((recipient.strip().lower(), subject.strip(), body.strip()))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -71,17 +82,30 @@ def queue_trade_email(*, recipient, subject, body, trade_context=None):
         },
     )
     key = _idempotency(recipient, subject, body)
-    outbox, created = TradeEmailOutbox.objects.get_or_create(
-        idempotency_key=key,
-        defaults={
-            "mailbox": mailbox,
-            "recipient": recipient,
-            "subject": subject,
-            "body": body,
-            "trade_context": trade_context or {},
-            "status": "queued",
-        },
+    # Preserve exact old drafts after an upgrade; a legacy hash collision with
+    # different fields must never suppress a distinct commercial message.
+    old = TradeEmailOutbox.objects.filter(
+        idempotency_key=_legacy_idempotency(recipient, subject, body)
+    ).first()
+    same_legacy_message = old is not None and (
+        old.recipient.strip().lower() == recipient.strip().lower()
+        and old.subject.strip() == subject.strip()
+        and old.body.strip() == body.strip()
     )
+    if same_legacy_message:
+        outbox, created = old, False
+    else:
+        outbox, created = TradeEmailOutbox.objects.get_or_create(
+            idempotency_key=key,
+            defaults={
+                "mailbox": mailbox,
+                "recipient": recipient,
+                "subject": subject,
+                "body": body,
+                "trade_context": trade_context or {},
+                "status": "queued",
+            },
+        )
     TradeEmailAudit.objects.create(
         outbox=outbox,
         action="queued" if created else "deduplicated",
