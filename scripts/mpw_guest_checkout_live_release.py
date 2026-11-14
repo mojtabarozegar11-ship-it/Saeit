@@ -40,7 +40,7 @@ def has_buyer_email_form(markup):
     if (attributes.get('name') == 'email'
         and str(attributes.get('type') or '').lower() == 'email'
         and 'required' in attributes
-        and str(attributes.get('disabled') or '') != 'disabled'):
+        and 'disabled' not in attributes):
      self.found = True
 
   def handle_endtag(self, tag):
