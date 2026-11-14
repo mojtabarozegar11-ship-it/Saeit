@@ -143,7 +143,8 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
     hit_counts = Counter()
     cron = snapshot.get("cron", {})
     if cron.get("state") == "observed":
-        entries = cron.get("entries", [])
+        # An absent inventory is not proof of zero scheduled workers.
+        entries = cron.get("entries")
         if not isinstance(entries, list):
             raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
         for row in entries:
