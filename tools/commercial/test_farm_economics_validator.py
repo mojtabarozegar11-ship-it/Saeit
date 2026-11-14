@@ -12,6 +12,18 @@ class FarmEconomicsTests(unittest.TestCase):
         row=BASE.copy();row[6]="80"
         result=validate_csv(sample(row))[0]
         self.assertEqual(result["break_even_units"],"32")
+    def test_break_even_exceeds_reported_production(self):
+        row=BASE.copy();row[6]="80";row[11]="600"
+        result=validate_csv(sample(row))[0]
+        self.assertEqual(result["break_even_units"],"96")
+        self.assertEqual(result["break_even_feasibility"],"EXCEEDS_REPORTED_PRODUCTION")
+    def test_break_even_within_reported_production(self):
+        row=BASE.copy();row[6]="80"
+        result=validate_csv(sample(row))[0]
+        self.assertEqual(result["break_even_feasibility"],"WITHIN_REPORTED_PRODUCTION")
+    def test_break_even_not_calculable_for_partial_sales(self):
+        result=validate_csv(sample())[0]
+        self.assertEqual(result["break_even_feasibility"],"NOT_CALCULABLE")
     def test_partial_sell_through_blocks_unallocated_unit_cost(self):
         row=BASE.copy();row[6]="100";row[7]="80"
         self.assertEqual(validate_csv(sample(row))[0]["break_even_units"],"NOT_ATTAINABLE")
