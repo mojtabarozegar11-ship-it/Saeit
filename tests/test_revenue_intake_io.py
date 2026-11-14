@@ -98,4 +98,84 @@ class IntakeIOTests(unittest.TestCase):
             with self.assertRaises(ValueError):mod.write_new_anonymized_json(p,{'x':1})
             self.assertFalse(p.exists())
 
+
+    def test_smaller_input_policy_blocks_same_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "input.json"
+            p.write_text('{"scope_items":1}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                mod.read_strict_json(p, max_bytes=5)
+            self.assertEqual(mod.read_strict_json(p, max_bytes=50), {"scope_items": 1})
+
+    def test_reject_invalid_limit_booleans_and_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "input.json"
+            p.write_text("{}", encoding="utf-8")
+            for bad in (True, False, 0, -1, "100", mod.MAX_BYTES + 1):
+                with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "size policy"):
+                    mod.read_strict_json(p, max_bytes=bad)
+
+    def test_very_deep_json_is_controlled_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "deep.json"
+            p.write_text("[" * 1500 + "0" + "]" * 1500, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid or ambiguous"):
+                mod.read_strict_json(p)
+
+    def test_invalid_input_size_limit_cannot_bypass_maximum(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "input.json"
+            p.write_bytes(b" " * (mod.MAX_BYTES + 1))
+            with self.assertRaises(ValueError):
+                mod.read_strict_json(p, max_bytes=mod.MAX_BYTES + 1)
+
+    def test_mid_read_file_change_cannot_be_accepted(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "input.json"
+            p.write_text('{"consent":true}', encoding="utf-8")
+            original = mod.os.fstat
+            calls = [0]
+            def modified_stat(fd):
+                result = original(fd)
+                calls[0] += 1
+                if calls[0] == 2:
+                    values = list(result)
+                    # st_size is field 6 in an os.stat_result.
+                    values[6] += 1
+                    return os.stat_result(values)
+                return result
+            with patch.object(mod.os, "fstat", side_effect=modified_stat):
+                with self.assertRaisesRegex(ValueError, "changed during read"):
+                    mod.read_strict_json(p)
+
+    def test_node_budget_blocks_large_array_without_db_or_network(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "array.json"
+            p.write_text(json.dumps({"items": [0] * (mod.MAX_JSON_NODES + 1)}),
+                         encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid or ambiguous"):
+                mod.read_strict_json(p)
+
+    def test_depth_boundary_accepts_64_and_rejects_65(self):
+        def nested(depth):
+            return "[" * depth + "0" + "]" * depth
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "nested.json"
+            p.write_text(nested(mod.MAX_JSON_DEPTH), encoding="utf-8")
+            self.assertIsInstance(mod.read_strict_json(p), list)
+            p.write_text(nested(mod.MAX_JSON_DEPTH + 1), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid or ambiguous"):
+                mod.read_strict_json(p)
+
+    def test_python_loader_errors_do_not_escape_as_recursionerror(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "input.json"
+            p.write_text("{}", encoding="utf-8")
+            with patch.object(mod.json, "loads", side_effect=RecursionError("secret")):
+                with self.assertRaisesRegex(ValueError, "invalid or ambiguous") as caught:
+                    mod.read_strict_json(p)
+            self.assertNotIn("secret", str(caught.exception))
+
 if __name__=='__main__':unittest.main()
