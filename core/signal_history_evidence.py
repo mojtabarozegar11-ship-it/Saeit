@@ -1,6 +1,6 @@
 """Authenticated, private signal history QA for the ONE mojtaba.bot.ai worker.
 
-HMAC protects records *after* an approved source adapter received them. A
+HMAC binds each record to its intended 17-brand distribution scope *after* a trusted adapter received it. A
 matching signature is not independent proof of execution, performance,
 merchant authority, subscriber entitlement or legal clearance. Never auto-sell.
 No network, messaging, trades, payments, DB writes or buyer information.
@@ -14,7 +14,7 @@ import hmac
 import json
 import re
 
-from .signal_commercial_catalog import inspect_signal_record
+from .signal_commercial_catalog import SIGNAL_BRANDS, inspect_signal_record
 
 MAX_RECORDS = 10000
 MAX_HISTORY_DAYS = 366 * 5
@@ -44,16 +44,19 @@ def _source(source):
     return source
 
 
-def _canonical(event, source_id):
+def _canonical(event, source_id, brand):
     """Only fixed non-identifying trade signal fields are signed."""
     _source(source_id)
+    if not isinstance(brand, str) or brand not in SIGNAL_BRANDS:
+        raise SignalHistoryRejected("brand_not_registered")
     if not inspect_signal_record(event):
         raise SignalHistoryRejected("invalid_signal_record")
     ts = event["created_at"]
     if ts.tzinfo is None or ts.utcoffset() != timedelta(0):
         raise SignalHistoryRejected("timestamp_not_utc")
     return json.dumps({
-        "format": "mojtaba.signal.attested_source.v1",
+        "format": "mojtaba.signal.attested_source.v2",
+        "brand": brand,
         "source_id": source_id,
         "event_id": event["event_id"],
         "symbol": event["symbol"],
@@ -65,18 +68,18 @@ def _canonical(event, source_id):
     }, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
 
 
-def source_digest(event, *, source_id, signing_key):
+def source_digest(event, *, source_id, brand, signing_key):
     """Restricted to a trusted internal adapter, not to HTTP client input."""
     if type(signing_key) is not bytes or len(signing_key) < 32:
         raise SignalHistoryRejected("trusted_adapter_key_missing")
-    return hmac.new(signing_key, _canonical(event, source_id), hashlib.sha256).hexdigest()
+    return hmac.new(signing_key, _canonical(event, source_id, brand), hashlib.sha256).hexdigest()
 
 
-def verify_source_integrity(event, *, source_id, signing_key, digest):
+def verify_source_integrity(event, *, source_id, brand, signing_key, digest):
     if type(digest) is not str or DIGEST.fullmatch(digest) is None:
         return False
     try:
-        expected = source_digest(event, source_id=source_id, signing_key=signing_key)
+        expected = source_digest(event, source_id=source_id, brand=brand, signing_key=signing_key)
     except (SignalHistoryRejected, TypeError, ValueError, AttributeError):
         return False
     return hmac.compare_digest(expected, digest)
@@ -86,6 +89,8 @@ def verify_source_integrity(event, *, source_id, signing_key, digest):
 class SignalAudit:
     event_count: int
     source_id: str
+    brand: str
+    signature_version: str
     first_at_utc: str
     last_at_utc: str
     history_digest_sha256: str
@@ -97,12 +102,14 @@ class SignalAudit:
     checkout_enabled: bool = False
 
 
-def audit_history(entries, *, source_id, signing_key, now_utc):
+def audit_history(entries, *, source_id, brand, signing_key, now_utc):
     """Exact, bounded, monotonic, nonfuture source-authenticated event series.
 
     Raises on *any* broken row. This is deliberately not a paid-signal adapter.
     """
     _source(source_id)
+    if not isinstance(brand, str) or brand not in SIGNAL_BRANDS:
+        raise SignalHistoryRejected("brand_not_registered")
     if not isinstance(now_utc, datetime) or now_utc.tzinfo is None:
         raise SignalHistoryRejected("observation_time_invalid")
     if now_utc.utcoffset() != timedelta(0):
@@ -132,16 +139,18 @@ def audit_history(entries, *, source_id, signing_key, now_utc):
         if now_utc - at > timedelta(days=MAX_HISTORY_DAYS):
             raise SignalHistoryRejected("history_too_old_for_review")
         if not verify_source_integrity(
-            record, source_id=source_id, signing_key=signing_key,
+            record, source_id=source_id, brand=brand, signing_key=signing_key,
             digest=item["source_digest"],
         ):
             raise SignalHistoryRejected("source_signature_mismatch")
-        canonical.append(_canonical(record, source_id))
+        canonical.append(_canonical(record, source_id, brand))
         previous = at
     commitment = hashlib.sha256(b"\n".join(canonical)).hexdigest()
     return SignalAudit(
         event_count=len(entries),
         source_id=source_id,
+        brand=brand,
+        signature_version="mojtaba.signal.attested_source.v2",
         first_at_utc=entries[0]["record"]["created_at"].isoformat(),
         last_at_utc=entries[-1]["record"]["created_at"].isoformat(),
         history_digest_sha256=commitment,
@@ -149,7 +158,7 @@ def audit_history(entries, *, source_id, signing_key, now_utc):
     )
 
 
-def subscription_preflight(*, history: SignalAudit, verified_order_source,
+def subscription_preflight(*, history: SignalAudit, merchant_brand, verified_order_source,
                            timestamped_independent_execution_audit,
                            risk_and_fee_disclosures_approved,
                            jurisdiction_approved, subscriber_delivery_proven,
@@ -158,7 +167,11 @@ def subscription_preflight(*, history: SignalAudit, verified_order_source,
     if not isinstance(history, SignalAudit):
         raise SignalHistoryRejected("history_attestation_required")
     checks = {
-        "source_history_integrity": history.integrity_verified_for_supplied_history is True,
+        "source_history_integrity": (history.integrity_verified_for_supplied_history is True
+                                     and history.signature_version == "mojtaba.signal.attested_source.v2"),
+        "merchant_scope_matches_history": (isinstance(merchant_brand, str)
+                                           and merchant_brand in SIGNAL_BRANDS
+                                           and merchant_brand == history.brand),
         "signed_order_source": verified_order_source is True,
         "independent_execution_audit": timestamped_independent_execution_audit is True,
         "risk_and_fee_disclosures": risk_and_fee_disclosures_approved is True,
@@ -171,6 +184,7 @@ def subscription_preflight(*, history: SignalAudit, verified_order_source,
         "eligible_for_owner_release_review": all(checks.values()),
         "missing": [key for key, ok in checks.items() if not ok],
         "history_events": history.event_count,
+        "brand": history.brand,
         "account_or_subscriber_created": False,
         "checkout_enabled": False,
         "money_received": None,

@@ -1,0 +1,42 @@
+name: C21 signal brand-bound history offline regression
+on:
+  push:
+    branches:
+      - fix/c21-signal-brand-bound-audit-20261115
+    paths:
+      - 'core/signal_history_evidence.py'
+      - 'tests/test_signal_history_evidence.py'
+      - 'docs/revenue-p0/C21_SIGNAL_BRAND_BOUND_SOURCE_AUDIT.md'
+      - '.github/workflows/c21-brand-bound-signal-history-ci.yml'
+  pull_request:
+    paths:
+      - 'core/signal_history_evidence.py'
+      - 'tests/test_signal_history_evidence.py'
+      - '.github/workflows/c21-brand-bound-signal-history-ci.yml'
+permissions:
+  contents: read
+jobs:
+  signal-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Django baseline (no trading or payment credentials)
+        run: python -m pip install -r requirements.txt
+      - name: Offline tests; never contact broker, customers or payment chain
+        env:
+          SECRET_KEY: c21-source-regression-only
+          ALLOWED_HOSTS: testserver,localhost
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_signal_history_evidence.py' -q
+          python3 -m py_compile core/signal_history_evidence.py
+          echo 'C21_SIGNAL_PUBLICATIONS=0'
+          echo 'C21_CUSTOMER_CHARGES=0'
+          echo 'C21_TRADES=0'
+          echo 'C21_PERSONAL_SOCIAL_POSTS=0'

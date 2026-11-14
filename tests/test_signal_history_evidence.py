@@ -23,16 +23,16 @@ def signal(i=1, **changes):
     return event
 
 
-def signed(record, source_id="source_main"):
+def signed(record, source_id="source_main", brand="saman"):
     return {"record": record, "source_digest": source_digest(
-        record, source_id=source_id, signing_key=KEY,
+        record, source_id=source_id, brand=brand, signing_key=KEY,
     )}
 
 
 class SignalEvidenceTests(unittest.TestCase):
     def history(self, values=None, **changes):
         records = [signed(signal(i)) for i in (1, 2, 3)] if values is None else values
-        return audit_history(records, source_id="source_main",
+        return audit_history(records, source_id="source_main", brand="saman",
                              signing_key=KEY, now_utc=NOW, **changes)
 
     def test_three_ordered_source_signed_records_have_deterministic_digest(self):
@@ -48,7 +48,7 @@ class SignalEvidenceTests(unittest.TestCase):
 
     def test_record_mutation_breaks_authenticated_source_integrity(self):
         record = signal()
-        digest = source_digest(record, source_id="source_main", signing_key=KEY)
+        digest = source_digest(record, source_id="source_main", brand="saman", signing_key=KEY)
         for field, value in (
             ("entry", "4100"), ("stop_loss", "3995"),
             ("take_profit", "4200"), ("event_id", "broker.changed"),
@@ -63,11 +63,11 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_wrong_signing_key_and_source_id_cannot_verify(self):
         item = signed(signal())
         self.assertFalse(verify_source_integrity(
-            item["record"], source_id="another_source",
+            item["record"], source_id="another_source", brand="saman",
             signing_key=KEY, digest=item["source_digest"],
         ))
         self.assertFalse(verify_source_integrity(
-            item["record"], source_id="source_main",
+            item["record"], source_id="source_main", brand="saman",
             signing_key=b"another-privileged-key-long-enough-to-pass-checks",
             digest=item["source_digest"],
         ))
@@ -118,7 +118,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_unaudited_signal_history_does_not_enable_checkout(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source=True,
+            history=audit, merchant_brand="saman", verified_order_source=True,
             timestamped_independent_execution_audit=False,
             risk_and_fee_disclosures_approved=True,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -131,7 +131,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_truthy_approval_words_are_not_valid_release_evidence(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source="yes",
+            history=audit, merchant_brand="saman", verified_order_source="yes",
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=1,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -145,7 +145,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_all_eight_prep_checks_still_do_not_issue_money_or_access(self):
         audit = self.history()
         result = subscription_preflight(
-            history=audit, verified_order_source=True,
+            history=audit, merchant_brand="saman", verified_order_source=True,
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=True,
             jurisdiction_approved=True, subscriber_delivery_proven=True,
@@ -157,6 +157,73 @@ class SignalEvidenceTests(unittest.TestCase):
         self.assertFalse(result["realized_performance_verified"])
         self.assertIsNone(result["money_received"])
 
+
+    def test_same_key_and_source_cannot_replay_signed_record_to_another_brand(self):
+        event = signal()
+        original = signed(event, brand="saman")
+        self.assertFalse(verify_source_integrity(
+            event, source_id="source_main", brand="zahra",
+            signing_key=KEY, digest=original["source_digest"],
+        ))
+        with self.assertRaisesRegex(SignalHistoryRejected, "source_signature_mismatch"):
+            audit_history([original], brand="zahra", source_id="source_main",
+                          signing_key=KEY, now_utc=NOW)
+
+    def test_separate_brand_signature_has_different_commitment(self):
+        event = signal()
+        a = source_digest(event, source_id="source_main", brand="saman", signing_key=KEY)
+        b = source_digest(event, source_id="source_main", brand="zahra", signing_key=KEY)
+        self.assertNotEqual(a, b)
+        saam = self.history([signed(event, brand="saman")])
+        zahra = audit_history([signed(event, brand="zahra")], brand="zahra",
+                              source_id="source_main", signing_key=KEY, now_utc=NOW)
+        self.assertEqual(saam.brand, "saman")
+        self.assertEqual(zahra.brand, "zahra")
+        self.assertNotEqual(saam.history_digest_sha256, zahra.history_digest_sha256)
+
+    def test_unknown_or_malformed_brand_is_fail_closed(self):
+        event = signal()
+        for bad in ("unknown_owner", "", None, [], {"brand": "saman"}, 1, True):
+            with self.subTest(value=str(bad)[:40]):
+                with self.assertRaises((SignalHistoryRejected, ValueError, TypeError)):
+                    source_digest(event, source_id="source_main", brand=bad, signing_key=KEY)
+                with self.assertRaises((SignalHistoryRejected, ValueError, TypeError)):
+                    audit_history([signed(event)], brand=bad, source_id="source_main",
+                                  signing_key=KEY, now_utc=NOW)
+
+    def test_subscription_preflight_does_not_accept_cross_brand_history(self):
+        audit = self.history()
+        review = subscription_preflight(
+            history=audit, merchant_brand="zahra", verified_order_source=True,
+            timestamped_independent_execution_audit=True,
+            risk_and_fee_disclosures_approved=True,
+            jurisdiction_approved=True, subscriber_delivery_proven=True,
+            refund_terms_approved=True, legal_merchant_ready=True,
+        )
+        self.assertFalse(review["eligible_for_owner_release_review"])
+        self.assertIn("merchant_scope_matches_history", review["missing"])
+        self.assertFalse(review["checkout_enabled"])
+        self.assertIsNone(review["money_received"])
+
+    def test_old_v1_history_cannot_be_reviewed_under_v2(self):
+        from dataclasses import replace
+        audit = replace(self.history(), signature_version="mojtaba.signal.attested_source.v1")
+        review = subscription_preflight(
+            history=audit, merchant_brand="saman", verified_order_source=True,
+            timestamped_independent_execution_audit=True,
+            risk_and_fee_disclosures_approved=True,
+            jurisdiction_approved=True, subscriber_delivery_proven=True,
+            refund_terms_approved=True, legal_merchant_ready=True,
+        )
+        self.assertIn("source_history_integrity", review["missing"])
+        self.assertFalse(review["eligible_for_owner_release_review"])
+
+    def test_signed_signal_is_not_proof_of_profit_or_receipt(self):
+        audit = self.history()
+        self.assertFalse(audit.independent_execution_verified)
+        self.assertFalse(audit.realized_performance_verified)
+        self.assertFalse(audit.customer_delivery_verified)
+        self.assertFalse(audit.checkout_enabled)
 
 if __name__ == "__main__":
     unittest.main()
