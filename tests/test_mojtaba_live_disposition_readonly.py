@@ -309,6 +309,33 @@ def test_php_disposition_blocks_unreconciled_enabled_identity_counts(
     assert report["verified_live_agents"] is None
 
 
+
+@pytest.mark.parametrize("records,known_roles,known_enabled,unknown_enabled,total", [
+    (2, 1, 2, 0, 2),  # More enabled known roles than registered known roles.
+    (1, 1, 1, 1, 2),  # More enabled records than total database rows.
+])
+def test_php_disposition_rejects_impossible_inventory_cardinalities(
+    records, known_roles, known_enabled, unknown_enabled, total
+):
+    php = {
+        "state": "source_registry_snapshot_only",
+        "records": records,
+        "agent_roles": [{"code": "master", "enabled": True}],
+        "known_roles_found": known_roles,
+        "enabled_count": total,
+        "known_enabled_count": known_enabled,
+        "unknown_enabled_count": unknown_enabled,
+    }
+    report = module.preview(
+        snap("vps"), snap("cpanel", private_php_site_registry=php),
+        MANIFEST, repository_root=ROOT,
+    )
+    group = next(g for g in report["groups"]
+                 if g["source_group"] == "zomorod_php_site_agent_runtime")
+    assert "php_enabled_identity_counts_inconsistent" in group["blocking_evidence"]
+    assert group["retirement_authorized"] is False
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
