@@ -27,6 +27,8 @@ ROUTES = (
     "/mpw-editorial/revenue/inquiry.php?service=general",
 )
 MAX_BYTES = 2_000_000
+# Three catalog products confirmed in the owned static store generator.
+STORE_PRODUCT_IDS = ("72", "225", "879")
 
 # Reject generic 200-OK placeholders that happen to contain the support email.
 # These route markers reflect the existing public pages.
@@ -58,17 +60,26 @@ class _SupportMailtoLinks(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.found = False
         self._ignored = 0
+        self._base_tag_seen = False
+        self._anchor_hrefs = []
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
         if tag in ("script", "style", "template"):
             self._ignored += 1
             return
-        if self._ignored or tag != "a":
+        if self._ignored:
+            return
+        if tag == "base":
+            # An HTML base tag can silently redirect otherwise-local links.
+            self._base_tag_seen = True
+            return
+        if tag != "a":
             return
         hrefs = [value for key, value in attrs if key.lower() == "href"]
         if len(hrefs) != 1 or not isinstance(hrefs[0], str):
             return
+        self._anchor_hrefs.append(hrefs[0])
         address = hrefs[0].split("?", 1)[0]
         if address.lower() == "mailto:" + INBOX:
             self.found = True
@@ -78,11 +89,35 @@ class _SupportMailtoLinks(HTMLParser):
             self._ignored -= 1
 
 
-def _has_support_mailto(html: str) -> bool:
+def _scan_anchors(html: str) -> _SupportMailtoLinks:
     parser = _SupportMailtoLinks()
     parser.feed(html)
     parser.close()
-    return parser.found
+    return parser
+
+
+def _has_support_mailto(html: str) -> bool:
+    return _scan_anchors(html).found
+
+
+def _store_catalog_links_verified(anchors: _SupportMailtoLinks) -> bool:
+    if anchors._base_tag_seen:
+        return False
+    hrefs = set(anchors._anchor_hrefs)
+    # Exact same-origin HTML anchors, not text snippets, JavaScript hrefs,
+    # external domains or auto-resolving relative paths under an HTML base tag.
+    return all(
+        any(
+            target in hrefs
+            for target in (
+                f"/store/product/{product_id}/",
+                f"/store/product/{product_id}/checkout/",
+                ORIGIN + f"/store/product/{product_id}/",
+                ORIGIN + f"/store/product/{product_id}/checkout/",
+            )
+        )
+        for product_id in STORE_PRODUCT_IDS
+    )
 
 
 def _same_public_url(expected: str, actual: str) -> bool:
@@ -123,9 +158,14 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
                 raise TypeError("INVALID_RESPONSE_TYPE")
             new = INBOX in html
             old = LEGACY in html
-            mailto = _has_support_mailto(html)
-            page_identity = all(marker.lower() in html.lower()
-                                for marker in ROUTE_IDENTITY[path])
+            anchors = _scan_anchors(html)
+            mailto = anchors.found
+            catalog_links = (_store_catalog_links_verified(anchors)
+                             if path == "/store/" else None)
+            page_identity = (
+                all(marker.lower() in html.lower() for marker in ROUTE_IDENTITY[path])
+                and (catalog_links if path == "/store/" else True)
+            )
             label = "READY" if new and mailto and not old and page_identity else "MISSING_NEW_CONTACT"
             if new and mailto and not page_identity:
                 label = "UNRECOGNIZED_PAGE"
@@ -140,6 +180,7 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
             results.append({"route": path, "status": label, "email_visible": new,
                             "mailto_visible": mailto, "legacy_visible": old,
                             "page_identity_verified": page_identity,
+                            "store_product_links_verified": catalog_links,
                             "store_source_indicator": source})
         except (OSError, RuntimeError, ValueError, TypeError, UnicodeError) as exc:
             results.append({"route": path, "status": "FETCH_FAILED",
@@ -147,6 +188,7 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
                             "email_visible": False, "mailto_visible": False,
                             "legacy_visible": False,
                             "page_identity_verified": False,
+                            "store_product_links_verified": False if path == "/store/" else None,
                             "store_source_indicator": "UNKNOWN"})
     passed = sum(x["status"] == "READY" for x in results)
     return {
