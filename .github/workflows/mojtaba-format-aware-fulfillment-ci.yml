@@ -46,7 +46,7 @@ jobs:
         run: |
           python manage.py check
           python -m py_compile core/fulfillment_preflight.py core/tests/test_mojtaba_fulfillment_formats_20261114.py
-      - name: Isolated 36 new and 55 existing no-write preflight tests
+      - name: Isolated 42 new and 55 existing no-write preflight tests
         run: |
           python -m pytest -q \
             core/tests/test_mojtaba_fulfillment_formats_20261114.py \
