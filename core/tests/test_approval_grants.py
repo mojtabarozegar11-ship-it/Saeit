@@ -47,7 +47,7 @@ def test_grant_rejects_scope_mismatch_and_expiry():
     service = ApprovalService()
     grant = service.issue_grant(approval.pk, owner.pk, {"action": "payment", "target": "order:7"}, ttl_seconds=300)
 
-    with pytest.raises(ValueError, match="scope mismatch"):
+    with pytest.raises(ValueError, match="GRANT_SCOPE_MISMATCH"):
         service.authorize_grant(grant.pk, {"action": "payment", "target": "order:8"})
 
     grant.expires_at = timezone.now() - timedelta(seconds=1)
