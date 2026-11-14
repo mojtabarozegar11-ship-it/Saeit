@@ -194,6 +194,8 @@ def _guest(email):
 
 
 def _new_invoice(email, host, language, product_id):
+    if getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True:
+        raise ValueError("TRON settlement is not authorized to issue payable invoices")
     # All database writes are atomic and rolling back a full cart on failure.
     with transaction.atomic():
         product, base_sun, fingerprint = _read_product(product_id, language)
@@ -294,6 +296,8 @@ def _page(request, ctx, *, status=200):
 @require_http_methods(["GET", "POST"])
 def checkout(request, product_id):
     host, language = _host(request)
+    if getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True:
+        raise Http404("TRON checkout is temporarily unavailable")
     product, base_sun, _ = _read_product(product_id, language)
     if request.method == "GET":
         return _page(request, _context(None, "start", language, product=product,
@@ -414,8 +418,11 @@ def _record_paid(invoice_id, proof):
 def invoice_page(request, invoice_id):
     host, language = _host(request)
     invoice = _owner(request, invoice_id, host)
+    settlement_ready = getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is True
     error = None
-    if request.method == "POST":
+    if request.method == "POST" and not settlement_ready:
+        error = "Settlement paused; do not transfer TRX or repeat payment"
+    elif request.method == "POST":
         _limit(request, invoice.buyer_email, purpose="verify")
         txid = request.POST.get("txid", "").strip().lower()
         if invoice.status == "awaiting_payment":
@@ -436,7 +443,7 @@ def invoice_page(request, invoice_id):
     item = OrderItem.objects.filter(order=invoice.order).select_related("product").first()
     digital = bool(item and invoice.fulfillment_kind == "digital")
     return _page(request, _context(invoice, "invoice", language, error=error,
-                                  is_digital=digital))
+                                  is_digital=digital, settlement_ready=settlement_ready))
 
 
 @never_cache
@@ -494,6 +501,8 @@ def recovery_link(request, token):
 def catalog(request):
     """Ready-to-sell products only; no hardcoded fake SKU inventory."""
     host, language = _host(request)
+    if getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True:
+        raise Http404("TRON catalogue checkout is temporarily unavailable")
     try:
         page = int(request.GET.get("page", "1"))
     except (ValueError, TypeError):
