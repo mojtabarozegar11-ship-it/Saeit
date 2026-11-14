@@ -81,5 +81,52 @@ class RevenueSourceContracts(unittest.TestCase):
         self.assertNotIn("socket",s)
         self.assertNotIn("websocket",s)
 
+    def test_all_revenue_cli_paths_share_the_strict_input_reader(self):
+        source = (ROOT / "scripts/mojtaba_revenue_cli.py").read_text("utf8")
+        self.assertIn("from revenue_intake_io import read_strict_json", source)
+        self.assertIn("read_strict_json(file_path, max_bytes=MAX_BYTES)", source)
+        self.assertIn("MAX_BYTES = 32768", source)
+        self.assertNotIn('json.loads(raw.decode("utf-8"))', source)
+
+    def test_qualifier_and_main_catalogue_share_secure_output_writer(self):
+        core = (ROOT / "scripts/mojtaba_revenue_cli.py").read_text("utf8")
+        two = (ROOT / "scripts/revenue_dual_offer_qualifier.py").read_text("utf8")
+        self.assertIn("write_new_anonymized_json(target, text)", core)
+        self.assertIn("write_new_anonymized_json(args.output, serialized)", two)
+
+    def test_size_and_depth_limits_are_not_waived_by_synthetic_mode(self):
+        io = (ROOT / "scripts/revenue_intake_io.py").read_text("utf8")
+        self.assertIn("MAX_BYTES = 65536", io)
+        self.assertIn("MAX_JSON_DEPTH = 64", io)
+        self.assertIn("MAX_JSON_NODES = 4096", io)
+        self.assertIn("intake changed during read", io)
+        self.assertIn("os.O_EXCL", io)
+
+    def test_large_synthetic_counts_cannot_exhaust_financial_preview(self):
+        p = (ROOT / "scripts/mojtaba_revenue_portfolio.py").read_text("utf8")
+        self.assertIn("MAX_SYNTHETIC_COUNT = 1_000_000_000", p)
+        self.assertIn("MAX_SOURCE_CHECKS = 1_000_000", p)
+        self.assertIn("MAX_SYNTHETIC_COUNT for x in _KPI_KEYS", p)
+        self.assertIn("source_check_passes <= MAX_SOURCE_CHECKS", p)
+
+    def test_cli_suite_is_registered_without_payment_or_deployment(self):
+        wf = (ROOT / ".github/workflows/revenue-p0-source-only.yml").read_text("utf8")
+        self.assertIn("test_mojtaba_revenue*.py", wf)
+        self.assertIn("test_revenue_*.py", wf)
+        self.assertNotIn("push: main", wf)
+        self.assertNotIn("pay_now", wf)
+        self.assertNotIn("transaction.submit", wf)
+
+    def test_source_status_remains_not_paid_or_deployed(self):
+        for text_path in ("scripts/mojtaba_revenue_cli.py",
+                          "scripts/mojtaba_revenue_portfolio.py"):
+            source = (ROOT / text_path).read_text("utf8")
+            self.assertIn("mojtaba.bot.ai", source)
+        src = (ROOT / "scripts/mojtaba_revenue_portfolio.py").read_text("utf8")
+        self.assertIn('"collected_revenue": None', src)
+        self.assertIn('"payment_verified": False', src)
+        self.assertIn('"production_deployed": False', src)
+
+
 if __name__=="__main__":
     unittest.main()
