@@ -4,6 +4,7 @@ No financial mutation. Every verified observation is checked for historical
 breaches; missing session-open data and incomplete reconciliation fail closed.
 """
 from collections import defaultdict
+from datetime import timedelta
 from datetime import timezone as utc_timezone
 from django.utils import timezone as django_timezone
 from .periods import most_recent_completed_period, period_statistics
@@ -112,34 +113,56 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     promotion_period = None
     promotion_stats = None
     social_decision = None
-    if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-        social_records = PropSocialEvidence.objects.filter(
-            account=account,
-            review_status=PropSocialEvidence.Review.VERIFIED,
-        ).select_related("reviewed_by")
-        if evidence_cutoff is not None:
-            social_records = social_records.filter(
-                posted_at__lt=evidence_cutoff, reviewed_at__lt=evidence_cutoff
-            )
-        social_decision = check_social_posting(
-            verified_trading_dates=set(day_totals),
-            verified_posts=[{
-                "trading_day": item.trading_day,
-                "platform": item.platform,
-                "post_url": item.post_url,
-                "review_status": item.review_status,
-                "reviewed_by_operator": bool(
-                    item.reviewed_by_id and item.reviewed_at is not None
-                    and item.reviewed_by.is_staff
-                    and item.reviewed_by_id != account.trader.user_id
-                ),
-                "author_verified": item.author_verified,
-                "public_visible": item.public_visible,
-                "disclosure_verified": item.disclosure_verified,
-                "content_compliant": item.content_compliant,
-                "date_verified": item.date_verified,
-            } for item in social_records],
+    purchase_window_valid = True
+    purchase = account.challenge_enrollment if account.kind in (
+        PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO
+    ) else None
+    if (account.policy_version == NEW_CONTRACT_VERSION and account.kind in (
+            PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO)):
+        purchase_window_valid = bool(
+            purchase and purchase.trader_id == account.trader_id
+            and purchase.settlement_verified is True
+            and purchase.terms_version == NEW_CONTRACT_VERSION
         )
+        if purchase_window_valid:
+            start = purchase.confirmed_at
+            end = start + timedelta(days=POLICY.completion_deadline_days)
+            # Every broker event must be inside the four-week TRADING window.
+            # Invalid events cannot be silently excluded to improve results.
+            if any(not start <= event.closed_at < end for event in executions):
+                purchase_window_valid = False
+            social_records = PropSocialEvidence.objects.filter(
+                enrollment=purchase,
+                review_status=PropSocialEvidence.Review.VERIFIED,
+            ).select_related("reviewed_by")
+            if evidence_cutoff is not None:
+                social_records = social_records.filter(
+                    posted_at__lt=evidence_cutoff, reviewed_at__lt=evidence_cutoff
+                )
+            social_decision = check_social_posting(
+                purchase_confirmed_at=start,
+                as_of=django_timezone.now() if as_of is None else as_of,
+                verified_posts=[{
+                    "platform": item.platform,
+                    "post_url": item.post_url,
+                    "posted_at": item.posted_at,
+                    "reviewed_at": item.reviewed_at,
+                    "review_status": item.review_status,
+                    "reviewed_by_operator": bool(
+                        item.reviewed_by_id and item.reviewed_at is not None
+                        and item.reviewed_by.is_staff
+                        and item.reviewed_by_id != account.trader.user_id
+                    ),
+                    "author_verified": item.author_verified,
+                    "public_visible": item.public_visible,
+                    "disclosure_verified": item.disclosure_verified,
+                    "content_compliant": item.content_compliant,
+                    "date_verified": item.date_verified,
+                    "continued_visibility_verified": item.continued_visibility_verified,
+                } for item in social_records],
+            )
+        # There is only one set of two social posts per paid enrollment shared
+        # by both simulated phases. An absent purchase never creates readiness.
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
             prior = account.trader.accounts.filter(
@@ -147,7 +170,10 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
                 status=PropAccount.Status.PASSED,
                 reconciled_by_operator=True,
                 policy_version=account.policy_version,
-            ).exclude(pk=account.pk).exists()
+            )
+            if account.policy_version == NEW_CONTRACT_VERSION:
+                prior = prior.filter(challenge_enrollment=purchase)
+            prior = prior.exclude(pk=account.pk).exists()
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
                 account_capital=account.starting_capital_usd,
@@ -155,7 +181,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
                 trading_days=days,
                 max_profitable_day=best_day,
                 risk=risk,
-                evidence_verified=fully_verified,
+                evidence_verified=bool(fully_verified and purchase_window_valid),
                 prior_phase_passed=prior,
                 social_posts_verified=(
                     social_decision.satisfied if social_decision is not None else False
@@ -191,6 +217,8 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         "risk": risk,
         "assessment": assessment,
         "social_posting": social_decision,
+        "purchase_window_valid": purchase_window_valid,
+        "challenge_purchase": purchase,
         "promotion_period": promotion_period,
         "promotion_statistics": promotion_stats,
         "verified": fully_verified,
