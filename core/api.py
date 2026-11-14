@@ -51,6 +51,15 @@ class InternalStaffWritePermission(BasePermission):
         return bool(request.user.is_staff)
 
 
+class CatalogOwnerWritePermission(BasePermission):
+    """Public catalog reads; only an active owner can mutate offerings."""
+
+    def has_permission(self, request, view):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        return is_authorized_chat_operator(request.user)
+
+
 class OwnerTaskPermission(BasePermission):
     """Task inventories and controls are not staff-wide data."""
 
@@ -201,11 +210,11 @@ class KnowledgeArticleViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.select_related("knowledge_article", "owner").all()
     serializer_class = ProductSerializer
-    permission_classes = [StaffWritePermission]
+    permission_classes = [CatalogOwnerWritePermission]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
+        if is_authorized_chat_operator(user):
             return self.queryset
         return self.queryset.filter(active=True, knowledge_article__published=True)
 
@@ -214,12 +223,36 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         product = self.get_object()
-        if "active" in request.data:
+        if product.active:
             return Response(
-                {"detail": "Use the activate action; activation requires owner approval."},
+                {"detail": "Active products are immutable; create a new approved version."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        allowed = frozenset({
+            "title", "product_type", "price", "currency", "knowledge_article",
+        })
+        if not isinstance(request.data, dict) or not request.data or (
+            set(request.data) - allowed
+        ):
+            return Response(
+                {"detail": "Draft changes must use the allowlisted fields; owner and publication status are immutable."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if ApprovalRequest.objects.filter(
+            target_type="Product", target_id=str(product.pk),
+            action_type="activate_product", status="pending",
+        ).exists():
+            return Response(
+                {"detail": "Reject the pending activation request before editing this draft."},
+                status=status.HTTP_409_CONFLICT,
+            )
         return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "Product deletion through the API is disabled; preserve commercial history."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
@@ -267,25 +300,32 @@ class ProductViewSet(viewsets.ModelViewSet):
 class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
     queryset = Order.objects.prefetch_related("items__product").all()
     serializer_class = OrderSerializer
-    permission_classes = [InternalStaffWritePermission]
+    permission_classes = [IsAuthenticated]
     owner_field = "customer"
+
+    def get_queryset(self):
+        if is_authorized_chat_operator(self.request.user):
+            return self.queryset
+        return self.queryset.filter(customer=self.request.user)
 
     def create(self, request, *args, **kwargs):
         product_id = request.data.get("product_id")
         quantity = request.data.get("quantity", 1)
-        try:
-            quantity = int(quantity)
-        except (TypeError, ValueError):
-            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        if quantity < 1:
-            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
-        except (Product.DoesNotExist, TypeError, ValueError):
-            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
+        if type(quantity) is bool or not str(quantity).isdigit() or len(str(quantity)) > 3:
+            return Response({"detail": "quantity must be an integer from 1 to 100."}, status=status.HTTP_400_BAD_REQUEST)
+        quantity = int(quantity)
+        if not 1 <= quantity <= 100:
+            return Response({"detail": "quantity must be an integer from 1 to 100."}, status=status.HTTP_400_BAD_REQUEST)
 
-        from django.db import transaction
         with transaction.atomic():
+            try:
+                product = Product.objects.select_for_update().get(
+                    pk=product_id, active=True, knowledge_article__published=True,
+                )
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
+            if product.price is None or not product.price.is_finite() or product.price <= 0:
+                return Response({"detail": "Product has no valid positive price."}, status=status.HTTP_409_CONFLICT)
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",
@@ -311,6 +351,12 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         return Response(
             {"detail": "Orders are immutable through direct update; use controlled lifecycle actions."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "Order deletion is disabled to preserve reconciliation history."},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
