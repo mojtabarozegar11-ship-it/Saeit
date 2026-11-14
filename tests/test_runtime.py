@@ -88,13 +88,12 @@ def test_runtime_rejects_cross_project_finding_evidence():
 
 def test_approval_decision_preserves_reason_and_audits_actor_type():
     project, _ = setup_project()
-    approval = ApprovalRequest.objects.create(
-        action_type="publish",
-        target_type="AgentTask",
-        target_id="999999",
-        reason="Original reason",
-        requested_by=project.owner,
+    task = MasterAgent().plan(project, "publish", {"x": 1})
+    approval = ApprovalRequest.objects.get(
+        target_type="AgentTask", target_id=str(task.pk),
     )
+    approval.reason = "Original reason"
+    approval.save(update_fields=["reason"])
     result = ApprovalService().decide(
         approval_id=approval.pk,
         approved=True,

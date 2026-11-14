@@ -21,9 +21,33 @@ if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --qui
   echo MASTER_CRON_DAEMON_INACTIVE
   exit 1
 fi
-for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
+for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/canonical_bot_identity.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# The deployed installer is deliberately legacy-only until the verified
+# canonical handoff also covers evolution state, recovery and cron. Detect an
+# already canonical or operator-disabled runtime before ANY filesystem or DB
+# mutation: do not let the legacy seeder silently reverse that handoff.
+master_identity_preflight() {
+  SAEIT_ENV=production DJANGO_SETTINGS_MODULE=config.settings "$py" - <<'PY'
+import django
+
+django.setup()
+from core.models import Agent
+
+rows = list(Agent.objects.filter(
+    code__in=("economic-master-agent", "mojtaba-bot-ai"),
+).values_list("code", "active"))
+active = [code for code, enabled in rows if enabled]
+if len(active) > 1:
+    raise SystemExit("MASTER_ACTIVATION_MULTIPLE_ACTIVE_RUNTIMES")
+if "mojtaba-bot-ai" in active:
+    raise SystemExit("MASTER_ACTIVATION_CANONICAL_HANDOFF_NOT_SUPPORTED")
+if rows and not active:
+    raise SystemExit("MASTER_ACTIVATION_OPERATOR_DISABLED_RUNTIME")
+print("MASTER_ACTIVATION_LEGACY_RUNTIME_PREFLIGHT_OK")
+PY
+}
 # A SQLite rollback snapshot needs at least the size of the live database on
 # the backup filesystem. Refuse activation BEFORE changing cron if insufficient.
 # No database rows are read, and this gate creates no files.
@@ -61,6 +85,7 @@ PY
 # Resolve config.settings relative to the live Django app before importing it.
 # This read-only directory change precedes every backup or cron mutation.
 cd "$app"
+master_identity_preflight
 master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
@@ -82,6 +107,7 @@ modules=(
   core/worker_runner.py
   core/management/commands/autonomous_master_loop.py
   core/management/commands/online_income_cycle.py
+  core/canonical_bot_identity.py
   core/recovery_scheduler.py
   core/management/commands/recover_stale_tasks.py
 )
@@ -201,7 +227,7 @@ done
   core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py \
   core/self_funding_policy.py core/task_runtime.py \
   core/management/commands/seed_online_income_agents.py \
-  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+  core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/canonical_bot_identity.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
 "$py" -m py_compile \
   core/management/commands/autonomous_master_loop.py \
   core/management/commands/online_income_cycle.py
@@ -233,25 +259,54 @@ test -x "$py" && test -f "$base/django-app/manage.py"
 export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$base/django-app"
-steps="$("$py" - "$base/private/master-agent/evolution.json" <<'PY'
-import json,sys
-from pathlib import Path
-p=Path(sys.argv[1])
-try:
-    steps=int(json.loads(p.read_text(encoding="utf-8")).get("max_steps",1))
-except (FileNotFoundError,ValueError,TypeError,KeyError):
-    steps=1
-# Execute up to 20 tasks serially. Product volume and approvals remain gated.
-print(min(20, max(1, steps)))
-PY
-)"
-# Hold one lock across recovery AND planning/execution. Two independent
-# flock invocations leave a race window that can spawn duplicate master work.
+# Hold the same lock across fresh preflight, recovery and serial execution.
+# Never execute the former 20-step budget solely from a stale JSON file.
 exec 9>"$root/master-cycle.lock"
 if ! flock -n 9; then
   echo MASTER_CYCLE_ALREADY_RUNNING
   exit 0
 fi
+steps=1
+preflight_passed=false
+if db="$("$py" - <<'PY'
+from django.conf import settings
+print(settings.DATABASES["default"]["NAME"])
+PY
+)"; then
+  if policy="$(timeout 90 "$py" "$root/evolution.py" \
+      --db "$db" --state "$base/private/master-agent/evolution.json" \
+      --check-only 2>&1)"; then
+    proposed="$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_MAX_STEPS=//p')"
+    approved_before="$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_PREVIOUS_MAX_STEPS=//p')"
+    # A read-only check may tighten the policy immediately but cannot expand
+    # the last persisted budget before its scheduled audited evolution pass.
+    if [[ "$proposed" =~ ^(1|2|3|20)$ && "$approved_before" =~ ^(1|2|3|20)$ ]] &&
+       [[ "$(printf '%s\n' "$policy" | sed -n 's/^MASTER_EVOLUTION_CHECK_ONLY=//p')" == true ]]; then
+      if (( proposed < approved_before )); then
+        steps="$proposed"
+      else
+        steps="$approved_before"
+      fi
+      preflight_passed=true
+      echo "MASTER_EVOLUTION_FRESH_PREFLIGHT_STEPS=$steps"
+    else
+      echo MASTER_EVOLUTION_PREFLIGHT_INVALID_RESULT
+    fi
+  else
+    echo MASTER_EVOLUTION_PREFLIGHT_EVALUATION_FAILED
+  fi
+else
+  echo MASTER_EVOLUTION_DB_SETTINGS_FAILED
+fi
+if [[ "$preflight_passed" != true ]]; then
+  # Never let even a single autonomous task execute after failed integrity
+  # verification. Exit as a temporary failure: cron retries at the next
+  # scheduled cycle; the job and other unrelated services remain enabled.
+  echo MASTER_EVOLUTION_PREFLIGHT_BLOCKED_NO_TASK_EXECUTION
+  exit 75
+fi
+# Read-only policy verification succeeded; perform bounded recovery and
+# serial work only behind the worker's independent owner-approval guards.
 timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
 timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH

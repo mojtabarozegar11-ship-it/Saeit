@@ -1,5 +1,6 @@
 from django.db.models import Case, IntegerField, Value, When
 
+from .canonical_bot_identity import is_master_only_action, resolve_single_active_agent
 from .models import Agent, AgentCapability
 from .services import normalize_risk
 
@@ -20,6 +21,13 @@ class AgentRegistry:
         capability = self._capability(normalized) or self._capability(f"core_{normalized}")
         if not capability:
             return None
+        if is_master_only_action(normalized):
+            # Do not dispatch a master economic capability to a specialist
+            # merely because it was granted the same capability in the DB.
+            master = resolve_single_active_agent(Agent)
+            if master is None or not capability.agents.filter(pk=master.pk, active=True).exists():
+                return None
+            return master
         # String ordering puts "critical" before "low". Use policy risk order.
         risk_priority = Case(
             *(When(risk_level=name, then=Value(priority)) for name, priority in RISK_ORDER.items()),

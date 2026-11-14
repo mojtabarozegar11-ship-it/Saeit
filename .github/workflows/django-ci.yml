@@ -41,6 +41,15 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: python manage.py collectstatic --noinput
+      - name: Scoped Mojtaba.bot.ai self-evolution integration regressions
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          python -m pytest -q \
+            core/tests/test_economic_worker.py::test_master_self_improvement_rejects_invalid_dossier_in_primary_runtime \
+            core/tests/test_economic_worker.py::test_master_self_improvement_has_verified_manifest_but_no_live_promotion
       - name: Run tests
         env:
           PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser

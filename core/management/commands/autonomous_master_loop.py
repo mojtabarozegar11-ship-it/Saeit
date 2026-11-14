@@ -2,7 +2,8 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
-from core.models import AgentTask
+from core.models import Agent, AgentTask
+from core.canonical_bot_identity import resolve_single_active_agent
 from core.economic_tool_pack import build_economic_gateway
 from core.worker_runner import WorkerRunner
 
@@ -24,18 +25,23 @@ class Command(BaseCommand):
             self.stdout.write("AUTO_BLOCKED_NO_REGISTERED_TOOLS")
             return
         runner = None
+        master_agent = resolve_single_active_agent(Agent)
+        if master_agent is None:
+            self.stdout.write("AUTO_BLOCKED_NO_ACTIVE_CANONICAL_BOT")
+            self.stdout.write("AUTONOMOUS_IDLE")
+            return
         requested_steps=max(1, opts["max_steps"])
         steps=min(20, requested_steps)
         if requested_steps>steps:
             self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")
         for step in range(steps):
-            active=self._next_eligible_task(supported)
+            active=self._next_eligible_task(supported, master_agent)
             if not active:
                 call_command("online_income_cycle")
-                active=self._next_eligible_task(supported)
+                active=self._next_eligible_task(supported, master_agent)
             if not active:
                 unsupported = AgentTask.objects.filter(
-                    agent__code="economic-master-agent", agent__active=True, status="queued",
+                    agent=master_agent, status="queued",
                 ).exclude(
                     capability_code__in=supported,
                     action_type=F("capability_code"),
@@ -61,8 +67,6 @@ class Command(BaseCommand):
                 self.stdout.write(f"AUTO_REPLAN failed_task={active.pk} reason={exc} prerequisite={prereq or 'unknown'}")
                 if not prereq:
                     return
-                # Failed task is already safely requeued by WorkerRunner when retries remain.
-                # Cancel it as superseded so the inferred prerequisite can run first.
                 active.refresh_from_db()
                 if active.status=="queued":
                     active.status="cancelled"
@@ -77,8 +81,6 @@ class Command(BaseCommand):
                     "reason":str(exc)[:1000]},status="queued")
                 continue
 
-            # Stop when progress reaches an external-world boundary rather than
-            # pretending an internal artifact equals a sale.
             done.refresh_from_db()
             if done.output_data.get("verified_effect") is not True:
                 self.stdout.write(
@@ -90,9 +92,9 @@ class Command(BaseCommand):
                 return
 
     @staticmethod
-    def _next_eligible_task(supported):
+    def _next_eligible_task(supported, master_agent):
         return AgentTask.objects.filter(
-            agent__code="economic-master-agent", agent__active=True, status="queued",
+            agent=master_agent, status="queued",
             capability_code__in=supported,
             action_type=F("capability_code"),
         ).order_by("created_at", "pk").first()

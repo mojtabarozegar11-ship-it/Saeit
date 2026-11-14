@@ -233,12 +233,19 @@ def _signal(product: str, rows: list, now: datetime, data_source: str = SOURCE) 
         "id": signal_id, "market": "crypto", "symbol": product.replace("-", "/"),
         "timeframe": "1h", "stance": stance, "observed_at": observed_at.isoformat(),
         "method": METHOD, "data_source": data_source,
+        # Exactly the finished USD-quoted candle close used to determine
+        # stance. Existing signed-feed schema accepts this optional evidence.
+        "reference_close_usd": last,
     }
 
 
 def _observed_signal(product: str, now: datetime) -> dict:
     failures = []
-    for source, fetcher in ((SOURCE, _fetch_candles), (BITSTAMP_SOURCE, _fetch_bitstamp_candles), (BINANCE_SOURCE, _fetch_binance_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
+    # These observations are explicitly BTC/USD or ETH/USD. Binance's
+    # BTCUSDT/ETHUSDT candles have a USDT, NOT USD, quote and must not
+    # silently enter a USD-only report. Its isolated parser remains available
+    # for a future explicit USDT-symbol schema; it is not an active fallback.
+    for source, fetcher in ((SOURCE, _fetch_candles), (BITSTAMP_SOURCE, _fetch_bitstamp_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
         try:
             return _signal(product, fetcher(product), now, source)
         except MarketDataError as exc:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import stat
 import tempfile
@@ -17,8 +18,13 @@ from pathlib import Path
 
 EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
 ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
+# USD-quoted spot markets only. Binance BTCUSDT/ETHUSDT cannot be
+# relabelled as BTC/USD or ETH/USD without breaking price provenance.
+CATALOG_PATH = Path(__file__).resolve().parents[1] / "runtime" / "mojtrade_signal_catalog_v1.json"
+
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
+    "bitstamp-public-ohlc",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
 })
@@ -26,6 +32,43 @@ ALLOWED_SOURCES = frozenset({
 
 class ProductArtifactError(ValueError):
     """Raised when a research report is not eligible for packaging."""
+
+
+def _load_signal_catalog(path: Path = CATALOG_PATH) -> dict:
+    try:
+        catalog = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ProductArtifactError("signal_catalog_unreadable") from exc
+    if not isinstance(catalog, dict):
+        raise ProductArtifactError("signal_catalog_invalid")
+    if catalog.get("schema") != "mojtaba.bot.ai.signal-catalog.v1":
+        raise ProductArtifactError("signal_catalog_schema_invalid")
+    if catalog.get("canonical_bot_id") != "mojtaba.bot.ai":
+        raise ProductArtifactError("signal_catalog_owner_invalid")
+    if catalog.get("market_scope") != ["BTC/USD", "ETH/USD"]:
+        raise ProductArtifactError("signal_catalog_market_scope_invalid")
+    delivery = catalog.get("delivery")
+    if (not isinstance(delivery, dict)
+            or delivery.get("access_days") != 15
+            or delivery.get("maximum_verified_signals_per_purchase") != 10
+            or delivery.get("primary") != "authenticated_user_panel"
+            or delivery.get("backup") != "buyer_email"):
+        raise ProductArtifactError("signal_catalog_delivery_invalid")
+    payment = catalog.get("payment")
+    if (not isinstance(payment, dict)
+            or payment.get("network") != "tron-mainnet"
+            or payment.get("asset") != "TRX"
+            or payment.get("receiver") != "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+            or payment.get("settlement") != "server_verified_finality_required"):
+        raise ProductArtifactError("signal_catalog_payment_invalid")
+    tiers = catalog.get("tiers")
+    if (not isinstance(tiers, list) or len(tiers) != 3
+            or [tier.get("price_trx") for tier in tiers] != [5, 10, 15]
+            or any(tier.get("validity_days") != 15
+                   or tier.get("max_verified_signals") != 10
+                   for tier in tiers)):
+        raise ProductArtifactError("signal_catalog_tiers_invalid")
+    return catalog
 
 
 def _aware(value: object, field: str) -> datetime:
@@ -40,7 +83,8 @@ def _aware(value: object, field: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
+def build_artifact(report_path: Path, now: datetime | None = None, catalog_path: Path = CATALOG_PATH) -> dict:
+    catalog = _load_signal_catalog(catalog_path)
     if not report_path.is_absolute() or report_path.is_symlink():
         raise ProductArtifactError("report_path_must_be_private_absolute_file")
     if not report_path.is_file():
@@ -86,17 +130,29 @@ def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
         method = signal.get("method")
         if not isinstance(method, str) or not method.strip():
             raise ProductArtifactError("report_method_missing")
-        normalized.append({
+        item = {
             "symbol": expected_symbol,
             "stance": stance,
             "observed_at": observed_at.isoformat(),
             "data_source": source,
             "method": method.strip(),
-        })
+        }
+        if "reference_close_usd" in signal:
+            price = signal["reference_close_usd"]
+            if (type(price) not in (int, float)
+                    or not math.isfinite(price)
+                    or not 0 < price <= 1_000_000_000):
+                raise ProductArtifactError("report_close_usd_invalid")
+            item["reference_close_usd"] = float(price)
+        normalized.append(item)
     report_hash = hashlib.sha256(raw).hexdigest()
     return {
         "schema": "mojtrade.research-product-artifact.v1",
         "product_id": "mojtrade-hourly-market-research",
+        "catalog_schema": catalog["schema"],
+        "catalog_tiers": catalog["tiers"],
+        "access_days": catalog["delivery"]["access_days"],
+        "maximum_verified_signals": catalog["delivery"]["maximum_verified_signals_per_purchase"],
         "version": "1.0.0",
         "generated_at": current.replace(microsecond=0).isoformat(),
         "source_report_generated_at": generated_at.isoformat(),

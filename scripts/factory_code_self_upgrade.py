@@ -68,8 +68,13 @@ def digest_bytes(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def _has_symlink_component(path):
+    """Reject symbolic links at every existing component of a destination."""
+    return any(part.is_symlink() for part in (path, *path.parents))
+
+
 def atomic(path, value):
-    if path.is_symlink() or path.parent.is_symlink():
+    if _has_symlink_component(path):
         raise RuntimeError("CODE_UPGRADE_UNSAFE_OUTPUT")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temp = tempfile.mkstemp(prefix=".self-upgrade-", dir=str(path.parent))
@@ -147,10 +152,15 @@ def probe(python, source, stage, method_name, payload_kind):
 def generate(repo, output, python=None):
     base = Path(repo).resolve()
     out = Path(output).expanduser().absolute()
-    if out.is_symlink() or out == base or base in out.parents:
+    # Reject symlinked parents before mkdir; lexical containment alone can
+    # otherwise direct private candidates back into the checked-out source.
+    if _has_symlink_component(out):
+        raise RuntimeError("CODE_UPGRADE_UNSAFE_OUTPUT_ANCESTOR")
+    real_out = out.resolve(strict=False)
+    if real_out == base or base in real_out.parents:
         raise RuntimeError("CODE_UPGRADE_OUTPUT_MUST_BE_PRIVATE_OUTSIDE_CHECKOUT")
     out.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if out.is_symlink() or not out.is_dir():
+    if _has_symlink_component(out) or not out.is_dir():
         raise RuntimeError("CODE_UPGRADE_OUTPUT_UNSAFE")
     modules = inventory(base)
     allowed = {rule[0] for rule in SAFE_FIXES}
@@ -182,11 +192,11 @@ def generate(repo, output, python=None):
             "changed_source": True, "private_only": True,
         }
         slot = out / ("candidate-" + str(len(candidates) + 1))
-        if slot.exists() and slot.is_symlink():
+        if _has_symlink_component(slot):
             raise RuntimeError("CODE_UPGRADE_UNSAFE_SLOT")
         slot.mkdir(parents=True, exist_ok=True, mode=0o700)
         proposed = slot / original.name
-        if proposed.is_symlink():
+        if _has_symlink_component(proposed):
             raise RuntimeError("CODE_UPGRADE_UNSAFE_PATCH_PATH")
         proposed.write_text(candidate, encoding="utf8")
         os.chmod(proposed, 0o600)

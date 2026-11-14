@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with Bitstamp's unauthenticated OHLC endpoint as the first fallback, followed by Binance public klines, Kraken Spot OHLC and Bitfinex public-candle fallbacks. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
+- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with Bitstamp's unauthenticated OHLC endpoint as the first fallback, followed by Kraken Spot OHLC and Bitfinex public-candle fallbacks. The separate Binance BTCUSDT/ETHUSDT parser is **excluded from the active USD-quote fallback chain**: its prices are quoted in USDT, not USD, and publishing them as BTC/USD or ETH/USD would misrepresent the market. Future USDT support requires an explicit schema and matching downstream consumer. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
 - Uses only finished hourly candles; rejects data gaps, duplicate or invalid prices, and stale observations.
 - Calculates reproducible SMA20/SMA50/momentum10 *research watch states*; these are **not** verified profitable strategies or personalized recommendations.
 - Emits exactly the schema required by the separate signed-feed interface in PR #1892 (`schema_version=1`, `source=mojtrade-vps`, `signals[]`). The output is private, atomically replaced, and expires in 90 minutes.
@@ -12,6 +12,64 @@
 ## Read-only consumption path
 
 `scripts/mojtrade_consume_observation.py` is the downstream research consumer. It reads the private observation, rejects expired/future payloads, validates the schema, provider, symbols, timeframe and research stance, and atomically writes a private report. The report explicitly contains `action=research_only`, `execution=disabled` and `orders=0`. It never places orders, contacts a broker, sends email or changes the source observation.
+
+## Canonical master-bot research review (new capability)
+
+The **existing** `economic-master-agent` (`Mojtaba.bot.ai`), not a second bot,
+can execute a queued `income_mojtrade_research_review` task via its normal
+`ToolGateway`, `TaskRuntime` and audit ledger. The seeder grants this low-risk
+capability only to the existing master, not to factory/specialist agents.
+This adds **no new cron**, daemon, market-data fetch, broker connector or live
+trading permission. An explicit queued, correctly authorized task is required.
+
+The review reads exactly
+`~/factory-runtime/private/mojtrade/validated-payload.json`, with no
+caller-controlled pathname, enforces 0700 private directory/0600-style file
+permissions, no file symlinks/hardlinks, 96 KB max, immutable read snapshot
+consistency, the existing consumer's schema/provider/market validation,
+at most 90-minute source validity, and completed candle freshness within 3h.
+Missing/stale/untrusted evidence is an explicit failed task, never invented
+signals. No source file is modified.
+
+The output records SHA-256 provenance, source, symbol, directional *watch*
+classification, and **zero** independently measured forward-outcome or
+backtest samples. Win rate and independently verified P&L are **null**;
+orders=0, execution=disabled, publication and delivery=false. Task completion
+verifies that this bounded private audit occurred, **not** the strategy's
+predictive accuracy, profitability or live VPS installation.
+A real performance score requires independently sourced future market closes,
+a clearly defined entry/exit and fee/slippage model, sample-size tracking,
+and separate trade-execution approvals.
+
+## Forward research outcomes — after real future observations only
+
+The USD-quoted observer now records the actual `reference_close_usd` of its
+last **finished** 1-hour candle, alongside source, timestamp and watch stance.
+The reader and private-product packager accept that optional, strictly positive
+finite field; **legacy snapshots without it remain readable but cannot be
+included in return calculations**.
+
+The existing master gains only the manually queued
+`income_mojtrade_forward_audit` low-risk capability, not a second bot,
+scheduled trading loop or broker adapter. It reads previously completed
+`income_mojtrade_research_review` task evidence from the same Django audit
+database; there is no network call, order, fee payment, file write or public
+feed. Repeated snapshot hashes are counted once; only the earliest reviewed
+observation per closed candle is eligible. The model compares an issued
+`watch_buy` or `watch_sell` with a **later** completed hourly candle; neutral
+stances do not count as trades. The fixed, disclosed model subtracts
+10 basis points in **fees** and 5 basis points **slippage** per side (30 bp
+round trip). These are assumptions, **not observed costs or executable fills**.
+
+Samples are explicitly `hypothetical_one_hour_pairs`, never executed orders,
+verified net P&L, actual cash income, or independent market attestation.
+A modeled win-rate estimate remains **null until at least 30 eligible pairs**
+exist. The maximum history is bounded, with duplicates, future/old invalid
+timestamps, unsupported USD source provenance and forged prices rejected.
+The closed-candle reference close and observation IDs are local model evidence,
+not independently signed exchange receipts. Actual viability still requires
+an outside data audit, documented slippage/fees, walk-forward outcomes,
+out-of-sample stress tests, broker-safe execution approvals and reconciliation.
 
 ## Independent VPS execution path
 

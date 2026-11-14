@@ -49,7 +49,7 @@ class KnowledgeAgentGenerateTests(TestCase):
             status="queued",
         )
 
-    def _approved_paid_grant(self, target_task=None, action="knowledge_content_generation"):
+    def _approved_paid_grant(self, target_task=None, action="knowledge_content_generation", run_id=None):
         owner = get_user_model().objects.create_user(
             username=f"knowledge-owner-{ApprovalRequest.objects.count()}", password="test-pass"
         )
@@ -65,7 +65,8 @@ class KnowledgeAgentGenerateTests(TestCase):
         )
         return ApprovalService().issue_grant(
             approval.pk, owner.pk,
-            {"action": "knowledge_content_generation", "run_id": self.run.pk, "paid_model": True},
+            {"action": "knowledge_content_generation",
+             "run_id": self.run.pk if run_id is None else run_id, "paid_model": True},
         )
 
     def test_missing_model_key_blocks_and_closes_the_task(self):
@@ -124,7 +125,10 @@ class KnowledgeAgentGenerateTests(TestCase):
             input_data={"run_id": 99999},
             status="queued",
         )
-        grant = self._approved_paid_grant(target_task=unrelated_task)
+        # A grant for a different task cannot use this queued run as scope.
+        with self.assertRaisesRegex(ValueError, "run scope mismatch"):
+            self._approved_paid_grant(target_task=unrelated_task)
+        grant = self._approved_paid_grant(target_task=unrelated_task, run_id=99999)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "configured-key"}), patch(
             "core.management.commands.knowledge_agent_generate.OpenAI"
         ) as openai:
