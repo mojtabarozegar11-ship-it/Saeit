@@ -313,6 +313,8 @@ class PropChallengeEnrollment(models.Model):
         from .social_policy import NEW_CONTRACT_VERSION, aware_utc
         if self.terms_version != NEW_CONTRACT_VERSION:
             raise ValidationError("New enrollment uses pre-disclosed v1.2 contract")
+        if self.trader_id and self.trader.user.is_active is not True:
+            raise ValidationError("Inactive buyer cannot enter a funded challenge")
         import re
         if (type(self.verified_invoice_ref) is not str
                 or re.fullmatch(
@@ -423,6 +425,7 @@ class PropSocialEvidence(models.Model):
                     or reviewed > _django_timezone.now()
                     or not self.reviewed_by_id
                     or self.reviewed_by.is_staff is not True
+                    or self.reviewed_by.is_active is not True
                     or self.reviewed_by_id == self.account.trader.user_id
                     or not all((
                         self.author_verified, self.public_visible,
