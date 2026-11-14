@@ -497,3 +497,6 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+# Register the cross-site, evidence-backed TRON invoice with the existing core app.
+from .tron_gateway_invoice import TronGatewayInvoice  # noqa: E402,F401
