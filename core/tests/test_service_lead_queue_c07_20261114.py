@@ -491,3 +491,148 @@ def test_owner_dashboard_discloses_uninspected_queue_instead_of_zero_buyers(owne
     board = client.get(reverse("command_center_service_proposal_funnel_dashboard"))
     assert board.status_code == 200
     assert "پرونده هنوز در این نوبت بررسی نشده‌اند" in board.content.decode()
+
+
+@pytest.mark.django_db
+def test_admin_handoff_creates_true_owner_workitem_with_24h_deadline(owner):
+    from command_center.models import WorkItem
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    before = timezone.now()
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner),
+            CompanyInquiry.objects.filter(pk=lead.pk),
+        )
+    lead.refresh_from_db()
+    assert lead.status == "reviewing"
+    task = WorkItem.objects.get(
+        source_type="company_service_proposal",
+        source_id=str(lead.pk),
+    )
+    assert task.created_by_id == owner.pk
+    assert task.status == "open"
+    assert task.priority == "high"
+    assert task.assignee_id is None
+    assert task.due_at is not None
+    assert before + timedelta(hours=23, minutes=59) <= task.due_at
+    assert task.due_at <= timezone.now() + timedelta(hours=24, minutes=1)
+    assert "AGR-01" in task.title
+    assert "ارسال" in task.description
+    assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 1
+    assert Order.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_admin_handoff_is_idempotent_even_for_prepared_record(owner):
+    from command_center.models import WorkItem
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        for _ in range(3):
+            panel.prepare_scoped_service_response(
+                SimpleNamespace(user=owner),
+                CompanyInquiry.objects.filter(pk=lead.pk),
+            )
+    assert WorkItem.objects.filter(
+        source_type="company_service_proposal", source_id=str(lead.pk)
+    ).count() == 1
+    assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 1
+
+
+@pytest.mark.django_db
+def test_owner_workitem_handoff_rejects_unconsented_and_closed_leads(owner):
+    from command_center.models import WorkItem
+    valid = create_lead()
+    create_lead(source=False)
+    create_lead(status="closed")
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner),
+            CompanyInquiry.objects.all(),
+        )
+    assert WorkItem.objects.count() == 1
+    assert WorkItem.objects.get().source_id == str(valid.pk)
+    assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 1
+
+
+@pytest.mark.django_db
+def test_owner_workitem_handoff_never_copies_pii_to_task_text(owner):
+    from command_center.models import WorkItem
+    lead = create_lead()
+    lead.phone = "PRIVATE-CUSTOMER-4404"
+    lead.message = "PRIVATE-SERVICE-SPEC-UNIQUE-CUSTOMER-2026"
+    lead.save(update_fields=["phone", "message"])
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner),
+            CompanyInquiry.objects.filter(pk=lead.pk),
+        )
+    task = WorkItem.objects.get()
+    serialized = task.title + task.description + task.source_type
+    for field in (lead.name, lead.email, lead.phone, lead.message):
+        assert field not in serialized
+
+
+@pytest.mark.django_db
+def test_owner_funnel_counts_actual_workitems_and_overdue_not_fake_cash(owner):
+    from command_center.models import WorkItem
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner),
+            CompanyInquiry.objects.filter(pk=lead.pk),
+        )
+    WorkItem.objects.filter(source_id=str(lead.pk)).update(
+        due_at=timezone.now() - timedelta(hours=2)
+    )
+    result = service_proposal_funnel_snapshot()
+    assert result["workitems_total"] == 1
+    assert result["workitems_open"] == 1
+    assert result["workitems_due_now"] == 1
+    assert result["cash_settled"] is None
+    client = Client()
+    client.force_login(owner)
+    html = client.get(reverse("command_center_service_proposal_funnel_dashboard")).content.decode()
+    assert "ارجاعات معوق" in html
+    assert reverse("admin:command_center_workitem_changelist") in html
+
+
+@pytest.mark.django_db
+def test_unauthorized_staff_cannot_create_workitem_handoff():
+    from command_center.models import WorkItem
+    person = get_user_model().objects.create_user(
+        username="guest-staff-c07", email="staff-private@example.invalid",
+        password="dummy-only", is_staff=True,
+    )
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=person), CompanyInquiry.objects.filter(pk=lead.pk)
+        )
+    assert WorkItem.objects.count() == 0
+    assert CompanyInquiry.objects.get(pk=lead.pk).status == "new"
+
+
+@pytest.mark.django_db
+def test_admin_bulk_handoff_keeps_existing_finished_task_closed(owner):
+    from command_center.models import WorkItem
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner), CompanyInquiry.objects.filter(pk=lead.pk)
+        )
+    WorkItem.objects.filter(source_id=str(lead.pk)).update(status="done")
+    with patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner), CompanyInquiry.objects.filter(pk=lead.pk)
+        )
+    assert WorkItem.objects.filter(
+        source_id=str(lead.pk), status="done"
+    ).count() == 1
+    assert WorkItem.objects.count() == 1
