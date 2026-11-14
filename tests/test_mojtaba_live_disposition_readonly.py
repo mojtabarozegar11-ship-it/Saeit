@@ -385,6 +385,16 @@ def test_unknown_process_route_cannot_hide_invalid_count(invalid):
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+@pytest.mark.parametrize("bad_key", [None, 42, False])
+def test_disposition_rejects_nontext_process_route_keys(bad_key):
+    vps = snap("vps")
+    vps["processes"]["state"] = "observed"
+    vps["processes"]["route_match_counts"] = {bad_key: 1}
+    with pytest.raises(ValueError, match="TOPOLOGY_PROCESS_COUNTS_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
