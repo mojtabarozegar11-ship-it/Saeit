@@ -7,7 +7,8 @@ from .newsletter_models import NewsletterStory
 from .company_inquiry_models import CompanyInquiry
 from .company_inquiry_policy import (
     FARM_SUBJECT, WINDOW_SECONDS, can_create, clean_history,
-    replay_inquiry_id, add_new,
+    replay_inquiry_id, add_new, normalize_customer_text,
+    normalize_customer_email, normalize_optional_phone,
 )
 
 
@@ -35,7 +36,7 @@ class CompanyInquiryForm(forms.ModelForm):
     """Validate explicit-consent leads before storing in the existing CRM."""
 
     consent = forms.BooleanField(required=True, label="با ثبت درخواست و بررسی اطلاعات برای پاسخ‌گویی موافقم")
-    website = forms.CharField(required=False, widget=forms.HiddenInput)
+    website = forms.CharField(required=False, max_length=128, widget=forms.HiddenInput)
 
     message = forms.CharField(max_length=5000, strip=True)
 
@@ -44,9 +45,49 @@ class CompanyInquiryForm(forms.ModelForm):
         fields = ("kind", "name", "organization", "email", "phone", "subject", "message")
 
     def clean_website(self):
-        if self.cleaned_data.get("website"):
+        if self.cleaned_data.get("website", "").strip():
             raise forms.ValidationError("درخواست نامعتبر است")
         return ""
+
+    @staticmethod
+    def _normalized_text(value, *, multiline=False):
+        try:
+            return normalize_customer_text(value, multiline=multiline)
+        except ValueError as exc:
+            raise forms.ValidationError("کاراکتر یا قالب متن نامعتبر است") from exc
+
+    def clean_name(self):
+        name = self._normalized_text(self.cleaned_data["name"])
+        if not name:
+            raise forms.ValidationError("نام درخواست‌دهنده الزامی است")
+        return name
+
+    def clean_organization(self):
+        return self._normalized_text(self.cleaned_data.get("organization", ""))
+
+    def clean_subject(self):
+        subject = self._normalized_text(self.cleaned_data["subject"])
+        if not subject:
+            raise forms.ValidationError("موضوع درخواست الزامی است")
+        return subject
+
+    def clean_message(self):
+        message = self._normalized_text(self.cleaned_data["message"], multiline=True)
+        if not message:
+            raise forms.ValidationError("شرح درخواست الزامی است")
+        return message
+
+    def clean_email(self):
+        try:
+            return normalize_customer_email(self.cleaned_data["email"])
+        except ValueError as exc:
+            raise forms.ValidationError("نشانی ایمیل معتبر نیست") from exc
+
+    def clean_phone(self):
+        try:
+            return normalize_optional_phone(self.cleaned_data.get("phone", ""))
+        except ValueError as exc:
+            raise forms.ValidationError("قالب یا طول شماره تلفن معتبر نیست") from exc
 
 
 # Session-based admission is not a global atomic or IP-based rate limit.
