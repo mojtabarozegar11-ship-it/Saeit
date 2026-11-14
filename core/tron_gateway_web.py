@@ -32,6 +32,7 @@ from django.views.decorators.http import require_http_methods
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 from .tron_gateway_invoice import TronGatewayInvoice
 from .tron_gateway_catalog import CatalogueScanLimit, paginate_eligible
+from .tron_gateway_identity import normalize_buyer_email
 from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, verify_native_trx
 
 PROVIDER = "zomorod_tron_mainnet_v1"
@@ -87,16 +88,12 @@ def _email_key(email):
 
 
 def _valid_email(raw):
-    if type(raw) is not str:
-        raise ValueError("Email required")
-    email = raw.strip().lower()
-    if len(email) > 254 or len(email) < 6 or "\n" in email or "\r" in email:
-        raise ValueError("Email invalid")
+    # Reject raw control / invisible format characters BEFORE strip() changes
+    # the evidence; keep Django's actual email syntax validation authoritative.
     try:
-        validate_email(email)
+        return normalize_buyer_email(raw, validate_email)
     except ValidationError as exc:
         raise ValueError("Email invalid") from exc
-    return email
 
 
 def _limit(request, email, purpose="email"):
