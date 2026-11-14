@@ -24,8 +24,10 @@ def reject_nonfinite(value):
     raise ValueError("non-finite JSON number rejected")
 
 
-def read_strict_json(path):
+def read_strict_json(path, *, max_bytes=MAX_BYTES):
     """Open regular input without following links; reject ambiguous JSON."""
+    if type(max_bytes) is not int or not 1 <= max_bytes <= MAX_BYTES:
+        raise ValueError("invalid input size policy")
     src = Path(path)
     if src.is_symlink():
         raise ValueError("intake symlink rejected")
@@ -36,16 +38,16 @@ def read_strict_json(path):
         raise ValueError("intake file inaccessible") from exc
     with os.fdopen(fd, "rb") as handle:
         meta = os.fstat(handle.fileno())
-        if not stat.S_ISREG(meta.st_mode) or meta.st_size > MAX_BYTES:
+        if not stat.S_ISREG(meta.st_mode) or meta.st_size > max_bytes:
             raise ValueError("intake must be a regular file at most 64 KiB")
-        raw = handle.read(MAX_BYTES + 1)
-    if len(raw) > MAX_BYTES:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
         raise ValueError("intake exceeds maximum length")
     try:
         return json.loads(raw.decode("utf-8"),
                           object_pairs_hook=reject_duplicate_keys,
                           parse_constant=reject_nonfinite)
-    except (ValueError, UnicodeError) as exc:
+    except (ValueError, UnicodeError, RecursionError) as exc:
         raise ValueError("invalid or ambiguous JSON intake") from exc
 
 
