@@ -31,6 +31,8 @@ from django.views.decorators.http import require_http_methods
 
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 from .tron_gateway_invoice import TronGatewayInvoice
+from .tron_gateway_settlement_claim import TronMainnetSettlementClaim
+from .tron_gateway_settlement_policy import canonical_settlement_claim, InvalidSettlementProof
 from .tron_gateway_catalog import CatalogueScanLimit, paginate_eligible
 from .tron_gateway_identity import normalize_buyer_email
 from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, verify_native_trx
@@ -334,12 +336,25 @@ def email_claim(request, token):
 
 
 def _record_paid(invoice_id, proof):
-    # The payer's browser cannot write a credit without proof from BOTH nodes.
+    # Legacy walletless worker exclusivity must be independently proven.
+    # This gate also covers direct cron/discovery calls, not only public URLs.
+    if getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True:
+        return False
+    try:
+        claim = canonical_settlement_claim(proof)
+    except InvalidSettlementProof:
+        return False
+    # Database PRIMARY KEY on canonical TXID arbitrates concurrent NEW writers.
     with transaction.atomic():
         invoice = TronGatewayInvoice.objects.select_for_update().select_related(
             "order", "payment_intent").get(pk=invoice_id)
         if invoice.status == "paid":
-            return invoice.txid == proof["txid"]
+            return (invoice.txid == claim["txid"] and
+                    TronMainnetSettlementClaim.objects.filter(
+                        txid=claim["txid"], invoice=invoice,
+                        payment_intent=invoice.payment_intent,
+                        proof_digest=claim["proof_digest"],
+                    ).exists())
         if (invoice.status != "awaiting_payment" or invoice.order.status != "pending"
                 or invoice.payment_intent.status != "awaiting_payment"
                 or invoice.payment_intent.provider != PROVIDER
@@ -354,14 +369,21 @@ def _record_paid(invoice_id, proof):
         if (PaymentWebhookEvent.objects.filter(event_id__iexact=proof["txid"]).exists()
                 or LedgerEntry.objects.filter(reference__iendswith=":" + proof["txid"]).exists()):
             return False
+        # The unique claim, event, ledger, intent and order commit atomically.
+        # This does NOT protect an unadapted concurrently running old writer.
+        TronMainnetSettlementClaim.objects.create(
+            txid=claim["txid"], provider=PROVIDER, invoice=invoice,
+            payment_intent=invoice.payment_intent,
+            proof_digest=claim["proof_digest"],
+        )
         event = PaymentWebhookEvent.objects.create(
-            provider=PROVIDER, event_id=proof["txid"], event_type="tron_finalized",
+            provider=PROVIDER, event_id=claim["txid"], event_type="tron_finalized",
             payment_intent=invoice.payment_intent, payload_hash=proof["proof_digest"],
             status="processed", processed_at=dj_timezone.now())
         LedgerEntry.objects.create(
             order=invoice.order, payment_intent=invoice.payment_intent,
             entry_type="credit", amount=invoice.order.total, currency=invoice.order.currency,
-            reference="tron-mainnet:" + proof["txid"],
+            reference="tron-mainnet:" + claim["txid"],
             metadata={"asset": "TRX", "network": "tron-mainnet",
                       "amount_sun": invoice.amount_sun,
                       "receiver": MAINNET_RECEIVER,
@@ -373,13 +395,13 @@ def _record_paid(invoice_id, proof):
                       "merchant_invoice_id": invoice.pk,
                       "fulfillment_kind": invoice.fulfillment_kind,
                       "webhook_event_id": event.pk})
-        invoice.txid = proof["txid"]
+        invoice.txid = claim["txid"]
         invoice.proof_digest = proof["proof_digest"]
         invoice.status = "paid"
         invoice.verified_at = dj_timezone.now()
         invoice.save(update_fields=("txid", "proof_digest", "status", "verified_at"))
         invoice.payment_intent.status = "paid"
-        invoice.payment_intent.provider_reference = proof["txid"]
+        invoice.payment_intent.provider_reference = claim["txid"]
         invoice.payment_intent.save(update_fields=("status", "provider_reference"))
         invoice.order.status = "paid"
         invoice.order.save(update_fields=("status",))
