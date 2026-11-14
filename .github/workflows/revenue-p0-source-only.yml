@@ -9,6 +9,7 @@ on:
       - "scripts/mojtaba_revenue_portfolio.py"
       - "scripts/mojtaba_revenue_cli.py"
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "scripts/mojtaba_revenue_margin.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
@@ -24,6 +25,7 @@ on:
       - "scripts/mojtaba_revenue_portfolio.py"
       - "scripts/mojtaba_revenue_cli.py"
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "scripts/mojtaba_revenue_margin.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
@@ -43,7 +45,7 @@ jobs:
       - name: Enforce ten-channel one-bot commercial gates and CLI invariants
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/revenue_dual_offer_qualifier.py
+          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/revenue_dual_offer_qualifier.py
           python3 -m unittest discover -s tests -p 'test_mojtaba_revenue*.py' -v
       - name: Prove sample portfolio and KPI outputs are expressly synthetic
         run: |
