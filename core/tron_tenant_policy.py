@@ -44,7 +44,11 @@ class TenantDecision:
 def canonical_host(value):
     if not isinstance(value, str):
         raise ValueError("Host must be string")
-    host = value.strip().lower()
+    # Do not normalize whitespace away from a security boundary. Hostnames
+    # are compared as exact merchant scope identifiers.
+    if value != value.strip():
+        raise ValueError("Noncanonical hostname whitespace")
+    host = value.lower()
     if not host.isascii() or len(host) > 253 or not HOST_PATTERN.fullmatch(host):
         raise ValueError("Invalid canonical hostname")
     return host
@@ -151,8 +155,8 @@ def verify_signed_routing_context(*, context, key, registry, allowed_anchors=Non
         return False
     if (context["network"] != CANONICAL_CHAIN
             or context["asset"] != CANONICAL_ASSET
-            or not isinstance(context["routing_digest"], str)
-            or len(context["routing_digest"]) != 64):
+            or type(context["routing_digest"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", context["routing_digest"]) is None):
         return False
     try:
         decision = registered_scope(

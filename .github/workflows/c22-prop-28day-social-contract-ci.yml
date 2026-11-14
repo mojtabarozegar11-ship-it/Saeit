@@ -1,30 +1,24 @@
-name: C22 MOJ PROP 28-day single-post contract and human-review safety
+name: C22 Moj Prop owner-safe 28-day reviewed-post regression
 on:
   push:
     branches: [fix/c22-moj-prop-28day-evidence-safety-20261115]
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
-      - 'prop_firm/admin.py'
-      - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
-      - 'tests/test_moj_prop_social_policy.py'
-      - 'tests/test_moj_prop_social_review.py'
+      - 'tests/test_moj_prop_social_c22_adversarial.py'
       - 'tests/test_moj_prop_social_admin_readonly_c22.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
   pull_request:
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
-      - 'prop_firm/admin.py'
-      - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
-      - 'tests/test_moj_prop_social_policy.py'
-      - 'tests/test_moj_prop_social_review.py'
+      - 'tests/test_moj_prop_social_c22_adversarial.py'
       - 'tests/test_moj_prop_social_admin_readonly_c22.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
 permissions:
   contents: read
 jobs:
-  four-week-social-contract:
+  full-prop-social-evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
@@ -34,26 +28,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install existing Python requirements
+      - name: Install pre-existing dependencies
         run: python -m pip install -r requirements.txt
-      - name: Django configuration and migration consistency; no production SSH
+      - name: Models consistent with EXISTING parent migration 0004
         env:
-          SECRET_KEY: c22-local-isolated-ci-only
+          SECRET_KEY: c22-prop-offline-only
           ALLOWED_HOSTS: testserver,localhost
         run: |
           set -euo pipefail
           python manage.py check
           python manage.py makemigrations --check --dry-run
-      - name: One-post 28-day social policy and independent database review
+      - name: Parent 28-day contract and C22 independent safety regressions
         env:
-          SECRET_KEY: c22-local-isolated-ci-only
-          ALLOWED_HOSTS: testserver,localhost
+          SECRET_KEY: c22-prop-offline-only
           DJANGO_SETTINGS_MODULE: config.settings
+          ALLOWED_HOSTS: testserver,localhost
         run: |
           set -euo pipefail
-          python -m pytest -q tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py tests/test_moj_prop_social_admin_readonly_c22.py
-          python -m py_compile prop_firm/models.py prop_firm/social_policy.py prop_firm/social_review_service.py
-          echo "C22_EXTERNAL_SOCIAL_POSTS=0"
-          echo "C22_REAL_TRX_PAYMENTS=0"
-          echo "C22_BROKER_TRADES=0"
-          echo "C22_PRODUCTION_DEPLOYMENTS=0"
+          python -m pytest -q tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py tests/test_moj_prop_social_c22_adversarial.py tests/test_moj_prop_social_admin_readonly_c22.py
+          python -m py_compile prop_firm/social_policy.py prop_firm/social_review_service.py prop_firm/models.py
+          echo 'C22_EXTERNAL_POSTS=0'
+          echo 'C22_PAID_ENROLLMENTS=0'
+          echo 'C22_BROKER_ORDERS=0'
+          echo 'C22_PRODUCTION_DEPLOYS=0'

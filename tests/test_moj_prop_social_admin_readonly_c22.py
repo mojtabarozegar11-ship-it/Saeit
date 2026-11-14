@@ -32,7 +32,7 @@ class PropFourWeekAdminReadOnlyTests(SimpleTestCase):
 
     def test_purchase_admin_shows_provenance_not_paid_income(self):
         display = admin.site._registry[PropChallengeEnrollment].list_display
-        self.assertIn("verified_invoice_ref", display)
+        self.assertNotIn("verified_invoice_ref", display)
         self.assertIn("settlement_verified", display)
         self.assertIn("terms_version", display)
         self.assertNotIn("money_received", display)

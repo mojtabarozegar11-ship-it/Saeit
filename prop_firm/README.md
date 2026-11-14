@@ -5,50 +5,46 @@
 ## Confirmed product terms
 - **30 TRX per applicant** is the challenge participation fee, not the company's starting capital.
 - Two *simulated* evaluation phases: realized-net profit goals **9.6% / 6%**, at least **6 valid trading days** each, maximum daily **4%** and fixed total **8%** mark-to-market equity loss; largest profitable day at most **32%** of net profit.
-- **No completion deadline**. Inactivity notice after 78 days and 39-day grace; inactivity messaging is not implemented here.
+- **28-day challenge trading window from verified purchase**. No trades may qualify after the end of that window. Inactivity notice at 14 days and grace at 14 days are informational and do not extend the window.
 - Upon passing both stages, KYC, lawful company funding and broker approvals, the first *real* account is **$100**, contingent on available capital.
 - All **14 USD levels:** 100, 200, 400, 800, 1500, 3000, 5000, 10000, 20000, 35000, **50000**, 70000, 85000, 100000.
 - **30-day promotion window**, at most one level per qualifying window, profit goal **3.6%**, at least **12 valid trading days**, no risk breach, max day 32%, trustworthy reconciled evidence and verified funding for the next tier.
 - Per-trade stop-risk max **0.8%** and cumulative open stop-risk **1.6%** of tier capital; block an order if broker minimum lot/stop distance cannot fit.
 - Monthly net profit sharing **70% trader / 30% company**, on cumulative realized net P&L exceeding previously *allocated* profit. Losses must be recouped first; no double payment.
 
-## New social posting pass condition — prospective v1.2 purchasers
+## Corrected four-week challenge and social posting requirement — new v1.2 buyers
 
-- For **each verified UTC trading day in each simulated challenge phase**, the
-  trader must personally publish **one original Instagram post AND one original
-  Facebook post** and submit two URLs for independent review.
-- A minimum of six trading days per phase means **6 Instagram + 6 Facebook
-  posts per phase**, **24 combined posts across both phases** at minimum.
-  Additional valid trading days require corresponding additional posts;
-  idle calendar days do not add a posting obligation. The challenge remains
-  without a fixed completion deadline.
-- This is a disclosed commercial participation condition, **not a request
-  for a fake review or a positive endorsement**. A neutral, truthful account
-  of the process is acceptable. Each post must clearly state that it is a
-  requirement of participating in MOJ PROP, and use an advertising/partnership
-  disclosure or labeling where applicable. Do not claim guaranteed returns,
-  falsely advertise actual funding, or pressure friends into purchasing.
-- Each post must come from the trader's own authorized account and remain
-  publicly inspectable at review, with its date matching the verified trading
-  day. Independent staff validates author, date, public visibility,
-  disclosure, content, and platform before marking the day reviewed.
-- **No automatic posting, scheduling, account passwords, Meta credentials,
-  forced tagging, or publication through mojtaba.bot.ai**. No action on
-  Instagram `Dr.mojtaba.rozegar` under any circumstances.
-- Missing or rejected posts **delay phase completion** but do not override
-  broker risk results, fabricate a risk breach, or directly confiscate
-  legitimate realized trading profits. The rule applies only to new v1.2
-  cohorts whose contract disclosed it before fee acceptance. Legacy v1.1
-  accounts retain their former terms.
-- Public-facing text is available in all 20 existing UI languages; local
-  legal/ad-policy and translation review are still required before enrollment.
-  Some jurisdictions/platforms may not allow such a compulsory promotion
-  requirement: in those markets the business must not sell the challenge
-  under these terms before counsel approves a lawful alternative.
-- `prop_firm/social_policy.py`, `social_review_service.py`, model
-  `PropSocialEvidence` and migration `0003_social_evidence.py` implement
-  a **private review-only evidence flow**. No live Meta integration, checkout,
-  automatic enrollment or funded-account approval is provided.
+- The **entire two-phase simulated trading challenge lasts 28 consecutive
+  24-hour days** beginning with a **verified paid invoice timestamp**, not
+  signup time or a self-reported purchase date. The verified trade ledger
+  must contain only trades inside this time window. Each stage retains a
+  minimum of **six valid trading days** and the unchanged profit and risk
+  rules. The 30-day *funded-tier promotion period* is separate.
+- **ONE original Instagram post AND ONE original Facebook post total** for
+  the complete purchase; **NOT one post per trading day and NOT two posts
+  per phase**. Publish each within 24 hours of confirmed purchase and keep
+  it publicly accessible for at least **28 x 24 hours after its own post time**.
+  A final independent review may therefore happen up to a day after the
+  trading window closes, but never extends the trading deadline.
+- Two distinct URLs are linked to a single independently settled purchase
+  (`PropChallengeEnrollment`), and both challenge phases share this
+  enrollment. Missing or removed posts defer passing; they do not fabricate
+  a risk violation or trigger forfeiture of legitimate realized profit.
+- Neutral, accurate content is permitted, without invented profit records,
+  recommendations, fake praise, or pressure to recruit others. Both posts
+  must conspicuously state that publication is a commercial condition of
+  participation. Local advertising rules and Meta platform policies must
+  be reviewed before selling challenges in a particular jurisdiction.
+- `PropSocialEvidence` stores the two privately reviewed URLs, author,
+  disclosure, continued public visibility and independent approval no
+  earlier than 28 days after posting. The trading portal is read-only;
+  none of these functions publishes, schedules or edits social posts.
+- The permanent prohibition concerning Instagram
+  `Dr.mojtaba.rozegar` is unchanged. Never publish to that account.
+- Old contracts use their original terms; do not impose this rule
+  retroactively. The proposed v1.2 terms were corrected *before paid
+  launch*. The public 20-language copy is subject to legal localization
+  review, and paid enrollment remains switched off.
 
 ## Non-negotiable implementation requirements
 1. No actual payments or trade orders can be triggered by this module: both real execution and TRX checkout are disabled by policy.

@@ -61,6 +61,12 @@ class TronMultiTenantTests(SimpleTestCase):
             with self.subTest(host=value), self.assertRaises(ValueError):
                 canonical_host(value)
 
+    def test_whitespace_smuggling_cannot_match_merchant_hostname(self):
+        for candidate in (" mojplaywin.com", "mojplaywin.com ",
+                          "\tmojplaywin.com", "mojplaywin.com\n"):
+            with self.subTest(host=repr(candidate)), self.assertRaises(ValueError):
+                canonical_host(candidate)
+
     def test_approved_registered_subdomain_is_allowed_by_exact_match(self):
         registry = {("shop.mojplaywin.com", ""): {
             **MERCHANT, "tenant_id": "separate_shop",
@@ -195,6 +201,13 @@ class RoutingVerificationRegressionTests(SimpleTestCase):
 
     def test_signature_tampering_denied(self):
         self.assertFalse(self.verify({**self.context, "routing_digest": "0" * 64}))
+
+    def test_non_ascii_and_malformed_hmac_are_cleanly_rejected(self):
+        for digest in ("é" * 64, "x" * 64, "A" * 64, "0" * 63, "0" * 65):
+            with self.subTest(digest=digest[:8]):
+                self.assertFalse(self.verify({
+                    **self.context, "routing_digest": digest,
+                }))
 
     def test_product_sku_tampering_denied(self):
         self.assertFalse(self.verify({**self.context, "product_sku": "book-225"}))
