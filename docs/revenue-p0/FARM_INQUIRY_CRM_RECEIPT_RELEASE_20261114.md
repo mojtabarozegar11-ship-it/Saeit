@@ -44,3 +44,19 @@ The number of operationally received ZM-FARM leads, paid contracts, confirmed co
 - New lead creation is bounded to 6 distinct valid submissions/hour per browser session, after the 15-minute identical-request replay check. The seventh receives HTTP 429 with Retry-After, without creating a CRM record. This is **not a global IP/account anti-spam control**.
 - `farm_inquiry_pipeline` now indicates that the command reads the *configured Django database*, logs observation time and explicitly marks financial certification false. No real database scan was run during this cycle.
 - No tests using a compatible Django runtime, MariaDB, actual customer data or live site were executed during the recovery turn.
+
+
+## 2026-11-14 — source integrity / dedup / revenue-source correction
+
+The first receipt branch required a *material* remediation before any release:
+
+- The old `_inquiry_fingerprint` used default `salted_hmac`, while robust history logic requires a **64-character lowercase SHA-256 HMAC**. The code now explicitly passes `algorithm="sha256"`; otherwise all valid requests would have failed the new session-history input validation.
+- The old session guard remembered only the last lead. Pattern A→B→A could create three saved rows. A **bounded, six-entry same-browser session history** now retains fingerprints and actual persisted CRM IDs for an hour, reuses existing rows for 15-minute replays and migrates the previous single-record session key. It is **not** global idempotence, account/IP throttling or protection against cross-session concurrent writes.
+- A customer could submit an arbitrary `ZM-FARM` subject to the generic `/company/` form and have it counted as a farm-service lead by the old report/admin classification. A dependency-free `provenance` function now requires the exact server-written `INTAKE_CONSENT_V1` first line, `source=farm`, type `commercial` and exact farm subject. Staff notes appended on later lines do not invalidate the source marker.
+- Existing CRM admin display and `farm_inquiry_pipeline` command now use the same server-provenance predicate; a defensive Python filter additionally protects against case-insensitive DB collations. Funnel reads only the relevant candidate records in bounded database iterator chunks and emits aggregate counts without buyer PII.
+- **37/37 dependency-free policy tests were actually executed locally** against a byte-identical GitHub source module (Git blob `b388c020d0216aca4b9d474e7e3f8ab93526ef4e`). **61/61 source-level connector readback checks** passed. These are not a Django runtime, business delivery or an authoritative live customer receipt.
+- Current branch has **51 authored new Django DB/client tests (22 receipt + 17 farm + 12 funnel) and six adapted existing tests**. **0/57 Django tests executed** in this cycle; Django isn't installed locally. The existing CI workflow may run on a main PR, but no PR/CI run or deploy was triggered automatically to avoid unreviewed workflow side effects.
+- Current company Gmail inspection found **no `ZM-FARM` inquiry matches** in bounded inbound subject/content queries. It also found a **sent follow-up to supplier DarooGostar** at timestamp 2026-11-14T13:21:08 in the company Sent folder. This cycle did **not** initiate its send. A sent message is not a supplier acceptance, a farm client contract, or received funds.
+- Effective `https://zomorodmelal.ir/company/`, `/services/` and PHP `/ask-master/` route behavior could not be validated from the current browsing environment. **No production changes, financial transactions or expenses have been initiated here.**
+
+**Launch status: NO-GO for live claims until tested in the real Django/MariaDB configuration and separately authorized/deployed.** Do not call source checks 'production ready'; do not convert a public link, mail draft, or sent supplier request into collected revenue.
