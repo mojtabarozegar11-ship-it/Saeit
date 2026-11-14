@@ -81,6 +81,21 @@ CRON_MACROS = frozenset({
     "@reboot", "@yearly", "@annually", "@monthly",
     "@weekly", "@daily", "@midnight", "@hourly",
 })
+# A bounded read is not a complete census. Explicitly label truncation so a
+# missing legacy worker is never inferred from an incomplete OS observation.
+MAX_STDOUT_CHARS = 512000
+MAX_CRON_LINES = 500
+MAX_PROCESS_LINES = 20000
+MAX_SERVICE_LINES = 1000
+
+
+def bounded_observation_state(state: str, output: str, limit: int) -> str:
+    """An otherwise successful but incomplete enumeration is not observed."""
+    return (
+        "observed_truncated"
+        if state == "observed" and len(output.splitlines()) > limit
+        else state
+    )
 
 
 def route_flags(command: str) -> list[str]:
@@ -96,7 +111,9 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
     except (OSError, subprocess.TimeoutExpired):
         return "unavailable", ""
     if proc.returncode == 0:
-        return "observed", proc.stdout[:512000]
+        if len(proc.stdout) > MAX_STDOUT_CHARS:
+            return "observed_truncated", ""
+        return "observed", proc.stdout
     if args[:2] == ["crontab", "-l"] and proc.returncode == 1:
         # rc=1 is commonly 'no crontab', but can be an access failure.
         # Do not claim zero scheduled jobs from this ambiguous signal.
@@ -106,7 +123,7 @@ def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
 
 def safe_cron(stdout: str) -> list[dict]:
     out = []
-    for line in stdout.splitlines()[:500]:
+    for line in stdout.splitlines()[:MAX_CRON_LINES]:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -136,7 +153,7 @@ def safe_cron(stdout: str) -> list[dict]:
 def safe_processes(stdout: str) -> dict:
     count = Counter()
     seen = 0
-    for line in stdout.splitlines()[:20000]:
+    for line in stdout.splitlines()[:MAX_PROCESS_LINES]:
         if not line.strip():
             continue
         seen += 1
@@ -149,7 +166,7 @@ def safe_processes(stdout: str) -> dict:
 
 def safe_service_units(stdout: str) -> list[dict]:
     entries = []
-    for line in stdout.splitlines()[:1000]:
+    for line in stdout.splitlines()[:MAX_SERVICE_LINES]:
         parts = line.split()
         if len(parts) < 4 or not parts[0].endswith(".service"):
             continue
@@ -317,6 +334,16 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
         "systemctl", "list-units", "--type=service",
         "--all", "--plain", "--no-legend", "--no-pager",
     ])
+    cron_state = bounded_observation_state(cron_state, cron_raw, MAX_CRON_LINES)
+    process_state = bounded_observation_state(
+        process_state, ps_raw, MAX_PROCESS_LINES
+    )
+    service_state = bounded_observation_state(
+        service_state, services_raw, MAX_SERVICE_LINES
+    )
+    system_service_state = bounded_observation_state(
+        system_service_state, system_services_raw, MAX_SERVICE_LINES
+    )
     cron_rows = safe_cron(cron_raw) if cron_state == "observed" else []
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
