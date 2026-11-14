@@ -243,12 +243,24 @@ def _checkout_page(request, product_id, pages_namespace):
         pk=product_id, active=True).first()
     if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
-    _record_funnel_event_best_effort(request, "begin_checkout", product)
-    response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
+    # A 200 checkout is a customer-facing promise. Verify the actual
+    # rendered HTML before showing any invoice CTA or logging funnel success.
+    # The CSP below forbids scripts, so script-bearing HTML must not be
+    # misrepresented as a protected checkout. Never disclose buyer inputs.
+    from services.mpw_checkout_render_contract import (
+        CheckoutMarkupError, require_checkout_markup,
+    )
+    response = render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
-    }))
+    })
+    try:
+        require_checkout_markup(response, product_id)
+    except CheckoutMarkupError as exc:
+        raise Http404("Buyer checkout is temporarily unavailable") from exc
+    response = _nocache(response)
     response = pages_namespace["_checkout_csrf_referrer"](response)
+    _record_funnel_event_best_effort(request, "begin_checkout", product)
     response["Content-Security-Policy"] = (
         "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
