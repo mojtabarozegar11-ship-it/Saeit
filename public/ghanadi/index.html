@@ -151,8 +151,17 @@ document.getElementById('inquiryPanel').addEventListener('submit',async event=>{
       credentials:'same-origin',cache:'no-store',signal:controller.signal,
     });
     if(!response.ok)throw new Error('official_form_unavailable');
-    const official=new DOMParser().parseFromString(await response.text(),'text/html')
-      .querySelector('form[method="post"][action="/ask-master/index.php"]');
+    // ZM_OFFICIAL_INQUIRY_ACTION_GUARD_20261114: validate official POST destination; never send to a foreign action.
+    const officialHtml=new DOMParser().parseFromString(await response.text(),'text/html');
+    const official=Array.from(officialHtml.querySelectorAll('form')).find(candidate=>{
+      if((candidate.getAttribute('method')||'').toUpperCase()!=='POST')return false;
+      let destination;
+      try{destination=new URL(candidate.getAttribute('action')||'/ask-master/index.php',location.href)}
+      catch(error){return false}
+      return destination.origin===location.origin
+        && destination.pathname==='/ask-master/index.php'
+        && !!candidate.querySelector('input[name="csrf"]');
+    });
     const csrf=official?.querySelector('input[name="csrf"]')?.value;
     if(!csrf)throw new Error('csrf_missing');
     const submission=document.createElement('form');
