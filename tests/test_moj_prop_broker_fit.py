@@ -65,7 +65,7 @@ class MojPropBrokerFitTests(unittest.TestCase):
 
     def test_higher_capital_increases_loss_budget_not_minimum_lot(self):
         x = self.run_fit(tier_index=10, broker_min_quantity=1000,
-                         broker_quantity_step=1000)
+                         broker_quantity_step=1000, available_margin_usd=10000)
         self.assertTrue(x.feasible)
         self.assertEqual(x.capital_usd, 50000)
         self.assertEqual(x.order_risk_budget_usd, 400)
