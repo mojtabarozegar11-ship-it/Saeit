@@ -494,7 +494,112 @@ def test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid():
     result = subprocess.run(['bash', '-n', str(relay)], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stderr
     script = relay.read_text()
-    assert 'django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream)' in script
+    # Keep an exact allowlist of operations while tolerating deliberate,
+    # separately reviewed additions; do not freeze its trailing string.
+    import re
+    match = re.search(r'(?m)^  (relay_preflight\|[a-z_|]+)\) ;;
+    assert script.count('zomorod_fields_audit_live)') == 2  # both relay modes
+    assert script.count('zomorod_fields_verify_stream)') == 3  # allowlist + both relay modes
+    assert script.count('zomorod_fields_audit_stream') == 3  # definition + both modes
+    assert 'aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32' in script
+    assert 'git hash-object -- "$guard"' in script
+    assert 'StrictHostKeyChecking yes' in script
+    assert 'ssh -T -F "$work/config" saeit-cpanel' in script
+    assert 'exec "$py" -B - audit-live' in script
+    assert 'sys.version_info >= (3, 8)' in script
+    assert '< "$guard"' in script
+
+
+def test_cpanel_relay_denies_unlisted_release_and_requires_host_key(tmp_path):
+    import os
+    import subprocess
+
+    relay = SOURCE.parents[1] / 'deploy/cpanel_direct_command.sh'
+    env = dict(os.environ)
+    env.pop('HOST_KEY', None)
+    env.pop('VPS_KEY', None)
+    env['RUNNER_TEMP'] = str(tmp_path)
+    denied = subprocess.run(
+        ['bash', str(relay), 'zomorod_fields_apply'],
+        env=env, capture_output=True, text=True, timeout=10)
+    assert denied.returncode == 64
+    assert 'CPANEL_DIRECT_OPERATION_DENIED' in denied.stderr
+    uncredentialed = subprocess.run(
+        ['bash', str(relay), 'zomorod_fields_audit_live'],
+        env=env, capture_output=True, text=True, timeout=10)
+    assert uncredentialed.returncode != 0
+    assert 'HOST_KEY' in uncredentialed.stderr
+    assert not any(tmp_path.iterdir())
+
+
+def test_host_stream_verifies_full_pinned_candidate_without_writes(sandbox):
+    import io
+    import stat
+    import zipfile
+
+    root, stage, old, new = sandbox
+    contents = io.BytesIO()
+    with zipfile.ZipFile(contents, "w", compression=zipfile.ZIP_DEFLATED) as out:
+        for category, files in (("old", old), ("new", new)):
+            for name, data in files.items():
+                entry = zipfile.ZipInfo(category + "/" + name)
+                entry.create_system = 3
+                entry.external_attr = (stat.S_IFREG | 0o600) << 16
+                out.writestr(entry, data)
+    before = {p: (root / p).read_bytes() for p in mod.FILES}
+    result = mod.inspect_streamed_candidate(contents.getvalue())
+    assert result['status'] == 'READ_ONLY_STAGE_STREAM_VERIFIED'
+    assert result['candidate_files_verified'] == 15
+    assert result['prior_source_files_verified'] == 3
+    assert result['stage_hashes_verified'] is True
+    assert result['host_files_written'] == 0
+    assert result['deployment_performed'] is False
+    assert not mod.BACKUP_ROOT.exists()
+    assert all((root / p).read_bytes() == before[p] for p in mod.FILES)
+    assert all(not (root / p).exists() for p in mod.CREATED)
+
+
+def test_host_stream_rejects_extra_path_and_path_traversal(sandbox):
+    import io
+    import zipfile
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, 'w') as out:
+        out.writestr('../public_html/index.html', b'forbidden')
+    with pytest.raises(RuntimeError, match='unexpected file inventory'):
+        mod.inspect_streamed_candidate(archive.getvalue())
+    assert not mod.BACKUP_ROOT.exists()
+
+
+def test_host_stream_rejects_payload_over_compressed_size_limit(sandbox):
+    with pytest.raises(RuntimeError, match='compressed size limit'):
+        mod.inspect_streamed_candidate(b'X' * (16 * 1024 * 1024 + 1))
+    assert not mod.BACKUP_ROOT.exists()
+
+
+def test_stream_verification_workflow_uses_only_pinned_source_and_private_runner():
+    script = (SOURCE.parents[1] / 'deploy/cpanel_direct_command.sh').read_text()
+    workflow = (SOURCE.parents[1] / '.github/workflows/zomorod-onepass-full-20261113.yml').read_text()
+    sender = (SOURCE.parents[1] / 'scripts/zomorod_fields_stream_sender_20261113.py').read_text()
+    assert 'zomorod_fields_verify_stream)' in script
+    assert 'zomorod_fields_verify_stream' in workflow
+    assert 'runs-on: [self-hosted, factory-vps]' in workflow
+    assert 'READ_ONLY_STAGE_STREAM_VERIFIED' in sender
+    assert 'PINNED_GUARD_BLOB' in sender
+    assert 'archive.writestr(info, value)' in sender
+    assert 'host_files_written' in sender
+    assert 'apply STAGE RELEASE --owner-approved' not in sender
+    assert 'def inspect_streamed_candidate' in SOURCE.read_text()
+, script)
+    assert match is not None
+    operations = match.group(1).split('|')
+    assert len(operations) == len(set(operations))
+    assert set(operations) == {
+        'relay_preflight', 'cpanel_version', 'passenger_inventory',
+        'cpanel_preflight', 'django_check', 'django_migrations',
+        'zomorod_fields_audit_live', 'zomorod_fields_verify_stream',
+        'mpw_source_provenance',
+    }
     assert script.count('zomorod_fields_audit_live)') == 2  # both relay modes
     assert script.count('zomorod_fields_verify_stream)') == 3  # allowlist + both relay modes
     assert script.count('zomorod_fields_audit_stream') == 3  # definition + both modes
