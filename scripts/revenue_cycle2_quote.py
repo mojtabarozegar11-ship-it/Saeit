@@ -11,6 +11,7 @@ import stat
 import sys
 
 from mojtaba_revenue_portfolio import CANONICAL_BOT, OFFERS, evaluate
+from mojtaba_revenue_safeio import read_json, create_private_json
 
 PACKAGES = {
     "farm_economics": ("economic_analysis",),
@@ -72,30 +73,11 @@ def generate(data):
 
 
 def bounded_read(path):
-    if path.is_symlink() or not path.is_file():
-        raise ValueError("INPUT_NOT_REGULAR")
-    size = path.stat().st_size
-    if not 0 < size <= 16384:
-        raise ValueError("INPUT_SIZE_INVALID")
-    payload = path.read_bytes()
-    if len(payload) != size:
-        raise ValueError("INPUT_CHANGED")
-    return json.loads(payload.decode("utf-8"))
+    return read_json(path, limit=16384)
 
 
 def private_create(path, source, result):
-    if path.is_symlink() or path.resolve() == source.resolve():
-        raise ValueError("OUTPUT_PATH_REJECTED")
-    if not path.parent.is_dir() or path.parent.is_symlink():
-        raise ValueError("OUTPUT_PARENT_REJECTED")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    fd = os.open(path, flags, stat.S_IRUSR | stat.S_IWUSR)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(result, handle, ensure_ascii=False, sort_keys=True, indent=2)
-        handle.write("\n")
-
+    create_private_json(path, result, input_path=source)
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)

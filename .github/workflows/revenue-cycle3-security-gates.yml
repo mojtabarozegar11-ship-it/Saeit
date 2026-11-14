@@ -1,0 +1,49 @@
+name: Mojtaba.bot.ai revenue cycle3 safe intake regression
+on:
+  push:
+    branches:
+      - work/revenue-cycle3-safe-intake-20261114
+    paths:
+      - "scripts/mojtaba_revenue_safeio.py"
+      - "scripts/mojtaba_revenue_cli.py"
+      - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/revenue_cycle2_quote.py"
+      - "scripts/revenue_cycle2_farm_preview.py"
+      - "tests/test_revenue_*.py"
+      - "tests/test_mojtaba_revenue_cli.py"
+      - ".github/workflows/revenue-cycle3-security-gates.yml"
+  pull_request:
+    branches:
+      - work/revenue-p0-cycle2-evidence-20261114
+permissions:
+  contents: read
+jobs:
+  secure-intake-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exactly changed offline revenue executables
+        run: |
+          python3 -m py_compile scripts/mojtaba_revenue_safeio.py scripts/mojtaba_revenue_cli.py scripts/revenue_dual_offer_qualifier.py scripts/revenue_cycle2_quote.py scripts/revenue_cycle2_farm_preview.py
+      - name: Run all existing and new revenue tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_revenue_*.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_revenue_cli.py' -v
+      - name: Produce offline source-only evidence
+        run: |
+          python3 scripts/revenue_cycle2_source_audit.py > /tmp/revenue-source.json
+          python3 scripts/revenue_cycle2_quote.py docs/revenue-p0/cycle2/examples/website_diagnosis.synthetic.json > /tmp/revenue-quote.json
+          python3 scripts/revenue_cycle2_farm_preview.py docs/revenue-p0/example-farm-model.synthetic.json > /tmp/revenue-farm.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/revenue-source.json', encoding='utf-8'))
+          q=json.load(open('/tmp/revenue-quote.json', encoding='utf-8'))
+          f=json.load(open('/tmp/revenue-farm.json', encoding='utf-8'))
+          assert a['source_contract_ok'] is True
+          assert q['payment_verified'] is False
+          assert q['collected_revenue'] is None
+          assert f['sample_only'] is True
+          assert f['actual_revenue'] is None
+          print('CYCLE3_SECURITY=source_only; live=UNKNOWN; payment=UNKNOWN')
+          PY
