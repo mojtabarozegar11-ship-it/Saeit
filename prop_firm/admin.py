@@ -2,7 +2,7 @@
 from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
-    PropProfitAllocation, PropProfitJournalLine,
+    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence,
 )
 
 
@@ -63,3 +63,14 @@ class PropProfitJournalAdmin(LockedAuditAdmin):
     """Inspect three-sided internal memo journal; never an accounts-payable UI."""
     list_display = ("id", "allocation_id", "code", "side", "amount_usd")
     list_filter = ("code", "side")
+
+
+
+@admin.register(PropSocialEvidence)
+class PropSocialEvidenceAdmin(LockedAuditAdmin):
+    """Operator review history; social posting and modifications are not enabled."""
+    list_display = (
+        "account_id", "trading_day", "platform", "review_status",
+        "author_verified", "disclosure_verified", "reviewed_at",
+    )
+    list_filter = ("platform", "review_status", "disclosure_verified")
