@@ -18,6 +18,7 @@ import urllib.request
 
 URLS = (
     ("canonical_php", "https://zomorodmelal.ir/ask-master/index.php?service=1"),
+    ("status_page", "https://zomorodmelal.ir/ask-master/status.php"),
     ("company_page", "https://zomorodmelal.ir/company/"),
     ("contact_page", "https://zomorodmelal.ir/contact/"),
 )
