@@ -6,9 +6,9 @@ from scripts import mpw_runner_port_reachability_readonly as n
 
 class PortProbeTests(unittest.TestCase):
     def test_01_whitelist_five(self):
-        self.assertEqual(len(n.TARGETS),5)
+        self.assertEqual(len(n.TARGETS),7)
     def test_02_target_ports(self):
-        self.assertEqual([p for _,_,p in n.TARGETS],[22,1396,443,443,443])
+        self.assertEqual([p for _,_,p in n.TARGETS],[22,1396,1396,2083,443,443,443])
     def test_03_bound_timeout(self):
         self.assertLessEqual(n.TIMEOUT_SECONDS,3)
     def test_04_tcp_success_no_false_auth(self):
@@ -44,7 +44,7 @@ class PortProbeTests(unittest.TestCase):
         self.assertFalse(result["money_spent"])
     def test_10_limit_refuses_extra_host(self):
         with self.assertRaises(ValueError):
-            n.run(tuple(("h","example.org",80) for _ in range(6)))
+            n.run(tuple(("h","example.org",80) for _ in range(8)))
     def test_11_run_is_not_authenticated(self):
         with patch.object(n.socket,"create_connection",side_effect=socket.timeout()):
             result=n.run()
@@ -53,6 +53,10 @@ class PortProbeTests(unittest.TestCase):
     def test_12_elapsed_nonnegative(self):
         with patch.object(n.socket,"create_connection",side_effect=socket.timeout()):
             self.assertGreaterEqual(n.probe("a","b",3)["probe_ms"],0)
+    def test_13_cpanel_documented_ip_present(self):
+        self.assertIn(("cpanel_known_ip_ssh_1396","178.239.147.125",1396),n.TARGETS)
+    def test_14_web_admin_probe_is_not_api_access(self):
+        self.assertIn(("cpanel_web_admin_2083","zohal.pws-dns.net",2083),n.TARGETS)
 
 if __name__=="__main__":
     unittest.main()
