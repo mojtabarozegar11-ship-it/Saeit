@@ -4,6 +4,7 @@ A 1-minute cron can safely invoke this command. It does not broadcast funds,
 issue payable invoices or rely on a screenshot or buyer statement as proof.
 """
 from django.core.management.base import BaseCommand
+from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import F
 from django.utils import timezone
@@ -23,6 +24,9 @@ class Command(BaseCommand):
         count = options["limit"]
         if not 1 <= count <= 1000:
             raise ValueError("Limit must be between 1 and 1000")
+        if getattr(settings, "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", False) is not True:
+            self.stdout.write("tron_reconcile disabled: legacy writer exclusivity unverified")
+            return
         # Least-recently-attempted first, so an unavailable old transfer never
         # prevents a later valid customer invoice from being processed.
         invoices = list(TronGatewayInvoice.objects.filter(
