@@ -35,6 +35,20 @@ jobs:
           assert 'st_nlink != 1' in f
           print('TRX_C27_NO_UNVERIFIED_PAID_FILE_RELEASE=PASS')
           PY
+      - name: Install existing Django project dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Run real Django invoice/reconciliation tests with mocked blockchain
+        env:
+          SECRET_KEY: tron-c27-local-test-only
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python manage.py test \
+            tests.test_tron_gateway_commerce_integrity \
+            tests.test_unified_tron_gateway_verify \
+            tests.test_tron_gateway_discovery \
+            --verbosity 1
       - name: Run fifty private file behavior regressions, no credentials
         env:
           PYTHONDONTWRITEBYTECODE: '1'
