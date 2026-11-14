@@ -149,6 +149,25 @@ class IntakeIOTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "changed during read"):
                     mod.read_strict_json(p)
 
+    def test_node_budget_blocks_large_array_without_db_or_network(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "array.json"
+            p.write_text(json.dumps({"items": [0] * (mod.MAX_JSON_NODES + 1)}),
+                         encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid or ambiguous"):
+                mod.read_strict_json(p)
+
+    def test_depth_boundary_accepts_64_and_rejects_65(self):
+        def nested(depth):
+            return "[" * depth + "0" + "]" * depth
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "nested.json"
+            p.write_text(nested(mod.MAX_JSON_DEPTH), encoding="utf-8")
+            self.assertIsInstance(mod.read_strict_json(p), list)
+            p.write_text(nested(mod.MAX_JSON_DEPTH + 1), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid or ambiguous"):
+                mod.read_strict_json(p)
+
     def test_python_loader_errors_do_not_escape_as_recursionerror(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as tmp:
