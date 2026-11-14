@@ -32,12 +32,13 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
 
  class InvoiceFormParser(HTMLParser):
   _VOID={'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}
-  _INERT={'script','style','textarea','template','noscript','select','option','button'}
+  _INERT={'script','style','textarea','template','noscript','select','option','button','datalist','svg','math','object','iframe'}
   def __init__(self):
    super().__init__(convert_charrefs=True)
    self.forms=[]
    self.matches=0
    self.malformed=False
+   self.document_parents=[]
 
   @staticmethod
   def _concealed(tag,attributes):
@@ -49,7 +50,8 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
       or 'opacity:0' in style)
 
   def _accessible(self):
-   return self.forms and not any(h or d for _,h,d in self.forms[-1]['parents'])
+   return (self.forms and not any(h or d for _,h,d in self.forms[-1]['parents'])
+           and not any(h or d for _,h,d in self.document_parents))
 
   def handle_starttag(self,tag,attrs):
    keys=[k for k,_ in attrs]
@@ -63,28 +65,33 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
     template_pattern=(r'/commerce/trx-easy/start/'
                       r'(?:[1-9][0-9]*|\{\{\s*product\.(?:pk|id)\s*\}\})/')
     rendered_pattern=r'/commerce/trx-easy/start/[1-9][0-9]*/'
-    valid=(method=='post' and re.fullmatch(template_pattern if require_source_csrf else rendered_pattern,action) is not None
+    form_hidden=self._concealed(tag,attributes) or any(h or d for _,h,d in self.document_parents)
+    valid=(not form_hidden and method=='post' and re.fullmatch(template_pattern if require_source_csrf else rendered_pattern,action) is not None
        and (expected_action is None or expected_action==action)
        and (action_prefix is None or action.startswith(action_prefix))
        and len(keys)==len(set(keys)))
     self.forms.append({'valid':valid,'email':0,'csrf':0,'source_csrf':0,'parents':[]})
-   elif self.forms:
+   elif not self.forms:
+    if tag not in self._VOID:
+     self.document_parents.append((tag,self._concealed(tag,attributes),tag=='fieldset' and 'disabled' in attributes))
+   else:
     form=self.forms[-1]
     if tag not in self._VOID:
      form['parents'].append((tag,self._concealed(tag,attributes),tag=='fieldset' and 'disabled' in attributes))
-    if tag=='input':
+    if tag in {'input','textarea','select','button'}:
      accessible=self._accessible()
      if attributes.get('name')=='csrfmiddlewaretoken':
       value=str(attributes.get('value') or '')
-      ok=(str(attributes.get('type') or '').lower()=='hidden'
-          and 'disabled' not in attributes and accessible
+      ok=(tag=='input' and str(attributes.get('type') or '').lower()=='hidden'
+          and 'disabled' not in attributes and 'form' not in attributes and accessible
           and 32<=len(value)<=128 and value.isascii() and value.isalnum()
           and len(keys)==len(set(keys)))
       form['csrf']+=1 if ok else 2
      if attributes.get('name')=='email':
-      ok=(str(attributes.get('type') or '').lower()=='email'
+      ok=(tag=='input' and str(attributes.get('type') or '').lower()=='email'
           and 'required' in attributes and 'disabled' not in attributes
           and 'readonly' not in attributes and 'hidden' not in attributes
+          and 'form' not in attributes
           and 'inert' not in attributes and accessible
           and not self._concealed(tag,attributes)
           and len(keys)==len(set(keys)))
@@ -96,6 +103,8 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
 
   def handle_endtag(self,tag):
    if not self.forms:
+    if self.document_parents and self.document_parents[-1][0]==tag:
+     self.document_parents.pop()
     return
    if tag=='form':
     form=self.forms.pop()
