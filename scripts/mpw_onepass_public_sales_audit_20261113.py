@@ -102,7 +102,7 @@ class PageParser(HTMLParser):
                 if (tag == "input" and
                         ("hidden" in values or "form" in values
                          or "multiple" in values
-                         or fields.count("required") != 1)):
+                         or fields.count("required") > 1)):
                     form["malformed"] = True
                 if tag == "input" and "maxlength" in values:
                     try:
