@@ -116,3 +116,41 @@ class FarmServiceIntakeTests(TestCase):
             self.assertEqual(response.status_code, 302)
             self.assertEqual(response["Location"], first["Location"])
         self.assertEqual(CompanyInquiry.objects.count(), 1)
+
+    def test_a_b_a_replay_preserves_first_record(self):
+        a = self.payload()
+        b = self.payload()
+        b["message"] = "Completely separate livestock enterprise"
+        first = self.client.post(self.path(), a)
+        second = self.client.post(self.path(), b)
+        replay = self.client.post(self.path(), a)
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(replay.status_code, 302)
+        self.assertEqual(first["Location"], replay["Location"])
+        self.assertEqual(CompanyInquiry.objects.count(), 2)
+
+    def test_fingerprint_is_explicit_sha256(self):
+        from core.company_content_views import CompanyInquiryForm, _inquiry_fingerprint
+        form = CompanyInquiryForm(self.payload())
+        self.assertTrue(form.is_valid())
+        fp = _inquiry_fingerprint(form.cleaned_data)
+        self.assertRegex(fp, r"^[0-9a-f]{64}$")
+
+    def test_spoofed_generic_company_subject_is_not_farm_source(self):
+        from core.company_inquiry_policy import provenance
+        data = self.payload()
+        data["kind"] = "commercial"
+        data["subject"] = "ZM-FARM | درخواست تحلیل اقتصادی مزرعه"
+        response = self.client.post(reverse("company"), data)
+        self.assertEqual(response.status_code, 302)
+        record = CompanyInquiry.objects.get()
+        self.assertFalse(provenance(record.kind, record.subject, record.internal_note))
+        self.assertIn("source=company", record.internal_note)
+
+    def test_farm_source_is_counted_only_with_server_consent_marker(self):
+        from core.company_inquiry_policy import provenance
+        response = self.client.post(self.path(), self.payload())
+        self.assertEqual(response.status_code, 302)
+        record = CompanyInquiry.objects.get()
+        self.assertTrue(provenance(record.kind, record.subject, record.internal_note))
