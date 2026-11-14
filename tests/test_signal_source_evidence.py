@@ -48,6 +48,19 @@ class SignedSignalSourceRegressionTests(SimpleTestCase):
         self.assertFalse(r.subscription_enabled)
         self.assertFalse(r.signal_delivered)
 
+    def test_verified_source_produces_stable_hash_not_verified_profit(self):
+        one, two = self.assess(), self.assess()
+        self.assertTrue(one.source_authenticated)
+        self.assertEqual(one.audit_digest_sha256, two.audit_digest_sha256)
+        self.assertEqual(len(one.audit_digest_sha256), 64)
+        self.assertFalse(one.performance_independently_audited)
+        self.assertFalse(one.signal_delivered)
+
+    def test_denied_provider_has_no_audit_credential(self):
+        decision = self.assess(signature="0" * 64)
+        self.assertFalse(decision.source_authenticated)
+        self.assertIsNone(decision.audit_digest_sha256)
+
     def test_unsigned_user_verified_boolean_is_not_evidence(self):
         self.assertFalse(self.assess(signature="0" * 64).source_authenticated)
 
