@@ -98,6 +98,34 @@ class CommerceGatewayIntegrityTests(TestCase):
         self.assertFalse(_record_paid(invoice.pk, PROOF))
         self.assertFalse(LedgerEntry.objects.exists())
 
+
+    def test_legacy_uppercase_event_txid_cannot_be_double_credited(self):
+        invoice = self._payable()
+        PaymentWebhookEvent.objects.create(
+            provider="mpw_walletless_trx_v1", event_id=PROOF["txid"].upper(),
+            event_type="tron_finalized", payload_hash="f"*64, status="processed")
+        self.assertFalse(_record_paid(invoice.pk, PROOF))
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_legacy_uppercase_ledger_reference_cannot_be_double_credited(self):
+        invoice = self._payable()
+        LedgerEntry.objects.create(
+            order=invoice.order, payment_intent=invoice.payment_intent,
+            entry_type="credit", amount=invoice.order.total,
+            currency=invoice.order.currency,
+            reference="walletless:tron-mainnet:" + PROOF["txid"].upper())
+        self.assertFalse(_record_paid(invoice.pk, PROOF))
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+        self.assertFalse(PaymentWebhookEvent.objects.exists())
+
+    def test_unrelated_legacy_event_does_not_block_a_valid_invoice(self):
+        invoice = self._payable()
+        PaymentWebhookEvent.objects.create(
+            provider="mpw_walletless_trx_v1", event_id="c"*64,
+            event_type="tron_finalized", payload_hash="f"*64, status="processed")
+        self.assertTrue(_record_paid(invoice.pk, PROOF))
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+
     def test_paid_order_with_changed_status_not_overwritten(self):
         invoice = self._payable()
         Order.objects.filter(pk=invoice.order_id).update(status="cancelled")
