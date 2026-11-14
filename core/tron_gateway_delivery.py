@@ -169,6 +169,9 @@ def download_paid(request, invoice_id):
     )[:2])
     if (len(events) != 1 or len(credits) != 1
             or LedgerEntry.objects.filter(
+                order=order, entry_type="credit",
+            ).count() != 1
+            or LedgerEntry.objects.filter(
                 order=order,
                 entry_type__in=("refund", "chargeback", "reversal"),
             ).exists()):
