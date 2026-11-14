@@ -6,6 +6,8 @@ on:
       - core/service_quote_draft.py
       - core/service_lead_handoff.py
       - core/service_scope_pages.py
+      - content/zomorod-nova-pages/services.html
+      - tests/test_company_services_static_links_c14_20261114.py
       - core/seo_views.py
       - core/tests/test_service_scope_sitemap_c13_20261114.py
       - core/templates/core/service_scope.html
@@ -48,6 +50,8 @@ on:
       - core/service_quote_draft.py
       - core/service_lead_handoff.py
       - core/service_scope_pages.py
+      - content/zomorod-nova-pages/services.html
+      - tests/test_company_services_static_links_c14_20261114.py
       - core/seo_views.py
       - core/tests/test_service_scope_sitemap_c13_20261114.py
       - core/templates/core/service_scope.html
@@ -129,6 +133,7 @@ jobs:
       - name: Verify public-only host probe logic without external requests
         run: |
           python -m unittest discover -s tests -p 'test_company_public_intake_probe_20261114.py' -q
+          python -m unittest discover -s tests -p 'test_company_services_static_links_c14_20261114.py' -q
           python -m unittest discover -s tests -p 'test_company_public_intake_release_gate_20261114.py' -q
       - name: Public first-party form GET evidence (no secrets, non-blocking)
         continue-on-error: true
