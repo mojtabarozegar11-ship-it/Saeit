@@ -294,6 +294,9 @@ class FourWeekProofTests(TestCase):
         self.assertTrue(phase_one["social_posting"].satisfied)
         self.assertTrue(phase_one["assessment"].passed)
         self.phase1.status=PropAccount.Status.PASSED
+        # An asynchronously PASSED flag without an actual stage-one closing
+        # timestamp cannot qualify a previously opened stage two.
+        self.phase1.closed_at=START+timedelta(days=6,hours=18)
         self.phase1.save()
         phase_two=account_projection(self.phase2)
         self.assertTrue(phase_two["social_posting"].satisfied)
