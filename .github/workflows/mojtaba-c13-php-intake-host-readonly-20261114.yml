@@ -1,0 +1,53 @@
+name: C13 PHP intake actual host structural audit, no customer data
+on:
+  push:
+    branches:
+      - feature/mojtaba-bot-lead-source-of-truth-c04-20261114
+    paths:
+      - deploy/company_live_intake_readonly.py
+      - .github/workflows/mojtaba-c13-php-intake-host-readonly-20261114.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-c13-cpanel-intake-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojtaba-bot-lead-source-of-truth-c04-20261114' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact source without git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and confirm read-only host auditor
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_live_intake_readonly.py").read_text(encoding="utf-8")); print("AUDITOR_PARSE=PASS")'
+          if grep -Eq '(^|[^a-zA-Z])(unlink|subprocess|os.system|requests.post|urlopen|sqlite3.connect|open\(.*[wa])' deploy/company_live_intake_readonly.py; then
+            echo "AUDITOR_ALLOWLIST_REVIEW_REQUIRED"
+            exit 2
+          fi
+      - name: Verify pinned cPanel host and stream read-only inspection via stdin
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="${RUNNER_TEMP}/c13-php-origin-${GITHUB_RUN_ID}"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          echo "CPANEL_FINGERPRINT=verified"
+          timeout 75s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_live_intake_readonly.py
+          echo "PHP_ORIGIN_READONLY_AUDIT=completed"
