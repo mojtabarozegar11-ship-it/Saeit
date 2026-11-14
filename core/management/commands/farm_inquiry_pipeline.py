@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from core.company_inquiry_models import CompanyInquiry
-from core.company_inquiry_policy import provenance
+from core.company_inquiry_policy import provenance, FARM_SUBJECT, CONSENT_MARKER
 
 _STATES = ("new", "reviewing", "approved", "closed")
 
@@ -29,7 +29,8 @@ class Command(BaseCommand):
         # A customer-controlled subject is NOT proof of which intake path
         # created the record. Require the server-stamped consent/source marker.
         rows = CompanyInquiry.objects.filter(
-            kind="commercial", subject__startswith="ZM-FARM",
+            kind="commercial", subject=FARM_SUBJECT,
+            internal_note__startswith=CONSENT_MARKER + "; confirmed_at=",
             created_at__gte=cutoff,
         ).values("kind", "subject", "internal_note", "status").iterator(chunk_size=200)
         counts = {state: 0 for state in _STATES}
