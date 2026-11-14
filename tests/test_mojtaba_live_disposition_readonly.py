@@ -413,6 +413,17 @@ def test_observed_cron_without_entries_is_not_an_empty_inventory():
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+@pytest.mark.parametrize("layer", [
+    "user_services", "system_services", "user_timers", "system_timers",
+])
+def test_observed_systemd_missing_candidate_units_is_not_empty_inventory(layer):
+    vps = snap("vps")
+    vps[layer].pop("candidate_units", None)
+    with pytest.raises(ValueError, match="TOPOLOGY_SYSTEMD_UNITS_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
