@@ -11,6 +11,8 @@ on:
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
       - "scripts/mojtaba_revenue_margin.py"
       - "scripts/mojtaba_farm_break_even.py"
+      - "scripts/mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_review_report.py"
       - "tests/test_mojtaba_farm_break_even.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
@@ -29,6 +31,8 @@ on:
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
       - "scripts/mojtaba_revenue_margin.py"
       - "scripts/mojtaba_farm_break_even.py"
+      - "scripts/mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_review_report.py"
       - "tests/test_mojtaba_farm_break_even.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
@@ -49,9 +53,10 @@ jobs:
       - name: Enforce ten-channel one-bot commercial gates and CLI invariants
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/mojtaba_farm_break_even.py scripts/revenue_dual_offer_qualifier.py
+          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/mojtaba_farm_break_even.py scripts/mojtaba_farm_review_report.py scripts/revenue_dual_offer_qualifier.py
           python3 -m unittest discover -s tests -p 'test_mojtaba_revenue*.py' -v
           python3 -m unittest discover -s tests -p 'test_mojtaba_farm_break_even.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_farm_review_report.py' -v
       - name: Run real farm economics and bounded pricing math offline
         run: |
           set -euo pipefail
@@ -72,6 +77,18 @@ jobs:
           assert r['gross_price_floor_synthetic']=='1500000'
           assert u['invoice_created'] is False
           print('MOJTABA_FARM_ECONOMICS=27_SCENARIOS_VERIFIED; USD_IRR_MARGIN_CALCULATED; ORDER_AND_PAYMENT=NOT_VERIFIED')
+          PY
+      - name: Generate usable private-style Persian economic report offline
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --farm-report docs/revenue-p0/mojtaba-farm-break-even.synthetic.json >/tmp/mojtaba-farm-report.md
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('/tmp/mojtaba-farm-report.md').read_text(encoding='utf8')
+          assert s.startswith('# برگه بررسی اقتصاد تولید')
+          assert s.count('| +') + s.count('| -') >= 27
+          assert 'بدون شماره فاکتور' in s and 'نه سفارش و نه درآمد وصول‌شده' in s
+          print('MOJTABA_FARM_REPORT=27_SCENARIOS; NO_CLIENT_SEND_NO_INVOICE_NO_SETTLEMENT')
           PY
       - name: Prove sample portfolio and KPI outputs are expressly synthetic
         run: |
