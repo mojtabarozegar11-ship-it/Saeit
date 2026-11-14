@@ -76,9 +76,23 @@ def _trace_id():
     return uuid.uuid4().hex
 
 
-def _idempotency(recipient, subject, body):
-    # A delimiter-joined triple collides for distinct subjects and bodies.
-    # JSON's array framing is unambiguous, and the v2 prefix separates formats.
+def _idempotency(recipient, subject, body, context=None):
+    # Bind the EXACT reviewed message plus structured commercial context.
+    # Stripping content or omitting quote details silently aliases distinct
+    # proposals, potentially returning a different draft to its customer.
+    try:
+        payload = json.dumps(
+            [recipient, subject, body, context or {}],
+            sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("TRADE_EMAIL_CONTEXT_INVALID") from exc
+    return hashlib.sha256(("v3:" + payload).encode("utf-8")).hexdigest()
+
+
+def _v2_idempotency(recipient, subject, body):
+    # Lookup only: retain historical exact records during a v2 -> v3 upgrade.
     payload = json.dumps(
         [recipient.strip().lower(), subject.strip(), body.strip()],
         ensure_ascii=False, separators=(",", ":"),
@@ -116,18 +130,24 @@ def queue_trade_email(*, recipient, subject, body, trade_context=None):
             "email_address": getattr(settings, "COMPANY_TRADE_EMAIL", ""),
         },
     )
-    key = _idempotency(recipient, subject, body)
-    # Preserve exact old drafts after an upgrade; a legacy hash collision with
-    # different fields must never suppress a distinct commercial message.
-    old = TradeEmailOutbox.objects.filter(
-        idempotency_key=_legacy_idempotency(recipient, subject, body)
-    ).first()
-    same_legacy_message = old is not None and (
-        old.recipient.strip().lower() == recipient.strip().lower()
-        and old.subject.strip() == subject.strip()
-        and old.body.strip() == body.strip()
+    key = _idempotency(recipient, subject, body, trade_context)
+    # Both former delimiter and v2 normalized-key rows remain accessible,
+    # but are reused ONLY for the exact same immutable message/context.
+    legacy_keys = (
+        _legacy_idempotency(recipient, subject, body),
+        _v2_idempotency(recipient, subject, body),
     )
-    if same_legacy_message:
+    old = next((
+        candidate for candidate in TradeEmailOutbox.objects.filter(
+            idempotency_key__in=legacy_keys,
+        ).select_related("mailbox")
+        if candidate.mailbox.code == "company-trade"
+        and candidate.recipient == recipient
+        and candidate.subject == subject
+        and candidate.body == body
+        and candidate.trade_context == (trade_context or {})
+    ), None)
+    if old is not None:
         outbox, created = old, False
     else:
         outbox, created = TradeEmailOutbox.objects.get_or_create(

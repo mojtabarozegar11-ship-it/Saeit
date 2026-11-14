@@ -13,7 +13,9 @@ from core.approval import ApprovalService
 from core.autonomous_external_trade import (
     authorize_external_trade, execute_one_authorized_outbox,
 )
-from core.economic_trade_email import queue_trade_email, send_queued_trade_email
+from core.economic_trade_email import (
+    _v2_idempotency, queue_trade_email, send_queued_trade_email,
+)
 from core.models import ApprovalGrant, ApprovalRequest, AuditLog
 from core.trade_approval_scope import trade_email_fingerprint
 
@@ -52,6 +54,53 @@ def _grant(owner, outbox, approval):
         {"action": "external_write", "outbox_id": outbox.pk,
          "message_sha256": trade_email_fingerprint(outbox)},
     )
+
+
+def test_exact_message_identity_prevents_silent_proposal_collision(queued_trade):
+    _, first, _ = queued_trade
+    with override_settings(COMPANY_TRADE_EMAIL="company@example.test"):
+        whitespace = queue_trade_email(
+            recipient=first.recipient, subject=first.subject,
+            body=first.body + " ",
+        )
+        changed_quote = queue_trade_email(
+            recipient=first.recipient, subject=first.subject,
+            body=first.body, trade_context={"quoted_amount": "100"},
+        )
+        repeat = queue_trade_email(
+            recipient=first.recipient, subject=first.subject, body=first.body,
+        )
+    assert len({first.pk, whitespace.pk, changed_quote.pk}) == 3
+    assert repeat.pk == first.pk
+    assert all(item.status == "queued" for item in (first, whitespace, changed_quote))
+
+
+def test_existing_v2_exact_draft_is_preserved_after_hash_upgrade(queued_trade):
+    _, first, _ = queued_trade
+    first.idempotency_key = _v2_idempotency(
+        first.recipient, first.subject, first.body,
+    )
+    first.save(update_fields=["idempotency_key"])
+    with override_settings(COMPANY_TRADE_EMAIL="company@example.test"):
+        preserved = queue_trade_email(
+            recipient=first.recipient, subject=first.subject, body=first.body,
+        )
+        different = queue_trade_email(
+            recipient=first.recipient, subject=first.subject,
+            body=first.body + " ",
+        )
+    assert preserved.pk == first.pk
+    assert different.pk != first.pk
+
+
+def test_invalid_trade_context_rejected_before_any_draft_write(queued_trade):
+    _, first, _ = queued_trade
+    with override_settings(COMPANY_TRADE_EMAIL="company@example.test"):
+        with pytest.raises(ValueError, match="TRADE_EMAIL_CONTEXT_INVALID"):
+            queue_trade_email(
+                recipient=first.recipient, subject=first.subject,
+                body=first.body, trade_context={"invalid": float("nan")},
+            )
 
 
 def test_missing_outbox_never_creates_general_email_approval(queued_trade):
