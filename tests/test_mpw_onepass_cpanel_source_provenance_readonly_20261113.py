@@ -399,7 +399,16 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.assertNotIn("synthetic source only", out)
         self.assertNotIn("mpw-buy-email", out)
         self.assertNotIn("APP='/home", out)
-        self.assertLess(len(out), 1500)
+        self.assertNotIn(str(self.base), out)  # never expose account path
+        self.assertNotIn(str(self.app), out)
+        self.assertNotIn(str(self.public), out)
+        # Original fixed report was <1500 chars. Bounded root evidence now
+        # allows at most 16 fixed-size digest records; reject unbounded logs.
+        self.assertLess(len(out), 6000)
+        roots = report["neighbor_root_fingerprints"]
+        self.assertLessEqual(roots["candidate_count"], 16)
+        self.assertEqual(roots["candidate_count"], len(roots["candidates"]))
+        self.assertFalse(roots["release_permitted"])
 
 
 if __name__ == "__main__":
