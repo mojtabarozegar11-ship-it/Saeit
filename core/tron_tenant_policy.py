@@ -103,7 +103,12 @@ def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
 
 def signed_routing_context(*, decision, product_sku, key):
     """Produce an internal routing token; it cannot settle or create invoices."""
-    if not isinstance(decision, TenantDecision) or not decision.eligible_for_checkout_review:
+    if (
+        not isinstance(decision, TenantDecision)
+        or decision.eligible_for_checkout_review is not True
+        or decision.payment_enabled is not False
+        or decision.invoice_created is not False
+    ):
         raise ValueError("Tenant requires verified review gates")
     if not isinstance(key, str) or len(key) < 32:
         raise ValueError("Missing trusted signing key")
