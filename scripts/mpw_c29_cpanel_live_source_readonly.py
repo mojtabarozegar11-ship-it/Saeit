@@ -56,7 +56,7 @@ def file_audit(root, relative):
         if len(content)!=stat.st_size:
             return {"present":True,"safety":"changed_during_read"}
         git_blob=hashlib.sha1(
-            b"blob "+str(len(content)).encode("ascii")+b"\\x00"+content
+            b"blob "+str(len(content)).encode("ascii")+bytes([0])+content
         ).hexdigest()
         markers={
             "moj_prop_router": b"moj-prop/" in content,
