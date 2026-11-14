@@ -153,6 +153,18 @@ def _read_product(product_id, locale, *, lock=False):
     kind = md.get("fulfillment_type")
     if kind not in ("digital", "physical", "service"):
         raise Http404("Fulfillment type missing")
+    # Signals are solely a service of mojtaba.bot.ai. A source-signed feed
+    # alone cannot satisfy legal, audited-history or delivery approvals.
+    from .mojtaba_signal_paid_access import (
+        approved_signal_offer_snapshot, REQUIRED_APPROVALS,
+    )
+    try:
+        signal_sku, signal_term = approved_signal_offer_snapshot(md, kind)
+    except ValueError as exc:
+        raise Http404("Signal subscription rights not approved") from exc
+    if (signal_sku and
+            getattr(settings, "MOJ_SIGNAL_BOT_PRODUCT_CHECKOUT_ENABLED", False) is not True):
+        raise Http404("MOJTABA BOT signal checkout has not been legally released")
     if kind == "digital":
         for key in ("rights_document_sha256", "rights_asset_sha256", "sha256"):
             value = md.get(key)
@@ -177,7 +189,7 @@ def _read_product(product_id, locale, *, lock=False):
         raise Http404("Current TRX quotation not approved")
     # Approved fixed merchant quote prevents speculative or invented FX rates.
     fingerprint = hashlib.sha256(
-        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{expires}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}|{kind}|{md.get('asset_relpath','')}|{md.get('rights_asset_sha256','')}|{tuple(md.get(k) is True for k in required)}".encode()
+        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{expires}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}|{kind}|{md.get('asset_relpath','')}|{md.get('rights_asset_sha256','')}|{tuple(md.get(k) is True for k in required)}|{signal_sku}|{signal_term}|{tuple(md.get(k) is True for k in REQUIRED_APPROVALS)}".encode()
     ).hexdigest()
     return product, base_sun, fingerprint
 
@@ -219,6 +231,10 @@ def _new_invoice(email, host, language, product_id):
         )
         if locked_sun != base_sun or locked_fingerprint != fingerprint:
             raise ValueError("Product changed during checkout")
+        from .mojtaba_signal_paid_access import approved_signal_offer_snapshot
+        signal_sku, signal_term = approved_signal_offer_snapshot(
+            product.metadata, product.metadata.get("fulfillment_type"),
+        )
         user = _guest(email)
         order = Order.objects.create(customer=user, status="pending",
                                      total=product.price, currency=product.currency)
@@ -247,6 +263,8 @@ def _new_invoice(email, host, language, product_id):
                         order=order, payment_intent=intent, buyer_email=email,
                         source_host=host, language=language,
                         merchant_tenant_id=merchant.tenant_id,
+                        signal_sku_snapshot=signal_sku,
+                        signal_term_days_snapshot=signal_term,
                         buyer_email_sha=_email_key(email), receiver=merchant.receiver,
                         amount_sun=amount_sun,
                         issued_ms=now_ms, expires_ms=now_ms + LINK_TTL * 1000,
@@ -402,6 +420,8 @@ def _record_paid(invoice_id, proof):
                       "amount_sun": invoice.amount_sun,
                       "receiver": invoice.receiver,
                       "merchant_tenant_id": invoice.merchant_tenant_id,
+                      "signal_sku_snapshot": invoice.signal_sku_snapshot,
+                      "signal_term_days_snapshot": invoice.signal_term_days_snapshot,
                       "sender_hex": proof["sender_hex"],
                       "block_height": proof["block_height"],
                       "proof_digest": proof["proof_digest"],

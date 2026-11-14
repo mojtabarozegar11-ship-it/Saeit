@@ -138,6 +138,9 @@ TRON_UNIFIED_RECEIVER = env("TRON_UNIFIED_RECEIVER", default="")
 TRON_UNIFIED_ALLOWED_HOSTS = env.list("TRON_UNIFIED_ALLOWED_HOSTS", default=[])
 # Approved site-to-tenant-to-receiver map, empty until owner configures each one.
 TRON_UNIFIED_SITE_MERCHANTS = env.json("TRON_UNIFIED_SITE_MERCHANTS", default={})
+# Never sell or deliver MOJTABA BOT paid signals from a code merge alone.
+MOJ_SIGNAL_BOT_PRODUCT_CHECKOUT_ENABLED = env.bool("MOJ_SIGNAL_BOT_PRODUCT_CHECKOUT_ENABLED", default=False)
+MOJ_SIGNAL_BOT_PAID_DELIVERY_ENABLED = env.bool("MOJ_SIGNAL_BOT_PAID_DELIVERY_ENABLED", default=False)
 TRON_UNIFIED_PRIVATE_DIGITAL_ROOT = env("TRON_UNIFIED_PRIVATE_DIGITAL_ROOT", default="")
 TRON_UNIFIED_TRONGRID_API_KEY = env("TRON_UNIFIED_TRONGRID_API_KEY", default="")
 

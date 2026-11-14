@@ -1,0 +1,70 @@
+name: C29 one mojtaba.bot.ai real paid-signal entitlement rights
+on:
+  push:
+    branches:
+      - fix/moj-c29-one-bot-paid-signals-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-c29-one-bot-financial-signal-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  digital-buyer-and-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate syntax and no automatic signal charge, post or trading
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          files=('core/mojtaba_signal_paid_access.py','core/tron_gateway_web.py',
+                 'core/tron_gateway_invoice.py',
+                 'core/migrations/0043_trongatewayinvoice_signal_entitlement_snapshot.py',
+                 'tests/test_moj_c29_one_bot_paid_signal_entitlements.py')
+          for p in files: ast.parse(Path(p).read_text(encoding='utf8'),filename=p)
+          s=Path('config/settings.py').read_text()
+          assert 'MOJ_SIGNAL_BOT_PRODUCT_CHECKOUT_ENABLED = env.bool(' in s
+          assert 'MOJ_SIGNAL_BOT_PAID_DELIVERY_ENABLED = env.bool(' in s
+          assert s.count('default=False)')>=2
+          src=Path('core/mojtaba_signal_paid_access.py').read_text()
+          assert 'CANONICAL_BOT = "mojtaba.bot.ai"' in src
+          assert 'sends_messages: bool = False' in src
+          assert 'executes_trades: bool = False' in src
+          print('MOJ_C29_PAID_SIGNAL_NO_UNAUTHORIZED_PUBLICATION=PASS')
+          PY
+      - name: Install pinned existing Django dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Check Django migrations are complete without applying to production
+        env:
+          SECRET_KEY: c29-only-test-secret
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: python3 manage.py makemigrations --check --dry-run
+      - name: Run Django paid signal, tenant proof, credit and file-delivery regressions
+        env:
+          SECRET_KEY: c29-only-test-secret
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 manage.py test \
+            tests.test_moj_c29_one_bot_paid_signal_entitlements \
+            tests.test_tron_c28_site_merchant_isolation \
+            tests.test_tron_c28_two_site_paid_invoice_flow \
+            tests.test_tron_gateway_commerce_integrity \
+            tests.test_unified_tron_gateway_verify \
+            tests.test_tron_gateway_discovery --verbosity 1
+          echo 'MOJ_C29_SIGNAL_SUBSCRIPTION_DJANGO=PASS'
+      - name: Run real private buyer bytes safety tests
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_tron_private_paid_asset_20261114.py' -v
+          echo 'MOJ_C29_PRIVATE_FILE_RIGHTS=PASS'
