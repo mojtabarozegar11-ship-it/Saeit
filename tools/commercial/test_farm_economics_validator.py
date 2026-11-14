@@ -51,6 +51,17 @@ class FarmEconomicsTests(unittest.TestCase):
         row=BASE.copy();row[0]=" FARM01 "
         with self.assertRaisesRegex(ValueError,"duplicate enterprise-period"):
             validate_csv(sample()+",".join(row)+"\n")
+    def test_overlapping_enterprise_period_rejected(self):
+        row=BASE.copy();row[2]="2026-06-30";row[3]="2026-12-31"
+        with self.assertRaisesRegex(ValueError,"overlapping enterprise-period"):
+            validate_csv(sample()+",".join(row)+"\\n")
+    def test_nested_enterprise_period_rejected(self):
+        row=BASE.copy();row[2]="2026-02-01";row[3]="2026-03-31"
+        with self.assertRaisesRegex(ValueError,"overlapping enterprise-period"):
+            validate_csv(sample()+",".join(row)+"\\n")
+    def test_adjacent_nonoverlapping_period_allowed(self):
+        row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31"
+        self.assertEqual(len(validate_csv(sample()+",".join(row)+"\\n")),2)
     def test_same_enterprise_different_period_allowed(self):
         row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31"
         self.assertEqual(len(validate_csv(sample()+",".join(row)+"\n")),2)
