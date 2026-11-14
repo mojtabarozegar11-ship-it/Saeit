@@ -77,11 +77,11 @@ class Command(BaseCommand):
                 completed = runner.run(task.pk)
             except Exception as exc:
                 # Provider/tool exceptions may contain credentials, private
-                # inputs or customer data. Preserve exception chaining for
-                # restricted debugging, but never echo raw text in the CLI.
+                # inputs or customer data. Suppress chained tracebacks as
+                # well as the direct CLI message to avoid accidental leakage.
                 raise CommandError(
                     f"Task {task.pk} execution failed: worker_execution_error"
-                ) from exc
+                ) from None
             if completed.status != "completed":
                 raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
             executed += 1
