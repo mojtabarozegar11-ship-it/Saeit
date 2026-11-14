@@ -33,3 +33,27 @@ PYTHONPATH=. python -m unittest discover -s tests -p 'test_prop_firm_policy.py' 
 Verified operating country and regulatory counsel; funded cash reserve and treasury policy; approved broker and its minimum order/stop specs; encrypted account store; KYC and eligibility; immutable and reconciled ledger; wallet and escrow accounting; customer terms and dispute handling; penetration/integration tests; hosting and domain authorization; independent deployment approval.
 
 **No deployments, paid services, live trading, customer emails, asset deletion, or payments are permitted by this draft.**
+
+
+## Moj Prop — 20-language luxury website integration (14 Nov 2026)
+
+**Brand ownership:** MOJ PROP is a MojPlayWin division, not a stand-alone AI agent or legal entity. The **only** organizational bot is \`mojtaba.bot.ai\`.
+
+**Canonical informational website:** \`https://mojplaywin.com/moj-prop/\` (English); 19 translated paths at \`/moj-prop/<language-code>/\`. The path is **not deployed** merely because it exists in the GitHub branch.
+
+**Full landing-page localization:** English \`en\` default; Farsi \`fa\`, Arabic \`ar\`, German \`de\`, French \`fr\`, Spanish \`es\`, Portuguese \`pt\`, Italian \`it\`, Turkish \`tr\`, Russian \`ru\`, Simplified Chinese \`zh\`, Japanese \`ja\`, Korean \`ko\`, Hindi \`hi\`, Indonesian \`id\`, Vietnamese \`vi\`, Thai \`th\`, Dutch \`nl\`, Polish \`pl\`, Urdu \`ur\`. **840 verified non-empty translatable page strings**, 42 per language, with complete navigation, page copy, disclosures, stages, tiers, rules and FAQs. Arabic, Farsi and Urdu use actual HTML RTL, not just CSS visual flipping.
+
+**UI implementation:** \`prop_firm/moj_prop_locales.json\` is the translation catalog, validated by \`prop_firm/moj_prop_page.py\`. Policy figures and fourteen funding tiers are supplied by \`prop_firm/rules.py\`, not duplicated as independent marketing numbers. The Django host-limited \`core/moj_prop_views.py\` renders \`core/templates/mojplaywin/moj_prop.html\`, styled by \`core/static/site/moj_prop.css\` (obsidian, champagne-gold, decorative capital orb, responsive tier visualization, keyboard-accessible localization menu, motion-reduction support).
+
+**Navigation:** Host \`mojplaywin.com\` and \`www.mojplaywin.com\` only; no page exposed as a Zomorod Melal financial offer. The parent MojPlayWin primary navigation/footer link to the preview division.
+
+**Availability and SEO:** All pages explicitly state pre-launch/no payments, return \`X-Robots-Tag: noindex, nofollow\`, and have canonical and language-alternate metadata. This content is a **product preview**, not a real public funding offer. Avoid promising that a trader will get cash after challenge completion unless the committed real treasury and broker support the entire advertised scale plan.
+
+**Translation scope:** All sections of this informational landing page are localized. Broker agreements, complete customer contracts, compliance documents, support workflows and a paid checkout have **not** been translated, completed or launched. Those require qualified native/regulatory review for each served jurisdiction. Do not call them 'fully localized' until they actually exist.
+
+### Verification
+- \`python -m unittest tests.test_moj_prop_site tests.test_prop_firm_policy tests.test_prop_firm_site\` (when import packages are available).
+- \`python manage.py test tests.test_moj_prop_site\` (Django integration, host blocking, HTML lang/dir).
+- Review linked PR CI, staticfiles collection, mobile rendering, native-speaker proofreading, performance, contrast/keyboard accessibility and load in every target locale before any production release.
+
+**Hard safeguards:** No wallets, payment acceptance, brokerage operations, login collection, trading APIs or financial guarantees are exposed in this page. No deployment or cost is authorized by these files.
