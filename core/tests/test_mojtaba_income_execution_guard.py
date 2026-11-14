@@ -334,3 +334,71 @@ def test_economic_worker_receipt_effect_must_be_explicit_boolean(
         call_command("run_economic_worker", stdout=out)
     assert f"internal_effect_verified={verified}" in out.getvalue()
     assert "revenue_not_assessed=true" in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_stale_running_task_is_recovered_even_if_another_task_is_queued(bot):
+    from datetime import timedelta
+    from django.utils import timezone
+
+    already_queued = enqueue(bot)
+    orphan = enqueue(bot, code="income_offer_design", status="running")
+    orphan.attempt_count = 1
+    orphan.max_attempts = 3
+    orphan.execution_id = "stale-execution-id"
+    orphan.save(update_fields=["attempt_count", "max_attempts", "execution_id"])
+    AgentTask.objects.filter(pk=orphan.pk).update(
+        updated_at=timezone.now() - timedelta(hours=2)
+    )
+    out = StringIO()
+    call_command("online_income_cycle", stale_after_seconds=900, stdout=out)
+    orphan.refresh_from_db()
+    already_queued.refresh_from_db()
+    assert "BRAIN_RECOVERED" in out.getvalue()
+    assert orphan.status == "queued"
+    assert orphan.execution_id == ""
+    assert already_queued.status == "queued"
+    assert AgentTask.objects.filter(agent=bot).count() == 2
+
+
+@pytest.mark.django_db
+def test_active_running_task_is_never_ignored_due_to_other_queued_work(bot):
+    queued = enqueue(bot)
+    running = enqueue(bot, code="income_offer_design", status="running")
+    running.attempt_count = 1
+    running.execution_id = "live-execution-id"
+    running.save(update_fields=["attempt_count", "execution_id"])
+    out = StringIO()
+    call_command("online_income_cycle", stale_after_seconds=900, stdout=out)
+    assert "BRAIN_RUNNING" in out.getvalue()
+    assert "BRAIN_CONTINUE" not in out.getvalue()
+    running.refresh_from_db()
+    queued.refresh_from_db()
+    assert running.status == "running"
+    assert running.execution_id == "live-execution-id"
+    assert queued.status == "queued"
+
+
+@pytest.mark.django_db
+def test_dry_run_with_mixed_queue_never_recovers_or_writes(bot):
+    from datetime import timedelta
+    from django.utils import timezone
+
+    queued = enqueue(bot)
+    running = enqueue(bot, code="income_offer_design", status="running")
+    running.execution_id = "old-but-owned"
+    running.attempt_count = 1
+    running.save(update_fields=["attempt_count", "execution_id"])
+    AgentTask.objects.filter(pk=running.pk).update(
+        updated_at=timezone.now() - timedelta(hours=3)
+    )
+    before = AgentTask.objects.count()
+    out = StringIO()
+    call_command("online_income_cycle", dry_run=True, stdout=out)
+    running.refresh_from_db()
+    queued.refresh_from_db()
+    assert running.status == "running"
+    assert running.execution_id == "old-but-owned"
+    assert queued.status == "queued"
+    assert AgentTask.objects.count() == before
+    assert "BRAIN_RUNNING" in out.getvalue()
