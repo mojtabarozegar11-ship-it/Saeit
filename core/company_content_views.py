@@ -27,25 +27,34 @@ def company_content_feed(request, slug):
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})
 
 
-class CompanyInquiryForm(forms.ModelForm):
-    """Validate public inquiries before adding a sales lead to the CRM."""
-
-    message = forms.CharField(max_length=5000, strip=True)
-
-    class Meta:
-        model = CompanyInquiry
-        fields = ("kind", "name", "organization", "email", "phone", "subject", "message")
+from .company_sales_intake import (
+    CompanySalesInquiryForm as CompanyInquiryForm,
+    require_company_host, save_inbound_inquiry, validate_body_size,
+)
+from django.views.decorators.csrf import csrf_protect
+from django.http import HttpResponse
 
 
+@csrf_protect
 def company_portal_home(request):
-    from django.shortcuts import redirect
+    """Share the same consent and anti-abuse contract as native /contact/."""
     from django.contrib import messages
-    if request.method == "POST":
-        form = CompanyInquiryForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
-        else:
-            messages.error(request, "اطلاعات درخواست معتبر نیست؛ فیلدهای الزامی، نوع همکاری و نشانی ایمیل را بررسی کنید.")
+    from django.shortcuts import redirect
+    require_company_host(request)
+    if request.method != "POST":
         return redirect("company")
-    return None
+    try:
+        validate_body_size(request)
+    except forms.ValidationError:
+        return HttpResponse("درخواست بیش از حد مجاز است.", status=413)
+    form = CompanyInquiryForm(request.POST)
+    if not form.is_valid():
+        return render(request, "core/company_contact.html", {
+            "form": form, "inquiry_received": False,
+        }, status=422)
+    save_inbound_inquiry(form)
+    messages.success(
+        request,
+        "درخواست برای بررسی داخلی ثبت شد. این ثبت، تأیید قرارداد یا پرداخت نیست.",
+    )
+    return redirect("company")
