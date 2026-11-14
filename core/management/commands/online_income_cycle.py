@@ -22,15 +22,6 @@ class Command(BaseCommand):
             self.stderr.write("Missing active economic-master-agent.")
             return
 
-        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
-        if queued:
-            # Task.action_type can originate from a legacy/untrusted queue.
-            # Never copy a raw capability string into general runner logs.
-            self.stdout.write(
-                f"BRAIN_CONTINUE task={queued.pk} status={queued.status}"
-            )
-            return
-
         running = AgentTask.objects.filter(agent=agent, status="running").order_by("updated_at").first()
         if running:
             if options["dry_run"]:
@@ -44,6 +35,15 @@ class Command(BaseCommand):
                 self.stdout.write(f"BRAIN_RUNNING task={running.pk} awaiting_heartbeat_or_recovery")
                 return
             self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
+            return
+
+        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
+        if queued:
+            # Task.action_type can originate from a legacy/untrusted queue.
+            # Never copy a raw capability string into general runner logs.
+            self.stdout.write(
+                f"BRAIN_CONTINUE task={queued.pk} status={queued.status}"
+            )
             return
 
         blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()
