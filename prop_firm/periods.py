@@ -59,3 +59,21 @@ def period_statistics(executions, period):
         "best_day": max((Decimal("0"), *per_day.values())),
         "period": period,
     }
+
+
+def completed_period_by_number(*, opened_at, as_of, period_number):
+    """Return an individual completed UTC 30-day period, even if reported late.
+
+    Explicitly disallow a zero/negative period or an unfinished future period.
+    This permits sequential reconciliation of old monthly accounts.
+    """
+    if isinstance(period_number, bool) or not isinstance(period_number, int) or period_number < 1:
+        return None
+    latest = most_recent_completed_period(opened_at=opened_at, as_of=as_of)
+    if latest is None or period_number > latest.number:
+        return None
+    start = opened_at.astimezone(timezone.utc) + timedelta(days=30 * (period_number - 1))
+    return CompletedPeriod(
+        number=period_number, start=start,
+        end=start + timedelta(days=30),
+    )
