@@ -1,0 +1,76 @@
+name: MPW exact registered Passenger source vs live delivery — readonly source CI
+on:
+  push:
+    branches: [fix/mpw-registered-uapi-exact-root-proof-20261114]
+  pull_request:
+    branches: [fix/mpw-registered-passenger-root-discovery-20261114]
+permissions:
+  contents: read
+jobs:
+  exact-root-security-and-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile Python and validate cPanel relay Bash syntax
+        run: |
+          python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+          python3 -m py_compile tests/test_mpw_exact_registered_uapi_root_readonly_20261114.py
+          bash -n deploy/cpanel_direct_command.sh
+      - name: Exercise 54 new exact registered root, privacy and commercial NO-GO cases
+        run: python3 -m unittest discover -s tests -p 'test_mpw_exact_registered_uapi_root_readonly_20261114.py' -v
+      - name: Retest 70 previous bounded neighbor and UAPI join contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_passenger_neighbor_root_discovery_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_readonly_app_root_evidence_join_20261114.py' -v
+      - name: Retest old source, SSH, allowlist and owner-only dispatcher
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_dispatch_boundaries_20261114.py' -v
+      - name: Verify two immutable exact source pins and restricted owner dispatch
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          code=Path('scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py').read_bytes()
+          digest=hashlib.sha1(b'blob '+str(len(code)).encode('ascii')+b'\0'+code).hexdigest()
+          relay=Path('deploy/cpanel_direct_command.sh').read_text()
+          workflow=Path('.github/workflows/cpanel-direct-command-bridge.yml').read_text()
+          assert relay.count(digest)==2
+          assert relay.count('MPW_READONLY_SOURCE_NOT_PINNED')==2
+          assert 'StrictHostKeyChecking yes' in relay
+          assert 'CPANEL_DIRECT_OPERATION_DENIED' in relay
+          assert "github.actor == 'mojtabarozegar11-ship-it'" in workflow
+          assert "github.ref == 'refs/heads/main'" in workflow
+          assert 'persist-credentials: false' in workflow
+          print('EXACT_SOURCE_PIN=PASS; REMOTE_EXECUTION=NOT_ATTEMPTED')
+          PY
+      - name: Confirm same-root UAPI evidence does not assert live sales
+        run: |
+          python3 - <<'PY'
+          import json,tempfile
+          from pathlib import Path
+          from types import SimpleNamespace
+          from scripts.mpw_onepass_cpanel_source_provenance_readonly_20261113 import inspect_uapi_registered_root
+          with tempfile.TemporaryDirectory() as x:
+              home=Path(x)
+              root=home/'app';root.mkdir()
+              (root/'passenger_wsgi.py').write_text('# synthetic')
+              (root/'core').mkdir()
+              (root/'core/mojplaywin_views.py').write_text('def store(request): pass')
+              (root/'mpw_commerce').mkdir()
+              (root/'mpw_commerce/product_checkout_page.py').write_text('# source only')
+              payload=json.dumps({'result':{'status':1,'data':[{'domain':'mojplaywin.com','app_root':str(root)}]}}).encode()
+              report=inspect_uapi_registered_root(home,lambda *a,**kw: SimpleNamespace(returncode=0,stdout=payload))
+              assert report['classification']=='registered_directory_has_commerce_source_on_disk'
+              assert not report['effective_passenger_worker_verified']
+              assert not report['effective_checkout_template_verified']
+              assert not report['paid_settlement_verified']
+              assert not report['production_release_permitted']
+              assert report['actual_collected_revenue'] is None
+              assert str(home) not in json.dumps(report)
+          print('REGISTERED_ROOT=STATIC_SOURCE_ONLY; LIVE_SALES=UNKNOWN; RELEASE=NO-GO')
+          PY
