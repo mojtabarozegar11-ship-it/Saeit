@@ -2,7 +2,8 @@
 """Read-only, disclosure-minimized live host topology evidence for Mojtaba.bot.ai.
 
 Run locally as githubops (VPS) or zomorod2 (cPanel) via a verified trusted
-session. No service changes, database reads, file writes or external requests.
+session. No service changes, file writes or external requests.
+On cPanel only, a bounded private SQLite aggregate may be queried read-only.
 A matching process/cron string is an *indicator*, never proof of successful
 task execution, retirement, customer delivery or live single-bot operation.
 """
