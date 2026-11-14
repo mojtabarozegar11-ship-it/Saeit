@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.autonomous_brain import AutonomousBrain
-from core.models import Agent, AgentTask
+from core.models import Agent, AgentCapability, AgentTask
 
 
 def test_market_research_and_scoring_are_verified_before_offer_design():
@@ -109,6 +109,73 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertFalse(state["self_improvement_complete"])
         self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
 
+    def test_held_profit_baseline_does_not_block_safe_dry_run_planning(self):
+        capability = AgentCapability.objects.create(
+            code="master_self_improvement", name="Private review", active=True,
+        )
+        self.agent.capabilities.add(capability)
+        held = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="queued",
+        )
+        state = AutonomousBrain().observe()
+        self.assertEqual(state["unfinished_tasks"], 0)
+        output = StringIO()
+        call_command("online_income_cycle", "--dry-run", stdout=output)
+        self.assertIn("BRAIN_DECISION action=master_self_improvement", output.getvalue())
+        held.refresh_from_db()
+        self.assertEqual(held.status, "queued")
+        self.assertEqual(held.attempt_count, 0)
+
+    def test_held_profit_baseline_allows_one_new_useful_task(self):
+        held = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="queued",
+        )
+        capability = AgentCapability.objects.create(
+            code="master_self_improvement", name="Private review", active=True,
+        )
+        self.agent.capabilities.add(capability)
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        self.assertIn("BRAIN_DECISION task=", output.getvalue())
+        useful = AgentTask.objects.get(agent=self.agent, action_type="master_self_improvement")
+        self.assertEqual(useful.status, "queued")
+        call_command("online_income_cycle", stdout=StringIO())
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 2)
+        held.refresh_from_db()
+        self.assertEqual(held.status, "queued")
+        self.assertEqual(held.attempt_count, 0)
+
+    def test_malformed_profit_task_cannot_be_hidden_as_diagnostic(self):
+        malformed = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_market_research", status="queued",
+        )
+        state = AutonomousBrain().observe()
+        self.assertEqual(state["unfinished_tasks"], 1)
+        output = StringIO()
+        call_command("online_income_cycle", "--dry-run", stdout=output)
+        self.assertIn(f"BRAIN_CONTINUE task={malformed.pk}", output.getvalue())
+
+    def test_running_profit_task_is_not_quarantined(self):
+        AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="running",
+        )
+        self.assertEqual(AutonomousBrain().observe()["unfinished_tasks"], 1)
+
+    def test_blocked_profit_task_still_requires_review(self):
+        blocked = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="blocked",
+        )
+        self.assertEqual(AutonomousBrain().observe()["unfinished_tasks"], 1)
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        self.assertIn(f"BRAIN_BLOCKED task={blocked.pk}", output.getvalue())
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
+
     def test_unverified_self_improvement_does_not_requeue_same_work(self):
         AgentTask.objects.create(
             agent=self.agent, action_type="master_self_improvement",
@@ -185,6 +252,21 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertEqual(task.status, "queued")
         self.assertEqual(task.attempt_count, 0)
         self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
+
+    def test_master_loop_holds_legacy_profit_backlog_without_execution_or_retry(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_profit_optimize", status="queued",
+        )
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            for _ in range(2):
+                output = StringIO()
+                call_command("autonomous_master_loop", "--max-steps", "20", stdout=output)
+                self.assertIn(f"AUTO_DIAGNOSTIC_BACKLOG_HELD task={task.pk}", output.getvalue())
+            worker.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertEqual(task.attempt_count, 0)
 
     def test_master_loop_skips_mismatched_action_snapshot(self):
         task = AgentTask.objects.create(

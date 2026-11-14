@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
-from core.economic_tool_pack import build_economic_gateway
+from core.economic_tool_pack import DIAGNOSTIC_ONLY_ACTIONS, build_economic_gateway
 from core.models import AgentTask
 from core.worker_runner import WorkerRunner
 
@@ -48,13 +48,36 @@ class Command(BaseCommand):
                     action_type=F("capability_code"),
                 )
                 .exclude(pk__in=attempted_ids)
+                .exclude(action_type__in=DIAGNOSTIC_ONLY_ACTIONS)
             )
             if options["task_id"] is not None:
                 task_query = task_query.filter(pk=options["task_id"])
             task = task_query.order_by("created_at", "pk").first()
             if not task:
                 if options["task_id"] is not None:
+                    held_explicit = AgentTask.objects.filter(
+                        pk=options["task_id"], agent__code="economic-master-agent",
+                        agent__active=True, status="queued",
+                        action_type__in=DIAGNOSTIC_ONLY_ACTIONS,
+                        capability_code=F("action_type"),
+                    ).exists()
+                    if held_explicit:
+                        raise CommandError(
+                            "Diagnostic-only profit task is held; independent financial "
+                            "evidence is required before any new profit work"
+                        )
                     raise CommandError("Explicit task is not queued with a matching registered economic tool")
+                held = AgentTask.objects.filter(
+                    agent__code="economic-master-agent", agent__active=True,
+                    status="queued", action_type__in=DIAGNOSTIC_ONLY_ACTIONS,
+                    capability_code=F("action_type"),
+                ).order_by("created_at", "pk").first()
+                if held:
+                    self.stdout.write(
+                        f"DIAGNOSTIC_BACKLOG_HELD task={held.pk} "
+                        "requires_external_evidence=true; no retry or task mutation"
+                    )
+                    break
                 if executed == 0:
                     unknown = AgentTask.objects.filter(
                         agent__code="economic-master-agent", agent__active=True, status="queued",
@@ -85,5 +108,13 @@ class Command(BaseCommand):
                 f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
             ))
+            # A completed catalog inspection is not permission to drain a
+            # legacy backlog of identical diagnostic-only economic tasks.
+            if (completed.output_data or {}).get("progress_class") == "diagnostic_only":
+                self.stdout.write(
+                    f"DRAIN_DIAGNOSTIC_BOUNDARY task={completed.pk} "
+                    "business_outcome_verified=false; await external evidence"
+                )
+                break
         if options["drain"]:
             self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
