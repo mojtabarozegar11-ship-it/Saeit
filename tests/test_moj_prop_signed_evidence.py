@@ -284,7 +284,7 @@ class BrokerSignedEvidenceTests(TestCase):
     def test_signed_excessively_nested_json_fails_closed(self):
         # Valid HMAC, invalid parser depth: no uncaught RecursionError or DB row.
         raw = (b"[" * 1200) + b"0" + (b"]" * 1200)
-        with self.assertRaisesRegex(EvidenceRejected, "Invalid UTF-8 JSON evidence"):
+        with self.assertRaisesRegex(EvidenceRejected, "JSON nesting limit exceeded"):
             ingest_signed_evidence(**self._signed_raw(raw))
         self.assertFalse(PropExecution.objects.exists())
         self.assertFalse(PropEquityObservation.objects.exists())
