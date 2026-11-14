@@ -3,7 +3,7 @@ from django.test import SimpleTestCase
 from core.tron_rollout_inventory import (
     rollout_targets, inspect_rollout, DISCOVERED_DOMAIN_ANCHORS,
 )
-from core.tron_tenant_policy import CANONICAL_ASSET, CANONICAL_CHAIN, REQUIRED_ATTESTATIONS
+from core.tron_tenant_policy import CANONICAL_ASSET, CANONICAL_CHAIN, REQUIRED_ATTESTATIONS, registered_scope
 
 class SubsiteIsolationTests(SimpleTestCase):
     SUB = "shop.mojplaywin.com"
@@ -105,3 +105,11 @@ class SubsiteIsolationTests(SimpleTestCase):
 
     def test_18_canonical_anchors_still_exact_two(self):
         self.assertEqual(len(DISCOVERED_DOMAIN_ANCHORS),2)
+
+    def test_19_array_brand_raises_value_error_not_internal_error(self):
+        with self.assertRaises(ValueError):
+            registered_scope(host="mojplaywin.com",brand=["saman"])
+
+    def test_20_map_brand_raises_value_error_not_internal_error(self):
+        with self.assertRaises(ValueError):
+            registered_scope(host="mojplaywin.com",brand={"brand":"saman"})
