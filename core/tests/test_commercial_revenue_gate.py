@@ -161,6 +161,17 @@ class CommercialGateTests(unittest.TestCase):
                 ledger.advance(order_id="order-52", target=CommercialState.SETTLED, event_id="quote-52", payload_digest="b" * 64, payment_evidence=self.payment())
             ledger.close()
 
+    def test_sqlite_ledger_rejects_cross_order_event_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            ledger.create_order(order_id="order-53", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.QUOTED, event_id="shared-event", payload_digest="a" * 64)
+            with self.assertRaisesRegex(CommercialGateError, "event_replay_order_mismatch"):
+                ledger.advance(order_id="order-53", target=CommercialState.QUOTED, event_id="shared-event", payload_digest="a" * 64)
+            self.assertEqual(ledger.snapshot("order-53")["state"], "ordered")
+            ledger.close()
+
     def test_sqlite_ledger_deduplicates_identical_event(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
