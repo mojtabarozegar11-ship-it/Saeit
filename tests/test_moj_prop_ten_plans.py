@@ -56,6 +56,36 @@ class TenChallengePlansTests(SimpleTestCase):
                 self.assertTrue(plan.trader_bots_allowed)
                 self.assertEqual(plan.maximum_capital_usd,LEVELS[-1])
 
+    def test_plan_one_owner_declared_active_and_funded(self):
+        plan = CHALLENGE_PLANS[0]
+        self.assertEqual(plan.business_status, "owner_declared_active")
+        self.assertTrue(plan.business_active_owner_declared)
+        self.assertTrue(plan.capital_funded_owner_declared)
+        self.assertFalse(plan.temporary_owner_hold)
+        self.assertFalse(plan.funding_independently_verified)
+        self.assertFalse(plan.broker_live_account_independently_verified)
+
+    def test_other_nine_under_funding_and_temporarily_inactive(self):
+        for plan in CHALLENGE_PLANS[1:]:
+            with self.subTest(code=plan.code):
+                self.assertEqual(plan.business_status, "funding_in_progress_temporary_inactive")
+                self.assertTrue(plan.temporary_owner_hold)
+                self.assertFalse(plan.business_active_owner_declared)
+                self.assertFalse(plan.capital_funded_owner_declared)
+                self.assertFalse(plan.checkout_enabled)
+
+    def test_owner_claim_distinguished_from_live_payment_and_bank_proof(self):
+        summary = plan_public_summary(CHALLENGE_PLANS[0])
+        self.assertTrue(summary["business_active_owner_declared"])
+        self.assertTrue(summary["capital_funded_owner_declared"])
+        self.assertFalse(summary["funding_independently_verified"])
+        self.assertFalse(summary["broker_live_account_independently_verified"])
+        self.assertFalse(summary["checkout_enabled"])
+        self.assertFalse(summary["real_funding_guaranteed"])
+        self.assertFalse(summary["fee_is_final_for_sale"])
+        self.assertEqual(sum(p.business_active_owner_declared for p in CHALLENGE_PLANS), 1)
+        self.assertEqual(sum(p.temporary_owner_hold for p in CHALLENGE_PLANS), 9)
+
     def test_no_challenge_product_can_be_purchased_prematurely(self):
         self.assertFalse(ALL_PLANS_SELLABLE)
         for plan in CHALLENGE_PLANS:
