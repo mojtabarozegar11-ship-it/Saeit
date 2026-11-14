@@ -438,6 +438,68 @@ class OrderPaymentSourceContractTests(TestCase):
         self.assertEqual(self.client.post("/api/payments/create/", payload, format="json").status_code, 409)
         self.assertEqual(PaymentIntent.objects.count(), 1)
 
+    def test_53_empty_order_cannot_request_payment(self):
+        order = self.make_order()
+        OrderItem.objects.filter(order=order).delete()
+        response = self.client.post(
+            "/api/payments/create/",
+            {"order_id": order.pk, "idempotency_key": "snapshot-empty-0001"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.exists())
+
+    def test_54_tampered_order_line_total_cannot_invoice(self):
+        order = self.make_order()
+        OrderItem.objects.filter(order=order).update(unit_price=Decimal("1.00"))
+        response = self.client.post(
+            "/api/payments/create/",
+            {"order_id": order.pk, "idempotency_key": "snapshot-total-0001"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_55_order_item_currency_mismatch_cannot_invoice(self):
+        order = self.make_order()
+        OrderItem.objects.filter(order=order).update(currency="IRR")
+        response = self.client.post(
+            "/api/payments/create/",
+            {"order_id": order.pk, "idempotency_key": "snapshot-currency-0001"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_56_order_line_zero_quantity_cannot_invoice(self):
+        order = self.make_order()
+        OrderItem.objects.filter(order=order).update(quantity=0)
+        response = self.client.post(
+            "/api/payments/create/",
+            {"order_id": order.pk, "idempotency_key": "snapshot-quantity-0001"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_57_two_valid_items_and_matching_total_can_invoice(self):
+        order = self.make_order()
+        OrderItem.objects.create(
+            order=order, product=self.product, quantity=1,
+            unit_price=Decimal("125.50"), currency="USD",
+        )
+        order.total = Decimal("251.00")
+        order.save(update_fields=["total"])
+        response = self.client.post(
+            "/api/payments/create/",
+            {"order_id": order.pk, "idempotency_key": "snapshot-multiline-0001"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+        self.assertEqual(ApprovalRequest.objects.count(), 1)
+
     def test_45_payment_does_not_emit_real_delivery(self):
         intent = self.ready_intent()
         self.assertEqual(self.signed_event(intent).status_code, 200)

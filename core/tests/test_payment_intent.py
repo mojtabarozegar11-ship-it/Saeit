@@ -1,7 +1,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from core.models import ApprovalRequest, KnowledgeArticle, Order, PaymentIntent, Product
+from core.models import ApprovalRequest, KnowledgeArticle, Order, OrderItem, PaymentIntent, Product
 
 
 @pytest.mark.django_db
@@ -11,6 +11,19 @@ def test_payment_intent_is_idempotent_and_requires_approval(django_user_model):
     )
     order = Order.objects.create(
         customer=owner, status="pending", total="250.00", currency="IRR"
+    )
+    article = KnowledgeArticle.objects.create(
+        title="Invoice attachment", slug="invoice-attachment-only",
+        content="Synthetic fixture", published=True,
+    )
+    product = Product.objects.create(
+        title="Invoice service fixture", product_type="service",
+        owner=owner, active=True, knowledge_article=article,
+        price="250.00", currency="IRR",
+    )
+    OrderItem.objects.create(
+        order=order, product=product, quantity=1,
+        unit_price="250.00", currency="IRR",
     )
     client = APIClient()
     client.force_authenticate(user=owner)

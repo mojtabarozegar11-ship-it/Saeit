@@ -22,6 +22,7 @@ from django.utils import timezone
 import hashlib
 import hmac
 import json
+from decimal import Decimal
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, AuditLog, ChatMessage, ChatSession, Evidence, Finding,
@@ -360,6 +361,27 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                                     status=status.HTTP_409_CONFLICT)
                 if not valid_currency(order.currency):
                     return Response({"detail": "Order currency is invalid."},
+                                    status=status.HTTP_409_CONFLICT)
+                # New payment intents require real, immutable line snapshots.
+                # Do not create a payment approval for an empty or doctored
+                # order whose items disagree with its stored total/currency.
+                items = list(OrderItem.objects.filter(order=order).only(
+                    "unit_price", "quantity", "currency",
+                )[:101])
+                if not 1 <= len(items) <= 100:
+                    return Response({"detail": "Order line items are missing or excessive."},
+                                    status=status.HTTP_409_CONFLICT)
+                try:
+                    lines_total = sum(
+                        (exact_total(item.unit_price, item.quantity) for item in items),
+                        Decimal("0"),
+                    )
+                except ValueError:
+                    return Response({"detail": "Invalid order line amount or quantity."},
+                                    status=status.HTTP_409_CONFLICT)
+                if (lines_total != order.total
+                        or any(item.currency != order.currency for item in items)):
+                    return Response({"detail": "Order line snapshot does not match invoice."},
                                     status=status.HTTP_409_CONFLICT)
                 existing = (PaymentIntent.objects.select_for_update()
                             .filter(order=order).first())
