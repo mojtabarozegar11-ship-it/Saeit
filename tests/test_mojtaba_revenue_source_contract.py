@@ -34,6 +34,17 @@ class RevenueSourceContracts(unittest.TestCase):
         for phrase in ("محدوده زمانی", "داده", "حساسیت هزینه", "تأیید موردی"):
             self.assertIn(phrase,s)
 
+    def test_farm_27_scenarios_claim_is_supported_by_real_local_engine(self):
+        s=source("farm_economics")
+        self.assertIn("۲۷ سناریوی حساسیت",s)
+        self.assertIn("یک محصول در یک دوره",s)
+        self.assertIn("گزارش نهایی یا تضمین سود تلقی نمی‌شوند",s)
+        engine=(ROOT/"scripts/mojtaba_farm_break_even.py").read_text("utf8")
+        self.assertIn('"scenario_count": len(rows)',engine)
+        self.assertIn('for dp in (-1, 0, 1):',engine)
+        self.assertIn('for dy in (-1, 0, 1):',engine)
+        self.assertIn('for dc in (-1, 0, 1):',engine)
+
     def test_main_en_and_legacy_offer_stay_aligned(self):
         sources=(source("website_diagnosis"),source("website_bounded_repair"))
         for s in sources:
