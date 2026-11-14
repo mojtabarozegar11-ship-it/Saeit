@@ -168,6 +168,20 @@ class FourWeekProofTests(TestCase):
         row.refresh_from_db()
         self.assertEqual(row.review_status, PropSocialEvidence.Review.PENDING)
 
+    def test_future_dated_four_week_approval_cannot_be_saved_directly(self):
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone as django_timezone
+        row = self.submit()
+        row.review_status = PropSocialEvidence.Review.VERIFIED
+        row.reviewed_by = self.staff
+        row.reviewed_at = django_timezone.now() + timedelta(days=1)
+        for field in CHECKED:
+            setattr(row, field, True)
+        with self.assertRaises(ValidationError):
+            row.save()
+        row.refresh_from_db()
+        self.assertEqual(row.review_status, PropSocialEvidence.Review.PENDING)
+
     def test_missing_visibility_review_is_rejected(self):
         row=self.submit()
         verified=self.review(row,continued_visibility_verified=False)
