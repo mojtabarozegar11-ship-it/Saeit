@@ -95,7 +95,11 @@ def offer_design(payload):
             "id": product.pk, "status": product.metadata.get("commercial_status"),
             "active": product.active, "price": str(product.price),
         }),
-        "next_action": "income_mvp_build",
+        "next_action": (
+            "income_mvp_build" if product.metadata.get("commercial_status") == "offer_designed"
+            else "income_growth_experiment" if product.metadata.get("commercial_status") == "mvp_built"
+            else "await_external_acquisition"
+        ),
     }
 
 MVP_SECTIONS = (
