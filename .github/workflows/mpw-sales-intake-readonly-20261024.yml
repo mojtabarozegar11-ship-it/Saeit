@@ -9,6 +9,7 @@ on:
       - "scripts/mpw_live_email_recovery_capability_readonly_20261105.py"
       - "scripts/mpw_live_guest_email_linkage_readonly_20261105.py"
       - "scripts/mpw_cpanel_direct_first_transport_readonly.py"
+      - "scripts/mpw_cpanel_source_attestation_readonly.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -54,6 +55,14 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B scripts/mpw_cpanel_direct_first_transport_readonly.py
+      - name: Attest actual cPanel Passenger and TRX source without mutation
+        continue-on-error: true
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_cpanel_source_attestation_readonly.py
       - name: Run read-only live sales and checkout audit
         env:
           PYTHONDONTWRITEBYTECODE: "1"
