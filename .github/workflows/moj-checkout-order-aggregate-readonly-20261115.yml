@@ -1,0 +1,80 @@
+name: MOJ checkout historical order-state read-only aggregate
+on:
+  push:
+    branches: [fix/moj-revenue-current-base-20261115]
+    paths: [.github/workflows/moj-checkout-order-aggregate-readonly-20261115.yml]
+permissions:
+  contents: read
+concurrency:
+  group: moj-checkout-order-aggregate-readonly
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: "github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/moj-revenue-current-base-20261115'"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Observe only order-state existence; no invoices, recipients or money
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-orders-readonly-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 55s ssh -T -i "$d/key" -p 1396 \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 \
+            -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no \
+            zomorod2@zohal.pws-dns.net \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import json, os, pathlib, sys
+          root = pathlib.Path("/home/zomorod2/Saeit-staging")
+          report = {
+              "classification": "MPW_ORDER_AGGREGATE_SELECT_ONLY",
+              "only_existing_rows_read": True,
+              "customer_fields_extracted": False,
+              "amounts_or_pii_printed": False,
+              "invoices_created": 0,
+              "payments_modified": 0,
+              "emails_sent": 0,
+              "deployment_performed": False,
+              "settlement_independently_verified": False,
+          }
+          try:
+              if root.is_symlink() or not root.is_dir():
+                  raise RuntimeError("invalid checked root")
+              sys.dont_write_bytecode = True
+              os.chdir(root)
+              sys.path.insert(0, str(root))
+              os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+              import django
+              django.setup()
+              from core.models import Order, PaymentIntent, Product
+              from django.db import connection
+              if connection.vendor not in ("mysql", "sqlite"):
+                  raise RuntimeError("unsupported data source for select-only query")
+              # These Django queryset operations emit SELECT statements only.
+              report["paid_order_rows_present"] = bool(
+                  Order.objects.filter(status="paid").exists())
+              report["pending_order_rows_present"] = bool(
+                  Order.objects.filter(status="pending").exists())
+              report["payment_intent_rows_present"] = bool(
+                  PaymentIntent.objects.exists())
+              report["active_product_rows_present"] = bool(
+                  Product.objects.filter(active=True).exists())
+              report["database_read_result"] = "select_queries_completed"
+          except BaseException as exc:
+              report["database_read_result"] = "unavailable"
+              report["error_type_only"] = type(exc).__name__
+          print(json.dumps(report, sort_keys=True))
+          PY
