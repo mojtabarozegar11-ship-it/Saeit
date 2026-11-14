@@ -63,8 +63,11 @@ def submit_social_evidence(*, account_id, submitter, platform,
 @transaction.atomic
 def review_social_evidence(*, evidence_id, reviewer, audited_facts, reviewed_at=None):
     """Independent human verifies original post still public after four weeks."""
-    if not reviewer or reviewer.is_authenticated is not True or reviewer.is_staff is not True:
-        raise PermissionDenied("Independent staff role required")
+    if (
+        not reviewer or reviewer.is_authenticated is not True
+        or reviewer.is_active is not True or reviewer.is_staff is not True
+    ):
+        raise PermissionDenied("Active independent staff role required")
     fields = {
         "author_verified", "public_visible", "disclosure_verified",
         "content_compliant", "date_verified", "continued_visibility_verified",
