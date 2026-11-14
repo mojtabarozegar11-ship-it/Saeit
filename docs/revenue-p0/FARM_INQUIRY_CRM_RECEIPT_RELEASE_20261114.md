@@ -60,3 +60,18 @@ The first receipt branch required a *material* remediation before any release:
 - Effective `https://zomorodmelal.ir/company/`, `/services/` and PHP `/ask-master/` route behavior could not be validated from the current browsing environment. **No production changes, financial transactions or expenses have been initiated here.**
 
 **Launch status: NO-GO for live claims until tested in the real Django/MariaDB configuration and separately authorized/deployed.** Do not call source checks 'production ready'; do not convert a public link, mail draft, or sent supplier request into collected revenue.
+
+
+## Final source-integrity gate — same-day continuation
+
+**Authoritative latest check:** **54/54** actual local stdlib policy tests passed; the exact `core/company_inquiry_policy.py` source has Git blob **`c49ae0c0eb718c8f358b9eb9f3f35cf91e77fe0a`**, independently matched by local `git hash-object`. In the GitHub branch, **82/82 read-only structural integration assertions** passed across 17 fetched files. These results supersede the earlier 37/37 and 61/61 checkpoints, not add to them.
+
+The policy now validates/normalizes customer names and organizations, Persian/English text, line endings and bidi controls, contact email domains without changing email local-part case, and optional 7–15-digit telephone formats. Existing `CompanyInquiryForm` calls the same validated pure functions. Main company form now shows a concrete data-use disclosure and a 5000-character input bound. **No claims of external delivery, payment or runtime Django success.**
+
+**Django tests awaiting actual execution:** 51 authored new Django test cases (22 receipt, 17 farm intake, 12 aggregate funnel), plus 10 adapted existing tests. **0/61 executed.** A 54-case portable Python suite is committed and was executed locally against the matching pure implementation, but it is not the Django ORM test environment.
+
+**Concurrency/merge blocker discovered:** Independent open draft PR **#2306** (`fix/commercial-intake-and-ci-rootcauses-20261114`) also changes `core/company_content_views.py` and `core/templates/core/platform_page.html`, introducing contact canonicalization and a different lead-admission policy. Useful compatible normalization was carried forward into this branch, but PR #2306's older tests lack the now-mandatory `consent` field and cannot be merged/declared green blindly. Reconcile exact changes and test fixtures on a single integration branch; no merge or CI-triggering PR has been initiated here.
+
+**Live reality:** incoming `ZM-FARM` customer inquiries remain unverified in the connected company inbox; effective live PHP/Django intake and MariaDB are not accessible for proof. Company Gmail shows a **sent supplier follow-up** to DarooGostar, but this cycle did not send it and it is not a paying farm buyer or collected income. **Do not flip payment or deployment gates.**
+
+**Deployment readiness: NO-GO.** Requires CI/DB integration, lead routing proof, owner-scoped release approval, genuine consented customer, real order/contract and independent bank/merchant reconciliation.
