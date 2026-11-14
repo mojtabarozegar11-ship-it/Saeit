@@ -58,11 +58,22 @@ class EconomicTradeEmailTests(TestCase):
 
 class ExternalTradeApprovalTests(TestCase):
     def test_request_step_never_self_approves_or_issues_grant(self):
-        owner = get_user_model().objects.create_user(
-            username="trade-owner",
-            email="owner@example.com",
+        owner = get_user_model().objects.create_superuser(
+            username="trade-owner", email="owner@example.invalid", password="offline-only",
         )
-        request = authorize_external_trade(owner_id=owner.pk)
+        with override_settings(COMPANY_TRADE_EMAIL="trade@example.invalid"):
+            outbox = queue_trade_email(
+                recipient="buyer@example.invalid",
+                subject="Requested quotation", body="A quotation draft",
+                trade_context={
+                    "contact_basis": "requested_quote",
+                    "basis_evidence_sha256": "a" * 64,
+                },
+            )
+        outbox.mailbox.active = True
+        outbox.mailbox.allow_outbound = True
+        outbox.mailbox.save(update_fields=["active", "allow_outbound"])
+        request = authorize_external_trade(owner_id=owner.pk, outbox_id=outbox.pk)
         request.refresh_from_db()
         self.assertIsInstance(request, ApprovalRequest)
         self.assertEqual(request.status, "pending")
