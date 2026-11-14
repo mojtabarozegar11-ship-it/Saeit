@@ -1,6 +1,6 @@
 """CRM lead-quality regression tests for the public company inquiry form."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.company_inquiry_models import CompanyInquiry
