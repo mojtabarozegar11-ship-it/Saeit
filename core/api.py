@@ -117,6 +117,10 @@ AgentCapabilityViewSet = vs(AgentCapability, AgentSerializer if False else Agent
 class KnowledgeArticleViewSet(viewsets.ModelViewSet):
     """Published knowledge is public; publishing itself always requires owner approval."""
 
+    # Publicly visible articles must never be destructively deleted through
+    # a generic authenticated API route; retain provenance and references.
+    http_method_names = ["get", "post", "put", "patch", "head", "options"]
+
     queryset = KnowledgeArticle.objects.select_related("source_report__project").all()
     serializer_class = KnowledgeArticleSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -195,6 +199,9 @@ class KnowledgeArticleViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    # Preserve seller inventory, historic offer references and order linkage.
+    # Deactivation/archive needs a reviewed lifecycle, never a generic DELETE.
+    http_method_names = ["get", "post", "put", "patch", "head", "options"]
     queryset = Product.objects.select_related("knowledge_article", "owner").all()
     serializer_class = ProductSerializer
     permission_classes = [StaffWritePermission]
@@ -261,6 +268,9 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
+    # Only creation and read routes are authorized. PUT/PATCH/DELETE would
+    # otherwise risk mutating or erasing financial evidence and line history.
+    http_method_names = ["get", "post", "head", "options"]
     queryset = Order.objects.prefetch_related("items__product").all()
     serializer_class = OrderSerializer
     permission_classes = [InternalStaffWritePermission]

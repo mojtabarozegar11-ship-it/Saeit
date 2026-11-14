@@ -500,6 +500,30 @@ class OrderPaymentSourceContractTests(TestCase):
         self.assertEqual(PaymentIntent.objects.count(), 1)
         self.assertEqual(ApprovalRequest.objects.count(), 1)
 
+    def test_58_order_delete_cannot_erase_pending_invoice_and_items(self):
+        order = self.make_order()
+        self.assertEqual(self.client.delete(f"/api/orders/{order.pk}/").status_code, 405)
+        self.assertTrue(Order.objects.filter(pk=order.pk).exists())
+        self.assertEqual(OrderItem.objects.filter(order=order).count(), 1)
+
+    def test_59_active_product_delete_cannot_erase_catalog_reference(self):
+        self.assertEqual(self.client.delete(f"/api/products/{self.product.pk}/").status_code, 405)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk, active=True).exists())
+
+    def test_60_published_knowledge_delete_cannot_erase_delivery_provenance(self):
+        self.assertEqual(self.client.delete(f"/api/knowledge/{self.article.pk}/").status_code, 405)
+        self.assertTrue(KnowledgeArticle.objects.filter(pk=self.article.pk, published=True).exists())
+
+    def test_61_order_patch_cannot_forge_payment_state(self):
+        order = self.make_order()
+        response = self.client.patch(
+            f"/api/orders/{order.pk}/", {"status": "paid", "total": "0.01"}, format="json",
+        )
+        self.assertEqual(response.status_code, 405)
+        order.refresh_from_db()
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(order.total, Decimal("125.50"))
+
     def test_45_payment_does_not_emit_real_delivery(self):
         intent = self.ready_intent()
         self.assertEqual(self.signed_event(intent).status_code, 200)
