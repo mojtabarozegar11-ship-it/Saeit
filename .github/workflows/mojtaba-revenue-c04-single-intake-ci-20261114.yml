@@ -6,6 +6,8 @@ on:
       - core/service_quote_draft.py
       - core/admin.py
       - command_center/service_proposal_funnel.py
+      - deploy/company_public_intake_probe_readonly.py
+      - tests/test_company_public_intake_probe_20261114.py
       - command_center/templates/command_center/service_proposal_funnel.html
       - command_center/templates/command_center/dashboard.html
       - command_center/urls.py
@@ -29,6 +31,8 @@ on:
       - core/service_quote_draft.py
       - core/admin.py
       - command_center/service_proposal_funnel.py
+      - deploy/company_public_intake_probe_readonly.py
+      - tests/test_company_public_intake_probe_20261114.py
       - command_center/templates/command_center/service_proposal_funnel.html
       - command_center/templates/command_center/dashboard.html
       - command_center/urls.py
@@ -73,6 +77,7 @@ jobs:
           python -m py_compile core/management/commands/mojtaba_intake_source_readonly.py
           python -m py_compile core/service_quote_draft.py core/autonomous_brain.py core/economic_tool_pack.py
           python -m py_compile core/admin.py command_center/service_proposal_funnel.py command_center/urls.py
+          python -m py_compile deploy/company_public_intake_probe_readonly.py tests/test_company_public_intake_probe_20261114.py
           python -m py_compile core/management/commands/mojtaba_prepare_service_drafts.py
           python -m py_compile core/management/commands/seed_online_income_agents.py core/company_content_views.py core/views.py
           python -m py_compile core/tests/test_company_portal_single_source_c06_20261114.py tests/test_company_inquiry_validation_20261106.py
@@ -80,6 +85,12 @@ jobs:
           python -m py_compile core/tests/test_service_lead_intake_c03_20261114.py
           python -m py_compile core/tests/test_service_proposal_conversion_c05_20261114.py
           python -m py_compile core/tests/test_service_lead_queue_c07_20261114.py
+      - name: Verify public-only host probe logic without external requests
+        run: python -m unittest discover -s tests -p 'test_company_public_intake_probe_20261114.py' -q
+      - name: Public first-party form GET evidence (no secrets, non-blocking)
+        continue-on-error: true
+        timeout-minutes: 2
+        run: python deploy/company_public_intake_probe_readonly.py
       - name: Verify Django system and URL configuration
         run: python manage.py check
       - name: Preserve prior pricing and service science regression gates
