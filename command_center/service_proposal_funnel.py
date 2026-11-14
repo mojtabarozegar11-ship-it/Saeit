@@ -68,6 +68,8 @@ def service_proposal_funnel_snapshot():
     preview = preview_candidates(limit=20)
     scoped["candidate_scan"] = {
         "inspected": preview["candidate_count"],
+        "queue_total_candidates": preview["queue_total_candidates"],
+        "queue_uninspected": preview["queue_uninspected"],
         "eligible": preview["eligible_count"],
         "requires_human_review": preview["requires_human_review_count"],
         "review_reasons": preview["review_reason_counts"],
