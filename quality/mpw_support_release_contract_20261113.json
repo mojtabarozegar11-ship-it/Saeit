@@ -158,5 +158,29 @@
     "mpw_revenue_20261020/earn/inquiry.php": "separate_php_inquiry_release",
     "services/mpw_trx_guest_commerce.py": "manual_guest_checkout_release",
     "tests/test_mpw_support_email_contract_20261113.py": "test_only_not_deployed"
-  }
+  },
+  "runtime_surfaces": [
+    {
+      "id": "static_store_fallback",
+      "public_route": "/store/",
+      "candidate_active_file": "/home/zomorod2/mojplaywin.com/store/index.html",
+      "source_of_hint": ".github/workflows/vps-store-identity-audit.yml",
+      "source_anchor": "cat > \"$STORE/index.html\" <<'HTML'",
+      "evidence_level": "SOURCE_CANDIDATE_ONLY",
+      "active_file_verified": false,
+      "verified_live_sha256": null,
+      "verified_rollback": false
+    },
+    {
+      "id": "dynamic_support_handler",
+      "public_route": "/support/",
+      "candidate_active_file": "/home/zomorod2/Saeit-staging/core/brand_views.py",
+      "source_of_hint": "scripts/mpw_purchase_recovery_copy_fix_20261024.py",
+      "source_anchor": "core/brand_views.py",
+      "evidence_level": "HISTORICAL_PATCH_TARGET_ONLY",
+      "active_file_verified": false,
+      "verified_live_sha256": null,
+      "verified_rollback": false
+    }
+  ]
 }
