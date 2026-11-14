@@ -251,16 +251,25 @@ class PropFirmPolicyTests(unittest.TestCase):
                     self.assertFalse(decision.allowed)
                     self.assertIn(reason, decision.reasons)
 
-    def test_new_cohort_requires_both_social_platforms(self):
+    def test_first_phase_can_pass_before_four_week_social_review(self):
         decision = self.challenge(social_posts_verified=False)
+        self.assertTrue(decision.passed)
+        self.assertNotIn("social_single_post_each_platform_unverified", decision.reasons)
+
+    def test_new_cohort_final_phase_requires_both_social_platforms(self):
+        kwargs = dict(phase=2, realized_net_profit="6",
+                      max_profitable_day="1.8", prior_phase_passed=True)
+        decision = self.challenge(social_posts_verified=False, **kwargs)
         self.assertFalse(decision.passed)
         self.assertIn("social_single_post_each_platform_unverified", decision.reasons)
-        self.assertTrue(self.challenge(social_posts_verified=True).passed)
+        self.assertTrue(self.challenge(social_posts_verified=True, **kwargs).passed)
 
-    def test_social_truthy_fakes_do_not_approve_phase(self):
+    def test_social_truthy_fakes_cannot_approve_final_phase(self):
+        kwargs = dict(phase=2, realized_net_profit="6",
+                      max_profitable_day="1.8", prior_phase_passed=True)
         for forged in (1, "yes", {"done": True}, ["ig", "fb"]):
             with self.subTest(forged=repr(forged)):
-                result = self.challenge(social_posts_verified=forged)
+                result = self.challenge(social_posts_verified=forged, **kwargs)
                 self.assertFalse(result.passed)
                 self.assertIn("social_single_post_each_platform_unverified", result.reasons)
 
