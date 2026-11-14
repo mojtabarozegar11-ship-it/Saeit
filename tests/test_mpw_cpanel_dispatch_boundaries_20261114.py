@@ -135,7 +135,7 @@ class DispatchBoundaryTests(unittest.TestCase):
         self.assertIn("BatchMode yes",self.sh)
 
     def test_26_two_bound_immutable_provenance_handlers(self):
-        blocks=re.findall(r"(?ms)^  mpw_source_provenance\)\n(.*?)\n    ;;",self.sh)
+        blocks=re.findall(r"(?ms)^ {2,4}mpw_source_provenance\)\n(.*?)\n    ;;",self.sh)
         self.assertEqual(len(blocks),2)
         payload=PROBE.read_bytes()
         digest=hashlib.sha1(b"blob "+str(len(payload)).encode()+b"\x00"+payload).hexdigest()
@@ -145,7 +145,7 @@ class DispatchBoundaryTests(unittest.TestCase):
             self.assertIn("PYTHONDONTWRITEBYTECODE=1",block)
 
     def test_27_no_write_operations_in_provenance_handlers(self):
-        blocks=re.findall(r"(?ms)^  mpw_source_provenance\)\n(.*?)\n    ;;",self.sh)
+        blocks=re.findall(r"(?ms)^ {2,4}mpw_source_provenance\)\n(.*?)\n    ;;",self.sh)
         for block in blocks:
             for banned in ("scp ","rsync ","touch ","chmod ","mkdir ","rm ",
                            "restart ","migrate ","curl ","git push","sudo "):
