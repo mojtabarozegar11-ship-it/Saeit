@@ -75,6 +75,19 @@ def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
     tenant_id = item.get("tenant_id")
     if not isinstance(tenant_id, str) or not VALID_TENANT_ID.fullmatch(tenant_id):
         return TenantDecision(None, actual, brand, False, ("invalid_tenant_id",))
+    # Every brand/site must have a unique accounting identity. A copied ID on
+    # a second host could collapse separate customer invoices into one ledger.
+    if len(registry) > 4096:
+        return TenantDecision(tenant_id, actual, brand, False, ("tenant_registry_too_large",))
+    for other_key, other in registry.items():
+        if (
+            not isinstance(other_key, tuple) or len(other_key) != 2
+            or not all(isinstance(v, str) for v in other_key)
+            or not isinstance(other, dict)
+        ):
+            return TenantDecision(tenant_id, actual, brand, False, ("malformed_tenant_registry",))
+        if other_key != key and other.get("tenant_id") == tenant_id:
+            return TenantDecision(tenant_id, actual, brand, False, ("duplicate_tenant_id",))
     if item.get("asset") != CANONICAL_ASSET or item.get("network") != CANONICAL_CHAIN:
         return TenantDecision(tenant_id, actual, brand, False, ("wrong_network_or_asset",))
     missing = tuple(k for k in REQUIRED_ATTESTATIONS if item.get(k) is not True)
