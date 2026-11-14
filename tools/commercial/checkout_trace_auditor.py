@@ -70,6 +70,12 @@ def audit_checkout_trace(payload):
                 state["confirmed"]=True
                 if len(state["payments"]) > 1:
                     state["issues"].append("POSSIBLE_MULTIPLE_PAYMENT_REFERENCES")
+        elif kind == "payment_failed":
+            # No attempt-level reference is supplied by this sanitized format.
+            # A failure following a confirmation may be another attempt, so
+            # require human review rather than claiming a reversal or success.
+            if state["confirmed"]:
+                state["issues"].append("FAILURE_AFTER_CONFIRMATION_REQUIRES_REVIEW")
         elif kind == "fulfilled":
             state["fulfilled"] += 1
             if not state["confirmed"]:
