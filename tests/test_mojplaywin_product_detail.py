@@ -181,16 +181,20 @@ class MojPlayWinProductDetailsTests(TestCase):
         self.assertNotContains(response, 'href="/commerce/book/72/"')
         self.assertContains(response, "Purchasing on this page is not enabled.")
 
-    def test_gateway_price_comes_from_real_database_record(self):
+    def test_changed_db_price_fails_closed_until_catalog_is_corrected(self):
         Product.objects.create(
             pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
             product_type="digital_book", currency="USD", price="8.25",
         )
         with patch("core.mojplaywin_product_detail._approved_purchase_url",
-                   return_value="/commerce/book/72/"):
+                   return_value="/commerce/book/72/") as approved:
             response = self.get(72)
-        self.assertEqual(response.context["database_price_usd"], "8.25")
-        self.assertContains(response, "US &#36;8.25")
+        self.assertIsNone(response.context["database_price_usd"])
+        self.assertTrue(response.context["is_preview"])
+        self.assertFalse(response.context["purchase_available"])
+        approved.assert_not_called()
+        self.assertNotContains(response, 'href="/commerce/book/72/"')
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
 
     def test_missing_product_does_not_consult_gateway(self):
         with patch("core.mojplaywin_product_detail._approved_purchase_url") as approved:
