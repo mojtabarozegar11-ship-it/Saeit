@@ -15,6 +15,8 @@ import time
 TARGETS = (
     ("vps_ssh_22", "178.239.147.150", 22),
     ("cpanel_direct_ssh_1396", "zohal.pws-dns.net", 1396),
+    ("cpanel_known_ip_ssh_1396", "178.239.147.125", 1396),
+    ("cpanel_web_admin_2083", "zohal.pws-dns.net", 2083),
     ("store_https", "mojplaywin.com", 443),
     ("company_https", "zomorodmelal.ir", 443),
     ("sole_bot_https", "mojtaba.bot.ai", 443),
@@ -40,7 +42,7 @@ def probe(name, host, port):
             "account_verified":False,"payment_confirmed":False}
 
 def run(targets=TARGETS):
-    if type(targets) is not tuple or len(targets)>5:
+    if type(targets) is not tuple or len(targets)>7:
         raise ValueError("Probe allowlist exceeded")
     return {"method":"unauthenticated_tcp_connect_only",
             "environment":"github_actions_ephemeral_runner",
