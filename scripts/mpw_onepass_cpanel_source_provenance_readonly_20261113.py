@@ -58,30 +58,148 @@ def _safe_read(root: Path, relative: str, limit: int = 240_000):
 
 
 class StaticCheckoutControlInspector(HTMLParser):
-    """Classify actual input/select/textarea tags, not CSS or HTML comments.
+    """Inspect *usable* buyer-email controls in a real POST form on disk.
 
-    This is deliberately *not* a Django template renderer and gives no
-    assurance about the effective runtime template or purchase behavior.
+    A visible string, autocomplete label, detached input, textarea, select,
+    disabled field, or GET form is not proof a guest can submit an email.
+    This remains static source evidence, NEVER live checkout attestation.
     """
+
+    _EMAIL_NAMES = frozenset({
+        "email", "buyer_email", "customer_email", "purchase_email",
+        "purchaser_email",
+    })
+    _VOID_TAGS = frozenset({
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    })
+    _ACTION_RE = re.compile(r"/commerce/trx-easy/start/[1-9][0-9]{0,9}/\Z")
+    _CONTROL_OVERRIDES = frozenset({
+        "form", "formaction", "formmethod", "formenctype", "formtarget",
+        "formnovalidate",
+    })
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.email_controls = 0
+        self.email_hints = 0
         self.forms = 0
         self.post_forms = 0
+        self.rejection_codes = set()
+        self._scopes = []
+        self._form = None
+
+    @staticmethod
+    def _attributes(attrs):
+        names = [key.lower() for key, _ in attrs if key]
+        values = {key.lower(): (value or "").strip() for key, value in attrs if key}
+        return names, values
+
+    @staticmethod
+    def _inert(tag, values):
+        style = re.sub(r"\s+", "", values.get("style", "").lower())
+        return (
+            "hidden" in values or "inert" in values
+            or values.get("aria-hidden", "").lower() == "true"
+            or values.get("aria-disabled", "").lower() == "true"
+            or "display:none" in style or "visibility:hidden" in style
+            or "content-visibility:hidden" in style
+            or "opacity:0" in style or "pointer-events:none" in style
+            or (tag == "fieldset" and "disabled" in values)
+            or tag == "template"
+            or (tag in ("details", "dialog") and "open" not in values)
+        )
 
     def handle_starttag(self, tag, attrs):
-        values = {name.lower(): (value or "").strip().lower()
-                  for name, value in attrs if name}
+        names, values = self._attributes(attrs)
+        inert = (bool(self._scopes and self._scopes[-1][1])
+                 or self._inert(tag, values))
+        if tag not in self._VOID_TAGS:
+            self._scopes.append((tag, inert))
         if tag == "form":
             self.forms += 1
-            if values.get("method") == "post":
+            method = values.get("method", "get").lower()
+            if method == "post":
                 self.post_forms += 1
-        if tag in ("input", "textarea", "select"):
-            if any("email" in values.get(key, "") for key in
-                   ("name", "id", "type", "autocomplete")):
-                self.email_controls += 1
+            if self._form is not None:
+                self.rejection_codes.add("nested_form")
+            valid_form = (
+                method == "post"
+                and self._ACTION_RE.fullmatch(values.get("action", "")) is not None
+                and names.count("method") == 1
+                and names.count("action") == 1
+                and "target" not in values and "novalidate" not in values
+                and values.get("enctype", "application/x-www-form-urlencoded").lower()
+                    == "application/x-www-form-urlencoded"
+                and values.get("accept-charset", "utf-8").lower() == "utf-8"
+                and not inert
+            )
+            self._form = {"valid": valid_form, "candidates": 0}
+            if not valid_form:
+                self.rejection_codes.add("not_usable_post_form")
+            return
+        if tag not in ("input", "textarea", "select"):
+            return
+        field = values.get("name", "").lower()
+        kind = values.get("type", "text").lower()
+        hint = (
+            field in self._EMAIL_NAMES or kind == "email"
+            or "email" in values.get("id", "").lower()
+            or values.get("autocomplete", "").lower() == "email"
+        )
+        if not hint:
+            return
+        self.email_hints += 1
+        if self._form is None or not self._form["valid"]:
+            self.rejection_codes.add("email_not_in_usable_post_form")
+            return
+        duplicate = any(names.count(a) != 1 for a in ("name", "type"))
+        duplicate = duplicate or any(names.count(a) > 1 for a in (
+            "required", "disabled", "readonly", "maxlength", "minlength",
+            "pattern", "autocomplete", "style", "hidden",
+        ))
+        blocked = (
+            tag != "input" or field not in self._EMAIL_NAMES
+            or kind != "email" or "required" not in values
+            or "disabled" in values or "readonly" in values
+            or "multiple" in values or "pattern" in values
+            or values.get("inputmode", "").lower() == "none"
+            or inert or duplicate
+            or any(name in self._CONTROL_OVERRIDES for name in names)
+        )
+        try:
+            if "maxlength" in values and not 6 <= int(values["maxlength"]) <= 254:
+                blocked = True
+            if "minlength" in values and not 0 <= int(values["minlength"]) <= 254:
+                blocked = True
+            if ("maxlength" in values and "minlength" in values
+                    and int(values["minlength"]) > int(values["maxlength"])):
+                blocked = True
+        except (ValueError, TypeError):
+            blocked = True
+        if blocked:
+            self.rejection_codes.add("email_control_inert_or_invalid")
+        else:
+            self._form["candidates"] += 1
 
+    def handle_endtag(self, tag):
+        if tag == "form":
+            if self._form is not None:
+                if self._form["valid"]:
+                    self.email_controls += self._form["candidates"]
+                self._form = None
+            else:
+                self.rejection_codes.add("orphan_form_end")
+        for i in range(len(self._scopes) - 1, -1, -1):
+            if self._scopes[i][0] == tag:
+                del self._scopes[i:]
+                break
+
+    def close(self):
+        super().close()
+        if self._form is not None:
+            self.rejection_codes.add("unclosed_form")
+            self._form = None
 
 
 def classify_apache_passenger_directives(raw, public: Path, app: Path) -> str:
@@ -195,6 +313,9 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     template_state = "missing_or_unsafe"
     template_forms = None
     template_post_forms = None
+    template_email_hints = None
+    template_email_valid_controls = None
+    template_email_rejections = []
     legacy_label_only = False
     if template is not None:
         try:
@@ -203,6 +324,9 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
             inspector.close()
             template_forms = min(inspector.forms, 100)
             template_post_forms = min(inspector.post_forms, 100)
+            template_email_hints = min(inspector.email_hints, 100)
+            template_email_valid_controls = min(inspector.email_controls, 100)
+            template_email_rejections = sorted(inspector.rejection_codes)[:20]
             legacy_label_only = (
                 b"mpw-buy-email" in template.lower()
                 and inspector.email_controls == 0
@@ -230,6 +354,9 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "template_disk_source": template_state,
         "template_forms_count_capped": template_forms,
         "template_post_forms_count_capped": template_post_forms,
+        "template_email_hints_count_capped": template_email_hints,
+        "template_usable_email_controls_count_capped": template_email_valid_controls,
+        "template_email_rejections": template_email_rejections,
         "template_legacy_email_label_without_control": legacy_label_only,
         "effective_django_template_origin_verified": False,
         "store_view_source_regular": store_view is not None,
