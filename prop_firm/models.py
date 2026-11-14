@@ -118,6 +118,16 @@ class PropExecution(models.Model):
                                 related_name="executions")
     external_event_id = models.CharField(max_length=160)
     data_source = models.CharField(max_length=64)
+    # The broker's stable POSITION/trade ID groups partial fills and
+    # stops a single round-trip being counted as many separate executions.
+    # Blank historical IDs are deliberately NOT credited toward 50 trades.
+    external_position_id = models.CharField(max_length=160, blank=True)
+    execution_origin = models.CharField(
+        max_length=12,
+        choices=[("unknown", "Unknown"), ("manual", "Manual"),
+                 ("bot", "Trader's automated strategy")],
+        default="unknown",
+    )
     symbol = models.CharField(max_length=32)
     closed_at = models.DateTimeField(db_index=True)
     gross_realized_usd = models.DecimalField(max_digits=18, decimal_places=4)
