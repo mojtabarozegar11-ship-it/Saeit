@@ -1,11 +1,19 @@
 """CRM lead-quality regression tests for the public company inquiry form."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.company_inquiry_models import CompanyInquiry
 
 
+@override_settings(
+    DEBUG=True,
+    SERVICE_INTAKE_DJANGO_ENABLED=True,
+    SERVICE_INTAKE_SINGLE_SOURCE_APPROVED=True,
+    SERVICE_INTAKE_ROLLBACK_VERIFIED=True,
+    SERVICE_INTAKE_PRIVACY_REVIEWED=True,
+    SERVICE_INTAKE_SOURCE_OF_TRUTH="django_company_inquiry_v1",
+)
 class CompanyInquiryValidationTests(TestCase):
     def payload(self):
         return {
@@ -16,6 +24,8 @@ class CompanyInquiryValidationTests(TestCase):
             "phone": "",
             "subject": "Request a quotation",
             "message": "Please tell me about the available service.",
+            "consent": "on",
+            "website": "",
         }
 
     def submit(self, payload):
