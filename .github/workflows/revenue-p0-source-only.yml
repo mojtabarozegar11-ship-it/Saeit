@@ -8,6 +8,8 @@ on:
       - "scripts/revenue_dual_offer_qualifier.py"
       - "scripts/mojtaba_revenue_portfolio.py"
       - "scripts/mojtaba_revenue_cli.py"
+      - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
@@ -21,6 +23,8 @@ on:
       - "scripts/revenue_dual_offer_qualifier.py"
       - "scripts/mojtaba_revenue_portfolio.py"
       - "scripts/mojtaba_revenue_cli.py"
+      - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
@@ -59,6 +63,18 @@ jobs:
           assert c['synthetic_example'] is True and c['actual_revenue'] is None
           print('MOJTABA_SINGLE_BOT_PORTFOLIO=10; FINANCIAL_RELEASE=NO_GO; ACTUAL_REVENUE=UNKNOWN')
           PY
+      - name: Observe public service pages and canonical domain via GET only
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_public_attestation_readonly.py
+      - name: Keep non-mutating public evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojtaba-revenue-get-only-readiness
+          path: ${{ runner.temp }}/mojtaba-revenue-attestation/
+          retention-days: 7
+          if-no-files-found: warn
       - name: Reject non-anonymized or phantom payment test output
         run: |
           python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-checkout-intake.synthetic.json > /tmp/revenue_checkout.json
