@@ -19,7 +19,7 @@ _NONNEGATIVE = (
     "payment_unit_fee", "refund_unit_reserve", "tax_unit_reserve",
     "period_fixed_cost",
 )
-_NUMERIC = re.compile(r"^(?:0|[1-9][0-9]{0,14})(?:\.[0-9]{1,6})?$")
+_NUMERIC = re.compile(r"^(?:0|[1-9][0-9]{0,14})(?:\.[0-9]{1,12})?$")
 
 
 def _amount(value: object, field: str) -> Decimal:
