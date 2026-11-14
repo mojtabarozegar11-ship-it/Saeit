@@ -293,3 +293,27 @@ def test_checkout_get_fetch_failure_is_unknown_not_verified_sale():
     assert all(row["status"] == "FETCH_FAILED" for row in result["observations"])
     assert all(row["error_class"] == "TimeoutError" for row in result["observations"])
     assert result["live_purchase_ready"] is False
+
+
+def test_checkout_form_rejects_foreign_base_tag_and_same_origin_login_action():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    pages[route] = _checkout_html(72).replace(
+        "<html>", '<html><head><base href="https://evil.example/"></head>', 1)
+    assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+    pages[route] = _checkout_html(72).replace(
+        "/commerce/trx-easy/start/72/", "/accounts/login/")
+    assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+
+
+def test_checkout_form_cannot_post_to_other_product_or_create_invoice_url():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    for action in ("/commerce/trx-easy/start/225/",
+                   "/commerce/trx-easy/invoice/1/",
+                   "/store/product/879/checkout/"):
+        pages[route] = _checkout_html(72).replace(
+            "/commerce/trx-easy/start/72/", action)
+        assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
