@@ -47,4 +47,11 @@ class FarmEconomicsTests(unittest.TestCase):
     def test_zero_sales(self):
         row=BASE.copy();row[7]="0";row[8]="0"
         self.assertEqual(validate_csv(sample(row))[0]["break_even_units"],"NOT_ATTAINABLE")
+    def test_duplicate_enterprise_period_casefold(self):
+        row=BASE.copy();row[0]=" FARM01 "
+        with self.assertRaisesRegex(ValueError,"duplicate enterprise-period"):
+            validate_csv(sample()+",".join(row)+"\n")
+    def test_same_enterprise_different_period_allowed(self):
+        row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31"
+        self.assertEqual(len(validate_csv(sample()+",".join(row)+"\n")),2)
 if __name__=="__main__":unittest.main()
