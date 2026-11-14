@@ -37,9 +37,15 @@ class PersistedSignalEvidenceTests(TestCase):
         brand = changes.get("brand", "saman")
         source_id = changes.get("source_id", "sourceA")
         record = changes.get("record", self.record)
+        # A deliberately malformed source record cannot be signed as a
+        # well-formed event; the caller may supply a precomputed valid
+        # signature so that the *importer* rejection is under test.
+        signature = changes.get("signature")
+        if signature is None:
+            signature = self.sign(record, brand, source_id)
         opts = {
             "brand": brand, "source_id": source_id, "record": record,
-            "signature": self.sign(record, brand, source_id),
+            "signature": signature,
             "trusted_source_keys": REGISTRY,
             "now": NOW,
         }
