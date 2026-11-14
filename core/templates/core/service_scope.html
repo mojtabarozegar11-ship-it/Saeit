@@ -21,6 +21,42 @@
     <p style="font-size:.9rem">فرم اصلی فعال شرکت روی مسیر موجود PHP قرار دارد. برای تشخیص خدمت در توضیحات فرم، کد <strong>{{ service_scope_code }}</strong> را درج کنید. این صفحه مشخصات شخصی شما را ذخیره نمی‌کند.</p>
     {% endif %}
   </header>
+  <section aria-labelledby="scope-brief" style="padding:1.1rem;background:#f4f7f6;color:#193f38;border-radius:.8rem;margin-bottom:1.4rem">
+    <h2 id="scope-brief">متن آماده برای استعلام همین خدمت</h2>
+    <p>این متن بدون نام، شماره تماس یا مدارک شخصی تهیه شده است. برای جلوگیری از گم‌شدن کد خدمت در فرم عمومی، آن را کپی و در بخش توضیحات فرم درج کنید.</p>
+    <label for="service-brief-text">کد و خلاصه دامنه خدمت</label>
+    <textarea id="service-brief-text" readonly rows="6" style="width:100%;max-width:100%;border:1px solid #647d78;border-radius:.5rem;padding:.7rem" dir="rtl">کد خدمت: {{ service_scope_code }}
+خدمت درخواستی: {{ offer.title_fa }}
+هدف درخواست: بررسی امکان ارائه خدمت و توافق بر دامنه کار
+مسئله اصلی: {{ guide.pain }}
+خروجی مورد انتظار: {{ guide.acceptance }}
+لطفاً پیش از هر تعهد، ظرفیت، هزینه، زمان و روش امن ارائه مدارک مشخص شود.</textarea>
+    <button id="copy-service-brief" type="button" style="margin-top:.6rem;padding:.65rem 1.1rem;border-radius:.5rem;border:1px solid #15584d;cursor:pointer">کپی متن آماده استعلام</button>
+    <p id="copy-service-feedback" role="status" aria-live="polite">در صورت نبود امکان کپی خودکار، متن را انتخاب و به فرم اصلی منتقل کنید.</p>
+  </section>
+  <script>
+  (function () {
+    "use strict";
+    const button = document.getElementById("copy-service-brief");
+    const field = document.getElementById("service-brief-text");
+    const feedback = document.getElementById("copy-service-feedback");
+    if (!button || !field || !feedback) return;
+    button.addEventListener("click", async function () {
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          field.focus(); field.select();
+          feedback.textContent = "متن انتخاب شد؛ آن را کپی و در توضیحات فرم اصلی جای‌گذاری کنید.";
+          return;
+        }
+        await navigator.clipboard.writeText(field.value);
+        feedback.textContent = "متن همین خدمت کپی شد؛ اکنون آن را در توضیحات فرم اصلی قرار دهید.";
+      } catch (error) {
+        field.focus(); field.select();
+        feedback.textContent = "کپی خودکار مجاز نبود؛ متن انتخاب شد و می‌توانید دستی کپی کنید.";
+      }
+    });
+  }());
+  </script>
   <section aria-labelledby="scope-questions">
     <h2 id="scope-questions">این بررسی به چه تصمیم‌هایی پاسخ می‌دهد؟</h2>
     <ul>{% for question in guide.questions %}<li>{{ question }}</li>{% endfor %}</ul>
