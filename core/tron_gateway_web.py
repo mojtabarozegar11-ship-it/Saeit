@@ -365,8 +365,6 @@ def _record_paid(invoice_id, proof):
     with transaction.atomic():
         invoice = TronGatewayInvoice.objects.select_for_update().select_related(
             "order", "payment_intent").get(pk=invoice_id)
-        if invoice.status == "paid":
-            return invoice.txid == proof["txid"]
         try:
             merchant = _merchant(invoice.source_host)
         except MerchantConfigurationError:
@@ -374,6 +372,8 @@ def _record_paid(invoice_id, proof):
         if (invoice.merchant_tenant_id != merchant.tenant_id
                 or invoice.receiver != merchant.receiver):
             return False
+        if invoice.status == "paid":
+            return invoice.txid == proof["txid"]
         if (invoice.status != "awaiting_payment" or invoice.order.status != "pending"
                 or invoice.payment_intent.status != "awaiting_payment"
                 or invoice.payment_intent.provider != PROVIDER
