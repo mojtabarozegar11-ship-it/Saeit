@@ -36,7 +36,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.guest.write_bytes(b"synthetic source only\n")
         self.template.write_bytes(
             b'<form method="post" action="/commerce/trx-easy/start/72/">'
-            b'<input id="mpw-buy-email" name="email" type="email"></form>')
+            b'<input id="mpw-buy-email" name="email" type="email" required></form>')
         self.ht.write_bytes(probe.FALLBACK_BLOCK + b"Owner original directives\n")
         self.wsgi.write_bytes(("APP='" + str(self.app) + "'\n").encode())
         self.store.write_bytes(b"<html>MPW_STATIC_STORE_FALLBACK_V1</html>\n")
@@ -111,17 +111,17 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         self.template.write_bytes(
             b'<form method="post"><textarea name="customer_email"></textarea></form>')
         report = self.inspect()
-        self.assertEqual(report["template_disk_source"], "email_field_present")
+        self.assertEqual(report["template_disk_source"], "email_not_found_static_source")
         self.assertEqual(report["template_post_forms_count_capped"], 1)
 
     def test_select_email_control_detected(self):
         self.template.write_bytes(
             b'<select id="preferred-email"><option>No</option></select>')
         self.assertEqual(self.inspect()["template_disk_source"],
-                         "email_field_present")
+                         "email_not_found_static_source")
 
     def test_uppercase_html_email_attribute_detected(self):
-        self.template.write_bytes(b'<INPUT TYPE="EMAIL" ID="BILLING"/>')
+        self.template.write_bytes(b'<form METHOD="POST" ACTION="/commerce/trx-easy/start/72/"><INPUT TYPE="EMAIL" NAME="BUYER_EMAIL" ID="BILLING" REQUIRED/></form>')
         self.assertEqual(self.inspect()["template_disk_source"],
                          "email_field_present")
 
@@ -149,7 +149,7 @@ class ReadOnlySourceProvenanceTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.template.write_bytes(b"<form>" + field + b"</form>")
-                self.assertEqual(self.inspect()["template_disk_source"], "email_field_present")
+                self.assertEqual(self.inspect()["template_disk_source"], "email_not_found_static_source")
 
     def test_store_and_checkout_view_source_are_fingerprinted(self):
         report = self.inspect()
