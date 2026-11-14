@@ -1,5 +1,6 @@
 """Moj Prop English-first, 20-language and MojPlayWin-only regression tests."""
 import unittest
+import unicodedata
 from pathlib import Path
 
 from prop_firm.moj_prop_page import (
@@ -28,8 +29,14 @@ class MojPropCatalogTests(unittest.TestCase):
                 self.assertTrue(context["trader_bots_allowed"])
                 self.assertEqual(set(context["trading"]),{"title","body","bots"})
                 self.assertTrue(all(context["trading"].values()))
-                self.assertIn("50",context["trading"]["body"])
-                self.assertIn("28",context["trading"]["body"])
+                # Unicode decimal numerals have local glyphs (e.g., فارسی ۵۰);
+                # the rule must be verified without forcing English digits.
+                body = "".join(
+                    str(unicodedata.decimal(ch)) if ch.isdecimal() else ch
+                    for ch in context["trading"]["body"]
+                )
+                self.assertIn("50", body)
+                self.assertIn("28", body)
         self.assertIn("ربات",page_context("fa")["trading"]["bots"])
         self.assertIn("bots",page_context("en")["trading"]["bots"])
 
