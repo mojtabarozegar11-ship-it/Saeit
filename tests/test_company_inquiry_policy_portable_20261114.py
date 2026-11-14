@@ -50,14 +50,14 @@ class PolicyTests(unittest.TestCase):
     def test_provenance_good(self): self.assertTrue(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm"))
     def test_provenance_fake_subject_only(self): self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,""))
     def test_provenance_generic_source_rejected(self): self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=x; source=company"))
-    def test_provenance_noncommercial_rejected(self): self.assertFalse(policy.provenance("research",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=x; source=farm"))
-    def test_provenance_nonfarm_title_rejected(self): self.assertFalse(policy.provenance("commercial","other","INTAKE_CONSENT_V1; confirmed_at=x; source=farm"))
-    def test_provenance_injected_suffix_rejected(self): self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=x; source=farm; source=company"))
+    def test_provenance_noncommercial_rejected(self): self.assertFalse(policy.provenance("research",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm"))
+    def test_provenance_nonfarm_title_rejected(self): self.assertFalse(policy.provenance("commercial","other","INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm"))
+    def test_provenance_injected_suffix_rejected(self): self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm; source=company"))
     def test_provenance_none_rejected(self): self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,None))
     def test_staff_appended_notes_do_not_lose_verified_farm_status(self):
-        self.assertTrue(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=x; source=farm\nSecond staff note"))
+        self.assertTrue(policy.provenance("commercial",policy.FARM_SUBJECT,"INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm\nSecond staff note"))
     def test_staff_note_cannot_forge_original_server_line(self):
-        self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,"Other note\nINTAKE_CONSENT_V1; confirmed_at=x; source=farm"))
+        self.assertFalse(policy.provenance("commercial",policy.FARM_SUBJECT,"Other note\nINTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm"))
     def test_older_session_legacy_not_duplicated(self): self.assertEqual(policy.replay_inquiry_id([row(when=NOW-50)],FP_A,NOW),1)
 
 
@@ -88,6 +88,30 @@ class NormalizationTests(unittest.TestCase):
     def test_invalid_email_denied(self):
         with self.assertRaises(ValueError): policy.normalize_customer_email("no-at-sign")
 
+
+
+class StrictProvenanceTests(unittest.TestCase):
+    def test_non_date_marker_is_not_farm(self):
+        self.assertFalse(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=x; source=farm"))
+    def test_naive_time_is_not_farm(self):
+        self.assertFalse(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00; source=farm"))
+    def test_impossible_date_is_not_farm(self):
+        self.assertFalse(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2026-02-30T12:00:00+00:00; source=farm"))
+    def test_bad_timezone_is_not_farm(self):
+        self.assertFalse(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+15:00; source=farm"))
+    def test_fractional_seconds_aware_is_farm(self):
+        self.assertTrue(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00.123456+03:30; source=farm"))
+    def test_past_valid_stamp_still_counts(self):
+        self.assertTrue(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2024-01-01T00:00:00+00:00; source=farm"))
+    def test_extra_semicolon_not_farm(self):
+        self.assertFalse(policy.provenance("commercial", policy.FARM_SUBJECT,
+            "INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; extra=1; source=farm"))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
