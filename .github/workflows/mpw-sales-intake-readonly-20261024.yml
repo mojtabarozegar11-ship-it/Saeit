@@ -10,6 +10,8 @@ on:
       - "tests/test_mpw_cpanel_direct_first_transport_readonly.py"
       - "tests/test_cpanel_source_attestation_readonly.py"
       - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
+      - "scripts/mpw_runner_port_reachability_readonly.py"
+      - "tests/test_mpw_runner_port_reachability_readonly.py"
   push:
     branches: [main]
     paths:
@@ -22,6 +24,8 @@ on:
       - "scripts/mpw_cpanel_source_attestation_readonly.py"
       - "scripts/mpw_encrypted_inquiry_queue_readonly.py"
       - "tests/test_mpw_encrypted_inquiry_queue_readonly.py"
+      - "scripts/mpw_runner_port_reachability_readonly.py"
+      - "tests/test_mpw_runner_port_reachability_readonly.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -52,6 +56,13 @@ jobs:
              ast.parse(Path(name).read_text(encoding='utf8'),filename=name)
           print('MPW_SAFE_READONLY_SOURCE_SYNTAX=PASS')
           PY
+      - name: Observe runner-to-server TCP connectivity without SSH secrets
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_runner_port_reachability_readonly.py' -v
+          python3 -B scripts/mpw_runner_port_reachability_readonly.py
       - name: Execute 70 offline regressions without SSH or customer access
         env:
           PYTHONDONTWRITEBYTECODE: "1"
