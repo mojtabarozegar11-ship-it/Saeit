@@ -42,6 +42,8 @@ class FarmEconomicsTests(unittest.TestCase):
         with self.assertRaises(ValueError):validate_csv(sample(row))
     def test_duplicate_header(self):
         with self.assertRaises(ValueError):validate_csv(sample(headers=FIELDS[:-1]+("fixed_cost",)))
+    def test_utf8_bom_export(self):
+        self.assertEqual(validate_csv("\ufeff"+sample())[0]["economic_profit"],"270")
     def test_empty(self):
         with self.assertRaises(ValueError):validate_csv(",".join(FIELDS)+"\n")
     def test_zero_sales(self):
