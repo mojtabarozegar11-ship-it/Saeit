@@ -11,6 +11,14 @@ from dataclasses import dataclass
 # Explicit release obligations across the owner's product/service lines.
 # No account/payment/deploy operation is performed by this module.
 SECTORS = {
+    "mojplaywin_store": (
+        "rights_verified_for_every_listed_sku", "guest_email_checkout_verified",
+        "native_trx_invoice_from_private_gateway_verified",
+        "independent_mainnet_payment_reconciled",
+        "private_download_and_receipt_delivery_verified",
+        "buyer_recovery_and_refund_path_verified",
+        "live_cpanel_release_evidence_approved",
+    ),
     "digital_books": (
         "content_final", "rights_cleared", "catalog_approved",
         "payment_reconciled", "delivery_verified", "recovery_verified",
@@ -61,8 +69,8 @@ SECTORS = {
 # Strict owner-set priority: keep these first four in all reports and planning.
 # A shared gateway is a prerequisite across brands, not a permission to charge.
 PRIORITY = (
-    "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
-    "website_kits", "agriculture_services", "ai_services",
+    "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
+    "digital_books", "website_kits", "agriculture_services", "ai_services",
     "education_courses", "research_publications", "games",
 )
 
