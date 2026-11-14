@@ -758,3 +758,21 @@ def test_route_substring_false_positive_does_not_enter_census(tmp_path):
     assert report["processes"]["route_match_counts"] == {}
     assert "PRIVATE_DATA" not in json.dumps(report)
     assert report["attestation"]["canonical_worker_executed"] is False
+
+
+def test_suffixed_systemd_units_remain_indicators_only():
+    input_rows = (
+        "newsletter_process_queue-private.service loaded active running Private worker\n"
+        "knowledge_agent_cycle-legacy.service loaded inactive dead Old worker\n"
+        "backup_newsletter_process_queue-private.service loaded active running Unrelated\n"
+        "not-a-related.service loaded active running Unrelated\n"
+    )
+    units = observer.safe_service_units(input_rows)
+    assert len(units) == 2
+    assert units[0]["known_route_flags"] == ["newsletter_process_queue"]
+    assert units[1]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert units[0]["active"] == "active"
+    assert units[1]["active"] == "inactive"
+    assert "newsletter_process_queue-private.service" not in json.dumps(units)
+    assert "knowledge_agent_cycle-legacy.service" not in json.dumps(units)
+    assert observer.route_flags("knowledge_agent_cycle-legacy.py") == []
