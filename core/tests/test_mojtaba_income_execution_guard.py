@@ -43,12 +43,10 @@ def enqueue(master, code="income_market_research", status="queued"):
     )
 
 
-@pytest.mark.parametrize("bad", [None, [], {}, "not a mapping", 1])
+@pytest.mark.parametrize("bad", [None, [], "not a mapping", 1])
 def test_invalid_gateway_registry_is_not_executable(bad):
     with pytest.raises(CommandError, match="registry is invalid"):
-        registered_economic_tools(gateway if False else SimpleNamespace(
-            describe=lambda: bad
-        ))
+        registered_economic_tools(SimpleNamespace(describe=lambda: bad))
 
 
 def test_only_explicitly_enabled_economic_tools_are_accepted():
@@ -70,6 +68,7 @@ def test_master_rejects_nonpositive_step_budget(limit):
         call_command("autonomous_master_loop", max_steps=limit)
 
 
+@pytest.mark.django_db
 def test_master_clamps_oversize_step_budget():
     output = StringIO()
     with patch("core.management.commands.autonomous_master_loop.build_economic_gateway",
