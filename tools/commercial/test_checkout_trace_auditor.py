@@ -37,6 +37,14 @@ class CheckoutTraceTests(unittest.TestCase):
         events=[event('e1','checkout_created'),event('e2','payment_failed','gateway'),
                 event('e3','payment_confirmed','gateway',PAY),event('e4','fulfilled','server')]
         self.assertEqual(audit_checkout_trace(payload(events))['issues_count'],0)
+    def test_payment_before_created_is_detected(self):
+        events=[event('e1','payment_confirmed','gateway',PAY),event('e2','checkout_created'),event('e3','fulfilled','server')]
+        issues=audit_checkout_trace(payload(events))['orders'][0]['issues']
+        self.assertIn('PAYMENT_BEFORE_CHECKOUT_CREATION',issues)
+        self.assertIn('CHECKOUT_CREATION_AFTER_PAYMENT_OR_DELIVERY',issues)
+    def test_normal_lifecycle_order_has_no_ordering_issue(self):
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),event('e3','fulfilled','server')]
+        self.assertEqual(audit_checkout_trace(payload(events))['issues_count'],0)
     def test_paid_but_no_fulfillment_is_not_declared_clean(self):
         events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY)]
         result=audit_checkout_trace(payload(events))
