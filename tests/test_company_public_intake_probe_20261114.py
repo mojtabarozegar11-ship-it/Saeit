@@ -228,7 +228,9 @@ class PublicProbeTests(unittest.TestCase):
         self.assertFalse(result["backend_storage_verified"])
         self.assertFalse(result["buyer_order_verified"])
         self.assertFalse(result["external_payment_verified"])
-        self.assertEqual(len(result["results"]), 3)
+        self.assertEqual(len(result["results"]), 4)
+        self.assertEqual(result["results"][1]["target"], "status_page")
+        self.assertTrue(URLS[1][1].endswith("/ask-master/status.php"))
 
 
 if __name__ == "__main__":
