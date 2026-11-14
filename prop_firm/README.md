@@ -1,4 +1,4 @@
-# Proprietary trading policy engine v1.1
+# Proprietary trading policy engine v1.2 (prospective cohorts)
 
 **Status:** Code for the proposed prop business. NOT a launched website, licensed provider, funded-account contract, broker adapter or payments service. The only organizational robot identity is **mojtaba.bot.ai**; this is an internal capability, not a second robot.
 
@@ -11,6 +11,44 @@
 - **30-day promotion window**, at most one level per qualifying window, profit goal **3.6%**, at least **12 valid trading days**, no risk breach, max day 32%, trustworthy reconciled evidence and verified funding for the next tier.
 - Per-trade stop-risk max **0.8%** and cumulative open stop-risk **1.6%** of tier capital; block an order if broker minimum lot/stop distance cannot fit.
 - Monthly net profit sharing **70% trader / 30% company**, on cumulative realized net P&L exceeding previously *allocated* profit. Losses must be recouped first; no double payment.
+
+## New social posting pass condition — prospective v1.2 purchasers
+
+- For **each verified UTC trading day in each simulated challenge phase**, the
+  trader must personally publish **one original Instagram post AND one original
+  Facebook post** and submit two URLs for independent review.
+- A minimum of six trading days per phase means **6 Instagram + 6 Facebook
+  posts per phase**, **24 combined posts across both phases** at minimum.
+  Additional valid trading days require corresponding additional posts;
+  idle calendar days do not add a posting obligation. The challenge remains
+  without a fixed completion deadline.
+- This is a disclosed commercial participation condition, **not a request
+  for a fake review or a positive endorsement**. A neutral, truthful account
+  of the process is acceptable. Each post must clearly state that it is a
+  requirement of participating in MOJ PROP, and use an advertising/partnership
+  disclosure or labeling where applicable. Do not claim guaranteed returns,
+  falsely advertise actual funding, or pressure friends into purchasing.
+- Each post must come from the trader's own authorized account and remain
+  publicly inspectable at review, with its date matching the verified trading
+  day. Independent staff validates author, date, public visibility,
+  disclosure, content, and platform before marking the day reviewed.
+- **No automatic posting, scheduling, account passwords, Meta credentials,
+  forced tagging, or publication through mojtaba.bot.ai**. No action on
+  Instagram `Dr.mojtaba.rozegar` under any circumstances.
+- Missing or rejected posts **delay phase completion** but do not override
+  broker risk results, fabricate a risk breach, or directly confiscate
+  legitimate realized trading profits. The rule applies only to new v1.2
+  cohorts whose contract disclosed it before fee acceptance. Legacy v1.1
+  accounts retain their former terms.
+- Public-facing text is available in all 20 existing UI languages; local
+  legal/ad-policy and translation review are still required before enrollment.
+  Some jurisdictions/platforms may not allow such a compulsory promotion
+  requirement: in those markets the business must not sell the challenge
+  under these terms before counsel approves a lawful alternative.
+- `prop_firm/social_policy.py`, `social_review_service.py`, model
+  `PropSocialEvidence` and migration `0003_social_evidence.py` implement
+  a **private review-only evidence flow**. No live Meta integration, checkout,
+  automatic enrollment or funded-account approval is provided.
 
 ## Non-negotiable implementation requirements
 1. No actual payments or trade orders can be triggered by this module: both real execution and TRX checkout are disabled by policy.
