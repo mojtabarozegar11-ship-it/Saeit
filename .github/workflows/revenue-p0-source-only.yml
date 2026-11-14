@@ -1,0 +1,49 @@
+name: Revenue P0 source-only non-deployment checks
+on:
+  push:
+    branches:
+      - work/revenue-dual-offer-readiness-20261114
+    paths:
+      - ".github/workflows/revenue-p0-source-only.yml"
+      - "scripts/revenue_dual_offer_qualifier.py"
+      - "tests/test_revenue_*.py"
+      - "docs/revenue-p0/**"
+      - "core/templates/core/services.html"
+      - "core/templates/mojplaywin/section.html"
+      - "core/templates/brands/mojplaywin/page.html"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/revenue-p0-source-only.yml"
+      - "scripts/revenue_dual_offer_qualifier.py"
+      - "tests/test_revenue_*.py"
+      - "docs/revenue-p0/**"
+      - "core/templates/core/services.html"
+      - "core/templates/mojplaywin/section.html"
+      - "core/templates/brands/mojplaywin/page.html"
+permissions:
+  contents: read
+jobs:
+  isolated-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline unit/source contracts
+        run: python3 -m unittest discover -s tests -p 'test_revenue_*.py' -v
+      - name: Reject non-anonymized or phantom payment test output
+        run: |
+          python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-checkout-intake.synthetic.json > /tmp/revenue_checkout.json
+          python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-farm-intake.synthetic.json > /tmp/revenue_farm.json
+          python3 - <<'PY'
+          import json
+          for item in ('/tmp/revenue_checkout.json', '/tmp/revenue_farm.json'):
+              result=json.load(open(item,encoding='utf-8'))
+              assert result['canonical_bot']=='mojtaba.bot.ai'
+              assert result['order_state']=='inquiry_only'
+              assert result['payment_state']=='not_requested'
+              assert result['delivery_state']=='not_delivered'
+              assert result['personal_data_exported'] is False
+          print('REVENUE_SOURCE_ONLY=passed; payment_and_delivery=UNVERIFIED')
+          PY
