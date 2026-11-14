@@ -1,0 +1,25 @@
+{
+  "disclaimer": "ILLUSTRATIVE DEMO ONLY. Not real customer data, sales, audited profit or actual receipt.",
+  "source_product": "Zomorod Farm OnePage Studio 1.1",
+  "currency": "USD",
+  "version": "2.0",
+  "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
+  "portfolio": {
+    "sales_revenue": "16000.00",
+    "total_cost": "12705.00",
+    "operating_profit": "3295.00",
+    "contribution_margin_total": "8695.00"
+  },
+  "enterprise_count": 2,
+  "scenario_count": 18,
+  "cashflow_summary": {
+    "opening_cash": "1000.00",
+    "ending_cash": "100.00",
+    "minimum_month_end_cash": "-600.00",
+    "additional_cash_needed_at_month_ends": "600.00",
+    "first_negative_month": 2,
+    "net_operating_cashflow_before_other_uses": "-100.00"
+  },
+  "payment_confirmed": false,
+  "real_customer": false
+}
