@@ -139,6 +139,24 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["ready_for_live_payment"])
 
+    def test_staff_can_distinguish_plan_one_owner_status_from_funded_proof(self):
+        self.client.force_login(self.staff)
+        body = self.client.get(self.endpoint()).json()
+        prop = body["financial_commerce"]["moj_prop"]
+        self.assertEqual(prop["plan_products_configured"], 10)
+        self.assertEqual(prop["owner_declared_active_plans"], 1)
+        self.assertEqual(prop["owner_declared_funded_plans"], 1)
+        self.assertEqual(prop["temporary_funding_hold_plans"], 9)
+        self.assertEqual(prop["independently_verified_funded_plans_in_catalog"], 0)
+        self.assertEqual(prop["plan_statuses"][0]["code"], "MOJ-PROP-01")
+        self.assertTrue(prop["plan_statuses"][0]["owner_funding_attested"])
+        self.assertFalse(prop["plan_statuses"][0]["checkout_enabled"])
+        self.assertTrue(all(plan["temporarily_inactive"] for plan in
+                            prop["plan_statuses"][1:]))
+        self.assertFalse(prop["live_challenge_checkout_verified"])
+        self.assertFalse(prop["real_broker_funding_verified"])
+        self.assertFalse(body["ready_for_live_payment"])
+
     def test_post_never_mutates(self):
         self.client.force_login(self.staff)
         response = self.client.post(self.endpoint(), {"enable_payment": "true"})
