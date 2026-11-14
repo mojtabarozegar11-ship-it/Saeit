@@ -180,24 +180,29 @@ class CheckoutReleaseFormTests(unittest.TestCase):
 
     def test_rejects_missing_email_field(self):
         self.assertFalse(self.check(
-            '<form method="POST"><input name="name" required></form>'
+            '<form method="POST" action="/commerce/trx-easy/start/72/">'
+            '<input name="name" required></form>'
         ))
 
     def test_rejects_disabled_field(self):
         self.assertFalse(self.check(
-            '<form method="post"><input type="email" name="email" required disabled></form>'
+            '<form method="post" action="/commerce/trx-easy/start/72/">'
+            '<input type="email" name="email" required disabled></form>'
         ))
 
     def test_rejects_email_outside_post_form(self):
         self.assertFalse(self.check(
             '<input type="email" name="email" required>'
-            '<form method="GET"><input type="email" name="email" required></form>'
+            '<form method="GET" action="/commerce/trx-easy/start/72/">'
+            '<input type="email" name="email" required></form>'
         ))
 
     def test_rejects_optional_or_non_email_input(self):
         for html in (
-            '<form method="post"><input type="email" name="email"></form>',
-            '<form method="post"><input type="text" name="email" required></form>',
+            '<form method="post" action="/commerce/trx-easy/start/72/">'
+            '<input type="email" name="email"></form>',
+            '<form method="post" action="/commerce/trx-easy/start/72/">'
+            '<input type="text" name="email" required></form>',
         ):
             with self.subTest(html=html):
                 self.assertFalse(self.check(html))
