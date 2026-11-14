@@ -259,3 +259,30 @@ class CommercializationBoardApiTests(TestCase):
         self.assertNotIn("<form", html)
         self.assertNotIn("payment_intent=", html)
         self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+
+    def test_signal_and_tron_priority_metrics_are_evidence_limited(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.endpoint())
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["financial_commerce"]
+        self.assertEqual(payload["owner_priority_order"][:4], [
+            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+        ])
+        self.assertEqual(payload["signals"]["known_financial_brands"], 17)
+        self.assertEqual(payload["signals"]["localization_contexts"], 51)
+        self.assertEqual(payload["signals"]["live_subscriptions_verified"], 0)
+        self.assertEqual(payload["signals"]["canonical_bot"], "mojtaba.bot.ai")
+        self.assertEqual(payload["tron"]["grounded_site_domains"], 2)
+        self.assertEqual(payload["tron"]["isolated_logical_scopes"], 37)
+        self.assertFalse(payload["tron"]["invoice_created_by_this_api"])
+        self.assertFalse(payload["tron"]["live_gateway_verified_by_this_api"])
+
+    def test_first_four_commercial_cards_match_owner_order(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("command_center_commercialization_page"))
+        self.assertEqual(response.status_code, 200)
+        codes = [x["code"] for x in response.context["sectors"]]
+        self.assertEqual(codes[:4], [
+            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+        ])
+        self.assertContains(response, "۱۰ بخش")
