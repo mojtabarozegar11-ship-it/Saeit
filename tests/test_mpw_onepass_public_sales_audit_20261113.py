@@ -475,6 +475,115 @@ class AuditTests(unittest.TestCase):
                          {"redirect_not_followed"})
         self.assertFalse(result["payments_sent"])
 
+    def test_csp_origin_header_only_does_not_infer_meta(self):
+        headers = {"Content-Security-Policy": "script-src 'none'"}
+        self.assertEqual(MOD.checkout_csp_origin_category(headers, checkout(72)),
+                         "header_script_only")
+
+    def test_csp_origin_meta_only_is_not_http_header_proof(self):
+        html = checkout(72).replace(
+            "<main>",
+            '<main><meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;self&#39;; form-action &#39;self&#39;">')
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "meta_only_script_not_header_proof")
+
+    def test_csp_origin_header_and_meta_are_separately_recognized(self):
+        html = checkout(72).replace(
+            "<main>", '<main><meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;none&#39;">')
+        headers = {"Content-Security-Policy": "script-src 'none'"}
+        self.assertEqual(MOD.checkout_csp_origin_category(headers, html),
+                         "header_and_meta_script")
+
+    def test_csp_origin_absence_is_not_approval(self):
+        self.assertEqual(MOD.checkout_csp_origin_category({}, checkout(72)),
+                         "script_src_absent_in_header_and_meta")
+
+    def test_meta_csp_without_script_directive_does_not_pass(self):
+        html = checkout(72).replace(
+            "<main>", '<main><meta http-equiv="Content-Security-Policy" '
+            'content="default-src &#39;self&#39;">')
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "meta_and_header_lack_script")
+
+    def test_duplicate_meta_csp_tags_are_ambiguous(self):
+        meta = ('<meta http-equiv="Content-Security-Policy" '
+                'content="script-src &#39;none&#39;">')
+        html = checkout(72).replace("<main>", "<main>" + meta + meta)
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "csp_meta_ambiguous")
+
+    def test_duplicate_meta_content_attrs_cannot_spoof_a_safe_policy(self):
+        html = checkout(72).replace(
+            "<main>",
+            '<main><meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;none&#39;" content="script-src *">')
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "csp_meta_ambiguous")
+
+    def test_html_comment_and_report_only_meta_do_not_masquerade(self):
+        html = checkout(72).replace(
+            "<main>",
+            '<main><!-- <meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;none&#39;"> -->'
+            '<meta http-equiv="Content-Security-Policy-Report-Only" '
+            'content="script-src &#39;none&#39;">')
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "script_src_absent_in_header_and_meta")
+
+    def test_meta_unsafe_inline_cannot_be_called_security_proof(self):
+        html = checkout(72).replace(
+            "<main>", '<main><meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;self&#39; &#39;unsafe-inline&#39;">')
+        self.assertEqual(MOD.checkout_csp_origin_category({}, html),
+                         "meta_script_src_unsafe_or_ambiguous")
+
+    def test_origin_diagnostic_never_leaks_policy_values_or_customer_data(self):
+        token = "never-log-this-nonce-value"
+        html = checkout(72).replace(
+            "<main>",
+            '<main><meta http-equiv="Content-Security-Policy" '
+            'content="script-src &#39;nonce-' + token + '&#39;">')
+        category = MOD.checkout_csp_origin_category({}, html)
+        self.assertEqual(category, "meta_only_script_not_header_proof")
+        self.assertNotIn(token, category)
+        self.assertLess(len(category), 60)
+
+    def test_checkout_observer_keeps_origin_diagnostic_separate_from_readiness(self):
+        class Response:
+            status = 200
+            headers = {
+                "Content-Type": "text/html",
+                "Cache-Control": "no-store",
+                "Content-Security-Policy": "default-src 'self'; form-action 'self'; frame-ancestors 'none'",
+            }
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return "https://mojplaywin.com/store/product/72/checkout/"
+            def read(self, size):
+                return checkout(72, '<input name="email" type="email" required>').replace(
+                    "<main>", '<main><meta http-equiv="Content-Security-Policy" '
+                    'content="script-src &#39;none&#39;">').encode()
+        class Opener:
+            def open(self, req, timeout):
+                self.last_method = req.get_method()
+                return Response()
+        forms, policies, origins = {}, {}, {}
+        opener = Opener()
+        status = MOD.observe("/store/product/72/checkout/", "checkout", 72, 4,
+                             opener, forms, policies, origins)
+        self.assertEqual(opener.last_method, "GET")
+        self.assertEqual(status, "checkout_csp_scripts_unverified")
+        self.assertEqual(forms["/store/product/72/checkout/"],
+                         "buyer_email_input_get_ok_not_paid")
+        self.assertEqual(policies["/store/product/72/checkout/"], "script_src_missing")
+        self.assertEqual(origins["/store/product/72/checkout/"],
+                         "meta_only_script_not_header_proof")
+
     def test_script_policy_categories_do_not_emit_raw_headers(self):
         scenarios = {
             "csp_missing": "",

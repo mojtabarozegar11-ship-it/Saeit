@@ -218,6 +218,67 @@ def script_csp_category(headers) -> str:
     return "script_other"
 
 
+class CheckoutMetaCSPInspector(HTMLParser):
+    """Read only CSP meta tag structure; never disclose policy tokens."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.policy_count = 0
+        self.ambiguous = False
+        self.script_category = "csp_missing"
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "meta":
+            return
+        names = [name.lower() for name, _ in attrs if name]
+        values = dict(attrs)
+        equiv = (values.get("http-equiv") or "").strip().lower()
+        if equiv != "content-security-policy":
+            return
+        self.policy_count += 1
+        if (self.policy_count != 1 or names.count("http-equiv") != 1
+                or names.count("content") != 1):
+            self.ambiguous = True
+            return
+        content = values.get("content") or ""
+        if len(content) > 8192:
+            self.ambiguous = True
+            return
+        self.script_category = script_csp_category(
+            {"Content-Security-Policy": content})
+
+
+def checkout_csp_origin_category(headers, html: str) -> str:
+    """Classify header-vs-meta CSP origin, not actual runtime enforcement.
+
+    Meta CSP cannot provide frame-ancestors, and presence is not an approval
+    of a script policy. Return fixed categories only; never headers or HTML.
+    """
+    if not isinstance(html, str) or len(html) > MAX_BODY:
+        return "csp_origin_unreadable"
+    parser = CheckoutMetaCSPInspector()
+    try:
+        parser.feed(html)
+        parser.close()
+    except (ValueError, TypeError):
+        return "csp_origin_unreadable"
+    if parser.ambiguous:
+        return "csp_meta_ambiguous"
+    header_category = script_csp_category(headers)
+    header_has_script = header_category not in ("csp_missing", "script_src_missing")
+    if not parser.policy_count:
+        return ("header_script_only" if header_has_script
+                else "script_src_absent_in_header_and_meta")
+    meta_category = parser.script_category
+    if meta_category in ("csp_missing", "script_src_missing"):
+        return ("header_script_meta_lacks_script" if header_has_script
+                else "meta_and_header_lack_script")
+    if meta_category not in ("script_none", "script_self_only", "script_nonce_or_hash"):
+        return "meta_script_src_unsafe_or_ambiguous"
+    return ("header_and_meta_script" if header_has_script
+            else "meta_only_script_not_header_proof")
+
+
 def checkout_header_status(headers) -> str:
     """Fail closed if security/cache headers fail the public GET contract.
 
@@ -252,7 +313,8 @@ class RejectRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
-            checkout_form_observations=None, checkout_script_policies=None):
+            checkout_form_observations=None, checkout_script_policies=None,
+            checkout_csp_origins=None):
     url = "https://" + HOST + path
     req = urllib.request.Request(
         url, headers={"User-Agent": UA, "Cache-Control": "no-cache",
@@ -281,6 +343,8 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
                     checkout_form_observations[path] = page_status
                 if checkout_script_policies is not None:
                     checkout_script_policies[path] = script_csp_category(response.headers)
+                if checkout_csp_origins is not None:
+                    checkout_csp_origins[path] = checkout_csp_origin_category(response.headers, html)
                 headers_status = checkout_header_status(response.headers)
                 if headers_status != "checkout_headers_pass":
                     return headers_status
@@ -310,14 +374,17 @@ def audit(timeout: int = 6, opener=None) -> dict:
     result = {}
     checkout_form_observations = {}
     checkout_script_policies = {}
+    checkout_csp_origins = {}
     for kind, sku, path in routes:
         result[path] = observe(path, kind, sku, timeout, opener,
-                               checkout_form_observations, checkout_script_policies)
+                               checkout_form_observations, checkout_script_policies,
+                               checkout_csp_origins)
     return {
         "schema": "mpw.public_buyer_journey.readonly.v1",
         "observed_routes": result,
         "checkout_form_observations": checkout_form_observations,
         "checkout_script_policy_categories": checkout_script_policies,
+        "checkout_csp_origin_categories": checkout_csp_origins,
         "pages_checked": len(result),
         "required_skus": list(SKUS),
         "guest_email_policy_expected": "valid_buyer_email_required",
