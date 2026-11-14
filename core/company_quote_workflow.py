@@ -125,8 +125,6 @@ def _context(inquiry, form, *, action):
     code = form.cleaned_data["service_code"]
     if code not in dict(SERVICE_BY_KIND.get(inquiry.kind, ())):
         raise ValidationError("SERVICE_NOT_IN_REQUEST_CATEGORY")
-    if inquiry.status not in {"new", "reviewing"}:
-        raise ValidationError("CASE_NOT_OPEN_FOR_INTERNAL_QUOTE")
     consent = _consent_record(inquiry.pk)
     if not consent or consent.after_state.get("consent_checked") is not True:
         raise ValidationError("CASE_HAS_NO_CONSENT_EVIDENCE")
@@ -158,6 +156,8 @@ def review_company_inquiry(*, case_id, owner, form: CompanyReviewForm):
     existing = _existing(trace, action=REVIEW_ACTION, inquiry_id=inquiry.pk)
     if existing is not None:
         return existing
+    if inquiry.status not in {"new", "reviewing"}:
+        raise ValidationError("CASE_NOT_OPEN_FOR_INTERNAL_QUOTE")
     _assert_revision(inquiry, form)
     before = {"status": inquiry.status}
     qualification = form.cleaned_data["qualification"]
@@ -191,6 +191,8 @@ def prepare_internal_quote(*, case_id, owner, form: CompanyDraftQuoteForm):
     existing = _existing(trace, action=DRAFT_ACTION, inquiry_id=inquiry.pk)
     if existing is not None:
         return existing
+    if inquiry.status not in {"new", "reviewing"}:
+        raise ValidationError("CASE_NOT_OPEN_FOR_INTERNAL_QUOTE")
     _assert_revision(inquiry, form)
     if inquiry.status != "reviewing":
         raise ValidationError("QUOTE_REQUIRES_REVIEWING_STATE")
