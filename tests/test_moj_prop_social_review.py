@@ -137,6 +137,19 @@ class FourWeekProofTests(TestCase):
                 audited_facts=CHECKED,reviewed_at=row.posted_at+timedelta(days=28),
             )
 
+    def test_nonstaff_cannot_forge_approved_social_proof_via_direct_model_save(self):
+        from django.core.exceptions import ValidationError
+        row = self.submit()
+        row.review_status = PropSocialEvidence.Review.VERIFIED
+        row.reviewed_by = self.other
+        row.reviewed_at = row.posted_at + timedelta(days=28)
+        for field in CHECKED:
+            setattr(row, field, True)
+        with self.assertRaises(ValidationError):
+            row.save()
+        row.refresh_from_db()
+        self.assertEqual(row.review_status, PropSocialEvidence.Review.PENDING)
+
     def test_missing_visibility_review_is_rejected(self):
         row=self.submit()
         verified=self.review(row,continued_visibility_verified=False)
