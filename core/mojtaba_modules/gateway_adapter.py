@@ -7,7 +7,7 @@ canonical-bot gateway after live identity/provenance checks.
 from __future__ import annotations
 
 from .cyber_security import (
-    CyberModuleError, review_offline_evidence,
+    CyberModuleError, _periodic_key, review_offline_evidence,
 )
 from .incident_response import plan_incident_response
 from .origin_defense import plan_origin_defense
@@ -31,12 +31,6 @@ def _validated_payload(data: dict, field: str) -> tuple[dict, dict]:
     if not isinstance(engagement, dict) or not isinstance(evidence, dict):
         raise CyberModuleError("CANONICAL_GATEWAY_PAYLOAD_INVALID")
     return engagement, evidence
-
-
-def _periodic_key(key: bytes) -> bool:
-    """Reject trivial repeated short-pattern HMAC keys, not estimate entropy."""
-    return any(len(key) % n == 0 and key == key[:n] * (len(key) // n)
-               for n in range(1, min(8, len(key) - 1) + 1))
 
 
 def build_cyber_gateway_tools(verify_key: bytes, *, enable_offline: bool = False) -> tuple[ToolSpec, ...]:
