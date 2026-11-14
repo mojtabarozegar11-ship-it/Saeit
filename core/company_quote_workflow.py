@@ -7,6 +7,7 @@ No email, live offer, order, acceptance, settlement or service delivery.
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from decimal import Decimal
 from django import forms
@@ -153,11 +154,21 @@ def _assert_revision(inquiry, form):
         raise ValidationError("STALE_CASE_RELOAD_REQUIRED")
 
 
-def _existing(trace, *, action, inquiry_id):
-    return AuditLog.objects.filter(
+def _action_digest(form, keys):
+    """Bind an idempotency token to the exact owner-selected action payload."""
+    payload = {key: str(form.cleaned_data[key]) for key in keys}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _existing(trace, *, action, inquiry_id, form_digest):
+    entry = AuditLog.objects.filter(
         trace_id=trace, action=action, target_type="CompanyInquiry",
         target_id=str(inquiry_id),
     ).order_by("pk").first()
+    if entry and entry.after_state.get("action_digest") != form_digest:
+        raise ValidationError("IDEMPOTENCY_TOKEN_REUSED_WITH_CHANGED_ACTION")
+    return entry
 
 
 @transaction.atomic
@@ -167,7 +178,11 @@ def review_company_inquiry(*, case_id, owner, form: CompanyReviewForm):
     _enforce_request(form)
     inquiry = CompanyInquiry.objects.select_for_update().get(pk=_case_id(case_id))
     trace = _context(inquiry, form, action="review")
-    existing = _existing(trace, action=REVIEW_ACTION, inquiry_id=inquiry.pk)
+    action_digest = _action_digest(form, ("qualification", "service_code"))
+    existing = _existing(
+        trace, action=REVIEW_ACTION, inquiry_id=inquiry.pk,
+        form_digest=action_digest,
+    )
     if existing is not None:
         return existing
     if inquiry.status not in {"new", "reviewing"}:
@@ -183,6 +198,7 @@ def review_company_inquiry(*, case_id, owner, form: CompanyReviewForm):
         target_id=str(inquiry.pk), trace_id=trace,
         before_state=before,
         after_state={
+            "action_digest": action_digest,
             "status": inquiry.status,
             "qualification": qualification,
             "service_code": form.cleaned_data["service_code"],
@@ -202,7 +218,14 @@ def prepare_internal_quote(*, case_id, owner, form: CompanyDraftQuoteForm):
     _enforce_request(form)
     inquiry = CompanyInquiry.objects.select_for_update().get(pk=_case_id(case_id))
     trace = _context(inquiry, form, action="quote")
-    existing = _existing(trace, action=DRAFT_ACTION, inquiry_id=inquiry.pk)
+    action_digest = _action_digest(
+        form, ("service_code", "currency", "unit_price", "quantity",
+               "turnaround_days", "valid_days"),
+    )
+    existing = _existing(
+        trace, action=DRAFT_ACTION, inquiry_id=inquiry.pk,
+        form_digest=action_digest,
+    )
     if existing is not None:
         return existing
     if inquiry.status not in {"new", "reviewing"}:
@@ -228,6 +251,7 @@ def prepare_internal_quote(*, case_id, owner, form: CompanyDraftQuoteForm):
         target_id=str(inquiry.pk), trace_id=trace,
         before_state={"status": "reviewing"},
         after_state={
+            "action_digest": action_digest,
             "schema": DRAFT_SCHEMA,
             "scope_code": form.cleaned_data["service_code"],
             "currency": form.cleaned_data["currency"],
