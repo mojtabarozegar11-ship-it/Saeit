@@ -2,7 +2,8 @@
 import pytest
 
 from scripts.mpw_customer_support_live_gate_20261114 import (
-    INBOX, LEGACY, ORIGIN, ROUTES, ROUTE_IDENTITY, _RejectRedirects, _same_public_url, assess, fetch_public
+    CHECKOUT_GET_ROUTES, INBOX, LEGACY, ORIGIN, ROUTES, ROUTE_IDENTITY,
+    _RejectRedirects, _same_public_url, assess, assess_checkout_get, fetch_public
 )
 
 
@@ -56,7 +57,7 @@ def test_plain_address_or_http_error_do_not_count_as_verified_customer_link():
 
 
 def test_get_only_allowlist_prevents_accidental_form_submission_or_remote_fetch():
-    for bad in (ORIGIN + "/store/product/72/checkout/", ORIGIN + "/admin/",
+    for bad in (ORIGIN + "/store/product/879/checkout/", ORIGIN + "/admin/",
                 "https://example.com/contact/", ORIGIN + "/support/?submit=1"):
         with pytest.raises(ValueError, match="NON_ALLOWLISTED_URL"):
             fetch_public(bad)
@@ -191,3 +192,104 @@ def test_product_links_can_use_https_absolute_same_origin_urls():
     store = next(item for item in result["observations"] if item["route"] == "/store/")
     assert store["store_product_links_verified"] is True
     assert result["support_ready"] is True
+
+
+def _checkout_html(product_id: int) -> str:
+    path = "/store/product/" + str(product_id) + "/checkout/"
+    return (
+        '<html><body><h1>' + CHECKOUT_GET_ROUTES[path] +
+        '</h1><p>Pay with TRX</p><form method="post" action="/commerce/trx-easy/start/' +
+        str(product_id) + '/"><input name="csrfmiddlewaretoken" type="hidden" value="example">'
+        '<input name="email" type="email" required><button>Continue</button>'
+        '</form></body></html>'
+    )
+
+
+def test_two_checkout_gets_expose_visible_email_post_forms_without_payment():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    report = assess_checkout_get(lambda url: pages[url])
+    assert report["observed_checkout_forms"] == 2
+    assert report["required_products"] == 2
+    assert all(row["status"] == "GET_FORM_PRESENT" for row in report["observations"])
+    assert report["network_methods"] == ["GET"]
+    assert report["orders_created"] == 0
+    assert report["payments_attempted"] == 0
+    assert report["emails_sent"] == 0
+    assert report["delivery_verified"] is False
+    assert report["on_chain_payment_verified"] is False
+    assert report["live_purchase_ready"] is False
+
+
+def test_checkout_get_cannot_accept_hidden_or_missing_email_inputs():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    for spoof in ('<input type="hidden" name="email" required>',
+                  '<p>Type your email to continue</p>'):
+        pages[route] = _checkout_html(72).replace(
+            '<input name="email" type="email" required>', spoof)
+        result = assess_checkout_get(lambda url: pages[url])
+        assert result["observed_checkout_forms"] == 1
+        assert result["observations"][0]["status"] == "GET_FORM_INCOMPLETE"
+
+
+def test_checkout_get_requires_csrf_and_post_method():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    for changed in (
+        _checkout_html(72).replace('method="post"', 'method="get"'),
+        _checkout_html(72).replace('name="csrfmiddlewaretoken"', 'name="not_csrf"'),
+    ):
+        pages[route] = changed
+        result = assess_checkout_get(lambda url: pages[url])
+        assert result["observed_checkout_forms"] == 1
+
+
+def test_external_insecure_and_duplicate_form_actions_fail_closed():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/225/checkout/"
+    for action in (
+        'https://evil.example/start', 'http://mojplaywin.com/start',
+        '//evil.example/start', 'javascript:alert(1)',
+    ):
+        pages[route] = _checkout_html(225).replace(
+            '/commerce/trx-easy/start/225/', action)
+        result = assess_checkout_get(lambda url: pages[url])
+        assert result["observed_checkout_forms"] == 1
+    pages[route] = _checkout_html(225).replace(
+        'method="post" action=', 'method="post" action="/wrong/" action=')
+    assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+
+
+def test_checkout_get_requires_correct_product_identity():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    pages[route] = _checkout_html(72).replace(
+        CHECKOUT_GET_ROUTES["/store/product/72/checkout/"], "Unrelated item")
+    assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+
+
+def test_checkout_get_does_not_include_sku879_or_mutating_endpoints():
+    assert len(CHECKOUT_GET_ROUTES) == 2
+    assert "/store/product/879/checkout/" not in CHECKOUT_GET_ROUTES
+    for url in (
+        ORIGIN + "/commerce/trx-easy/start/72/",
+        ORIGIN + "/commerce/trx-easy/invoice/1/",
+        ORIGIN + "/store/product/879/checkout/",
+    ):
+        with pytest.raises(ValueError, match="NON_ALLOWLISTED_URL"):
+            fetch_public(url)
+
+
+def test_checkout_get_fetch_failure_is_unknown_not_verified_sale():
+    def blocked(_):
+        raise TimeoutError("connection unavailable")
+    result = assess_checkout_get(blocked)
+    assert result["observed_checkout_forms"] == 0
+    assert all(row["status"] == "FETCH_FAILED" for row in result["observations"])
+    assert all(row["error_class"] == "TimeoutError" for row in result["observations"])
+    assert result["live_purchase_ready"] is False
