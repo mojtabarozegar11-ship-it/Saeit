@@ -198,3 +198,81 @@ class PropDecisionLog(models.Model):
 
     def __str__(self):
         return f"{self.category}:{self.decision_key}"
+
+
+
+class PropProfitAllocation(models.Model):
+    """Internal provisional 70/30 distribution, never a bank/wallet payment."""
+    account = models.ForeignKey(PropAccount, on_delete=models.PROTECT,
+                                related_name="profit_allocations")
+    period_number = models.PositiveIntegerField()
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
+    cumulative_realized_net_usd = models.DecimalField(max_digits=18, decimal_places=4)
+    previously_allocated_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    eligible_profit_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    trader_profit_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    company_profit_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    evidence_digest = models.CharField(max_length=64)
+    policy_version = models.CharField(max_length=32, default=POLICY.version)
+    status = models.CharField(max_length=16, default="provisional",
+                              choices=[("provisional", "Provisional — not payable")])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["account_id", "period_number"]
+        constraints = [
+            models.UniqueConstraint(fields=["account", "period_number"],
+                                    name="mp_profit_account_period_unique"),
+            models.CheckConstraint(
+                condition=Q(period_number__gte=1),
+                name="mp_profit_period_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(previously_allocated_usd__gte=0),
+                name="mp_profit_previous_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(eligible_profit_usd__gte=0),
+                name="mp_profit_eligible_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(trader_profit_usd__gte=0),
+                name="mp_profit_trader_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=Q(company_profit_usd__gte=0),
+                name="mp_profit_company_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return f"provisional-profit:{self.account_id}:{self.period_number}"
+
+
+class PropProfitJournalLine(models.Model):
+    """Balanced provisional memo entries, not a general ledger or cash asset."""
+    allocation = models.ForeignKey(
+        PropProfitAllocation, on_delete=models.PROTECT, related_name="journal_lines"
+    )
+    code = models.CharField(max_length=16, choices=[
+        ("pool_debit", "Provisional pool debit"),
+        ("trader_credit", "Trader share provisional credit"),
+        ("company_credit", "Company share provisional credit"),
+    ])
+    side = models.CharField(max_length=6, choices=[
+        ("debit", "Debit"), ("credit", "Credit"),
+    ])
+    amount_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["allocation", "code"],
+                                    name="mp_profit_line_code_unique"),
+            models.CheckConstraint(condition=Q(amount_usd__gt=0),
+                                   name="mp_profit_line_positive"),
+        ]
+
+    def __str__(self):
+        return f"provisional-line:{self.allocation_id}:{self.code}"
