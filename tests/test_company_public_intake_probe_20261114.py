@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from deploy.company_public_intake_probe_readonly import (
-    MAX_BYTES, URLS, _safe_probe, main,
+    MAX_BYTES, MAX_FORMS, URLS, _public_structure, _safe_probe, main,
 )
 
 
@@ -103,6 +103,117 @@ class PublicProbeTests(unittest.TestCase):
                         Opener(HtmlResponse(b"x" * (MAX_BYTES + 600))))
         self.assertTrue(r["body_truncated"])
         self.assertFalse(r["html_form_seen"])
+
+
+    def test_multiple_forms_cannot_cross_contaminate_consent_or_email(self):
+        sample = """<form method="post" action="/unrelated"><input name="consent">
+            <button>Submit</button></form>
+            <form method="get"><input name="email"></form>"""
+        output = _public_structure(sample, URLS[0][1])
+        self.assertEqual(output["form_count_capped"], 2)
+        self.assertEqual(output["candidate_post_email_form_count_capped"], 0)
+        self.assertIsNone(output["consent_named_in_candidate"])
+
+    def test_post_email_and_consent_on_same_form_are_detected(self):
+        sample = """<form method="POST" action="/ask-master/submit.php">
+          <input type="email" name="sender_email">
+          <input type="checkbox" name="consent" required>
+          <input type="hidden" name="csrf_token" value="SUPER_SECRET">
+          <button type="submit">Send</button></form>"""
+        output = _public_structure(sample, URLS[0][1])
+        self.assertEqual(output["candidate_post_email_form_count_capped"], 1)
+        self.assertEqual(output["submission_target_class"], "same_origin_https")
+        self.assertTrue(output["required_named_consent_checkbox_seen"])
+        self.assertTrue(output["csrf_named_hidden_in_candidate"])
+        self.assertTrue(output["submit_control_in_candidate"])
+        self.assertNotIn("SUPER_SECRET", json.dumps(output))
+
+    def test_checkbox_without_required_is_not_counted_as_required(self):
+        result = _public_structure(
+            '<form method=post><input type=email><input type=checkbox name=agree>'
+            '<button>Go</button></form>', URLS[0][1])
+        self.assertTrue(result["consent_named_in_candidate"])
+        self.assertFalse(result["required_named_consent_checkbox_seen"])
+
+    def test_text_field_named_consent_is_not_checkbox_proof(self):
+        result = _public_structure(
+            '<form method=post><input type=email><input type=text name=consent required>'
+            '</form>', URLS[0][1])
+        self.assertTrue(result["consent_named_in_candidate"])
+        self.assertFalse(result["required_named_consent_checkbox_seen"])
+
+    def test_external_form_action_is_classified_not_leaked(self):
+        sample = ('<form method="post" action="https://third-party.example.com/'
+                  'path?token=VERY_PRIVATE_TOKEN"><input name=email></form>')
+        result = _public_structure(sample, URLS[0][1])
+        self.assertEqual(result["submission_target_class"], "external_https")
+        self.assertNotIn("third-party.example", json.dumps(result))
+        self.assertNotIn("VERY_PRIVATE_TOKEN", json.dumps(result))
+
+    def test_http_action_classified_insecure_without_echo(self):
+        result = _public_structure(
+            '<form method=post action="http://localhost/private">'
+            '<input type=email></form>', URLS[0][1])
+        self.assertEqual(result["submission_target_class"], "unsafe_or_non_https")
+
+    def test_javascript_action_classified_unsafe_without_execution(self):
+        result = _public_structure(
+            '<form method=post action="javascript:alert(1)">'
+            '<input type=email></form>', URLS[0][1])
+        self.assertEqual(result["submission_target_class"], "unsafe_or_non_https")
+
+    def test_empty_action_is_same_origin_default(self):
+        result = _public_structure(
+            '<form method=post><input name=email></form>', URLS[0][1])
+        self.assertEqual(result["submission_target_class"], "same_origin_default")
+
+    def test_no_email_in_post_form_cannot_be_proven_from_footer_get_form(self):
+        result = _public_structure(
+            '<form method=post><input name=message></form>'
+            '<form method=get><input name=email></form>', URLS[0][1])
+        self.assertEqual(result["candidate_post_email_form_count_capped"], 0)
+
+    def test_captcha_named_field_is_not_validation_proof(self):
+        result = _public_structure(
+            '<form method=post><input name=email>'
+            '<input name=cf-turnstile-response></form>', URLS[0][1])
+        self.assertTrue(result["captcha_named_field_in_candidate"])
+        self.assertIsNone(_safe_probe(
+            "canonical_php", URLS[0][1],
+            Opener(HtmlResponse(
+                b"<form method=post><input name=email><input name=cf-turnstile-response></form>"
+            ))
+        )["php_database_connected"])
+
+    def test_truncated_response_fails_closed_for_missing_form(self):
+        result = _safe_probe(
+            "canonical_php", URLS[0][1],
+            Opener(HtmlResponse(b"<html><p>" + b"z" * (MAX_BYTES + 42)))
+        )
+        self.assertTrue(result["body_truncated"])
+        self.assertFalse(result["structural_evidence_complete"])
+        self.assertIsNone(result["form_post_seen"])
+        self.assertIsNone(result["consent_field_seen"])
+
+    def test_form_cap_is_explicit_and_scan_is_incomplete(self):
+        result = _safe_probe(
+            "canonical_php", URLS[0][1],
+            Opener(HtmlResponse(
+                ("<form method=post><input name=email></form>" * (MAX_FORMS + 4)).encode()
+            ))
+        )
+        self.assertEqual(result["form_count_capped"], MAX_FORMS)
+        self.assertTrue(result["form_limit_reached"])
+        self.assertFalse(result["structural_evidence_complete"])
+
+    def test_hidden_fields_are_never_echoed_as_values(self):
+        secret = "UNREDACTED_CSRF_SECRET_EXAMPLE"
+        r = _safe_probe("canonical_php", URLS[0][1],
+                        Opener(HtmlResponse(
+                            (f"<form method='post'><input name=email><input type=hidden"
+                             f" name=csrf_token value='{secret}'></form>").encode())))
+        self.assertTrue(r["csrf_named_hidden_in_candidate"])
+        self.assertNotIn(secret, json.dumps(r))
 
     def test_program_output_never_asserts_settlement(self):
         opener = Opener(HtmlResponse(b"<html></html>"))
