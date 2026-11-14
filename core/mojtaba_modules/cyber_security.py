@@ -18,7 +18,7 @@ EVIDENCE_SCHEMA = "mojtaba.bot.ai.cyber.evidence.v1"
 HOST_RE = re.compile(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 FINDING_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
 REDACTIONS = (
-    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)\S+"),
+    re.compile(r"(?i)(authorization\s*:\s*(?:bearer|basic)\s+)\S+"),
     re.compile(r"(?i)((?:password|secret|api[_-]?key|token)\s*[=:]\s*)\S+"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
 )
