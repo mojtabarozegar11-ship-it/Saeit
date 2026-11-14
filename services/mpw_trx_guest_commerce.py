@@ -206,14 +206,18 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     user, token = _identity(request, create=create)
-    user_identifier = getattr(user, "USERNAME_FIELD", "username")
-    if create and str(getattr(user, user_identifier, "")).startswith("mpwguest_"):
-        # This check is also required when an existing signed guest cookie
-        # bypasses _new_user. It protects all subsequent invoice attempts.
+    if create:
+        # Require an explicit, matching buyer email for ALL invoice starts,
+        # including already-authenticated buyers and signed guest cookies.
+        # This proves only request/account consistency, not email ownership.
         expected = _buyer_email(request)
-        actual = getattr(user, "email", "")
-        if type(actual) is not str or not hmac.compare_digest(actual, expected):
-            raise Http404("Guest buyer email does not match this session")
+        stored = getattr(user, "email", None)
+        if type(stored) is not str or "@" not in stored:
+            raise Http404("Buyer email not available for invoice")
+        local, _, domain = stored.rpartition("@")
+        normalized = local + "@" + domain.lower()
+        if not hmac.compare_digest(normalized, expected):
+            raise Http404("Buyer email does not match this session")
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
