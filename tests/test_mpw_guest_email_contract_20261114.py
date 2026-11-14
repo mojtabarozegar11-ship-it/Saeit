@@ -6,6 +6,7 @@ They validate input/identity boundaries, not mainnet payment or email ownership.
 import ast
 import hmac
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -138,10 +139,28 @@ class GuestInvoiceIdentityTests(unittest.TestCase):
         self.assertIs(self.dispatch(req, self.view, (), {}, create=False), self.response)
         self.assertEqual(self.user.email, "alice@buyer.org")
 
-    def test_signed_in_non_guest_retains_existing_flow(self):
+    def test_signed_in_account_with_matching_email_may_start_invoice(self):
+        self.user = types.SimpleNamespace(username="existing_account", email="alice@Buyer.ORG")
+        self.assertIs(self.dispatch(request_values("alice@buyer.org"), self.view, (), {},
+                                    create=True), self.response)
+
+    def test_signed_in_account_cannot_start_invoice_without_email(self):
         self.user = types.SimpleNamespace(username="existing_account", email="alice@buyer.org")
-        self.assertIs(self.dispatch(request_values(), self.view, (), {}, create=True),
-                      self.response)
+        with self.assertRaises(Http404):
+            self.dispatch(request_values(), self.view, (), {}, create=True)
+        self.view.assert_not_called()
+
+    def test_signed_in_account_cannot_buy_with_unrelated_email(self):
+        self.user = types.SimpleNamespace(username="existing_account", email="alice@buyer.org")
+        with self.assertRaises(Http404):
+            self.dispatch(request_values("other@buyer.org"), self.view, (), {}, create=True)
+        self.view.assert_not_called()
+
+    def test_signed_in_account_without_stored_email_cannot_buy(self):
+        self.user = types.SimpleNamespace(username="existing_account", email="")
+        with self.assertRaises(Http404):
+            self.dispatch(request_values("alice@buyer.org"), self.view, (), {}, create=True)
+        self.view.assert_not_called()
 
 
 
@@ -181,6 +200,77 @@ class CheckoutReleaseFormTests(unittest.TestCase):
         ):
             with self.subTest(html=html):
                 self.assertFalse(self.check(html))
+
+    def test_rendered_checkout_requires_exact_product_action(self):
+        markup = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                  '<input type="email" name="email" required></form>')
+        self.assertTrue(self.check(markup,
+                                   expected_action="/commerce/trx-easy/start/72/"))
+        self.assertFalse(self.check(markup,
+                                    expected_action="/commerce/trx-easy/start/225/"))
+
+    def test_rejects_external_or_wrong_action_on_rendered_checkout(self):
+        for action in ("https://unknown.example/start/72/",
+                       "/commerce/trx-easy/status/72/", "/store/"):
+            markup = ('<form method="post" action="' + action + '">'
+                      '<input type="email" name="email" required></form>')
+            with self.subTest(action=action):
+                self.assertFalse(self.check(
+                    markup, expected_action="/commerce/trx-easy/start/72/"))
+
+
+class CheckoutSourcePreflightTests(unittest.TestCase):
+    """Temporary files only; never touch production hosting."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="mpw-email-gate-")
+        self.addCleanup(self.temp.cleanup)
+        self.app = Path(self.temp.name)
+        self.template = (self.app / "mpw_commerce" / "templates" /
+                         "mpw_commerce" / "product_checkout.html")
+        self.template.parent.mkdir(parents=True)
+        release = SOURCE.parents[1] / "scripts/mpw_guest_checkout_live_release.py"
+        self.html_check = source_function("has_buyer_email_form", source=release)
+        self.preflight = source_function(
+            "preflight_checkout_email_template",
+            injected={
+                "APP": self.app,
+                "has_buyer_email_form": self.html_check,
+                "fail": lambda message: (_ for _ in ()).throw(RuntimeError(message))
+            },
+            source=release,
+        )
+
+    def test_preflight_blocks_missing_template(self):
+        with self.assertRaisesRegex(RuntimeError, "CHECKOUT_TEMPLATE_MISSING_OR_UNSAFE"):
+            self.preflight()
+
+    def test_preflight_blocks_form_without_email(self):
+        self.template.write_text(
+            '<form method="post"><button>Buy</button></form>', encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
+            self.preflight()
+
+    def test_preflight_accepts_source_contract(self):
+        self.template.write_text(
+            '<form method="POST" action="/commerce/trx-easy/start/72/">'
+            '<input name="email" type="email" required>'
+            '<button>Create invoice and pay with TRX</button></form>', encoding="utf8")
+        self.assertTrue(self.preflight())
+
+    def test_preflight_rejects_symlink(self):
+        external = self.app / "external-template.html"
+        external.write_text(
+            '<form method="post"><input type="email" name="email" required></form>',
+            encoding="utf8")
+        self.template.symlink_to(external)
+        with self.assertRaisesRegex(RuntimeError, "CHECKOUT_TEMPLATE_MISSING_OR_UNSAFE"):
+            self.preflight()
+
+    def test_preflight_rejects_oversized_template(self):
+        self.template.write_text("X" * 180001, encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "CHECKOUT_TEMPLATE_OVERSIZE"):
+            self.preflight()
 
 
 if __name__ == "__main__":
