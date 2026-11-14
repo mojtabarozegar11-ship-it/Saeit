@@ -29,7 +29,7 @@ class AuthGateTests(unittest.TestCase):
         with patch.object(Stub,"open",side_effect=HTTPError(p.URL,403,"forbidden",{},None)):
             self.assertEqual(p.run(Stub(0))["status"],"auth_challenge_expected")
     def test_07_success_without_auth_flagged(self):
-        self.assertEqual(p.run(Stub(200))["status"],"unexpected_unauthenticated_success")
+        self.assertEqual(p.run(Stub(200))["status"],"http200_unauthenticated_unknown_content_type")
     def test_08_no_token_in_request(self):
         opener=Stub(401)
         p.run(opener)
@@ -50,6 +50,18 @@ class AuthGateTests(unittest.TestCase):
         r=p.run(Stub(401))
         self.assertFalse(r["remote_data_read"])
         self.assertEqual(r["operations_modified"],0)
+    def test_13_html_login_not_auth(self):
+        fake=Stub(200)
+        fake.headers={"Content-Type":"text/html; charset=utf-8"}
+        r=p.run(fake)
+        self.assertEqual(r["status"],"html_response_unauthenticated_login_or_error")
+        self.assertFalse(r["user_authenticated"])
+    def test_14_json_without_auth_is_not_authenticated(self):
+        fake=Stub(200)
+        fake.headers={"Content-Type":"application/json; charset=utf-8"}
+        r=p.run(fake)
+        self.assertEqual(r["status"],"json_response_unauthenticated_review_required")
+        self.assertFalse(r["user_authenticated"])
 
 if __name__=="__main__":
     unittest.main()
