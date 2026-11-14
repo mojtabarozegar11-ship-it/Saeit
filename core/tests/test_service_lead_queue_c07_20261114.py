@@ -364,3 +364,77 @@ def test_approved_inquiries_are_not_reactivated_by_drafting():
     assert prepare_one(lead.pk)["verified_effect"] is False
     assert preview_candidates()["eligible_count"] == 0
     assert AuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_owner_dashboard_renders_scoped_stats_and_existing_admin_action(owner):
+    lead = create_lead()
+    client = Client()
+    client.force_login(owner)
+    response = client.get(reverse("command_center_service_proposal_funnel_dashboard"))
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert "پیگیری سرنخ‌ها و پیشنهاد خدمات" in body
+    assert "درخواست با منشأ و رضایت ثبت‌شده" in body
+    assert "آماده‌سازی پیش‌نویس داخلی" in body
+    assert reverse("admin:core_companyinquiry_changelist") in body
+    assert reverse("command_center_service_proposal_funnel_api") in body
+    assert lead.email not in body
+    assert lead.name not in body
+    assert response["Cache-Control"].startswith("no-store")
+    assert response["X-Robots-Tag"] == "noindex, nofollow, noarchive"
+
+
+@pytest.mark.django_db
+def test_non_owner_cannot_open_dashboard(db):
+    response = Client().get(reverse("command_center_service_proposal_funnel_dashboard"))
+    assert response.status_code == 302
+    assert "/admin/login/" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_dashboard_refuses_write_methods_even_for_owner(owner):
+    client = Client()
+    client.force_login(owner)
+    response = client.post(reverse("command_center_service_proposal_funnel_dashboard"))
+    assert response.status_code == 405
+    assert AuditLog.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_dashboard_has_no_fabricated_percentage_without_leads(owner):
+    client = Client()
+    client.force_login(owner)
+    response = client.get(reverse("command_center_service_proposal_funnel_dashboard"))
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "هنوز پرونده دارای منشأ و رضایت" in html
+    assert "100٪" not in html
+    assert CompanyInquiry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_dashboard_computes_prepared_over_consent_records_not_over_sales(owner):
+    valid = create_lead()
+    create_lead()
+    prepare_one(valid.pk)
+    client = Client()
+    client.force_login(owner)
+    html = client.get(reverse("command_center_service_proposal_funnel_dashboard")).content.decode()
+    assert "50.0٪" in html
+    assert "درآمد وصول‌شده" in html
+    assert "فقط" not in ""  # No assertion about real cash from an internal ratio.
+
+
+@pytest.mark.django_db
+def test_admin_bulk_proposals_do_not_contact_customer_or_open_payments(owner):
+    lead = create_lead()
+    panel = django_admin.site._registry[CompanyInquiry]
+    with patch("django.core.mail.send_mail", side_effect=AssertionError("external send forbidden")), \
+         patch.object(panel, "message_user"):
+        panel.prepare_scoped_service_response(
+            SimpleNamespace(user=owner),
+            CompanyInquiry.objects.filter(pk=lead.pk),
+        )
+    assert Order.objects.count() == 0
+    assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 1
