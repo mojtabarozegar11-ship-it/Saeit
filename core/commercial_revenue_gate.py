@@ -312,9 +312,11 @@ class SQLiteCommercialLedger:
             if row is None:
                 raise CommercialGateError("order_not_found")
             prior = self.connection.execute(
-                "SELECT payload_digest, state FROM order_events WHERE event_id = ?", (event_id,)
+                "SELECT order_id, payload_digest, state FROM order_events WHERE event_id = ?", (event_id,)
             ).fetchone()
             if prior is not None:
+                if prior["order_id"] != order_id:
+                    raise CommercialGateError("event_replay_order_mismatch")
                 if prior["payload_digest"] != payload_digest:
                     raise CommercialGateError("event_replay_mismatch")
                 return CommercialState(prior["state"])
