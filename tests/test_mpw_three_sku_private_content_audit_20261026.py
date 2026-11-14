@@ -110,6 +110,40 @@ class PrivateContentAuditTests(unittest.TestCase):
             self.assertIn("navigation_integrity",result["needs_specialist_review"])
             self.assertNotIn("gameplay",result["needs_specialist_review"])
 
+    def test_nested_relative_and_root_relative_archive_assets_resolve(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "nested.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(
+                    "pages/items/index.html",
+                    "<html><head><title>Product</title></head><body>"
+                    "<img src='../../media/hero.png' alt='Hero'>"
+                    "<img src='/media/hero.png' alt='Hero'></body></html>"
+                )
+                archive.writestr("media/hero.png", b"placeholder")
+            result = audit.audit_zip(path)
+            self.assertTrue(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(result["missing_local_refs"], [])
+
+    def test_root_asset_must_not_mask_broken_nested_relative_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wrong-root.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr(
+                    "pages/index.html",
+                    "<html><head><title>Product</title></head><body>"
+                    "<img src='hero.png' alt='Hero'></body></html>"
+                )
+                archive.writestr("hero.png", b"incorrect-location")
+            result = audit.audit_zip(path)
+            self.assertFalse(result["checks"]["local_asset_links_resolve"])
+            self.assertEqual(result["missing_local_refs"], ["hero.png"])
+
+    def test_archive_parent_escape_is_never_resolved_as_local_asset(self):
+        self.assertIsNone(audit.resolve_archive_asset("index.html", "../private.png"))
+        self.assertEqual(audit.resolve_archive_asset(
+            "pages/index.html", "../media/hero.png"), "media/hero.png")
+
     def test_zip_missing_media_and_srcset_assets_cannot_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"site.zip"
