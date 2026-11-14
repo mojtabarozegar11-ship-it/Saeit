@@ -550,6 +550,7 @@ class CheckoutSourcePreflightTests(unittest.TestCase):
         self.template.write_text(
             '<form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/">'
             '{% csrf_token %}<input name="email" type="email" required>'
+            '<button type="submit">Create invoice and pay with TRX</button>'
             '</form>', encoding="utf8")
         self.assertEqual(self.preflight(),
                          hashlib.sha256(self.template.read_bytes()).hexdigest())
