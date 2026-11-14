@@ -1,0 +1,31 @@
+name: Mojtaba bot chat intent and scope (offline)
+
+on:
+  pull_request:
+    branches:
+      - audit/mojtaba-auth-failclosed-20261114
+    paths:
+      - core/operation_planner.py
+      - core/chat_operation_security.py
+      - core/chat_operation_scope.py
+      - tests/test_mojtaba_chat_intent_20261114.py
+      - .github/workflows/mojtaba-chat-intent-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  command-intent-regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Strict offline parser and approval identity cases
+        run: |
+          python -m unittest discover -s tests -p 'test_mojtaba_chat_intent_20261114.py' -v
+          python -m unittest discover -s tests -p 'test_mojtaba_authorization_boundary_20261114.py' -v
+      - name: Syntax checks
+        run: python -m compileall -q core/operation_planner.py core/chat_operation_security.py core/chat_operation_scope.py tests/test_mojtaba_chat_intent_20261114.py

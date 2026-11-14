@@ -5,9 +5,9 @@ def is_authorized_chat_operator(user) -> bool:
 
     Staff membership and being the requester of an approval are insufficient.
     """
-    return bool(
+    return (
         user is not None
-        and user.is_authenticated
-        and user.is_active
-        and user.is_superuser
+        and getattr(user, "is_authenticated", False) is True
+        and getattr(user, "is_active", False) is True
+        and getattr(user, "is_superuser", False) is True
     )

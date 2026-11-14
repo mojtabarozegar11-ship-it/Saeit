@@ -9,6 +9,7 @@ import re
 
 from .chat_operation_security import is_authorized_chat_operator
 from .models import ChatSession
+from .operation_planner import valid_draft_path
 
 EXPECTED = {
     "cpanel.preflight": ("cPanel", "medium", frozenset()),
@@ -39,7 +40,8 @@ def validate_chat_operation_scope(approval):
     operation_id, action = data["operation_id"], data["action"]
     if not isinstance(operation_id, str) or re.fullmatch(r"[a-f0-9]{32}", operation_id) is None:
         raise ValueError("CHAT_OPERATION_ID_INVALID")
-    if approval.target_id != operation_id or action not in EXPECTED:
+    if (approval.target_id != operation_id or type(action) is not str
+            or action not in EXPECTED):
         raise ValueError("CHAT_OPERATION_ID_OR_ACTION_MISMATCH")
     target_rule, risk, expected_params = EXPECTED[action]
     if approval.action_type != "chat:" + action or approval.risk != risk:
@@ -57,12 +59,10 @@ def validate_chat_operation_scope(approval):
         if target != "cPanel":
             raise ValueError("CHAT_OPERATION_TARGET_INVALID")
     else:
-        if target not in SITES:
+        if type(target) is not str or target not in SITES:
             raise ValueError("CHAT_OPERATION_SITE_TARGET_INVALID")
         path = params["path"]
-        if (not isinstance(path, str) or not path.startswith("/")
-                or len(path) > 180 or "\x00" in path or
-                "//" in path or any(part == ".." for part in path.split("/"))):
+        if not valid_draft_path(path, target):
             raise ValueError("CHAT_OPERATION_PATH_INVALID")
         if action == "site.create_draft_page":
             if (not isinstance(params["title"], str) or
