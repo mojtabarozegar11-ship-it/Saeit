@@ -61,6 +61,10 @@ class PropAccount(models.Model):
     starting_capital_usd = models.DecimalField(max_digits=18, decimal_places=2,
                                                default=Decimal("100.00"))
     reference = models.CharField(max_length=96, blank=True)
+    challenge_enrollment = models.ForeignKey(
+        "PropChallengeEnrollment", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="phase_accounts"
+    )
     policy_version = models.CharField(max_length=32, default=POLICY.version)
     reconciled_by_operator = models.BooleanField(default=False)
     opened_at = models.DateTimeField(null=True, blank=True)
@@ -279,27 +283,55 @@ class PropProfitJournalLine(models.Model):
 
 
 
-class PropSocialEvidence(models.Model):
-    """Privately reviewed trader-authored posts, never an auto-publishing task.
+class PropChallengeEnrollment(models.Model):
+    """One independently confirmed purchase binding both simulated phases.
 
-    Data are challenge-specific, may not be displayed publicly, and cannot
-    authorize payment/funding on their own. Only the evidence review service
-    may create or approve them; the administrative UI is read-only.
+    Only a trusted private gateway adapter may create confirmed purchases.
+    This is a read-only record, not a customer self-attestation or TRX invoice.
     """
+    trader = models.ForeignKey(
+        PropTrader, on_delete=models.PROTECT, related_name="challenge_enrollments"
+    )
+    verified_invoice_ref = models.CharField(max_length=96, unique=True)
+    confirmed_at = models.DateTimeField(db_index=True)
+    settlement_verified = models.BooleanField(default=False)
+    terms_version = models.CharField(max_length=32, default=POLICY.version)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        from .social_policy import NEW_CONTRACT_VERSION, aware_utc
+        if self.terms_version != NEW_CONTRACT_VERSION:
+            raise ValidationError("New enrollment uses pre-disclosed v1.2 contract")
+        if not self.verified_invoice_ref or not self.verified_invoice_ref.strip():
+            raise ValidationError("Trusted payment receipt reference required")
+        aware_utc(self.confirmed_at, "confirmed_at")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class PropSocialEvidence(models.Model):
+    """Exactly two original posts per verified purchase: one per platform."""
     class Platform(models.TextChoices):
         INSTAGRAM = "instagram", "Instagram"
         FACEBOOK = "facebook", "Facebook"
 
     class Review(models.TextChoices):
         PENDING = "pending", "Pending independent review"
-        VERIFIED = "verified", "Verified by independent operator"
+        VERIFIED = "verified", "Verified and visible for four weeks"
         REJECTED = "rejected", "Rejected evidence"
 
     account = models.ForeignKey(
         PropAccount, on_delete=models.PROTECT, related_name="social_evidence"
     )
+    enrollment = models.ForeignKey(
+        PropChallengeEnrollment, null=True, blank=True,
+        on_delete=models.PROTECT, related_name="social_posts"
+    )
     platform = models.CharField(max_length=12, choices=Platform.choices)
-    trading_day = models.DateField(db_index=True)
+    trading_day = models.DateField(null=True, blank=True)  # old draft metadata retained
     post_url = models.URLField(max_length=512, unique=True)
     posted_at = models.DateTimeField()
     review_status = models.CharField(
@@ -315,21 +347,22 @@ class PropSocialEvidence(models.Model):
     disclosure_verified = models.BooleanField(default=False)
     content_compliant = models.BooleanField(default=False)
     date_verified = models.BooleanField(default=False)
+    continued_visibility_verified = models.BooleanField(default=False)
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ("account_id", "trading_day", "platform")
+        ordering = ("enrollment_id", "platform")
         constraints = [
             models.UniqueConstraint(
-                fields=("account", "trading_day", "platform"),
-                name="mp_social_day_platform_unique",
+                fields=("enrollment", "platform"),
+                name="mp_social_enrollment_platform_unique",
             ),
             models.CheckConstraint(
                 condition=~Q(review_status="verified") | (
                     Q(reviewed_by__isnull=False) & Q(reviewed_at__isnull=False)
                     & Q(author_verified=True) & Q(public_visible=True)
                     & Q(disclosure_verified=True) & Q(content_compliant=True)
-                    & Q(date_verified=True)
+                    & Q(date_verified=True) & Q(continued_visibility_verified=True)
                 ),
                 name="mp_social_verified_review_gate",
             ),
@@ -337,36 +370,46 @@ class PropSocialEvidence(models.Model):
 
     def clean(self):
         super().clean()
-        from .social_policy import utc_day, valid_platform_post_url
-        if self.account_id:
-            if self.account.kind not in (
-                PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO,
-            ):
-                raise ValidationError("Only simulated challenge days require social proofs")
-            if self.account.policy_version == "2026-11-14/v1.1":
-                raise ValidationError("Legacy paid cohorts cannot be retroactively changed")
-            if self.account.policy_version != POLICY.version:
-                raise ValidationError("Unsupported social challenge policy version")
-            if self.account.opened_at and self.posted_at and self.posted_at < self.account.opened_at:
-                raise ValidationError("Social publication predates challenge opening")
-            if self.account.trader_id and self.reviewed_by_id == self.account.trader.user_id:
-                raise ValidationError("Traders cannot independently verify their own posts")
-        if self.posted_at and self.trading_day and utc_day(self.posted_at) != self.trading_day:
-            raise ValidationError("Post must match its corresponding UTC trading day")
+        from datetime import timedelta
+        from .social_policy import (
+            NEW_CONTRACT_VERSION, DURATION_DAYS, POST_START_GRACE_HOURS,
+            aware_utc, valid_platform_post_url,
+        )
+        if not self.account_id or not self.enrollment_id:
+            raise ValidationError("Verified purchase and challenge account required")
+        if self.account.kind not in (
+            PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO
+        ):
+            raise ValidationError("Social rule is only for simulated challenges")
+        if (self.account.policy_version != NEW_CONTRACT_VERSION
+                or self.enrollment.terms_version != NEW_CONTRACT_VERSION):
+            raise ValidationError("Social rule only applies to prospective v1.2 enrollments")
+        if (self.account.trader_id != self.enrollment.trader_id
+                or self.account.challenge_enrollment_id != self.enrollment_id):
+            raise ValidationError("Post must belong to this authenticated purchase")
+        if not self.enrollment.settlement_verified:
+            raise ValidationError("Independently settled purchase must be confirmed")
         if not valid_platform_post_url(self.post_url, self.platform):
-            raise ValidationError("Unsupported post URL; profile pages are not proof")
+            raise ValidationError("Unsupported post URL or banned profile")
+        published = aware_utc(self.posted_at, "posted_at")
+        start = aware_utc(self.enrollment.confirmed_at, "confirmed_at")
+        if not start <= published <= start + timedelta(hours=POST_START_GRACE_HOURS):
+            raise ValidationError("Post must be published within 24 hours of purchase")
         if self.review_status == self.Review.VERIFIED:
-            if (not self.reviewed_by_id or self.reviewed_at is None
+            reviewed = aware_utc(self.reviewed_at, "reviewed_at")
+            if (reviewed < published + timedelta(days=DURATION_DAYS)
+                    or not self.reviewed_by_id
+                    or self.reviewed_by_id == self.account.trader.user_id
                     or not all((
                         self.author_verified, self.public_visible,
                         self.disclosure_verified, self.content_compliant,
-                        self.date_verified,
+                        self.date_verified, self.continued_visibility_verified,
                     ))):
-                raise ValidationError("Independent approval and all post disclosures required")
+                raise ValidationError("28-day public lifetime and independent review required")
 
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"social-review:{self.account_id}:{self.trading_day}:{self.platform}"
+        return f"social-review:{self.enrollment_id}:{self.platform}"
