@@ -127,6 +127,7 @@ def inspect_fulfillment_order(order):
         fmt = metadata.get("delivery_format")
         if type(fmt) is not str or fmt not in FORMAT:
             block("DELIVERY_FORMAT_UNSUPPORTED")
+            fmt = None  # Never perform set membership on unhashable JSON lists.
         if fmt == "in_game_cosmetic" and product.product_type != "game_cosmetic":
             block("DELIVERY_PRODUCT_FORMAT_CONFLICT")
         if fmt in FILE_FORMATS | LICENSE_FORMATS and product.product_type == "game_cosmetic":
