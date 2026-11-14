@@ -236,8 +236,14 @@ class RevenueOperationsTests(TestCase):
 
     def test_single_agent_can_cost_without_payment(self):
         from core.economic_master_agent import EconomicMasterAgent
-        from core.tests.test_revenue_unit_economics_20261114 import quote
-        x = EconomicMasterAgent().calculate_quote_scenario_readonly(quote())
+        fixture = {
+            "currency": "USD", "base_unit_price": "100",
+            "discount_percent": "10", "direct_unit_cost": "30",
+            "delivery_unit_cost": "5", "payment_unit_fee": "2",
+            "refund_unit_reserve": "3", "tax_unit_reserve": "5",
+            "period_fixed_cost": "180", "expected_units": 5,
+        }
+        x = EconomicMasterAgent().calculate_quote_scenario_readonly(fixture)
         self.assertIsNone(x["external_cash_settlement"])
 
     def test_single_agent_reuses_same_service_catalogue(self):
