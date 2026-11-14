@@ -29,8 +29,13 @@
   <article class="services-core-card">
     <span>{{ offer.service_code }}</span>
     <h3>{{ offer.title_fa }}</h3>
-    <p>{{ offer.customer }}</p><p>{{ offer.limitation }}</p>
-    <a href="{{ offer.contact_url }}" aria-label="درخواست بررسی {{ offer.title_fa }}">درخواست بررسی اولیه ↗</a>
+    <p><strong>مناسب برای:</strong> {{ offer.customer }}</p>
+    <p><strong>خروجی‌های احتمالی پس از بررسی دامنه:</strong></p>
+    <ul>{% for deliverable in offer.deliverables %}<li>{{ deliverable }}</li>{% endfor %}</ul>
+    <p><strong>محدودیت:</strong> {{ offer.limitation }}</p>
+    <p>قیمت و ظرفیت پس از برآورد و تأیید جداگانه تعیین می‌شود.</p>
+    <a href="{% url 'service_scope_page' offer.service_code %}" aria-label="جزئیات و دامنه {{ offer.title_fa }}">جزئیات، مدارک لازم و مراحل همکاری ↗</a>
+    <a href="{{ offer.contact_url }}" aria-label="درخواست بررسی {{ offer.title_fa }}">ثبت استعلام در فرم اصلی شرکت ↗</a>
   </article>
   {% endfor %}
 </section>
