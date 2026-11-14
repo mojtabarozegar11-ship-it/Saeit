@@ -15,50 +15,116 @@ from .models import LedgerEntry, OrderItem, PaymentWebhookEvent
 from .tron_gateway_web import PROVIDER, _host, _owner, _private
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,220}\Z")
+_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+_TXID = re.compile(r"[0-9a-f]{64}\Z")
+MAX_DIGITAL_FILE_BYTES = 128 * 1024 * 1024
+MAX_PRIVATE_SEGMENTS = 8
+
+
+def _private_asset_parts(relative):
+    """Never treat buyer/product metadata as a filesystem path without checks."""
+    if (type(relative) is not str or _SAFE.fullmatch(relative) is None
+            or relative.startswith("/") or "\\" in relative):
+        raise Http404("Private asset path invalid")
+    parts = relative.split("/")
+    if (not 1 <= len(parts) <= MAX_PRIVATE_SEGMENTS
+            or any(part in ("", ".", "..") or part.startswith(".") for part in parts)
+            or any(len(part) > 96 for part in parts)):
+        raise Http404("Private asset path invalid")
+    if not relative.lower().endswith((".pdf", ".epub", ".zip")):
+        raise Http404("Unsupported private digital file")
+    return parts
+
+
+def _safe_root():
+    raw = getattr(settings, "TRON_UNIFIED_PRIVATE_DIGITAL_ROOT", None)
+    if type(raw) not in (str, Path):
+        raise Http404("Private digital root not configured")
+    root = Path(raw)
+    if (not root.is_absolute() or ".." in root.parts
+            or str(root) == "/" or not getattr(os, "O_NOFOLLOW", 0)
+            or not getattr(os, "O_DIRECTORY", 0)):
+        raise Http404("Private digital root not configured")
+    for p in (root, *root.parents):
+        if p.is_symlink():
+            raise Http404("Private digital root unavailable")
+    return root
+
+
+def _check_private_stat(st, *, directory=False):
+    if not (stat.S_ISDIR(st.st_mode) if directory else stat.S_ISREG(st.st_mode)):
+        raise Http404("Private file type invalid")
+    if (st.st_uid != os.geteuid() or (stat.S_IMODE(st.st_mode) & 0o077) != 0):
+        raise Http404("Private file permissions invalid")
+    if not directory and (st.st_nlink != 1 or
+                          not 0 < st.st_size <= MAX_DIGITAL_FILE_BYTES):
+        raise Http404("Private asset size or link count invalid")
 
 
 def _file_from_private_root(relative, expected_digest):
-    """Open each segment O_NOFOLLOW; verify SHA256 on the very same open FD."""
-    if (not isinstance(relative, str) or not _SAFE.fullmatch(relative)
-            or relative.startswith("/") or "\\" in relative or
-            any(x in ("", ".", "..") for x in relative.split("/"))):
-        raise Http404("Private asset path invalid")
-    root = Path(getattr(settings, "TRON_UNIFIED_PRIVATE_DIGITAL_ROOT", ""))
-    if not root.is_absolute() or root.is_symlink() or not root.is_dir():
-        raise Http404("Private digital root not configured")
-    if not isinstance(expected_digest, str) or not re.fullmatch("[0-9a-fA-F]{64}", expected_digest):
+    """Read owner-private bytes once; stream from the same verified descriptor.
+
+    A match is a local byte-integrity check, NOT a paid delivery receipt or
+    legal-rights/settlement verification.
+    """
+    parts = _private_asset_parts(relative)
+    if type(expected_digest) is not str or _DIGEST.fullmatch(expected_digest) is None:
         raise Http404("Approved file digest unavailable")
-    parts = relative.split("/")
-    handles = []
+    root = _safe_root()
+    dirs = []
+    asset_fd = None
+    stream = None
+    flags_dir = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    flags_file = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
-        folder_fd = os.open(str(root), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        handles.append(folder_fd)
+        folder_fd = os.open(str(root), flags_dir)
+        dirs.append(folder_fd)
+        _check_private_stat(os.fstat(folder_fd), directory=True)
         for part in parts[:-1]:
-            folder_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                dir_fd=folder_fd)
-            handles.append(folder_fd)
-        asset_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW,
-                           dir_fd=folder_fd)
-        st = os.fstat(asset_fd)
-        if not stat.S_ISREG(st.st_mode) or not 0 < st.st_size <= 2**31:
-            os.close(asset_fd)
-            raise Http404("Digital asset not safe")
-        stream = os.fdopen(asset_fd, "rb")
-        try:
-            digest = hashlib.sha256()
-            for block in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(block)
-            if digest.hexdigest() != expected_digest.lower():
-                raise Http404("Published asset hash no longer matches")
-            stream.seek(0)
-            return stream
-        except BaseException:
-            stream.close()
-            raise
-    except (OSError, ValueError) as exc:
-        raise Http404("Private file not available") from exc
+            folder_fd = os.open(part, flags_dir, dir_fd=folder_fd)
+            dirs.append(folder_fd)
+            _check_private_stat(os.fstat(folder_fd), directory=True)
+        asset_fd = os.open(parts[-1], flags_file, dir_fd=folder_fd)
+        before = os.fstat(asset_fd)
+        _check_private_stat(before)
+        stream = os.fdopen(asset_fd, "rb", buffering=0)
+        asset_fd = None   # Ownership passed to stream, including failure paths
+        digest = hashlib.sha256()
+        count = 0
+        start = b""
+        while True:
+            chunk = stream.read(min(65536, MAX_DIGITAL_FILE_BYTES + 1 - count))
+            if not chunk:
+                break
+            count += len(chunk)
+            if count > MAX_DIGITAL_FILE_BYTES:
+                raise Http404("Private digital asset exceeds limit")
+            if not start:
+                start = chunk[:8]
+            digest.update(chunk)
+        after = os.fstat(stream.fileno())
+        if (count != before.st_size or any(getattr(before, key) != getattr(after, key)
+            for key in ("st_dev", "st_ino", "st_size", "st_mode",
+                        "st_nlink", "st_mtime_ns", "st_ctime_ns"))):
+            raise Http404("Private file changed during inspection")
+        extension = parts[-1].rsplit(".", 1)[-1].lower()
+        if ((extension == "pdf" and not start.startswith(b"%PDF-")) or
+                (extension in ("zip", "epub") and not start.startswith(b"PK\x03\x04"))):
+            raise Http404("Private digital file signature invalid")
+        if digest.hexdigest() != expected_digest:
+            raise Http404("Published asset hash no longer matches")
+        stream.seek(0)
+        result = stream
+        stream = None    # Caller / Django FileResponse closes after streaming
+        return result
+    except (OSError, ValueError, OverflowError) as exc:
+        raise Http404("Private file not available") from None
     finally:
-        for fd in reversed(handles):
+        if stream is not None:
+            stream.close()
+        if asset_fd is not None:
+            os.close(asset_fd)
+        for fd in reversed(dirs):
             os.close(fd)
 
 
