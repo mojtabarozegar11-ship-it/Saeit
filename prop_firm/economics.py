@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 from .rules import LEVELS, POLICY, dec
+from .plans import DEFAULT_PLAN_CODE, plan_for_code
 
 
 def nonnegative(value, field):
@@ -83,14 +84,17 @@ class CohortEstimate:
     first_tier_escrow_requirement_usd: Decimal
     ultimate_tier_capital_usd: Decimal
     gross_revenue_not_actual: bool = True
+    plan_code: str = DEFAULT_PLAN_CODE
 
 
 def estimate_cohort(*, applicants, trx_usd_assumption, pass_rate_percent,
+                    plan_code=DEFAULT_PLAN_CODE,
                     acquisition_cost_per_applicant_usd=0,
                     payment_cost_per_applicant_usd=0,
                     support_cost_per_applicant_usd=0,
                     allocated_overhead_usd=0):
     """Projected cohort counts round UP to avoid understating funding needs."""
+    plan = plan_for_code(plan_code)
     count = valid_count(applicants, "applicants")
     rate = nonnegative(trx_usd_assumption, "trx_usd_assumption")
     if rate == 0:
@@ -102,7 +106,7 @@ def estimate_cohort(*, applicants, trx_usd_assumption, pass_rate_percent,
     overhead = nonnegative(allocated_overhead_usd, "allocated_overhead_usd")
 
     passed = int((Decimal(count) * pass_rate / 100).to_integral_value(rounding=ROUND_CEILING))
-    fees_trx = POLICY.entry_trx * count
+    fees_trx = plan.entry_fee_trx * count
     gross = fees_trx * rate
     acquisition = acquire * count
     payment = pay * count
@@ -117,8 +121,9 @@ def estimate_cohort(*, applicants, trx_usd_assumption, pass_rate_percent,
         support_cost_usd=support_total,
         overhead_usd=overhead,
         fee_contribution_usd=gross - acquisition - payment - support_total - overhead,
-        first_tier_escrow_requirement_usd=LEVELS[0] * passed,
-        ultimate_tier_capital_usd=LEVELS[-1] * passed,
+        first_tier_escrow_requirement_usd=plan.starting_capital_usd * passed,
+        ultimate_tier_capital_usd=plan.maximum_capital_usd * passed,
+        plan_code=plan.code,
     )
 
 
