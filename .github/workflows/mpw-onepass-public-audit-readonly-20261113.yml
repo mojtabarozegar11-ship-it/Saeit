@@ -1,0 +1,146 @@
+name: MojPlayWin one-pass public sales audit (read only)
+# Manually run on reviewed main only. No production login, payment, mail,
+# mutation, network transfer of buyer data or external task subscription.
+on:
+  pull_request:
+    paths:
+      - 'scripts/mpw_onepass_public_sales_audit_20261113.py'
+      - 'scripts/mpw_paid_provenance_readonly_20261105.py'
+      - 'tests/test_mpw_onepass_public_sales_audit_20261113.py'
+      - 'tests/test_mpw_checkout_render_contract_20261114.py'
+      - 'tests/test_mpw_paid_sku_scope_20261113.py'
+      - 'services/mpw_trx_guest_commerce.py'
+      - 'services/mpw_checkout_render_contract.py'
+      - 'services/mpw_trx_email_recovery.py'
+      - 'tests/test_mpw_email_recovery_20261105.py'
+      - 'scripts/mpw_guest_no_email_release.py'
+      - 'scripts/mpw_guest_email_order_source_gate_20261114.py'
+      - 'scripts/test_mpw_guest_route_patching.py'
+      - 'scripts/test_mpw_guest_first_order_identity.py'
+      - 'tests/test_mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_guest_email_order_source_gate_20261114.py'
+      - 'tests/test_mpw_guest_email_post_contract_20261114.py'
+      - 'tests/test_mpw_guest_telemetry_isolation_20261108.py'
+      - 'scripts/mpw_dynamic_store_cutover_20261108.py'
+      - 'tests/test_mpw_dynamic_store_cutover_20261108.py'
+      - 'scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
+      - 'tests/test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
+      - 'tests/test_mpw_cpanel_source_bridge_readonly_20261113.py'
+      - '.github/workflows/mpw-sales-intake-readonly-20261024.yml'
+      - 'tests/test_mpw_sales_intake_selfhost_readonly_20261113.py'
+      - 'deploy/cpanel_direct_command.sh'
+      - '.github/workflows/cpanel-direct-command-bridge.yml'
+      - '.github/workflows/mpw-public-passenger-runtime-readonly-20261102.yml'
+      - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
+  # Read-only isolated tests for the Draft branch, even when GitHub
+  # cannot generate a pull_request merge ref because of main conflicts.
+  # This does not authorize a cPanel release or financial action.
+  push:
+    branches:
+      - audit/mpw-onepass-sales-20261113
+    paths:
+      - '.github/workflows/mpw-onepass-public-audit-readonly-20261113.yml'
+      - '.github/workflows/mpw-sales-intake-readonly-20261024.yml'
+      - 'tests/test_mpw_sales_intake_selfhost_readonly_20261113.py'
+      - 'scripts/mpw_guest_no_email_release.py'
+      - 'scripts/mpw_guest_email_order_source_gate_20261114.py'
+      - 'tests/test_mpw_guest_no_email_release.py'
+      - 'tests/test_mpw_guest_email_order_source_gate_20261114.py'
+      - 'tests/test_mpw_guest_email_post_contract_20261114.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-onepass-public-readonly
+  cancel-in-progress: false
+
+jobs:
+  isolated-safety-contract:
+    if: "${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mpw-onepass-sales-20261113') }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout pull request without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify two precise MojPlayWin regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py scripts/mpw_paid_provenance_readonly_20261105.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+          python3 -m py_compile services/mpw_trx_guest_commerce.py scripts/mpw_guest_no_email_release.py
+          python3 -m py_compile services/mpw_checkout_render_contract.py
+          python3 -m py_compile services/mpw_trx_email_recovery.py
+          python3 -m py_compile scripts/mpw_guest_email_order_source_gate_20261114.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_email_order_source_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_email_post_contract_20261114.py' -v
+          python3 scripts/test_mpw_guest_route_patching.py
+          python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
+          python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+          python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_sales_intake_selfhost_readonly_20261113.py' -v
+  public-pr-readonly-observation:
+    # Public HTTPS GET only, no credentials, only an internal reviewed PR.
+    needs: isolated-safety-contract
+    if: "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout PR without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check public site, product and guest checkout GETs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_onepass_public_sales_audit_20261113.py --timeout 4
+  public-buyer-journey:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 4
+    steps:
+      - name: Checkout reviewed source with no persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source and isolated security contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_onepass_public_sales_audit_20261113.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_paid_sku_scope_20261113.py' -v
+          python3 -m py_compile services/mpw_trx_guest_commerce.py scripts/mpw_guest_no_email_release.py
+          python3 -m py_compile services/mpw_checkout_render_contract.py
+          python3 -m py_compile services/mpw_trx_email_recovery.py
+          python3 -m py_compile scripts/mpw_guest_email_order_source_gate_20261114.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_email_order_source_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_email_post_contract_20261114.py' -v
+          python3 scripts/test_mpw_guest_route_patching.py
+          python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_no_email_release.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py' -v
+          python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+          python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_sales_intake_selfhost_readonly_20261113.py' -v
+      - name: Bounded public HTML observations; never POST or create invoice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_onepass_public_sales_audit_20261113.py --timeout 6

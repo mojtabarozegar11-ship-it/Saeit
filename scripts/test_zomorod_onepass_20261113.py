@@ -6,13 +6,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def main():
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else list(argv)
     repo=Path(__file__).resolve().parents[1]
     script=repo/'scripts/zomorod_onepass_guarded_20261113.py'
     spec=importlib.util.spec_from_file_location('guard_zm_once',script)
     g=importlib.util.module_from_spec(spec);spec.loader.exec_module(g)
-    if len(sys.argv)!=2:raise SystemExit('Pass old/new stage root')
-    stage=Path(sys.argv[1]).resolve()
+    if len(args)!=1:raise SystemExit('Pass old/new stage root')
+    stage=Path(args[0]).resolve()
     with tempfile.TemporaryDirectory() as directory:
      home=Path(directory)
      site=home/'public_html';(site/'assets').mkdir(parents=True)

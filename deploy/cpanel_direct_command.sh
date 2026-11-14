@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream|mpw_source_provenance) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -52,11 +52,11 @@ normalize_key() {
 }
 if [[ "${FACTORY_VPS_RUNNER:-0}" == "1" ]]; then
   normalize_key "$HOST_KEY" "$work/host.key"
-  ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/host.known" 2>/dev/null
+  ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net > "$work/host.known" 2>/dev/null
   test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
   cat > "$work/config" <<EOF
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -90,6 +90,13 @@ EOF
     passenger_inventory)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
       ;;
+    mpw_source_provenance)
+      test -f scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+      test ! -L scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+      test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "da126a27de047239b46148ce0b878cebf53ad109" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
+      PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+        < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+    ;;
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'
       ;;
@@ -105,7 +112,7 @@ normalize_key "$HOST_KEY" "$work/host.key"
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
-ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
+ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$work/host.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
 cat > "$work/config" <<EOF
@@ -115,7 +122,7 @@ Host saeit-vps
   IdentityFile $work/vps.key
   UserKnownHostsFile $work/vps.known
 Host saeit-cpanel
-  HostName 178.239.147.125
+  HostName zohal.pws-dns.net
   User zomorod2
   Port 1396
   IdentityFile $work/host.key
@@ -151,6 +158,13 @@ case "$operation" in
   passenger_inventory)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' |
       python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+    ;;
+    mpw_source_provenance)
+      test -f scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+      test ! -L scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+      test "$(git hash-object -- scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py)" = "da126a27de047239b46148ce0b878cebf53ad109" || { echo "MPW_READONLY_SOURCE_NOT_PINNED" >&2; exit 65; }
+      PYTHONDONTWRITEBYTECODE=1 timeout 90s ssh -T -F "$work/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+        < scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
     ;;
   cpanel_preflight)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'

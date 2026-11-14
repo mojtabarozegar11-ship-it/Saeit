@@ -1,0 +1,176 @@
+{
+  "schema": "mpw.public_checkout_observation.evidence.v1",
+  "observed_on": "2026-11-13",
+  "source": {
+    "github_actions_run": 43429609528,
+    "github_actions_job": 131899604691,
+    "url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43429609528"
+  },
+  "methods": [
+    "GET"
+  ],
+  "source_of_truth": "Public HTTPS response body and headers observed by GitHub-hosted runner; not cPanel DB or blockchain",
+  "storefront": {
+    "path": "/store/",
+    "status": "static_fallback_not_dynamic"
+  },
+  "details": {
+    "/store/product/72/": "detail_public_get_ok_not_sale",
+    "/store/product/225/": "detail_public_get_ok_not_sale",
+    "/store/product/879/": "detail_public_get_ok_not_sale"
+  },
+  "checkouts": {
+    "/store/product/72/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/store/product/225/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/store/product/879/checkout/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/72/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/225/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    },
+    "/commerce/book/879/": {
+      "form": "legacy_email_requested",
+      "headers": "checkout_csp_scripts_unverified"
+    }
+  },
+  "routes_checked": 10,
+  "buyer_purchase_POST_performed": false,
+  "order_or_invoice_created": false,
+  "independent_chain_transfer_verified": false,
+  "authenticated_buyer_download_verified": false,
+  "confirmed_commercial_sales": null,
+  "confirmed_revenue_USD": null,
+  "severity": "release_blocked",
+  "disclaimers": [
+    "Header classification is a strict source-independent release contract check; it does not prove the underlying payment service is down.",
+    "Presence of an email field conflicts with the intended no-email policy, but it does not prove an invoice POST succeeded or failed.",
+    "The three product detail pages pass GET/CTA checks only; this is not a valid sale.",
+    "No personal data, payment identifiers, wallet addresses, or secrets were accessed or copied."
+  ],
+  "follow_up_readonly_observation": {
+    "run_id": 43434626462,
+    "job_id": 131916548353,
+    "url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43434626462",
+    "checked_route_count": 10,
+    "source": "Github hosted runner with public unauthenticated HTTPS GET only",
+    "result": "release_gate_blocked_public_storefront_and_checkout",
+    "checkout_form_observations": {
+      "/commerce/book/72/": "legacy_email_requested",
+      "/commerce/book/225/": "legacy_email_requested",
+      "/commerce/book/879/": "legacy_email_requested",
+      "/store/product/72/checkout/": "legacy_email_requested",
+      "/store/product/225/checkout/": "legacy_email_requested",
+      "/store/product/879/checkout/": "legacy_email_requested"
+    },
+    "storefront": "static_fallback_not_dynamic",
+    "detail_product_routes_confirmed": [
+      72,
+      225,
+      879
+    ],
+    "checkout_strict_csp_script_src_passed": 0,
+    "checkout_strict_csp_script_src_evaluated": 6,
+    "changed_from_prior_public_observation": false,
+    "source_integration_github_ci": {
+      "run_id": 43434626462,
+      "isolated_checks": "passed",
+      "unit_tests_passed": 146,
+      "independent_route_patch_test": "passed",
+      "concurrent_first_order_identity_test": "passed"
+    },
+    "production_deployed": false,
+    "independent_real_payment_verified": false,
+    "purchase_download_verified": false,
+    "confirmed_revenue_usd": null
+  },
+  "cycle_6_readonly_facts": {
+    "run_id": 43450899114,
+    "job_id": 131972804962,
+    "source": "GitHub-hosted public unauthenticated HTTPS GET only",
+    "checked_routes": 10,
+    "dynamic_storefront": "static_fallback_not_dynamic",
+    "verified_product_detail_get_count": 3,
+    "checkout_email_collection_detected_count": 6,
+    "checkout_script_src_explicit_missing_count": 6,
+    "checkout_strict_csp_pass_count": 0,
+    "no_payment_post": true,
+    "cpanel_source_probe_executed": false,
+    "cpanel_source_bridge_option_implemented_in_pr": true,
+    "commercial_revenue_verified": null,
+    "buyer_delivery_verified": false,
+    "caveat": "CSP missing explicit script-src does not alone prove an exploitable vulnerability; default-src may restrict scripts. No paid checkout was performed."
+  },
+  "cycle_8_cpanel_transport_evidence": {
+    "github_hosted_passenger_probe": {
+      "workflow_run": 43454715777,
+      "workflow_job": 131985697660,
+      "result": "blocked_before_any_remote_source_read",
+      "vps_host_key_verified": true,
+      "cpanel_host_key_verified": true,
+      "via_vps_attempts": 5,
+      "via_vps_result": "ssh_banner_timeout",
+      "direct_fallback_host": "old_pinned_ip_path",
+      "direct_fallback_result": "ssh_connect_timeout"
+    },
+    "factory_vps_selfhosted_ssh_probe": {
+      "workflow_run": 43157969516,
+      "rerun_job": 131988664973,
+      "result": "cpanel_ssh_auth_success",
+      "target_name": "zohal.pws-dns.net",
+      "ssh_reported_address": "178.239.147.124",
+      "ssh_authenticated": true,
+      "cpanel_file_source_inspected": false
+    },
+    "candidate_code_only_remediation": {
+      "old_direct_ip": "178.239.147.125",
+      "hostname": "zohal.pws-dns.net",
+      "fingerprint_check_preserved": true,
+      "branch_only_no_merge": true,
+      "production_edits": false
+    },
+    "source_conclusion": "SSH from VPS worked on DNS hostname, but app source and effective Passenger/Django runtime remain unverified",
+    "commercial_sale_verification": null,
+    "real_buyer_delivery_verified": false
+  },
+  "cycle_9_actual_cpanel_readonly": {
+    "source": "Existing main-branch read-only cPanel SSH/UAPI workflows; no deployment or customer access",
+    "github_hosted_legacy_private_relay": {
+      "run": 43457001017,
+      "job": 131993652010,
+      "status": "failed_before_remote_source_read",
+      "host_fingerprints": "verified",
+      "vps_jump_ssh_retries": 5,
+      "vps_jump_result": "ssh_banner_timeout",
+      "direct_fallback_ip_connection": "timeout",
+      "raw_cpanel_source_obtained": false
+    },
+    "self_hosted_factory_vps_passenger_inventory": {
+      "run": 43162619527,
+      "rerun_job": 131997282584,
+      "status": "success",
+      "method": "fingerprint-pinned self-hosted SSH to cPanel, UAPI PassengerApps list_applications, read-only",
+      "uapi_records_discovered": 2,
+      "mojplaywin_registered_mapping_count": 1,
+      "mojplaywin_references_shared_saeit_staging": false,
+      "production_isolation_proven": false,
+      "effective_django_template_origin_proven": false,
+      "customer_data_or_secrets_exposed": false,
+      "release_permitted": false
+    },
+    "transport_interpretation": "One VPS-hosted read-only probe succeeded using a main workflow with the existing target while a cloud runner failed; a fixed IP is NOT proven globally dead. Different runner egress and DNS resolution may affect reachability.",
+    "commercial_sales_verified": null,
+    "authenticated_download_verified": false
+  }
+}

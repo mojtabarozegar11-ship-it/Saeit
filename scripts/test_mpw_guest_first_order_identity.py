@@ -29,11 +29,13 @@ class Atomic:
 
 class Field:
     unique = True
+    concrete = True
+    is_relation = False
 
 
 class Meta:
     def get_field(self, name):
-        assert name == "username"
+        assert name in ("username", "email")
         return Field()
 
 
@@ -65,6 +67,9 @@ class User:
 
     def __init__(self, **kwargs):
         self.username = kwargs["username"]
+        self.email = ""
+        self.is_staff = False
+        self.is_superuser = False
         self.is_active = True
         self.pk = None
         self.unusable = False
@@ -93,6 +98,15 @@ def install_fake_django():
     sys.modules["django.contrib.auth"].get_user_model = lambda: User
     sys.modules["django.db"].IntegrityError = IntegrityError
     sys.modules["django.db"].transaction = types.SimpleNamespace(atomic=Atomic)
+    sys.modules["services"] = types.ModuleType("services")
+    recovery = types.ModuleType("services.mpw_trx_email_recovery")
+    def posted_email(request):
+        values = request.POST.getlist("email")
+        if len(values) != 1 or not values[0] or "@" not in values[0]:
+            raise ValueError("Buyer email required")
+        return values[0].strip().casefold()
+    recovery._posted_email = posted_email
+    sys.modules["services.mpw_trx_email_recovery"] = recovery
 
 
 def load_real_functions():
@@ -122,8 +136,10 @@ def run():
     global STALE_LOOKUP
     install_fake_django()
     functions = load_real_functions()
-    request = lambda secret: types.SimpleNamespace(
-        META={"CSRF_COOKIE": secret}
+    request = lambda secret, email="buyer@example.com": types.SimpleNamespace(
+        META={"CSRF_COOKIE": secret}, POST=types.SimpleNamespace(
+            getlist=lambda key: [email] if key == "email" and email else [],
+        )
     )
     one, _ = functions["_new_user"](request("A" * 32))
     # Force a stale initial lookup to exercise the concurrent insert conflict.
@@ -134,6 +150,27 @@ def run():
     assert len(USERS) == 2
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
+    assert all(v.email == "buyer@example.com" for v in USERS.values())
+    assert all(not v.is_staff and not v.is_superuser for v in USERS.values())
+    # Guest contact is the validated buyer address, never a dummy mailbox.
+    assert one.email == "buyer@example.com"
+    # Existing privileged principals must not be reused as guest purchases.
+    one.is_staff = True
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("privileged principal was accepted as a guest")
+    one.is_staff = False
+    one.email = "other@example.com"
+    try:
+        functions["_new_user"](request("A" * 32))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("existing real email was rebound to guest")
+    one.email = "buyer@example.com"
     try:
         functions["_new_user"](request(""))
     except Http404:

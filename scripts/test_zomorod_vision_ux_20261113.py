@@ -8,13 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 
-def main():
+def main(argv=None):
+    args = sys.argv[1:] if argv is None else list(argv)
     repo=Path(__file__).resolve().parents[1]
     source=repo/'scripts/zomorod_vision_ux_guarded_20261113.py'
     spec=importlib.util.spec_from_file_location('zm_ux_guard',source)
     mod=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    oldref=sys.argv[1] if len(sys.argv)>1 else None
+    oldref=args[0] if args else None
     if not oldref:raise SystemExit('Supply locally staged old/new release directory')
     stage=Path(oldref).resolve()
     with tempfile.TemporaryDirectory(prefix='zm-ux-safe-') as temporary:

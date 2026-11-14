@@ -23,8 +23,14 @@ def stub_modules(record, product):
         "django", "django.views", "django.views.decorators", "django.views.decorators.cache",
         "django.views.decorators.csrf", "django.views.decorators.http", "core", "core.models",
         "core.commerce_funnel",
+        "services", "services.mpw_trx_email_recovery",
     )
     result = {name: types.ModuleType(name) for name in names}
+    result["services"].__path__ = []
+    for handler in ("recovery_request", "recovery_verify", "recovery_orders",
+                    "recovery_download"):
+        setattr(result["services.mpw_trx_email_recovery"], handler,
+                lambda request, **kwargs: None)
     identity = lambda view: view
     result["django.views.decorators.cache"].never_cache = identity
     result["django.views.decorators.csrf"].csrf_protect = identity
@@ -52,7 +58,12 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        class InvoiceRedirect:
+            status_code = 302
+            def get(self, key, default=""):
+                return ("/commerce/trx-easy/invoice/42/"
+                        if key == "Location" else default)
+        response = InvoiceRedirect()
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -69,9 +80,24 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                 "start_order", "show_invoice", "invoice_status",
                 "reconcile_invoice", "download_paid",
             )}
+            namespace["COMMERCIAL_URLPATTERNS"] = (
+                ("/commerce/trx-easy/start/<int:product_id>/", namespace["_start_order"]),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/", namespace["_show_invoice"]),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/status/", namespace["_invoice_status"]),
+                ("/commerce/trx-easy/invoice/<str:invoice_id>/reconcile/", namespace["_reconcile_invoice"]),
+                ("/commerce/trx-easy/download/<str:receipt_id>/", namespace["_download_paid"]),
+                ("/commerce/trx-easy/catalogue/", lambda req: None),
+            )
             installer(namespace)
+            routes = dict(namespace["COMMERCIAL_URLPATTERNS"])
+            self.assertIs(routes["/commerce/trx-easy/start/<int:product_id>/"],
+                          namespace["start_order"])
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
+            self.assertEqual(
+                len([key for key in routes if key.startswith("commerce/trx-easy/recover/")]),
+                4,
+            )
             self.assertEqual(record.call_count, 1)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
