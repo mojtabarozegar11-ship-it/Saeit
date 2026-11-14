@@ -47,7 +47,7 @@ function eligible_service($slug): bool {
 function main_cli(array $args): void {
     if (!extension_loaded('openssl')) abort_private('OPENSSL_UNAVAILABLE');
     if (!in_array(($args[1]??''),['summary','inspect'],true)) abort_private('USAGE_SUMMARY_OR_INSPECT');
-    if (($args[1]??'')==='summary' && count($args)!==2) abort_private('EXTRA_ARGUMENTS');
+    if (($args[1]??'')==='summary' && (count($args)>3 || (count($args)===3 && !preg_match('/^[1-9][0-9]{0,3}$/D',$args[2])))) abort_private('INVALID_PAGE');
     if (($args[1]??'')==='inspect' && (count($args)!==3 || !preg_match('/^[A-F0-9]{18}$/D',$args[2]))) abort_private('INVALID_REFERENCE');
     $root=fixture_root();
     if ($root===null) {
@@ -64,15 +64,19 @@ function main_cli(array $args): void {
     $names=@scandir($root);
     if (!is_array($names)) abort_private('DIRECTORY_UNREADABLE');
     $files=array_values(array_filter($names,static fn($n)=>is_string($n)&&preg_match('/^[0-9]{8}-[A-F0-9]{18}\.json$/D',$n)));
-    sort($files,SORT_STRING);
+    rsort($files,SORT_STRING); // Prioritize newest inbound requests, without dropping older pages.
     $report=['version'=>1,'read_only'=>true,'emails_sent'=>0,'orders_created'=>0,'payments_created'=>0,
         'scanned'=>0,'valid'=>0,'invalid'=>0,'notified_to_local_mta'=>0,'not_yet_notified'=>0,
-        'older_than_24h'=>0,'older_than_72h'=>0,'by_service'=>[], 'backlog_truncated'=>count($files)>500];
+        'older_than_24h'=>0,'older_than_72h'=>0,'by_service'=>[], 'pending_references'=>[],
+        'pending_refs_truncated'=>false, 'total_files'=>count($files),
+        'page'=>($args[1]??'')==='summary'?(int)($args[2]??1):1,
+        'total_pages'=>max(1,(int)ceil(count($files)/500)),
+        'backlog_truncated'=>count($files)>500];
     if (($args[1]??'')==='inspect') {
         $reference=$args[2];$matches=array_values(array_filter($files,static fn($n)=>str_ends_with($n,'-'.$reference.'.json')));
         if (count($matches)!==1) abort_private('REFERENCE_NOT_FOUND');
         $files=$matches;
-    } else $files=array_slice($files,0,500);
+    } else $files=array_slice($files,($report['page']-1)*500,500);
     foreach ($files as $name) {
         $report['scanned']++;
         $path=$root.'/'.$name;
@@ -87,6 +91,10 @@ function main_cli(array $args): void {
         $marker=$root.'/.owner-dispatched-'.hash('sha256',$name).'.json';
         $notified=secured($marker) && @filesize($marker)>0;
         $report[$notified?'notified_to_local_mta':'not_yet_notified']++;
+        if (!$notified) {
+            if (count($report['pending_references'])<25) $report['pending_references'][]=$ref;
+            else $report['pending_refs_truncated']=true;
+        }
         $ts=strtotime((string)($lead['created_at']??''));
         if ($ts!==false && $ts<=time() && $ts>=0) {
             $age=time()-$ts;
