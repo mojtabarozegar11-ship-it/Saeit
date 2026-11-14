@@ -1,0 +1,66 @@
+name: MPW checkout inert-control gate and GET-only live diagnosis
+on:
+  push:
+    branches:
+      - fix/mpw-checkout-inert-controls-20261114
+    paths:
+      - "services/mpw_checkout_render_contract.py"
+      - "tests/test_mpw_checkout_inert_control_gate_20261114.py"
+      - "tests/test_mpw_public_checkout_hidden_controls_20261114.py"
+      - "scripts/mpw_onepass_public_sales_audit_20261113.py"
+      - ".github/workflows/mpw-checkout-inert-gate-20261114.yml"
+  pull_request:
+    branches:
+      - audit/mpw-onepass-sales-20261113
+permissions:
+  contents: read
+jobs:
+  checkout-render-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python compile buyer email form validation source
+        run: python3 -m py_compile services/mpw_checkout_render_contract.py
+      - name: Run existing + new adversarial rendered checkout contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_inert_control_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_public_checkout_hidden_controls_20261114.py' -v
+      - name: Observe ten public buyer routes using GET only; do not fail build for live unknowns
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/mpw_onepass_public_sales_audit_20261113.py --timeout 4 > /tmp/mpw_checkout_live_observation.log
+          rc=$?
+          set -e
+          if [[ "$rc" != "0" && "$rc" != "2" ]]; then
+            echo "MPW_READONLY_AUDIT=unexpected_process_exit"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('/tmp/mpw_checkout_live_observation.log')
+          line = path.read_text('utf8').strip()
+          prefix = 'MPW_ONEPASS_PUBLIC_READONLY='
+          assert line.startswith(prefix)
+          result = json.loads(line[len(prefix):])
+          assert result['payment_or_invoice_posts_performed'] is False
+          assert result['payments_sent'] is False
+          assert result['customer_data_read'] is False
+          assert result['commercial_sales_verified'] is None
+          assert result['pages_checked'] == 10
+          statuses = result['observed_routes']
+          checks = result['checkout_form_observations']
+          # Only fixed reason categories are logged; do not print page source,
+          # customer cookies, CSP nonce, CSRF form token or HTTP response body.
+          summary = {}
+          for value in statuses.values():
+              summary[value] = summary.get(value,0) + 1
+          print('MPW_PUBLIC_GET_ONLY=' + json.dumps(summary, sort_keys=True))
+          print('MPW_CHECKOUT_FORM_READONLY=' + json.dumps(
+              {k:v for k,v in sorted(checks.items())}, sort_keys=True))
+          print('MPW_PUBLIC_LIVE_RELEASE_PROVEN=false; settlement=UNKNOWN; delivery=UNKNOWN')
+          PY
