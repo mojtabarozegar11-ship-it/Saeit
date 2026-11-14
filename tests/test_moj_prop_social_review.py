@@ -131,6 +131,19 @@ class FourWeekProofTests(TestCase):
             verified_invoice_ref="future-paid-should-not-activate",
         ).exists())
 
+    def test_receipt_identifier_rejects_whitespace_or_header_injection(self):
+        from django.core.exceptions import ValidationError
+        for reference in ("\tbad", "paid\nX-Forger: true",
+                          "path/other-merchant", "x" * 97):
+            with self.subTest(reference=repr(reference)):
+                with self.assertRaises(ValidationError):
+                    PropChallengeEnrollment.objects.create(
+                        trader=self.profile,
+                        verified_invoice_ref=reference,
+                        confirmed_at=START,
+                        settlement_verified=True,
+                    )
+
     def test_purchase_identity_must_be_trusted(self):
         self.enrollment.settlement_verified=False
         self.enrollment.save()
