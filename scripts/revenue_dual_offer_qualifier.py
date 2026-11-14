@@ -8,6 +8,12 @@ No third-party dependencies or network access.
 import argparse
 import json
 from pathlib import Path
+try:
+    from scripts.revenue_intake_io import read_strict_json, write_new_anonymized_json
+except ModuleNotFoundError as exc:
+    if exc.name != "scripts":
+        raise
+    from revenue_intake_io import read_strict_json, write_new_anonymized_json
 
 OFFERS = {
     "website_checkout_repair": {
@@ -94,22 +100,17 @@ def main(argv=None):
     parser.add_argument("input_file", help="LOCAL JSON file only; do not put customer PII in it")
     parser.add_argument("--output", help="LOCAL anonymized result JSON path")
     args = parser.parse_args(argv)
-    source = Path(args.input_file)
-    if not source.is_file() or source.stat().st_size > 65536:
-        parser.error("expected a local JSON file of at most 64 KiB")
     try:
-        obj = json.loads(source.read_text(encoding="utf-8"))
+        obj = read_strict_json(args.input_file)
         result = qualify(obj)
     except (ValueError, UnicodeError) as exc:
         parser.error(str(exc))
     serialized = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
-        target = Path(args.output)
-        if target.is_symlink():
-            parser.error("output symlinks are not accepted")
-        if target.resolve() == source.resolve():
-            parser.error("refusing to overwrite intake input")
-        target.write_text(serialized, encoding="utf-8")
+        try:
+            write_new_anonymized_json(args.output, serialized)
+        except ValueError as exc:
+            parser.error(str(exc))
     else:
         print(serialized, end="")
     return 0

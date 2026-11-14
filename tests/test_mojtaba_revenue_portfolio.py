@@ -202,5 +202,35 @@ class KpiFalsificationGuards(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.synthetic_kpis(dict(self.numbers(), customer_email="secret"))
 
+
+class BoundedSourceEvidenceTests(unittest.TestCase):
+    def test_synthetic_maximum_counter_is_supported_without_real_cash(self):
+        counts = dict(views=module.MAX_SYNTHETIC_COUNT,
+                      inquiries=2, qualified=1, approved_quotes=1,
+                      paid_orders=0, delivered_orders=0,
+                      synthetic_example=True)
+        report = module.synthetic_kpis(counts)
+        self.assertIsNone(report["actual_revenue"])
+
+    def test_synthetic_count_above_safety_cap_is_rejected(self):
+        counts = dict(views=module.MAX_SYNTHETIC_COUNT+1,
+                      inquiries=1, qualified=1, approved_quotes=1,
+                      paid_orders=0, delivered_orders=0,
+                      synthetic_example=True)
+        with self.assertRaisesRegex(ValueError, "KPI_COUNTS_INVALID"):
+            module.synthetic_kpis(counts)
+
+    def test_huge_source_checks_cannot_fake_verified_payments(self):
+        with self.assertRaisesRegex(ValueError, "INVALID_SOURCE_CHECK_COUNT"):
+            module.no_revenue_claims_from_source(module.MAX_SOURCE_CHECKS + 1,
+                                                 receipts_verified=True)
+
+    def test_max_source_checks_still_cannot_claim_a_sale(self):
+        result = module.no_revenue_claims_from_source(module.MAX_SOURCE_CHECKS,
+                                                       receipts_verified=True)
+        self.assertFalse(result["receipt_attestation_from_source_only"])
+        self.assertIsNone(result["verified_collected_revenue"])
+
+
 if __name__ == "__main__":
     unittest.main()

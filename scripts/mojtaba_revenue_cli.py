@@ -15,23 +15,18 @@ import sys
 
 from mojtaba_revenue_portfolio import (CANONICAL_BOT, OFFERS, evaluate,
                                         synthetic_kpis)
+from revenue_intake_io import read_strict_json, write_new_anonymized_json
 
 MAX_BYTES = 32768
 
 
 def load_bounded_json(file_path: Path) -> dict:
-    if file_path.is_symlink() or not file_path.is_file():
-        raise ValueError("INPUT_NOT_A_REGULAR_FILE")
-    st = file_path.stat()
-    if not 0 < st.st_size <= MAX_BYTES:
-        raise ValueError("INPUT_SIZE_NOT_ALLOWED")
-    raw = file_path.read_bytes()
-    if len(raw) != st.st_size:
-        raise ValueError("INPUT_CHANGED_DURING_READ")
+    # File descriptor is checked after open, avoiding stat/read symlink races.
+    # The central parser rejects duplicate consent keys and NaN/Infinity.
     try:
-        obj = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("INPUT_JSON_INVALID") from exc
+        obj = read_strict_json(file_path, max_bytes=MAX_BYTES)
+    except (ValueError, OSError) as exc:
+        raise ValueError("INPUT_JSON_INVALID_OR_UNSAFE") from exc
     if type(obj) is not dict:
         raise ValueError("INPUT_MUST_BE_OBJECT")
     return obj
@@ -43,13 +38,8 @@ def output_private(target: Path, result: dict, input_path: Path) -> None:
     if not target.parent.is_dir() or target.parent.is_symlink():
         raise ValueError("OUTPUT_DIRECTORY_INVALID")
     text = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    # Exclusive creation avoids overwrites, including race-created symlinks.
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    fd = os.open(target, flags, stat.S_IRUSR | stat.S_IWUSR)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(text)
+    # Shared privacy gate provides exclusive 0600 creation and fsync.
+    write_new_anonymized_json(target, text)
 
 
 def catalog() -> dict:
