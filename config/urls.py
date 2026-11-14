@@ -116,6 +116,8 @@ for _brand_slug, _fa, _en, _ar in BRANDS:
         path(f"{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="signals"), name=f"finance_{_brand_slug}_signals"),
         path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),
         path(f"{_brand_slug}/game/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="game"), name=f"game_{_brand_slug}"),
+        path(f"fa/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="fa", page_type="signals"), name=f"finance_fa_{_brand_slug}_signals"),
+        path(f"fa/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="fa", page_type="store"), name=f"finance_fa_{_brand_slug}_store"),
         path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
         path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
     ])
