@@ -31,7 +31,7 @@ class RevenueSourceContracts(unittest.TestCase):
 
     def test_farm_brief_has_three_input_fields_as_guidance(self):
         s=source("farm_economics")
-        for phrase in ("دوره زمانی", "داده", "حساسیت هزینه", "تأیید موردی"):
+        for phrase in ("محدوده زمانی", "داده", "حساسیت هزینه", "تأیید موردی"):
             self.assertIn(phrase,s)
 
     def test_main_en_and_legacy_offer_stay_aligned(self):
