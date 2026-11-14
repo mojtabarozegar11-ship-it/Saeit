@@ -1,0 +1,42 @@
+name: MOJ C28 authorized cPanel HTTPS buyer-inquiry census (read only)
+on:
+  push:
+    branches:
+      - ops/moj-c28-readonly-https-cpanel-leads-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-c28-private-lead-census
+  cancel-in-progress: false
+jobs:
+  authorized-no-content-uapi:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout fixed read-only auditor
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert no network write methods, no customer body or wallet calls
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('scripts/mpw_cpanel_uapi_https_revenue_readonly.py')
+          source=p.read_text()
+          ast.parse(source,filename=str(p))
+          assert 'method="GET"' in source
+          assert 'read_customer_payload": False' in source
+          assert 'messages_sent": False' in source
+          assert 'payment_processed": False' in source
+          assert 'HTTPSHandler(context=ssl.create_default_context())' in source
+          print('MOJ_C28_OWNER_CENSUS_READONLY_ALLOWLIST=PASS')
+          PY
+      - name: Check existing owner-authorized cPanel token without showing value
+        env:
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          python3 -B scripts/mpw_cpanel_uapi_https_revenue_readonly.py
