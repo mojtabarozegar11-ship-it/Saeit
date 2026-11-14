@@ -19,6 +19,11 @@ SOURCES = (
 TX_PATTERN = re.compile(r"[0-9a-fA-F]{64}\Z")
 
 
+class _DenyRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
 class PaymentNotFinal(Exception):
     """Proof unavailable, malformed, not finalized or not equal to the invoice."""
 
@@ -50,9 +55,13 @@ def _https_rpc(base: str, endpoint: str, txid: str) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=9) as response:
-            if response.status != 200:
-                raise PaymentNotFinal("RPC unavailable")
+        # No redirect is permitted: the RPC operator cannot send merchant
+        # workers to arbitrary internal or external URLs.
+        opener = urllib.request.build_opener(_DenyRedirect())
+        with opener.open(request, timeout=9) as response:
+            if (response.status != 200 or
+                    response.headers.get_content_type() != "application/json"):
+                raise PaymentNotFinal("RPC unavailable or wrong content type")
             data = response.read(65537)
             if len(data) > 65536:
                 raise PaymentNotFinal("Oversized RPC evidence")
@@ -70,16 +79,23 @@ def _single_proof(txid: str, receiver_hex: str, sun: int,
             type(receipt.get("id")) is not str or
             body["txID"].lower() != txid or receipt["id"].lower() != txid):
         raise PaymentNotFinal("Transaction ID does not match")
-    contracts = (body.get("raw_data") or {}).get("contract")
+    raw_data = body.get("raw_data")
+    if type(raw_data) is not dict:
+        raise PaymentNotFinal("Malformed native transfer body")
+    contracts = raw_data.get("contract")
     if type(contracts) is not list or len(contracts) != 1:
         raise PaymentNotFinal("Not a single native TRX transfer")
     contract = contracts[0]
     if type(contract) is not dict or contract.get("type") != "TransferContract":
         raise PaymentNotFinal("Wrong asset type")
-    data = (contract.get("parameter") or {}).get("value")
+    parameter = contract.get("parameter")
+    if type(parameter) is not dict:
+        raise PaymentNotFinal("Malformed transfer parameters")
+    data = parameter.get("value")
     if type(data) is not dict:
         raise PaymentNotFinal("Transfer body missing")
-    if (str(data.get("to_address", "")).lower() != receiver_hex or
+    if (type(data.get("to_address")) is not str or
+            data["to_address"].lower() != receiver_hex or
             type(data.get("amount")) is not int or data["amount"] != sun):
         raise PaymentNotFinal("Destination or amount does not match invoice")
     result = body.get("ret")
@@ -87,7 +103,9 @@ def _single_proof(txid: str, receiver_hex: str, sun: int,
             type(result[0]) is not dict or result[0].get("contractRet") != "SUCCESS"):
         raise PaymentNotFinal("Transaction did not execute successfully")
     execution = receipt.get("receipt", {})
-    if type(execution) is not dict or execution.get("result", "SUCCESS") != "SUCCESS":
+    if (receipt.get("result", "SUCCESS") != "SUCCESS" or
+            type(execution) is not dict or
+            execution.get("result", "SUCCESS") != "SUCCESS"):
         raise PaymentNotFinal("Transaction execution failed")
     height = receipt.get("blockNumber")
     timestamp = receipt.get("blockTimeStamp")
@@ -111,6 +129,8 @@ def verify_native_trx(txid: str, recipient: str, expected_sun: int,
         raise PaymentNotFinal("Invalid invoice evidence")
     txid = txid.lower()
     receiver_hex = address_hex(recipient)
+    if len(SOURCES) != 2 or SOURCES[0][1] == SOURCES[1][1]:
+        raise PaymentNotFinal("Independent mainnet verification unavailable")
     observations = []
     for _, base in SOURCES:
         body = rpc(base, "/walletsolidity/gettransactionbyid", txid)
