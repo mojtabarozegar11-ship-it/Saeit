@@ -317,3 +317,27 @@ def test_checkout_form_cannot_post_to_other_product_or_create_invoice_url():
         pages[route] = _checkout_html(72).replace(
             "/commerce/trx-easy/start/72/", action)
         assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+
+
+def test_checkout_requires_mandatory_editable_email_in_post_form():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/72/checkout/"
+    for replacement in (
+        '<input name="email" type="email">',
+        '<input name="email" type="email" disabled required>',
+        '<input name="email" type="email" readonly required>',
+    ):
+        pages[route] = _checkout_html(72).replace(
+            '<input name="email" type="email" required>', replacement)
+        assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
+
+
+def test_optional_non_email_input_cannot_stand_in_for_buyer_email():
+    pages = {ORIGIN + route: _checkout_html(int(route.split("/")[3]))
+             for route in CHECKOUT_GET_ROUTES}
+    route = ORIGIN + "/store/product/225/checkout/"
+    pages[route] = _checkout_html(225).replace(
+        '<input name="email" type="email" required>',
+        '<input name="delivery_note" type="text" required>')
+    assert assess_checkout_get(lambda url: pages[url])["observed_checkout_forms"] == 1
