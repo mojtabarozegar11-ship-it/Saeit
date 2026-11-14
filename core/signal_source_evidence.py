@@ -28,6 +28,7 @@ class SignalSourceDecision:
     performance_independently_audited: bool = False
     subscription_enabled: bool = False
     signal_delivered: bool = False
+    audit_digest_sha256: str | None = None
 
 
 def canonical_signal_bytes(*, record, brand, source_id):
@@ -110,4 +111,7 @@ def authenticate_signal_source(*, record, brand, source_id, signature,
     expected = hmac.new(secret, payload, sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         return denied("source_signature_mismatch")
-    return SignalSourceDecision(True, "trusted_source_signature_valid")
+    return SignalSourceDecision(
+        True, "trusted_source_signature_valid",
+        audit_digest_sha256=sha256(payload).hexdigest(),
+    )
