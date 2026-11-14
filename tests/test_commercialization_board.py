@@ -229,3 +229,24 @@ class CommercializationBoardApiTests(TestCase):
         self.client.force_login(self.staff)
         obs = self.client.get(self.endpoint()).json()["observed"]
         self.assertEqual(obs["source"], "shared_django_models_not_external_trx_settlement")
+
+    def test_private_html_page_denied_to_anonymous_visitors(self):
+        response = self.client.get(reverse("command_center_commercialization_page"))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_private_html_page_denied_to_nonstaff(self):
+        self.client.force_login(self.visitor)
+        response = self.client.get(reverse("command_center_commercialization_page"))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_private_html_page_lists_eight_lines_without_enable_button(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("command_center_commercialization_page"))
+        self.assertEqual(response.status_code, 200)
+        for key in PRIORITY:
+            self.assertContains(response, key)
+        self.assertContains(response, "Dr.mojtaba.rozegar")
+        html = response.content.decode("utf-8").lower()
+        self.assertNotIn("<form", html)
+        self.assertNotIn("payment_intent=", html)
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
