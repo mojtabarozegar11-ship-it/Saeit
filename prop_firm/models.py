@@ -94,6 +94,12 @@ class PropAccount(models.Model):
         if not isinstance(self.tier_index, int) or not 0 <= self.tier_index < len(LEVELS):
             raise ValidationError({"tier_index": "Invalid capital tier"})
         if self.kind == self.Kind.FUNDED:
+            if self.challenge_enrollment_id is not None:
+                enrollment = self.challenge_enrollment
+                if self.trader_id != enrollment.trader_id:
+                    raise ValidationError("Funded plan belongs to a different trader")
+                if self.tier_index < plan_for_code(enrollment.plan_code).starting_tier_index:
+                    raise ValidationError("Funded account cannot start below purchased plan")
             if self.starting_capital_usd != LEVELS[self.tier_index]:
                 raise ValidationError({"starting_capital_usd": "Must match the funded tier"})
             if not self.reference:
