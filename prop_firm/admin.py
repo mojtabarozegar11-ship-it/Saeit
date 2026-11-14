@@ -82,7 +82,7 @@ class PropSocialEvidenceAdmin(LockedAuditAdmin):
 class PropChallengeEnrollmentAdmin(LockedAuditAdmin):
     """Read-only confirmed purchase, shared by both stages; never issue an invoice."""
     list_display = (
-        "id", "trader_id", "confirmed_at",
+        "id", "trader_id", "plan_code", "confirmed_at",
         "settlement_verified", "terms_version",
     )
     list_filter = ("settlement_verified", "terms_version")
