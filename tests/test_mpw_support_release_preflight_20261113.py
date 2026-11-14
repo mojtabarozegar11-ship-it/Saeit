@@ -2,7 +2,9 @@
 import json
 from pathlib import Path
 
-from scripts.mpw_support_release_preflight_20261113 import ROOT, CONTRACT, audit, git_blob_sha
+from scripts.mpw_support_release_preflight_20261113 import (
+    ROOT, CONTRACT, audit, audit_runtime_surfaces, git_blob_sha
+)
 
 
 def test_source_integrity_and_release_guards_are_valid():
@@ -59,3 +61,45 @@ def test_main_publisher_cannot_be_mistaken_for_complete_release():
     assert matrix["core/templates/brands/mojplaywin/page.html"] == "legacy_safe_lock_no_guaranteed_publish"
     for name in ("footer.html", "store.html", "theme.html"):
         assert matrix["core/templates/mojplaywin/" + name] == "main_site_push"
+
+
+def test_two_live_runtime_candidates_are_separately_tracked_as_unverified():
+    contract = json.loads((ROOT / CONTRACT).read_text(encoding="utf-8"))
+    problems, pending = audit_runtime_surfaces(contract, ROOT)
+    assert not problems, problems
+    assert set(pending) == {"static_store_fallback", "dynamic_support_handler"}
+    store, support = contract["runtime_surfaces"]
+    assert store["public_route"] == "/store/"
+    assert store["candidate_active_file"].endswith("/store/index.html")
+    assert support["public_route"] == "/support/"
+    assert support["candidate_active_file"].endswith("/core/brand_views.py")
+    assert all(item["active_file_verified"] is False for item in (store, support))
+    assert all(item["verified_live_sha256"] is None for item in (store, support))
+    assert all(item["verified_rollback"] is False for item in (store, support))
+    result = audit()
+    assert result["source_preflight_passed"], result["source_problems"]
+    assert result["runtime_candidate_surfaces"] == 2
+    assert result["runtime_surfaces_pending"] == pending
+    assert result["runtime_surfaces_verified"] == 0
+    assert result["production_ready"] is False
+
+
+def test_runtime_contract_rejects_fake_verification_and_pretend_backup():
+    document = json.loads((ROOT / CONTRACT).read_text(encoding="utf-8"))
+    document["runtime_surfaces"][0]["active_file_verified"] = True
+    document["runtime_surfaces"][0]["verified_live_sha256"] = "a" * 64
+    document["runtime_surfaces"][0]["verified_rollback"] = True
+    problems, pending = audit_runtime_surfaces(document, ROOT)
+    assert "unverified_runtime_claims_ready:static_store_fallback" in problems
+    assert "static_store_fallback" not in pending
+
+
+def test_runtime_contract_rejects_unapproved_path_and_missing_surface():
+    document = json.loads((ROOT / CONTRACT).read_text(encoding="utf-8"))
+    document["runtime_surfaces"][1]["candidate_active_file"] = "/tmp/rogue/support.py"
+    problems, _ = audit_runtime_surfaces(document, ROOT)
+    assert "runtime_candidate_changed:dynamic_support_handler:candidate_active_file" in problems
+    document["runtime_surfaces"] = document["runtime_surfaces"][:1]
+    problems, _ = audit_runtime_surfaces(document, ROOT)
+    assert "runtime_surface_count_mismatch" in problems
+    assert "runtime_surface_identity_mismatch" in problems
