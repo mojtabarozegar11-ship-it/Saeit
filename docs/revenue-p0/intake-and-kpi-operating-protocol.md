@@ -31,3 +31,46 @@ In the draft CLI, `payment_state` is always `not_requested` and `delivery_state`
 
 ## Progress reporting
 Use separate source/readiness and commercial gates. For this cycle, 10 work-item completions out of 10 may show **100% of planned source tasks**, but never 100% revenue-readiness. Technical pass counts are not a substitute for collected sales.
+
+
+## Single-bot income portfolio acceptance (draft; no production activation)
+
+The canonical agent is `mojtaba.bot.ai` alone. Its eleven *candidate
+business models* span existing service inquiries, research consulting,
+digital books/guides, training, software/content licensing, subscriptions,
+sponsorship, B2B goods and game content. Only **two** service-offer inquiry
+sources have been edited as Draft; the other nine are planning candidates,
+not public saleable SKUs.
+
+Each model requires evidence for all eight gates before a separate release
+decision: `source_and_rights`, `verified_deliverable`,
+`owner_price_approval`, `lawful_payment_and_tax`, `refund_terms`,
+`customer_support_route`, `real_live_route`, and
+`receipt_to_delivery_test`. An offline assertion that a gate passed is
+not independent verification. No software here advances those real gates,
+collects money or issues an invoice.
+
+**First revenue priorities:** (1) manually scoped website checkout
+diagnosis/repair inquiry with permission to inspect a particular issue
+and concrete before/after evidence, (2) farm break-even/sensitivity
+inquiry using a named crop, dated data, costs, unit assumptions and a
+reviewed calculation. Neither is published/authorized based on these
+source-only changes.
+
+**Definition of verified positive funnel evidence:** unique opted-in
+inquiry, owner-authorized quote, independently settled payment, reviewed
+deliverable, and private delivery acknowledgement. A local CLI output is
+not proof of any of those events. No customer outreach, crypto transfer,
+trading action, marketing spend or production site change is automatic.
+
+The new `mojtaba_revenue_portfolio.py --synthetic-funnel` CLI accepts
+**synthetic same-cohort aggregate counts only**, rejects names, emails,
+odd JSON counts and duplicate keys, and returns per-stage ratios with
+null on zero denominator. This does **not** measure a live conversion rate.
+A single day of visits compared with historic paid orders is not the same
+cohort, so the software refuses non-monotone same-cohort submissions.
+
+**Release rule:** source tests can establish *only* local contract
+consistency. Exact-head CI on a new branch, GET-only public route checks,
+real receipt reconciliation, lawful payment permission and owner-QC
+delivery must be evidenced independently before any commercial claim.
