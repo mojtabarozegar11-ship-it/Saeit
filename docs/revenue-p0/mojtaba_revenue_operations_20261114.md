@@ -28,7 +28,7 @@
 ## Verification / execution instructions
 
 Offline check of the pure calculator:
-\`python -m unittest core.tests.test_revenue_unit_economics_20261114 -v\`
+\`python -m unittest discover -s core/tests -p 'test_revenue_unit_economics_20261114.py' -v\`
 
 Django isolated database tests (non-production):
 \`python manage.py test command_center.tests.test_revenue_operations_20261114 core.tests.test_revenue_unit_economics_20261114 --keepdb\`
