@@ -49,9 +49,12 @@ def company_portal_home(request):
         return HttpResponse("درخواست بیش از حد مجاز است.", status=413)
     form = CompanyInquiryForm(request.POST)
     if not form.is_valid():
-        return render(request, "core/company_contact.html", {
+        response = render(request, "core/company_contact.html", {
             "form": form, "inquiry_received": False,
         }, status=422)
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
     save_inbound_inquiry(form)
     messages.success(
         request,
