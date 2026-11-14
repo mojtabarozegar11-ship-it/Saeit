@@ -4,6 +4,7 @@ These tests exercise the real helper source without loading Django or a database
 They validate input/identity boundaries, not mainnet payment or email ownership.
 """
 import ast
+import hashlib
 import hmac
 import sys
 import tempfile
@@ -173,7 +174,7 @@ class CheckoutReleaseFormTests(unittest.TestCase):
 
     def test_accepts_required_email_in_post_form(self):
         self.assertTrue(self.check(
-            '<form method="POST" action="/invoice/start/">'
+            '<form method="POST" action="/commerce/trx-easy/start/72/">'
             '<input name="email" type="email" required></form>'
         ))
 
@@ -218,6 +219,63 @@ class CheckoutReleaseFormTests(unittest.TestCase):
                 self.assertFalse(self.check(
                     markup, expected_action="/commerce/trx-easy/start/72/"))
 
+    def test_rejects_duplicate_email_controls(self):
+        markup = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                  '<input type="email" name="email" required>'
+                  '<input type="email" name="email" required></form>')
+        self.assertFalse(self.check(markup))
+
+    def test_rejects_disabled_fieldset_and_hidden_email(self):
+        for html in (
+            '<fieldset disabled><input type="email" name="email" required></fieldset>',
+            '<input type="email" name="email" required hidden>',
+            '<input type="email" name="email" required aria-hidden="true">',
+            '<input type="email" name="email" required style="display: none">',
+        ):
+            markup = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                      + html + '</form>')
+            with self.subTest(html=html):
+                self.assertFalse(self.check(markup))
+
+    def test_rejects_invalid_invoice_action_paths(self):
+        for action in (
+            "/commerce/trx-easy/start/0/",
+            "/commerce/trx-easy/start/72/../../evil",
+            "/commerce/trx-easy/start/72/?to=another",
+            "//attacker.com/commerce/trx-easy/start/72/",
+        ):
+            markup = ('<form method="post" action="' + action + '">'
+                      '<input type="email" name="email" required></form>')
+            with self.subTest(action=action):
+                self.assertFalse(self.check(markup))
+
+    def test_rendered_form_requires_csrf_in_same_form(self):
+        valid = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                 '<input type="hidden" name="csrfmiddlewaretoken" value="token">'
+                 '<input type="email" name="email" required></form>')
+        self.assertTrue(self.check(valid, require_csrf=True))
+        self.assertFalse(self.check(
+            valid.replace('name="csrfmiddlewaretoken"', 'name="not_csrf"'),
+            require_csrf=True))
+        with_other = ('<form method="post" action="/commerce/trx-easy/start/73/">'
+                      '<input type="hidden" name="csrfmiddlewaretoken"></form>'
+                      '<form method="post" action="/commerce/trx-easy/start/72/">'
+                      '<input name="email" type="email" required></form>')
+        self.assertFalse(self.check(
+            with_other, expected_action="/commerce/trx-easy/start/72/",
+            require_csrf=True))
+
+    def test_source_csrf_must_be_inside_invoice_form(self):
+        markup = ('<form method="post" action="/newsletter/">'
+                  '{% csrf_token %}</form>'
+                  '<form method="post" action="/commerce/trx-easy/start/72/">'
+                  '<input type="email" name="email" required></form>')
+        self.assertFalse(self.check(markup, require_source_csrf=True))
+        self.assertTrue(self.check(
+            markup.replace('<input type="email"', '{% csrf_token %}<input type="email"'),
+            require_source_csrf=True))
+
+
 
 class CheckoutSourcePreflightTests(unittest.TestCase):
     """Temporary files only; never touch production hosting."""
@@ -235,6 +293,7 @@ class CheckoutSourcePreflightTests(unittest.TestCase):
             "preflight_checkout_email_template",
             injected={
                 "APP": self.app,
+                "digest": lambda raw: hashlib.sha256(raw).hexdigest(),
                 "has_buyer_email_form": self.html_check,
                 "fail": lambda message: (_ for _ in ()).throw(RuntimeError(message))
             },
@@ -262,9 +321,37 @@ class CheckoutSourcePreflightTests(unittest.TestCase):
     def test_preflight_accepts_source_contract(self):
         self.template.write_text(
             '<form method="POST" action="/commerce/trx-easy/start/72/">'
-            '<input name="email" type="email" required>'
+            '{% csrf_token %}<input name="email" type="email" required>'
             '<button>Create invoice and pay with TRX</button></form>', encoding="utf8")
-        self.assertTrue(self.preflight())
+        self.assertEqual(self.preflight(),
+                         hashlib.sha256(self.template.read_bytes()).hexdigest())
+
+    def test_preflight_rejects_missing_source_csrf(self):
+        self.template.write_text(
+            '<form method="post" action="/commerce/trx-easy/start/72/">'
+            '<input name="email" type="email" required></form>', encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
+            self.preflight()
+
+    def test_preflight_rejects_parent_symlink(self):
+        external_dir = self.app / "external-dir"
+        external_dir.mkdir()
+        (external_dir / "product_checkout.html").write_text(
+            '<form method="post" action="/commerce/trx-easy/start/72/">'
+            '{% csrf_token %}<input name="email" type="email" required></form>',
+            encoding="utf8")
+        self.template.parent.rmdir()
+        self.template.parent.symlink_to(external_dir, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "CHECKOUT_TEMPLATE_PARENT_SYMLINK"):
+            self.preflight()
+
+    def test_preflight_requires_correct_source_action(self):
+        self.template.write_text(
+            '<form method="post" action="/newsletter/subscribe/">'
+            '{% csrf_token %}<input name="email" type="email" required></form>',
+            encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING"):
+            self.preflight()
 
     def test_preflight_rejects_symlink(self):
         external = self.app / "external-template.html"
