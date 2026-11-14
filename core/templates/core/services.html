@@ -30,7 +30,7 @@
     <span>{{ offer.service_code }}</span>
     <h3>{{ offer.title_fa }}</h3>
     <p>{{ offer.customer }}</p><p>{{ offer.limitation }}</p>
-    <a href="{% url 'service_inquiry' offer.service_code %}" aria-label="درخواست بررسی {{ offer.title_fa }}">درخواست بررسی اولیه ↗</a>
+    <a href="{{ offer.contact_url }}" aria-label="درخواست بررسی {{ offer.title_fa }}">درخواست بررسی اولیه ↗</a>
   </article>
   {% endfor %}
 </section>
