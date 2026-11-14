@@ -107,10 +107,9 @@ class CompanyInquiryValidationTests(TestCase):
         self.assertNotIn("customer@example.org", i.internal_note)
 
     def test_oversize_body_declared_is_blocked_before_form_parse(self):
-        response = self.client.post(
-            reverse("company"), data=self.payload(),
-            HTTP_CONTENT_LENGTH="60000",
-        )
+        payload = self.payload()
+        payload["message"] = "x" * 31000
+        response = self.client.post(reverse("company"), data=payload)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(CompanyInquiry.objects.count(), 0)
 
