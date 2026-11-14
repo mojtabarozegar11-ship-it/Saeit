@@ -120,6 +120,7 @@
        if(!next&&strip.scrollLeft>-2)strip.scrollLeft=-state.period;
        if(next&&strip.scrollLeft<=-state.period+2)strip.scrollLeft=0;
        strip.scrollBy({left:next?-amount:amount,behavior:motionPreference.matches?'instant':'smooth'});
+       state.position=strip.scrollLeft;
      });
    }
    rotators.push(state);
