@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from prop_firm.periods import most_recent_completed_period, period_statistics
+from prop_firm.periods import most_recent_completed_period, completed_period_by_number, period_statistics
 
 START = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
 
@@ -94,3 +94,32 @@ class MojPropPeriodsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_first_completed_month_can_be_reconciled_much_later(self):
+        period = completed_period_by_number(
+            opened_at=START, as_of=START + timedelta(days=100), period_number=1
+        )
+        self.assertEqual(period.number, 1)
+        self.assertEqual(period.start, START)
+        self.assertEqual(period.end, START + timedelta(days=30))
+
+    def test_last_completed_month_at_day_100_is_third(self):
+        period = completed_period_by_number(
+            opened_at=START, as_of=START + timedelta(days=100), period_number=3
+        )
+        self.assertEqual(period.start, START + timedelta(days=60))
+        self.assertEqual(period.end, START + timedelta(days=90))
+
+    def test_selected_month_must_be_finished(self):
+        self.assertIsNone(completed_period_by_number(
+            opened_at=START, as_of=START + timedelta(days=59), period_number=2
+        ))
+
+    def test_invalid_month_numbers_rejected(self):
+        for number in (-1, 0, True, 1.0, "1", None):
+            with self.subTest(number=number):
+                self.assertIsNone(completed_period_by_number(
+                    opened_at=START, as_of=START + timedelta(days=100),
+                    period_number=number,
+                ))
