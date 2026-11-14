@@ -90,7 +90,7 @@ def commercialization_board_api(request):
             "live_gateway_verified_by_this_api": False,
         },
         "owner_priority_order": [
-            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+            "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
         ],
     }
     data["warnings"] = [
