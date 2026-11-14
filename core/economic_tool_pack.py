@@ -55,14 +55,23 @@ def opportunity_score(payload):
 
 
 
+OFFER_TITLE = "Digital Project & Automation Audit"
+OFFER_LIFECYCLE = ("offer_designed", "mvp_built", "growth_ready")
+
+
 def offer_design(payload):
-    offer = Product.objects.filter(
-        title="Digital Project & Automation Audit",
+    # Re-entrant manual/queued invocations may arrive after MVP or growth.
+    # Reusing a later-stage record cannot be mistaken for a new paid offer.
+    matches = list(Product.objects.filter(
+        title=OFFER_TITLE,
         product_type="service",
-        metadata__commercial_status="offer_designed",
-    ).order_by("id").first()
-    if offer:
-        product = offer
+        metadata__commercial_status__in=OFFER_LIFECYCLE,
+    ).order_by("pk")[:2])
+    if len(matches) > 1:
+        # Never choose between possibly duplicated customer-facing offerings.
+        raise ValueError("DUPLICATE_OFFER_REQUIRES_RECONCILIATION")
+    if matches:
+        product = matches[0]
         created = False
     else:
         product = Product.objects.create(
@@ -81,7 +90,7 @@ def offer_design(payload):
         created = True
     return {
         "action_performed": f"{'Created' if created else 'Reused'} isolated draft offer {product.pk}: {product.title}.",
-        "verified_effect": True,
+        "verified_effect": created,
         "evidence": _evidence("product_record", {
             "id": product.pk, "status": product.metadata.get("commercial_status"),
             "active": product.active, "price": str(product.price),
@@ -251,7 +260,12 @@ footer{{border-top:2px solid var(--gold);margin-top:24px;padding-top:12px;font-s
 
 
 def mvp_build(payload):
-    product = Product.objects.filter(metadata__commercial_status="offer_designed").order_by("id").first()
+    product = Product.objects.filter(
+        title=OFFER_TITLE,
+        product_type="service",
+        active=False,
+        metadata__commercial_status="offer_designed",
+    ).order_by("id").first()
     if not product:
         raise ValueError("No designed offer exists; run income_offer_design first.")
     asset = build_mvp_asset(product.pk, product.title)
@@ -277,7 +291,12 @@ def mvp_build(payload):
         "next_action": "income_growth_experiment",
     }
 def growth_experiment(payload):
-    product = Product.objects.filter(metadata__commercial_status="mvp_built").order_by("id").first()
+    product = Product.objects.filter(
+        title=OFFER_TITLE,
+        product_type="service",
+        active=False,
+        metadata__commercial_status="mvp_built",
+    ).order_by("id").first()
     if not product:
         raise ValueError("No built MVP exists; run income_mvp_build first.")
     product.metadata = {
