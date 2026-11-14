@@ -14,6 +14,7 @@ from .signal_commercial_catalog import SIGNAL_BRANDS
 
 CANONICAL_CHAIN = "tron-mainnet"
 CANONICAL_ASSET = "TRX"
+ACCEPTED_BRANDS = frozenset((*SIGNAL_BRANDS, "moj_prop"))
 HOST_PATTERN = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}\Z"
 )
@@ -52,7 +53,7 @@ def canonical_host(value):
 def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
     """Caller registry must be separately protected configuration, not HTTP JSON."""
     actual = canonical_host(host)
-    if brand and brand not in SIGNAL_BRANDS:
+    if brand and brand not in ACCEPTED_BRANDS:
         raise ValueError("Unknown branded route")
     if not isinstance(brand, str):
         raise ValueError("Brand must be text")
