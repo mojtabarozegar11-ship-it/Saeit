@@ -158,10 +158,12 @@ def _new_user(request):
                 if hasattr(user, "is_active"):
                     user.is_active = True
                 user.save(force_insert=True)
-        except IntegrityError:
+        except IntegrityError as exc:
+            # A unique email/identity conflict must not become HTTP 500 or
+            # reassign an existing customer's account to a guest principal.
             user = Model.objects.filter(**query).first()
             if user is None:
-                raise
+                raise Http404("Guest identity unavailable") from exc
     if (not getattr(user, "is_active", True) or user.has_usable_password()
             or getattr(user, "is_staff", False)
             or getattr(user, "is_superuser", False)
