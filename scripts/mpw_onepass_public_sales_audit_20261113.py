@@ -22,7 +22,16 @@ UA = "MojPlayWin-readonly-sales-evidence/20261113"
 
 
 class PageParser(HTMLParser):
-    """Parse form boundaries without handling or printing buyer input values."""
+    """Read public checkout structure without echoing buyer or CSRF values.
+
+    A valid-looking email inside a disabled/hidden ancestor is not a usable
+    buyer contact. The parser treats unprovable visibility as a release hold.
+    """
+
+    VOID_TAGS = frozenset({
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    })
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -30,12 +39,33 @@ class PageParser(HTMLParser):
         self.links = []
         self.base_tag_present = False
         self._active_form = None
+        self._scopes = []
+
+    @staticmethod
+    def _inert(tag, values):
+        import re
+        css = re.sub(r"\s+", "", (values.get("style") or "").casefold())
+        return (
+            "hidden" in values or "inert" in values
+            or (values.get("aria-hidden") or "").casefold() == "true"
+            or (values.get("aria-disabled") or "").casefold() == "true"
+            or "display:none" in css or "visibility:hidden" in css
+            or "content-visibility:hidden" in css
+            or "opacity:0" in css or "pointer-events:none" in css
+            or tag == "template"
+            or (tag == "fieldset" and "disabled" in values)
+            or (tag in ("dialog", "details") and "open" not in values)
+        )
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
+        keys = [name.casefold() for name, _ in attrs if name]
+        inherited_inert = bool(self._scopes and self._scopes[-1][1])
+        inert = inherited_inert or self._inert(tag, values)
+        if tag not in self.VOID_TAGS:
+            self._scopes.append((tag, inert))
+
         if tag == "form":
-            # Duplicate action/method attributes are ambiguous in browsers.
-            keys = [name.lower() for name, _ in attrs if name]
             nested = self._active_form is not None
             if nested:
                 self._active_form["malformed"] = True
@@ -46,91 +76,103 @@ class PageParser(HTMLParser):
                 "submit_controls": 0,
                 "email_control": False,
                 "email_inputs": [],
-                "malformed": nested or keys.count("action") != 1
+                "malformed": nested or inert or keys.count("action") != 1
                              or keys.count("method") != 1,
             }
-            # Browser-level overrides can bypass required buyer email input
-            # or send a checkout POST to a different target/encoding.
-            if "novalidate" in values:
-                form["malformed"] = True
-            if "target" in values:
-                form["malformed"] = True
-            if (values.get("enctype") or "application/x-www-form-urlencoded").strip().lower() != "application/x-www-form-urlencoded":
-                form["malformed"] = True
-            if (values.get("accept-charset") or "utf-8").strip().lower() != "utf-8":
+            if ("novalidate" in values or "target" in values
+                    or (values.get("enctype") or
+                        "application/x-www-form-urlencoded").strip().lower()
+                        != "application/x-www-form-urlencoded"
+                    or (values.get("accept-charset") or "utf-8").strip().lower()
+                        != "utf-8"):
                 form["malformed"] = True
             self.forms.append(form)
             self._active_form = form
         elif tag == "a":
             self.links.append(values.get("href") or "")
         elif tag == "base":
-            # <base> can silently redirect a root-relative checkout POST to
-            # another origin. Even CSP cannot be assumed active until checked.
             self.base_tag_present = True
 
         form = self._active_form
         if form is None:
             return
         if tag in ("input", "textarea", "select"):
-            fields = [key.lower() for key, _ in attrs if key]
-            if any(fields.count(key) > 1 for key in
-                   ("name", "type", "value", "id", "autocomplete")):
+            fields = [key.casefold() for key, _ in attrs if key]
+            if any(fields.count(key) > 1 for key in (
+                    "name", "type", "value", "id", "autocomplete", "required",
+                    "maxlength", "minlength", "pattern", "disabled", "readonly")):
                 form["malformed"] = True
-            name = (values.get("name") or "").lower()
-            input_type = (values.get("type") or "text").lower()
-            # Submit overrides can change the URL, HTTP verb, encoding,
-            # browsing context or HTML required-field validation.
+            name = (values.get("name") or "").casefold()
+            input_type = (values.get("type") or "text").casefold()
             if tag == "input" and input_type in ("submit", "image"):
                 if any(option in values for option in (
                         "formnovalidate", "formaction", "formmethod",
                         "formenctype", "formtarget")):
                     form["malformed"] = True
-            # Security-relevant form fields must not be disabled or spoofed.
+            if "form" in values:
+                form["malformed"] = True
             if tag == "input":
                 form["inputs"].append(
                     (name, values.get("value") or "", input_type,
-                     "disabled" in values))
+                     "disabled" in values or inert))
             looks_like_email = (
-                "email" in name or "email" in (values.get("id") or "").lower()
+                "email" in name or "email" in (values.get("id") or "").casefold()
                 or input_type == "email"
-                or (values.get("autocomplete") or "").lower() == "email"
+                or (values.get("autocomplete") or "").casefold() == "email"
             )
             form["email_control"] |= looks_like_email
+            critical = looks_like_email or name == "csrfmiddlewaretoken" or input_type in ("submit", "image")
+            if critical and inert:
+                form["malformed"] = True
             if looks_like_email:
-                # A hidden, detached or multi-address field does not prove a
-                # usable single buyer contact, even if labelled "required".
-                if (tag == "input" and
-                        ("hidden" in values or "form" in values
-                         or "multiple" in values
-                         or fields.count("required") > 1)):
+                if tag == "input" and (
+                        "hidden" in values or "form" in values
+                        or "multiple" in values or fields.count("required") > 1):
                     form["malformed"] = True
-                if tag == "input" and "maxlength" in values:
+                max_length = 254
+                if "maxlength" in values:
                     try:
-                        if int(values["maxlength"]) < 6:
+                        max_length = int(values["maxlength"])
+                        if not 6 <= max_length <= 254:
                             form["malformed"] = True
                     except (TypeError, ValueError):
                         form["malformed"] = True
-                # Presence alone is not proof of a required, usable buyer
-                # contact. Record only field structure, never its value.
+                if "minlength" in values:
+                    try:
+                        if not 0 <= int(values["minlength"]) <= max_length:
+                            form["malformed"] = True
+                    except (TypeError, ValueError):
+                        form["malformed"] = True
+                if "pattern" in values or (values.get("inputmode") or "").casefold() == "none":
+                    form["malformed"] = True
                 form["email_inputs"].append((
                     tag, name, input_type, "required" in values,
-                    "disabled" in values or "readonly" in values,
+                    "disabled" in values or "readonly" in values or inert,
                 ))
-            if (tag == "input" and input_type == "submit"
-                    and "disabled" not in values and "hidden" not in values):
-                form["submit_controls"] += 1
+            if tag == "input" and input_type == "submit":
+                if "disabled" not in values and not inert:
+                    form["submit_controls"] += 1
         elif tag == "button":
-            if sum(key.lower() == "type" for key, _ in attrs if key) > 1:
+            if sum(key.casefold() == "type" for key, _ in attrs if key) > 1:
                 form["malformed"] = True
-            button_type = (values.get("type") or "submit").lower()
+            button_type = (values.get("type") or "submit").casefold()
             if button_type == "submit" and any(option in values for option in (
                     "formnovalidate", "formaction", "formmethod",
                     "formenctype", "formtarget")):
                 form["malformed"] = True
-            if button_type == "submit" and "disabled" not in values and "hidden" not in values:
-                form["submit_controls"] += 1
+            if "form" in values:
+                form["malformed"] = True
+            if button_type == "submit":
+                if inert:
+                    form["malformed"] = True
+                if "disabled" not in values and not inert:
+                    form["submit_controls"] += 1
 
     def handle_endtag(self, tag):
+        for index in range(len(self._scopes)-1, -1, -1):
+            if self._scopes[index][0] == tag:
+                del self._scopes[index:]
+                break
         if tag == "form":
             self._active_form = None
 
