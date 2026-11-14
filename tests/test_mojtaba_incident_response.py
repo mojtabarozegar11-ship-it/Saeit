@@ -197,15 +197,18 @@ class IncidentResponseTests(unittest.TestCase):
         self.assertNotEqual(original, other)
 
     def test_backup_tag_framing_prevents_separator_collision(self):
-        left = self.plan(
-            incident(tenant_id="tenant|x", engagement_id="case"),
-            grant(tenant_id="tenant|x", engagement_id="case"),
-        )["backup_assessments"][0]["backup_tag"]
-        right = self.plan(
-            incident(tenant_id="tenant", engagement_id="x|case"),
-            grant(tenant_id="tenant", engagement_id="x|case"),
-        )["backup_assessments"][0]["backup_tag"]
-        self.assertNotEqual(left, right)
+        # A forbidden delimiter in either signed context must fail closed.
+        # Valid cross-tenant tags remain covered by the isolation test above.
+        with self.assertRaisesRegex(CyberModuleError, "TENANT_INVALID"):
+            self.plan(
+                incident(tenant_id="tenant|x", engagement_id="case"),
+                grant(tenant_id="tenant|x", engagement_id="case"),
+            )
+        with self.assertRaisesRegex(CyberModuleError, "ENGAGEMENT_INVALID"):
+            self.plan(
+                incident(tenant_id="tenant", engagement_id="x|case"),
+                grant(tenant_id="tenant", engagement_id="x|case"),
+            )
 
     def test_backup_tag_not_plain_dictionary_hash(self):
         tag = self.plan()["backup_assessments"][0]["backup_tag"]
