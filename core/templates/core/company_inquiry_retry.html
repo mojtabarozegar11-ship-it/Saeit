@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer">
+<title>اصلاح درخواست همکاری | شرکت زمرد ملل</title>
+<style>
+body{background:#f5f7f2;color:#163b2c;font:16px/1.9 Tahoma,Arial,sans-serif}
+main{max-width:690px;margin:30px auto;padding:16px}article{background:#fff;border:1px solid #cadacd;border-radius:18px;padding:30px}
+label{display:block;font-weight:700;margin:12px 0 4px}input,select,textarea{width:100%;box-sizing:border-box;padding:11px;border:1px solid #aac2b0;border-radius:8px;font:inherit}
+input[type=checkbox]{width:auto}ul.errorlist{color:#ae2828}button{border:0;background:#176749;color:white;border-radius:10px;padding:13px 21px;font:inherit;cursor:pointer}
+a{color:#176749}p{max-width:100%}
+</style></head><body><main><article>
+<h1>بررسی دوباره اطلاعات درخواست</h1>
+<p>درخواست هنوز در سامانه ثبت نشده است. خطاها را اصلاح کنید و دوباره ثبت کنید؛ اطلاعات معتبر واردشده حفظ شده است.</p>
+<form action="/company/" method="post">{% csrf_token %}
+{{ form.non_field_errors }}
+{{ form.as_p }}
+<button type="submit">ثبت درخواست برای بررسی</button>
+</form>
+<p>با ارسال این فرم، اطلاعات برای بررسی درخواست در سامانه داخلی شرکت ذخیره می‌شود؛ ارسال به‌معنی قرارداد، دریافت وجه یا پذیرش خدمت نیست.</p>
+<p><a href="/company/#company-request">بازگشت به صفحه شرکت</a></p>
+</article></main></body></html>
