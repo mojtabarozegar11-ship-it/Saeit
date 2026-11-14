@@ -59,7 +59,7 @@
       <div class="mp-orbit orbit-two" aria-hidden="true"></div>
       <div class="mp-orbit orbit-three" aria-hidden="true"></div>
       <div class="mp-orbit-beacon" aria-hidden="true">M<span>✦</span>P</div>
-      <div class="mp-hero-art-caption"><small>THE CAPITAL LADDER</small><strong>$100 <span aria-hidden="true">⟶</span> $100,000</strong><small>14 LEVELS · PROGRESSION BY MERIT</small></div>
+      <div class="mp-hero-art-caption"><small>{{ ladder.0 }}</small><strong>$100 <span aria-hidden="true">⟶</span> $100,000</strong><small>{{ ladder.3 }}</small></div>
       <span class="mp-hero-art-index" aria-hidden="true">14 / 14</span>
     </div>
   </section>
@@ -72,7 +72,7 @@
   </section>
 
   <section class="mp-section mp-journey" id="journey" aria-labelledby="mp-journey-title">
-    <div class="mp-section-head"><p class="mp-index">01 / THE METHOD</p><h2 id="mp-journey-title">{{ steps.0 }}</h2>
+    <div class="mp-section-head"><p class="mp-index">01 / {{ steps.0 }}</p><h2 id="mp-journey-title">{{ steps.0 }}</h2>
     <p>{{ hero.3 }}</p></div>
     <div class="mp-journey-grid">
       {% for step in steps %}
@@ -86,7 +86,7 @@
 
   <section class="mp-section mp-ladder" id="ladder" aria-labelledby="mp-ladder-title">
     <div class="mp-section-head">
-      <p class="mp-index">02 / CAPITAL ARCHITECTURE</p>
+      <p class="mp-index">02 / {{ ladder.0 }}</p>
       <h2 id="mp-ladder-title">{{ ladder.0 }}</h2><p>{{ ladder.1 }}</p>
     </div>
     <ol class="mp-levels">
@@ -103,7 +103,7 @@
 
   <section class="mp-section mp-rules" id="rules" aria-labelledby="mp-rules-title">
     <div class="mp-section-head">
-      <p class="mp-index">03 / RISK ENGINE</p>
+      <p class="mp-index">03 / {{ rule_title }}</p>
       <h2 id="mp-rules-title">{{ rule_title }}</h2><p>{{ hero.5 }}</p>
     </div>
     <div class="mp-rule-grid">
@@ -114,14 +114,14 @@
   </section>
 
   <section class="mp-section mp-faq" id="faq" aria-labelledby="mp-faq-title">
-    <div class="mp-section-head"><p class="mp-index">04 / TRANSPARENCY</p><h2 id="mp-faq-title">{{ faq.0 }}</h2></div>
+    <div class="mp-section-head"><p class="mp-index">04 / {{ faq.0 }}</p><h2 id="mp-faq-title">{{ faq.0 }}</h2></div>
     <div class="mp-faq-grid">
       <details><summary>{{ faq.1 }}<span aria-hidden="true">+</span></summary><p>{{ faq.2 }}</p></details>
       <details><summary>{{ faq.3 }}<span aria-hidden="true">+</span></summary><p>{{ faq.4 }}</p></details>
     </div>
   </section>
 
-  <section class="mp-closing" aria-label="{{ hero.4 }}"><div><span>MOJ PROP / PRE-LAUNCH</span><h2>{{ hero.4 }}</h2><p>{{ footer.0 }}</p></div>
+  <section class="mp-closing" aria-label="{{ hero.4 }}"><div><span>MOJ PROP / {{ hero.4 }}</span><h2>{{ hero.4 }}</h2><p>{{ footer.0 }}</p></div>
     <a href="/" class="mp-back">MOJPLAYWIN <span aria-hidden="true">↗</span></a>
   </section>
   <div class="mp-local-footer"><span>MOJ PROP <b>×</b> MOJPLAYWIN</span><span>{{ footer.1 }}</span><span>{{ policy_version }}</span></div>
