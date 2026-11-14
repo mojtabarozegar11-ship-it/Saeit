@@ -37,7 +37,7 @@ class StaticCheckoutEmailRegression(unittest.TestCase):
                 self.assertEqual(parse_static(html).email_controls, 1)
 
     def test_uppercase_html_input_and_form_is_supported(self):
-        html="<FORM METHOD=\"POST\" ACTION=\"/COMMERCE/TRX-EASY/START/72/\"><INPUT TYPE=\"EMAIL\" NAME=\"BUYER_EMAIL\" REQUIRED></FORM>"
+        html="<FORM METHOD=\"POST\" ACTION=\"/commerce/trx-easy/start/72/\"><INPUT TYPE=\"EMAIL\" NAME=\"BUYER_EMAIL\" REQUIRED></FORM>"
         self.assertEqual(parse_static(html).email_controls, 1)
 
     def test_multiple_email_fields_are_not_source_ready(self):
