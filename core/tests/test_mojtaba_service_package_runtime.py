@@ -140,3 +140,40 @@ def test_original_input_is_rejected_if_customer_contact_fields_are_injected():
 def test_invalid_result_cannot_be_counted_as_deliverable(bad):
     with pytest.raises(InvalidService):
         generate(bad, "0" * 64)
+
+
+def test_concurrent_identical_artifact_is_counted_only_once(tmp_path):
+    """A second worker loses the atomic link race without a fake new effect."""
+    payload = {"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}
+    real_link = os.link
+
+    def first_writer_wins(src, dest, **kwargs):
+        real_link(src, dest, **kwargs)
+        raise FileExistsError("concurrent writer already committed the same file")
+
+    with patch("core.mojtaba_commercial_services.Path.home",
+               return_value=tmp_path), patch(
+        "core.economic_tool_pack.os.link", side_effect=first_writer_wins
+    ):
+        result = service_package(payload)
+    assert result["verified_effect"] is False
+    assert result["revenue_not_assessed"] is True
+    assert len(list(tmp_path.rglob("*.md"))) == 1
+
+
+def test_concurrent_different_bytes_never_clobber_prior_private_work(tmp_path):
+    payload = {"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}
+
+    def competing_writer(src, dest, **kwargs):
+        Path(dest).write_text("other trusted content", encoding="utf-8")
+        raise FileExistsError("another writer")
+
+    with patch("core.mojtaba_commercial_services.Path.home",
+               return_value=tmp_path), patch(
+        "core.economic_tool_pack.os.link", side_effect=competing_writer
+    ):
+        with pytest.raises(ValueError, match="CONCURRENT_OUTPUT_COLLISION"):
+            service_package(payload)
+    files = list(tmp_path.rglob("*.md"))
+    assert len(files) == 1
+    assert files[0].read_text(encoding="utf-8") == "other trusted content"
