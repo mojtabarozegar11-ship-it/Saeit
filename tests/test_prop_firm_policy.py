@@ -22,7 +22,7 @@ class PropFirmPolicyTests(unittest.TestCase):
         self.assertEqual(POLICY.canonical_bot, "mojtaba.bot.ai")
         self.assertEqual(POLICY.promotion_cycle_days, 30)
         self.assertEqual(POLICY.completion_deadline_days, 28)
-        self.assertEqual(POLICY.inactivity_notice_days + POLICY.inactivity_grace_days,117)
+        self.assertEqual(POLICY.inactivity_notice_days + POLICY.inactivity_grace_days, 28)
 
     def test_14_levels_and_confirmed_level_eleven(self):
         self.assertEqual((len(LEVELS), LEVELS[10], LEVELS[-1], sum(LEVELS)),
