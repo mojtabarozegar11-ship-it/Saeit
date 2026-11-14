@@ -1,6 +1,7 @@
 """Offline proof that one canonical bot owns inquiry-only commercial policy."""
 import importlib.util
 import json
+import sys
 from pathlib import Path
 import unittest
 
@@ -8,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
     "mojtaba_revenue_portfolio", ROOT / "scripts/mojtaba_revenue_portfolio.py")
 module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
