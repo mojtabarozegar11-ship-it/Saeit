@@ -93,7 +93,7 @@
    else if(typeof motionPreference.addListener==='function')motionPreference.addListener(onMotionChange);
    strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
-   strip.addEventListener('focusin',()=>{state.focused=keyboardFocus;});
+   strip.addEventListener('focusin',()=>{state.focused=keyboardFocus||document.activeElement===strip;});
    strip.addEventListener('focusout',()=>{state.focused=strip.contains(document.activeElement);});
    strip.addEventListener('pointerdown',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
    strip.addEventListener('wheel',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
