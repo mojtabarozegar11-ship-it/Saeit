@@ -45,6 +45,8 @@ def submit_social_evidence(*, account_id, submitter, trading_day,
         raise SocialEvidenceRejected("Account is no longer accepting social evidence")
     if not valid_platform_post_url(post_url, platform):
         raise SocialEvidenceRejected("Unsupported post URL or platform")
+    if posted_at > django_timezone.now():
+        raise SocialEvidenceRejected("Future social publications cannot be evidence")
     if utc_day(posted_at) != trading_day or not _verified_trade_on(account, trading_day):
         raise SocialEvidenceRejected("One post must match a verified UTC trading day")
     if PropSocialEvidence.objects.filter(
@@ -80,7 +82,8 @@ def review_social_evidence(*, evidence_id, reviewer, audited_facts,
     if not _verified_trade_on(row.account, row.trading_day):
         raise SocialEvidenceRejected("Trading day has lost verified status")
     now = django_timezone.now() if reviewed_at is None else reviewed_at
-    if now.tzinfo is None or now.utcoffset() is None or now < row.posted_at:
+    if (now.tzinfo is None or now.utcoffset() is None
+            or now < row.posted_at or now > django_timezone.now()):
         raise SocialEvidenceRejected("Review time must be valid and after publication")
     all_checked = all(value is True for value in audited_facts.values())
     row.review_status = (
