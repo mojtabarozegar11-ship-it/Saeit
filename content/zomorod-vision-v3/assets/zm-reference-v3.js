@@ -47,7 +47,7 @@
        // Duplicates are removed from keyboard/tab order but remain mouse-clickable.
        duplicate.tabIndex=-1;
        // aria-hidden alone does not remove nested interactive controls from tab order.
-       for(const nested of $('a[href],button,input,select,textarea,[tabindex]',duplicate)){
+       for(const nested of Array.from(duplicate.querySelectorAll('a[href],button,input,select,textarea,[tabindex]'))){
          nested.tabIndex=-1;
        }
        duplicate.classList.add('carousel-copy');
