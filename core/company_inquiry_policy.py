@@ -73,9 +73,13 @@ def add_new(history, fingerprint, now, inquiry_id):
 
 def provenance(kind, subject, internal_note):
     """Only one server-stamped CRM service type is eligible for farm funnel."""
+    if type(internal_note) is not str:
+        return False
+    # Staff may append notes on later lines. The original server-generated
+    # first line remains the exact intake provenance, never a free-text title.
+    initial_stamp = internal_note.split("\n", 1)[0]
     return (
         kind == "commercial" and subject == FARM_SUBJECT
-        and type(internal_note) is str
-        and internal_note.startswith(CONSENT_MARKER + "; confirmed_at=")
-        and internal_note.endswith("; source=farm")
+        and initial_stamp.startswith(CONSENT_MARKER + "; confirmed_at=")
+        and initial_stamp.endswith("; source=farm")
     )
