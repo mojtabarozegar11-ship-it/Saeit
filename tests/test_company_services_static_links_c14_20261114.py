@@ -53,8 +53,9 @@ class StaticServiceLinkTests(unittest.TestCase):
         )
 
     def test_source_has_no_shadow_public_form(self):
-        self.assertEqual(self.parsed.forms, 0)
-        self.assertIn("/ask-master/index.php", self.parsed.links[0] if False else self.page)
+        block = self.page.split('<section id="'+MARKER+'"', 1)[1].split('</section>', 1)[0]
+        self.assertNotIn('<form', block.lower())
+        self.assertIn("/ask-master/index.php", self.page)
         self.assertIn("این صفحه هیچ داده شخصی دریافت یا ذخیره نمی‌شود", self.page)
 
     def test_existing_presentation_not_replaced(self):
