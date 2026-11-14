@@ -88,7 +88,7 @@ def html_page(code: str, offer: dict, guide: dict) -> str:
 <header class="card">
   <small>کد {escape(code)} · استعلام اولیه غیرتعهدآور</small><h1>{title}</h1>
   <p>{pain}</p><p><strong>مناسب برای:</strong> {customer}</p>
-  <a class="cta" href="{CONTACT}">ورود به فرم رسمی شرکت</a>
+  <a class="cta scope-primary-cta" href="{CONTACT}">ورود به فرم رسمی شرکت</a>
   <p><small>هنگام ثبت درخواست، کد {escape(code)} را در بخش توضیحات فرم درج کنید؛ انتقال خودکار اطلاعات در این نسخه تأیید نشده است.</small></p>
 </header>
 <section class="card"><h2>پرسش‌هایی که بررسی به آن‌ها پاسخ می‌دهد</h2><ul>{bullets(guide["questions"])}</ul></section>
