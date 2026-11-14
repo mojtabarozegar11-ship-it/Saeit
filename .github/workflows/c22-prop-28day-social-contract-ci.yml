@@ -5,17 +5,21 @@ on:
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
+      - 'prop_firm/admin.py'
       - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
       - 'tests/test_moj_prop_social_policy.py'
       - 'tests/test_moj_prop_social_review.py'
+      - 'tests/test_moj_prop_social_admin_readonly_c22.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
   pull_request:
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
+      - 'prop_firm/admin.py'
       - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
       - 'tests/test_moj_prop_social_policy.py'
       - 'tests/test_moj_prop_social_review.py'
+      - 'tests/test_moj_prop_social_admin_readonly_c22.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
 permissions:
   contents: read
@@ -47,7 +51,7 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings
         run: |
           set -euo pipefail
-          python -m pytest -q tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py
+          python -m pytest -q tests/test_moj_prop_social_policy.py tests/test_moj_prop_social_review.py tests/test_moj_prop_social_admin_readonly_c22.py
           python -m py_compile prop_firm/models.py prop_firm/social_policy.py prop_firm/social_review_service.py
           echo "C22_EXTERNAL_SOCIAL_POSTS=0"
           echo "C22_REAL_TRX_PAYMENTS=0"
