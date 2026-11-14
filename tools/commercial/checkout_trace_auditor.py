@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 ALLOWED_FIELDS = {"event_id", "order_ref", "event", "source", "amount", "currency", "payment_ref"}
-EVENTS = {"checkout_created", "payment_confirmed", "payment_failed", "fulfilled"}
+EVENTS = {"checkout_created", "payment_confirmed", "payment_failed", "fulfilled", "refund_confirmed"}
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 ID = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z")
 CURRENCY = re.compile(r"[A-Z]{3}\Z")
@@ -24,8 +24,9 @@ def audit_checkout_trace(payload):
     events = payload["events"]
     if not isinstance(events, list) or not (1 <= len(events) <= 2000):
         raise ValueError("events must be a nonempty bounded list")
-    states = defaultdict(lambda: {"created": False, "confirmed": False, "fulfilled": 0,
-                                   "payments": set(), "amount": None, "currency": None, "issues": []})
+    states = defaultdict(lambda: {"created": False, "confirmed": False, "refunded": False,
+                                   "fulfilled": 0, "payments": set(), "amount": None,
+                                   "currency": None, "issues": []})
     seen = {}
     replayed = 0
     for i, e in enumerate(events, 1):
@@ -80,10 +81,19 @@ def audit_checkout_trace(payload):
             # require human review rather than claiming a reversal or success.
             if state["confirmed"]:
                 state["issues"].append("FAILURE_AFTER_CONFIRMATION_REQUIRES_REVIEW")
+        elif kind == "refund_confirmed":
+            if e["source"] != "gateway" or e["payment_ref"] not in state["payments"]:
+                state["issues"].append("REFUND_WITHOUT_MATCHED_GATEWAY_PAYMENT")
+            else:
+                state["refunded"] = True
+                if state["fulfilled"]:
+                    state["issues"].append("REFUND_AFTER_FULFILLMENT_ACCESS_REVIEW")
         elif kind == "fulfilled":
             state["fulfilled"] += 1
             if not state["confirmed"]:
                 state["issues"].append("FULFILLMENT_WITHOUT_TRUSTED_PAYMENT_IN_TRACE")
+            if state["refunded"]:
+                state["issues"].append("FULFILLMENT_AFTER_REFUND_REQUIRES_REVIEW")
             if state["fulfilled"] > 1:
                 state["issues"].append("MULTIPLE_FULFILLMENTS")
     results=[]
