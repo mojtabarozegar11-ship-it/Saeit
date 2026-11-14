@@ -17,8 +17,8 @@ This change reuses the **same existing** `CompanyInquiry` model, database and Dj
 7. New Django regression tests cover signed status, PII protection, consent, bot form, invalid retries, session duplicates, source-of-truth CRM, farm-specific route, and coarse status; existing six validation tests updated for 400-invalid behavior.
 
 ## Real-world boundary and testing honesty
-- **65/65 read-only structural source assertions** passed against fetched GitHub branch files. All source writes were read back from the connected GitHub repository. These are not Django end-to-end tests.
-- **32 new Django ORM/client tests written, 0/32 executed** because Django/production DB was unavailable in the local execution environment. Six older Django tests modified, also not executed. No CI green assertion.
+- **89/89 source-level structural assertions** passed after correcting a false-positive checker that flagged a harmless documentation mention of the word 'email'. The final corrected check verifies the exact signed token payload contains only version and record ID. All source writes were read back from connected GitHub. This is **not** Django integration, CI, or MariaDB execution.
+- **43 new Django ORM/client tests written, 0/43 executed**: 22 signed receipt, 13 farm-specific CRM intake and consent/rate-limit, 8 read-only funnel. Six older Django validation tests adapted, all six also unexecuted: **0/49 changed/new Django tests executed** because Django is unavailable locally and the production database is not accessible. No CI green assertion.
 - No production code, PHP source, cPanel path, MariaDB schema, Django migration or real buyer lead was modified. No new payment/order/contract/revenue created. Source-only branch has no approved merge or deployment.
 - Live `https://zomorodmelal.ir/company/` and PHP `/ask-master/` could not be independently fetched in this cycle. The actual active host implementation is UNKNOWN. The existing PHP intake must not be silently disabled or redirected.
 
@@ -37,3 +37,10 @@ A genuine supplier reply was read in the company Gmail mailbox and a **non-sent*
 
 ## Metrics
 The number of operationally received ZM-FARM leads, paid contracts, confirmed collected cash, and global company completion are presently **unverified/unknown**. Source changes are not equivalent to live company revenue.
+
+
+## Resume-after-interruption source corrections
+- The *existing* `CompanyInquiry.internal_note` now records a minimal server-generated `INTAKE_CONSENT_V1` marker, UTC-aware timestamp and `source=farm|company`, without adding a speculative migration or storing customer PII in the marker. It is editable administrative evidence, **not an immutable legal consent log**.
+- New lead creation is bounded to 6 distinct valid submissions/hour per browser session, after the 15-minute identical-request replay check. The seventh receives HTTP 429 with Retry-After, without creating a CRM record. This is **not a global IP/account anti-spam control**.
+- `farm_inquiry_pipeline` now indicates that the command reads the *configured Django database*, logs observation time and explicitly marks financial certification false. No real database scan was run during this cycle.
+- No tests using a compatible Django runtime, MariaDB, actual customer data or live site were executed during the recovery turn.
