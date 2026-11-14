@@ -284,7 +284,7 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         codes = [x["code"] for x in response.context["sectors"]]
         self.assertEqual(codes[:4], [
-            "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
+            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
         ])
         self.assertContains(response, "۱۱ بخش")
 
@@ -313,3 +313,46 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(observed["catalog_products_active_title_matched"], 2)
         self.assertEqual(observed["catalog_products_active_price_matched"], 1)
         self.assertEqual(observed["catalog_price_verified_listing_ids"], [72])
+
+    def test_signed_signal_pending_count_is_not_subscription(self):
+        from core.models import SignalSourceEvent
+        from django.utils import timezone
+        SignalSourceEvent.objects.create(
+            brand="saman", source_id="broker1", event_id="demo-001",
+            event_at=timezone.now(), canonical_payload="source-only",
+            payload_sha256="a"*64, source_signature="b"*64,
+        )
+        self.client.force_login(self.staff)
+        sig = self.client.get(self.endpoint()).json()["financial_commerce"]["signals"]
+        self.assertEqual(sig["signed_signal_pending_count"], 1)
+        self.assertTrue(sig["signed_events_are_not_sales"])
+        self.assertEqual(sig["live_subscriptions_verified"], 0)
+
+    def test_signal_receipts_never_increase_verified_income(self):
+        from core.models import SignalSourceEvent
+        from django.utils import timezone
+        SignalSourceEvent.objects.create(
+            brand="zahra", source_id="broker1", event_id="demo-002",
+            event_at=timezone.now(), canonical_payload="pending-audit",
+            payload_sha256="a"*64, source_signature="b"*64,
+        )
+        self.client.force_login(self.staff)
+        result = self.client.get(self.endpoint()).json()
+        self.assertIsNone(result["verified_income_usd"])
+        self.assertFalse(result["ready_for_live_payment"])
+
+    def test_missing_signal_table_is_unknown_not_zero(self):
+        from django.db import OperationalError
+        from unittest.mock import patch
+        self.client.force_login(self.staff)
+        with patch(
+            "command_center.commercialization_board.SignalSourceEvent.objects.filter",
+            side_effect=OperationalError("not migrated"),
+        ):
+            result = self.client.get(self.endpoint()).json()
+        self.assertIsNone(
+            result["financial_commerce"]["signals"]["signed_signal_pending_count"]
+        )
+        self.assertEqual(
+            result["financial_commerce"]["signals"]["live_subscriptions_verified"], 0
+        )
