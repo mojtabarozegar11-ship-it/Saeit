@@ -6,8 +6,8 @@ native TRX finality/amount/receiver through the pinned solidified RPC nodes.
 from __future__ import annotations
 import re
 
-_TXID = re.compile(r"[0-9a-f]{64}\\Z")
-_SENDER = re.compile(r"41[0-9a-f]{40}\\Z")
+_TXID = re.compile(r"[0-9a-f]{64}\Z")
+_SENDER = re.compile(r"41[0-9a-f]{40}\Z")
 
 
 class InvalidSettlementProof(ValueError):
