@@ -156,3 +156,44 @@ class MojPlayWinProductDetailsTests(TestCase):
             [PUBLIC_CATALOG[k]["expected_price_usd"] for k in (72,225,879)],
             ["7.50", "4.00", "6.80"],
         )
+
+    def test_verified_private_gateway_can_restore_legitimate_buy_button(self):
+        item = Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        with patch("core.mojplaywin_product_detail._approved_purchase_url",
+                   return_value="/commerce/book/72/") as approved:
+            response = self.get(72)
+        approved.assert_called_once()
+        self.assertTrue(response.context["purchase_available"])
+        self.assertContains(response, 'href="/commerce/book/72/"')
+        self.assertContains(response, "Continue to verified TRX checkout")
+        self.assertContains(response, "Never send funds to an address found outside your verified order invoice.")
+
+    def test_missing_private_gateway_holds_checkout_even_when_catalog_matches(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        response = self.get(72)
+        self.assertFalse(response.context["purchase_available"])
+        self.assertNotContains(response, 'href="/commerce/book/72/"')
+        self.assertContains(response, "Purchasing on this page is not enabled.")
+
+    def test_gateway_price_comes_from_real_database_record(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="8.25",
+        )
+        with patch("core.mojplaywin_product_detail._approved_purchase_url",
+                   return_value="/commerce/book/72/"):
+            response = self.get(72)
+        self.assertEqual(response.context["database_price_usd"], "8.25")
+        self.assertContains(response, "US $8.25")
+
+    def test_missing_product_does_not_consult_gateway(self):
+        with patch("core.mojplaywin_product_detail._approved_purchase_url") as approved:
+            response = self.get(72)
+        self.assertFalse(response.context["purchase_available"])
+        approved.assert_not_called()
