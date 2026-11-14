@@ -11,6 +11,7 @@ from command_center.models import WorkItem
 
 def scenario(**kwargs):
     params = {
+        "service_code": "AGR-01",
         "currency": "IRT",
         "base_unit_price": "450000",
         "discount_percent": "10",
@@ -62,6 +63,7 @@ def test_get_has_no_speculative_default_costs_and_no_write(owner):
     assert "کارگاه محاسبه قیمت و سودآوری خدمات" in html
     assert "هیچ هزینه‌ای پیش‌فرض صفر" in html
     assert 'name="direct_unit_cost"' in html
+    assert 'name="service_code"' in html
     assert "450000" not in html
     assert "نامعلوم" in html
     assert CompanyInquiry.objects.count() == 0
@@ -77,6 +79,9 @@ def test_realistic_hypothetical_costs_produce_bounded_result_no_sale(owner):
     html = r.content.decode()
     assert "نتیجه محاسبه" in html
     assert "405000" in html
+    assert "AGR-01" in html
+    assert "تحلیل اقتصاد و سودآوری مزرعه" in html
+    assert "جدول هزینه متغیر و ثابت" in html
     assert "وصول وجه واقعی: نامعلوم" in html
     assert "قیمت دارای تأیید مالک: خیر" in html
     assert r["Cache-Control"].startswith("no-store")
@@ -101,6 +106,7 @@ def test_missing_costs_are_validation_errors_not_zero_profit_assumptions(owner):
 @pytest.mark.django_db
 @pytest.mark.parametrize("override", [
     {"currency": "EUR"},
+    {"service_code": "WRONG-00"},
     {"expected_units": "-1"},
     {"expected_units": "4.2"},
     {"discount_percent": "150"},
@@ -171,3 +177,48 @@ def test_funnel_navigation_has_costing_link(owner):
     client.force_login(owner)
     html = client.get(reverse("command_center_service_proposal_funnel_dashboard")).content.decode()
     assert reverse("command_center_service_pricing_workbench") in html
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("code,title", [
+    ("AGR-01", "تحلیل اقتصاد و سودآوری مزرعه"),
+    ("RS-01", "ممیزی شاخص‌های پژوهش کشاورزی"),
+    ("RS-02", "ممیزی سناریوی آبیاری"),
+    ("RS-03", "طراحی آزمایش و بررسی اقتصادی تحقیق"),
+    ("WEB-01", "طراحی مسیر درخواست و فروش کسب‌وکار"),
+    ("SEO-01", "ممیزی فنی و محتوایی سئو"),
+])
+def test_six_real_service_quotes_are_scoped_internal_and_no_sale(owner,code,title):
+    client = Client()
+    client.force_login(owner)
+    response = client.post(reverse("command_center_service_pricing_workbench"),
+                           scenario(service_code=code))
+    html = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert title in html
+    assert code in html
+    assert "نتیجه محاسبه" in html
+    assert "برای ارسال به مشتری" in html
+    assert "قیمت دارای تأیید مالک: خیر" in html
+    assert CompanyInquiry.objects.count() == 0
+    assert WorkItem.objects.count() == 0
+    assert Order.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_missing_or_unknown_service_code_never_generates_a_quote(owner):
+    client = Client()
+    client.force_login(owner)
+    for code in (None, "", "../../../private", "SEO-02", "<script>alert(1)</script>"):
+        payload = scenario()
+        if code is None:
+            del payload["service_code"]
+        else:
+            payload["service_code"] = code
+        html = client.post(
+            reverse("command_center_service_pricing_workbench"), payload
+        ).content.decode("utf-8")
+        assert "نتیجه محاسبه" not in html
+        assert Order.objects.count() == 0
+        assert WorkItem.objects.count() == 0
+        assert "<script>alert(1)</script>" not in html
