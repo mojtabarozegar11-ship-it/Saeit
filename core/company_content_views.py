@@ -154,7 +154,16 @@ def company_portal_home(request):
             item.status = "new"
             item.internal_note = COMPANY_LEGACY_SOURCE_MARKER
             item.save()
-    # A valid consented request remains only an inquiry. No external message,
-    # invoice, price, new background agent or fulfillment is implied.
-    messages.success(request, "درخواست برای بررسی ثبت شد؛ این پیام تأیید سفارش یا قرارداد نیست.")
+    # Do not falsely say a duplicate caused another submission. Preserve the
+    # customer's ability to change the question and submit a distinct inquiry.
+    if exact_duplicate:
+        messages.info(
+            request,
+            "درخواست یکسان قبلاً دریافت شده است؛ ثبت تکراری انجام نشد."
+        )
+    else:
+        messages.success(
+            request,
+            "درخواست برای بررسی ثبت شد؛ این پیام تأیید سفارش یا قرارداد نیست."
+        )
     return _company_response_headers(redirect("company"))
