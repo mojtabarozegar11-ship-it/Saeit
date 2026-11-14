@@ -2,7 +2,7 @@
 from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
-    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence,
+    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
 )
 
 
@@ -70,7 +70,18 @@ class PropProfitJournalAdmin(LockedAuditAdmin):
 class PropSocialEvidenceAdmin(LockedAuditAdmin):
     """Operator review history; social posting and modifications are not enabled."""
     list_display = (
-        "account_id", "trading_day", "platform", "review_status",
-        "author_verified", "disclosure_verified", "reviewed_at",
+        "enrollment_id", "account_id", "platform", "review_status",
+        "author_verified", "disclosure_verified",
+        "continued_visibility_verified", "posted_at", "reviewed_at",
     )
     list_filter = ("platform", "review_status", "disclosure_verified")
+
+
+@admin.register(PropChallengeEnrollment)
+class PropChallengeEnrollmentAdmin(LockedAuditAdmin):
+    """Read-only confirmed purchase, shared by both stages; never issue an invoice."""
+    list_display = (
+        "id", "trader_id", "confirmed_at",
+        "settlement_verified", "terms_version",
+    )
+    list_filter = ("settlement_verified", "terms_version")
