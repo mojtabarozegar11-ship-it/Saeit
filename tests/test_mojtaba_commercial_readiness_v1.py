@@ -178,7 +178,6 @@ class PortfolioTests(unittest.TestCase):
         self.check_block(intake_path="/ask-master/\nHost:evil")
 
     def test_40_unplanned_auto_purchase_stage_rejected(self):
-        self.check_block(stage="release_blocked", model="b2b_quote") if False else None
         self.check_block(stage="inquiry_candidate", model="subscription")
 
     def test_41_free_offer_stage_must_match(self):

@@ -18,7 +18,6 @@ MODELS = frozenset({
 })
 STAGES = frozenset({"inquiry_candidate", "release_blocked", "free_acquisition"})
 BANDS = frozenset({1, 2, 3, 4})
-PUBLIC_HOSTS = frozenset({"zomorodmelal.ir", "mojplaywin.com", "mojtaba.bot.ai"})
 FIELDS = frozenset({
     "offer_id", "title", "buyer", "value_proposition", "model", "stage",
     "channel", "source_files", "intake_path", "required_inputs", "deliverables",
@@ -83,6 +82,8 @@ def check_offer(offer: dict, root: Path) -> dict:
         raise ContractError("invalid_offer_id")
     if offer["canonical_bot_id"] != CANONICAL_BOT:
         raise ContractError("noncanonical_bot")
+    if not isinstance(offer["model"], str) or not isinstance(offer["stage"], str):
+        raise ContractError("invalid_business_model_type")
     if offer["model"] not in MODELS or offer["stage"] not in STAGES:
         raise ContractError("invalid_business_model")
     if type(offer["priority_band"]) is not int or offer["priority_band"] not in BANDS:
