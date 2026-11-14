@@ -21,7 +21,7 @@
         "Explore the rules"
       ],
       "stats": [
-        "Challenge entry",
+        "Plan 1 entry — starting at",
         "Trader profit share",
         "Planned capital ceiling",
         "Assessment stages"
@@ -55,7 +55,7 @@
       "faq": [
         "The important questions",
         "Will I receive a real trading account?",
-        "Only after passing both stages and completing compliance, broker and funding checks. The first planned tier is $100.",
+        "Only after both stages, eligibility checks, an approved broker and independently available company capital. Plan 1 would start at $100; the other nine plans have different conditional starting tiers.",
         "Can I pay 30 TRX now?",
         "No. Enrollment and payments are disabled until legal, financial and technical checks are complete."
       ],
@@ -101,7 +101,7 @@
         "مشاهده قوانین"
       ],
       "stats": [
-        "هزینه ورود به چالش",
+        "ورودیه پلن ۱، شروع از",
         "سهم سود معامله‌گر",
         "سقف سرمایه برنامه",
         "مراحل ارزیابی"
@@ -135,7 +135,7 @@
       "faq": [
         "پرسش‌های مهم",
         "آیا حساب معاملاتی واقعی دریافت می‌کنم؟",
-        "فقط پس از قبولی هر دو مرحله و تأیید مقررات، کارگزار و تأمین سرمایه. سطح نخست ۱۰۰ دلار است.",
+        "فقط پس از قبولی دو مرحله، احراز شرایط، تأیید کارگزار و وجود سرمایه واقعی شرکت. پلن ۱ از ۱۰۰ دلار آغاز می‌شود و ۹ پلن دیگر سرمایه شروع مشروط متفاوت دارند.",
         "آیا اکنون می‌توانم ۳۰ TRX پرداخت کنم؟",
         "خیر. تا تکمیل بررسی‌های قانونی، مالی و فنی، ثبت‌نام و پرداخت غیرفعال است."
       ],
@@ -181,7 +181,7 @@
         "اطّلع على القواعد"
       ],
       "stats": [
-        "رسوم التحدي",
+        "رسوم الخطة الأولى — بدءاً من",
         "حصة المتداول من الأرباح",
         "الحد الأقصى المخطط لرأس المال",
         "مراحل التقييم"
@@ -215,7 +215,7 @@
       "faq": [
         "أسئلة مهمة",
         "هل سأحصل على حساب تداول حقيقي؟",
-        "فقط بعد اجتياز المرحلتين واستكمال الفحوص التنظيمية وموافقة الوسيط والتمويل. المستوى الأول المخطط 100 دولار.",
+        "فقط بعد اجتياز المرحلتين والتحقق من الأهلية والوسيط ورأس المال المتاح فعلياً. تبدأ الخطة الأولى من 100 دولار، وللخطط التسع الأخرى مستويات بدء مشروطة مختلفة.",
         "هل يمكنني دفع 30 TRX الآن؟",
         "لا، التسجيل والمدفوعات معطلان حتى اكتمال المتطلبات القانونية والمالية والتقنية."
       ],
@@ -261,7 +261,7 @@
         "Regeln ansehen"
       ],
       "stats": [
-        "Teilnahmegebühr",
+        "Einstieg ab — Plan 1",
         "Gewinnanteil des Traders",
         "Geplante Kapitalobergrenze",
         "Prüfungsphasen"
@@ -341,7 +341,7 @@
         "Voir les règles"
       ],
       "stats": [
-        "Frais du défi",
+        "Entrée à partir de — formule 1",
         "Part des gains du trader",
         "Capital maximal prévu",
         "Phases d’évaluation"
@@ -421,7 +421,7 @@
         "Ver reglas"
       ],
       "stats": [
-        "Entrada al desafío",
+        "Entrada desde — plan 1",
         "Parte del beneficio del trader",
         "Capital máximo previsto",
         "Fases de evaluación"
@@ -501,7 +501,7 @@
         "Ver regras"
       ],
       "stats": [
-        "Entrada no desafio",
+        "Entrada a partir de — plano 1",
         "Parcela do lucro do trader",
         "Capital máximo previsto",
         "Etapas de avaliação"
@@ -581,7 +581,7 @@
         "Consulta le regole"
       ],
       "stats": [
-        "Costo della sfida",
+        "Ingresso da — piano 1",
         "Quota di profitto del trader",
         "Massimale previsto",
         "Fasi di valutazione"
@@ -661,7 +661,7 @@
         "Kuralları incele"
       ],
       "stats": [
-        "Mücadele giriş ücreti",
+        "Plan 1 başlangıç ücreti",
         "Yatırımcının kâr payı",
         "Planlanan azami sermaye",
         "Değerlendirme aşamaları"
@@ -741,7 +741,7 @@
         "Изучить правила"
       ],
       "stats": [
-        "Взнос за испытание",
+        "Стоимость от — план 1",
         "Доля прибыли трейдера",
         "Плановый предел капитала",
         "Этапы оценки"
@@ -821,7 +821,7 @@
         "查看规则"
       ],
       "stats": [
-        "挑战报名费",
+        "方案1报名费起价",
         "交易者利润分成",
         "计划资金上限",
         "评估阶段"
@@ -901,7 +901,7 @@
         "規則を見る"
       ],
       "stats": [
-        "チャレンジ参加費",
+        "プラン1参加費（最低額）",
         "トレーダー利益配分",
         "予定資金の上限",
         "評価ステージ"
@@ -981,7 +981,7 @@
         "규칙 확인"
       ],
       "stats": [
-        "챌린지 참가비",
+        "플랜 1 참가비부터",
         "트레이더 수익 배분",
         "계획된 최대 자본",
         "평가 단계"
@@ -1061,7 +1061,7 @@
         "नियम देखें"
       ],
       "stats": [
-        "चुनौती प्रवेश शुल्क",
+        "प्लान 1 प्रवेश शुल्क से",
         "ट्रेडर का लाभ हिस्सा",
         "प्रस्तावित अधिकतम पूँजी",
         "मूल्यांकन चरण"
@@ -1141,7 +1141,7 @@
         "Lihat aturan"
       ],
       "stats": [
-        "Biaya masuk tantangan",
+        "Biaya mulai — paket 1",
         "Bagian keuntungan trader",
         "Batas modal rencana",
         "Tahap evaluasi"
@@ -1221,7 +1221,7 @@
         "Xem quy tắc"
       ],
       "stats": [
-        "Phí tham gia thử thách",
+        "Phí từ — gói 1",
         "Phần lợi nhuận của trader",
         "Mức vốn dự kiến cao nhất",
         "Giai đoạn đánh giá"
@@ -1301,7 +1301,7 @@
         "ดูกฎ"
       ],
       "stats": [
-        "ค่าสมัครชาเลนจ์",
+        "ค่าธรรมเนียมเริ่มต้น — แผน 1",
         "ส่วนแบ่งกำไรของเทรดเดอร์",
         "วงเงินสูงสุดที่วางแผน",
         "ขั้นตอนการประเมิน"
@@ -1381,7 +1381,7 @@
         "Bekijk de regels"
       ],
       "stats": [
-        "Inschrijfgeld uitdaging",
+        "Vanafprijs — plan 1",
         "Winstaandeel trader",
         "Geplafonneerd gepland kapitaal",
         "Beoordelingsfasen"
@@ -1461,7 +1461,7 @@
         "Zobacz zasady"
       ],
       "stats": [
-        "Opłata za wyzwanie",
+        "Opłata od — plan 1",
         "Udział tradera w zyskach",
         "Planowany limit kapitału",
         "Etapy oceny"
@@ -1541,7 +1541,7 @@
         "اصول دیکھیں"
       ],
       "stats": [
-        "چیلنج داخلہ فیس",
+        "پلان ۱ کی ابتدائی فیس",
         "ٹریڈر کا منافع حصہ",
         "منصوبہ بند زیادہ سے زیادہ سرمایہ",
         "جانچ کے مراحل"
