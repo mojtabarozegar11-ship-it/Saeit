@@ -92,12 +92,6 @@ def _scan(host, port, keytype, destination, expected, *, via=None):
 
 def _config(path, folder, *, via_vps):
     lines = [
-        "Host saeit-vps",
-        "  HostName " + VPS_ADDR,
-        "  User githubops",
-        "  Port 22",
-        "  IdentityFile " + str(folder / "vps.key"),
-        "  UserKnownHostsFile " + str(folder / "vps.known"),
         "Host saeit-cpanel",
         "  HostName " + CPANEL_HOST,
         "  User zomorod2",
@@ -106,6 +100,14 @@ def _config(path, folder, *, via_vps):
         "  UserKnownHostsFile " + str(folder / "host.known"),
     ]
     if via_vps:
+        lines = [
+            "Host saeit-vps",
+            "  HostName " + VPS_ADDR,
+            "  User githubops",
+            "  Port 22",
+            "  IdentityFile " + str(folder / "vps.key"),
+            "  UserKnownHostsFile " + str(folder / "vps.known"),
+        ] + lines
         lines.append("  ProxyJump saeit-vps")
     lines += [
         "Host *",
@@ -136,7 +138,8 @@ def main():
     host_key = os.environ.get("HOST_KEY", "")
     vps_key = os.environ.get("VPS_KEY", "")
     _key(host_key, folder / "host.key")
-    _key(vps_key, folder / "vps.key")
+    # The direct route must not depend on the VPS private key. Validate
+    # that second identity only when the pinned direct route fails.
     config = folder / "config"
     cpanel_known = folder / "host.known"
     # First try the already-authorized hosting endpoint directly, using its
@@ -149,6 +152,7 @@ def main():
         config.unlink()
         cpanel_known.unlink()
     # Direct route failed, so only the old pinned VPS jump may be attempted.
+    _key(vps_key, folder / "vps.key")
     if not _scan(VPS_ADDR, "22", "rsa", folder / "vps.known", VPS_RSAPIN):
         print("MPW_CPANEL_ROUTE=VPS_PORT_22_UNREACHABLE_OR_NO_RSA")
         return 2
