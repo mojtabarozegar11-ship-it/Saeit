@@ -88,3 +88,31 @@ class FarmServiceIntakeTests(TestCase):
         lead = CompanyInquiry.objects.get()
         self.assertEqual(lead.status, "new")
         self.assertFalse(hasattr(lead, "paid_amount"))
+
+    def test_consent_provenance_is_recorded_in_existing_crm(self):
+        response = self.client.post(self.path(), self.payload())
+        self.assertEqual(response.status_code, 302)
+        record = CompanyInquiry.objects.get()
+        self.assertIn("INTAKE_CONSENT_V1;", record.internal_note)
+        self.assertIn("source=farm", record.internal_note)
+        self.assertNotIn("owner@example.org", record.internal_note)
+
+    def test_six_distinct_requests_in_session_seventh_is_rate_limited(self):
+        for n in range(6):
+            data = self.payload()
+            data["message"] = f"Distinct scope of agricultural project {n}"
+            self.assertEqual(self.client.post(self.path(), data).status_code, 302)
+        data = self.payload()
+        data["message"] = "Distinct scope of agricultural project 7"
+        response = self.client.post(self.path(), data)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response)
+        self.assertEqual(CompanyInquiry.objects.count(), 6)
+
+    def test_replaying_existing_request_does_not_consume_new_lead_quota(self):
+        first = self.client.post(self.path(), self.payload())
+        for _ in range(7):
+            response = self.client.post(self.path(), self.payload())
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response["Location"], first["Location"])
+        self.assertEqual(CompanyInquiry.objects.count(), 1)
