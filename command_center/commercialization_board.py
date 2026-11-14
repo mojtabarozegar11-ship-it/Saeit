@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
@@ -70,4 +71,19 @@ def commercialization_board_api(request):
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+
+@staff_member_required
+@require_GET
+def commercialization_board_page(request):
+    """Private bilingual control surface; decisions are not payment actions."""
+    board = build_board()  # No auto-attested readiness.
+    response = render(request, "command_center/commercialization_board.html", {
+        "sectors": board["sectors"],
+        "eligible": board["eligible_for_commercial_review"],
+    })
+    response["Cache-Control"] = "private, no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
     return response
