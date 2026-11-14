@@ -1,0 +1,61 @@
+name: MOJ PROP C27 latest social and finance contracts
+on:
+  push:
+    branches:
+      - fix/moj-priority-c27-social-safe-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-prop-c27-social-safe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source integrity, social post safeguards and zero real payment
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          paths=('prop_firm/portal.py','prop_firm/challenge_commerce.py',
+                 'core/tron_tenant_policy.py','core/tron_rollout_inventory.py',
+                 'core/financial_brand_pages.py')
+          for p in paths: ast.parse(Path(p).read_text(),filename=p)
+          portal=Path('prop_firm/portal.py').read_text()
+          policy=Path('prop_firm/rules.py').read_text()
+          social=Path('prop_firm/social_policy.py').read_text()
+          assert 'prior = completed_prior_phase_one(account)' in portal
+          assert 'social_posts_verified=' in portal
+          assert 'check_social_posting(' in portal
+          assert 'automated_publishing_allowed: bool = False' in social
+          assert 'real_orders_enabled: bool = False' in policy
+          assert 'trx_checkout_enabled: bool = False' in policy
+          print('MOJ_C27_SOCIAL_AND_FUNDED_STAGE_GATES=PASS')
+          PY
+      - name: Install existing Django requirements
+        run: python -m pip install -r requirements.txt
+      - name: Run updated MOJ PROP, social, signal and TRX tenant regressions
+        env:
+          SECRET_KEY: c27-branch-tests-only
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python manage.py test \
+            tests.test_moj_prop_prior_phase_sequence \
+            tests.test_moj_prop_zero_funded_account_guard \
+            tests.test_tron_subsite_candidate_isolation \
+            tests.test_signal_brand_canonical_host_locale \
+            tests.test_moj_prop_social_policy \
+            tests.test_moj_prop_social_review \
+            tests.test_moj_prop_dashboard \
+            tests.test_prop_firm_policy \
+            --verbosity 1
+          echo 'MOJ_C27_REAL_DJANGO_SOCIAL_TENANT_REGRESSIONS=PASS'
