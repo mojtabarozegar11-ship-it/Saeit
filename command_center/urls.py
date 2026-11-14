@@ -22,6 +22,7 @@ from .commerce_funnel import commerce_funnel_api
 from .revenue_evidence import revenue_evidence_api
 from .fulfillment_preflight import fulfillment_preflight_api
 from .company_sales_pipeline import company_sales_pipeline_api
+from .company_quote_desk import sales_cases, sales_case_detail, sales_case_action
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
