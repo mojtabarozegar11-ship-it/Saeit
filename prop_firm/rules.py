@@ -142,9 +142,9 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     rate = POLICY.phase_one_goal_pct if phase == 1 else POLICY.phase_two_goal_pct
     goal = percent(capital, rate)
     reasons = list(risk.reasons)
-    if phase == 2 and not prior_phase_passed:
+    if phase == 2 and prior_phase_passed is not True:
         reasons.append("phase_one_pass_required")
-    if not evidence_verified:
+    if evidence_verified is not True:
         reasons.append("reconciled_evidence_required")
     if days < POLICY.min_challenge_days:
         reasons.append("minimum_trading_days_not_met")
@@ -168,14 +168,14 @@ def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
     reasons = list(risk.reasons)
     if level_index == len(LEVELS) - 1:
         reasons.append("maximum_level_reached")
-    if not evidence_verified:
+    if evidence_verified is not True:
         reasons.append("reconciled_evidence_required")
     if profit < percent(current, POLICY.promotion_goal_pct):
         reasons.append("monthly_profit_target_not_met")
     if days < POLICY.promotion_min_days:
         reasons.append("minimum_trading_days_not_met")
     reasons.extend(_consistency_reasons(verified_profit=profit, max_profitable_day=max_profitable_day))
-    if not funding_for_next_level:
+    if funding_for_next_level is not True:
         reasons.append("next_level_funding_not_confirmed")
     return PromotionDecision(not reasons, tuple(dict.fromkeys(reasons)), current, nxt)
 
@@ -201,13 +201,13 @@ def authorize_funding(*, requested_capital, unencumbered_cash,
     reasons = []
     if cash < need:
         reasons.append("unencumbered_capital_insufficient")
-    if not legal_approved:
+    if legal_approved is not True:
         reasons.append("legal_authorization_missing")
-    if not broker_approved:
+    if broker_approved is not True:
         reasons.append("broker_contract_missing")
-    if not kyc_approved:
+    if kyc_approved is not True:
         reasons.append("kyc_missing")
-    if not contracts_signed:
+    if contracts_signed is not True:
         reasons.append("client_contract_missing")
     return FundingDecision(not reasons, tuple(reasons), need)
 
@@ -224,9 +224,9 @@ def authorize_order(*, account_capital, equity, day_open_equity,
     minimum = _nonnegative(broker_minimum_risk, "broker_minimum_risk")
     state = assess_risk(account_capital=capital, equity=equity, day_open_equity=day_open_equity)
     reasons = list(state.reasons)
-    if not authoritative_snapshot:
+    if authoritative_snapshot is not True:
         reasons.append("authoritative_broker_snapshot_required")
-    if not verified_stop:
+    if verified_stop is not True:
         reasons.append("stop_loss_required")
     if single == 0 or single > percent(capital, POLICY.order_risk_pct):
         reasons.append("per_order_risk_limit")
@@ -234,7 +234,7 @@ def authorize_order(*, account_capital, equity, day_open_equity,
         reasons.append("aggregate_risk_limit")
     if minimum > single:
         reasons.append("broker_minimum_lot_not_feasible")
-    if mode == "real" and (not execution_authorized or not POLICY.real_orders_enabled):
+    if mode == "real" and (execution_authorized is not True or POLICY.real_orders_enabled is not True):
         reasons.append("real_execution_disabled")
     return RiskDecision(not reasons, tuple(dict.fromkeys(reasons)),
                         state.daily_equity_floor, state.total_equity_floor)
