@@ -411,8 +411,11 @@ class PropSocialEvidence(models.Model):
             raise ValidationError("Unsupported post URL or banned profile")
         published = aware_utc(self.posted_at, "posted_at")
         start = aware_utc(self.enrollment.confirmed_at, "confirmed_at")
+        from django.utils import timezone as _django_timezone
         if not start <= published <= start + timedelta(hours=POST_START_GRACE_HOURS):
             raise ValidationError("Post must be published within 24 hours of purchase")
+        if published > _django_timezone.now():
+            raise ValidationError("Future-dated social posts cannot be submitted")
         if self.review_status == self.Review.VERIFIED:
             from django.utils import timezone as _django_timezone
             reviewed = aware_utc(self.reviewed_at, "reviewed_at")
