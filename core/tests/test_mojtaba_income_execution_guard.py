@@ -466,3 +466,15 @@ def test_economic_worker_unverified_result_stops_drain_without_fake_completion(b
     assert "EXECUTED task=" not in out.getvalue()
     second.refresh_from_db()
     assert second.status == "queued"
+
+
+@pytest.mark.django_db
+def test_internal_ledger_and_catalog_review_not_business_progress():
+    from core.economic_tool_pack import revenue_verify, profit_optimize
+    for result in (revenue_verify({}), profit_optimize({})):
+        assert result["verified_effect"] is False
+        assert result["business_effect_verified"] is False
+        assert result.get("verified_revenue") is None
+        assert result["evidence"]["kind"] in (
+            "internal_ledger_inventory", "profit_baseline",
+        )
