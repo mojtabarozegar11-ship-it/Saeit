@@ -45,6 +45,10 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
                               required_first_tier_accounts=1, attestations=None):
     if not isinstance(merchant_tenant, TenantDecision):
         raise ValueError("Trusted merchant scope needed")
+    if (type(required_first_tier_accounts) is not int
+            or not 1 <= required_first_tier_accounts <= 10000):
+        raise ValueError("At least one bounded real account must be backed")
+
     if attestations is None:
         attestations = {}
     if not isinstance(attestations, dict):
