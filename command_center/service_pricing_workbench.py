@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 from core.revenue_unit_economics import compute_quote_scenario
+from core.service_sales_controls import SERVICE_CARDS, service_card
 
 
 FIELDS = (
@@ -34,6 +35,13 @@ PRICING_LABELS = {
 
 
 class ServicePricingScenarioForm(forms.Form):
+    service_code = forms.ChoiceField(
+        choices=tuple(
+            (code, f"{code} — {record['title_fa']}")
+            for code, record in SERVICE_CARDS.items()
+        ),
+        label="خدمت واقعی از کاتالوگ شش‌گانه (اجباری)",
+    )
     currency = forms.ChoiceField(choices=CURRENCIES, label=PRICING_LABELS["currency"])
     expected_units = forms.IntegerField(
         min_value=0, max_value=1_000_000,
@@ -89,6 +97,7 @@ def service_pricing_workbench(request):
         request.POST if request.method == "POST" else None
     )
     scenario = None
+    selected_offer = None
     if request.method == "POST" and form.is_valid():
         raw = {
             name: (str(form.cleaned_data[name]) if name != "expected_units"
@@ -97,6 +106,7 @@ def service_pricing_workbench(request):
         }
         try:
             scenario = compute_quote_scenario(raw)
+            selected_offer = service_card(form.cleaned_data["service_code"])
         except (ValueError, ArithmeticError):
             form.add_error(None, "سناریو با محدودیت‌های محاسبه سازگار نیست.")
     response = render(
@@ -104,6 +114,9 @@ def service_pricing_workbench(request):
         {
             "form": form,
             "scenario": scenario,
+            "selected_offer": selected_offer,
+            "service_quote_is_internal": True,
+            "public_price_not_authorized": True,
             "financial_claims_verified": False,
             "service_quote_approved": False,
         },
