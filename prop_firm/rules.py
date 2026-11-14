@@ -36,7 +36,7 @@ class Policy:
     phase_one_goal_pct: Decimal = D("9.6")
     phase_two_goal_pct: Decimal = D("6")
     min_challenge_days: int = 6
-    social_posts_per_platform_per_challenge: int = 1
+    social_posts_per_challenge: int = 1
     social_posting_platforms: tuple[str, str] = ("instagram", "facebook")
     max_daily_loss_pct: Decimal = D("4")
     max_total_loss_pct: Decimal = D("8")
