@@ -1,4 +1,4 @@
-name: Mojtaba revenue cycle 02 isolated database and sales controls
+name: Mojtaba revenue cycle 02 isolated database and sales controls v2
 on:
   push:
     branches:
