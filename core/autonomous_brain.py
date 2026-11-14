@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
 from core.service_quote_draft import preview_candidates
+from core.service_lead_handoff import orphaned_handoff_snapshot
 
 @dataclass(frozen=True)
 class Candidate:
@@ -79,8 +80,15 @@ class AutonomousBrain:
         )
         consented_queue = preview_candidates(limit=20)
         consented_proposal_candidates = consented_queue["eligible_count"]
+        orphaned_queue = (
+            {"verified_candidate_count": 0, "uninspected": 0}
+            if consented_proposal_candidates
+            else orphaned_handoff_snapshot()
+        )
         return {
             "consented_service_draft_candidates": consented_proposal_candidates,
+            "verified_orphaned_service_handoffs": orphaned_queue["verified_candidate_count"],
+            "orphaned_service_queue_uninspected": orphaned_queue["uninspected"],
             "consented_service_queue_scan_limited": consented_queue["scan_limit_reached"],
             "consented_service_queue_requires_triage": consented_queue["requires_human_review_count"],
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
@@ -115,6 +123,18 @@ class AutonomousBrain:
             return [Candidate(
                 "income_service_proposal_prepare",
                 "Prepare a nonbinding scoped internal response to a consented real service inquiry.",
+                10, 10, 10, 1,
+            )]
+        if s.get("verified_orphaned_service_handoffs", 0):
+            return [Candidate(
+                "income_service_proposal_prepare",
+                "Recover an audited real service scope into a durable owner-desk follow-up.",
+                10, 10, 10, 1,
+            )]
+        if s.get("orphaned_service_queue_uninspected", 0):
+            return [Candidate(
+                "await_orphaned_service_queue_triage",
+                "Prepared service queue has uninspected records and needs bounded review.",
                 10, 10, 10, 1,
             )]
         if s.get("consented_service_queue_scan_limited", False):
