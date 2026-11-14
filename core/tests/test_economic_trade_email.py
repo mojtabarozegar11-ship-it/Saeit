@@ -3,7 +3,8 @@ from django.test import TestCase, override_settings
 
 from core.approval import ApprovalService
 from core.autonomous_external_trade import authorize_external_trade
-from core.economic_trade_email import mailbox_status, queue_trade_email, send_queued_trade_email
+from core.economic_trade_email import (_legacy_idempotency, mailbox_status,
+                                       queue_trade_email, send_queued_trade_email)
 from core.economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
 from core.models import ApprovalRequest
 
@@ -27,6 +28,31 @@ class EconomicTradeEmailTests(TestCase):
         self.assertEqual(TradeMailbox.objects.count(), 1)
         self.assertEqual(TradeEmailAudit.objects.count(), 2)
         self.assertEqual(first.status, "queued")
+
+    def test_ambiguous_delimiter_keys_do_not_suppress_distinct_trade_drafts(self):
+        a = queue_trade_email(
+            recipient="buyer@example.test", subject="Offer|details", body="Pricing"
+        )
+        b = queue_trade_email(
+            recipient="buyer@example.test", subject="Offer", body="details|Pricing"
+        )
+        self.assertNotEqual(a.pk, b.pk)
+        self.assertNotEqual(a.idempotency_key, b.idempotency_key)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 2)
+
+    def test_preexisting_legacy_key_deduplicates_same_message_after_upgrade(self):
+        original = queue_trade_email(
+            recipient="buyer@example.test", subject="Old inquiry", body="Catalogue"
+        )
+        original.idempotency_key = _legacy_idempotency(
+            "buyer@example.test", "Old inquiry", "Catalogue"
+        )
+        original.save(update_fields=["idempotency_key"])
+        same = queue_trade_email(
+            recipient="buyer@example.test", subject="Old inquiry", body="Catalogue"
+        )
+        self.assertEqual(original.pk, same.pk)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 1)
 
     def test_invalid_recipient_cannot_create_unusable_trade_draft(self):
         for recipient in ("", "not-an-address", " buyer@example.test",
