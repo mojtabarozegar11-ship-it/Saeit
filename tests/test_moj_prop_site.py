@@ -20,6 +20,19 @@ class MojPropCatalogTests(unittest.TestCase):
                 total += len(lang[name])
         self.assertEqual(total, 840)
 
+    def test_fifty_trades_and_bots_are_disclosed_in_every_language(self):
+        for code in SUPPORTED_CODES:
+            with self.subTest(locale=code):
+                context=page_context(code)
+                self.assertEqual(context["minimum_closed_trades"],50)
+                self.assertTrue(context["trader_bots_allowed"])
+                self.assertEqual(set(context["trading"]),{"title","body","bots"})
+                self.assertTrue(all(context["trading"].values()))
+                self.assertIn("50",context["trading"]["body"])
+                self.assertIn("28",context["trading"]["body"])
+        self.assertIn("ربات",page_context("fa")["trading"]["bots"])
+        self.assertIn("bots",page_context("en")["trading"]["bots"])
+
     def test_main_language_english_and_rtl_three_languages(self):
         self.assertEqual(SUPPORTED_CODES[0], "en")
         for code in SUPPORTED_CODES:
