@@ -157,9 +157,16 @@ class DispatchBoundaryTests(unittest.TestCase):
                       '"files_modified": False','"production_release_permitted_by_this_report": False'):
             self.assertIn(field,source)
 
-    def test_29_probe_never_executes_dynamic_network_operations(self):
+    def test_29_probe_only_allows_fixed_owner_local_readonly_uapi(self):
         source=PROBE.read_text()
-        for banned in ("import django","urllib.request","import subprocess","import requests","os.system("):
+        # Local cPanel PassengerApps enumeration is now an explicit narrow
+        # dependency. Arbitrary shell commands or customer network I/O remain
+        # prohibited; the exact argv and timeout are tested independently.
+        self.assertIn('UAPI_CMD = ("uapi", "--output=json", "PassengerApps", "list_applications")',source)
+        self.assertIn("timeout=12, check=False",source)
+        self.assertIn("UAPI_OUTPUT_LIMIT = 131_072",source)
+        for banned in ("import django", "urllib.request", "import requests",
+                       "os.system(", "shell=True", "Popen(", "subprocess.call("):
             self.assertNotIn(banned,source)
 
 
