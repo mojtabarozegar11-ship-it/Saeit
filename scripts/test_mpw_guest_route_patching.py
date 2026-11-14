@@ -20,6 +20,15 @@ def load():
     sys.modules["django.views.decorators.csrf"].csrf_protect = identity
     sys.modules["django.views.decorators.http"].require_GET = identity
     sys.modules["django.views.decorators.http"].require_POST = identity
+    # The real installer registers read-only recovery URLs.  Stub their
+    # handlers without importing Django, email backends or production modules.
+    sys.modules.setdefault("services", types.ModuleType("services"))
+    sys.modules["services"].__path__ = []
+    recovery = types.ModuleType("services.mpw_trx_email_recovery")
+    for name in ("recovery_request", "recovery_verify", "recovery_orders",
+                 "recovery_download"):
+        setattr(recovery, name, old)
+    sys.modules["services.mpw_trx_email_recovery"] = recovery
     variables = {}
     exec(compile(ast.Module(body=functions, type_ignores=[]), "<isolated-guest-patch>", "exec"),
          variables)
@@ -69,6 +78,14 @@ def main():
         assert mapped[path] is value[name], name
         assert mapped[path] is not old
     assert mapped[original[5][0]] is old
+    recovery = (
+        "commerce/trx-easy/recover/",
+        "commerce/trx-easy/recover/verify/",
+        "commerce/trx-easy/recover/orders/",
+        "commerce/trx-easy/recover/download/<int:invoice_id>/",
+    )
+    for route in recovery:
+        assert route in mapped and mapped[route] is old
     saved = value["COMMERCIAL_URLPATTERNS"]
     patch(value)
     assert value["COMMERCIAL_URLPATTERNS"] is saved
@@ -77,6 +94,8 @@ def main():
     rejected_without_mutation(patch, original[:4] + original[5:])
     rejected_without_mutation(patch, original[:2] + (original[1],) + original[2:])
     rejected_without_mutation(patch, original[:3] + (("/bad/route/", None),) + original[3:])
+    # An existing recovery route must fail without touching any handler.
+    rejected_without_mutation(patch, original + (("commerce/trx-easy/recover/", old),))
     print("MPW_GUEST_ROUTE_CONTRACT=PASS;NO_SERVER_IO=TRUE")
 
 if __name__ == "__main__":
