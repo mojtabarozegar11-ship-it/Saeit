@@ -140,5 +140,7 @@ def company_portal_home(request):
                 messages.success(request, "درخواست شما ثبت شد و در صف بررسی شرکت قرار گرفت.")
         else:
             messages.error(request, "اطلاعات درخواست معتبر نیست؛ نام، نوع همکاری، ایمیل، موضوع و شرح درخواست را بررسی کنید.")
-        return redirect("company")
+        # Keep user at the enquiry block so errors and success are visible.
+        from django.urls import reverse
+        return redirect(reverse("company") + "#company-request")
     return None
