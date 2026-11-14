@@ -14,6 +14,68 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = "quality/mpw_support_release_contract_20261113.json"
 
 
+# Candidate runtime file locations are not proven production targets.
+EXPECTED_RUNTIME_SURFACES = {
+    "static_store_fallback": {
+        "public_route": "/store/",
+        "candidate_active_file": "/home/zomorod2/mojplaywin.com/store/index.html",
+        "source_of_hint": ".github/workflows/vps-store-identity-audit.yml",
+        "source_anchor": 'cat > "$STORE/index.html" <<\'HTML\'',
+        "evidence_level": "SOURCE_CANDIDATE_ONLY",
+    },
+    "dynamic_support_handler": {
+        "public_route": "/support/",
+        "candidate_active_file": "/home/zomorod2/Saeit-staging/core/brand_views.py",
+        "source_of_hint": "scripts/mpw_purchase_recovery_copy_fix_20261024.py",
+        "source_anchor": "core/brand_views.py",
+        "evidence_level": "HISTORICAL_PATCH_TARGET_ONLY",
+    },
+}
+
+
+def audit_runtime_surfaces(document: dict, root: Path) -> tuple[list[str], list[str]]:
+    """Separate unverified runtime candidates from repo-owned release files.
+
+    No host access, mutable secrets, incoming evidence or deployment side effects.
+    Promoting a candidate to verified requires a separate authenticated audit.
+    """
+    problems: list[str] = []
+    pending: list[str] = []
+    surfaces = document.get("runtime_surfaces")
+    if not isinstance(surfaces, list):
+        return ["runtime_inventory_missing"], list(EXPECTED_RUNTIME_SURFACES)
+    if len(surfaces) != len(EXPECTED_RUNTIME_SURFACES):
+        problems.append("runtime_surface_count_mismatch")
+    ids = [item.get("id") if isinstance(item, dict) else None for item in surfaces]
+    if len(ids) != len(set(ids)) or set(ids) != set(EXPECTED_RUNTIME_SURFACES):
+        problems.append("runtime_surface_identity_mismatch")
+    for item in surfaces:
+        if not isinstance(item, dict):
+            problems.append("runtime_surface_not_object")
+            continue
+        name = item.get("id")
+        if name not in EXPECTED_RUNTIME_SURFACES:
+            problems.append("unexpected_runtime_surface")
+            continue
+        ref = EXPECTED_RUNTIME_SURFACES[name]
+        for field, required in ref.items():
+            if item.get(field) != required:
+                problems.append("runtime_candidate_changed:" + name + ":" + field)
+        if (item.get("active_file_verified") is not False
+                or item.get("verified_live_sha256") is not None
+                or item.get("verified_rollback") is not False):
+            problems.append("unverified_runtime_claims_ready:" + name)
+        else:
+            pending.append(name)
+        source = root / ref["source_of_hint"]
+        if not source.is_file() or source.is_symlink():
+            problems.append("runtime_hint_source_missing:" + name)
+        elif ref["source_anchor"] not in source.read_text(encoding="utf-8"):
+            problems.append("runtime_hint_anchor_missing:" + name)
+    return problems, pending
+
+
+
 def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
 
@@ -39,6 +101,9 @@ def audit(root: Path = ROOT) -> dict:
         problems.append("authorization_must_remain_false")
     if document.get("operational_mode") != "READ_ONLY_SOURCE_PREFLIGHT":
         problems.append("preflight_must_remain_read_only")
+
+    runtime_problems, runtime_pending = audit_runtime_surfaces(document, root)
+    problems.extend(runtime_problems)
 
     checked = 0
     pending_host_baselines = []
@@ -143,6 +208,9 @@ def audit(root: Path = ROOT) -> dict:
         "production_deployment_authorized": False,
         "production_ready": False,
         "host_baselines_pending": pending_host_baselines,
+        "runtime_candidate_surfaces": len(EXPECTED_RUNTIME_SURFACES),
+        "runtime_surfaces_pending": runtime_pending,
+        "runtime_surfaces_verified": 0,
         "public_pages_verified": 0,
         "live_host_access_verified": False,
         "release_route_matrix": release_routes,
