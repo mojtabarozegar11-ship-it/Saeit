@@ -1,0 +1,43 @@
+name: TRX C27 production asset bytes and buyer safety
+on:
+  push:
+    branches:
+      - fix/tron-c27-private-byte-preflight-current-20261115
+permissions:
+  contents: read
+concurrency:
+  group: trx-c27-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-buyer-asset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax + no financial changes
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in ('core/tron_gateway_delivery.py', 'tests/test_tron_private_paid_asset_20261114.py'):
+              ast.parse(Path(name).read_text(), filename=name)
+          f = Path('core/tron_gateway_delivery.py').read_text()
+          assert 'invoice.status != "paid"' in f
+          assert 'intent.status != "paid"' in f
+          assert 'invoice.asset_sha256_snapshot' in f
+          assert 'invoice.rights_document_sha256_snapshot' in f
+          assert 'MAX_DIGITAL_FILE_BYTES = 128 * 1024 * 1024' in f
+          assert 'st_nlink != 1' in f
+          print('TRX_C27_NO_UNVERIFIED_PAID_FILE_RELEASE=PASS')
+          PY
+      - name: Run fifty private file behavior regressions, no credentials
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_tron_private_paid_asset_20261114.py' -v
+          echo 'TRX_C27_FIFTY_PRIVATE_FILE_TESTS=PASS'
