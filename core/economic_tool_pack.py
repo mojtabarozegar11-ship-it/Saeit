@@ -406,11 +406,44 @@ def factory_native_review(payload):
 
 
 def service_proposal_prepare(payload):
-    """Same master bot: prepare one internal consented service proposal."""
-    # Payload intentionally cannot specify an arbitrary contact or recipient.
-    # This action has no network, billing, SMS, email or publication effect.
+    """Atomically turn one first-party inquiry into a real internal desk task.
+
+    The bot may not report a verified completed service handoff until both the
+    scoped private proposal AND a durable WorkItem exist. Rolling back the
+    outer transaction is essential: retries must not strand a reviewed lead
+    without an assigned follow-up in the single owner's work queue.
+    """
+    from django.db import transaction
     from .service_quote_draft import prepare_next
-    return prepare_next()
+    from .service_lead_handoff import handoff_prepared_inquiry
+    with transaction.atomic():
+        prepared = prepare_next()
+        if prepared.get("verified_effect") is not True:
+            return prepared
+        evidence = prepared.get("evidence") or {}
+        inquiry_id = evidence.get("inquiry_id")
+        handoff = handoff_prepared_inquiry(inquiry_id)
+        if handoff.get("state") != "desk_workitem_created":
+            # The entire draft/receipt transaction is rolled back. This is
+            # a structured internal failure, never a falsely green task.
+            raise ValueError("bot_desk_handoff_unverified")
+        return {
+            **prepared,
+            "state": "prepared_and_desk_handoff",
+            "verified_effect": True,
+            "action_performed": (
+                "Prepared an evidenced service scope and created one real "
+                "owner-desk WorkItem for authorized commercial follow-up."
+            ),
+            "evidence": {
+                **evidence,
+                "workitem_id": handoff["workitem_id"],
+                "desk_handoff_verified": True,
+                "customer_contacted": False,
+                "cash_reconciled": False,
+            },
+            "next_action": "owner_review_real_desk_workitem",
+        }
 
 
 def build_economic_gateway():
