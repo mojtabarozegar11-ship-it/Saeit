@@ -212,6 +212,8 @@ def authorize_funding(*, requested_capital, unencumbered_cash,
     reserve = _nonnegative(payout_reserve, "payout_reserve")
     need = capital + reserve
     reasons = []
+    if capital not in LEVELS:
+        reasons.append("unsupported_capital_tier")
     if cash < need:
         reasons.append("unencumbered_capital_insufficient")
     if legal_approved is not True:
@@ -237,6 +239,8 @@ def authorize_order(*, account_capital, equity, day_open_equity,
     minimum = _nonnegative(broker_minimum_risk, "broker_minimum_risk")
     state = assess_risk(account_capital=capital, equity=equity, day_open_equity=day_open_equity)
     reasons = list(state.reasons)
+    if capital not in LEVELS:
+        reasons.append("unsupported_capital_tier")
     if authoritative_snapshot is not True:
         reasons.append("authoritative_broker_snapshot_required")
     if verified_stop is not True:
