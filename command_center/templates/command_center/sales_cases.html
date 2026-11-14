@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}کارتابل خصوصی استعلام‌های فروش | mojtaba.bot.ai{% endblock %}
+{% block content %}
+<section dir="rtl" style="max-width:1060px;margin:30px auto;padding:20px;line-height:1.9">
+  <p><small>PRIVATE / OWNER ONLY / mojtaba.bot.ai</small></p>
+  <h1>کارتابل بررسی استعلام‌ها و آماده‌سازی پیشنهادهای داخلی</h1>
+  <p>مبنای این فهرست، رکوردهای واقعی CRM شرکت است. هیچ رکوردی به معنی مشتری تأییدشده، قرارداد، پرداخت یا درآمد وصول‌شده نیست.</p>
+  <p>تعداد کل درخواست‌های ذخیره‌شده: <strong>{{ total }}</strong> · نمایش ۲۵ پرونده در هر صفحه</p>
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse">
+    <caption>درخواست‌های شرکت برای بررسی مالک؛ بدون نمایش عمومی</caption>
+    <thead><tr><th scope="col">تاریخ ثبت</th><th scope="col">نوع</th><th scope="col">موضوع</th><th scope="col">وضعیت داخلی</th><th scope="col">پرونده</th></tr></thead>
+    <tbody>
+    {% for item in items %}
+      <tr style="border-bottom:1px solid #888">
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ item.get_kind_display }}</td>
+        <td>{{ item.subject|truncatechars:65 }}</td>
+        <td>{{ item.get_status_display }}</td>
+        <td><a href="{% url 'mojtaba_company_case_detail' item.pk %}">بررسی داخلی پرونده</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5">هنوز هیچ استعلامی در بانک متصل ثبت نشده است.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <nav aria-label="صفحه‌بندی پرونده‌ها" style="display:flex;gap:20px;padding:20px 0">
+    {% if items.has_previous %}<a href="?page={{ items.previous_page_number }}">صفحهٔ قبل</a>{% endif %}
+    <span>صفحهٔ {{ items.number }} از {{ items.paginator.num_pages }}</span>
+    {% if items.has_next %}<a href="?page={{ items.next_page_number }}">صفحهٔ بعد</a>{% endif %}
+  </nav>
+  <p><a href="/staff/command-center/">مرکز فرماندهی</a> · <a href="/contact/">فرم عمومی استعلام خدمات</a></p>
+  <p>اطلاعات خصوصی است؛ ارسال پیام، صدور پیش‌فاکتور رسمی و فعال‌سازی پرداخت از این صفحه ممکن نیست.</p>
+</section>
+{% endblock %}
