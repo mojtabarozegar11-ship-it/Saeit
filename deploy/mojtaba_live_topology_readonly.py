@@ -191,6 +191,20 @@ def safe_service_units(stdout: str) -> list[dict]:
         if len(parts) < 4 or not parts[0].endswith(".service"):
             continue
         flags = route_flags(parts[0])
+        if not flags:
+            # systemd allows named service variants (e.g.
+            # newsletter_process_queue-private.service). Match only a
+            # bounded unit-name suffix, not arbitrary process argv or a
+            # name embedded inside an unrelated service identifier.
+            flags = [
+                tag for tag in ROUTES
+                if re.search(
+                    r"(?<![0-9a-z_.-])" + re.escape(tag)
+                    + r"-[0-9a-z_.@-]+\.service$",
+                    parts[0],
+                    flags=re.IGNORECASE,
+                )
+            ]
         if flags:
             entries.append({
                 "unit_name_digest": hashlib.sha256(parts[0].encode()).hexdigest()[:16],
