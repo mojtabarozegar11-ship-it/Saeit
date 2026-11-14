@@ -182,19 +182,20 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
-        # A guest invoice must acquire an immutable per-order email claim in
-        # the same database transaction as its order. Never create a payable
-        # orphan invoice if the verified binding component is not installed.
-        # Keep the later recovery/mail feature disabled independently.
-        try:
-            from services.mpw_trx_email_recovery import bound_checkout
-        except ImportError as exc:
-            raise Http404("Guest buyer email order binding unavailable") from exc
-        if not callable(bound_checkout):
-            raise Http404("Guest buyer email order binding unavailable")
-        return bound_checkout(
-            request, view, _identity, _install_cookie, args, kwargs,
-        )
+        # Registered buyers retain the existing authenticated checkout path.
+        # Only an anonymous/guest invoice requires the durable per-order email
+        # claim. Do not block logged-in customers when guest recovery is absent.
+        current = getattr(request, "user", None)
+        if current is None or not getattr(current, "is_authenticated", False):
+            try:
+                from services.mpw_trx_email_recovery import bound_checkout
+            except ImportError as exc:
+                raise Http404("Guest buyer email order binding unavailable") from exc
+            if not callable(bound_checkout):
+                raise Http404("Guest buyer email order binding unavailable")
+            return bound_checkout(
+                request, view, _identity, _install_cookie, args, kwargs,
+            )
     user, token = _identity(request, create=False)
     request.user = user
     response = view(request, *args, **kwargs)

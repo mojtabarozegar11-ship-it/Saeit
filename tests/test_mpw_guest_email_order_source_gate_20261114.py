@@ -236,6 +236,17 @@ class DispatchRuntimeTests(unittest.TestCase):
         self.identity.assert_not_called()
         self.view.assert_not_called()
 
+    def test_authenticated_checkout_keeps_existing_purchase_path_without_guest_recovery(self):
+        request = types.SimpleNamespace(user=types.SimpleNamespace(
+            is_authenticated=True))
+        with self._mock_import(missing=True):
+            response = self.dispatch(request, self.view, (72,), {}, create=True)
+        self.assertEqual(response, {"status_code": 200})
+        self.assertIs(request.user, self.user)
+        self.identity.assert_called_once_with(request, create=False)
+        self.view.assert_called_once_with(request, 72)
+        self.cookie.assert_called_once_with(response, self.token)
+
     def test_noncreating_invoice_status_still_calls_legacy_owner_read(self):
         request = types.SimpleNamespace()
         response = self.dispatch(request, self.view, (17,), {}, create=False)
