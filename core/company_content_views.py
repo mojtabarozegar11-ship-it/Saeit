@@ -121,7 +121,7 @@ class CompanyInquiryForm(forms.ModelForm):
             created_at__gte=timezone.now() - timedelta(minutes=3),
         ).exists():
             raise forms.ValidationError(
-                "This exact inquiry has already been received recently."
+                "درخواست یکسان اخیراً دریافت شده و دوباره ثبت نمی‌شود."
             )
         return cleaned
 
@@ -155,6 +155,11 @@ def company_portal_home(request):
             inquiry.save()
             messages.success(request, "درخواست در دفتر شرکت ثبت شد؛ بررسی و پاسخ پس از ارزیابی انجام می‌شود و پذیرش خدمت قطعی نیست.")
         else:
-            messages.error(request, "درخواست ثبت نشد؛ اطلاعات، رضایت پردازش داده و تکراری نبودن پیام را بررسی کنید.")
-        return redirect("company")
+            if any("درخواست یکسان اخیراً دریافت شده" in message
+                   for message in form.non_field_errors()):
+                messages.info(request, "درخواست یکسان شما قبلاً در دفتر شرکت ثبت شده است؛ نیازی به ارسال دوباره نیست.")
+            else:
+                messages.error(request, "درخواست ثبت نشد؛ اطلاعات و رضایت پردازش داده را بررسی کنید.")
+        from django.urls import reverse
+        return redirect(reverse("company") + "#company-request")
     return None
