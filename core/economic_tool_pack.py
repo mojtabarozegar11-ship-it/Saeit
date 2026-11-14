@@ -5,6 +5,7 @@ financial commitments remain behind the existing approval boundary.
 """
 import hashlib
 import html
+import json
 import os
 import importlib.util
 from pathlib import Path
@@ -446,6 +447,75 @@ def master_self_improvement(payload):
     }
 
 
+
+def service_package(payload):
+    """Produce one private, source-verified deliverable for an authorized task.
+
+    This is an INTERNAL capability of the existing economic master; no new agent,
+    worker, scheduler, buyer communication, transaction or public file is made.
+    """
+    from .mojtaba_commercial_services import generate, private_dir
+    if not isinstance(payload, dict) or set(payload) != {"service_code", "data"}:
+        raise ValueError("SERVICE_PACKAGE_INPUT_INVALID")
+    try:
+        canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                               separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("SERVICE_PACKAGE_JSON_INVALID") from exc
+    if len(canonical) > 65536:
+        raise ValueError("SERVICE_PACKAGE_INPUT_TOO_LARGE")
+    digest = hashlib.sha256(canonical).hexdigest()
+    try:
+        document = generate(payload, digest)
+    except (TypeError, ValueError) as exc:
+        # Do not log or echo original client values through provider stacktraces.
+        raise ValueError("SERVICE_PACKAGE_VALIDATION_FAILED") from None
+
+    root = private_dir()
+    target = root / f"{payload['service_code']}-{digest[:20]}.md"
+    if target.is_symlink():
+        raise ValueError("SERVICE_PACKAGE_OUTPUT_SYMLINK")
+    if target.exists():
+        if not target.is_file() or target.read_text(encoding="utf-8") != document:
+            raise ValueError("SERVICE_PACKAGE_OUTPUT_COLLISION")
+        return {
+            "action_performed": "Verified existing private service package; no new deliverable produced.",
+            "verified_effect": False, "evidence": _evidence("existing_service_package", {
+                "service_code": payload["service_code"], "input_sha256": digest,
+            }),
+            "revenue_not_assessed": True,
+            "next_action": "owner_review_existing_deliverable",
+        }
+    fd, tmp = tempfile.mkstemp(prefix=".service-", dir=str(root))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(document)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    written = target.read_bytes()
+    if hashlib.sha256(written).hexdigest() != hashlib.sha256(
+            document.encode("utf-8")).hexdigest():
+        raise ValueError("SERVICE_PACKAGE_POSTWRITE_INTEGRITY_FAILED")
+    return {
+        "action_performed": "Created verified private nonbinding service analysis package.",
+        "verified_effect": True,
+        "evidence": _evidence("private_service_package", {
+            "service_code": payload["service_code"], "input_sha256": digest,
+            "output_sha256": hashlib.sha256(written).hexdigest(),
+            "bytes": len(written),
+            "customer_delivered": False, "revenue_verified": False,
+        }),
+        "customer_delivered": False,
+        "revenue_not_assessed": True,
+        "next_action": "owner_review_service_deliverable",
+    }
+
+
 def factory_native_review(payload):
     # This executor is intentionally *private VPS-only*. Never accept a
     # caller-supplied root, production website path, or output destination.
@@ -459,6 +529,7 @@ def build_economic_gateway():
     return ToolGateway([
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
+        ToolSpec(code="income_service_package", handler=service_package, risk="medium"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
