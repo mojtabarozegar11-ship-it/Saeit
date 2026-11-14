@@ -1,4 +1,5 @@
 from datetime import timedelta
+import re
 
 from django import forms
 from django.http import Http404
@@ -38,10 +39,72 @@ class CompanyInquiryForm(forms.ModelForm):
         label="I agree to processing for inquiry response and follow-up.",
     )
     # Invisible field never persisted to CRM.
-    website = forms.CharField(required=False, widget=forms.HiddenInput)
+    website = forms.CharField(required=False, max_length=128, widget=forms.HiddenInput)
+
+    @staticmethod
+    def _clean_customer_text(value, *, multiline=False):
+        if not isinstance(value, str):
+            raise forms.ValidationError("اطلاعات متنی نامعتبر است.")
+        # Ignore harmless surrounding whitespace, preserve Persian letters.
+        value = value.strip()
+        if multiline:
+            value = value.replace("\r\n", "\n").replace("\r", "\n")
+        else:
+            value = " ".join(value.split())
+        for ch in value:
+            code = ord(ch)
+            if code < 32 and not (multiline and ch in ("\n", "\t")):
+                raise forms.ValidationError("کاراکتر کنترلی نامعتبر است.")
+            # Invisible overrides can reverse customer references and links.
+            if code == 127 or 0x202A <= code <= 0x202E or 0x2066 <= code <= 0x2069:
+                raise forms.ValidationError("کاراکتر کنترلی نامعتبر است.")
+        return value
+
+    def clean_website(self):
+        if self.cleaned_data.get("website", "").strip():
+            raise forms.ValidationError("درخواست نامعتبر است.")
+        return ""
+
+    def clean_name(self):
+        value = self._clean_customer_text(self.cleaned_data["name"])
+        if not value:
+            raise forms.ValidationError("نام الزامی است.")
+        return value
+
+    def clean_organization(self):
+        return self._clean_customer_text(self.cleaned_data.get("organization", ""))
+
+    def clean_subject(self):
+        value = self._clean_customer_text(self.cleaned_data["subject"])
+        if not value:
+            raise forms.ValidationError("موضوع درخواست الزامی است.")
+        return value
+
+    def clean_message(self):
+        value = self._clean_customer_text(self.cleaned_data["message"], multiline=True)
+        if not value:
+            raise forms.ValidationError("شرح درخواست الزامی است.")
+        return value
 
     def clean_email(self):
-        return self.cleaned_data["email"].strip().casefold()
+        email = self.cleaned_data["email"].strip()
+        local, at, domain = email.rpartition("@")
+        if not at or not local or not domain:
+            raise forms.ValidationError("نشانی ایمیل نامعتبر است.")
+        # Email local parts are not universally case-insensitive.
+        return local + "@" + domain.lower()
+
+    def clean_phone(self):
+        phone = self._clean_customer_text(self.cleaned_data.get("phone", ""))
+        if not phone:
+            return ""
+        if not re.fullmatch(r"\+?[\d\s().-]+", phone):
+            raise forms.ValidationError("قالب شماره تلفن نامعتبر است.")
+        count = sum(ch.isdigit() for ch in phone)
+        if not 7 <= count <= 15:
+            raise forms.ValidationError("طول شماره تلفن نامعتبر است.")
+        return phone
+
 
     def clean(self):
         cleaned = super().clean()
@@ -51,8 +114,9 @@ class CompanyInquiryForm(forms.ModelForm):
             cleaned.get("email"), cleaned.get("subject"), cleaned.get("message")
         )
         if email and subject and message and CompanyInquiry.objects.filter(
-            email__iexact=email,
-            subject__iexact=subject,
+            kind=cleaned.get("kind"),
+            email=email,
+            subject=subject,
             message=message,
             created_at__gte=timezone.now() - timedelta(minutes=3),
         ).exists():
