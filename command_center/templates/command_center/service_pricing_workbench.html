@@ -33,6 +33,15 @@
 </form>
 </section>
 {% if scenario %}
+<section class="box" aria-label="دامنه واقعی خدمت انتخاب‌شده">
+<h2>خدمت {{ selected_offer.service_code }} — {{ selected_offer.title_fa }}</h2>
+<p><strong>مشتری هدف:</strong> {{ selected_offer.customer }}</p>
+<p><strong>ورودی لازم:</strong> {{ selected_offer.input }}</p>
+<p><strong>چه چیزی واقعاً تحویل می‌شود (فقط پس از ارزیابی امکان اجرا):</strong></p>
+<ul>{% for item in selected_offer.deliverables %}<li>{{ item }}</li>{% endfor %}</ul>
+<p><strong>محدودیت:</strong> {{ selected_offer.limitation }}</p>
+<p class="muted">قیمت محاسبه‌شده، برآورد مفروض داخلی است و برای ارسال به مشتری، ثبت سفارش یا اعلام در سایت مجاز نیست. برآورد ظرفیت، حق استفاده از داده‌ها، توافق دامنه، مسئول تحویل و روش دریافت قانونی وجه باید مستقل تأیید شود.</p>
+</section>
 <section class="box" aria-label="نتیجه سناریو">
 <h2>نتیجه محاسبه – {{ scenario.currency }}</h2>
 <div class="kv">
