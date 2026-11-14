@@ -391,6 +391,85 @@ class CheckoutReleaseFormTests(unittest.TestCase):
 
 
 
+    def test_form_itself_cannot_be_hidden(self):
+        html = ('<form hidden method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form>')
+        self.assertFalse(self.check(html))
+
+    def test_form_style_display_none_fails_closed(self):
+        html = ('<form style="display:none" method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form>')
+        self.assertFalse(self.check(html))
+
+    def test_checkout_in_hidden_parent_is_not_eligible(self):
+        html = ('<div hidden><form method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form></div>')
+        self.assertFalse(self.check(html))
+
+    def test_checkout_in_aria_hidden_ancestor_is_not_eligible(self):
+        html = ('<section aria-hidden="true"><form method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form></section>')
+        self.assertFalse(self.check(html))
+
+    def test_checkout_in_inert_ancestor_is_not_eligible(self):
+        html = ('<div inert><form method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form></div>')
+        self.assertFalse(self.check(html))
+
+    def test_checkout_in_disabled_ancestor_fieldset_fails_closed(self):
+        html = ('<fieldset disabled><form method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required></form></fieldset>')
+        self.assertFalse(self.check(html))
+
+    def test_buyer_email_must_not_override_form_owner(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required form="other"></form>')
+        self.assertFalse(self.check(html))
+
+    def test_csrf_must_not_override_form_owner(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required>'
+                '<input type="hidden" name="csrfmiddlewaretoken" form="other" '
+                'value="' + "A" * 64 + '"></form>')
+        self.assertFalse(self.check(html, require_csrf=True))
+
+    def test_email_inside_datalist_is_not_submittable(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<datalist><input name="email" type="email" required>'
+                '</datalist></form>')
+        self.assertFalse(self.check(html))
+
+    def test_select_named_email_invalidates_sole_email_gate(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required>'
+                '<select name="email"><option value="x">X</option></select>'
+                '</form>')
+        self.assertFalse(self.check(html))
+
+    def test_textarea_named_csrf_invalidates_sole_csrf_gate(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required>'
+                '<input type="hidden" name="csrfmiddlewaretoken" value="' +
+                "A" * 64 + '"><textarea name="csrfmiddlewaretoken">x</textarea>'
+                '</form>')
+        self.assertFalse(self.check(html, require_csrf=True))
+
+    def test_valid_form_with_semantic_container_passes(self):
+        html = ('<main><section><form method="post" '
+                'action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required>'
+                '<input type="hidden" name="csrfmiddlewaretoken" value="' +
+                "A" * 64 + '"></form></section></main>')
+        self.assertTrue(self.check(
+            html, expected_action="/commerce/trx-easy/start/72/",
+            require_csrf=True))
+
+
 class CheckoutSourcePreflightTests(unittest.TestCase):
     """Temporary files only; never touch production hosting."""
 
