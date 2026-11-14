@@ -1,17 +1,16 @@
 """Contact-only PHP review gates; avoid changing other shared-shell routes."""
 from pathlib import Path
-import re
 import subprocess
 
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/"scripts/mpw_dynamic_main_shell_20261019.php"
-BASE="8751d8bfd47354ba18d1efe75166404127a5bb4a"
+BASE_FIXTURE=ROOT/"tests/fixtures/mpw_main_shell_pre_contact_opening_8751d8b.txt"
 
 def test_new_contact_branch_is_scoped_and_does_not_modify_allowed_routes():
     new=SOURCE.read_text("utf-8")
-    before=subprocess.run(
-        ["git","show",BASE+":scripts/mpw_dynamic_main_shell_20261019.php"],
-        cwd=ROOT,text=True,capture_output=True,check=True).stdout
+    # A tracked historical fixture remains available in shallow CI checkouts.
+    # Keep exact byte-for-byte scope comparison; do not weaken the route guard.
+    before=BASE_FIXTURE.read_text(encoding="utf-8")
     opening=new.split("function transformMain",1)[0]
     old_opening=before.split("function transformMain",1)[0]
     assert opening==old_opening,"Shared route inventory/header changed"
