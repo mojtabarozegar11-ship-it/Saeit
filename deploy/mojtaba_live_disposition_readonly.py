@@ -293,6 +293,22 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
                 if php.get("state") == "source_registry_snapshot_only":
                     obs["php_known_roles_found"] = trusted_count(php.get("known_roles_found"))
                     obs["php_enabled_records_not_active_bots"] = trusted_count(php.get("enabled_count"))
+                    # Separate known and unrecognized enabled identities; a
+                    # total alone can falsely imply all roles were inventoried.
+                    known_enabled = php.get("known_enabled_count")
+                    unknown_enabled = php.get("unknown_enabled_count")
+                    if known_enabled is None or unknown_enabled is None:
+                        blockers.append("php_enabled_identity_breakdown_unavailable")
+                    else:
+                        known_enabled = trusted_count(known_enabled)
+                        unknown_enabled = trusted_count(unknown_enabled)
+                        if known_enabled + unknown_enabled != obs["php_enabled_records_not_active_bots"]:
+                            blockers.append("php_enabled_identity_counts_inconsistent")
+                        else:
+                            obs["php_known_enabled_records_not_active_bots"] = known_enabled
+                            obs["php_unknown_enabled_records_not_active_bots"] = unknown_enabled
+                            if unknown_enabled:
+                                blockers.append("unknown_enabled_php_identities_need_reconciliation")
                 else:
                     blockers.append("private_php_sqlite_snapshot_unavailable")
             if any(obs[k] != "observed" for k in
