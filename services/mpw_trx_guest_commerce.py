@@ -323,6 +323,11 @@ def patch_commercial(namespace):
         normalized = route.rstrip("/") + "/"
         matches = [name for token, name in route_names
                    if token in normalized]
+        # Never rebind an unrelated endpoint that happens to end in /start/,
+        # /invoice/, etc.  The adapter owns only the TRX checkout URL tree.
+        # Reject a foreign action-shaped route rather than silently hijacking it.
+        if matches and not normalized.startswith("/commerce/trx-easy/"):
+            raise RuntimeError("TRX action route outside checkout prefix")
         if len(matches) > 1 or (matches and not any(
                 normalized.endswith(token) for token, _ in route_names)):
             raise RuntimeError("Ambiguous TRX URL route")
