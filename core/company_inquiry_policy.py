@@ -8,6 +8,7 @@ customer-submitted subject alone. No customer identity is recorded here.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 
 MAX_NEW_LEADS_PER_SESSION = 6
 WINDOW_SECONDS = 60 * 60
@@ -78,11 +79,23 @@ def provenance(kind, subject, internal_note):
     # Staff may append notes on later lines. The original server-generated
     # first line remains the exact intake provenance, never a free-text title.
     initial_stamp = internal_note.split("\n", 1)[0]
-    return (
-        kind == "commercial" and subject == FARM_SUBJECT
-        and initial_stamp.startswith(CONSENT_MARKER + "; confirmed_at=")
-        and initial_stamp.endswith("; source=farm")
-    )
+    if kind != "commercial" or subject != FARM_SUBJECT:
+        return False
+    prefix, suffix = CONSENT_MARKER + "; confirmed_at=", "; source=farm"
+    if not initial_stamp.startswith(prefix) or not initial_stamp.endswith(suffix):
+        return False
+    recorded_at = initial_stamp[len(prefix):-len(suffix)]
+    # A literal, timezone-aware server timestamp is required. Arbitrary text,
+    # a naive date, extra semicolons, or impossible dates never qualify as
+    # an evidenced farm-service lead in management reports.
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?[+-]\d{2}:\d{2}", recorded_at):
+        return False
+    try:
+        observed = datetime.fromisoformat(recorded_at)
+        offset = observed.utcoffset()
+        return offset is not None and abs(offset) <= timedelta(hours=14)
+    except (ValueError, OverflowError):
+        return False
 
 
 def normalize_customer_text(value, *, multiline=False):
