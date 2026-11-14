@@ -18,7 +18,7 @@ import sys
 
 ROOT = Path.home() / "public_html" / "ask-master"
 MAX_SOURCE = 400_000
-PHP = ("index.php", "app.php")
+PHP = ("index.php",)  # Additional owner-local PHP files enumerated below
 S = {
     "post_branch": rb"\$_SERVER\s*\[\s*['\"]REQUEST_METHOD['\"]\s*\]|\$_POST\b",
     "email_validation": rb"FILTER_VALIDATE_EMAIL|filter_var\s*\(",
@@ -39,7 +39,7 @@ S = {
     "email_dispatch": rb"\bmail\s*\(|PHPMailer|SMTP",
     "cookie_session": rb"session_set_cookie_params\s*\(|setcookie\s*\(",
     "exception_handling": rb"\bcatch\s*\(",
-    "success_receipt": rb"receipt|ticket|tracking|شماره",
+    "success_receipt": rb"receipt|ticket|tracking",
     "error_log": rb"error_log\s*\(",
     "robots_privacy": rb"noindex|no-store",
     "html_output_escape": rb"htmlspecialchars\s*\(|htmlentities\s*\(",
@@ -60,7 +60,17 @@ def main() -> int:
         out("STATE", "NO_SAFE_PHP_ROOT")
         return 13
     contents = []
-    for basename in PHP:
+    if not (ROOT / "index.php").is_file():
+        out("STATE", "NO_INDEX_FILE")
+        return 14
+    names = list(PHP) + sorted(
+        f.name for f in ROOT.glob("*.php")
+        if f.name not in PHP
+    )
+    if len(names) > 12:
+        out("STATE", "TOO_MANY_LOCAL_PHP_FILES")
+        return 14
+    for basename in names:
         f = ROOT / basename
         if not f.exists() and not f.is_symlink():
             out("SOURCE_"+basename.replace(".", "_").upper()+"_EXISTS", "false")
