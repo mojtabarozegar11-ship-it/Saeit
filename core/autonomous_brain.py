@@ -98,10 +98,15 @@ class AutonomousBrain:
         c=[]
         if s["unfinished_tasks"]:
             return [Candidate("continue_existing_work","An unfinished task must be resolved first.",10,10,10,1)]
-        # A newly recorded payment is more urgent than any internal planning
-        # prerequisite. Check evidence first; never infer settled revenue.
+        # Internal Order/Ledger statuses do NOT contain independent PSP or
+        # chain finality evidence. Stop at an external reconciliation boundary;
+        # do not queue a no-op 'revenue verify' as an economic success.
         if s.get("financial_event_needs_reconcile", False):
-            return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+            return [Candidate(
+                "await_external_settlement_evidence",
+                "Internal financial events require independent PSP/bank/chain settlement proof.",
+                10, 10, 10, 1,
+            )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
             return [Candidate(
                 "await_external_self_improvement_review",
