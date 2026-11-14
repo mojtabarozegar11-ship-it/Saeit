@@ -216,6 +216,18 @@ def test_constant_byte_verifier_key_rejected():
         build_cyber_gateway_tools(b"A" * 64, enable_offline=True)
 
 
+def test_short_period_repeated_verifier_keys_rejected():
+    """Two- through eight-byte periodic keys are not acceptable HMAC secrets."""
+    for pattern in (b"AB", b"ABC", b"ABCDEFGH"):
+        key = pattern * (48 // len(pattern))
+        with pytest.raises(CyberModuleError, match="VERIFIER_KEY_INVALID"):
+            build_cyber_gateway_tools(key, enable_offline=True)
+
+
+def test_genuine_nonperiodic_verifier_key_accepted():
+    assert len(build_cyber_gateway_tools(KEY)) == 3
+
+
 def test_non_boolean_activation_rejected():
     with pytest.raises(CyberModuleError, match="ENABLED_FLAG_INVALID"):
         build_cyber_gateway_tools(KEY, enable_offline="true")
