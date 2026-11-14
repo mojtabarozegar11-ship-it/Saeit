@@ -7,10 +7,10 @@ import json
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count
 from django.utils import timezone
 
 from core.company_inquiry_models import CompanyInquiry
+from core.company_inquiry_policy import provenance
 
 _STATES = ("new", "reviewing", "approved", "closed")
 
@@ -26,18 +26,21 @@ class Command(BaseCommand):
         if type(days) is not int or not 1 <= days <= 366:
             raise ValueError("days must be an integer in 1..366")
         cutoff = timezone.now() - timedelta(days=days)
+        # A customer-controlled subject is NOT proof of which intake path
+        # created the record. Require the server-stamped consent/source marker.
         rows = CompanyInquiry.objects.filter(
-            kind="commercial",
-            subject__startswith="ZM-FARM",
+            kind="commercial", subject__startswith="ZM-FARM",
             created_at__gte=cutoff,
-        ).values("status").annotate(count=Count("id")).order_by("status")
+        ).values("kind", "subject", "internal_note", "status").iterator(chunk_size=200)
         counts = {state: 0 for state in _STATES}
         unknown_status = 0
         for row in rows:
+            if not provenance(row["kind"], row["subject"], row["internal_note"]):
+                continue
             if row["status"] in counts:
-                counts[row["status"]] += row["count"]
+                counts[row["status"]] += 1
             else:
-                unknown_status += row["count"]
+                unknown_status += 1
         result = {
             "schema": "zomorod.farm.inquiry-pipeline.v1",
             "source": "CompanyInquiry persisted CRM",
