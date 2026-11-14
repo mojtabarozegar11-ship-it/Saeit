@@ -66,8 +66,9 @@ def _https_rpc(base: str, endpoint: str, txid: str) -> dict:
 
 def _single_proof(txid: str, receiver_hex: str, sun: int,
                   issued_ms: int, expires_ms: int, body: dict, receipt: dict):
-    if (body.get("txID", "").lower() != txid or
-            receipt.get("id", "").lower() != txid):
+    if (type(body.get("txID")) is not str or
+            type(receipt.get("id")) is not str or
+            body["txID"].lower() != txid or receipt["id"].lower() != txid):
         raise PaymentNotFinal("Transaction ID does not match")
     contracts = (body.get("raw_data") or {}).get("contract")
     if type(contracts) is not list or len(contracts) != 1:
@@ -82,7 +83,8 @@ def _single_proof(txid: str, receiver_hex: str, sun: int,
             type(data.get("amount")) is not int or data["amount"] != sun):
         raise PaymentNotFinal("Destination or amount does not match invoice")
     result = body.get("ret")
-    if type(result) is not list or len(result) != 1 or result[0].get("contractRet") != "SUCCESS":
+    if (type(result) is not list or len(result) != 1 or
+            type(result[0]) is not dict or result[0].get("contractRet") != "SUCCESS"):
         raise PaymentNotFinal("Transaction did not execute successfully")
     execution = receipt.get("receipt", {})
     if type(execution) is not dict or execution.get("result", "SUCCESS") != "SUCCESS":
