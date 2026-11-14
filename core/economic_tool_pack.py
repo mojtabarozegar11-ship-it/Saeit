@@ -532,6 +532,25 @@ def service_package(payload):
     }
 
 
+def quote_packet(payload):
+    """Create one private, nonbinding cost scenario; never an approved quote."""
+    from .mojtaba_private_quote import prepare_private_quote
+    outcome = prepare_private_quote(payload)
+    return {
+        "action_performed": (
+            "Created private cost-verified six-service quote scenario."
+            if outcome["created"] else
+            "Verified existing private quote scenario; no new quote produced."
+        ),
+        "verified_effect": outcome["created"] is True,
+        "evidence": _evidence("private_quote_scenario", outcome),
+        "price_approved": False,
+        "external_payment_verified": False,
+        "revenue_not_assessed": True,
+        "next_action": "owner_review_service_price_and_legal_payment",
+    }
+
+
 def factory_native_review(payload):
     # This executor is intentionally *private VPS-only*. Never accept a
     # caller-supplied root, production website path, or output destination.
@@ -546,6 +565,7 @@ def build_economic_gateway():
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
         ToolSpec(code="income_service_package", handler=service_package, risk="medium"),
+        ToolSpec(code="income_quote_scenario", handler=quote_packet, risk="medium"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
