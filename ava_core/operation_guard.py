@@ -22,21 +22,26 @@ class Approval:
 
 def authorize(action: str, resource: str, approval: Approval | None = None,
               *, now: datetime | None = None) -> bool:
-    """Return True only for nonsensitive operations or exact valid approvals.
-
-    True is not a command to execute; downstream enforcement remains required.
-    """
-    if not action or not resource or not action.strip() or not resource.strip():
+    """Pure allowlist decision, not an authorization receipt or execution."""
+    if (type(action) is not str or not action.strip()
+            or type(resource) is not str or not resource.strip()):
         return False
     if action not in SENSITIVE:
-        return False  # Unknown actions are denied until explicitly classified.
-    if approval is None or not approval.verified or not approval.approval_id.strip():
         return False
-    if approval.action != action or approval.resource != resource:
+    if (not isinstance(approval, Approval) or approval.verified is not True
+            or type(approval.approval_id) is not str
+            or not approval.approval_id.strip()):
         return False
-    if approval.expires_at.tzinfo is None:
+    if (type(approval.action) is not str or type(approval.resource) is not str
+            or approval.action != action or approval.resource != resource):
         return False
+    expiry = approval.expires_at
     instant = now if now is not None else datetime.now(timezone.utc)
-    if instant.tzinfo is None:
+    if not isinstance(expiry, datetime) or not isinstance(instant, datetime):
         return False
-    return instant < approval.expires_at
+    try:
+        if expiry.utcoffset() is None or instant.utcoffset() is None:
+            return False
+        return instant < expiry
+    except (TypeError, ValueError, OverflowError):
+        return False
