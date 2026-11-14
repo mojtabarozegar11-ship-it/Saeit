@@ -527,11 +527,11 @@ def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
 def test_cron_macro_shortcuts_are_recorded_and_redacted():
     secret = "PRIVATE_CRON_TOKEN_NOT_FOR_LOGS"
     raw = (
-        f"@reboot python manage.py run_economic_worker --secret {secret}\\n"
-        "@daily\tpython manage.py knowledge_agent_cycle\\n"
-        "@hourly python manage.py newsletter_process_queue\\n"
-        "@monthly python unrelated.py\\n"
-    ).replace("\\\\n", "\\n")
+        f"@reboot python manage.py run_economic_worker --secret {secret}\n"
+        "@daily\tpython manage.py knowledge_agent_cycle\n"
+        "@hourly python manage.py newsletter_process_queue\n"
+        "@monthly python unrelated.py\n"
+    )
     rows = observer.safe_cron(raw)
     assert [row["schedule"] for row in rows] == [
         "@reboot", "@daily", "@hourly", "@monthly",
@@ -547,11 +547,11 @@ def test_cron_macro_shortcuts_are_recorded_and_redacted():
 
 def test_cron_macro_rejects_unknown_malformed_and_empty_shortcuts():
     rows = observer.safe_cron(
-        "@random python manage.py run_economic_worker\\n"
-        "@reboot\\n"
-        "@hourly    \\n"
-        "# @daily python manage.py knowledge_agent_cycle\\n"
-        "@annually\tpython manage.py weather_agent_cycle\\n"
+        "@random python manage.py run_economic_worker\n"
+        "@reboot\n"
+        "@hourly    \n"
+        "# @daily python manage.py knowledge_agent_cycle\n"
+        "@annually\tpython manage.py weather_agent_cycle\n"
     )
     assert len(rows) == 1
     assert rows[0]["schedule"] == "@annually"
@@ -594,7 +594,7 @@ def test_vps_collector_never_claims_sqlite_query(tmp_path):
 
 def test_macro_cron_inventory_is_not_live_worker_attestation(tmp_path):
     with patch.object(observer, "call_readonly", side_effect=[
-        ("observed", "@reboot python manage.py run_economic_worker\\n"),
+        ("observed", "@reboot python manage.py run_economic_worker\n"),
         ("unavailable", ""), ("unavailable", ""), ("unavailable", ""),
     ]):
         row = observer.collect("vps", home=tmp_path, username="githubops")
