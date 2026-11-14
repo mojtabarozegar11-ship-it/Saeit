@@ -23,6 +23,7 @@ fs.mkdirSync(out,{recursive:true});
           // One sequential browser page; bounded retry only if the first fetch fails.
           const response=await p.goto('https://zomorodmelal.ir'+uri,{
             waitUntil:'domcontentloaded',timeout:attempt===1?16000:12000});
+          delete item.error;
           item.http=response?.status();
           item.documentPath=new URL(p.url()).pathname;
           if(item.http!==200 || item.documentPath!==uri){
@@ -93,6 +94,8 @@ fs.mkdirSync(out,{recursive:true});
           delete item.error;
           break;
         }catch(e){
+          delete item.http;
+          delete item.documentPath;
           item.error=String(e).slice(0,210);
           item.censusComplete=false;
           item.attempts.push({number:attempt,ok:false,
@@ -113,16 +116,16 @@ fs.mkdirSync(out,{recursive:true});
   fs.writeFileSync(path.join(out,'computed-palette.json'),JSON.stringify({summary,pages:all},null,2));
   if(process.env.GITHUB_STEP_SUMMARY){
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-      '\\n## Existing interior pages: computed backgrounds (no site changes)\\n\\n'+
-      '| URL | Background | Result | Dark full-width bands | HTTP | Attempts |\\n'+
-      '|---|---|---|---:|---:|---:|\\n'+
+      '\n## Existing interior pages: computed backgrounds (no site changes)\n\n'+
+      '| URL | Background | Result | Dark full-width bands | HTTP | Attempts |\n'+
+      '|---|---|---|---:|---:|---:|\n'+
       all.map(x=>'| '+x.path+' | '+(x.bodyBg||'unavailable')+
         ' | '+x.censusStatus+' | '+(x.blackBands?.length||0)+
-        ' | '+(x.http||0)+' | '+x.attempts.length+' |\\n').join('')+
+        ' | '+(x.http||0)+' | '+x.attempts.length+' |\n').join('')+
       '\n**Verified DOM:** '+summary.inspected+'/'+summary.total+
       '; **transient failures recovered:** '+summary.transientFailures.length+
       '; **unknown routes:** '+summary.failedRoutes.length+
-      '. Homepage excluded. Timeouts and missing pages are never counted as success.\\n');
+      '. Homepage excluded. Timeouts and missing pages are never counted as success.\n');
   }
   if(!summary.allRoutesInspected)process.exitCode=1;
 })().catch(e=>{console.error('ZM_INTERIOR_PALETTE_FATAL',e);process.exitCode=1});
