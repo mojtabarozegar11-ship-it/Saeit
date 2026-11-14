@@ -404,6 +404,15 @@ def test_observed_process_inventory_requires_explicit_route_counts():
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+def test_observed_cron_without_entries_is_not_an_empty_inventory():
+    vps = snap("vps")
+    vps["cron"]["state"] = "observed"
+    vps["cron"].pop("entries", None)
+    with pytest.raises(ValueError, match="TOPOLOGY_CRON_ENTRIES_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
