@@ -20,6 +20,9 @@ from django.views.decorators.http import require_http_methods
 
 from .company_inquiry_models import CompanyInquiry
 from .service_sales_controls import service_card
+from .service_intake_routing import (
+    LEGACY_INQUIRY_PATH, django_service_intake_active,
+)
 
 MAX_POST_BYTES = 24_576
 _DUPLICATE_WINDOW = timedelta(minutes=15)
@@ -131,6 +134,18 @@ def service_inquiry(request, service_code):
         offer = service_card(service_code)
     except ValueError as exc:
         raise Http404("Unknown service code") from exc
+    # Fail closed if PHP is still the sole routed source. GET can navigate
+    # to legacy. POST MUST NOT forward form contents or cookies cross-stack.
+    if not django_service_intake_active():
+        if request.method == "GET":
+            return _no_cache(redirect(LEGACY_INQUIRY_PATH))
+        response = _no_cache(HttpResponse(
+            "این مسیر فعلاً پذیرش درخواست ندارد؛ فرم اصلی خدمات را باز کنید.",
+            status=503,
+        ))
+        response["Retry-After"] = "3600"
+        response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        return response
 
     session_key = _SUBMISSION_SESSION_PREFIX + service_code
     if request.method == "POST":
