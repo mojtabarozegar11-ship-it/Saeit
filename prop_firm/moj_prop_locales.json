@@ -62,7 +62,12 @@
       "footer": [
         "Moj Prop is a planned MojPlayWin division, not an active licensed funding offer.",
         "Only organizational bot: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Social posting condition",
+        "body": "For each verified trading day in each challenge phase, publish one original Instagram post and one original Facebook post. Clearly disclose that posting is a challenge participation condition. Neutral, truthful content is accepted; no profit claims or positive reviews are required. Each post must be independently reviewed before the phase can pass. This applies only to newly enrolled v1.2 cohorts.",
+        "disclosure": "Required promotional participation in MOJ PROP challenge; this is not an independent endorsement."
+      }
     },
     "fa": {
       "name": "فارسی",
@@ -124,7 +129,12 @@
       "footer": [
         "مج پراپ بخش برنامه‌ریزی‌شده مج‌پلی‌وین است؛ نه یک پیشنهاد فعال و دارای مجوز تأمین سرمایه.",
         "تنها ربات سازمانی: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "شرط انتشار در شبکه‌های اجتماعی",
+        "body": "در هر روز معاملاتی معتبر از هر مرحله چالش، یک پست اصلی در اینستاگرام و یک پست اصلی در فیسبوک منتشر کنید. اجباری‌بودن انتشار برای شرکت در چالش را آشکارا اعلام کنید. متن صادقانه و بی‌طرفانه پذیرفته است و تعریف مثبت یا ادعای سود لازم نیست. قبولی هر مرحله منوط به تأیید مستقل پست‌هاست. این شرط فقط شامل خریداران جدید نسخه ۱٫۲ می‌شود.",
+        "disclosure": "این انتشار طبق شرایط شرکت در چالش MOJ PROP انجام شده و نظر مستقل تبلیغاتی نیست."
+      }
     },
     "ar": {
       "name": "العربية",
@@ -186,7 +196,12 @@
       "footer": [
         "Moj Prop قسم مخطط له ضمن MojPlayWin، وليس عرض تمويل نشطًا ومرخصًا.",
         "الروبوت التنظيمي الوحيد: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "شرط النشر على الشبكات الاجتماعية",
+        "body": "في كل يوم تداول موثّق من كل مرحلة تحدٍّ، انشر منشوراً أصلياً على إنستغرام وآخر على فيسبوك. أفصح بوضوح عن أن النشر شرط للمشاركة. يُقبل المحتوى الصادق والمحايد، ولا يُشترط الترويج الإيجابي أو الادعاء بأرباح. يجب مراجعة المنشورين بشكل مستقل قبل اجتياز المرحلة. يُطبق فقط على المشاركين الجدد وفق الإصدار 1.2.",
+        "disclosure": "هذا المنشور مطلوب ضمن شروط المشاركة في تحدّي MOJ PROP وليس تأييداً مستقلاً."
+      }
     },
     "de": {
       "name": "Deutsch",
@@ -248,7 +263,12 @@
       "footer": [
         "Moj Prop ist ein geplanter Bereich von MojPlayWin, kein aktives lizenziertes Finanzierungsangebot.",
         "Einziger Organisationsbot: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Pflicht zur Veröffentlichung in sozialen Medien",
+        "body": "Für jeden bestätigten Handelstag jeder Challenge-Phase ist ein eigener Instagram- und ein eigener Facebook-Beitrag zu veröffentlichen. Kennzeichnen Sie klar, dass dies eine Teilnahmebedingung ist. Sachliche, wahrheitsgemäße Beiträge genügen; positive Bewertungen oder Gewinnversprechen sind nicht erforderlich. Vor dem Bestehen müssen die Beiträge unabhängig geprüft werden. Nur für neue Teilnehmer nach Version 1.2.",
+        "disclosure": "Dieser Beitrag ist eine Teilnahmebedingung der MOJ PROP Challenge und keine unabhängige Empfehlung."
+      }
     },
     "fr": {
       "name": "Français",
@@ -310,7 +330,12 @@
       "footer": [
         "Moj Prop est une division prévue de MojPlayWin, et non une offre de financement active et agréée.",
         "Unique robot de l’organisation : mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Condition de publication sur les réseaux sociaux",
+        "body": "Pour chaque journée de négociation vérifiée de chaque phase, publiez une publication originale sur Instagram et une sur Facebook. Indiquez clairement qu'il s'agit d'une condition de participation. Un contenu neutre et véridique suffit ; aucun avis positif ni promesse de gain n'est exigé. Les publications doivent être vérifiées avant la validation. Réservé aux nouveaux participants sous la version 1.2.",
+        "disclosure": "Cette publication est exigée pour participer au défi MOJ PROP ; ce n'est pas une recommandation indépendante."
+      }
     },
     "es": {
       "name": "Español",
@@ -372,7 +397,12 @@
       "footer": [
         "Moj Prop es una división planificada de MojPlayWin, no una oferta activa y autorizada de financiación.",
         "Único bot de la organización: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Requisito de publicaciones en redes sociales",
+        "body": "Por cada día de operaciones verificado de cada fase, publique una entrada original en Instagram y otra en Facebook. Indique claramente que es un requisito de participación. Se admite contenido neutral y veraz; no se exige una opinión positiva ni promesas de beneficios. Las publicaciones deben verificarse antes de aprobar la fase. Solo para nuevos participantes de la versión 1.2.",
+        "disclosure": "Esta publicación es un requisito para participar en el reto MOJ PROP; no es una recomendación independiente."
+      }
     },
     "pt": {
       "name": "Português",
@@ -434,7 +464,12 @@
       "footer": [
         "Moj Prop é uma divisão planejada da MojPlayWin, não uma oferta ativa e licenciada de financiamento.",
         "Único robô da organização: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Condição de publicação nas redes sociais",
+        "body": "Para cada dia de negociação verificado de cada fase, publique uma postagem original no Instagram e outra no Facebook. Informe claramente que a publicação é uma condição de participação. Conteúdo neutro e verdadeiro é aceito; não são exigidos elogios nem promessas de lucro. As publicações devem ser verificadas antes da aprovação. Apenas para novos participantes da versão 1.2.",
+        "disclosure": "Esta publicação é exigida para participar do desafio MOJ PROP e não é uma recomendação independente."
+      }
     },
     "it": {
       "name": "Italiano",
@@ -496,7 +531,12 @@
       "footer": [
         "Moj Prop è una divisione pianificata di MojPlayWin, non un’offerta attiva e autorizzata di finanziamento.",
         "Unico bot dell’organizzazione: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Requisito di pubblicazione sui social",
+        "body": "Per ogni giorno di trading verificato di ciascuna fase, pubblica un post originale su Instagram e uno su Facebook. Dichiara chiaramente che è una condizione di partecipazione. Sono ammessi contenuti neutrali e veritieri; non sono richieste recensioni positive o promesse di profitto. I post devono essere verificati prima del superamento della fase. Solo per i nuovi iscritti alla versione 1.2.",
+        "disclosure": "Questo post è richiesto per partecipare alla sfida MOJ PROP e non costituisce una raccomandazione indipendente."
+      }
     },
     "tr": {
       "name": "Türkçe",
@@ -558,7 +598,12 @@
       "footer": [
         "Moj Prop, MojPlayWin'in planlanan bir bölümüdür; aktif ve lisanslı bir fonlama teklifi değildir.",
         "Tek kurumsal bot: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Sosyal medya paylaşım şartı",
+        "body": "Her aşamadaki doğrulanmış işlem günü için Instagram'da bir ve Facebook'ta bir özgün gönderi yayımlayın. Paylaşımın katılım koşulu olduğunu açıkça belirtin. Dürüst ve tarafsız içerik kabul edilir; olumlu yorum veya kazanç vaadi gerekmez. Aşama geçilmeden önce gönderiler bağımsız olarak doğrulanmalıdır. Yalnızca 1.2 sürümündeki yeni katılımcılar içindir.",
+        "disclosure": "Bu gönderi MOJ PROP değerlendirmesine katılım şartıdır; bağımsız bir tavsiye değildir."
+      }
     },
     "ru": {
       "name": "Русский",
@@ -620,7 +665,12 @@
       "footer": [
         "Moj Prop — планируемое подразделение MojPlayWin, а не действующее лицензированное предложение финансирования.",
         "Единственный организационный бот: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Условие публикаций в социальных сетях",
+        "body": "За каждый подтверждённый торговый день каждого этапа опубликуйте по одному оригинальному посту в Instagram и Facebook. Ясно укажите, что публикация обязательна для участия. Допускается честный нейтральный текст; положительные отзывы и обещания прибыли не требуются. До зачёта этапа публикации должны быть независимо проверены. Только для новых участников версии 1.2.",
+        "disclosure": "Эта публикация обязательна по условиям участия в MOJ PROP и не является независимой рекомендацией."
+      }
     },
     "zh": {
       "name": "简体中文",
@@ -682,7 +732,12 @@
       "footer": [
         "Moj Prop 是 MojPlayWin 规划中的业务部门，并非已运营或持牌的资金提供服务。",
         "唯一组织机器人：mojtaba.bot.ai。"
-      ]
+      ],
+      "social": {
+        "title": "社交媒体发帖要求",
+        "body": "每个挑战阶段的每一个已核实交易日，须分别在 Instagram 和 Facebook 发布一条原创帖子。请明确说明发帖是参与挑战的条件。允许真实、中立的内容；无需好评或收益承诺。通过阶段考核前，帖子须经独立核验。仅适用于 1.2 版新报名者。",
+        "disclosure": "本帖为参加 MOJ PROP 挑战的规定要求，并非独立推荐。"
+      }
     },
     "ja": {
       "name": "日本語",
@@ -744,7 +799,12 @@
       "footer": [
         "Moj PropはMojPlayWinの計画中の部門であり、現在営業中の認可済み資金提供サービスではありません。",
         "組織唯一のボット：mojtaba.bot.ai。"
-      ]
+      ],
+      "social": {
+        "title": "SNS投稿条件",
+        "body": "各チャレンジ段階の確認済み取引日ごとに、InstagramとFacebookへそれぞれオリジナル投稿を1件公開してください。投稿が参加条件であることを明示してください。正確で中立的な内容で構いません。好意的な評価や利益の保証は不要です。各段階の合格前に独立した確認が必要です。バージョン1.2の新規参加者のみ対象です。",
+        "disclosure": "この投稿はMOJ PROPチャレンジの参加条件によるもので、独立した推薦ではありません。"
+      }
     },
     "ko": {
       "name": "한국어",
@@ -806,7 +866,12 @@
       "footer": [
         "Moj Prop은 MojPlayWin의 계획 중인 사업부이며 현재 운영 중인 인가된 자금 제공 서비스가 아닙니다.",
         "유일한 조직 봇: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "소셜 미디어 게시 조건",
+        "body": "각 챌린지 단계에서 확인된 거래일마다 Instagram과 Facebook에 각각 원본 게시물 하나를 올려야 합니다. 게시가 참여 조건임을 명확히 밝히세요. 사실에 근거한 중립적인 내용도 인정되며 긍정적 후기나 수익 보장은 요구되지 않습니다. 단계 통과 전 각 게시물의 독립적 확인이 필요합니다. 버전 1.2 신규 참가자에게만 적용됩니다.",
+        "disclosure": "이 게시물은 MOJ PROP 챌린지의 참여 조건에 따른 것이며 독립적인 추천이 아닙니다."
+      }
     },
     "hi": {
       "name": "हिन्दी",
@@ -868,7 +933,12 @@
       "footer": [
         "Moj Prop, MojPlayWin का प्रस्तावित विभाग है; यह अभी सक्रिय या लाइसेंस प्राप्त फंडिंग सेवा नहीं है।",
         "एकमात्र संगठनात्मक बॉट: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "सोशल मीडिया पोस्ट की शर्त",
+        "body": "हर चरण के प्रत्येक सत्यापित ट्रेडिंग दिन पर Instagram और Facebook पर एक-एक मौलिक पोस्ट डालें। स्पष्ट करें कि पोस्ट करना चुनौती में भाग लेने की शर्त है। सत्य और तटस्थ सामग्री मान्य है; सकारात्मक समीक्षा या लाभ का वादा आवश्यक नहीं। चरण पास करने से पहले पोस्ट की स्वतंत्र जाँच होगी। यह केवल संस्करण 1.2 के नए प्रतिभागियों पर लागू है।",
+        "disclosure": "यह पोस्ट MOJ PROP चुनौती की भागीदारी शर्त के कारण है; यह स्वतंत्र अनुशंसा नहीं है।"
+      }
     },
     "id": {
       "name": "Bahasa Indonesia",
@@ -930,7 +1000,12 @@
       "footer": [
         "Moj Prop adalah divisi yang direncanakan di MojPlayWin, bukan layanan pendanaan aktif dan berlisensi.",
         "Satu-satunya bot organisasi: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Ketentuan unggahan media sosial",
+        "body": "Pada setiap hari trading terverifikasi di tiap tahap, buat satu unggahan asli di Instagram dan satu di Facebook. Nyatakan dengan jelas bahwa unggahan merupakan syarat partisipasi. Konten jujur dan netral diterima; ulasan positif atau janji keuntungan tidak diwajibkan. Unggahan harus ditinjau secara independen sebelum tahap dinyatakan lulus. Hanya berlaku bagi peserta baru versi 1.2.",
+        "disclosure": "Unggahan ini merupakan syarat partisipasi tantangan MOJ PROP, bukan dukungan independen."
+      }
     },
     "vi": {
       "name": "Tiếng Việt",
@@ -992,7 +1067,12 @@
       "footer": [
         "Moj Prop là bộ phận dự kiến của MojPlayWin, chưa phải dịch vụ cấp vốn đang hoạt động hay được cấp phép.",
         "Bot duy nhất của tổ chức: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Điều kiện đăng bài mạng xã hội",
+        "body": "Với mỗi ngày giao dịch đã xác minh ở từng giai đoạn, hãy đăng một bài gốc trên Instagram và một bài trên Facebook. Nêu rõ việc đăng bài là điều kiện tham gia. Nội dung trung thực, trung lập được chấp nhận; không bắt buộc đánh giá tích cực hay hứa hẹn lợi nhuận. Bài đăng phải được kiểm tra độc lập trước khi qua giai đoạn. Chỉ áp dụng cho người tham gia mới theo phiên bản 1.2.",
+        "disclosure": "Bài đăng này là điều kiện tham gia thử thách MOJ PROP, không phải lời giới thiệu độc lập."
+      }
     },
     "th": {
       "name": "ไทย",
@@ -1054,7 +1134,12 @@
       "footer": [
         "Moj Prop เป็นฝ่ายธุรกิจที่วางแผนไว้ของ MojPlayWin ยังไม่ใช่บริการให้เงินทุนที่เปิดดำเนินการหรือได้รับใบอนุญาต",
         "บอตประจำองค์กรเพียงตัวเดียว: mojtaba.bot.ai"
-      ]
+      ],
+      "social": {
+        "title": "เงื่อนไขการโพสต์สื่อสังคมออนไลน์",
+        "body": "ในแต่ละวันซื้อขายที่ตรวจสอบแล้วของแต่ละด่าน ต้องโพสต์เนื้อหาต้นฉบับหนึ่งโพสต์บน Instagram และหนึ่งโพสต์บน Facebook ระบุชัดเจนว่าการโพสต์เป็นเงื่อนไขการเข้าร่วม ยอมรับเนื้อหาที่เป็นกลางและตรงความจริง ไม่บังคับรีวิวเชิงบวกหรือรับประกันกำไร โพสต์ต้องผ่านการตรวจสอบอิสระก่อนผ่านด่าน ใช้เฉพาะผู้สมัครใหม่ตามเวอร์ชัน 1.2",
+        "disclosure": "โพสต์นี้เป็นเงื่อนไขการเข้าร่วม MOJ PROP ไม่ใช่คำแนะนำอิสระ"
+      }
     },
     "nl": {
       "name": "Nederlands",
@@ -1116,7 +1201,12 @@
       "footer": [
         "Moj Prop is een geplande afdeling van MojPlayWin, geen actief vergunninghoudend financieringsaanbod.",
         "Enige organisatierobot: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Voorwaarde voor berichten op sociale media",
+        "body": "Plaats voor elke geverifieerde handelsdag van elke fase één origineel bericht op Instagram en één op Facebook. Vermeld duidelijk dat dit een deelnamevoorwaarde is. Eerlijke, neutrale inhoud volstaat; positieve beoordelingen of winstbeloften zijn niet vereist. De berichten worden onafhankelijk gecontroleerd voordat de fase slaagt. Alleen voor nieuwe deelnemers volgens versie 1.2.",
+        "disclosure": "Dit bericht is verplicht voor deelname aan de MOJ PROP-challenge en is geen onafhankelijke aanbeveling."
+      }
     },
     "pl": {
       "name": "Polski",
@@ -1178,7 +1268,12 @@
       "footer": [
         "Moj Prop jest planowanym działem MojPlayWin, a nie aktywną licencjonowaną ofertą finansowania.",
         "Jedyny bot organizacji: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "Warunek publikacji w mediach społecznościowych",
+        "body": "Za każdy zweryfikowany dzień handlowy każdego etapu opublikuj jeden oryginalny post na Instagramie i jeden na Facebooku. Wyraźnie ujawnij, że jest to warunek uczestnictwa. Wystarczy prawdziwa, neutralna treść; pozytywne opinie ani obietnice zysku nie są wymagane. Posty muszą zostać niezależnie zweryfikowane przed zaliczeniem etapu. Dotyczy wyłącznie nowych uczestników wersji 1.2.",
+        "disclosure": "Publikacja jest wymagana do udziału w wyzwaniu MOJ PROP; nie jest niezależną rekomendacją."
+      }
     },
     "ur": {
       "name": "اردو",
@@ -1240,7 +1335,12 @@
       "footer": [
         "Moj Prop، MojPlayWin کا منصوبہ بند شعبہ ہے، فی الحال فعال یا لائسنس یافتہ سرمایہ فراہم کرنے کی پیشکش نہیں۔",
         "واحد تنظیمی بوٹ: mojtaba.bot.ai."
-      ]
+      ],
+      "social": {
+        "title": "سوشل میڈیا پوسٹ کی شرط",
+        "body": "ہر مرحلے کے ہر تصدیق شدہ تجارتی دن پر Instagram اور Facebook پر ایک ایک اصل پوسٹ شائع کریں۔ واضح کریں کہ یہ پوسٹ چیلنج میں شرکت کی شرط ہے۔ سچا اور غیر جانب دار مواد قابل قبول ہے؛ مثبت تعریف یا منافع کی ضمانت لازم نہیں۔ مرحلہ پاس ہونے سے پہلے پوسٹس کی آزادانہ تصدیق ضروری ہے۔ یہ شرط صرف ورژن 1.2 کے نئے شرکا پر لاگو ہے۔",
+        "disclosure": "یہ پوسٹ MOJ PROP چیلنج میں شرکت کی شرط کے تحت ہے، آزادانہ توثیق یا سفارش نہیں۔"
+      }
     }
   }
 }
