@@ -328,6 +328,22 @@ def test_cpanel_inventory_reports_php_sqlite_as_separate_unverified_source(tmp_p
     assert result["attestation"]["external_schedulers_fully_enumerated"] is False
 
 
+
+def test_cpanel_readonly_sqlite_query_is_disclosed_in_attestation(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)")
+        conn.execute("INSERT INTO agents VALUES ('master', 1)")
+    with patch.object(observer, "call_readonly", return_value=("unavailable", "")):
+        result = observer.collect("cpanel", username="zomorod2", home=tmp_path)
+    assert result["database_queried"] is True
+    assert result["private_php_site_registry"]["state"] == "source_registry_snapshot_only"
+    assert result["read_only"] is True
+    assert result["private_php_site_registry"]["database_state_proves_live_workers"] is False
+
+
 def test_system_service_matches_are_not_live_execution_attestation(tmp_path):
     with patch.object(observer, "call_readonly", side_effect=[
         ("unavailable", ""),
