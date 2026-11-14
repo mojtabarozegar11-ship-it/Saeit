@@ -32,6 +32,8 @@ def validate_csv(text):
             raise ValueError(f"line {line}: negative or nonfinite value")
         if values["sold_quantity"] > values["production_quantity"]:
             raise ValueError(f"line {line}: sold exceeds produced; inventory reconciliation required")
+        if values["sold_quantity"] == 0 and values["sales_revenue"] != 0:
+            raise ValueError(f"line {line}: sales revenue without sold quantity")
         revenue = values["sales_revenue"] + values["other_revenue"]
         contribution = revenue - values["variable_cost"]
         operating = contribution - values["fixed_cost"]
