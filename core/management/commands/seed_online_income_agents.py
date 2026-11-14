@@ -7,6 +7,8 @@ from core.models import Agent, AgentCapability
 CAPABILITIES = [
     ("factory_native_review", "Factory native evidence review", "Reopen independently reviewed private native build receipts and queue verified specialist/device gaps. No commercial release.", "low"),
     ("factory_f41_private_build", "F41 private blockchain utility build", "Build only bounded vetted F41 orders in the private warehouse; no wallets, network, sales or public deployment.", "low"),
+    ("income_quote_scenario", "Private costed nonbinding service price scenario",
+     "Calculate an evidence-limited margin and break-even scenario for six services, write one private immutable draft; no invoice, quote approval, paid order or customer contact.", "medium"),
     ("income_service_package", "Private six-service deliverable generation",
      "Create a deterministic nonbinding private service analysis file from validated nonpersonal aggregate data. No external contact, sale, invoice, public listing, trading or deployment.", "medium"),
     ("income_market_research", "Internal commercial inventory", "Measure local product inventory and queued tasks. Does not verify external customer demand, competitors, legal feasibility or willingness to pay.", "low"),
