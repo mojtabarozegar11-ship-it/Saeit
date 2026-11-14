@@ -49,6 +49,16 @@ class PageParser(HTMLParser):
                 "malformed": nested or keys.count("action") != 1
                              or keys.count("method") != 1,
             }
+            # Browser-level overrides can bypass required buyer email input
+            # or send a checkout POST to a different target/encoding.
+            if "novalidate" in values:
+                form["malformed"] = True
+            if "target" in values:
+                form["malformed"] = True
+            if (values.get("enctype") or "application/x-www-form-urlencoded").strip().lower() != "application/x-www-form-urlencoded":
+                form["malformed"] = True
+            if (values.get("accept-charset") or "utf-8").strip().lower() != "utf-8":
+                form["malformed"] = True
             self.forms.append(form)
             self._active_form = form
         elif tag == "a":
@@ -68,6 +78,13 @@ class PageParser(HTMLParser):
                 form["malformed"] = True
             name = (values.get("name") or "").lower()
             input_type = (values.get("type") or "text").lower()
+            # Submit overrides can change the URL, HTTP verb, encoding,
+            # browsing context or HTML required-field validation.
+            if tag == "input" and input_type in ("submit", "image"):
+                if any(option in values for option in (
+                        "formnovalidate", "formaction", "formmethod",
+                        "formenctype", "formtarget")):
+                    form["malformed"] = True
             # Security-relevant form fields must not be disabled or spoofed.
             if tag == "input":
                 form["inputs"].append(
@@ -80,6 +97,19 @@ class PageParser(HTMLParser):
             )
             form["email_control"] |= looks_like_email
             if looks_like_email:
+                # A hidden, detached or multi-address field does not prove a
+                # usable single buyer contact, even if labelled "required".
+                if (tag == "input" and
+                        ("hidden" in values or "form" in values
+                         or "multiple" in values
+                         or fields.count("required") != 1)):
+                    form["malformed"] = True
+                if tag == "input" and "maxlength" in values:
+                    try:
+                        if int(values["maxlength"]) < 6:
+                            form["malformed"] = True
+                    except (TypeError, ValueError):
+                        form["malformed"] = True
                 # Presence alone is not proof of a required, usable buyer
                 # contact. Record only field structure, never its value.
                 form["email_inputs"].append((
@@ -93,7 +123,11 @@ class PageParser(HTMLParser):
             if sum(key.lower() == "type" for key, _ in attrs if key) > 1:
                 form["malformed"] = True
             button_type = (values.get("type") or "submit").lower()
-            if button_type == "submit" and "disabled" not in values                     and "hidden" not in values:
+            if button_type == "submit" and any(option in values for option in (
+                    "formnovalidate", "formaction", "formmethod",
+                    "formenctype", "formtarget")):
+                form["malformed"] = True
+            if button_type == "submit" and "disabled" not in values and "hidden" not in values:
                 form["submit_controls"] += 1
 
     def handle_endtag(self, tag):
@@ -323,7 +357,8 @@ def observe(path: str, kind: str, sku: int | None, timeout: int, opener,
         with opener.open(req, timeout=timeout) as response:
             final = urllib.parse.urlsplit(response.geturl())
             if (final.scheme != "https" or final.hostname != HOST
-                    or final.port not in (None, 443)):
+                    or final.port not in (None, 443)
+                    or final.path != path or final.query or final.fragment):
                 return "unexpected_destination"
             code = response.status
             if code != 200:
