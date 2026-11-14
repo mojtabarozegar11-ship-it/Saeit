@@ -227,3 +227,59 @@ class RoutingVerificationRegressionTests(SimpleTestCase):
         for payload in (None, [], "invalid", {}, {"routing_digest": "x"}):
             with self.subTest(payload=payload):
                 self.assertFalse(self.verify(payload))
+
+
+class CrossTenantIsolationTests(SimpleTestCase):
+    def test_duplicate_tenant_id_on_www_alias_is_not_a_separate_merchant(self):
+        reg = {
+            ("mojplaywin.com", ""): dict(MERCHANT),
+            ("www.mojplaywin.com", ""): dict(MERCHANT),
+        }
+        result = registered_scope(host="mojplaywin.com", registry=reg)
+        self.assertFalse(result.eligible_for_checkout_review)
+        self.assertIn("duplicate_tenant_id", result.missing)
+        other = registered_scope(host="www.mojplaywin.com", registry=reg)
+        self.assertFalse(other.eligible_for_checkout_review)
+
+    def test_duplicate_id_across_signal_brand_and_prop_is_rejected(self):
+        reg = {
+            ("mojplaywin.com", "saman"): {**MERCHANT, "tenant_id": "brand_reused"},
+            ("mojplaywin.com", "moj_prop"): {**MERCHANT, "tenant_id": "brand_reused"},
+        }
+        first = registered_scope(host="mojplaywin.com", brand="saman", registry=reg)
+        second = registered_scope(host="mojplaywin.com", brand="moj_prop", registry=reg)
+        self.assertFalse(first.eligible_for_checkout_review)
+        self.assertFalse(second.eligible_for_checkout_review)
+
+    def test_separate_unique_ids_remain_eligible_only_for_review(self):
+        reg = {
+            ("mojplaywin.com", "saman"): {**MERCHANT, "tenant_id": "brand_saman"},
+            ("mojplaywin.com", "moj_prop"): {**MERCHANT, "tenant_id": "prop_firm"},
+        }
+        for brand in ("saman", "moj_prop"):
+            with self.subTest(brand=brand):
+                result = registered_scope(host="mojplaywin.com", brand=brand, registry=reg)
+                self.assertTrue(result.eligible_for_checkout_review)
+                self.assertFalse(result.payment_enabled)
+                self.assertFalse(result.invoice_created)
+
+    def test_malformed_registry_entry_halts_checkout_review(self):
+        reg = {
+            ("mojplaywin.com", ""): dict(MERCHANT),
+            ("other.invalid", ""): "not-a-merchant-object",
+        }
+        result = registered_scope(host="mojplaywin.com", registry=reg)
+        self.assertIn("malformed_tenant_registry", result.missing)
+        self.assertFalse(result.eligible_for_checkout_review)
+
+    def test_registry_denies_oversized_unreconciled_tenant_map(self):
+        reg = {("mojplaywin.com", ""): dict(MERCHANT)}
+        reg.update({
+            (f"store{i}.mojplaywin.com", ""): {
+                **MERCHANT, "tenant_id": f"store_{i}"
+            }
+            for i in range(4096)
+        })
+        result = registered_scope(host="mojplaywin.com", registry=reg)
+        self.assertIn("tenant_registry_too_large", result.missing)
+        self.assertFalse(result.eligible_for_checkout_review)
