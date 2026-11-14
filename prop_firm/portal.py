@@ -5,6 +5,8 @@ breaches; missing session-open data and incomplete reconciliation fail closed.
 """
 from collections import defaultdict
 from datetime import timezone as utc_timezone
+from django.utils import timezone as django_timezone
+from .periods import most_recent_completed_period, period_statistics
 from decimal import Decimal
 
 from .models import PropAccount, PropEquityObservation, PropExecution
@@ -19,7 +21,7 @@ def _day(value):
     return value.astimezone(utc_timezone.utc).date()
 
 
-def account_projection(account):
+def account_projection(account, *, as_of=None):
     """Return verified-only account facts. No unverified data enters calculations."""
     if not isinstance(account, PropAccount) or not account.pk:
         raise ValueError("Persisted PropAccount required")
@@ -101,6 +103,8 @@ def account_projection(account):
         and bool(executions)
     )
     assessment = None
+    promotion_period = None
+    promotion_stats = None
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
             prior = account.trader.accounts.filter(
@@ -120,16 +124,23 @@ def account_projection(account):
                 prior_phase_passed=prior,
             )
         elif account.kind == PropAccount.Kind.FUNDED:
-            # Treasury has no configured approval integration; don't auto-promote.
-            assessment = assess_promotion(
-                level_index=account.tier_index,
-                realized_monthly_profit=total_net,
-                trading_days=days,
-                max_profitable_day=best_day,
-                risk=risk,
-                evidence_verified=fully_verified,
-                funding_for_next_level=False,
+            # Never reuse lifetime P&L to qualify a specific monthly promotion.
+            promotion_period = most_recent_completed_period(
+                opened_at=account.opened_at,
+                as_of=django_timezone.now() if as_of is None else as_of,
             )
+            promotion_stats = period_statistics(executions, promotion_period)
+            if promotion_stats is not None:
+                # Treasury has no configured approval integration: no auto-promotion.
+                assessment = assess_promotion(
+                    level_index=account.tier_index,
+                    realized_monthly_profit=promotion_stats["net"],
+                    trading_days=promotion_stats["trading_days"],
+                    max_profitable_day=promotion_stats["best_day"],
+                    risk=risk,
+                    evidence_verified=fully_verified,
+                    funding_for_next_level=False,
+                )
 
     return {
         "account": account,
@@ -140,6 +151,8 @@ def account_projection(account):
         "best_day": best_day,
         "risk": risk,
         "assessment": assessment,
+        "promotion_period": promotion_period,
+        "promotion_statistics": promotion_stats,
         "verified": fully_verified,
         "evidence_state": "reconciled" if fully_verified else "pending",
         "last_equity": equity.equity_usd if equity else None,
