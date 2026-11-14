@@ -91,7 +91,8 @@ document.getElementById('cafeInquiry').addEventListener('submit', async function
   const form=event.currentTarget;
   const button=document.getElementById('cafeInquirySubmit');
   const status=document.getElementById('cafeInquiryStatus');
-  if(!form.reportValidity()) return;
+  // Prevent a second submission while the official CSRF preflight runs.
+  if(button.disabled || !form.reportValidity()) return;
   const data=new FormData(form);
   const fields=['name','email','cafe','district','product','quantity','frequency','date','details'];
   const values=Object.fromEntries(fields.map(key=>[key,String(data.get(key)||'').trim()]));
