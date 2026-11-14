@@ -12,7 +12,7 @@ from .company_sales_intake import (
 )
 
 
-def _private(response):
+def _private(response, *, public_form=False):
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["X-Content-Type-Options"] = "nosniff"
     response["X-Robots-Tag"] = "noindex, nofollow"
