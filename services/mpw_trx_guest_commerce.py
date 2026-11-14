@@ -28,6 +28,40 @@ def _host_ok(request):
             in ("mojplaywin.com", "www.mojplaywin.com"))
 
 
+def _buyer_email(request):
+    """Require one actual buyer-supplied email; syntax is NOT ownership proof."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    form = getattr(request, "POST", None)
+    if form is None or not hasattr(form, "getlist"):
+        raise Http404("A valid buyer email is required")
+    values = form.getlist("email")
+    if len(values) != 1 or type(values[0]) is not str:
+        raise Http404("A valid buyer email is required")
+    raw = values[0]
+    if (not 3 <= len(raw) <= 254 or raw != raw.strip()
+            or not raw.isascii()
+            or any(ord(char) < 33 or ord(char) == 127 for char in raw)):
+        raise Http404("A valid buyer email is required")
+    local, separator, domain = raw.rpartition("@")
+    domain = domain.lower()
+    if not separator or not local or not domain:
+        raise Http404("A valid buyer email is required")
+    if (domain in {"localhost", "example.com", "example.net",
+                   "example.org", "guest.mojplaywin.com"}
+            or domain.endswith((".invalid", ".test", ".example", ".localhost",
+                                ".example.com", ".example.net", ".example.org",
+                                ".guest.mojplaywin.com"))):
+        raise Http404("A real buyer email is required")
+    normalized = local + "@" + domain
+    try:
+        validate_email(normalized)
+    except ValidationError as exc:
+        raise Http404("A valid buyer email is required") from exc
+    return normalized
+
+
 def _read_user(request):
     raw = request.COOKIES.get(COOKIE, "")
     if not isinstance(raw, str) or not 20 < len(raw) <= MAX_COOKIE:
@@ -35,11 +69,16 @@ def _read_user(request):
     try:
         data = signing.loads(raw, salt=SALT, max_age=COOKIE_AGE)
         user_id = data.get("u") if type(data) is dict else None
-        if type(user_id) is not int or user_id <= 0:
+        nonce = data.get("n") if type(data) is dict else None
+        if (type(user_id) is not int or user_id <= 0
+                or type(nonce) is not str or not 16 <= len(nonce) <= 128
+                or not nonce.isascii()):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if user is None or user.has_usable_password():
+        if (user is None or user.has_usable_password()
+                or getattr(user, "is_staff", False)
+                or getattr(user, "is_superuser", False)):
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -93,6 +132,17 @@ def _new_user(request):
     _rate_limit(request)
     Model = get_user_model()
     field = Model.USERNAME_FIELD
+    # An email-as-USERNAME_FIELD schema cannot safely store both the stable
+    # anonymous principal and the genuine buyer address in the same column.
+    if field.lower() in ("email", "email_address"):
+        raise Http404("Guest email schema is unsupported")
+    email = _buyer_email(request)
+    try:
+        email_field = Model._meta.get_field("email")
+    except Exception as exc:
+        raise Http404("Guest email storage unavailable") from exc
+    if email_field.max_length and len(email) > email_field.max_length:
+        raise Http404("Buyer email exceeds storage limit")
     value = _guest_username(request)
     if field.lower() in ("email", "email_address"):
         value += "@guest.mojplaywin.com"
@@ -105,7 +155,7 @@ def _new_user(request):
             # The auth username/email field must retain its database uniqueness.
             # If another request wins this insert, its committed user is reused.
             with transaction.atomic():
-                user = Model(**query)
+                user = Model(**query, email=email)
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
@@ -114,7 +164,12 @@ def _new_user(request):
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if not getattr(user, "is_active", True) or user.has_usable_password():
+    if (not getattr(user, "is_active", True) or user.has_usable_password()
+            or getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)
+            or getattr(user, "email", None) != email):
+        # In particular, never reassign an existing guest (or a raced insert)
+        # to another email; a previous purchase must not be rebound.
         raise Http404("Guest identity conflict")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
@@ -153,6 +208,13 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     user, token = _identity(request, create=create)
+    if create and str(getattr(user, "username", "")).startswith("mpwguest_"):
+        # This check is also required when an existing signed guest cookie
+        # bypasses _new_user. It protects all subsequent invoice attempts.
+        expected = _buyer_email(request)
+        actual = getattr(user, "email", "")
+        if type(actual) is not str or not hmac.compare_digest(actual, expected):
+            raise Http404("Guest buyer email does not match this session")
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
