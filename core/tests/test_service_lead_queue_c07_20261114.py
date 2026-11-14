@@ -443,3 +443,51 @@ def test_admin_bulk_proposals_do_not_contact_customer_or_open_payments(owner):
         )
     assert Order.objects.count() == 0
     assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 1
+
+
+@pytest.mark.django_db
+def test_recent_valid_buyer_is_not_starved_by_more_than_500_bad_old_records():
+    CompanyInquiry.objects.bulk_create([
+        CompanyInquiry(
+            kind="project", name="Old", email="invalid-email",
+            subject="[AGR-01] Old task",
+            message="Please review older case with no valid contact.",
+            status="new", internal_note=SOURCE_MARKER,
+        )
+        for _ in range(MAX_SCAN + 1)
+    ])
+    recent = create_lead()
+    snapshot = preview_candidates()
+    assert snapshot["scan_limit_reached"] is True
+    assert snapshot["queue_total_candidates"] == MAX_SCAN + 2
+    assert snapshot["queue_uninspected"] == 2
+    assert snapshot["eligible_count"] == 1
+    receipt = prepare_next()
+    assert receipt["verified_effect"] is True
+    assert receipt["evidence"]["inquiry_id"] == recent.pk
+    recent.refresh_from_db()
+    assert recent.status == "reviewing"
+
+
+@pytest.mark.django_db
+def test_owner_dashboard_discloses_uninspected_queue_instead_of_zero_buyers(owner):
+    CompanyInquiry.objects.bulk_create([
+        CompanyInquiry(
+            kind="project", name="Old", email="invalid-email",
+            subject="[AGR-01] Old task",
+            message="Please review older case with no valid contact.",
+            status="new", internal_note=SOURCE_MARKER,
+        )
+        for _ in range(MAX_SCAN + 1)
+    ])
+    client = Client()
+    client.force_login(owner)
+    api = client.get(reverse("command_center_service_proposal_funnel_api"))
+    assert api.status_code == 200
+    scanned = api.json()["candidate_scan"]
+    assert scanned["queue_total_candidates"] == MAX_SCAN + 1
+    assert scanned["queue_uninspected"] == 1
+    assert scanned["scan_complete"] is False
+    board = client.get(reverse("command_center_service_proposal_funnel_dashboard"))
+    assert board.status_code == 200
+    assert "پرونده هنوز در این نوبت بررسی نشده‌اند" in board.content.decode()
