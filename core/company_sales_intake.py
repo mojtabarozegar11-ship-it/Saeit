@@ -181,4 +181,25 @@ def save_inbound_inquiry(form: CompanySalesInquiryForm):
     inquiry.status = "new"
     inquiry.internal_note = ""
     inquiry.save()
+    label = str(form.fields["consent"].label)
+    AuditLog.objects.create(
+        actor_type="visitor",
+        actor_id="",
+        action="company_inquiry_consent_submitted",
+        target_type="CompanyInquiry",
+        target_id=str(inquiry.pk),
+        before_state={},
+        after_state={
+            "form_version": FORM_VERSION,
+            "consent_checked": True,
+            "consent_text_sha256": hashlib.sha256(
+                label.encode("utf-8")
+            ).hexdigest(),
+            "purpose": "review_and_related_follow_up_only",
+            "outbound_contact_sent": False,
+            "sale_verified": False,
+            "payment_accepted": False,
+        },
+        trace_id=f"company-lead-{inquiry.pk}",
+    )
     return inquiry
