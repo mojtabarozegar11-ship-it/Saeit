@@ -22,6 +22,7 @@ from .commerce_funnel import commerce_funnel_api
 from .revenue_operations import revenue_operations_api
 from .lead_workqueue import lead_workqueue_api
 from .service_intake_diagnostics import service_intake_diagnostics_api
+from .service_proposal_funnel import service_proposal_funnel_api
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -40,6 +41,7 @@ urlpatterns = [
     path("api/bot/revenue-operations/", revenue_operations_api, name="command_center_revenue_operations_api"),
     path("api/bot/lead-workqueue/", lead_workqueue_api, name="command_center_lead_workqueue_api"),
     path("api/bot/service-intake-source/", service_intake_diagnostics_api, name="command_center_service_intake_source_api"),
+    path("api/bot/service-proposal-funnel/", service_proposal_funnel_api, name="command_center_service_proposal_funnel_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
