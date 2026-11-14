@@ -15,7 +15,7 @@ from scripts import mojtaba_revenue_source_gate_20261114 as gate
 ROOT = Path(__file__).resolve().parents[1]
 NEEDED = (
     gate.HUB, gate.INQUIRY, gate.STORE, gate.FARM,
-    gate.BOT_MANIFEST, gate.BOT_EVIDENCE,
+    gate.BOT_MANIFEST, gate.BOT_EVIDENCE, gate.REVENUE_CONTRACT,
 ) + tuple(gate.SOURCE_ROOT + "/" + name + "/index.html"
           for name in gate.SERVICES)
 
@@ -211,3 +211,83 @@ def test_no_network_or_money_transfers_in_source_gate_script():
                       "smtplib", "send_mail(", "PaymentIntent.objects",
                       "os.system(", "shutil.rmtree(", ".write_text("):
         assert forbidden not in code
+
+
+def test_revenue_contract_two_services_three_products_and_one_bot():
+    result = gate.audit(ROOT)
+    assert result["source_gate_passed"]
+    assert result["pilot_service_ids"] == [
+        "website-doctor", "farm-profitability-break-even"
+    ]
+    assert result["canonical_bot_id"] == "mojtaba.bot.ai"
+    contract = json.loads((ROOT / gate.REVENUE_CONTRACT).read_text("utf-8"))
+    assert len(contract["offers"]) == 2
+    assert len(contract["digital_products"]) == 3
+    assert all(entry["quote_mode"] == "manual_review_only"
+               for entry in contract["offers"])
+    assert all(entry["received_revenue_verified"] is False
+               for entry in contract["offers"])
+
+
+def test_revenue_contract_blocks_noncanonical_agent(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"canonical_bot_id": "mojtaba.bot.ai"',
+           '"canonical_bot_id": "shadow-revenue.bot"')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_contract_identity")["passed"]
+
+
+def test_revenue_contract_blocks_spend_activation(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"auto_spend_authorized": false',
+           '"auto_spend_authorized": true')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_automatic_write_denied")["passed"]
+
+
+def test_revenue_contract_blocks_fabricated_receipts(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"confirmed_paid_order_count": null',
+           '"confirmed_paid_order_count": 3')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_paid_unknown")["passed"]
+
+
+def test_revenue_contract_blocks_fabricated_delivery(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"delivery_verified_live": false',
+           '"delivery_verified_live": true')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_product_scope")["passed"]
+
+
+def test_revenue_contract_blocks_unsupported_service_claim(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"quote_mode": "manual_review_only"',
+           '"quote_mode": "fully_automatic_paid_checkout"')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_service_scope")["passed"]
+
+
+def test_revenue_contract_blocks_missing_payment_evidence(sources):
+    mutate(sources, gate.REVENUE_CONTRACT,
+           '"compliant_paid_receipt",',
+           '"unverified_invoice_stub",')
+    checks = gate.audit(sources)["checks"]
+    assert not next(x for x in checks if
+                    x["code"] == "revenue_manual_client_handoff")["passed"]
+
+
+def test_contract_revenue_not_auto_sent_and_no_new_bot():
+    source = (ROOT / gate.REVENUE_CONTRACT).read_text("utf-8")
+    contract = json.loads(source)
+    assert contract["single_bot_policy"].startswith("one_orchestrator")
+    assert contract["auto_email_authorized"] is False
+    assert contract["auto_publication_authorized"] is False
+    assert contract["automatic_live_trading_authorized"] is False
+    assert contract["confirmed_revenue_amount"] is None
