@@ -364,7 +364,8 @@ def revenue_verify(payload):
             "Inspected internal payment and settlement entry counts; "
             "withheld revenue claims pending independent external reconciliation."
         ),
-        "verified_effect": True,
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("internal_ledger_inventory", {
             "payment_entries": payment_events,
             "settlement_candidates": settlement_candidates,
@@ -380,7 +381,8 @@ def profit_optimize(payload):
     active = list(Product.objects.filter(active=True).values("id", "title", "price", "currency")[:100])
     return {
         "action_performed": "Measured active sellable catalog for the next allocation decision without fabricating margin data.",
-        "verified_effect": True,
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("profit_baseline", {"active_products": len(active), "products": active}),
         "next_action": "income_market_research",
     }
