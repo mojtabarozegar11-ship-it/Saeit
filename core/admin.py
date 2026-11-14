@@ -273,6 +273,18 @@ from .company_inquiry_policy import provenance
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
+    # Only authenticated, permissioned staff can bulk-progress genuine new leads.
+    # Moving to "reviewing" does NOT approve price, contract, payment or delivery.
+    actions = ("begin_review",)
+
+    @admin.action(description="آغاز بررسی درخواست‌های جدید (بدون ایجاد قرارداد)")
+    def begin_review(self, request, queryset):
+        from django.utils import timezone
+        changed = queryset.filter(status="new").update(
+            status="reviewing", updated_at=timezone.now()
+        )
+        self.message_user(request, f"{changed} درخواست جدید به مرحله بررسی منتقل شد.")
+
     list_display = ("subject", "service_label", "kind", "name", "organization", "status", "created_at")
     @admin.display(description="مسیر خدمت")
     def service_label(self, obj):
