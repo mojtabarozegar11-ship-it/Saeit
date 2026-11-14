@@ -130,3 +130,29 @@ class MojPlayWinProductDetailsTests(TestCase):
 
     def test_strict_catalog_id_count(self):
         self.assertEqual(set(PUBLIC_CATALOG), {72, 225, 879})
+
+    def test_changed_price_must_be_preview_not_valid_catalog(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", currency="USD", price="9.99",
+        )
+        response = self.get(72)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_preview"])
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertFalse(CommerceFunnelEvent.objects.exists())
+
+    def test_currency_mismatch_does_not_inflate_availability(self):
+        Product.objects.create(
+            pk=225, title=PUBLIC_CATALOG[225]["title"], active=True,
+            product_type="digital_book", currency="EUR", price="4.00",
+        )
+        response = self.get(225)
+        self.assertTrue(response.context["is_preview"])
+        self.assertFalse(CommerceFunnelEvent.objects.exists())
+
+    def test_exact_declared_prices_all_have_one_source_of_truth(self):
+        self.assertEqual(
+            [PUBLIC_CATALOG[k]["expected_price_usd"] for k in (72,225,879)],
+            ["7.50", "4.00", "6.80"],
+        )
