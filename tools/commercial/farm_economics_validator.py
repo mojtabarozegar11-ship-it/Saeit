@@ -55,7 +55,14 @@ def validate_csv(text):
         margin = ((values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"]
                   if fully_sold else None)
         break_even = values["fixed_cost"] / margin if margin is not None and margin > 0 else None
-        result.append({"enterprise_id":row["enterprise_id"],"currency":row["currency"],"contribution":str(contribution),"operating_surplus":str(operating),"economic_profit":str(economic),"break_even_units":str(break_even) if break_even is not None else "NOT_ATTAINABLE"})
+        # Break-even may be mathematically defined yet exceed reported production.
+        if break_even is None:
+            break_even_feasibility = "NOT_CALCULABLE"
+        elif break_even > values["production_quantity"]:
+            break_even_feasibility = "EXCEEDS_REPORTED_PRODUCTION"
+        else:
+            break_even_feasibility = "WITHIN_REPORTED_PRODUCTION"
+        result.append({"enterprise_id":row["enterprise_id"],"currency":row["currency"],"contribution":str(contribution),"operating_surplus":str(operating),"economic_profit":str(economic),"break_even_units":str(break_even) if break_even is not None else "NOT_ATTAINABLE","break_even_feasibility":break_even_feasibility})
     if not result:
         raise ValueError("empty dataset")
     return result
