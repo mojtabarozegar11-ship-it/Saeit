@@ -4,6 +4,8 @@ on:
     branches:
       - fix/forbidden-social-target-hard-stop-c16-20261114
     paths:
+      - scripts/mojtaba_direct_social_publisher_20261026.py
+      - tests/test_mojtaba_direct_social_publisher_20261026.py
       - social_hub/catalog.py
       - social_hub/adapters.py
       - social_hub/service.py
@@ -30,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mojtaba_social_hub_20261026.py' -q
+          python3 -m unittest discover -s tests -p 'test_mojtaba_direct_social_publisher_20261026.py' -q
           python3 - <<'PY'
           from social_hub.catalog import RESTRICTED_HANDLES
           assert {'dr.mojtaba.rozegar','7317306','102203064721826'} <= set(RESTRICTED_HANDLES)
