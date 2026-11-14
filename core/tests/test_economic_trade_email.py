@@ -112,6 +112,27 @@ class EconomicTradeEmailTests(TestCase):
         outbox.refresh_from_db()
         self.assertEqual(outbox.status, "sent")
 
+    @override_settings(COMPANY_TRADE_EMAIL="company@example.test", TRADE_EMAIL_ENABLED=True)
+    def test_mailbox_setting_alone_is_not_an_active_outbound_policy(self):
+        initial = mailbox_status()
+        self.assertFalse(initial["active"])
+        outbox = queue_trade_email(
+            recipient="buyer@example.test", subject="Quote", body="Draft only"
+        )
+        self.assertFalse(mailbox_status()["active"])
+        outbox.mailbox.active = True
+        outbox.mailbox.allow_outbound = True
+        outbox.mailbox.save(update_fields=["active", "allow_outbound"])
+        ready = mailbox_status()
+        self.assertTrue(ready["active"])
+        self.assertTrue(ready["mailbox_policy_ready"])
+        self.assertFalse(ready["delivery_verified"])
+        with override_settings(COMPANY_TRADE_EMAIL="wrong-sender@example.test"):
+            self.assertFalse(mailbox_status()["active"])
+        with override_settings(COMPANY_TRADE_EMAIL="invalid-address"):
+            self.assertFalse(mailbox_status()["configured"])
+            self.assertFalse(mailbox_status()["active"])
+
     def test_status_does_not_expose_credentials(self):
         status = mailbox_status()
         self.assertNotIn("password", status)
