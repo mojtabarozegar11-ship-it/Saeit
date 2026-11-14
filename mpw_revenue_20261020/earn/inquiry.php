@@ -32,6 +32,68 @@ function oversized_inquiry_body($raw): bool {
   if (!is_string($raw) || !preg_match('/\\A[0-9]{1,9}\\z/D', $raw)) return true;
   return (int)$raw > 12000;
 }
+
+/*
+ * Bounded first-party form decoder contract. PHP has already parsed $_POST,
+ * but its parser may silently normalize names or discard duplicate keys.
+ * Reconcile against the raw URL-encoded body before writing any private lead.
+ * Pure function: no I/O, email, database changes or payment side effects.
+ */
+function inquiry_input_violations(array $post, $contentType, $rawBody): array {
+  $errors=[];
+  if (!is_string($contentType) || !preg_match('~\Aapplication/x-www-form-urlencoded(?:;[ \t]*charset=utf-8)?\z~iD',trim($contentType))) {
+    $errors[]='Only standard UTF-8 form submissions are supported.';
+  }
+  if (!is_string($rawBody)) {
+    $errors[]='The request body could not be verified.';
+    return $errors;
+  }
+  if (strlen($rawBody)>12000) $errors[]='Request is too large.';
+  if ($rawBody==='' || str_contains($rawBody,';')) $errors[]='Invalid form encoding.';
+  $caps=[
+    'csrf'=>96,'service'=>60,'name'=>120,'email'=>254,
+    'company'=>120,'website'=>300,'details'=>2000,'timeline'=>120,
+    'fax_number'=>120,'consent'=>8,
+  ];
+  $seen=[];
+  foreach (explode('&',$rawBody) as $pair) {
+    $rawKey=explode('=',$pair,2)[0];
+    if ($rawKey==='' || strlen($rawKey)>90 || preg_match('/%(?![a-f0-9]{2})/i',$pair)) {
+      $errors[]='Invalid form field encoding.';
+      continue;
+    }
+    $key=rawurldecode(str_replace('+',' ',$rawKey));
+    if (!array_key_exists($key,$caps)) {
+      $errors[]='Unexpected form field.';
+      continue;
+    }
+    if (isset($seen[$key])) $errors[]='A form field was repeated.';
+    $seen[$key]=true;
+  }
+  if (count($post)>count($caps)) $errors[]='Too many form fields.';
+  foreach ($post as $key=>$value) {
+    if (!is_string($key) || !array_key_exists($key,$caps)) {
+      $errors[]='Unexpected form field.';
+      continue;
+    }
+    if (!isset($seen[$key])) $errors[]='The form payload did not match the submitted fields.';
+    if (!is_string($value) || !mb_check_encoding($value,'UTF-8')) {
+      $errors[]='Invalid text field.';
+      continue;
+    }
+    if (mb_strlen($value,'UTF-8')>$caps[$key]) $errors[]='A field exceeds its permitted length.';
+    if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u',$value) ||
+        ($key!=='details' && preg_match('/[\x09\x0A\x0D]/u',$value))) {
+      $errors[]='A text field contains unsupported control characters.';
+    }
+  }
+  foreach (['csrf','service','name','email','details','consent'] as $required) {
+    if (!array_key_exists($required,$post)) $errors[]='A required field is missing.';
+  }
+  if (count($seen)!==count($post)) $errors[]='The form payload was not parsed consistently.';
+  return array_values(array_unique($errors));
+}
+
 function clean($v, int $max): string {
   if (!is_string($v)) return '';
   $v = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', trim($v));
@@ -94,12 +156,18 @@ $slugValue=$_POST['service']??$_GET['service']??'';
 $slug=is_string($slugValue) ? $slugValue : '';
 if (!array_key_exists($slug,$allowed)) {http_response_code(404);echo '<h1>Unknown service</h1>';exit;}
 $title=$allowed[$slug];
-$token=$_SESSION['mpw_inquiry_token']??bin2hex(random_bytes(24));
+$priorToken=$_SESSION['mpw_inquiry_token']??null;
+$token=(is_string($priorToken) && preg_match('/\A[a-f0-9]{48}\z/D',$priorToken)) ? $priorToken : bin2hex(random_bytes(24));
 $_SESSION['mpw_inquiry_token']=$token;
 $errors=[];$sent=false;$reference='';
 $data=['name'=>'','email'=>'','company'=>'','website'=>'','details'=>'','timeline'=>''];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   if (oversized_inquiry_body($_SERVER['CONTENT_LENGTH']??null)) $errors[]='Request is too large.';
+  // Read at most one byte past the cap to reject chunked or undeclared oversize bodies.
+  $rawBody=@file_get_contents('php://input',false,null,0,12001);
+  $shapeErrors=inquiry_input_violations($_POST,$_SERVER['CONTENT_TYPE']??null,$rawBody);
+  if ($shapeErrors) { http_response_code(400); $errors=array_merge($errors,$shapeErrors); }
+  if (!empty($_FILES)) { http_response_code(400); $errors[]='File uploads are not supported.'; }
   $submittedCsrf=$_POST['csrf']??null;
   if (!is_string($submittedCsrf) || !hash_equals($token,$submittedCsrf)) $errors[]='The form expired. Refresh and try again.';
   if (!empty($_POST['fax_number'])) $errors[]='Submission rejected.';
@@ -119,7 +187,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $token=$_SESSION['mpw_inquiry_token'];
       $sent=true;
       $body="MojPlayWin commercial inquiry received and stored privately.\nService: ".$title."\nReference: ".$reference."\n\nReview the private cPanel revenue-inquiries record. No customer data is logged to CI.\n";
-      @mail(MPW_OFFICIAL_INQUIRY_EMAIL,'New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
+      if (!@mail(MPW_OFFICIAL_INQUIRY_EMAIL,'New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8")) {
+        // Do not roll back a successfully encrypted lead on an SMTP failure.
+        error_log('MPW_INQUIRY_OWNER_NOTIFICATION_FAILED');
+      }
     } catch (Throwable $e) {$errors[]='We could not securely save the request. Please use the email fallback.';error_log('MPW_INQUIRY_STORAGE_FAILURE');}
   }
 }
