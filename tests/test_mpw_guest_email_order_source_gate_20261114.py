@@ -82,11 +82,15 @@ class SourceGateTests(unittest.TestCase):
         self.assertFalse(result["paid_delivery_verified"])
         self.assertIsNone(result["commercial_revenue_verified"])
 
-    def test_current_draft_is_fail_closed_without_order_claim_dependencies(self):
+    def test_integrated_source_is_complete_but_still_never_authorizes_live_sale(self):
         result = gate.inspect(ROOT)
-        self.assertTrue(result["source_checks"]["invoice_post_email_binding_guard"])
-        self.assertFalse(result["source_candidate_complete"])
+        self.assertEqual(result["source_checks_passed"], 7)
+        self.assertEqual(result["source_checks_total"], 7)
+        self.assertTrue(result["source_candidate_complete"])
         self.assertFalse(result["production_release_permitted"])
+        self.assertFalse(result["migration_applied_verified"])
+        self.assertFalse(result["passenger_runtime_verified"])
+        self.assertIsNone(result["commercial_revenue_verified"])
 
     def test_missing_recovery_module_blocks_source_candidate(self):
         (self.root / gate.RELATIVE["recovery"]).unlink()

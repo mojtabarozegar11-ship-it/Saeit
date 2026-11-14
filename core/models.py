@@ -2,6 +2,9 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+# Durable checkout-email ownership and disabled-by-default recovery models.
+from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate
+
 
 class T(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)

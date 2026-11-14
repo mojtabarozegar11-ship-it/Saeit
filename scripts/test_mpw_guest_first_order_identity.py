@@ -98,6 +98,15 @@ def install_fake_django():
     sys.modules["django.contrib.auth"].get_user_model = lambda: User
     sys.modules["django.db"].IntegrityError = IntegrityError
     sys.modules["django.db"].transaction = types.SimpleNamespace(atomic=Atomic)
+    sys.modules["services"] = types.ModuleType("services")
+    recovery = types.ModuleType("services.mpw_trx_email_recovery")
+    def posted_email(request):
+        values = request.POST.getlist("email")
+        if len(values) != 1 or not values[0] or "@" not in values[0]:
+            raise ValueError("Buyer email required")
+        return values[0].strip().casefold()
+    recovery._posted_email = posted_email
+    sys.modules["services.mpw_trx_email_recovery"] = recovery
 
 
 def load_real_functions():
@@ -127,8 +136,10 @@ def run():
     global STALE_LOOKUP
     install_fake_django()
     functions = load_real_functions()
-    request = lambda secret: types.SimpleNamespace(
-        META={"CSRF_COOKIE": secret}
+    request = lambda secret, email="buyer@example.com": types.SimpleNamespace(
+        META={"CSRF_COOKIE": secret}, POST=types.SimpleNamespace(
+            getlist=lambda key: [email] if key == "email" and email else [],
+        )
     )
     one, _ = functions["_new_user"](request("A" * 32))
     # Force a stale initial lookup to exercise the concurrent insert conflict.
@@ -139,10 +150,10 @@ def run():
     assert len(USERS) == 2
     assert not one.has_usable_password()
     assert all(v.username.startswith("mpwguest_") for v in USERS.values())
-    assert all(v.email.endswith("@guest.mojplaywin.invalid") for v in USERS.values())
+    assert all(v.email == "buyer@example.com" for v in USERS.values())
     assert all(not v.is_staff and not v.is_superuser for v in USERS.values())
-    # The browser identity must never inherit a real customer mailbox.
-    assert one.email != "buyer@example.com"
+    # Guest contact is the validated buyer address, never a dummy mailbox.
+    assert one.email == "buyer@example.com"
     # Existing privileged principals must not be reused as guest purchases.
     one.is_staff = True
     try:
@@ -152,14 +163,14 @@ def run():
     else:
         raise AssertionError("privileged principal was accepted as a guest")
     one.is_staff = False
-    one.email = "buyer@example.com"
+    one.email = "other@example.com"
     try:
         functions["_new_user"](request("A" * 32))
     except Http404:
         pass
     else:
         raise AssertionError("existing real email was rebound to guest")
-    one.email = one.username + "@guest.mojplaywin.invalid"
+    one.email = "buyer@example.com"
     try:
         functions["_new_user"](request(""))
     except Http404:
