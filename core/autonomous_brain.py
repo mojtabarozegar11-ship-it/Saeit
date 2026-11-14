@@ -77,9 +77,12 @@ class AutonomousBrain:
             seen_at is not None and (last_review_at is None or seen_at > last_review_at)
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
-        consented_proposal_candidates = preview_candidates(limit=20)["eligible_count"]
+        consented_queue = preview_candidates(limit=20)
+        consented_proposal_candidates = consented_queue["eligible_count"]
         return {
             "consented_service_draft_candidates": consented_proposal_candidates,
+            "consented_service_queue_scan_limited": consented_queue["scan_limit_reached"],
+            "consented_service_queue_requires_triage": consented_queue["requires_human_review_count"],
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
@@ -112,6 +115,12 @@ class AutonomousBrain:
             return [Candidate(
                 "income_service_proposal_prepare",
                 "Prepare a nonbinding scoped internal response to a consented real service inquiry.",
+                10, 10, 10, 1,
+            )]
+        if s.get("consented_service_queue_scan_limited", False):
+            return [Candidate(
+                "await_consent_queue_manual_triage",
+                "CRM scan reached its safe limit; do not claim absence of buyers or repeat empty planning.",
                 10, 10, 10, 1,
             )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
