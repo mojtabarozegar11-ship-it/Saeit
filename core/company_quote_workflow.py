@@ -256,7 +256,7 @@ def make_review_form(inquiry):
 def make_quote_form(inquiry):
     latest = _case_events(inquiry.pk, REVIEW_ACTION).first()
     service = latest.after_state.get("service_code") if latest else ""
-    return CompanyDraftQuoteForm(initial={
+    return CompanyDraftQuoteForm(case_kind=inquiry.kind, initial={
         "request_token": new_desk_token(),
         "revision": inquiry.updated_at.isoformat(),
         "service_code": service if service in SERVICE_CODES else "",
