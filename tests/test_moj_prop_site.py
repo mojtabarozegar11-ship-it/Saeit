@@ -79,6 +79,36 @@ class MojPropCatalogTests(unittest.TestCase):
                                     for item in context["challenge_plans"]))
         self.assertIn("پیشنهاد",page_context("fa")["plans_copy"]["notice"])
 
+    def test_owner_active_plan_one_and_nine_funding_holds_in_all_locales(self):
+        for code in SUPPORTED_CODES:
+            with self.subTest(locale=code):
+                context = page_context(code)
+                statuses = context["plan_status_copy"]
+                self.assertEqual(set(statuses),
+                                 {"owner_active", "funding_hold", "owner_disclosure"})
+                self.assertTrue(all(statuses.values()))
+                self.assertEqual(context["owner_active_plans"], 1)
+                self.assertEqual(context["temporary_funding_hold_plans"], 9)
+                cards = context["challenge_plans"]
+                self.assertTrue(cards[0]["business_active_owner_declared"])
+                self.assertTrue(cards[0]["capital_funded_owner_declared"])
+                self.assertFalse(cards[0]["funding_independently_verified"])
+                self.assertFalse(cards[0]["checkout_enabled"])
+                for card in cards[1:]:
+                    self.assertTrue(card["temporary_owner_hold"])
+                    self.assertFalse(card["business_active_owner_declared"])
+                    self.assertFalse(card["checkout_enabled"])
+
+    def test_public_page_mentions_owner_status_without_offering_billing(self):
+        from pathlib import Path
+        text = (Path(__file__).resolve().parents[1] /
+                "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf-8")
+        self.assertIn("plan.business_active_owner_declared", text)
+        self.assertIn("plan_status_copy.owner_active", text)
+        self.assertIn("plan_status_copy.funding_hold", text)
+        self.assertIn("plan_status_copy.owner_disclosure", text)
+        self.assertNotIn('name="wallet_private_key"', text)
+
     def test_urls_and_breadcrumb_identity(self):
         self.assertEqual(page_context()["canonical_url"], "/moj-prop/")
         self.assertEqual(page_context("ar")["canonical_url"], "/moj-prop/ar/")
