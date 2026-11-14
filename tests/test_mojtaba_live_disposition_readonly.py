@@ -336,6 +336,16 @@ def test_php_disposition_rejects_impossible_inventory_cardinalities(
     assert group["retirement_authorized"] is False
 
 
+
+@pytest.mark.parametrize("entries", [None, "unavailable", [None], [{"known_route_flags": "mojcoin"}]])
+def test_disposition_rejects_malformed_cron_inventory(entries):
+    vps = snap("vps")
+    vps["cron"]["state"] = "observed"
+    vps["cron"]["entries"] = entries
+    with pytest.raises(ValueError, match="TOPOLOGY_CRON_ENTRIES_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
