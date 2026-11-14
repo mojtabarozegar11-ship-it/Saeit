@@ -38,7 +38,7 @@ def inspect_path(route: str, marker: str) -> dict:
             result["truncated"] = len(data) > 1024 * 1024
         data = data[:1024 * 1024]
         html = data.decode("utf-8", errors="replace")
-        found = re.search(r'<meta\\s+name=["\\\']theme-color["\\\']\\s+content=["\\\']([^"\\\']+)', html, re.I)
+        found = re.search('name="theme-color" content="([^"]+)"', html, re.I)
         result.update({
             "html_sha256": hashlib.sha256(data).hexdigest(),
             "bytes_seen": len(data),
@@ -71,9 +71,9 @@ def main() -> None:
     print("ZM_INNER_ATTESTATION_PATH " + str(dest))
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
-            handle.write("\\n### Read-only live CSS marker attestation (not deployment verification)\\n")
+            handle.write(chr(10) + "### Read-only live CSS marker attestation (not deployment verification)" + chr(10))
             for row in entries:
-                handle.write(f"- {row['route']}: {row['live_css_status']}\\n")
+                handle.write(f"- {row['route']}: {row['live_css_status']}" + chr(10))
 
 
 if __name__ == "__main__":
