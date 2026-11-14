@@ -108,6 +108,19 @@ class MojPropChallengeCheckoutSafetyTests(SimpleTestCase):
         self.assertIn("real_initial_account_capital_shortfall", x.blockers)
         self.assertEqual(x.capital_shortfall_usd, 100)
 
+    def test_forged_existing_payment_status_in_scope_blocks_prop_review(self):
+        from dataclasses import replace
+        for change in ({"payment_enabled": True},
+                       {"invoice_created": True},
+                       {"eligible_for_checkout_review": "yes"}):
+            with self.subTest(change=change):
+                result = self.ready(
+                    merchant_tenant=replace(self.tenant(), **change),
+                )
+                self.assertFalse(result.eligible_for_external_legal_review)
+                self.assertIn("dedicated_moj_prop_tron_merchant_not_verified",
+                              result.blockers)
+
     def test_wrong_signal_tenant_never_sells_prop_challenge(self):
         x = self.ready(merchant_tenant=self.tenant("saman"))
         self.assertIn("dedicated_moj_prop_tron_merchant_not_verified", x.blockers)
