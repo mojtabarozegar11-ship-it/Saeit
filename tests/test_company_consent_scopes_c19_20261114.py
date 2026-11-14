@@ -77,3 +77,22 @@ class C19CompanyConversionTests(TestCase):
         response=public.post(reverse("company"),data=self.data())
         self.assertEqual(response.status_code,403)
         self.assertFalse(CompanyInquiry.objects.exists())
+
+
+    def test_six_optional_email_links_only_open_buyer_mail_app(self):
+        html=self.client.get(reverse("services"),HTTP_HOST="zomorodmelal.ir").content.decode("utf-8")
+        for code in SCOPES:
+            self.assertIn(
+                "mailto:zomorodmelal@gmail.com?subject=Service%20inquiry%20"+code,
+                html,
+            )
+        self.assertEqual(html.count('class="c19-email-alternative"'),6)
+        self.assertNotIn("mailto:zomorodmelal@gmail.com?body=",html)
+        self.assertIn("هیچ پیام خودکاری ارسال نمی‌شود",html)
+
+    def test_valid_receipt_returns_to_same_form_and_does_not_claim_paid_service(self):
+        response=self.client.post(reverse("company"),data=self.data())
+        self.assertEqual(response.status_code,302)
+        self.assertTrue(response["Location"].endswith("#company-request"))
+        self.assertEqual(CompanyInquiry.objects.count(),1)
+        self.assertEqual(CompanyInquiry.objects.get().status,"new")
