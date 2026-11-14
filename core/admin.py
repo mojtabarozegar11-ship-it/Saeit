@@ -23,6 +23,7 @@ from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson, EducationPresentation,
     EducationEnrollment, EducationProgress, EducationBookmark, EducationAssessment,
     EducationQuestion, EducationAttempt, EducationCertificate,
+    SignalSourceEvent,
 )
 
 
@@ -277,3 +278,35 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+
+@admin.register(SignalSourceEvent)
+class SignalSourceEventAdmin(admin.ModelAdmin):
+    """Read-only internal broker-origin audit: no broadcast, billing, or release."""
+
+    list_display = (
+        "brand", "source_id", "event_id", "event_at", "state", "received_at",
+    )
+    list_filter = ("brand", "state")
+    search_fields = ("brand", "source_id", "event_id")
+    ordering = ("-received_at",)
+    readonly_fields = (
+        "brand", "source_id", "event_id", "event_at", "canonical_payload",
+        "payload_sha256", "source_signature", "state", "received_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        user = request.user
+        return bool(
+            user.is_active and user.is_staff
+            and (user.is_superuser or user.has_perm("core.view_signalsourceevent"))
+        )
