@@ -187,6 +187,42 @@ class FourWeekProofTests(TestCase):
                 reviewed_at=row.posted_at+timedelta(days=27),
             )
 
+    def test_disabled_reviewer_cannot_authorize_post_even_with_staff_flag(self):
+        row = self.submit()
+        self.staff.is_active = False
+        self.staff.save(update_fields=["is_active"])
+        with self.assertRaises(PermissionDenied):
+            self.review(row)
+        self.assertEqual(
+            PropSocialEvidence.objects.get(pk=row.pk).review_status,
+            PropSocialEvidence.Review.PENDING,
+        )
+
+    def test_direct_save_rejects_disabled_staff_approval(self):
+        from django.core.exceptions import ValidationError
+        row = self.submit()
+        self.staff.is_active = False
+        self.staff.save(update_fields=["is_active"])
+        row.review_status = PropSocialEvidence.Review.VERIFIED
+        row.reviewed_by = self.staff
+        row.reviewed_at = row.posted_at + timedelta(days=28)
+        for field in CHECKED:
+            setattr(row, field, True)
+        with self.assertRaises(ValidationError):
+            row.save()
+
+    def test_inactive_buyer_cannot_receive_new_challenge_enrollment(self):
+        from django.core.exceptions import ValidationError
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        with self.assertRaises(ValidationError):
+            PropChallengeEnrollment.objects.create(
+                trader=self.profile,
+                verified_invoice_ref="inactive-client-untrusted",
+                confirmed_at=START,
+                settlement_verified=True,
+            )
+
     def test_reviewer_must_be_staff(self):
         row=self.submit()
         with self.assertRaises(PermissionDenied):
