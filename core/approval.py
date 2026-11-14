@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from .chat_operation_security import is_authorized_chat_operator
 from .task_approval_scope import approval_covers_task
 from .chat_operation_scope import validate_chat_operation_scope
+from .grant_scope_policy import require_exact_grant_scope, require_exact_consumption_scope
 
 from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
@@ -129,22 +130,48 @@ class ApprovalService:
 
     @transaction.atomic
     def issue_grant(self, approval_id, actor_id, scope=None, ttl_seconds=300):
-        """Convert an approved request into a short-lived, one-time scoped grant."""
-        approval = ApprovalRequest.objects.select_for_update().get(pk=approval_id)
+        """Issue ONE immutable action-bound and target-bound grant per approval.
+
+        A different commercial operation requires a new independent request.
+        The approval record is not a wildcard and no caller-provided ID is
+        proof of an authenticated host session.
+        """
+        approval = (
+            ApprovalRequest.objects.select_for_update()
+            .select_related("requested_by")
+            .get(pk=approval_id)
+        )
         if approval.status != "approved":
             raise ValueError("Only an approved request can issue an execution grant")
-        if approval.requested_by_id != actor_id:
+        if type(actor_id) is not int or actor_id != approval.requested_by_id:
             raise ValueError("Only the designated owner can issue an execution grant")
-        try:
-            ttl = max(30, min(int(ttl_seconds), 900))
-        except (TypeError, ValueError):
-            raise ValueError("ttl_seconds must be an integer")
+        if not is_authorized_chat_operator(approval.requested_by):
+            raise ValueError("A current active superuser is required for this grant")
+        if type(ttl_seconds) is not int or not 30 <= ttl_seconds <= 900:
+            raise ValueError("Grant TTL must be an integer between 30 and 900 seconds")
+        approved_scope = require_exact_grant_scope(approval, scope)
+
+        if approval.action_type == "knowledge_content_generation":
+            task = AgentTask.objects.select_for_update().filter(
+                pk=approval.target_id,
+            ).first()
+            input_data = task.input_data if task and isinstance(task.input_data, dict) else {}
+            if (task is None
+                    or task.action_type != "knowledge_content_generation"
+                    or input_data.get("run_id") != approved_scope["run_id"]
+                    or type(input_data.get("run_id")) is not int):
+                raise ValueError("GRANT_PAID_MODEL_TASK_RUN_MISMATCH")
+
+        # A one-time token is not enough if the SAME owner approval can mint
+        # limitless fresh tokens. Serialize on approval row and deny reissues.
+        if ApprovalGrant.objects.filter(approval=approval).exists():
+            raise ValueError("GRANT_APPROVAL_ALREADY_ISSUED")
         now = timezone.now()
         grant = ApprovalGrant.objects.create(
             approval=approval,
-            actor_id=actor_id,
-            scope=dict(scope or {}),
-            expires_at=now + timedelta(seconds=ttl),
+            actor=approval.requested_by,
+            scope=approved_scope,
+            expires_at=now + timedelta(seconds=ttl_seconds),
         )
         AuditLog.objects.create(
             actor_type="owner",
@@ -152,22 +179,45 @@ class ApprovalService:
             action="approval_grant_issued",
             target_type="ApprovalGrant",
             target_id=str(grant.pk),
-            after_state={"approval_id": approval_id, "scope": grant.scope, "expires_at": grant.expires_at.isoformat()},
+            after_state={
+                "approval_id": approval_id,
+                "action": approved_scope["action"],
+                "scope": approved_scope,
+                "expires_at": grant.expires_at.isoformat(),
+            },
             trace_id=f"grant-{grant.pk}",
         )
         return grant
 
     @transaction.atomic
     def authorize_grant(self, grant_id, required_scope=None):
-        """Atomically consume a valid grant exactly once."""
-        grant = ApprovalGrant.objects.select_for_update().select_related("approval", "actor").get(pk=grant_id)
+        """Atomically consume once, only for the original exact approved action."""
+        grant = (
+            ApprovalGrant.objects.select_for_update()
+            .select_related("approval", "actor", "approval__requested_by")
+            .get(pk=grant_id)
+        )
         if grant.used_at is not None:
             raise ValueError("Execution grant has already been used")
+        if (grant.approval.status != "approved"
+                or grant.approval.requested_by_id != grant.actor_id
+                or not is_authorized_chat_operator(grant.actor)):
+            raise ValueError("GRANT_OWNER_OR_APPROVAL_NO_LONGER_VALID")
+        # Reject a grant whose persisted scope was mutated after issuance.
+        saved = require_exact_grant_scope(grant.approval, grant.scope)
+        checked = require_exact_consumption_scope(saved, required_scope)
         if grant.expires_at <= timezone.now():
             raise ValueError("Execution grant has expired")
-        required = dict(required_scope or {})
-        if any(grant.scope.get(key) != value for key, value in required.items()):
-            raise ValueError("Execution grant scope mismatch")
+        if grant.approval.action_type == "knowledge_content_generation":
+            task = AgentTask.objects.select_for_update().filter(
+                pk=grant.approval.target_id,
+            ).first()
+            inputs = task.input_data if task and isinstance(task.input_data, dict) else {}
+            if (task is None
+                    or task.action_type != "knowledge_content_generation"
+                    or inputs.get("run_id") != checked["run_id"]
+                    or type(inputs.get("run_id")) is not int):
+                raise ValueError("GRANT_PAID_MODEL_TASK_RUN_MISMATCH")
         grant.used_at = timezone.now()
         grant.save(update_fields=["used_at", "updated_at"])
         AuditLog.objects.create(
@@ -176,7 +226,10 @@ class ApprovalService:
             action="approval_grant_consumed",
             target_type="ApprovalGrant",
             target_id=str(grant.pk),
-            after_state={"scope": grant.scope},
+            after_state={
+                "approval_id": grant.approval_id,
+                "scope": checked,
+            },
             trace_id=f"grant-{grant.pk}",
         )
         return grant

@@ -50,8 +50,9 @@ class KnowledgeAgentGenerateTests(TestCase):
         )
 
     def _approved_paid_grant(self, target_task=None, action="knowledge_content_generation"):
-        owner = get_user_model().objects.create_user(
-            username=f"knowledge-owner-{ApprovalRequest.objects.count()}", password="test-pass"
+        owner = get_user_model().objects.create_superuser(
+            username=f"knowledge-owner-{ApprovalRequest.objects.count()}",
+            password="test-pass", email="owner@example.invalid",
         )
         task = target_task or self.task
         approval = ApprovalRequest.objects.create(
@@ -124,17 +125,17 @@ class KnowledgeAgentGenerateTests(TestCase):
             input_data={"run_id": 99999},
             status="queued",
         )
-        grant = self._approved_paid_grant(target_task=unrelated_task)
+        # The stricter grant issuer now refuses a mismatched run before a
+        # reusable authorization token can even be created.
+        with self.assertRaises(ValueError):
+            self._approved_paid_grant(target_task=unrelated_task)
         with patch.dict(os.environ, {"OPENAI_API_KEY": "configured-key"}), patch(
             "core.management.commands.knowledge_agent_generate.OpenAI"
         ) as openai:
-            with self.assertRaises(CommandError):
-                call_command("knowledge_agent_generate", approval_grant_id=grant.pk, stdout=StringIO())
+            call_command("knowledge_agent_generate", stdout=StringIO())
 
         openai.assert_not_called()
-        grant.refresh_from_db()
         self.run.refresh_from_db()
-        self.assertIsNone(grant.used_at)
         self.assertEqual(self.run.status, "queued")
 
     def test_completed_run_cannot_incur_second_charge(self):
