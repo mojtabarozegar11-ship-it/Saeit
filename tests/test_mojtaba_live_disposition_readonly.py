@@ -424,6 +424,15 @@ def test_observed_systemd_missing_candidate_units_is_not_empty_inventory(layer):
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+@pytest.mark.parametrize("bad_timestamp", [None, 172, [], {}, "not-a-time"])
+def test_timestamp_shape_fails_closed_without_runtime_traceback(tmp_path, bad_timestamp):
+    vps = snap("vps", captured_at_utc=bad_timestamp)
+    path = save_snapshot(tmp_path, "vps", vps)
+    with pytest.raises(ValueError, match="TOPOLOGY_TIMESTAMP_INVALID"):
+        module.parse_snapshot(path, "vps", now=datetime.now(timezone.utc))
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
