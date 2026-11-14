@@ -23,23 +23,37 @@ class Approval:
 
 def authorize(*, owner_id: str, operation: str, resource_id: str,
               request_id: str, authenticated: bool, approval: Approval | None) -> bool:
-    """Require exact, unexpired, case-sensitive, per-operation approval.
+    """Require exact per-request approval; the host must atomically consume it.
 
-    Approval records MUST originate from a trusted authenticated host, never
-    from model output or a user-supplied message. The host must atomically
-    consume request_id before executing a sensitive operation to prevent replay.
+    A pure decision is never proof of one-time consumption or external effect.
     """
-    if not authenticated or not all((owner_id, operation, resource_id, request_id)):
+    fields = (owner_id, operation, resource_id, request_id)
+    if authenticated is not True or any(
+        type(value) is not str or not value.strip() or len(value) > 512
+        for value in fields
+    ):
         return False
-    if operation not in SENSITIVE:
-        return False  # No implicit allowlist for unknown or ordinary operations.
-    if approval is None:
+    if operation not in SENSITIVE or not isinstance(approval, Approval):
         return False
-    fields = ((approval.owner_id, owner_id), (approval.operation, operation),
-              (approval.resource_id, resource_id), (approval.request_id, request_id))
-    if not all(compare_digest(a, b) for a, b in fields):
+    approved_fields = (
+        approval.owner_id, approval.operation, approval.resource_id,
+        approval.request_id,
+    )
+    if any(type(value) is not str or len(value) > 512 for value in approved_fields):
+        return False
+    # Encode before constant-time comparison: hmac.compare_digest rejects
+    # non-ASCII str, but valid owner/resource identifiers may be Unicode.
+    if not all(
+        compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+        for a, b in zip(approved_fields, fields)
+    ):
         return False
     expiry = approval.expires_at
-    if expiry.tzinfo is None:
+    if not isinstance(expiry, datetime):
         return False
-    return expiry.astimezone(timezone.utc) > datetime.now(timezone.utc)
+    try:
+        if expiry.utcoffset() is None:
+            return False
+        return expiry.astimezone(timezone.utc) > datetime.now(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return False
