@@ -468,7 +468,7 @@ class PrivateQuoteWorkflowTests(TestCase):
 
     def test_61_oversize_post_gets_413(self):
         self.client.force_login(self.owner)
-        r = self.client.post(self.review_url(), self.review_data(), HTTP_CONTENT_LENGTH="9000")
+        r = self.client.post(self.review_url(), {**self.review_data(), "padding": "x" * 5000})
         self.assertEqual(r.status_code, 413)
 
     def test_62_owner_post_is_private_no_store(self):
@@ -495,3 +495,44 @@ class PrivateQuoteWorkflowTests(TestCase):
         self.review(service_code=valid)
         f = CompanyDraftQuoteForm(self.quote_data(service_code="farm_economic_advisory"), case_kind="research")
         self.assertFalse(f.is_valid())
+
+    def test_66_replay_review_with_changed_qualification_is_denied(self):
+        data = self.review_data()
+        f = CompanyReviewForm(data, case_kind="commercial")
+        review_company_inquiry(case_id=self.case.pk, owner=self.owner, form=f)
+        changed = CompanyReviewForm(
+            {**data, "qualification": "out_of_scope"}, case_kind="commercial"
+        )
+        with self.assertRaises(ValidationError):
+            review_company_inquiry(
+                case_id=self.case.pk, owner=self.owner, form=changed
+            )
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "reviewing")
+
+    def test_67_replay_quote_token_with_changed_price_is_denied(self):
+        self.review()
+        data = self.quote_data()
+        first = CompanyDraftQuoteForm(data, case_kind="commercial")
+        prepare_internal_quote(case_id=self.case.pk, owner=self.owner, form=first)
+        changed = CompanyDraftQuoteForm(
+            {**data, "unit_price": "3000000.00"}, case_kind="commercial"
+        )
+        with self.assertRaises(ValidationError):
+            prepare_internal_quote(
+                case_id=self.case.pk, owner=self.owner, form=changed
+            )
+        self.assertEqual(AuditLog.objects.filter(action=DRAFT_ACTION).count(), 1)
+
+    def test_68_review_digest_excludes_pii(self):
+        event = self.review()
+        self.assertEqual(len(event.after_state["action_digest"]), 64)
+        self.assertNotIn(self.case.email, str(event.after_state))
+
+    def test_69_quote_digest_matches_after_exact_replay(self):
+        self.review()
+        data = self.quote_data()
+        f = CompanyDraftQuoteForm(data, case_kind="commercial")
+        first = prepare_internal_quote(case_id=self.case.pk, owner=self.owner, form=f)
+        again = prepare_internal_quote(case_id=self.case.pk, owner=self.owner, form=f)
+        self.assertEqual(first.after_state["action_digest"], again.after_state["action_digest"])
