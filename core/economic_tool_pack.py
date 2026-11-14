@@ -415,10 +415,18 @@ def service_proposal_prepare(payload):
     """
     from django.db import transaction
     from .service_quote_draft import prepare_next
-    from .service_lead_handoff import handoff_prepared_inquiry
+    from .service_lead_handoff import (
+        handoff_prepared_inquiry, recover_one_orphaned_handoff,
+    )
     with transaction.atomic():
         prepared = prepare_next()
         if prepared.get("verified_effect") is not True:
+            # A previously prepared and independently audited customer
+            # request may be stranded without an operational WorkItem.
+            # Recover real pending follow-up before claiming idle.
+            recovered = recover_one_orphaned_handoff()
+            if recovered.get("verified_effect") is True:
+                return recovered
             return prepared
         evidence = prepared.get("evidence") or {}
         inquiry_id = evidence.get("inquiry_id")
