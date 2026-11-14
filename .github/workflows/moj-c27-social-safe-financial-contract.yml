@@ -41,6 +41,12 @@ jobs:
           PY
       - name: Install existing Django requirements
         run: python -m pip install -r requirements.txt
+      - name: Build Django static manifest before rendering 20 localized dashboards
+        env:
+          SECRET_KEY: c27-branch-tests-only
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: python manage.py collectstatic --noinput
       - name: Run updated MOJ PROP, social, signal and TRX tenant regressions
         env:
           SECRET_KEY: c27-branch-tests-only
