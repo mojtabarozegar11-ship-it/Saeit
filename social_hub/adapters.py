@@ -115,6 +115,8 @@ def send(account: dict, content: dict, token: str, transport) -> DispatchOutcome
     The caller MUST independently verify owner authorization, account permissions,
     exact destination, campaign approval, and rate limits before calling send().
     """
+    from .owner_policy import assert_destination_allowed
+    assert_destination_allowed(account)  # Defense in depth for direct adapter callers.
     p = _check_brand(account)
     key = p.key
     destination = account.get("destination")
