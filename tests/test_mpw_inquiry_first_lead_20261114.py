@@ -244,3 +244,54 @@ def test_email_change_never_invents_paid_conversions():
     assert "MPW_OFFICIAL_INQUIRY_EMAIL" in text
     assert "paid_orders=1" not in text
     assert "received_revenue=1" not in text
+
+
+def test_integrated_upgrade_generated_quote_link_uses_official_mailbox():
+    text = DEPLOYER.read_text("utf-8")
+    assert "mailto:mojplaywin@gmail.com?subject=" in text
+    assert "mailto:support@mojplaywin.com" not in text
+
+
+def test_legacy_restore_generated_quote_links_use_official_mailbox():
+    text = (ROOT / "scripts/mpw_revenue_12_restore_20261026.py").read_text("utf-8")
+    assert text.count("mailto:mojplaywin@gmail.com?subject=") == 2
+    assert "mailto:support@mojplaywin.com" not in text
+
+
+def test_official_reply_path_consistent_across_all_three_source_generators():
+    sources = [
+        SOURCE, DEPLOYER,
+        ROOT / "scripts/mpw_revenue_12_restore_20261026.py",
+    ]
+    for path in sources:
+        text = path.read_text("utf-8")
+        assert OFFICIAL_EMAIL in text
+        assert "mailto:support@mojplaywin.com" not in text
+
+
+def test_owner_dispatcher_remains_independent_private_reference_workflow():
+    source = (ROOT / "scripts/mpw_revenue_owner_inquiry_dispatch_20261026.php"
+              ).read_text("utf-8")
+    assert "revenue-inquiries" in source
+    assert "source" in source
+    assert "owner-dispatched" in source
+    # Dispatch verification is source-only; it is NOT proof live cron sends.
+    assert "mojtaba.rozegar11@gmail.com" in source
+
+
+def test_php_limit_handles_leading_zero_without_overflow_bypass():
+    php_limit([("00012000", False), ("00012001", True),
+               ("000000000", False), ("0000000000", True)])
+
+
+def test_malformed_declared_content_length_is_fail_closed_not_infinite_request():
+    php_limit([(True, True), (12000, True), (0, True),
+               ("12000\n", True), ("12000\x00", True)])
+
+
+def test_official_inbox_notification_is_an_attempt_not_revenue_proof():
+    text = contents()
+    assert "@mail(MPW_OFFICIAL_INQUIRY_EMAIL" in text
+    assert "Review the private cPanel revenue-inquiries record." in text
+    assert "$sent=true;" in text
+    assert "No payment, binding order or contract is created." in text
