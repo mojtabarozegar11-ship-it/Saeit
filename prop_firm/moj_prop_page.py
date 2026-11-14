@@ -39,6 +39,10 @@ def catalog():
                 raise ValueError(f"Missing or incomplete translation: {code}/{group}")
             if any(not isinstance(v, str) or not v.strip() for v in texts):
                 raise ValueError(f"Empty localized text: {code}/{group}")
+        social = item.get("social")
+        if (not isinstance(social, dict) or set(social) != {"title", "body", "disclosure"}
+                or any(not isinstance(v, str) or not v.strip() for v in social.values())):
+            raise ValueError(f"Missing complete social rule localization: {code}")
     return locales
 
 
@@ -94,6 +98,9 @@ def page_context(code="en"):
                   for key, val in zip(t["rules"][1:], rates)],
         "faq": t["faq"],
         "footer": t["footer"],
+        "social": t["social"],
+        "social_daily_post_per_platform": p.social_posts_per_platform_per_verified_trading_day,
+        "social_platforms": p.social_posting_platforms,
         "levels": level_items,
         "entry": f"{p.entry_trx} TRX",
         "share": f"{p.trader_profit_share_pct}%",
