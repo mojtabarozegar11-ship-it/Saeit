@@ -63,17 +63,22 @@ class Command(BaseCommand):
                 held_invalid_registry += 1
                 continue
             by_receiver[inv.receiver].append(inv)
-        receiver_groups = sorted(
-            by_receiver,
-            key=lambda receiver: min(x.issued_ms for x in by_receiver[receiver]),
-        )
-        omitted_receivers = max(0, len(receiver_groups) - 4)
+        receiver_groups = sorted(by_receiver)
+        # A fixed oldest-first limit would permanently starve site wallets
+        # beyond the fourth. Rotate disjoint groups every 15-minute slot;
+        # max four wallets per run and bounded GET/API usage are preserved.
+        group_size = 4
+        total_batches = max(1, (len(receiver_groups) + group_size - 1) // group_size)
+        receiver_batch = (now_ms // 900_000) % total_batches
+        from_index = receiver_batch * group_size
+        chosen_receivers = receiver_groups[from_index:from_index + group_size]
+        omitted_receivers = len(receiver_groups) - len(chosen_receivers)
         candidates = []
         seen_invoice = set()
         discovered_count = 0
         truncated = omitted_receivers > 0
         indexer_unavailable = 0
-        for receiver in receiver_groups[:4]:
+        for receiver in chosen_receivers:
             invoices = by_receiver[receiver]
             try:
                 discovered, was_truncated = receiver_candidates(
@@ -121,7 +126,7 @@ class Command(BaseCommand):
                 held += 1
         self.stdout.write(
             f"tron_discover candidate_count={discovered_count} "
-            f"matched={len(candidates)} receivers_checked={min(4,len(receiver_groups))} "
+            f"matched={len(candidates)} receivers_checked={len(chosen_receivers)} "
             f"receivers_omitted={omitted_receivers} invalid_tenant_holds={held_invalid_registry} "
             f"indexer_unavailable={indexer_unavailable} inspected={inspected} "
             f"paid={paid} held={held} "
