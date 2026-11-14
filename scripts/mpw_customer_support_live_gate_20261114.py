@@ -136,6 +136,7 @@ class _CheckoutFormInspector(HTMLParser):
         self.forms = []
         self._active = None
         self._ignored = 0
+        self.base_tag_present = False
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
@@ -143,6 +144,9 @@ class _CheckoutFormInspector(HTMLParser):
             self._ignored += 1
             return
         if self._ignored:
+            return
+        if tag == "base":
+            self.base_tag_present = True
             return
         if tag == "form":
             names = [key.lower() for key, _ in attrs]
@@ -180,10 +184,16 @@ class _CheckoutFormInspector(HTMLParser):
 def _safe_post_action(url: str, action: str) -> bool:
     target = urllib.parse.urljoin(url, action)
     parts = urllib.parse.urlsplit(target)
+    checkout = urllib.parse.urlsplit(url).path
+    product_id = checkout.split("/")[3]
+    approved_actions = {
+        checkout,
+        "/commerce/trx-easy/start/" + product_id + "/",
+    }
     return (parts.scheme == "https" and
             parts.netloc == "mojplaywin.com" and
-            parts.path.startswith("/") and
-            not parts.fragment and
+            parts.path in approved_actions and
+            not parts.query and not parts.fragment and
             not any(ord(ch) < 32 for ch in action))
 
 
@@ -204,6 +214,7 @@ def assess_checkout_get(fetcher: Callable[[str], str] = None) -> dict:
             forms = [item for item in inspector.forms if
                      item["method"] == "post" and item["email"] and
                      item["csrf"] and not item["invalid"] and
+                     not inspector.base_tag_present and
                      _safe_post_action(url, item["action"])]
             identity = title.casefold() in html.casefold() and "trx" in html.casefold()
             ready = bool(forms) and identity
