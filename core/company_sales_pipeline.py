@@ -8,6 +8,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from .company_inquiry_models import CompanyInquiry
+from .models import AuditLog
 
 MAX_DAYS = 90
 
@@ -30,6 +31,11 @@ def sales_pipeline_snapshot(*, days=30):
         "status_counts": dict(sorted(status.items())),
         "kind_counts": dict(sorted(by_kind.items())),
         "new_older_than_48h_requires_review": old_new,
+        "internal_nonbinding_quote_drafts": AuditLog.objects.filter(
+            action="company_nonbinding_quote_draft",
+            target_type="CompanyInquiry", created_at__gte=now - timedelta(days=days),
+        ).count(),
+        "drafts_are_not_sales": True,
         "source_of_truth": "core.CompanyInquiry",
         "buyer_contacted": None,
         "lead_qualified": None,

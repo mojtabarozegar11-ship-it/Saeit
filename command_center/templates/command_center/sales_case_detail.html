@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}بررسی خصوصی درخواست شرکت | mojtaba.bot.ai{% endblock %}
+{% block content %}
+<section dir="rtl" style="max-width:940px;margin:30px auto;padding:clamp(16px,3vw,32px);line-height:1.9">
+  <p><small>PRIVATE · OWNER ONLY · mojtaba.bot.ai · NO EXTERNAL DELIVERY</small></p>
+  <h1>بررسی درخواست و تهیهٔ پیش‌نویس غیرتعهدآور</h1>
+  <p><a href="{% url 'mojtaba_company_sales_cases' %}">بازگشت به کارتابل</a></p>
+  {% if error %}<div role="alert" style="border:2px solid #a54c4c;padding:10px"><strong>اقدام ذخیره نشد:</strong> {{ error }}</div>{% endif %}
+  <article style="border:1px solid #888;padding:16px;border-radius:12px">
+    <h2>جزئیات ورودی CRM</h2>
+    <dl>
+      <dt>شمارهٔ داخلی</dt><dd>{{ case.pk }}</dd>
+      <dt>نوع</dt><dd>{{ case.get_kind_display }}</dd>
+      <dt>وضعیت</dt><dd>{{ case.get_status_display }}</dd>
+      <dt>نام</dt><dd>{{ case.name }}</dd>
+      <dt>سازمان</dt><dd>{{ case.organization|default:"ثبت نشده" }}</dd>
+      <dt>ایمیل ثبت‌شده (مالکیت آن احراز نشده)</dt><dd>{{ case.email }}</dd>
+      <dt>موضوع</dt><dd>{{ case.subject }}</dd>
+      <dt>شرح درخواست</dt><dd style="white-space:pre-wrap;overflow-wrap:anywhere">{{ case.message }}</dd>
+    </dl>
+  </article>
+  {% if case.status == "new" or case.status == "reviewing" %}
+  <section style="border:1px solid #888;padding:18px;margin:22px 0;border-radius:12px">
+    <h2>۱. بررسی تخصصی درخواست</h2>
+    <p>تعیین تناسب برای آماده‌سازی پیش‌نویس داخلی است، نه تأیید قرارداد یا اجازهٔ تماس با مشتری.</p>
+    <form action="{% url 'mojtaba_company_case_action' case.pk 'review' %}" method="post">
+      {% csrf_token %}{{ review_form.request_token }}{{ review_form.revision }}
+      <p><label for="{{ review_form.qualification.id_for_label }}">نتیجه بررسی</label>{{ review_form.qualification }}{{ review_form.qualification.errors }}</p>
+      <p><label for="{{ review_form.service_code.id_for_label }}">خدمت مرتبط با طبقه درخواست</label>{{ review_form.service_code }}{{ review_form.service_code.errors }}</p>
+      {{ review_form.non_field_errors }}
+      <button type="submit" style="padding:10px 15px">ثبت بررسی در دفتر حسابرسی داخلی</button>
+    </form>
+  </section>
+  {% if latest_review %}
+    <p>آخرین طبقه‌بندی ثبت‌شده: <strong>{{ latest_review.after_state.qualification }}</strong> · وضعیت: {{ latest_review.after_state.status }}</p>
+  {% endif %}
+  <section style="border:1px solid #888;padding:18px;margin:22px 0;border-radius:12px">
+    <h2>۲. تهیه پیش‌نویس پیشنهاد قیمت</h2>
+    <p>فقط پس از بررسی واجدشرایط و معتبرشدن رضایت ثبت فرم، پیش‌نویس با قیمت واردشدهٔ مالک ذخیره می‌شود. این سند برای مشتری ارسال نمی‌شود.</p>
+    <form action="{% url 'mojtaba_company_case_action' case.pk 'draft' %}" method="post">
+      {% csrf_token %}{{ quote_form.request_token }}{{ quote_form.revision }}
+      <p><label for="{{ quote_form.service_code.id_for_label }}">خدمت</label>{{ quote_form.service_code }}{{ quote_form.service_code.errors }}</p>
+      <p><label for="{{ quote_form.currency.id_for_label }}">واحد پول</label>{{ quote_form.currency }}{{ quote_form.currency.errors }}</p>
+      <p><label for="{{ quote_form.unit_price.id_for_label }}">قیمت واحد (ورود دستی مالک)</label>{{ quote_form.unit_price }}{{ quote_form.unit_price.errors }}</p>
+      <p><label for="{{ quote_form.quantity.id_for_label }}">تعداد</label>{{ quote_form.quantity }}{{ quote_form.quantity.errors }}</p>
+      <p><label for="{{ quote_form.turnaround_days.id_for_label }}">برآورد زمان انجام (روز)</label>{{ quote_form.turnaround_days }}{{ quote_form.turnaround_days.errors }}</p>
+      <p><label for="{{ quote_form.valid_days.id_for_label }}">مهلت اعتبار پیش‌نویس (روز)</label>{{ quote_form.valid_days }}{{ quote_form.valid_days.errors }}</p>
+      {{ quote_form.non_field_errors }}
+      <button type="submit" style="padding:10px 15px">ذخیره پیش‌نویس فقط در پرونده داخلی</button>
+    </form>
+  </section>
+  {% else %}
+  <p>این پرونده از حالت بررسی باز خارج شده است؛ ایجاد پیشنهاد جدید در مسیر داخلی مجاز نیست.</p>
+  {% endif %}
+  <section style="border:1px solid #888;padding:18px;margin:22px 0;border-radius:12px">
+    <h2>۳. سابقه پیش‌نویس‌های داخلی</h2>
+    {% for item in drafts %}
+      <article style="border-top:1px solid #aaa;padding:12px 0">
+        <strong>{{ item.created_at|date:"Y-m-d H:i" }}</strong> · {{ item.after_state.scope_code }}
+        <p>قیمت واحد: {{ item.after_state.unit_price }} {{ item.after_state.currency }} × {{ item.after_state.quantity }} = {{ item.after_state.gross_total }} {{ item.after_state.currency }}</p>
+        <p>زمان پیشنهادی: {{ item.after_state.turnaround_days }} روز · اعتبار پیش‌نویس: {{ item.after_state.valid_days }} روز</p>
+        <p>فقط داخلی؛ ارسال‌نشده، نپذیرفته‌شده، پرداخت‌نشده و غیرتعهدآور</p>
+      </article>
+    {% empty %}
+      <p>پیش‌نویس قیمتی برای این پرونده وجود ندارد.</p>
+    {% endfor %}
+  </section>
+  <p><strong>مرز حقوقی:</strong> قیمت در این صفحه صرفاً یادداشت کارشناسی داخلی است و به معنای پیشنهاد رسمی، توافق مشتری، فاکتور یا دریافت وجه نیست.</p>
+</section>
+<style>
+  section[dir=rtl] input:not([type=hidden]),section[dir=rtl] select{display:block;width:100%;max-width:500px;padding:10px;margin-top:5px}
+  section[dir=rtl] button{cursor:pointer}
+  section[dir=rtl] dl{display:grid;grid-template-columns:minmax(80px,240px) 1fr;gap:5px 15px}
+  section[dir=rtl] dt{font-weight:700}
+  section[dir=rtl] dd{margin:0;overflow-wrap:anywhere}
+</style>
+{% endblock %}
