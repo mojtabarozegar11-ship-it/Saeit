@@ -479,3 +479,27 @@ def test_internal_ledger_and_catalog_review_not_business_progress():
             "internal_ledger_inventory", "profit_baseline",
         )
         assert result["next_action"].startswith("await_")
+
+
+@pytest.mark.django_db
+def test_all_read_only_scans_are_explicitly_not_business_effects():
+    from core.economic_tool_pack import (
+        inspect_project, market_research, opportunity_score,
+        revenue_verify, profit_optimize,
+    )
+    with patch("core.economic_tool_pack.ProductionGate") as gate:
+        gate.return_value.evaluate.return_value = SimpleNamespace(
+            ready=True, checks=(), reasons=(),
+        )
+        outputs = [
+            inspect_project({}), market_research({}), opportunity_score({}),
+            revenue_verify({}), profit_optimize({}),
+        ]
+    for result in outputs:
+        assert result["verified_effect"] is False
+        assert result["business_effect_verified"] is False
+        assert result["evidence"]["kind"] in (
+            "production_gate", "database_measurement", "product_inventory",
+            "internal_ledger_inventory", "profit_baseline",
+        )
+        assert result.get("verified_revenue") is None
