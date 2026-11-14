@@ -36,11 +36,12 @@ footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
 <p>{% if language == 'fa' %}آدرس مقصد{% else %}Receiving address{% endif %}:</p><p class="number" id="address">{{ recipient }}</p>
 <p>{% if language == 'fa' %}مبلغ دقیق قابل پرداخت{% else %}Exact amount to pay{% endif %}:</p><p class="number" id="amount">{{ trx_amount }} TRX</p>
 <p class="muted">{% if language == 'fa' %}برای شناسایی مستقل هر خرید، مبلغ صورتحساب ممکن است حداکثر ۰٫۰۱ TRX از قیمت پایه تفاوت داشته باشد. پس از پایان اعتبار صورتحساب، وجه نفرستید.{% else %}To identify your payment independently, the exact invoice may include up to 0.01 TRX in unique-amount adjustment. Do not transfer after invoice expiry.{% endif %}</p>
+
+{% else %}<p class="warn">{% if language == 'fa' %}مهلت این صورتحساب به پایان رسیده است. پرداخت جدید نفرستید. اگر در زمان اعتبار پرداخت کرده‌اید، شناسه تراکنش را زیر وارد کنید.{% else %}Invoice expired. Do not send any new payment. If you paid before expiry, you can still submit your original transaction ID.{% endif %}</p>{% endif %}
 <form method="post">{% csrf_token %}
 <label for="txid">{% if language == 'fa' %}شناسه تراکنش ۶۴ کاراکتری (پس از ارسال){% else %}64-character transaction ID (after transfer){% endif %}</label>
 <input name="txid" id="txid" spellcheck="false" autocapitalize="off" autocomplete="off" minlength="64" maxlength="64" required>
 <button type="submit">{% if language == 'fa' %}بررسی مستقل پرداخت{% else %}Verify payment on-chain{% endif %}</button></form>
-{% else %}<p class="warn">{% if language == 'fa' %}مهلت این صورتحساب به پایان رسیده است. پرداخت جدید نفرستید. اگر در زمان اعتبار پرداخت کرده‌اید، شناسه تراکنش را زیر وارد کنید.{% else %}Invoice expired. Do not send any new payment. If you paid before expiry, you can still submit your original transaction ID.{% endif %}</p>{% endif %}
 {% else %}
 <p class="warn">{% if language == 'fa' %}این صورتحساب قابل پرداخت نیست. مبلغی ارسال نکنید.{% else %}This invoice is not payable. Do not send funds.{% endif %}</p>
 {% endif %}
