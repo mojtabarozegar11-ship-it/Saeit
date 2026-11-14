@@ -14,3 +14,12 @@ class ServiceCodeTypeGuardTests(unittest.TestCase):
     def test_unknown_string_rejected(self):
         with self.assertRaises(InvalidService):
             generate({"service_code": "UNKNOWN", "data": {}}, "digest")
+
+    def test_seo_priority_non_string_fails_closed(self):
+        valid = {"id": "SEO-1", "category": "indexing", "state": "unknown",
+                 "priority": "high", "evidence_ref": ""}
+        for priority in (None, False, 1, [], {}, ["high"]):
+            with self.subTest(priority=priority):
+                check = dict(valid, priority=priority)
+                with self.assertRaises(InvalidService):
+                    generate({"service_code": "SEO-01", "data": {"checks": [check]}}, "digest")
