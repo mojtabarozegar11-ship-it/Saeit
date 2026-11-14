@@ -10,6 +10,7 @@ least 28 x 24 hours. A completed trading window never substitutes for confirmed
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
+import re
 
 PLATFORMS = ("instagram", "facebook")
 LEGACY_CONTRACT_VERSION = "2026-11-14/v1.1"
@@ -17,6 +18,14 @@ NEW_CONTRACT_VERSION = "2026-11-15/v1.2"
 DURATION_DAYS = 28
 POST_START_GRACE_HOURS = 24
 BLOCKED_OWNER_PROFILE = "dr.mojtaba.rozegar"
+BLOCKED_OWNER_FACEBOOK_PAGE_ID = "102203064721826"
+BLOCKED_OWNER_METRICOOL_BRAND_ID = "7317306"
+_BLOCKED_OWNER_COMPONENTS = frozenset((
+    BLOCKED_OWNER_PROFILE,
+    BLOCKED_OWNER_FACEBOOK_PAGE_ID,
+    BLOCKED_OWNER_METRICOOL_BRAND_ID,
+))
+_SAFE_POST_COMPONENT = re.compile(r"[A-Za-z0-9_.-]{1,128}\Z")
 DISCLOSURE_EN = "This post is required as part of my MOJ PROP challenge participation."
 DISCLOSURE_FA = "این پست طبق شرایط شرکت در چالش MOJ PROP الزامی است."
 ALLOWED_HOSTS = {
@@ -31,19 +40,36 @@ def valid_platform_post_url(url, platform):
     try:
         u = urlsplit(url)
         host = (u.hostname or "").lower()
-        parts = u.path.strip("/").split("/")
+        raw_path = u.path
+        # Percent encoding, backslashes, unicode and invisible control bytes
+        # cannot transform a banned personal-page reference into valid proof.
+        if (
+            not raw_path or "%" in raw_path or "\\" in raw_path
+            or not raw_path.isascii()
+            or any(ord(ch) < 33 or ord(ch) > 126 for ch in raw_path)
+        ):
+            return False
+        parts = raw_path.strip("/").split("/")
         if (
             u.scheme != "https" or u.netloc != host or u.username is not None
             or u.password is not None or u.port is not None
             or host not in ALLOWED_HOSTS[platform] or u.query or u.fragment
-            or BLOCKED_OWNER_PROFILE in u.path.lower()
+            or not parts
+            or any(_SAFE_POST_COMPONENT.fullmatch(p) is None for p in parts)
+            or any(p.casefold() in _BLOCKED_OWNER_COMPONENTS for p in parts)
+            or BLOCKED_OWNER_PROFILE in raw_path.casefold()
+            or BLOCKED_OWNER_FACEBOOK_PAGE_ID in raw_path
+            or BLOCKED_OWNER_METRICOOL_BRAND_ID in raw_path
         ):
             return False
         if platform == "instagram":
-            return len(parts) == 2 and parts[0] in ("p", "reel") and bool(parts[1])
+            return (
+                len(parts) == 2 and parts[0] in ("p", "reel")
+                and re.fullmatch(r"[A-Za-z0-9_-]{4,128}", parts[1]) is not None
+            )
         return (
-            (len(parts) >= 3 and parts[1] in ("posts", "reels", "videos"))
-            or (len(parts) >= 2 and parts[0] in ("posts", "reel", "videos"))
+            (len(parts) == 3 and parts[1] in ("posts", "reels", "videos"))
+            or (len(parts) == 2 and parts[0] in ("posts", "reel", "videos"))
         )
     except (ValueError, AttributeError):
         return False
