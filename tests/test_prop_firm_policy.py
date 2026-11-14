@@ -13,7 +13,8 @@ class PropFirmPolicyTests(unittest.TestCase):
     def challenge(self, **overrides):
         kwargs = dict(phase=1, account_capital=100, realized_net_profit="9.6",
                       trading_days=6, max_profitable_day=3, risk=self.risk(equity="110",
-                      open_equity="110"), evidence_verified=True, social_posts_verified=True)
+                      open_equity="110"), evidence_verified=True, social_posts_verified=True,
+                      verified_cumulative_trades=50)
         kwargs.update(overrides)
         return assess_challenge(**kwargs)
 
@@ -283,3 +284,35 @@ class PropFirmPolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_fifty_trades_required_across_both_stages_at_final_pass(self):
+        self.assertEqual(POLICY.min_closed_trades_per_challenge, 50)
+        self.assertTrue(POLICY.trader_bots_allowed)
+        phase_one=self.challenge(phase=1, verified_cumulative_trades=0,
+                                 social_posts_verified=False)
+        self.assertTrue(phase_one.passed)  # no 28-day post block on stage one
+        kwargs=dict(phase=2, realized_net_profit="6", max_profitable_day="1.8",
+                    prior_phase_passed=True)
+        self.assertFalse(self.challenge(verified_cumulative_trades=49, **kwargs).passed)
+        self.assertIn("minimum_50_distinct_closed_trades_not_met",
+                      self.challenge(verified_cumulative_trades=49, **kwargs).reasons)
+        self.assertTrue(self.challenge(verified_cumulative_trades=50, **kwargs).passed)
+        self.assertTrue(self.challenge(verified_cumulative_trades=51, **kwargs).passed)
+
+    def test_noninteger_fifty_trade_claim_rejected(self):
+        kwargs=dict(phase=2, realized_net_profit="6", max_profitable_day="1.8",
+                    prior_phase_passed=True)
+        for invalid in (True, 49.5, "50", -1):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.challenge(verified_cumulative_trades=invalid, **kwargs)
+
+    def test_legacy_contract_unchanged_by_new_fifty_trade_gate(self):
+        x=self.challenge(phase=2, realized_net_profit="6", max_profitable_day="1.8",
+            prior_phase_passed=True, verified_cumulative_trades=0,
+            contract_version="2026-11-14/v1.1",social_posts_verified=False)
+        self.assertTrue(x.passed)
+
+    def test_bot_permission_does_not_enable_real_broker_orders(self):
+        self.assertTrue(POLICY.trader_bots_allowed)
+        self.assertFalse(POLICY.real_orders_enabled)
+        self.assertFalse(POLICY.trx_checkout_enabled)
