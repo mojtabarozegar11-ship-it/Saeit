@@ -11,6 +11,8 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from core.company_inquiry_models import CompanyInquiry
+from core.models import AuditLog
+from core.company_sales_intake import FORM_VERSION
 from core.company_sales_intake import (
     CompanySalesInquiryForm, validate_body_size, require_company_host,
 )
@@ -336,3 +338,41 @@ class NativeCompanySalesTests(TestCase):
         self.client.force_login(self.owner)
         r = self.client.post("/staff/command-center/api/bot/sales-pipeline/", {})
         self.assertEqual(r.status_code, 405)
+
+    def test_61_consent_audit_written_atomically(self):
+        self.assertEqual(self.post().status_code, 302)
+        inquiry = CompanyInquiry.objects.get()
+        event = AuditLog.objects.get(action="company_inquiry_consent_submitted")
+        self.assertEqual(event.target_id, str(inquiry.pk))
+        self.assertEqual(event.after_state["form_version"], FORM_VERSION)
+        self.assertIs(event.after_state["consent_checked"], True)
+
+    def test_62_consent_statement_digest_is_deterministic(self):
+        import hashlib
+        self.post()
+        event = AuditLog.objects.get(action="company_inquiry_consent_submitted")
+        expected = hashlib.sha256(
+            str(CompanySalesInquiryForm().fields["consent"].label).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(event.after_state["consent_text_sha256"], expected)
+
+    def test_63_rejected_form_writes_no_consent_audit(self):
+        self.assert_rejected(consent="")
+        self.assertFalse(AuditLog.objects.filter(
+            action="company_inquiry_consent_submitted"
+        ).exists())
+
+    def test_64_no_buyer_pii_in_immutable_audit(self):
+        self.post()
+        event = AuditLog.objects.get(action="company_inquiry_consent_submitted")
+        self.assertNotIn("buyer@agricultural-services.org", str(event.after_state))
+        self.assertNotIn("Ali Customer", str(event.after_state))
+        self.assertIs(event.after_state["outbound_contact_sent"], False)
+        self.assertIs(event.after_state["payment_accepted"], False)
+
+    def test_65_duplicate_does_not_double_issue_audit(self):
+        self.post()
+        self.post()
+        self.assertEqual(AuditLog.objects.filter(
+            action="company_inquiry_consent_submitted"
+        ).count(), 1)
