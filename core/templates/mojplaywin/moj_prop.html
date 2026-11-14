@@ -113,6 +113,19 @@
     </div>
   </section>
 
+  <section class="mp-section mp-trading-requirement" id="trading-rule" aria-labelledby="mp-trade-title">
+    <div class="mp-section-head">
+      <p class="mp-index">28 DAYS / BOTH STAGES</p>
+      <h2 id="mp-trade-title">{{ trading.title }}</h2>
+      <p>{{ trading.body }}</p>
+    </div>
+    <article class="mp-rule-card">
+      <span class="mp-rule-caption">Verified closed positions</span>
+      <strong dir="ltr">{{ minimum_closed_trades }} TOTAL / {{ challenge_days }} DAYS</strong>
+      <p>{{ trading.bots }}</p>
+    </article>
+  </section>
+
   <section class="mp-section mp-social-requirement" id="social-rule" aria-labelledby="mp-social-title">
     <div class="mp-section-head">
       <p class="mp-index">NEW COHORT / V1.2</p>
