@@ -2,6 +2,10 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+# Guest email claims and recovery data are persistent, migration-gated models.
+# Importing models does NOT activate recovery routes or outbound mail.
+from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate
+
 
 class T(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)

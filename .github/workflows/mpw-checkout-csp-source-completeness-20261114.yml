@@ -46,7 +46,11 @@ jobs:
           assert report['files']['mpw_commerce/buyer_orders.py']=='missing_or_unsafe'
           assert report['files']['mpw_commerce/product_checkout_page.py']=='missing_or_unsafe'
           assert report['files']['mpw_commerce/templates/mpw_commerce/product_checkout.html']=='missing_or_unsafe'
-          assert report['files']['core/migrations/0049_mpw_guest_email_recovery.py']=='missing_or_unsafe'
+          assert report['files']['core/migrations/0049_mpw_guest_email_recovery.py']=='present_regular_bounded'
+          assert report['files']['services/mpw_trx_email_recovery.py']=='present_regular_bounded'
+          assert report['source_files_present']==8
+          assert report['source_files_required']==11
+          assert not report['commerce_app_installed_in_reviewed_settings_source']
           assert not report['explicit_source_routes']['commerce/book/<int:product_id>/']
           assert not report['explicit_source_routes']['store/product/<int:product_id>/checkout/']
           assert not report['release_permitted']
