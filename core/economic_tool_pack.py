@@ -435,7 +435,7 @@ _GREENHOUSE_COST_FIELDS = (
     "production_cost_per_harvested_kg", "fixed_cost", "energy_cost",
     "water_cost", "labor_cost", "other_cost",
 )
-_NONNEGATIVE_DECIMAL = re.compile(r"(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,4})?\\Z")
+_NONNEGATIVE_DECIMAL = re.compile(r"(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,4})?\Z")
 _MONEY_CENT = Decimal("0.01")
 _MASS_CENT = Decimal("0.01")
 
