@@ -12,8 +12,8 @@ a{color:#186748}small{color:#62756a}.hint{padding:12px;background:#edf4ed;border
 <p>شرکت کشت و صنعت زمرد ملل · خدمات اقتصاد تولید</p>
 <h1>ثبت درخواست تحلیل اقتصادی مزرعه</h1>
 <p>اطلاعات اولیه را وارد کنید تا مستقیماً در سامانه درخواست‌های شرکت ثبت و رسید پیگیری صادر شود. این صفحه از همان CRM اصلی استفاده می‌کند و سامانه دریافت دوم ایجاد نمی‌کند.</p>
-<p class="hint">مرحله فعلی فقط درخواست بررسی است؛ مبلغ، زمان تحویل و قرارداد باید پس از تعیین دامنه و تأیید جداگانه مشخص شوند. **هیچ پرداختی در این فرم دریافت نمی‌شود.**</p>
-</header><form method="post" action="/company/farm-economics/request/" novalidate>
+<p class="hint">مرحله فعلی فقط درخواست بررسی است؛ مبلغ، زمان تحویل و قرارداد باید پس از تعیین دامنه و تأیید جداگانه مشخص شوند. <strong>هیچ پرداختی در این فرم دریافت نمی‌شود.</strong></p>
+</header><form method="post" action="/company/farm-economics/request/">
 {% csrf_token %}
 {{ form.kind.as_hidden }}
 {{ form.subject.as_hidden }}
