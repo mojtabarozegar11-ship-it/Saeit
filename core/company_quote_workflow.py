@@ -6,6 +6,7 @@ No email, live offer, order, acceptance, settlement or service delivery.
 """
 from __future__ import annotations
 
+import hashlib
 import secrets
 from decimal import Decimal
 from django import forms
@@ -15,6 +16,7 @@ from django.utils import timezone
 
 from .chat_operation_security import is_authorized_chat_operator
 from .company_inquiry_models import CompanyInquiry
+from .company_sales_intake import FORM_VERSION, CompanySalesInquiryForm
 from .models import AuditLog
 
 REVIEW_ACTION = "company_inquiry_reviewed"
@@ -131,8 +133,15 @@ def _context(inquiry, form, *, action):
     if code not in dict(SERVICE_BY_KIND.get(inquiry.kind, ())):
         raise ValidationError("SERVICE_NOT_IN_REQUEST_CATEGORY")
     consent = _consent_record(inquiry.pk)
-    if not consent or consent.after_state.get("consent_checked") is not True:
-        raise ValidationError("CASE_HAS_NO_CONSENT_EVIDENCE")
+    label = str(CompanySalesInquiryForm().fields["consent"].label)
+    digest = hashlib.sha256(label.encode("utf-8")).hexdigest()
+    evidence = consent.after_state if consent and isinstance(consent.after_state, dict) else {}
+    if (not consent or consent.actor_type != "visitor"
+            or evidence.get("consent_checked") is not True
+            or evidence.get("form_version") != FORM_VERSION
+            or evidence.get("purpose") != "review_and_related_follow_up_only"
+            or evidence.get("consent_text_sha256") != digest):
+        raise ValidationError("CASE_HAS_NO_CURRENT_CONSENT_EVIDENCE")
     trace = f"sales-{action}-{inquiry.pk}-{form.cleaned_data['request_token']}"
     if len(trace) > 100:
         raise ValidationError("ACTION_TRACE_TOO_LONG")
