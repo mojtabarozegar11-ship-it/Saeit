@@ -11,6 +11,7 @@ from decimal import Decimal
 import hashlib
 import hmac
 import secrets
+import smtplib
 import time
 
 from django.conf import settings
@@ -255,8 +256,10 @@ def _mail_link(request, invoice, token):
     else:
         subject = "Confirm your email for your TRON invoice — MojPlayWin"
         body = "Open your secure TRON invoice using this link:\n" + link + "\nIf you did not request this, ignore this email."
-    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL,
-              [invoice.buyer_email], fail_silently=False)
+    sent = send_mail(subject, body, settings.DEFAULT_FROM_EMAIL,
+                     [invoice.buyer_email], fail_silently=False)
+    if sent != 1:
+        raise RuntimeError("Invoice confirmation email was not accepted")
 
 
 def _owner(request, invoice_id, host):
@@ -297,7 +300,8 @@ def checkout(request, product_id):
         _limit(request, email)
         invoice, token = _new_invoice(email, host, language, product_id)
         _mail_link(request, invoice, token)
-    except (ValueError, IntegrityError, OSError, ConnectionError) as exc:
+    except (ValueError, IntegrityError, OSError, ConnectionError,
+            smtplib.SMTPException, RuntimeError):
         # No wallet instructions were exposed. Email or quote failure never
         # masquerades as successful ordering.
         return _page(request, _context(None, "start", language, product=product,
@@ -426,9 +430,11 @@ def recovery(request):
             payload = {"h": host, "e": _email_key(email)}
             token = signing.dumps(payload, salt="tron:recovery:v1")
             message = (f"https://{host}/pay/tron/recovery/{token}/")
-            send_mail("TRON invoice recovery" if language == "en" else "بازیابی صورتحساب TRON",
-                      message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
-    except (ValueError, OSError, ConnectionError):
+            sent = send_mail("TRON invoice recovery" if language == "en" else "بازیابی صورتحساب TRON",
+                             message, settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False)
+            if sent != 1:
+                raise RuntimeError("Recovery email was not accepted")
+    except (ValueError, OSError, ConnectionError, smtplib.SMTPException, RuntimeError):
         pass
     # Identical response prevents user enumeration by email.
     return _page(request, _context(None, "recovery_sent", language))
