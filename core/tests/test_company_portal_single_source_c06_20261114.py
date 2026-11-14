@@ -258,3 +258,56 @@ def test_legacy_reply_does_not_echo_any_submitted_private_fields():
     r = Client().post(reverse("company"), payload(message=secret))
     assert secret not in r.content.decode("utf-8")
     assert CompanyInquiry.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(**ENABLE_FLAGS)
+def test_exact_duplicate_has_truthful_reuse_feedback_instead_of_second_success():
+    from django.contrib.messages import get_messages
+    client = Client()
+    first = client.post(reverse("company"), payload(), follow=True)
+    assert "درخواست برای بررسی ثبت شد" in first.content.decode("utf-8")
+    second = client.post(reverse("company"), payload(), follow=False)
+    notices = list(get_messages(second.wsgi_request))
+    assert any("ثبت تکراری انجام نشد" in str(message) for message in notices)
+    assert CompanyInquiry.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_owner_source_snapshot_exposes_company_form_and_post_gates_without_pii():
+    from core.service_intake_routing import service_intake_source_snapshot
+    with override_settings(**DISABLE_FLAGS):
+        data = service_intake_source_snapshot()
+    assert data["company_portal_django_form_visible"] is False
+    assert data["company_portal_django_post_enabled"] is False
+    assert data["company_portal_post_when_disabled"] == "503_no_store_no_pii_forward"
+    assert data["company_portal_external_fallback"] == "/ask-master/index.php?service=1"
+    assert data["company_portal_legacy_php_health_verified"] is None
+    assert "customer@example.com" not in str(data)
+
+
+@pytest.mark.django_db
+def test_owner_source_snapshot_matches_enabled_company_form_and_post():
+    from core.service_intake_routing import service_intake_source_snapshot
+    with override_settings(**ENABLE_FLAGS):
+        data = service_intake_source_snapshot()
+    assert data["company_portal_django_form_visible"] is True
+    assert data["company_portal_django_post_enabled"] is True
+    assert data["django_new_leads_enabled"] is True
+    assert data["production_release_authorized_by_this_report"] is False
+
+
+@pytest.mark.django_db
+def test_existing_operator_cli_reflects_same_company_post_source():
+    import json
+    from io import StringIO
+    with override_settings(**DISABLE_FLAGS):
+        out = StringIO()
+        call_command = __import__(
+            "django.core.management", fromlist=["call_command"]
+        ).call_command
+        call_command("mojtaba_intake_source_readonly", stdout=out)
+    data = json.loads(out.getvalue())
+    assert data["company_portal_django_post_enabled"] is False
+    assert data["live_php_form_verified"] is None
+    assert data["real_revenue_collected"] is None
