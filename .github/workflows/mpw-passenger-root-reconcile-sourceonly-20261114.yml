@@ -1,0 +1,67 @@
+name: MPW public Passenger root fingerprint reconciliation — redacted source only
+on:
+  push:
+    branches: [fix/mpw-passenger-root-mismatch-readonly-20261114]
+  pull_request:
+    branches: [fix/mpw-bounded-read-release-gate-20261114]
+permissions:
+  contents: read
+jobs:
+  reconcile-reviewed-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile code and preserve owner-only production bridge
+        run: |
+          python3 -m py_compile scripts/mpw_passenger_root_reconciliation_20261114.py
+          python3 -m py_compile scripts/mojplaywin_cpanel_readonly_inventory.py
+          python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py
+      - name: Run 40 new root registration adversarial checks
+        run: python3 -m unittest discover -s tests -p 'test_mpw_passenger_root_reconciliation_20261114.py' -v
+      - name: Rerun all existing checkout and cutover regression suites
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_email_required_preflight_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_inert_control_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_public_checkout_hidden_controls_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_release_assurance_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cutover_buyer_email_routes_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_response_integrity_20261114.py' -v
+      - name: Demonstrate fail-closed sanitized UAPI mismatch without real server secrets
+        run: |
+          python3 - <<'PY'
+          import json, subprocess,sys
+          from scripts.mojplaywin_cpanel_readonly_inventory import sanitize
+          value=sanitize({'result':{'status':1,'data':[
+              {'domain':'mojplaywin.com','base_uri':'/private-app/',
+               'app_root':'/fake/unrelated/production/app'},
+              {'domain':'other.example','base_uri':'/','app_root':'/other/app'}]}})
+          p=subprocess.run([sys.executable,'scripts/mpw_passenger_root_reconciliation_20261114.py'],
+                           input=json.dumps(value),text=True,capture_output=True,check=True)
+          payload=json.loads(p.stdout.split('=',1)[1])
+          assert payload['root_registration_mismatch'] is True
+          assert payload['unlisted_base_uri'] is True
+          assert payload['release_permitted'] is False
+          assert payload['effective_wsgi_worker_attested'] is False
+          assert payload['paid_settlement_attested'] is False
+          assert payload['actual_collected_revenue'] is None
+          assert '/fake/' not in p.stdout
+          print('MPW_UAPI_RECONCILIATION=SOURCE_PASS; LIVE_APPLICATION_IDENTITY=UNPROVEN; RELEASE=NO-GO')
+          PY
+      - name: Verify real buyer email and no paid purchase asserted
+        run: |
+          python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/mpw-email.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/mpw-email.json').read_text().split('=',1)[1])
+          assert r['source_candidate_complete']
+          assert not r['release_authorized']
+          assert r['actual_collected_revenue'] is None
+          print('REAL_BUYER_EMAIL=SOURCE_ONLY; PAYMENT=UNKNOWN; LIVE_RELEASE=DENIED')
+          PY
