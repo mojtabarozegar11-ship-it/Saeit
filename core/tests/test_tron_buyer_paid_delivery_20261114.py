@@ -70,7 +70,7 @@ class BuyerReceiptAndPrivateDownloadTests(TestCase):
             unit_price=Decimal("20.00"), currency="USD",
         )
         self.intent = PaymentIntent.objects.create(
-            order=self.order, amount="20.00", currency="USD",
+            order=self.order, amount=Decimal("20.00"), currency="USD",
             status="paid", provider=PROVIDER, provider_reference="a" * 64,
             idempotency_key="synthetic-invoice-20261114",
         )
