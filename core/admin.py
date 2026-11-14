@@ -272,8 +272,25 @@ from .company_inquiry_models import CompanyInquiry
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
-    list_display = ("subject", "kind", "name", "organization", "status", "created_at")
+    list_display = ("subject", "kind", "name", "organization", "status", "days_open", "service_code", "created_at")
+    list_per_page = 50
+    ordering = ("created_at", "pk")
     list_filter = ("kind", "status", "created_at")
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+    @admin.display(description="سن درخواست باز (روز)")
+    def days_open(self, obj):
+        if obj.status == "closed" or not obj.created_at:
+            return "—"
+        from django.utils import timezone
+        return max(0, (timezone.now() - obj.created_at).days)
+
+    @admin.display(description="کد خدمت")
+    def service_code(self, obj):
+        from .service_sales_controls import SERVICE_CARDS
+        return next(
+            (code for code in SERVICE_CARDS if (obj.subject or "").startswith(f"[{code}] ")),
+            "—",
+        )
