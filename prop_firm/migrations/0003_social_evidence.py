@@ -75,4 +75,19 @@ class Migration(migrations.Migration):
                 name="mp_social_verified_review_gate",
             ),
         ),
+
+        # New *prospective* accounts and logs use v1.2. Existing database
+        # values remain v1.1 and are evaluated under their original contract.
+        migrations.AlterField(
+            model_name="propaccount", name="policy_version",
+            field=models.CharField(default="2026-11-15/v1.2", max_length=32),
+        ),
+        migrations.AlterField(
+            model_name="propdecisionlog", name="policy_version",
+            field=models.CharField(default="2026-11-15/v1.2", max_length=32),
+        ),
+        migrations.AlterField(
+            model_name="propprofitallocation", name="policy_version",
+            field=models.CharField(default="2026-11-15/v1.2", max_length=32),
+        ),
     ]
