@@ -21,6 +21,27 @@ def _day(value):
     return value.astimezone(utc_timezone.utc).date()
 
 
+
+def completed_prior_phase_one(account):
+    """Require a completed, reconciled prior first evaluation for phase two.
+
+    An ordered pair of timestamps is necessary but does not itself prove a
+    legitimate customer, a funded account, or payout authorization.
+    """
+    if (not isinstance(account, PropAccount)
+            or account.kind != PropAccount.Kind.PHASE_TWO
+            or not account.pk or account.opened_at is None):
+        return False
+    return account.trader.accounts.filter(
+        kind=PropAccount.Kind.PHASE_ONE,
+        status=PropAccount.Status.PASSED,
+        reconciled_by_operator=True,
+        policy_version=POLICY.version,
+        closed_at__isnull=False,
+        closed_at__lte=account.opened_at,
+    ).exclude(pk=account.pk).exists()
+
+
 def account_projection(account, *, as_of=None, evidence_cutoff=None):
     """Return verified-only account facts. No unverified data enters calculations."""
     if not isinstance(account, PropAccount) or not account.pk:
@@ -112,12 +133,11 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     promotion_stats = None
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-            prior = account.trader.accounts.filter(
-                kind=PropAccount.Kind.PHASE_ONE,
-                status=PropAccount.Status.PASSED,
-                reconciled_by_operator=True,
-                policy_version=POLICY.version,
-            ).exclude(pk=account.pk).exists()
+            # Phase-two qualification must be based on a *previously
+            # completed* phase-one of this same trader. A phase-one passed
+            # after phase-two opened, or a passed row with no completion time,
+            # must never retroactively qualify a challenge.
+            prior = completed_prior_phase_one(account)
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
                 account_capital=account.starting_capital_usd,
