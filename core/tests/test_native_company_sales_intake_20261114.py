@@ -376,3 +376,27 @@ class NativeCompanySalesTests(TestCase):
         self.assertEqual(AuditLog.objects.filter(
             action="company_inquiry_consent_submitted"
         ).count(), 1)
+
+    def test_66_receipt_confirmation_is_not_indexable(self):
+        self.post()
+        response = self.client.get("/contact/", HTTP_HOST="zomorodmelal.ir")
+        self.assertIn("noindex", response["X-Robots-Tag"])
+        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_67_invalid_legacy_form_no_cache_and_noindex(self):
+        response = self.post(endpoint="/company/", consent="")
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("noindex", response["X-Robots-Tag"])
+
+    def test_68_company_legacy_label_matches_audit_contract(self):
+        from django.conf import settings
+        from pathlib import Path
+        path = Path(settings.BASE_DIR) / "core/templates/core/platform_page.html"
+        consent_text = str(CompanySalesInquiryForm().fields["consent"].label)
+        self.assertIn(consent_text, path.read_text(encoding="utf-8"))
+
+    def test_69_invalid_native_form_noindex(self):
+        response = self.post(consent="")
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("noindex", response["X-Robots-Tag"])
