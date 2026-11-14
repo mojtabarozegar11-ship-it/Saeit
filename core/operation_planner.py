@@ -150,7 +150,7 @@ def plan_chat_operation(text: str) -> ChatOperation | None:
     target = _explicit_target(low)
     if target is None:
         return None
-    path = _one_path(low, target)
+    path = _one_path(unquoted, target)
     if path is None:
         return None
     if create:
