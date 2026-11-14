@@ -39,7 +39,7 @@ CACHE={"default":{"BACKEND":"django.core.cache.backends.redis.RedisCache",
     TRON_UNIFIED_ALLOWED_HOSTS=["mojplaywin.com"],
     MOJ_SIGNAL_BOT_PRODUCT_CHECKOUT_ENABLED=True,
     MOJ_SIGNAL_BOT_PAID_DELIVERY_ENABLED=True,
-    ALLOWED_HOSTS=["mojplaywin.com","testserver"],
+    ALLOWED_HOSTS=["mojplaywin.com","zomorodmelal.ir","testserver"],
     CACHES=CACHE,
 )
 class PaidSignalAccessC29Tests(TestCase):
@@ -233,3 +233,10 @@ class PaidSignalAccessC29Tests(TestCase):
         invoice=self.paid()
         self.assertFalse(paid_signal_access(
             self.buyer_request(invoice,email_key="f"*64),invoice.pk,SKU).permitted)
+
+    def test_26_disallowed_host_never_throws_an_internal_error(self):
+        invoice=self.paid()
+        request=self.buyer_request(invoice,host="attacker.invalid")
+        result=paid_signal_access(request,invoice.pk,SKU)
+        self.assertFalse(result.permitted)
+        self.assertFalse(result.sends_messages)
