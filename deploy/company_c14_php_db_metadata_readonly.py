@@ -17,7 +17,7 @@ import stat
 
 MAX_SCAN = 48
 MAX_BYTES = 100_000_000
-TARGET_TABLES = ("inquiries", "requests", "service_requests", "leads", "messages", "questions")
+TARGET_TABLES = ("inquiries", "requests", "service_requests", "leads", "messages", "questions", "submissions", "tickets", "contact_requests", "form_submissions", "ask_master_requests", "inbox", "entries")
 
 def emit(name, value):
     assert re.fullmatch(r"[A-Z0-9_]+", name)
@@ -43,6 +43,18 @@ def main():
     lead_table_candidates = 0
     snapshots_with_rows = 0
     incomplete = False
+    schema_detected_candidate_tables = 0
+    schema_candidate_rows_present = False
+    source_references_candidate_basename = False
+    php_source = b''
+    php_root = home / 'public_html' / 'ask-master'
+    for source in sorted(php_root.glob('*.php'))[:12]:
+        try:
+            if source.is_symlink() or not source.is_file() or source.stat().st_size > 400_000:
+                continue
+            php_source += source.read_bytes() + b'\n'
+        except OSError:
+            continue
     for directory in dirs:
         if directory.is_symlink() or not directory.is_dir():
             continue
@@ -92,6 +104,25 @@ def main():
                     known = [table for table in TARGET_TABLES if table in tables]
                     if known:
                         lead_table_candidates += 1
+                    if f.name.encode("utf-8") in php_source:
+                        source_references_candidate_basename = True
+                    # Schema-only matching. Columns are metadata; no PII values are fetched.
+                    for table in tables:
+                        if not re.fullmatch(r"[a-zA-Z0-9_]{1,80}", table):
+                            continue
+                        columns = {
+                            col[1].casefold()
+                            for col in db.execute('PRAGMA table_info("'+table+'")')
+                            if isinstance(col[1], str)
+                        }
+                        looks_like_lead = (
+                            bool(columns & {"email", "email_address", "phone", "mobile"})
+                            and bool(columns & {"message", "body", "question", "subject", "content", "details"})
+                        )
+                        if looks_like_lead:
+                            schema_detected_candidate_tables += 1
+                            result = db.execute('SELECT EXISTS(SELECT 1 FROM "'+table+'" LIMIT 1)').fetchone()
+                            schema_candidate_rows_present |= bool(result[0])
                     for table in known:
                         # table comes from an immutable, code-owned whitelist only.
                         n = db.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0]
@@ -110,6 +141,9 @@ def main():
     emit("CANDIDATE_LEAD_TABLE_DB_COUNT", lead_table_candidates)
     emit("CANDIDATE_LEAD_TABLE_DB_WITH_ROWS", snapshots_with_rows)
     emit("CANDIDATE_SQLITE_ERROR_COUNT", corrupt_or_unavailable)
+    emit("LEAD_LIKE_SCHEMA_TABLE_COUNT", schema_detected_candidate_tables)
+    emit("LEAD_LIKE_SCHEMA_ANY_ROW", str(schema_candidate_rows_present))
+    emit("SOURCE_MENTIONS_CANDIDATE_DB_BASENAME", str(source_references_candidate_basename))
     emit("SCAN_INCOMPLETE", str(incomplete))
     emit("POTENTIAL_WAL_UNREAD", "true")
     emit("PHP_DATABASE_PATH_MATCH_VERIFIED", "unknown")
