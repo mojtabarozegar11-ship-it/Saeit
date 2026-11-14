@@ -1,0 +1,12 @@
+{
+  "canonical_bot": "mojtaba.bot.ai",
+  "offer_id": "website_diagnosis",
+  "scope_items": 1,
+  "evidence_items": 2,
+  "consent": true,
+  "rights_documents": 0,
+  "inventory_documents": 0,
+  "delivery_documents": 0,
+  "synthetic_example": true,
+  "work_package": "single_fault_diagnosis"
+}
