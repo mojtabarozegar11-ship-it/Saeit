@@ -690,3 +690,35 @@ def test_systemd_1001_lines_fail_closed_instead_of_hiding_last_worker(tmp_path):
     assert row["user_services"]["candidate_units"] == []
     assert row["system_services"]["candidate_units"] == []
     assert row["attestation"]["handoff_verified"] is False
+
+
+@pytest.mark.parametrize("spec_line,expected_schedule", [
+    ("0 9 * JAN,DEC MON-FRI python manage.py knowledge_agent_cycle",
+     "0 9 * JAN,DEC MON-FRI"),
+    ("30 6 * JAN-MAR/2 MON,WED,FRI python manage.py knowledge_agent_cycle",
+     "30 6 * JAN-MAR/2 MON,WED,FRI"),
+    ("5 2 * MAY SUN python manage.py knowledge_agent_cycle",
+     "5 2 * MAY SUN"),
+    ("0 0 * * mon-fri python manage.py knowledge_agent_cycle",
+     "0 0 * * mon-fri"),
+    ("15 20 * nov SAT python manage.py knowledge_agent_cycle",
+     "15 20 * nov SAT"),
+    ("0 1 1 FEB * python manage.py knowledge_agent_cycle",
+     "0 1 1 FEB *"),
+])
+def test_cron_named_month_weekday_ranges_are_included(spec_line, expected_schedule):
+    row = observer.safe_cron(spec_line + "\n")
+    assert len(row) == 1
+    assert row[0]["schedule"] == expected_schedule
+    assert row[0]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert len(row[0]["command_digest"]) == 16
+
+
+@pytest.mark.parametrize("spec_line", [
+    "0 9 * MARCH MON python manage.py knowledge_agent_cycle",
+    "0 9 * APRIL MON python manage.py knowledge_agent_cycle",
+    "0 9 * JAN HOLIDAY python manage.py knowledge_agent_cycle",
+    "0 9 * JAN MONDAY python manage.py knowledge_agent_cycle",
+])
+def test_cron_named_tokens_still_reject_unrecognized_words(spec_line):
+    assert observer.safe_cron(spec_line + "\n") == []
