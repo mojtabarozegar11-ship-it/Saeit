@@ -279,3 +279,29 @@ class FulfillmentFormatContractTests(TestCase):
     def test_36_unknown_format_remains_blocked(self):
         self.change_format("raw_api_secret")
         self.check_blocker("DELIVERY_FORMAT_UNSUPPORTED")
+
+    def test_37_unhashable_list_format_is_blocked_not_500(self):
+        self.change_format(["pdf", "exe"])
+        self.check_blocker("DELIVERY_FORMAT_UNSUPPORTED")
+
+    def test_38_unhashable_dict_format_is_blocked_not_500(self):
+        self.change_format({"download": "pdf"})
+        self.check_blocker("DELIVERY_FORMAT_UNSUPPORTED")
+
+    def test_39_bool_format_is_blocked_not_500(self):
+        self.change_format(True)
+        self.check_blocker("DELIVERY_FORMAT_UNSUPPORTED")
+
+    def test_40_missing_format_is_blocked_not_500(self):
+        self.change_format(None)
+        self.check_blocker("DELIVERY_FORMAT_UNSUPPORTED")
+
+    def test_41_license_array_inventory_ref_is_not_accepted(self):
+        self.license_ready()
+        self.update_product(delivery_license_inventory_ref=["secret"])
+        self.check_blocker("DELIVERY_LICENSE_INVENTORY_REF_INVALID")
+
+    def test_42_cosmetic_string_entitlement_review_is_not_accepted(self):
+        self.cosmetic_ready()
+        self.update_product(delivery_entitlement_reviewed="true")
+        self.check_blocker("DELIVERY_COSMETIC_ENTITLEMENT_NOT_REVIEWED")
