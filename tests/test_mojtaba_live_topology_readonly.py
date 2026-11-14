@@ -522,3 +522,84 @@ def test_vps_fallback_missing_secret_and_bad_fingerprint_fail_closed():
     assert 'echo "$VPS_KEY"' not in workflow
     assert 'sudo ' not in workflow
     assert "MOJTABA_DUAL_HOST_GATE=BLOCKED_INCOMPLETE" in workflow
+
+
+def test_cron_macro_shortcuts_are_recorded_and_redacted():
+    secret = "PRIVATE_CRON_TOKEN_NOT_FOR_LOGS"
+    raw = (
+        f"@reboot python manage.py run_economic_worker --secret {secret}\\n"
+        "@daily\tpython manage.py knowledge_agent_cycle\\n"
+        "@hourly python manage.py newsletter_process_queue\\n"
+        "@monthly python unrelated.py\\n"
+    ).replace("\\\\n", "\\n")
+    rows = observer.safe_cron(raw)
+    assert [row["schedule"] for row in rows] == [
+        "@reboot", "@daily", "@hourly", "@monthly",
+    ]
+    assert rows[0]["known_route_flags"] == ["run_economic_worker"]
+    assert rows[1]["known_route_flags"] == ["knowledge_agent_cycle"]
+    assert rows[2]["known_route_flags"] == ["newsletter_process_queue"]
+    assert rows[3]["known_route_flags"] == []
+    assert all(len(row["command_digest"]) == 16 for row in rows)
+    assert secret not in json.dumps(rows)
+    assert "python" not in json.dumps(rows)
+
+
+def test_cron_macro_rejects_unknown_malformed_and_empty_shortcuts():
+    rows = observer.safe_cron(
+        "@random python manage.py run_economic_worker\\n"
+        "@reboot\\n"
+        "@hourly    \\n"
+        "# @daily python manage.py knowledge_agent_cycle\\n"
+        "@annually\tpython manage.py weather_agent_cycle\\n"
+    )
+    assert len(rows) == 1
+    assert rows[0]["schedule"] == "@annually"
+    assert rows[0]["known_route_flags"] == ["weather_agent_cycle"]
+
+
+def test_cpanel_collect_reports_successful_sqlite_aggregate_query(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)")
+        conn.execute("INSERT INTO agents VALUES ('master', 1)")
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("cpanel", home=tmp_path, username="zomorod2")
+    assert row["database_queried"] is True
+    assert row["private_php_site_registry"]["state"] == "source_registry_snapshot_only"
+    assert row["private_php_site_registry"]["known_roles_found"] == 1
+    assert row["attestation"]["canonical_worker_executed"] is False
+    assert row["attestation"]["legacy_workers_retired"] is False
+
+
+def test_cpanel_missing_sqlite_does_not_claim_database_query(tmp_path):
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("cpanel", home=tmp_path, username="zomorod2")
+    assert row["database_queried"] is False
+    assert row["private_php_site_registry"]["state"] == "private_database_not_observed"
+    assert row["attestation"]["source_code_deployment_matches_pr"] is False
+
+
+def test_vps_collector_never_claims_sqlite_query(tmp_path):
+    with patch.object(observer, "call_readonly",
+                      return_value=("unavailable", "")):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["database_queried"] is False
+    assert row["private_php_site_registry"]["state"] == "not_applicable"
+
+
+def test_macro_cron_inventory_is_not_live_worker_attestation(tmp_path):
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", "@reboot python manage.py run_economic_worker\\n"),
+        ("unavailable", ""), ("unavailable", ""), ("unavailable", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["enumerated_entries"] == 1
+    assert row["cron"]["entries"][0]["schedule"] == "@reboot"
+    assert row["attestation"]["canonical_worker_executed"] is False
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+    assert row["attestation"]["automatic_deactivation_authorized"] is False
