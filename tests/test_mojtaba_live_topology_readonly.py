@@ -257,6 +257,36 @@ def test_private_php_registry_invalid_enabled_flag_fails_closed(tmp_path):
     assert report["database_state_proves_live_workers"] is False
 
 
+
+@pytest.mark.parametrize("bad_flag", [1.5, "1", None])
+def test_private_php_registry_coercible_or_null_flags_fail_closed(tmp_path, bad_flag):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as connection:
+        # SQLite NUMERIC affinity can coerce text '1' to integer 1, so use
+        # a TEXT-free column to preserve the malformed storage class.
+        connection.execute("CREATE TABLE agents (code TEXT, enabled)")
+        connection.execute("INSERT INTO agents VALUES (?, ?)", ("master", bad_flag))
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "invalid_registry_enabled_flag"
+    assert report["records"] is None
+    assert report["enabled_count"] is None
+    assert report["database_state_proves_live_workers"] is False
+
+
+def test_private_php_registry_nontext_identity_fails_closed(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE agents (code, enabled INTEGER)")
+        connection.execute("INSERT INTO agents VALUES (?, ?)", (42, 1))
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "invalid_registry_enabled_flag"
+    assert report["enabled_count"] is None
+
+
 def test_private_php_registry_wal_refuses_stale_snapshot(tmp_path):
     private = tmp_path / ".private" / "zomorod-business"
     private.mkdir(parents=True)
