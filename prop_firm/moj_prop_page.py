@@ -39,6 +39,11 @@ def catalog():
                 raise ValueError(f"Missing or incomplete translation: {code}/{group}")
             if any(not isinstance(v, str) or not v.strip() for v in texts):
                 raise ValueError(f"Empty localized text: {code}/{group}")
+        trading = item.get("trading")
+        if (not isinstance(trading, dict)
+                or set(trading) != {"title", "body", "bots"}
+                or any(not isinstance(v, str) or not v.strip() for v in trading.values())):
+            raise ValueError(f"Missing verified trade / bot disclosure: {code}")
         social = item.get("social")
         if (not isinstance(social, dict) or set(social) != {"title", "body", "disclosure"}
                 or any(not isinstance(v, str) or not v.strip() for v in social.values())):
@@ -99,6 +104,9 @@ def page_context(code="en"):
         "faq": t["faq"],
         "footer": t["footer"],
         "social": t["social"],
+        "trading": t["trading"],
+        "minimum_closed_trades": p.min_closed_trades_per_challenge,
+        "trader_bots_allowed": p.trader_bots_allowed,
         "social_posts_per_platform_per_challenge": p.social_posts_per_platform_per_challenge,
         "challenge_days": p.completion_deadline_days,
         "social_platforms": p.social_posting_platforms,
