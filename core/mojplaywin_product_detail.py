@@ -54,6 +54,33 @@ PUBLIC_CATALOG = {
 }
 
 
+def _approved_purchase_url(request, product):
+    """Link only to the *effective* private TRX gateway after all its gates pass.
+
+    Public Saeit may not contain the private gateway modules at all.
+    No optimistic purchase URL is rendered if components are missing or
+    live rights, verified delivery, HTTPS, host or URL registration disagree.
+    """
+    try:
+        from django.urls import reverse, resolve
+        from services.mpw_trx_commercial_context import checkout_flags
+        from services.mpw_trx_public_catalog import public_trx_product
+        if checkout_flags(request).get("mpw_trx_easy_enabled") is not True:
+            return None
+        if public_trx_product(product.pk) is None:
+            return None
+        path = reverse("mpw_commerce:book", args=[product.pk])
+        if resolve(path).url_name != "book":
+            return None
+        if not path.startswith("/commerce/book/"):
+            return None
+        return path
+    except Exception:
+        # Any missing private component, migration, provider or URL is a HOLD,
+        # not an invitation to generate an invoice or mark a sale as live.
+        return None
+
+
 def brand_product_detail(request, product_id):
     """Never expose one company's product page as the other's sales offer."""
     host = request.get_host().split(":")[0].lower()
@@ -85,15 +112,18 @@ def brand_product_detail(request, product_id):
             logging.getLogger(__name__).warning(
                 "MojPlayWin product view telemetry unavailable"
             )
-    # No sales-enabled flag is sufficient proof of TRX mainnet receipt and
-    # protected downloadable content; all CTAs stay informational.
-    available_for_checkout = False
+    # The live private gateway may already exist on cPanel even though its
+    # source is excluded from this public repository. Respect its actual
+    # merchant, rights, product-asset and route checks before exposing checkout.
+    purchase_url = _approved_purchase_url(request, db_product) if matched else None
+    available_for_checkout = bool(purchase_url)
     context = {
         "catalog": item,
         "product_id": product_id,
         "canonical": f"https://mojplaywin.com/store/product/{product_id}/",
         "listed_in_database": matched,
         "purchase_available": available_for_checkout,
+        "approved_purchase_url": purchase_url,
         "return_path": "/store/",
         "is_preview": not matched,
     }
