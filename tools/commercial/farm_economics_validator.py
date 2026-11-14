@@ -36,7 +36,12 @@ def validate_csv(text):
         contribution = revenue - values["variable_cost"]
         operating = contribution - values["fixed_cost"]
         economic = operating - values["opportunity_cost"]
-        margin = (values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"] if values["sold_quantity"] else None
+        # Period-level other revenue has no proven per-unit basis.
+        # If some output remains unsold, the costs of sold units cannot be
+        # isolated from this aggregate CSV. Do not invent a break-even.
+        fully_sold = values["sold_quantity"] == values["production_quantity"] and values["sold_quantity"] > 0
+        margin = ((values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"]
+                  if fully_sold else None)
         break_even = values["fixed_cost"] / margin if margin is not None and margin > 0 else None
         result.append({"enterprise_id":row["enterprise_id"],"currency":row["currency"],"contribution":str(contribution),"operating_surplus":str(operating),"economic_profit":str(economic),"break_even_units":str(break_even) if break_even is not None else "NOT_ATTAINABLE"})
     if not result:
