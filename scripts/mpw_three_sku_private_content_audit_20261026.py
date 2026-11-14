@@ -62,6 +62,24 @@ def srcset_urls(value):
     return urls
 
 
+
+def resolve_archive_asset(html_name, reference):
+    """Resolve as a browser would within an archive; never escape its root."""
+    if not isinstance(reference, str) or not reference or "\\" in reference or "\0" in reference:
+        return None
+    parts = [] if reference.startswith("/") else list(PurePosixPath(html_name).parent.parts)
+    for part in PurePosixPath(reference).parts:
+        if part in ("/", ".", ""):
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+        else:
+            parts.append(part)
+    return "/".join(parts) if parts else None
+
+
 class PageAudit(html.parser.HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -425,15 +443,14 @@ def audit_zip(path):
                 parser.feed(raw.decode("utf-8"))
             except UnicodeDecodeError:
                 parser.feed(raw.decode("utf-8", errors="replace"))
-            parent = PurePosixPath(info.filename).parent
             unresolved = []
             for ref in parser.local_links:
                 if not ref:
                     continue
-                candidate = PurePosixPath(ref)
-                resolved = (parent / candidate)
-                options = {str(resolved), str(candidate)}
-                if not any(x in names for x in options):
+                # A root-level asset does not make a broken nested relative
+                # link valid; conversely ../ and /asset.png must resolve.
+                resolved = resolve_archive_asset(info.filename, ref)
+                if resolved is None or resolved not in names:
                     unresolved.append(ref[:180])
             missing_local.extend(unresolved)
             pages.append({
