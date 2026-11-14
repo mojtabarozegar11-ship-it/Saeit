@@ -281,6 +281,34 @@ def test_cpanel_private_registry_yields_per_role_records_not_false_active_bots()
     assert roles["weather"]["retirement_authorized"] is False
 
 
+
+@pytest.mark.parametrize("known,unknown,total,expected_blocker", [
+    (2, 1, 3, "unknown_enabled_php_identities_need_reconciliation"),
+    (2, 0, 3, "php_enabled_identity_counts_inconsistent"),
+    (None, None, 3, "php_enabled_identity_breakdown_unavailable"),
+])
+def test_php_disposition_blocks_unreconciled_enabled_identity_counts(
+    known, unknown, total, expected_blocker
+):
+    php = {
+        "state": "source_registry_snapshot_only",
+        "agent_roles": [{"code": "master", "enabled": True}],
+        "known_roles_found": 1,
+        "enabled_count": total,
+        "known_enabled_count": known,
+        "unknown_enabled_count": unknown,
+    }
+    report = module.preview(
+        snap("vps"), snap("cpanel", private_php_site_registry=php),
+        MANIFEST, repository_root=ROOT,
+    )
+    group = next(g for g in report["groups"]
+                 if g["source_group"] == "zomorod_php_site_agent_runtime")
+    assert expected_blocker in group["blocking_evidence"]
+    assert group["retirement_authorized"] is False
+    assert report["verified_live_agents"] is None
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
