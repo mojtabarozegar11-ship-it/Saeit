@@ -114,10 +114,16 @@ class ReadOnlyAuditTests(unittest.TestCase):
 
     def test_no_post_payment_or_output_of_customer_data(self):
         r = M.diagnose(self.fetcher())
-        for key in ("forms_submitted","remote_writes","requests_sent"):
+        for key in ("forms_submitted","remote_writes","lead_submissions_sent"):
             self.assertEqual(r[key],0)
         self.assertFalse(r["credentials_used"])
         self.assertNotIn("html", str(r).lower())
+
+    def test_three_gets_distinguished_from_zero_customer_submissions(self):
+        r = M.diagnose(self.fetcher())
+        self.assertEqual(r["http_get_requests"], 3)
+        self.assertEqual(r["lead_submissions_sent"], 0)
+        self.assertNotIn("requests_sent", r)
 
     def test_form_get_method_is_not_sufficient(self):
         r = M.diagnose(self.fetcher(form=FORM_HTML.replace('method="post"','method="get"')))
