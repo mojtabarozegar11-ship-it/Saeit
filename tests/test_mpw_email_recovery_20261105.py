@@ -329,12 +329,17 @@ class RecoveryIsolationTests(TransactionTestCase):
                  "_download_paid": handler}
         names["COMMERCIAL_URLPATTERNS"] = (
             ("commerce/trx-easy/start/<int:product_id>/", handler),
-            ("commerce/trx-easy/download/<int:invoice_id>/", handler),
+            ("commerce/trx-easy/invoice/<str:invoice_id>/", handler),
+            ("commerce/trx-easy/invoice/<str:invoice_id>/status/", handler),
+            ("commerce/trx-easy/invoice/<str:invoice_id>/reconcile/", handler),
+            ("commerce/trx-easy/download/<str:receipt_id>/", handler),
+            ("commerce/trx-easy/catalogue/", handler),
         )
         guest_adapter.patch_commercial(names)
         routes = dict(names["COMMERCIAL_URLPATTERNS"])
-        self.assertEqual(len(routes), 7)
-        self.assertIn("commerce/trx-easy/receipt/", routes)
+        self.assertEqual(len(routes), 10)
+        self.assertIs(routes["commerce/trx-easy/start/<int:product_id>/"],
+                      names["start_order"])
         self.assertIn("commerce/trx-easy/recover/download/<int:invoice_id>/", routes)
         self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
         self.assertIs(names["_start_order"], handler)
