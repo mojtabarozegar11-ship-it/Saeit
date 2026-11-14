@@ -355,3 +355,39 @@ class BuyerReceiptAndPrivateDownloadTests(TestCase):
             Order.objects.count(), PaymentIntent.objects.count(),
             PaymentWebhookEvent.objects.count(), LedgerEntry.objects.count(),
         ))
+
+    def test_39_prequote_missing_file_creates_no_pending_order(self):
+        before = (Order.objects.count(), TronGatewayInvoice.objects.count())
+        self.file.unlink()
+        with override_settings(TRON_UNIFIED_PRIVATE_DIGITAL_ROOT=str(self.root)):
+            with self.assertRaises(ValueError):
+                _new_invoice("newbuyer@example.invalid", "mojplaywin.com", "en", self.product.pk)
+        self.assertEqual(before, (Order.objects.count(), TronGatewayInvoice.objects.count()))
+
+    def test_40_valid_prequote_creates_one_pending_email_invoice_without_sending(self):
+        from core.tron_gateway_web import _new_invoice
+        with override_settings(TRON_UNIFIED_PRIVATE_DIGITAL_ROOT=str(self.root)):
+            with patch("core.tron_gateway_web.send_mail") as send:
+                invoice, token = _new_invoice(
+                    "newbuyer@example.invalid", "mojplaywin.com", "en", self.product.pk,
+                )
+                send.assert_not_called()
+        self.assertEqual(invoice.status, "email_pending")
+        self.assertTrue(len(token) >= 30)
+        self.assertEqual(invoice.order.status, "pending")
+        self.assertEqual(invoice.payment_intent.status, "awaiting_payment")
+        self.assertEqual(invoice.quote_fingerprint, _read_product(self.product.pk, "en")[2])
+
+    def test_41_requote_fails_if_digital_file_checksum_mismatches(self):
+        before = TronGatewayInvoice.objects.count()
+        self.file.write_bytes(self.bytes + b"tampering")
+        with override_settings(TRON_UNIFIED_PRIVATE_DIGITAL_ROOT=str(self.root)):
+            with self.assertRaises(ValueError):
+                _new_invoice("freshbuyer@example.invalid", "mojplaywin.com", "en", self.product.pk)
+        self.assertEqual(TronGatewayInvoice.objects.count(), before)
+
+    def test_42_invoice_prequote_does_not_change_paid_invoice(self):
+        self.test_40_valid_prequote_creates_one_pending_email_invoice_without_sending()
+        self.invoice.refresh_from_db()
+        self.assertEqual(self.invoice.status, "paid")
+        self.assertEqual(self.invoice.txid, self.txid)
