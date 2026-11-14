@@ -161,3 +161,61 @@ class StrictQuoteScenarioTests(TestCase):
         x = compute_quote_scenario(quote())
         self.assertTrue(x["requires_owner_approval_for_price_and_spend"])
         self.assertEqual(x["financial_claim"], "SCENARIO_ONLY_NOT_RECEIPT")
+
+
+class ConservativeMoneyCycle02Tests(TestCase):
+    """Close underpricing gaps without inventing sold units or cash."""
+
+    def test_five_fractional_costs_round_up_individually(self):
+        x = compute_quote_scenario(quote(
+            discount_percent=0, direct_unit_cost="0.001",
+            delivery_unit_cost="0.001", payment_unit_fee="0.001",
+            refund_unit_reserve="0.001", tax_unit_reserve="0.001",
+        ))
+        self.assertEqual(x["variable_unit_cost"], "0.05")
+
+    def test_fractional_fixed_cost_rounds_up(self):
+        x = compute_quote_scenario(quote(period_fixed_cost="0.001"))
+        self.assertEqual(x["period_fixed_cost"], "0.01")
+
+    def test_break_even_shortfall_calculated(self):
+        x = compute_quote_scenario(quote(expected_units=1))
+        self.assertEqual(x["break_even_units_shortfall"], 3)
+
+    def test_reached_break_even_has_zero_shortfall(self):
+        x = compute_quote_scenario(quote(expected_units=5))
+        self.assertEqual(x["break_even_units_shortfall"], 0)
+
+    def test_never_claim_shortfall_when_not_viable(self):
+        x = compute_quote_scenario(quote(direct_unit_cost=150))
+        self.assertIsNone(x["break_even_units_shortfall"])
+
+    def test_minimum_price_for_target_volume(self):
+        x = compute_quote_scenario(quote(expected_units=5))
+        self.assertEqual(x["minimum_unit_sale_price_for_expected_units"], "81.00")
+
+    def test_zero_target_has_no_minimum_price(self):
+        x = compute_quote_scenario(quote(expected_units=0))
+        self.assertIsNone(x["minimum_unit_sale_price_for_expected_units"])
+
+    def test_contribution_margin_percentage(self):
+        x = compute_quote_scenario(quote())
+        self.assertEqual(x["contribution_margin_percent"], "50.00")
+
+    def test_zero_price_has_no_margin_percentage(self):
+        x = compute_quote_scenario(quote(discount_percent=100))
+        self.assertIsNone(x["contribution_margin_percent"])
+
+    def test_trx_cost_never_rounds_down_to_zero(self):
+        x = compute_quote_scenario(quote(
+            currency="TRX", base_unit_price="1",
+            discount_percent=0, direct_unit_cost="0.0000001",
+            delivery_unit_cost=0, payment_unit_fee=0,
+            refund_unit_reserve=0, tax_unit_reserve=0,
+        ))
+        self.assertEqual(x["variable_unit_cost"], "0.000001")
+
+    def test_cost_component_breakdown_matches_total(self):
+        x = compute_quote_scenario(quote())
+        items = x["cost_components_rounded_up"]
+        self.assertEqual(sum(map(Decimal, items.values())), Decimal(x["variable_unit_cost"]))
