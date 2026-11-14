@@ -15,7 +15,7 @@ from .models import (
     PropAccount, PropExecution, PropEquityObservation,
     PropProfitAllocation, PropProfitJournalLine,
 )
-from .periods import most_recent_completed_period
+from .periods import most_recent_completed_period, completed_period_by_number
 from .portal import account_projection
 from .rules import POLICY, calculate_payout
 
@@ -88,7 +88,7 @@ def _journal_is_balanced(allocation):
 
 
 @transaction.atomic
-def stage_provisional_allocation(*, account_id, as_of=None):
+def stage_provisional_allocation(*, account_id, as_of=None, period_number=None):
     """Atomic internal snapshot, strictly sequential, immutable per period.
 
     No HTTP route exists for this action. Call only from a trusted, separately
@@ -108,20 +108,38 @@ def stage_provisional_allocation(*, account_id, as_of=None):
         raise AllocationRejected("KYC/eligibility incomplete")
     if not account.reconciled_by_operator:
         raise AllocationRejected("Independent operator reconciliation missing")
-    period = most_recent_completed_period(opened_at=account.opened_at, as_of=now)
-    if period is None:
+    latest_completed = most_recent_completed_period(
+        opened_at=account.opened_at, as_of=now
+    )
+    if latest_completed is None:
         raise AllocationRejected("30-day period has not completed")
-
     latest = (PropProfitAllocation.objects.filter(account=account)
               .order_by("-period_number").first())
-    # Only stage sequential periods; no skipped losses or future leakage.
-    if latest and latest.period_number not in (period.number, period.number - 1):
+    next_number = 1 if latest is None else latest.period_number + 1
+    if period_number is None:
+        # An identical request in the same latest period is idempotent;
+        # if the treasury missed months, process the oldest one first.
+        requested = (
+            latest.period_number if latest and latest.period_number == latest_completed.number
+            else next_number
+        )
+    else:
+        if (isinstance(period_number, bool) or not isinstance(period_number, int)
+                or period_number < 1):
+            raise AllocationRejected("Invalid accounting period")
+        requested = period_number
+    if latest and requested not in (latest.period_number, next_number):
         raise AllocationRejected("Cannot skip or roll back accounting periods")
-    if not latest and period.number != 1:
+    if not latest and requested != 1:
         raise AllocationRejected("First allocation must cover first period")
+    period = completed_period_by_number(
+        opened_at=account.opened_at, as_of=now, period_number=requested
+    )
+    if period is None:
+        raise AllocationRejected("Requested accounting period is not complete")
 
     executions, marks = _verified_source(account, period_end=period.end)
-    projection = account_projection(account, as_of=now)
+    projection = account_projection(account, as_of=now, evidence_cutoff=period.end)
     if not projection["verified"] or not projection["risk"].allowed:
         raise AllocationRejected("Historical risk/reconciliation not established")
 
@@ -131,8 +149,21 @@ def stage_provisional_allocation(*, account_id, as_of=None):
     cumulative_net = sum((e.net_realized_usd for e in executions), Decimal("0"))
     source = "\n".join(
         [str(account.id), str(period.number), period.end.isoformat(), str(cumulative_net)]
-        + [f"T|{e.external_event_id}|{e.evidence_digest}" for e in executions]
-        + [f"E|{e.external_event_id}|{e.evidence_digest}" for e in marks]
+        + [
+            "T|{}|{}|{}|{}|{}|{}|{}".format(
+                e.external_event_id, e.evidence_digest, e.data_source,
+                e.closed_at.isoformat(), e.symbol,
+                e.gross_realized_usd, e.total_fees_usd
+            )
+            for e in executions
+        ]
+        + [
+            "E|{}|{}|{}|{}|{}".format(
+                e.external_event_id, e.evidence_digest,
+                e.observed_at.isoformat(), e.equity_usd, e.is_session_open
+            )
+            for e in marks
+        ]
     )
     digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
     existing = PropProfitAllocation.objects.filter(
