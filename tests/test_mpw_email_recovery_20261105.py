@@ -94,6 +94,63 @@ class RecoveryIsolationTests(TransactionTestCase):
                          self._install, (72,), {}).status_code, 400)
         self.assertEqual(Order.objects.count(), 1)
 
+    def _post_with_contact_fields(self, data):
+        req = self.rf.post("/commerce/trx-easy/start/72/", data,
+                           secure=True, HTTP_HOST="mojplaywin.com")
+        req.user = self.user
+        return req
+
+    def _assert_bad_contact_never_creates_order(self, data):
+        response = module.bound_checkout(
+            self._post_with_contact_fields(data), self._start,
+            self._identity, self._install, (72,), {},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(PaymentIntent.objects.count(), 0)
+        self.assertEqual(GuestOrderEmail.objects.count(), 0)
+
+    def test_identical_duplicate_contact_values_do_not_create_invoice(self):
+        self._assert_bad_contact_never_creates_order(
+            {"email": ["buyer@example.com", "buyer@example.com"]})
+
+    def test_blank_duplicate_contact_value_does_not_create_invoice(self):
+        self._assert_bad_contact_never_creates_order(
+            {"email": ["buyer@example.com", ""]})
+
+    def test_two_identical_email_aliases_do_not_create_invoice(self):
+        self._assert_bad_contact_never_creates_order(
+            {"email": "buyer@example.com", "buyer_email": "buyer@example.com"})
+
+    def test_secondary_blank_alias_does_not_silently_disappear(self):
+        self._assert_bad_contact_never_creates_order(
+            {"email": "buyer@example.com", "buyer_email": ""})
+
+    def test_invalid_email_never_creates_an_invoice(self):
+        self._assert_bad_contact_never_creates_order(
+            {"email": "not-an-email-address"})
+
+    def test_non_post_request_email_cannot_issue_invoice(self):
+        req = self.rf.get("/commerce/trx-easy/start/72/",
+                          {"email": "buyer@example.com"},
+                          secure=True, HTTP_HOST="mojplaywin.com")
+        req.user = self.user
+        self.assertEqual(module.bound_checkout(
+            req, self._start, self._identity, self._install, (72,), {},
+        ).status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(GuestOrderEmail.objects.count(), 0)
+
+    def test_canonicalized_contact_binds_immutable_order_claim(self):
+        response = module.bound_checkout(
+            self._request("  BUYER@EXAMPLE.COM  "), self._start,
+            self._identity, self._install, (72,), {},
+        )
+        self.assertEqual(response.status_code, 302)
+        claim = GuestOrderEmail.objects.get()
+        self.assertEqual(claim.email_address, "buyer@example.com")
+        self.assertEqual(claim.email_digest, module._digest("buyer@example.com"))
+
     def test_email_claim_cannot_be_reassigned_after_creation(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})

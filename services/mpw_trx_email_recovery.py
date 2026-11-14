@@ -78,16 +78,31 @@ def _email(value):
 
 
 def _posted_email(request):
-    # Different checkout templates have historically used these four names.
-    # Reject conflicting values instead of choosing an attacker-controlled one.
+    """Require exactly one supplied buyer address from the *POST body*.
+
+    A duplicate or blank alias is ambiguous even when another field has a
+    valid address. Never silently discard repeated browser/proxy values or
+    choose an attacker-controlled winner. HTML required=email is not a
+    substitute for this independent server-side purchase invariant.
+    """
+    if getattr(request, "method", None) != "POST":
+        raise ValueError("Buyer email requires a checkout POST")
+    fields = getattr(request, "POST", None)
+    if fields is None or not callable(getattr(fields, "getlist", None)):
+        raise ValueError("Checkout form data unavailable")
     values = []
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        for value in request.POST.getlist(key):
-            if value:
-                values.append(_email(value))
-    if not values or any(value != values[0] for value in values):
-        raise ValueError("Missing or conflicting checkout email")
-    return values[0]
+    for key in ("email", "buyer_email", "customer_email", "purchase_email",
+                "purchaser_email"):
+        submitted = fields.getlist(key)
+        if not isinstance(submitted, (list, tuple)) or len(submitted) > 1:
+            raise ValueError("Ambiguous checkout email fields")
+        if submitted:
+            values.append(submitted[0])
+        if len(values) > 1:
+            raise ValueError("Multiple buyer email fields")
+    if len(values) != 1:
+        raise ValueError("Exactly one buyer email is required")
+    return _email(values[0])
 
 
 def _digest(value, purpose="email"):
