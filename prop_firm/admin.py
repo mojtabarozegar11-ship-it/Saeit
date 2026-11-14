@@ -33,7 +33,8 @@ class PropAccountAdmin(LockedAuditAdmin):
 
 @admin.register(PropExecution)
 class PropExecutionAdmin(LockedAuditAdmin):
-    list_display = ("id", "account_id", "symbol", "reconciliation_status", "closed_at")
+    list_display = ("id", "account_id", "symbol", "external_position_id",
+                    "execution_origin", "reconciliation_status", "closed_at")
     list_filter = ("reconciliation_status",)
 
 
