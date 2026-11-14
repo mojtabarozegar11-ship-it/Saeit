@@ -7,6 +7,7 @@ Never treats an HTML form as proof that an order is payable or delivered.
 from __future__ import annotations
 
 from html.parser import HTMLParser
+import re
 
 MAX_CHECKOUT_BYTES = 512_000
 EMAIL_FIELDS = frozenset({
@@ -15,6 +16,10 @@ EMAIL_FIELDS = frozenset({
 })
 OVERRIDE_ATTRIBUTES = frozenset({
     "formaction", "formmethod", "formenctype", "formtarget", "formnovalidate",
+})
+VOID_ELEMENTS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input",
+    "link", "meta", "param", "source", "track", "wbr",
 })
 
 
@@ -34,14 +39,40 @@ class _CheckoutParser(HTMLParser):
         self.email_inputs = []
         self.submit_count = 0
         self.script_count = 0
+        # Real browser form controls inside inert/hidden ancestors are unusable.
+        # Preserve ancestry to reject a syntactically complete but invisible form.
+        self._scopes = []
 
     @staticmethod
     def _attrs(attributes):
         names = [name.casefold() for name, _ in attributes if name]
         return names, {name.casefold(): value for name, value in attributes if name}
 
+    @staticmethod
+    def _visually_inert(tag, attrs):
+        style = re.sub(r"\\s+", "", (attrs.get("style") or "").casefold())
+        # Inline style, hidden/inert and ARIA-hidden/disabled control states
+        # cannot prove an interactable buyer form on a source-only review.
+        return (
+            "hidden" in attrs or "inert" in attrs
+            or (attrs.get("aria-hidden") or "").casefold() == "true"
+            or (attrs.get("aria-disabled") or "").casefold() == "true"
+            or "display:none" in style or "visibility:hidden" in style
+            or "content-visibility:hidden" in style or "opacity:0" in style
+            or "pointer-events:none" in style
+            or (tag == "fieldset" and "disabled" in attrs)
+            or tag == "template"
+            or (tag in ("details", "dialog") and "open" not in attrs)
+        )
+
     def handle_starttag(self, tag, attributes):
         names, attrs = self._attrs(attributes)
+        inherited_inert = bool(self._scopes and self._scopes[-1][1])
+        inert = inherited_inert or self._visually_inert(tag, attrs)
+        if tag not in VOID_ELEMENTS:
+            self._scopes.append((tag, inert))
+        if tag == "form" and inert:
+            self.errors.add("inert_buyer_form")
         if any(name.startswith("on") for name in names):
             self.errors.add("inline_event_handler")
         if any(isinstance(value, str) and value.lstrip().casefold().startswith(
@@ -81,37 +112,61 @@ class _CheckoutParser(HTMLParser):
             return
         if any(name in OVERRIDE_ATTRIBUTES for name in names) or "form" in names:
             self.errors.add("submit_override")
+        if inert:
+            self.errors.add("inert_checkout_control")
         if any(names.count(key) > 1 for key in
-               ("name", "value", "type", "required", "disabled", "readonly", "id")):
+               ("name", "value", "type", "required", "disabled", "readonly",
+                "id", "maxlength", "minlength", "pattern", "autocomplete")):
             self.errors.add("duplicate_control_attribute")
         name = (attrs.get("name") or "").strip().casefold()
         kind = (attrs.get("type") or ("submit" if tag == "button" else "text")).casefold()
         if tag == "input" and name == "csrfmiddlewaretoken":
-            self.form["csrf"].append((kind, attrs.get("value"), "disabled" in attrs))
+            self.form["csrf"].append((kind, attrs.get("value"), inert or "disabled" in attrs))
         if (name in EMAIL_FIELDS or kind == "email"
                 or "email" in (attrs.get("id") or "").casefold()
                 or (attrs.get("autocomplete") or "").casefold() == "email"):
             # Browsers truncate values at maxlength; too-small inputs make
             # a valid customer contact impossible even if required is set.
+            max_length = 254
             if "maxlength" in attrs:
                 try:
-                    limit = int(attrs.get("maxlength"))
-                    if not 6 <= limit <= 254:
+                    max_length = int(attrs.get("maxlength"))
+                    if not 6 <= max_length <= 254:
                         self.errors.add("buyer_email_length_limit")
                 except (TypeError, ValueError):
                     self.errors.add("buyer_email_length_limit")
+            if "minlength" in attrs:
+                try:
+                    minimum = int(attrs.get("minlength"))
+                    if not 0 <= minimum <= max_length:
+                        self.errors.add("buyer_email_length_limit")
+                except (TypeError, ValueError):
+                    self.errors.add("buyer_email_length_limit")
+            if "pattern" in attrs:
+                # Custom HTML patterns can reject otherwise valid buyer emails.
+                # Keep the browser's native email validation as the only gate.
+                self.errors.add("unsupported_email_pattern")
+            if (attrs.get("inputmode") or "").casefold() == "none":
+                self.errors.add("email_keyboard_disabled")
             self.form["email"].append((
                 tag, name, kind, "required" in attrs,
-                "disabled" in attrs or "readonly" in attrs or "multiple" in attrs,
+                inert or "disabled" in attrs or "readonly" in attrs
+                or "multiple" in attrs,
             ))
         if (tag == "button" and kind == "submit"
                 or tag == "input" and kind == "submit"):
-            if "disabled" not in attrs and "hidden" not in attrs:
+            if "disabled" not in attrs and not inert:
                 self.form["submit"] += 1
         if tag == "input" and kind == "image":
             self.errors.add("image_submit")
 
     def handle_endtag(self, tag):
+        # Keep ancestry synchronized for every element, including fieldset,
+        # hidden wrappers, template, dialog and details.
+        for i in range(len(self._scopes) - 1, -1, -1):
+            if self._scopes[i][0] == tag:
+                del self._scopes[i:]
+                break
         if tag != "form":
             return
         if self.form is None:
