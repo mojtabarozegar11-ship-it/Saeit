@@ -333,6 +333,7 @@ def test_economic_worker_receipt_effect_must_be_explicit_boolean(
         call_command("run_economic_worker", stdout=out)
     assert f"internal_effect_verified={verified}" in out.getvalue()
     assert "revenue_not_assessed=true" in out.getvalue()
+    assert ("EXECUTED task=" if verified == "1" else "EXECUTED_UNVERIFIED task=") in out.getvalue()
 
 
 @pytest.mark.django_db
@@ -401,3 +402,67 @@ def test_dry_run_with_mixed_queue_never_recovers_or_writes(bot):
     assert queued.status == "queued"
     assert AgentTask.objects.count() == before
     assert "BRAIN_RUNNING" in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_economic_worker_missing_enabled_flag_never_dispatches(bot):
+    task = enqueue(bot)
+    # Old worker treated an omitted enabled flag as authorization.
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway({"income_market_research": {}})), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        out = StringIO()
+        call_command("run_economic_worker", stdout=out)
+    runner.assert_not_called()
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert "BLOCKED_UNSUPPORTED" in out.getvalue()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("which,reason", [
+    ("identity", "worker_task_identity_mismatch"),
+    ("action", "worker_action_mismatch"),
+    ("status", "worker_result_not_completed"),
+])
+def test_economic_worker_never_accepts_mismatched_receipt(bot, which, reason):
+    task = enqueue(bot)
+    done = SimpleNamespace(
+        pk=-1 if which == "identity" else task.pk,
+        status="running" if which == "status" else "completed",
+        action_type="income_offer_design" if which == "action" else task.action_type,
+        output_data={"verified_effect": True},
+    )
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway()), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        runner.return_value.run.return_value = done
+        out = StringIO()
+        with pytest.raises(CommandError, match=reason):
+            call_command("run_economic_worker", stdout=out)
+    assert "EXECUTED task=" not in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_economic_worker_unverified_result_stops_drain_without_fake_completion(bot):
+    first = enqueue(bot)
+    second = enqueue(bot)
+    fake = SimpleNamespace(
+        pk=first.pk, status="completed", action_type=first.action_type,
+        output_data={"verified_effect": "yes"},
+    )
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway()), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        runner.return_value.run.return_value = fake
+        out = StringIO()
+        call_command("run_economic_worker", "--drain", stdout=out)
+    runner.return_value.run.assert_called_once_with(first.pk)
+    assert "EXECUTED_UNVERIFIED" in out.getvalue()
+    assert "DRAIN_SUMMARY completed=0 limit=20" in out.getvalue()
+    assert "EXECUTED task=" not in out.getvalue()
+    second.refresh_from_db()
+    assert second.status == "queued"
