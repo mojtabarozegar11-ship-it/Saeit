@@ -5,6 +5,10 @@ from django.utils import timezone
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 from .newsletter_models import NewsletterStory
 from .company_inquiry_models import CompanyInquiry
+from .company_inquiry_policy import (
+    FARM_SUBJECT, WINDOW_SECONDS, can_create, clean_history,
+    replay_inquiry_id, add_new,
+)
 
 
 def company_gallery(request):
@@ -45,12 +49,9 @@ class CompanyInquiryForm(forms.ModelForm):
         return ""
 
 
-# Session-only duplicate and intake-rate defenses; do not claim global anti-spam.
-_DUPLICATE_WINDOW_SECONDS = 15 * 60
-_SESSION_KEY = "zomorod_last_company_inquiry_v1"
-_RATE_KEY = "zomorod_company_inquiry_submissions_v1"
-_RATE_WINDOW_SECONDS = 60 * 60
-_RATE_NEW_LEADS = 6
+# Session-based admission is not a global atomic or IP-based rate limit.
+_SESSION_KEY = "zomorod_last_company_inquiry_v1"  # legacy single record
+_SESSION_HISTORY_KEY = "zomorod_recent_company_inquiries_v2"
 
 
 def _inquiry_fingerprint(cleaned):
@@ -61,7 +62,7 @@ def _inquiry_fingerprint(cleaned):
         {key: cleaned.get(key, "") for key in fields},
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
-    return salted_hmac("company.inquiry.duplicate.v1", content).hexdigest()
+    return salted_hmac("company.inquiry.duplicate.v1", content, algorithm="sha256").hexdigest()
 
 
 def company_portal_home(request, *, service=None):
@@ -74,7 +75,7 @@ def company_portal_home(request, *, service=None):
     data = request.POST.copy()
     if service == "farm":
         data["kind"] = "commercial"
-        data["subject"] = "ZM-FARM | درخواست تحلیل اقتصادی مزرعه"
+        data["subject"] = FARM_SUBJECT
     form = CompanyInquiryForm(data)
     if not form.is_valid():
         response = render(request, "core/company_inquiry_retry.html", {
@@ -89,27 +90,23 @@ def company_portal_home(request, *, service=None):
     from django.utils import timezone
     from .company_inquiry_receipts import issue_receipt
     fingerprint = _inquiry_fingerprint(form.cleaned_data)
-    record = request.session.get(_SESSION_KEY)
     now = int(timezone.now().timestamp())
-    if (type(record) is dict and record.get("fingerprint") == fingerprint
-            and type(record.get("created")) is int
-            and 0 <= now - record["created"] < _DUPLICATE_WINDOW_SECONDS
-            and type(record.get("inquiry_id")) is int
-            and CompanyInquiry.objects.filter(pk=record["inquiry_id"]).exists()):
+    history = request.session.get(_SESSION_HISTORY_KEY)
+    if type(history) is not list:
+        # Preserve one pre-upgrade record, then graduate the session to
+        # a bounded history of recent valid CRM rows.
+        old = request.session.get(_SESSION_KEY)
+        history = [old] if type(old) is dict else []
+    history = clean_history(history, now)
+
+    previous_id = replay_inquiry_id(history, fingerprint, now)
+    if (previous_id is not None
+            and CompanyInquiry.objects.filter(pk=previous_id).exists()):
         return redirect(reverse("company_inquiry_receipt", kwargs={
-            "ticket": issue_receipt(record["inquiry_id"]),
+            "ticket": issue_receipt(previous_id),
         }))
 
-    # Rate-limit only *new* lead creation; repeat of a previously saved request
-    # above returns its existing receipt without counting another submission.
-    recent = request.session.get(_RATE_KEY, [])
-    if type(recent) is not list:
-        recent = []
-    recent = [
-        t for t in recent if type(t) is int
-        and 0 <= now - t < _RATE_WINDOW_SECONDS
-    ]
-    if len(recent) >= _RATE_NEW_LEADS:
+    if not can_create(history, now):
         from django.http import HttpResponse
         response = HttpResponse(
             "سقف درخواست‌های این نشست موقتاً تکمیل شده است؛ بعداً اقدام کنید.",
@@ -117,7 +114,7 @@ def company_portal_home(request, *, service=None):
         )
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "no-referrer"
-        response["Retry-After"] = str(_RATE_WINDOW_SECONDS)
+        response["Retry-After"] = str(WINDOW_SECONDS)
         return response
 
     # Keep a server-generated *non-sensitive* consent provenance in the
@@ -131,8 +128,7 @@ def company_portal_home(request, *, service=None):
         "INTAKE_CONSENT_V1; confirmed_at=" + created + "; source=" + origin
     )
     inquiry.save()
-    recent.append(now)
-    request.session[_RATE_KEY] = recent
+    request.session[_SESSION_HISTORY_KEY] = add_new(history, fingerprint, now, inquiry.pk)
     request.session[_SESSION_KEY] = {
         "fingerprint": fingerprint, "created": now, "inquiry_id": inquiry.pk,
     }
@@ -180,7 +176,7 @@ def farm_economics_request(request):
         return HttpResponseNotAllowed(["GET", "POST"])
     form = CompanyInquiryForm(initial={
         "kind": "commercial",
-        "subject": "ZM-FARM | درخواست تحلیل اقتصادی مزرعه",
+        "subject": FARM_SUBJECT,
     })
     response = render(request, "core/farm_economics_request.html", {"form": form})
     response["Cache-Control"] = "no-store"
