@@ -78,7 +78,28 @@ def validate_csv(text):
             break_even_feasibility = "EXCEEDS_REPORTED_PRODUCTION"
         else:
             break_even_feasibility = "WITHIN_REPORTED_PRODUCTION"
-        result.append({"enterprise_id":row["enterprise_id"],"currency":row["currency"],"contribution":str(contribution),"operating_surplus":str(operating),"economic_profit":str(economic),"break_even_units":str(break_even) if break_even is not None else "NOT_ATTAINABLE","break_even_feasibility":break_even_feasibility})
+        # Keep the evidence dimensions and cost basis with each calculated result;
+        # otherwise a downstream report cannot be tied to its source enterprise/period.
+        unsold = values["production_quantity"] - values["sold_quantity"]
+        result.append({
+            "enterprise_id": row["enterprise_id"].strip(),
+            "enterprise_type": row["enterprise_type"].strip(),
+            "period_start": start.isoformat(), "period_end": end.isoformat(),
+            "currency": row["currency"], "output_unit": row["output_unit"].strip(),
+            "production_quantity": str(values["production_quantity"]),
+            "sold_quantity": str(values["sold_quantity"]),
+            "unsold_quantity": str(unsold),
+            "inventory_cost_allocation": "REQUIRES_RECONCILIATION" if unsold > 0 else "NO_UNSOLD_OUTPUT",
+            "sales_revenue": str(values["sales_revenue"]), "other_revenue": str(values["other_revenue"]),
+            "variable_cost": str(values["variable_cost"]),
+            "fixed_cost": str(values["fixed_cost"]),
+            "opportunity_cost": str(values["opportunity_cost"]),
+            "reported_profit_basis": "PERIOD_RECEIPTS_LESS_TOTAL_RECORDED_COSTS",
+            "contribution": str(contribution), "operating_surplus": str(operating),
+            "economic_profit": str(economic),
+            "break_even_units": str(break_even) if break_even is not None else "NOT_ATTAINABLE",
+            "break_even_feasibility": break_even_feasibility,
+        })
     if not result:
         raise ValueError("empty dataset")
     return result
