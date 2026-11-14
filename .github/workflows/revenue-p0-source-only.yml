@@ -10,6 +10,8 @@ on:
       - "scripts/mojtaba_revenue_cli.py"
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
       - "scripts/mojtaba_revenue_margin.py"
+      - "scripts/mojtaba_farm_break_even.py"
+      - "tests/test_mojtaba_farm_break_even.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
@@ -26,6 +28,8 @@ on:
       - "scripts/mojtaba_revenue_cli.py"
       - "scripts/mojtaba_revenue_public_attestation_readonly.py"
       - "scripts/mojtaba_revenue_margin.py"
+      - "scripts/mojtaba_farm_break_even.py"
+      - "tests/test_mojtaba_farm_break_even.py"
       - "tests/test_mojtaba_revenue*.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
@@ -45,8 +49,30 @@ jobs:
       - name: Enforce ten-channel one-bot commercial gates and CLI invariants
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/revenue_dual_offer_qualifier.py
+          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/mojtaba_farm_break_even.py scripts/revenue_dual_offer_qualifier.py
           python3 -m unittest discover -s tests -p 'test_mojtaba_revenue*.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_farm_break_even.py' -v
+      - name: Run real farm economics and bounded pricing math offline
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --farm-analysis docs/revenue-p0/mojtaba-farm-break-even.synthetic.json > /tmp/mojtaba-farm-output.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-margin docs/revenue-p0/mojtaba-synthetic-margin-usd.json > /tmp/mojtaba-margin-usd.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-margin docs/revenue-p0/mojtaba-synthetic-margin-irr.json > /tmp/mojtaba-margin-irr.json
+          python3 - <<'PY'
+          import json
+          f=json.load(open('/tmp/mojtaba-farm-output.json'))
+          u=json.load(open('/tmp/mojtaba-margin-usd.json'))
+          r=json.load(open('/tmp/mojtaba-margin-irr.json'))
+          assert f['canonical_bot']=='mojtaba.bot.ai'
+          assert f['estimated_profit_irr']=='500000000'
+          assert f['breakeven_quantity_kg_ceil']=='5000'
+          assert f['scenario_count']==27 and f['quote_approved'] is False
+          assert f['payment_collected'] is False
+          assert u['gross_price_floor_synthetic']=='36.77'
+          assert r['gross_price_floor_synthetic']=='1500000'
+          assert u['invoice_created'] is False
+          print('MOJTABA_FARM_ECONOMICS=27_SCENARIOS_VERIFIED; USD_IRR_MARGIN_CALCULATED; ORDER_AND_PAYMENT=NOT_VERIFIED')
+          PY
       - name: Prove sample portfolio and KPI outputs are expressly synthetic
         run: |
           set -euo pipefail
