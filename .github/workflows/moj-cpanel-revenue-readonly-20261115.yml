@@ -56,8 +56,34 @@ jobs:
                   return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
               except (OSError, ValueError):
                   return None
+          def integrity_file_state():
+              p = root / 'services/mpw_trx_asset_integrity.py'
+              try:
+                  if p.is_symlink():
+                      return 'symlink_not_accepted'
+                  if not p.exists():
+                      return 'absent_from_examined_root'
+                  if not p.is_file():
+                      return 'not_regular_file'
+                  if not (0 < p.stat().st_size <= 524288):
+                      return 'invalid_file_size'
+                  with p.open('rb') as stream:
+                      stream.read(1)
+                  return 'regular_readable'
+              except (OSError, ValueError):
+                  return 'unreadable'
+          try:
+              passenger_staging = bool(
+                  passenger.is_file() and not passenger.is_symlink()
+                  and passenger.stat().st_size <= 131072
+                  and 'Saeit-staging' in passenger.read_text(encoding='utf8')
+              )
+          except (OSError, ValueError, UnicodeError):
+              passenger_staging = None
           result = {
               'read_only': True,
+              'passenger_entry_mentions_examined_app_root': passenger_staging,
+              'asset_integrity_file_state': integrity_file_state(),
               'merchant_app_dir_present': bool(root.is_dir() and not root.is_symlink()),
               'passenger_entry_present': bool(passenger.is_file() and not passenger.is_symlink()),
               'effective_module_hash_prefix': {key: file_digest(key) for key in modules},
