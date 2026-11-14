@@ -1,13 +1,16 @@
-"""Ten distinct prelaunch MOJ PROP challenge products over one shared ruleset.
+"""Ten MOJ PROP business plans over one shared, audited challenge ruleset.
 
-Plan 1 preserves the exact owner's 30 TRX / 100 USD model. Plans 2..10
+Plan 1 preserves the owner-confirmed 30 TRX / 100 USD model. Plans 2..10
 are proposed differentiated *starting capital tiers*, with their own quoted
 TRX fees. Prices are recommendations for review, NOT published checkout quotes,
 real funding promises, or verified financial return. Every plan uses the SAME
 28-day two-stage evaluation, at least 50 independently verified closed
 positions, and the one Instagram plus one Facebook post held 28 days.
 
-Buyer agreement must bind a plan code and the immutable fee before payment.
+The owner declares Plan 1 funded and operational. This assertion is NOT an
+independently audited bank/broker balance or proof of live customer checkout.
+Plans 2-10 are explicitly on temporary funding hold, irrespective of how many
+paper attestations become true. A buyer agreement must bind plan and fee.
 """
 from dataclasses import dataclass
 from decimal import Decimal
@@ -16,6 +19,8 @@ from .rules import LEVELS, POLICY
 
 PLAN_PREFIX = "MOJ-PROP-"
 ALL_PLANS_SELLABLE = False
+OWNER_ACTIVE_STATUS = "owner_declared_active"
+FUNDING_HOLD_STATUS = "funding_in_progress_temporary_inactive"
 
 
 @dataclass(frozen=True)
@@ -41,6 +46,12 @@ class ChallengePlan:
     instagram_posts_per_challenge: int
     facebook_posts_per_challenge: int
     trader_bots_allowed: bool
+    business_status: str
+    capital_funded_owner_declared: bool
+    business_active_owner_declared: bool
+    temporary_owner_hold: bool
+    funding_independently_verified: bool = False
+    broker_live_account_independently_verified: bool = False
     checkout_enabled: bool = False
     account_activation_enabled: bool = False
     prices_approved_for_public_sale: bool = False
@@ -77,6 +88,10 @@ def _make_plan(number, starting_tier_index, fee):
         instagram_posts_per_challenge=1,
         facebook_posts_per_challenge=1,
         trader_bots_allowed=POLICY.trader_bots_allowed,
+        business_status=(OWNER_ACTIVE_STATUS if number == 1 else FUNDING_HOLD_STATUS),
+        capital_funded_owner_declared=(number == 1),
+        business_active_owner_declared=(number == 1),
+        temporary_owner_hold=(number > 1),
     )
 
 
@@ -93,6 +108,10 @@ if len({plan.starting_tier_index for plan in CHALLENGE_PLANS}) != 10:
     raise RuntimeError("Plan starting tiers cannot duplicate")
 if CHALLENGE_PLANS[0].entry_fee_trx != POLICY.entry_trx:
     raise RuntimeError("Plan 1 historical 30 TRX price cannot drift")
+if (sum(plan.business_active_owner_declared for plan in CHALLENGE_PLANS) != 1
+        or any(plan.temporary_owner_hold for plan in CHALLENGE_PLANS[:1])
+        or any(not plan.temporary_owner_hold for plan in CHALLENGE_PLANS[1:])):
+    raise RuntimeError("Exactly owner-declared Plan 1 may be active")
 
 
 def plan_for_code(code):
@@ -114,6 +133,12 @@ def plan_public_summary(plan):
         "maximum_capital_usd": str(plan.maximum_capital_usd),
         "fee_trx_proposed": str(plan.entry_fee_trx),
         "fee_is_final_for_sale": False,
+        "business_status": plan.business_status,
+        "capital_funded_owner_declared": plan.capital_funded_owner_declared,
+        "business_active_owner_declared": plan.business_active_owner_declared,
+        "temporary_owner_hold": plan.temporary_owner_hold,
+        "funding_independently_verified": plan.funding_independently_verified,
+        "broker_live_account_independently_verified": plan.broker_live_account_independently_verified,
         "duration_days": plan.duration_days,
         "minimum_trades": plan.minimum_verified_closed_trades,
         "bots_allowed": plan.trader_bots_allowed,
