@@ -1,0 +1,1246 @@
+{
+  "schema": "moj-prop.i18n.v1",
+  "default": "en",
+  "locales": {
+    "en": {
+      "name": "English",
+      "dir": "ltr",
+      "nav": [
+        "How it works",
+        "Capital ladder",
+        "Risk rules",
+        "FAQs"
+      ],
+      "hero": [
+        "MOJPLAYWIN / THE PROP DIVISION",
+        "Where discipline",
+        "earns the next level.",
+        "A two-stage skills assessment followed by conditional access to actual company-funded brokerage. From $100 to $100,000 across 14 milestones.",
+        "PRE-LAUNCH / NO PAYMENTS",
+        "Not yet open. No TRX is being collected and no real brokerage accounts are being offered.",
+        "Explore the rules"
+      ],
+      "stats": [
+        "Challenge entry",
+        "Trader profit share",
+        "Planned capital ceiling",
+        "Assessment stages"
+      ],
+      "steps": [
+        "A deliberate path to real capital",
+        "Complete two simulated trading phases",
+        "Pass identity and eligibility checks",
+        "Access real capital only after broker and treasury approval",
+        "Progress at most one tier per qualifying 30-day cycle"
+      ],
+      "ladder": [
+        "The 14-level capital ladder",
+        "A transparent monthly progression, contingent on verified performance and reserved capital.",
+        "Month",
+        "Advancement is conditional, never automatic; funds must be available."
+      ],
+      "rules": [
+        "The standards",
+        "Stage one profit target",
+        "Stage two profit target",
+        "Daily loss ceiling",
+        "Total equity drawdown",
+        "Trading days per stage",
+        "Best-day share of net profit",
+        "Risk per order",
+        "Aggregate open risk",
+        "Monthly promotion target",
+        "Days per promotion"
+      ],
+      "faq": [
+        "The important questions",
+        "Will I receive a real trading account?",
+        "Only after passing both stages and completing compliance, broker and funding checks. The first planned tier is $100.",
+        "Can I pay 30 TRX now?",
+        "No. Enrollment and payments are disabled until legal, financial and technical checks are complete."
+      ],
+      "footer": [
+        "Moj Prop is a planned MojPlayWin division, not an active licensed funding offer.",
+        "Only organizational bot: mojtaba.bot.ai."
+      ]
+    },
+    "fa": {
+      "name": "فارسی",
+      "dir": "rtl",
+      "nav": [
+        "مراحل کار",
+        "پلکان سرمایه",
+        "قوانین ریسک",
+        "پرسش‌ها"
+      ],
+      "hero": [
+        "MOJPLAYWIN / بخش پراپ",
+        "انضباط معاملاتی",
+        "راه رشد سرمایه است.",
+        "دو مرحله ارزیابی مهارت در محیط شبیه‌سازی و سپس امکان مشروط معامله با سرمایه واقعی شرکت؛ از ۱۰۰ تا ۱۰۰٬۰۰۰ دلار در ۱۴ سطح.",
+        "پیش از راه‌اندازی / بدون دریافت وجه",
+        "ثبت‌نام هنوز فعال نیست؛ هیچ TRX دریافت نمی‌شود و حساب واقعی ارائه نمی‌شود.",
+        "مشاهده قوانین"
+      ],
+      "stats": [
+        "هزینه ورود به چالش",
+        "سهم سود معامله‌گر",
+        "سقف سرمایه برنامه",
+        "مراحل ارزیابی"
+      ],
+      "steps": [
+        "مسیر سنجیده تا سرمایه واقعی",
+        "عبور از دو مرحله شبیه‌سازی معاملات",
+        "تکمیل احراز هویت و بررسی صلاحیت",
+        "دریافت سرمایه واقعی تنها پس از تأیید کارگزار و خزانه شرکت",
+        "ارتقای حداکثر یک سطح در هر دوره موفق ۳۰روزه"
+      ],
+      "ladder": [
+        "پلکان سرمایه ۱۴سطحی",
+        "ارتقای ماهانه شفاف، مشروط به عملکرد تأییدشده و سرمایه اختصاص‌یافته.",
+        "ماه",
+        "ارتقا خودکار نیست؛ سرمایه لازم باید موجود باشد."
+      ],
+      "rules": [
+        "استانداردهای معاملاتی",
+        "هدف سود مرحله اول",
+        "هدف سود مرحله دوم",
+        "حداکثر زیان روزانه",
+        "حداکثر افت کل سرمایه",
+        "روزهای معاملاتی هر مرحله",
+        "سهم بهترین روز از سود خالص",
+        "ریسک هر سفارش",
+        "ریسک مجموع موقعیت‌های باز",
+        "هدف سود ارتقای ماهانه",
+        "روزهای معاملاتی برای ارتقا"
+      ],
+      "faq": [
+        "پرسش‌های مهم",
+        "آیا حساب معاملاتی واقعی دریافت می‌کنم؟",
+        "فقط پس از قبولی هر دو مرحله و تأیید مقررات، کارگزار و تأمین سرمایه. سطح نخست ۱۰۰ دلار است.",
+        "آیا اکنون می‌توانم ۳۰ TRX پرداخت کنم؟",
+        "خیر. تا تکمیل بررسی‌های قانونی، مالی و فنی، ثبت‌نام و پرداخت غیرفعال است."
+      ],
+      "footer": [
+        "مج پراپ بخش برنامه‌ریزی‌شده مج‌پلی‌وین است؛ نه یک پیشنهاد فعال و دارای مجوز تأمین سرمایه.",
+        "تنها ربات سازمانی: mojtaba.bot.ai."
+      ]
+    },
+    "ar": {
+      "name": "العربية",
+      "dir": "rtl",
+      "nav": [
+        "آلية العمل",
+        "سلم رأس المال",
+        "قواعد المخاطر",
+        "الأسئلة"
+      ],
+      "hero": [
+        "MOJPLAYWIN / قسم التداول الممول",
+        "الانضباط في التداول",
+        "يفتح طريق التقدم.",
+        "تقييم للمهارات على مرحلتين بمحاكاة التداول، ثم إمكانية مشروطة للتداول برأس مال الشركة الحقيقي؛ من 100 إلى 100,000 دولار عبر 14 مستوى.",
+        "قبل الإطلاق / لا مدفوعات",
+        "التسجيل غير متاح بعد، ولا يتم تحصيل TRX أو تقديم حسابات تداول حقيقية.",
+        "اطّلع على القواعد"
+      ],
+      "stats": [
+        "رسوم التحدي",
+        "حصة المتداول من الأرباح",
+        "الحد الأقصى المخطط لرأس المال",
+        "مراحل التقييم"
+      ],
+      "steps": [
+        "مسار مدروس نحو رأس المال الحقيقي",
+        "اجتز مرحلتي تداول تجريبي",
+        "أكمل التحقق من الهوية والأهلية",
+        "احصل على رأس المال الحقيقي بعد موافقة الوسيط والخزينة فقط",
+        "ترقَّ بمستوى واحد على الأكثر لكل دورة ناجحة مدتها 30 يومًا"
+      ],
+      "ladder": [
+        "سلم رأس المال من 14 مستوى",
+        "ترقٍّ شهري واضح وفق الأداء المتحقق وتوافر الأموال المخصصة.",
+        "الشهر",
+        "الترقية مشروطة وليست تلقائية؛ يجب توافر رأس المال."
+      ],
+      "rules": [
+        "معايير التداول",
+        "هدف ربح المرحلة الأولى",
+        "هدف ربح المرحلة الثانية",
+        "حد الخسارة اليومية",
+        "الحد الأقصى لانخفاض رأس المال",
+        "أيام التداول لكل مرحلة",
+        "حصة أفضل يوم من صافي الربح",
+        "المخاطرة لكل أمر",
+        "مجموع مخاطر المراكز المفتوحة",
+        "هدف الترقية الشهري",
+        "أيام التداول للترقية"
+      ],
+      "faq": [
+        "أسئلة مهمة",
+        "هل سأحصل على حساب تداول حقيقي؟",
+        "فقط بعد اجتياز المرحلتين واستكمال الفحوص التنظيمية وموافقة الوسيط والتمويل. المستوى الأول المخطط 100 دولار.",
+        "هل يمكنني دفع 30 TRX الآن؟",
+        "لا، التسجيل والمدفوعات معطلان حتى اكتمال المتطلبات القانونية والمالية والتقنية."
+      ],
+      "footer": [
+        "Moj Prop قسم مخطط له ضمن MojPlayWin، وليس عرض تمويل نشطًا ومرخصًا.",
+        "الروبوت التنظيمي الوحيد: mojtaba.bot.ai."
+      ]
+    },
+    "de": {
+      "name": "Deutsch",
+      "dir": "ltr",
+      "nav": [
+        "So funktioniert es",
+        "Kapitalstufen",
+        "Risikoregeln",
+        "FAQ"
+      ],
+      "hero": [
+        "MOJPLAYWIN / PROP-TRADING-BEREICH",
+        "Disziplin im Handel",
+        "ermöglicht den Aufstieg.",
+        "Zweistufige simulierte Eignungsprüfung, danach bedingter Zugang zu echtem Firmenkapital. Von 100 bis 100.000 USD in 14 Stufen.",
+        "VOR DEM START / KEINE ZAHLUNGEN",
+        "Noch nicht geöffnet. Es werden weder TRX entgegengenommen noch echte Brokerkonten angeboten.",
+        "Regeln ansehen"
+      ],
+      "stats": [
+        "Teilnahmegebühr",
+        "Gewinnanteil des Traders",
+        "Geplante Kapitalobergrenze",
+        "Prüfungsphasen"
+      ],
+      "steps": [
+        "Ein klarer Weg zu echtem Kapital",
+        "Zwei simulierte Handelsphasen bestehen",
+        "Identität und Berechtigung prüfen lassen",
+        "Echtes Kapital erst nach Broker- und Finanzfreigabe nutzen",
+        "Höchstens eine Stufe je erfolgreichem 30-Tage-Zyklus"
+      ],
+      "ladder": [
+        "Die Kapitalleiter mit 14 Stufen",
+        "Transparente monatliche Entwicklung bei nachgewiesener Leistung und gesichertem Kapital.",
+        "Monat",
+        "Aufstieg erfolgt nicht automatisch; Kapital muss verfügbar sein."
+      ],
+      "rules": [
+        "Die Standards",
+        "Gewinnziel der ersten Phase",
+        "Gewinnziel der zweiten Phase",
+        "Tägliche Verlustgrenze",
+        "Maximaler Gesamtdrawdown",
+        "Handelstage je Phase",
+        "Anteil des besten Tages am Nettogewinn",
+        "Risiko je Auftrag",
+        "Gesamtrisiko offener Positionen",
+        "Monatliches Aufstiegsziel",
+        "Handelstage für den Aufstieg"
+      ],
+      "faq": [
+        "Wichtige Fragen",
+        "Erhalte ich ein echtes Handelskonto?",
+        "Nur nach beiden Prüfungen sowie regulatorischer, Broker- und Kapitalfreigabe. Die erste Stufe beträgt 100 USD.",
+        "Kann ich jetzt 30 TRX zahlen?",
+        "Nein. Anmeldung und Zahlungen bleiben bis zum Abschluss aller Prüfungen deaktiviert."
+      ],
+      "footer": [
+        "Moj Prop ist ein geplanter Bereich von MojPlayWin, kein aktives lizenziertes Finanzierungsangebot.",
+        "Einziger Organisationsbot: mojtaba.bot.ai."
+      ]
+    },
+    "fr": {
+      "name": "Français",
+      "dir": "ltr",
+      "nav": [
+        "Fonctionnement",
+        "Échelle du capital",
+        "Règles de risque",
+        "Questions"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DIVISION PROP",
+        "La discipline",
+        "ouvre chaque nouveau palier.",
+        "Deux phases d’évaluation simulée, puis un accès conditionnel à de vrais capitaux de l’entreprise, de 100 à 100 000 $ sur 14 niveaux.",
+        "AVANT LANCEMENT / AUCUN PAIEMENT",
+        "Inscriptions fermées. Aucun TRX n’est collecté et aucun compte de courtage réel n’est proposé.",
+        "Voir les règles"
+      ],
+      "stats": [
+        "Frais du défi",
+        "Part des gains du trader",
+        "Capital maximal prévu",
+        "Phases d’évaluation"
+      ],
+      "steps": [
+        "Un parcours maîtrisé vers le capital réel",
+        "Réussir deux phases de trading simulé",
+        "Faire vérifier son identité et son admissibilité",
+        "Accéder aux fonds réels après validation du courtier et de la trésorerie",
+        "Progresser d’un palier au plus par cycle admissible de 30 jours"
+      ],
+      "ladder": [
+        "L’échelle de capital à 14 niveaux",
+        "Progression mensuelle transparente selon les performances validées et les fonds réservés.",
+        "Mois",
+        "La progression est conditionnelle, jamais automatique; les fonds doivent être disponibles."
+      ],
+      "rules": [
+        "Les normes",
+        "Objectif de gain de la phase 1",
+        "Objectif de gain de la phase 2",
+        "Plafond de perte quotidienne",
+        "Baisse maximale du capital",
+        "Jours de trading par phase",
+        "Part du meilleur jour dans le gain net",
+        "Risque par ordre",
+        "Risque total des positions ouvertes",
+        "Objectif mensuel de progression",
+        "Jours requis pour progresser"
+      ],
+      "faq": [
+        "Questions essentielles",
+        "Aurai-je un véritable compte de trading ?",
+        "Seulement après les deux phases, les vérifications réglementaires et l’accord du courtier et du financement. Le premier niveau prévu est de 100 $.",
+        "Puis-je payer 30 TRX maintenant ?",
+        "Non. Inscriptions et paiements restent désactivés jusqu’à la fin des contrôles légaux, financiers et techniques."
+      ],
+      "footer": [
+        "Moj Prop est une division prévue de MojPlayWin, et non une offre de financement active et agréée.",
+        "Unique robot de l’organisation : mojtaba.bot.ai."
+      ]
+    },
+    "es": {
+      "name": "Español",
+      "dir": "ltr",
+      "nav": [
+        "Cómo funciona",
+        "Escala de capital",
+        "Reglas de riesgo",
+        "Preguntas"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DIVISIÓN PROP",
+        "La disciplina",
+        "impulsa cada nivel.",
+        "Evaluación simulada de dos fases y, después, acceso condicionado a capital real de la empresa, de 100 a 100.000 USD en 14 niveles.",
+        "PRELANZAMIENTO / SIN PAGOS",
+        "Aún no está abierto. No se reciben TRX ni se ofrecen cuentas reales de bróker.",
+        "Ver reglas"
+      ],
+      "stats": [
+        "Entrada al desafío",
+        "Parte del beneficio del trader",
+        "Capital máximo previsto",
+        "Fases de evaluación"
+      ],
+      "steps": [
+        "Un camino prudente hacia capital real",
+        "Supera dos fases de trading simulado",
+        "Verifica identidad y requisitos",
+        "Accede a capital real solo con aprobación del bróker y tesorería",
+        "Sube como máximo un nivel por ciclo válido de 30 días"
+      ],
+      "ladder": [
+        "Escalera de capital de 14 niveles",
+        "Progreso mensual transparente sujeto a resultados verificados y fondos reservados.",
+        "Mes",
+        "El ascenso es condicional, nunca automático; debe existir capital disponible."
+      ],
+      "rules": [
+        "Los estándares",
+        "Objetivo de beneficio de fase uno",
+        "Objetivo de beneficio de fase dos",
+        "Límite de pérdida diaria",
+        "Caída máxima del capital",
+        "Días de trading por fase",
+        "Peso del mejor día en el beneficio neto",
+        "Riesgo por orden",
+        "Riesgo total de posiciones abiertas",
+        "Objetivo mensual de ascenso",
+        "Días para ascender"
+      ],
+      "faq": [
+        "Preguntas importantes",
+        "¿Recibiré una cuenta real de trading?",
+        "Solo tras superar ambas fases y completar las verificaciones legales, del bróker y del capital. El primer nivel previsto es de 100 USD.",
+        "¿Puedo pagar 30 TRX ahora?",
+        "No. El registro y los pagos siguen desactivados hasta superar las verificaciones legales, financieras y técnicas."
+      ],
+      "footer": [
+        "Moj Prop es una división planificada de MojPlayWin, no una oferta activa y autorizada de financiación.",
+        "Único bot de la organización: mojtaba.bot.ai."
+      ]
+    },
+    "pt": {
+      "name": "Português",
+      "dir": "ltr",
+      "nav": [
+        "Como funciona",
+        "Escada de capital",
+        "Regras de risco",
+        "Dúvidas"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DIVISÃO PROP",
+        "A disciplina",
+        "conquista o próximo nível.",
+        "Avaliação simulada em duas etapas e acesso condicional ao capital real da empresa, de US$ 100 a US$ 100.000 em 14 níveis.",
+        "PRÉ-LANÇAMENTO / SEM PAGAMENTOS",
+        "Ainda não aberto. Não são recebidos TRX nem oferecidas contas reais de corretagem.",
+        "Ver regras"
+      ],
+      "stats": [
+        "Entrada no desafio",
+        "Parcela do lucro do trader",
+        "Capital máximo previsto",
+        "Etapas de avaliação"
+      ],
+      "steps": [
+        "Um caminho criterioso ao capital real",
+        "Conclua duas etapas de negociação simulada",
+        "Verifique identidade e elegibilidade",
+        "Use capital real somente com autorização da corretora e tesouraria",
+        "Avance no máximo um nível por ciclo válido de 30 dias"
+      ],
+      "ladder": [
+        "Escada de capital com 14 níveis",
+        "Progressão mensal transparente, sujeita ao desempenho comprovado e à reserva de fundos.",
+        "Mês",
+        "O avanço depende de condições; não é automático e requer capital disponível."
+      ],
+      "rules": [
+        "Os padrões",
+        "Meta de lucro da primeira etapa",
+        "Meta de lucro da segunda etapa",
+        "Limite de perda diária",
+        "Perda total máxima",
+        "Dias de negociação por etapa",
+        "Parcela do melhor dia no lucro líquido",
+        "Risco por ordem",
+        "Risco total de posições abertas",
+        "Meta mensal para avançar",
+        "Dias necessários para avançar"
+      ],
+      "faq": [
+        "Perguntas importantes",
+        "Terei uma conta real de negociação?",
+        "Somente após ambas as etapas e as aprovações legais, da corretora e de capital. O primeiro nível previsto é US$ 100.",
+        "Posso pagar 30 TRX agora?",
+        "Não. Inscrições e pagamentos seguem desativados até a conclusão das verificações legais, financeiras e técnicas."
+      ],
+      "footer": [
+        "Moj Prop é uma divisão planejada da MojPlayWin, não uma oferta ativa e licenciada de financiamento.",
+        "Único robô da organização: mojtaba.bot.ai."
+      ]
+    },
+    "it": {
+      "name": "Italiano",
+      "dir": "ltr",
+      "nav": [
+        "Come funziona",
+        "Scala del capitale",
+        "Regole di rischio",
+        "Domande"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DIVISIONE PROP",
+        "La disciplina",
+        "fa avanzare di livello.",
+        "Valutazione simulata in due fasi e successivo accesso condizionato al capitale reale della società, da 100 a 100.000 USD in 14 livelli.",
+        "PRE-LANCIO / NESSUN PAGAMENTO",
+        "Non ancora aperto. Nessun TRX viene incassato e non sono offerti conti reali.",
+        "Consulta le regole"
+      ],
+      "stats": [
+        "Costo della sfida",
+        "Quota di profitto del trader",
+        "Massimale previsto",
+        "Fasi di valutazione"
+      ],
+      "steps": [
+        "Un percorso rigoroso verso il capitale reale",
+        "Supera due fasi di trading simulato",
+        "Completa le verifiche di identità e idoneità",
+        "Accedi al capitale reale solo dopo l’approvazione del broker e della tesoreria",
+        "Avanza al massimo di un livello per ciclo idoneo di 30 giorni"
+      ],
+      "ladder": [
+        "Scala del capitale a 14 livelli",
+        "Progressione mensile trasparente, subordinata ai risultati verificati e ai fondi riservati.",
+        "Mese",
+        "L’avanzamento è condizionato, non automatico; servono fondi disponibili."
+      ],
+      "rules": [
+        "Gli standard",
+        "Obiettivo di profitto della fase uno",
+        "Obiettivo di profitto della fase due",
+        "Limite di perdita giornaliera",
+        "Drawdown massimo complessivo",
+        "Giorni di trading per fase",
+        "Peso del giorno migliore sull’utile netto",
+        "Rischio per ordine",
+        "Rischio totale delle posizioni aperte",
+        "Obiettivo mensile di avanzamento",
+        "Giorni per l’avanzamento"
+      ],
+      "faq": [
+        "Domande importanti",
+        "Riceverò un conto di trading reale?",
+        "Solo dopo le due fasi e le verifiche normative, del broker e dei fondi. Il primo livello previsto è 100 USD.",
+        "Posso pagare 30 TRX adesso?",
+        "No. Iscrizioni e pagamenti restano disabilitati fino al completamento delle verifiche legali, finanziarie e tecniche."
+      ],
+      "footer": [
+        "Moj Prop è una divisione pianificata di MojPlayWin, non un’offerta attiva e autorizzata di finanziamento.",
+        "Unico bot dell’organizzazione: mojtaba.bot.ai."
+      ]
+    },
+    "tr": {
+      "name": "Türkçe",
+      "dir": "ltr",
+      "nav": [
+        "Nasıl çalışır",
+        "Sermaye basamakları",
+        "Risk kuralları",
+        "Sorular"
+      ],
+      "hero": [
+        "MOJPLAYWIN / PROP BÖLÜMÜ",
+        "Disiplin",
+        "bir sonraki seviyeyi kazandırır.",
+        "İki aşamalı simülasyon değerlendirmesinden sonra şirketin gerçek sermayesine koşullu erişim. 14 seviyede 100 dolardan 100.000 dolara.",
+        "LANSMAN ÖNCESİ / ÖDEME YOK",
+        "Henüz açık değil. TRX tahsil edilmiyor ve gerçek aracı kurum hesabı sunulmuyor.",
+        "Kuralları incele"
+      ],
+      "stats": [
+        "Mücadele giriş ücreti",
+        "Yatırımcının kâr payı",
+        "Planlanan azami sermaye",
+        "Değerlendirme aşamaları"
+      ],
+      "steps": [
+        "Gerçek sermayeye kontrollü yol",
+        "İki simülasyon ticaret aşamasını geç",
+        "Kimlik ve uygunluk denetimlerini tamamla",
+        "Gerçek sermayeyi yalnızca aracı kurum ve hazine onayından sonra kullan",
+        "Uygun her 30 günlük dönemde en fazla bir seviye yüksel"
+      ],
+      "ladder": [
+        "14 seviyeli sermaye merdiveni",
+        "Doğrulanmış performansa ve ayrılmış sermayeye bağlı şeffaf aylık yükseliş.",
+        "Ay",
+        "Yükseliş otomatik değildir; yeterli sermaye bulunmalıdır."
+      ],
+      "rules": [
+        "Standartlar",
+        "Birinci aşama kâr hedefi",
+        "İkinci aşama kâr hedefi",
+        "Günlük zarar sınırı",
+        "Toplam azami sermaye düşüşü",
+        "Aşama başına işlem günü",
+        "En iyi günün net kârdaki payı",
+        "Emir başına risk",
+        "Açık pozisyonların toplam riski",
+        "Aylık yükseliş hedefi",
+        "Yükseliş için işlem günü"
+      ],
+      "faq": [
+        "Önemli sorular",
+        "Gerçek bir işlem hesabı alacak mıyım?",
+        "Ancak iki aşamayı geçip yasal, aracı kurum ve finansman onaylarını aldıktan sonra. İlk planlanan seviye 100 dolardır.",
+        "Şimdi 30 TRX ödeyebilir miyim?",
+        "Hayır. Hukuki, mali ve teknik kontroller tamamlanana dek kayıt ve ödemeler kapalıdır."
+      ],
+      "footer": [
+        "Moj Prop, MojPlayWin'in planlanan bir bölümüdür; aktif ve lisanslı bir fonlama teklifi değildir.",
+        "Tek kurumsal bot: mojtaba.bot.ai."
+      ]
+    },
+    "ru": {
+      "name": "Русский",
+      "dir": "ltr",
+      "nav": [
+        "Как это работает",
+        "Ступени капитала",
+        "Правила риска",
+        "Вопросы"
+      ],
+      "hero": [
+        "MOJPLAYWIN / ПОДРАЗДЕЛЕНИЕ PROP",
+        "Дисциплина",
+        "ведёт к новому уровню.",
+        "Два этапа оценки в симуляторе, затем условный доступ к реальному капиталу компании: от 100 до 100 000 долларов за 14 уровней.",
+        "ДО ЗАПУСКА / БЕЗ ПЛАТЕЖЕЙ",
+        "Регистрация ещё закрыта. TRX не принимаются, реальные брокерские счета не предоставляются.",
+        "Изучить правила"
+      ],
+      "stats": [
+        "Взнос за испытание",
+        "Доля прибыли трейдера",
+        "Плановый предел капитала",
+        "Этапы оценки"
+      ],
+      "steps": [
+        "Продуманный путь к реальному капиталу",
+        "Пройдите два этапа симулированной торговли",
+        "Подтвердите личность и соответствие условиям",
+        "Получите реальный капитал лишь после одобрения брокера и казначейства",
+        "Переходите не более чем на один уровень за успешные 30 дней"
+      ],
+      "ladder": [
+        "Лестница капитала из 14 уровней",
+        "Прозрачное ежемесячное продвижение при подтверждённых результатах и наличии средств.",
+        "Месяц",
+        "Продвижение не автоматическое: средства должны быть доступны."
+      ],
+      "rules": [
+        "Стандарты",
+        "Цель прибыли первого этапа",
+        "Цель прибыли второго этапа",
+        "Дневной лимит убытка",
+        "Максимальная общая просадка",
+        "Торговые дни на этап",
+        "Доля лучшего дня в чистой прибыли",
+        "Риск на ордер",
+        "Совокупный риск открытых позиций",
+        "Месячная цель повышения",
+        "Торговые дни для повышения"
+      ],
+      "faq": [
+        "Важные вопросы",
+        "Получу ли я реальный торговый счёт?",
+        "Только после обоих этапов и проверок соответствия, брокера и наличия средств. Первый плановый уровень — 100 долларов.",
+        "Можно ли заплатить 30 TRX сейчас?",
+        "Нет. Регистрация и платежи отключены до завершения юридических, финансовых и технических проверок."
+      ],
+      "footer": [
+        "Moj Prop — планируемое подразделение MojPlayWin, а не действующее лицензированное предложение финансирования.",
+        "Единственный организационный бот: mojtaba.bot.ai."
+      ]
+    },
+    "zh": {
+      "name": "简体中文",
+      "dir": "ltr",
+      "nav": [
+        "运作方式",
+        "资金阶梯",
+        "风险规则",
+        "常见问题"
+      ],
+      "hero": [
+        "MOJPLAYWIN / 自营交易部门",
+        "以纪律为基石",
+        "逐级赢得资金。",
+        "先完成两阶段模拟交易评估，通过合规审核后才可能使用公司的真实经纪账户资金；14 个等级，从 100 美元至 100,000 美元。",
+        "上线前 / 暂不收款",
+        "项目尚未开放。不收取 TRX，也不提供真实经纪账户。",
+        "查看规则"
+      ],
+      "stats": [
+        "挑战报名费",
+        "交易者利润分成",
+        "计划资金上限",
+        "评估阶段"
+      ],
+      "steps": [
+        "通往真实资金的审慎路径",
+        "完成两阶段模拟交易评估",
+        "通过身份及资格核验",
+        "经纪商和资金管理部门批准后方可使用真实资金",
+        "每个合格的 30 天周期最多晋升一级"
+      ],
+      "ladder": [
+        "14 级资金阶梯",
+        "根据核实的交易表现及预留资金按月有条件晋升。",
+        "第几月",
+        "晋级并非自动，必须具备相应资金。"
+      ],
+      "rules": [
+        "交易标准",
+        "第一阶段盈利目标",
+        "第二阶段盈利目标",
+        "每日最大亏损",
+        "总体最大回撤",
+        "每阶段最少交易天数",
+        "最佳单日占净利润比例",
+        "每笔订单风险",
+        "未平仓总风险",
+        "月度晋级盈利目标",
+        "晋级所需交易天数"
+      ],
+      "faq": [
+        "重要问题",
+        "能获得真实交易账户吗？",
+        "仅在通过两阶段评估及合规、经纪商和资金审核后才可能获得。首级计划资金为 100 美元。",
+        "现在可以支付 30 TRX 吗？",
+        "不能。完成法律、财务及技术审核前，报名和支付功能均关闭。"
+      ],
+      "footer": [
+        "Moj Prop 是 MojPlayWin 规划中的业务部门，并非已运营或持牌的资金提供服务。",
+        "唯一组织机器人：mojtaba.bot.ai。"
+      ]
+    },
+    "ja": {
+      "name": "日本語",
+      "dir": "ltr",
+      "nav": [
+        "仕組み",
+        "資金ステップ",
+        "リスク規則",
+        "よくある質問"
+      ],
+      "hero": [
+        "MOJPLAYWIN / PROP部門",
+        "規律ある取引が",
+        "次の段階を開く。",
+        "2段階の模擬取引評価を経て、条件を満たした場合にのみ企業資金による実際の取引へ。100ドルから10万ドルまで14段階。",
+        "公開準備中 / 決済不可",
+        "現在受付は行っていません。TRXの受領も実際の証券口座の提供もありません。",
+        "規則を見る"
+      ],
+      "stats": [
+        "チャレンジ参加費",
+        "トレーダー利益配分",
+        "予定資金の上限",
+        "評価ステージ"
+      ],
+      "steps": [
+        "実資金までの慎重な道筋",
+        "模擬取引の2段階を通過",
+        "本人確認と資格審査を完了",
+        "ブローカーと資金管理部門の承認後に実資金を利用",
+        "条件を満たす30日ごとに最大1段階昇格"
+      ],
+      "ladder": [
+        "14段階の資金ステップ",
+        "検証済みの成績と確保済み資金に応じて月次で昇格。",
+        "月",
+        "昇格は自動ではなく、利用可能な資金が必要です。"
+      ],
+      "rules": [
+        "取引基準",
+        "第1段階の利益目標",
+        "第2段階の利益目標",
+        "1日の最大損失",
+        "総資金の最大ドローダウン",
+        "各段階の取引日数",
+        "純利益に占める最高日の割合",
+        "注文ごとのリスク",
+        "未決済ポジションの総リスク",
+        "月次昇格利益目標",
+        "昇格に必要な取引日数"
+      ],
+      "faq": [
+        "重要な質問",
+        "実際の取引口座を受け取れますか？",
+        "両段階の合格と法令・ブローカー・資金審査完了後に限ります。最初の予定資金は100ドルです。",
+        "今30 TRXを支払えますか？",
+        "いいえ。法務・財務・技術審査が完了するまで登録と決済は無効です。"
+      ],
+      "footer": [
+        "Moj PropはMojPlayWinの計画中の部門であり、現在営業中の認可済み資金提供サービスではありません。",
+        "組織唯一のボット：mojtaba.bot.ai。"
+      ]
+    },
+    "ko": {
+      "name": "한국어",
+      "dir": "ltr",
+      "nav": [
+        "이용 방법",
+        "자본 단계",
+        "위험 규칙",
+        "자주 묻는 질문"
+      ],
+      "hero": [
+        "MOJPLAYWIN / PROP 사업부",
+        "거래 규율이",
+        "다음 단계를 만듭니다.",
+        "2단계 모의거래 평가 후 조건이 충족되면 회사의 실제 자본을 이용할 수 있습니다. 14단계에 걸쳐 100달러에서 10만 달러까지.",
+        "출시 전 / 결제 불가",
+        "아직 등록할 수 없습니다. TRX를 받지 않으며 실제 중개 계좌도 제공하지 않습니다.",
+        "규칙 확인"
+      ],
+      "stats": [
+        "챌린지 참가비",
+        "트레이더 수익 배분",
+        "계획된 최대 자본",
+        "평가 단계"
+      ],
+      "steps": [
+        "실제 자본에 이르는 신중한 과정",
+        "두 단계의 모의 거래를 통과",
+        "신원과 자격 검증 완료",
+        "중개사 및 자금 담당자의 승인 후 실제 자본 사용",
+        "합격한 30일 주기마다 최대 한 단계 상승"
+      ],
+      "ladder": [
+        "14단계 자본 사다리",
+        "검증된 실적과 확보된 자금을 바탕으로 한 조건부 월간 성장.",
+        "월",
+        "승급은 자동이 아니며 충분한 자금이 있어야 합니다."
+      ],
+      "rules": [
+        "거래 기준",
+        "1단계 이익 목표",
+        "2단계 이익 목표",
+        "일일 손실 한도",
+        "전체 최대 자본 감소",
+        "단계별 최소 거래일",
+        "순이익 중 최고 수익일 비중",
+        "주문당 위험",
+        "열린 포지션의 총 위험",
+        "월간 승급 목표",
+        "승급에 필요한 거래일"
+      ],
+      "faq": [
+        "중요한 질문",
+        "실제 거래 계좌를 받을 수 있나요?",
+        "두 단계 통과 및 법규, 중개사, 자금 심사 완료 후에만 가능합니다. 첫 계획 단계는 100달러입니다.",
+        "지금 30 TRX를 결제할 수 있나요?",
+        "아니요. 법률·재무·기술 검토가 완료될 때까지 가입과 결제는 비활성화됩니다."
+      ],
+      "footer": [
+        "Moj Prop은 MojPlayWin의 계획 중인 사업부이며 현재 운영 중인 인가된 자금 제공 서비스가 아닙니다.",
+        "유일한 조직 봇: mojtaba.bot.ai."
+      ]
+    },
+    "hi": {
+      "name": "हिन्दी",
+      "dir": "ltr",
+      "nav": [
+        "यह कैसे काम करता है",
+        "पूँजी के स्तर",
+        "जोखिम नियम",
+        "सवाल"
+      ],
+      "hero": [
+        "MOJPLAYWIN / प्रॉप विभाग",
+        "अनुशासन से",
+        "अगला स्तर मिलता है।",
+        "दो चरणों के सिम्युलेटेड ट्रेडिंग मूल्यांकन के बाद, शर्तें पूरी होने पर कंपनी की वास्तविक पूँजी तक पहुँच। 14 स्तरों में $100 से $100,000 तक।",
+        "लॉन्च से पहले / कोई भुगतान नहीं",
+        "अभी पंजीकरण बंद है। TRX नहीं लिया जा रहा और वास्तविक ब्रोकरेज खाते उपलब्ध नहीं हैं।",
+        "नियम देखें"
+      ],
+      "stats": [
+        "चुनौती प्रवेश शुल्क",
+        "ट्रेडर का लाभ हिस्सा",
+        "प्रस्तावित अधिकतम पूँजी",
+        "मूल्यांकन चरण"
+      ],
+      "steps": [
+        "वास्तविक पूँजी तक सावधान रास्ता",
+        "सिम्युलेटेड ट्रेडिंग के दोनों चरण पास करें",
+        "पहचान और पात्रता जाँच पूरी करें",
+        "ब्रोकर और कोष विभाग की अनुमति के बाद वास्तविक पूँजी पाएँ",
+        "प्रत्येक सफल 30-दिन के चक्र में अधिकतम एक स्तर बढ़ें"
+      ],
+      "ladder": [
+        "पूँजी के 14 स्तर",
+        "सत्यापित प्रदर्शन और आरक्षित पूँजी के आधार पर पारदर्शी मासिक प्रगति।",
+        "महीना",
+        "प्रगति स्वतः नहीं होती; धन उपलब्ध होना चाहिए।"
+      ],
+      "rules": [
+        "ट्रेडिंग मानक",
+        "पहले चरण का लाभ लक्ष्य",
+        "दूसरे चरण का लाभ लक्ष्य",
+        "दैनिक हानि सीमा",
+        "कुल अधिकतम पूँजी गिरावट",
+        "प्रत्येक चरण के ट्रेडिंग दिन",
+        "शुद्ध लाभ में सर्वश्रेष्ठ दिन का हिस्सा",
+        "प्रति ऑर्डर जोखिम",
+        "खुली पोज़िशनों का कुल जोखिम",
+        "मासिक उन्नति लक्ष्य",
+        "उन्नति के लिए ट्रेडिंग दिन"
+      ],
+      "faq": [
+        "महत्त्वपूर्ण सवाल",
+        "क्या मुझे वास्तविक ट्रेडिंग खाता मिलेगा?",
+        "दोनों चरण, कानूनी, ब्रोकर और पूँजी जाँच पास होने पर ही। पहला प्रस्तावित स्तर $100 है।",
+        "क्या अभी 30 TRX दे सकता हूँ?",
+        "नहीं। कानूनी, वित्तीय और तकनीकी जाँच पूरी होने तक पंजीकरण और भुगतान बंद हैं।"
+      ],
+      "footer": [
+        "Moj Prop, MojPlayWin का प्रस्तावित विभाग है; यह अभी सक्रिय या लाइसेंस प्राप्त फंडिंग सेवा नहीं है।",
+        "एकमात्र संगठनात्मक बॉट: mojtaba.bot.ai."
+      ]
+    },
+    "id": {
+      "name": "Bahasa Indonesia",
+      "dir": "ltr",
+      "nav": [
+        "Cara kerja",
+        "Jenjang modal",
+        "Aturan risiko",
+        "Pertanyaan"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DIVISI PROP",
+        "Disiplin trading",
+        "membuka tingkat berikutnya.",
+        "Evaluasi simulasi dua tahap, kemudian akses bersyarat ke modal nyata perusahaan. Dari $100 hingga $100.000 dalam 14 jenjang.",
+        "PRAPELUNCURAN / TANPA PEMBAYARAN",
+        "Belum dibuka. TRX tidak diterima dan akun broker riil belum ditawarkan.",
+        "Lihat aturan"
+      ],
+      "stats": [
+        "Biaya masuk tantangan",
+        "Bagian keuntungan trader",
+        "Batas modal rencana",
+        "Tahap evaluasi"
+      ],
+      "steps": [
+        "Jalur terukur menuju modal riil",
+        "Lulus dua tahap simulasi trading",
+        "Selesaikan verifikasi identitas dan kelayakan",
+        "Akses modal riil hanya setelah persetujuan broker dan keuangan",
+        "Naik maksimal satu tingkat setiap siklus 30 hari yang memenuhi syarat"
+      ],
+      "ladder": [
+        "Jenjang modal 14 tingkat",
+        "Kenaikan bulanan yang transparan berdasarkan kinerja terverifikasi dan dana tersedia.",
+        "Bulan",
+        "Kenaikan bersyarat, tidak otomatis; modal harus tersedia."
+      ],
+      "rules": [
+        "Standar trading",
+        "Target laba tahap pertama",
+        "Target laba tahap kedua",
+        "Batas rugi harian",
+        "Penurunan total modal maksimum",
+        "Hari trading per tahap",
+        "Porsi hari terbaik dari laba bersih",
+        "Risiko per order",
+        "Total risiko posisi terbuka",
+        "Target kenaikan bulanan",
+        "Hari trading untuk naik tingkat"
+      ],
+      "faq": [
+        "Pertanyaan penting",
+        "Apakah saya mendapat akun trading riil?",
+        "Hanya setelah kedua tahap dan pemeriksaan hukum, broker, serta modal selesai. Jenjang pertama direncanakan $100.",
+        "Bisakah saya membayar 30 TRX sekarang?",
+        "Tidak. Pendaftaran dan pembayaran dinonaktifkan hingga verifikasi hukum, keuangan, dan teknis selesai."
+      ],
+      "footer": [
+        "Moj Prop adalah divisi yang direncanakan di MojPlayWin, bukan layanan pendanaan aktif dan berlisensi.",
+        "Satu-satunya bot organisasi: mojtaba.bot.ai."
+      ]
+    },
+    "vi": {
+      "name": "Tiếng Việt",
+      "dir": "ltr",
+      "nav": [
+        "Cách hoạt động",
+        "Lộ trình vốn",
+        "Quy tắc rủi ro",
+        "Câu hỏi"
+      ],
+      "hero": [
+        "MOJPLAYWIN / BỘ PHẬN PROP",
+        "Kỷ luật giao dịch",
+        "mở ra cấp độ mới.",
+        "Đánh giá giao dịch mô phỏng qua hai giai đoạn, sau đó có thể được cấp vốn thực của công ty nếu đáp ứng điều kiện; 14 cấp từ 100 đến 100.000 USD.",
+        "TRƯỚC KHI RA MẮT / CHƯA THANH TOÁN",
+        "Chưa mở đăng ký. Không thu TRX và chưa cung cấp tài khoản môi giới thực.",
+        "Xem quy tắc"
+      ],
+      "stats": [
+        "Phí tham gia thử thách",
+        "Phần lợi nhuận của trader",
+        "Mức vốn dự kiến cao nhất",
+        "Giai đoạn đánh giá"
+      ],
+      "steps": [
+        "Lộ trình thận trọng đến vốn thực",
+        "Vượt qua hai giai đoạn giao dịch mô phỏng",
+        "Hoàn thành xác minh danh tính và tư cách",
+        "Chỉ sử dụng vốn thực sau khi môi giới và bộ phận tài chính phê duyệt",
+        "Tăng tối đa một cấp sau mỗi chu kỳ 30 ngày hợp lệ"
+      ],
+      "ladder": [
+        "Lộ trình vốn 14 cấp",
+        "Tăng cấp hằng tháng minh bạch, dựa trên kết quả đã xác minh và vốn đã dành sẵn.",
+        "Tháng",
+        "Việc tăng cấp có điều kiện, không tự động; phải có đủ vốn."
+      ],
+      "rules": [
+        "Tiêu chuẩn",
+        "Mục tiêu lợi nhuận giai đoạn một",
+        "Mục tiêu lợi nhuận giai đoạn hai",
+        "Giới hạn lỗ mỗi ngày",
+        "Mức sụt giảm vốn tối đa",
+        "Số ngày giao dịch mỗi giai đoạn",
+        "Tỷ lệ ngày tốt nhất trong lợi nhuận ròng",
+        "Rủi ro mỗi lệnh",
+        "Tổng rủi ro vị thế mở",
+        "Mục tiêu tăng cấp hằng tháng",
+        "Số ngày giao dịch để tăng cấp"
+      ],
+      "faq": [
+        "Câu hỏi quan trọng",
+        "Tôi có nhận tài khoản giao dịch thực không?",
+        "Chỉ sau khi qua cả hai giai đoạn và hoàn thành kiểm tra pháp lý, môi giới và vốn. Cấp đầu dự kiến 100 USD.",
+        "Tôi có thể nộp 30 TRX ngay không?",
+        "Không. Đăng ký và thanh toán bị tắt cho đến khi hoàn tất kiểm tra pháp lý, tài chính và kỹ thuật."
+      ],
+      "footer": [
+        "Moj Prop là bộ phận dự kiến của MojPlayWin, chưa phải dịch vụ cấp vốn đang hoạt động hay được cấp phép.",
+        "Bot duy nhất của tổ chức: mojtaba.bot.ai."
+      ]
+    },
+    "th": {
+      "name": "ไทย",
+      "dir": "ltr",
+      "nav": [
+        "ขั้นตอนการทำงาน",
+        "ลำดับเงินทุน",
+        "กฎความเสี่ยง",
+        "คำถาม"
+      ],
+      "hero": [
+        "MOJPLAYWIN / ฝ่าย PROP",
+        "วินัยในการเทรด",
+        "นำไปสู่ระดับถัดไป",
+        "ประเมินทักษะผ่านการเทรดจำลองสองขั้น จากนั้นจึงอาจได้รับเงินทุนจริงของบริษัทเมื่อผ่านเงื่อนไข รวม 14 ระดับตั้งแต่ 100 ถึง 100,000 ดอลลาร์",
+        "ก่อนเปิดบริการ / ไม่รับชำระเงิน",
+        "ยังไม่เปิดลงทะเบียน ไม่รับ TRX และยังไม่ให้บัญชีโบรกเกอร์จริง",
+        "ดูกฎ"
+      ],
+      "stats": [
+        "ค่าสมัครชาเลนจ์",
+        "ส่วนแบ่งกำไรของเทรดเดอร์",
+        "วงเงินสูงสุดที่วางแผน",
+        "ขั้นตอนการประเมิน"
+      ],
+      "steps": [
+        "เส้นทางอย่างรอบคอบสู่เงินทุนจริง",
+        "ผ่านการเทรดจำลองสองขั้นตอน",
+        "ยืนยันตัวตนและคุณสมบัติ",
+        "ใช้เงินทุนจริงได้หลังโบรกเกอร์และฝ่ายการเงินอนุมัติเท่านั้น",
+        "เลื่อนขึ้นได้ไม่เกินหนึ่งระดับต่อรอบ 30 วันที่ผ่านเกณฑ์"
+      ],
+      "ladder": [
+        "ลำดับเงินทุน 14 ระดับ",
+        "เลื่อนระดับรายเดือนอย่างโปร่งใสตามผลที่ตรวจสอบได้และเงินทุนสำรอง",
+        "เดือน",
+        "การเลื่อนระดับมีเงื่อนไข ไม่ใช่อัตโนมัติ และต้องมีเงินทุนพร้อม"
+      ],
+      "rules": [
+        "มาตรฐาน",
+        "เป้ากำไรขั้นแรก",
+        "เป้ากำไรขั้นที่สอง",
+        "ขาดทุนสูงสุดต่อวัน",
+        "เงินทุนลดลงสูงสุดรวม",
+        "จำนวนวันเทรดต่อขั้น",
+        "สัดส่วนวันทำกำไรสูงสุดต่อกำไรสุทธิ",
+        "ความเสี่ยงต่อคำสั่ง",
+        "ความเสี่ยงรวมของสถานะเปิด",
+        "เป้ากำไรเลื่อนระดับรายเดือน",
+        "วันเทรดที่ต้องมีเพื่อเลื่อนระดับ"
+      ],
+      "faq": [
+        "คำถามสำคัญ",
+        "จะได้บัญชีเทรดเงินจริงหรือไม่?",
+        "ต้องผ่านทั้งสองขั้นและการตรวจสอบกฎหมาย โบรกเกอร์ และเงินทุนก่อน ระดับแรกที่วางแผนคือ 100 ดอลลาร์",
+        "จ่าย 30 TRX ตอนนี้ได้ไหม?",
+        "ยังไม่ได้ การลงทะเบียนและชำระเงินปิดอยู่จนกว่าการตรวจสอบจะเสร็จสิ้น"
+      ],
+      "footer": [
+        "Moj Prop เป็นฝ่ายธุรกิจที่วางแผนไว้ของ MojPlayWin ยังไม่ใช่บริการให้เงินทุนที่เปิดดำเนินการหรือได้รับใบอนุญาต",
+        "บอตประจำองค์กรเพียงตัวเดียว: mojtaba.bot.ai"
+      ]
+    },
+    "nl": {
+      "name": "Nederlands",
+      "dir": "ltr",
+      "nav": [
+        "Hoe het werkt",
+        "Kapitaalladder",
+        "Risicoregels",
+        "Vragen"
+      ],
+      "hero": [
+        "MOJPLAYWIN / PROP-AFDELING",
+        "Discipline",
+        "verdient de volgende stap.",
+        "Twee gesimuleerde beoordelingsfasen en daarna voorwaardelijke toegang tot echt bedrijfsvermogen. Van $100 tot $100.000 in 14 niveaus.",
+        "VOOR LANCERING / GEEN BETALINGEN",
+        "Nog niet geopend. Er wordt geen TRX geïnd en er zijn geen echte brokerrekeningen beschikbaar.",
+        "Bekijk de regels"
+      ],
+      "stats": [
+        "Inschrijfgeld uitdaging",
+        "Winstaandeel trader",
+        "Geplafonneerd gepland kapitaal",
+        "Beoordelingsfasen"
+      ],
+      "steps": [
+        "Een beheerste weg naar echt kapitaal",
+        "Slaag voor twee gesimuleerde handelsfasen",
+        "Doorloop identiteit- en geschiktheidscontroles",
+        "Gebruik echt kapitaal pas na goedkeuring van broker en treasury",
+        "Stijg hoogstens één niveau per succesvolle cyclus van 30 dagen"
+      ],
+      "ladder": [
+        "De kapitaalladder met 14 niveaus",
+        "Transparante maandelijkse groei afhankelijk van gecontroleerde prestaties en gereserveerd kapitaal.",
+        "Maand",
+        "Promotie is voorwaardelijk, nooit automatisch; het kapitaal moet beschikbaar zijn."
+      ],
+      "rules": [
+        "De normen",
+        "Winstdoel fase één",
+        "Winstdoel fase twee",
+        "Dagelijkse verlieslimiet",
+        "Maximale totale vermogensdaling",
+        "Handelsdagen per fase",
+        "Aandeel beste dag in nettowinst",
+        "Risico per order",
+        "Totaal risico open posities",
+        "Maandelijks promotiedoel",
+        "Handelsdagen voor promotie"
+      ],
+      "faq": [
+        "Belangrijke vragen",
+        "Krijg ik een echte handelsrekening?",
+        "Alleen na beide fasen en controle van wetgeving, broker en financiering. Het eerste geplande niveau is $100.",
+        "Kan ik nu 30 TRX betalen?",
+        "Nee. Inschrijving en betalingen blijven uit tot alle juridische, financiële en technische controles klaar zijn."
+      ],
+      "footer": [
+        "Moj Prop is een geplande afdeling van MojPlayWin, geen actief vergunninghoudend financieringsaanbod.",
+        "Enige organisatierobot: mojtaba.bot.ai."
+      ]
+    },
+    "pl": {
+      "name": "Polski",
+      "dir": "ltr",
+      "nav": [
+        "Jak to działa",
+        "Drabina kapitału",
+        "Zasady ryzyka",
+        "Pytania"
+      ],
+      "hero": [
+        "MOJPLAYWIN / DZIAŁ PROP",
+        "Dyscyplina",
+        "prowadzi na wyższy poziom.",
+        "Dwuetapowa ocena na rachunku symulowanym, a później warunkowy dostęp do prawdziwego kapitału firmy. Od 100 do 100 000 USD w 14 poziomach.",
+        "PRZED STARTEM / BEZ PŁATNOŚCI",
+        "Program nie jest otwarty. Nie pobieramy TRX i nie oferujemy realnych rachunków maklerskich.",
+        "Zobacz zasady"
+      ],
+      "stats": [
+        "Opłata za wyzwanie",
+        "Udział tradera w zyskach",
+        "Planowany limit kapitału",
+        "Etapy oceny"
+      ],
+      "steps": [
+        "Rozważna droga do prawdziwego kapitału",
+        "Zalicz dwa etapy handlu symulowanego",
+        "Potwierdź tożsamość i uprawnienia",
+        "Korzystaj z kapitału po zgodzie brokera i działu finansowego",
+        "Awansuj najwyżej o jeden poziom w udanym cyklu 30 dni"
+      ],
+      "ladder": [
+        "Drabina kapitału w 14 poziomach",
+        "Przejrzysty miesięczny awans zależny od potwierdzonych wyników i odłożonych środków.",
+        "Miesiąc",
+        "Awans nie jest automatyczny; środki muszą być dostępne."
+      ],
+      "rules": [
+        "Standardy",
+        "Cel zysku etapu pierwszego",
+        "Cel zysku etapu drugiego",
+        "Dzienny limit straty",
+        "Maksymalny łączny spadek kapitału",
+        "Dni handlowe na etap",
+        "Udział najlepszego dnia w zysku netto",
+        "Ryzyko na zlecenie",
+        "Łączne ryzyko otwartych pozycji",
+        "Miesięczny cel awansu",
+        "Dni handlowe do awansu"
+      ],
+      "faq": [
+        "Ważne pytania",
+        "Czy dostanę realny rachunek handlowy?",
+        "Dopiero po obu etapach oraz kontrolach prawnych, brokera i dostępności kapitału. Pierwszy planowany poziom to 100 USD.",
+        "Czy mogę już zapłacić 30 TRX?",
+        "Nie. Zapisy i płatności pozostają wyłączone do ukończenia kontroli prawnych, finansowych i technicznych."
+      ],
+      "footer": [
+        "Moj Prop jest planowanym działem MojPlayWin, a nie aktywną licencjonowaną ofertą finansowania.",
+        "Jedyny bot organizacji: mojtaba.bot.ai."
+      ]
+    },
+    "ur": {
+      "name": "اردو",
+      "dir": "rtl",
+      "nav": [
+        "یہ کیسے کام کرتا ہے",
+        "سرمائے کے درجے",
+        "خطرے کے اصول",
+        "سوالات"
+      ],
+      "hero": [
+        "MOJPLAYWIN / پراپ شعبہ",
+        "تجارتی نظم و ضبط",
+        "اگلا درجہ دلاتا ہے۔",
+        "دو مرحلوں میں فرضی تجارت کی جانچ کے بعد کمپنی کے حقیقی سرمائے تک مشروط رسائی۔ ۱۴ درجوں میں ۱۰۰ سے ۱۰۰٬۰۰۰ ڈالر تک۔",
+        "افتتاح سے پہلے / ادائیگی بند",
+        "ابھی اندراج کھلا نہیں۔ TRX وصول نہیں ہو رہا اور حقیقی بروکر اکاؤنٹس پیش نہیں کیے جا رہے۔",
+        "اصول دیکھیں"
+      ],
+      "stats": [
+        "چیلنج داخلہ فیس",
+        "ٹریڈر کا منافع حصہ",
+        "منصوبہ بند زیادہ سے زیادہ سرمایہ",
+        "جانچ کے مراحل"
+      ],
+      "steps": [
+        "حقیقی سرمائے تک ذمہ دارانہ راستہ",
+        "فرضی تجارت کے دونوں مرحلے پاس کریں",
+        "شناخت اور اہلیت کی جانچ مکمل کریں",
+        "بروکر اور خزانے کی منظوری کے بعد حقیقی سرمایہ استعمال کریں",
+        "ہر کامیاب ۳۰ روزہ دور میں زیادہ سے زیادہ ایک درجہ ترقی کریں"
+      ],
+      "ladder": [
+        "سرمائے کی ۱۴ سطحیں",
+        "تصدیق شدہ کارکردگی اور محفوظ سرمائے کی بنیاد پر ماہانہ مشروط ترقی۔",
+        "مہینہ",
+        "ترقی خودکار نہیں؛ سرمایہ دستیاب ہونا ضروری ہے۔"
+      ],
+      "rules": [
+        "تجارتی معیارات",
+        "پہلے مرحلے کا منافع ہدف",
+        "دوسرے مرحلے کا منافع ہدف",
+        "روزانہ نقصان کی حد",
+        "مجموعی سرمایہ کمی کی حد",
+        "فی مرحلہ تجارتی دن",
+        "خالص منافع میں بہترین دن کا حصہ",
+        "فی آرڈر خطرہ",
+        "کھلی پوزیشنوں کا کل خطرہ",
+        "ماہانہ ترقی کا ہدف",
+        "ترقی کے لیے تجارتی دن"
+      ],
+      "faq": [
+        "اہم سوالات",
+        "کیا حقیقی تجارتی اکاؤنٹ ملے گا؟",
+        "دونوں مرحلے اور قانونی، بروکر و سرمایہ جانچ کے بعد ہی۔ پہلا منصوبہ بند درجہ ۱۰۰ ڈالر ہے۔",
+        "کیا میں ابھی ۳۰ TRX ادا کر سکتا ہوں؟",
+        "نہیں۔ قانونی، مالی اور تکنیکی جانچ مکمل ہونے تک اندراج اور ادائیگی بند ہیں۔"
+      ],
+      "footer": [
+        "Moj Prop، MojPlayWin کا منصوبہ بند شعبہ ہے، فی الحال فعال یا لائسنس یافتہ سرمایہ فراہم کرنے کی پیشکش نہیں۔",
+        "واحد تنظیمی بوٹ: mojtaba.bot.ai."
+      ]
+    }
+  }
+}
