@@ -151,8 +151,8 @@ def verify_signed_routing_context(*, context, key, registry, allowed_anchors=Non
         return False
     if (context["network"] != CANONICAL_CHAIN
             or context["asset"] != CANONICAL_ASSET
-            or not isinstance(context["routing_digest"], str)
-            or len(context["routing_digest"]) != 64):
+            or type(context["routing_digest"]) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", context["routing_digest"]) is None):
         return False
     try:
         decision = registered_scope(
