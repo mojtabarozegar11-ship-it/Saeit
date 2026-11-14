@@ -44,14 +44,26 @@ SECTORS = {
         "funding_and_reserves_attested", "trader_kyc_aml_ready",
         "signed_broker_evidence_reconciled", "payout_and_trx_controls_live",
     ),
+    "signal_subscriptions": (
+        "signal_source_independently_verified", "timestamped_history_audited",
+        "drawdown_and_fees_disclosed", "seller_jurisdiction_approved",
+        "subscription_entitlement_verified", "terms_and_refunds_approved",
+        "trx_payment_reconciled",
+    ),
+    "tron_gateway": (
+        "merchant_entity_verified", "site_and_subsite_registry_approved",
+        "tron_mainnet_receipt_proven", "independent_confirmations_verified",
+        "tenant_invoice_isolation_verified", "replay_and_double_settlement_blocked",
+        "refund_and_dispute_process_approved", "delivery_entitlement_reconciled",
+    ),
 }
 
-# Commercialization ordering is evidence-based. The first three categories
-# already have public catalog references; that is not proof of payable stock.
+# Strict owner-set priority: keep these first four in all reports and planning.
+# A shared gateway is a prerequisite across brands, not a permission to charge.
 PRIORITY = (
-    "digital_books", "website_kits", "agriculture_services",
-    "ai_services", "education_courses", "research_publications",
-    "games", "moj_prop",
+    "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+    "website_kits", "agriculture_services", "ai_services",
+    "education_courses", "research_publications", "games",
 )
 
 
