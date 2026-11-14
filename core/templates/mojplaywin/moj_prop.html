@@ -107,12 +107,20 @@
       <h2 id="mp-plans-title">{{ plans_copy.title }}</h2>
       <p>{{ plans_copy.body }}</p>
     </div>
+    <p class="mp-fineprint">{{ plan_status_copy.owner_disclosure }}</p>
     <div class="mp-plan-grid">
       {% for plan in challenge_plans %}
       <article class="mp-plan-card" aria-label="MOJ PROP {{ plan.code }}">
         <div class="mp-plan-top"><span>MOJ PROP {{ plan.number|stringformat:"02d" }}</span>
           <span class="mp-plan-code" dir="ltr">{{ plan.code }}</span>
         </div>
+        <p class="mp-plan-business-status" role="status" data-plan-owner-state="{{ plan.business_status }}">
+          {% if plan.business_active_owner_declared %}
+            {{ plan_status_copy.owner_active }}
+          {% else %}
+            {{ plan_status_copy.funding_hold }}
+          {% endif %}
+        </p>
         <p class="mp-plan-field">{{ plans_copy.starting }}</p>
         <strong class="mp-plan-capital" dir="ltr">&#36;{{ plan.starting_capital_usd }}</strong>
         <p class="mp-plan-field">{{ plans_copy.fee }}</p>
