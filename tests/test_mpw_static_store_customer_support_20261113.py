@@ -86,12 +86,15 @@ def test_sku879_inquiry_prevents_premature_direct_checkout_but_keeps_other_two()
 
 def test_sku879_modified_direct_checkout_baseline_fails_closed():
     original = original_static_fallback()
-    for tampered in (
-        original.replace(SKU879_OLD_CHECKOUT_CTA.encode(), b'<a href="/external-pay/">Pay</a>', 1),
-        original.replace(SKU879_OLD_CHECKOUT_CTA.encode(), b'', 1),
-        original + SKU879_INQUIRY_CTA.encode(),
+    for tampered, failure in (
+        (original.replace(SKU879_OLD_CHECKOUT_CTA.encode(), b'<a href="/external-pay/">Pay</a>', 1),
+         "STORE_PRODUCT_OR_PAYMENT_GUARD_MISMATCH"),
+        (original.replace(SKU879_OLD_CHECKOUT_CTA.encode(), b'', 1),
+         "STORE_PRODUCT_OR_PAYMENT_GUARD_MISMATCH"),
+        (original + SKU879_INQUIRY_CTA.encode(),
+         "UNEXPECTED_PRIOR_SUPPORT_CHANGE"),
     ):
-        with pytest.raises(RuntimeError, match="STORE_PRODUCT_OR_PAYMENT_GUARD_MISMATCH"):
+        with pytest.raises(RuntimeError, match=failure):
             patched_html(tampered)
 
 
