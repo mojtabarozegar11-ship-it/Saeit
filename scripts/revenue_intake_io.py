@@ -9,6 +9,8 @@ from pathlib import Path
 import stat
 
 MAX_BYTES = 65536
+MAX_JSON_DEPTH = 64
+MAX_JSON_NODES = 4096
 
 
 def reject_duplicate_keys(pairs):
@@ -22,6 +24,22 @@ def reject_duplicate_keys(pairs):
 
 def reject_nonfinite(value):
     raise ValueError("non-finite JSON number rejected")
+
+
+def _enforce_document_shape(root):
+    # JSON can be deeply nested even if the interpreter accepts it.
+    # Iterative traversal avoids recursive risk and bounds processing cost.
+    pending = [(root, 0)]
+    nodes = 0
+    while pending:
+        current, depth = pending.pop()
+        nodes += 1
+        if nodes > MAX_JSON_NODES or depth > MAX_JSON_DEPTH:
+            raise ValueError("JSON nesting or field-count limit exceeded")
+        if isinstance(current, dict):
+            pending.extend((v, depth + 1) for v in current.values())
+        elif isinstance(current, list):
+            pending.extend((v, depth + 1) for v in current)
 
 
 def read_strict_json(path, *, max_bytes=MAX_BYTES):
@@ -49,9 +67,11 @@ def read_strict_json(path, *, max_bytes=MAX_BYTES):
     if len(raw) > max_bytes:
         raise ValueError("intake exceeds maximum length")
     try:
-        return json.loads(raw.decode("utf-8"),
-                          object_pairs_hook=reject_duplicate_keys,
-                          parse_constant=reject_nonfinite)
+        result = json.loads(raw.decode("utf-8"),
+                            object_pairs_hook=reject_duplicate_keys,
+                            parse_constant=reject_nonfinite)
+        _enforce_document_shape(result)
+        return result
     except (ValueError, UnicodeError, RecursionError) as exc:
         raise ValueError("invalid or ambiguous JSON intake") from exc
 
