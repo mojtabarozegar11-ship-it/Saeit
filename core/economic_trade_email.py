@@ -37,6 +37,16 @@ def mailbox_status():
     }
 
 
+def _validate_dispatch_address(address, code):
+    if (type(address) is not str or address != address.strip()
+            or not address or "\r" in address or "\n" in address):
+        raise RuntimeError(code)
+    try:
+        validate_email(address)
+    except ValidationError as exc:
+        raise RuntimeError(code) from exc
+
+
 def _trace_id():
     return uuid.uuid4().hex
 
@@ -177,6 +187,10 @@ def send_queued_trade_email(outbox_id, *, grant_id=None):
             raise RuntimeError("Trade mailbox outbound policy is disabled.")
         if not outbox.mailbox.email_address:
             raise RuntimeError("Company trade mailbox has no configured sender address.")
+        # Legacy drafts and mutable records still need validation at the
+        # final approved boundary, before consuming a one-time owner grant.
+        _validate_dispatch_address(outbox.mailbox.email_address, "TRADE_EMAIL_SENDER_INVALID")
+        _validate_dispatch_address(outbox.recipient, "TRADE_EMAIL_RECIPIENT_INVALID")
         from .approval import ApprovalService
         ApprovalService().authorize_grant(grant_id, scope)
 
