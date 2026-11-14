@@ -61,6 +61,12 @@ class TronMultiTenantTests(SimpleTestCase):
             with self.subTest(host=value), self.assertRaises(ValueError):
                 canonical_host(value)
 
+    def test_whitespace_smuggling_cannot_match_merchant_hostname(self):
+        for candidate in (" mojplaywin.com", "mojplaywin.com ",
+                          "\tmojplaywin.com", "mojplaywin.com\n"):
+            with self.subTest(host=repr(candidate)), self.assertRaises(ValueError):
+                canonical_host(candidate)
+
     def test_approved_registered_subdomain_is_allowed_by_exact_match(self):
         registry = {("shop.mojplaywin.com", ""): {
             **MERCHANT, "tenant_id": "separate_shop",
