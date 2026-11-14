@@ -243,6 +243,20 @@ def test_private_php_registry_inventory_is_immutable_and_redacted(tmp_path):
     assert report["live_scheduler_verified"] is False
 
 
+def test_private_php_registry_invalid_enabled_flag_fails_closed(tmp_path):
+    private = tmp_path / ".private" / "zomorod-business"
+    private.mkdir(parents=True)
+    db = private / "site_agents.sqlite3"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE agents (code TEXT PRIMARY KEY, enabled INTEGER)")
+        connection.execute("INSERT INTO agents VALUES ('master', 2)")
+    report = observer.cpanel_php_registry_snapshot(tmp_path)
+    assert report["state"] == "invalid_registry_enabled_flag"
+    assert report["records"] is None
+    assert report["enabled_count"] is None
+    assert report["database_state_proves_live_workers"] is False
+
+
 def test_private_php_registry_wal_refuses_stale_snapshot(tmp_path):
     private = tmp_path / ".private" / "zomorod-business"
     private.mkdir(parents=True)
