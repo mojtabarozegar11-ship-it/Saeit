@@ -1,0 +1,44 @@
+name: MPW exact buyer-email cutover proof — source only, no deployment
+on:
+  push:
+    branches: [fix/mpw-dynamic-cutover-buyer-email-proof-20261114]
+  pull_request:
+    branches: [fix/mpw-email-required-cutover-preflight-20261114]
+permissions:
+  contents: read
+jobs:
+  guest-buyer-source-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax on exact release path
+        run: python3 -m py_compile services/mpw_checkout_release_assurance.py scripts/mpw_dynamic_store_cutover_20261108.py services/mpw_checkout_render_contract.py
+      - name: Retest legacy rollback, source and checkout contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_email_required_preflight_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_inert_control_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_public_checkout_hidden_controls_20261114.py' -v
+      - name: Validate actual nine-route release decision and strict headers
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_checkout_release_assurance_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cutover_buyer_email_routes_20261114.py' -v
+      - name: Source check and nonproduction disclosure
+        run: |
+          python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/claim-source.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=Path('/tmp/claim-source.json').read_text()
+          assert x.startswith('MPW_EMAIL_REQUIRED_SOURCE=')
+          r=json.loads(x.split('=',1)[1])
+          assert r['source_candidate_complete']
+          assert r['release_authorized'] is False
+          assert r['settled_payment_verified'] is False
+          assert r['paid_delivery_verified'] is False
+          assert r['actual_collected_revenue'] is None
+          print('SOURCE_CHECK=PASS; LIVE_CUTOVER=UNPROVEN; CUSTOMER_PAYMENT=UNKNOWN')
+          PY
