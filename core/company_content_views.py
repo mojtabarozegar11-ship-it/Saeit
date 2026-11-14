@@ -61,16 +61,23 @@ def _inquiry_fingerprint(cleaned):
     return salted_hmac("company.inquiry.duplicate.v1", content).hexdigest()
 
 
-def company_portal_home(request):
+def company_portal_home(request, *, service=None):
     """Write a real CRM lead once, return signed receipt; never send mail."""
     from django.shortcuts import redirect
     from django.urls import reverse
     if request.method != "POST":
         raise Http404("Use the company intake form")
 
-    form = CompanyInquiryForm(request.POST)
+    data = request.POST.copy()
+    if service == "farm":
+        data["kind"] = "commercial"
+        data["subject"] = "ZM-FARM | درخواست تحلیل اقتصادی مزرعه"
+    form = CompanyInquiryForm(data)
     if not form.is_valid():
-        response = render(request, "core/company_inquiry_retry.html", {"form": form}, status=400)
+        response = render(request, "core/company_inquiry_retry.html", {
+            "form": form,
+            "form_action": "/company/farm-economics/request/" if service == "farm" else "/company/",
+        }, status=400)
         response["Cache-Control"] = "no-store"
         response["Referrer-Policy"] = "no-referrer"
         response["X-Robots-Tag"] = "noindex, nofollow"
@@ -127,3 +134,20 @@ def company_inquiry_receipt(request, ticket):
         return response
 
     return _show(request, ticket)
+
+
+def farm_economics_request(request):
+    """Dedicated farm service intake using the SAME persisted company CRM."""
+    if request.method == "POST":
+        return company_portal_home(request, service="farm")
+    if request.method != "GET":
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(["GET", "POST"])
+    form = CompanyInquiryForm(initial={
+        "kind": "commercial",
+        "subject": "ZM-FARM | درخواست تحلیل اقتصادی مزرعه",
+    })
+    response = render(request, "core/farm_economics_request.html", {"form": form})
+    response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    return response
