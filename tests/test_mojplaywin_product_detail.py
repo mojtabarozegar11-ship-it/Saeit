@@ -190,7 +190,7 @@ class MojPlayWinProductDetailsTests(TestCase):
                    return_value="/commerce/book/72/"):
             response = self.get(72)
         self.assertEqual(response.context["database_price_usd"], "8.25")
-        self.assertContains(response, "US $8.25")
+        self.assertContains(response, "US &#36;8.25")
 
     def test_missing_product_does_not_consult_gateway(self):
         with patch("core.mojplaywin_product_detail._approved_purchase_url") as approved:
