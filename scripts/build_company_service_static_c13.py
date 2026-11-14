@@ -10,6 +10,7 @@ import ast
 from html import escape
 import json
 from pathlib import Path
+from urllib.parse import quote
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +37,8 @@ def bullets(items) -> str:
 
 def html_page(code: str, offer: dict, guide: dict) -> str:
     title = escape(offer["title_fa"])
+    email_subject = quote(f"[{code}] درخواست بررسی اولیه {offer['title_fa']}", safe="")
+    email_href = f"mailto:zomorodmelal@gmail.com?subject={email_subject}"
     pain = escape(guide["pain"])
     customer = escape(offer["customer"])
     limitation = escape(offer["limitation"])
@@ -89,6 +92,8 @@ def html_page(code: str, offer: dict, guide: dict) -> str:
   <small>کد {escape(code)} · استعلام اولیه غیرتعهدآور</small><h1>{title}</h1>
   <p>{pain}</p><p><strong>مناسب برای:</strong> {customer}</p>
   <a class="cta scope-primary-cta" href="{CONTACT}">ورود به فرم رسمی شرکت</a>
+  <p><a class="scope-email-fallback" href="{email_href}">مسیر جایگزین: نوشتن ایمیل به شرکت (اختیاری)</a></p>
+  <p><small>لینک ایمیل فقط نرم‌افزار ایمیل شما را باز می‌کند؛ هیچ پیامی از این صفحه به صورت خودکار ارسال نمی‌شود. از درج اسناد محرمانه یا اطلاعات بانکی خودداری کنید.</small></p>
   <p><small>هنگام ثبت درخواست، کد {escape(code)} را در بخش توضیحات فرم درج کنید؛ انتقال خودکار اطلاعات در این نسخه تأیید نشده است.</small></p>
 </header>
 <section class="card"><h2>پرسش‌هایی که بررسی به آن‌ها پاسخ می‌دهد</h2><ul>{bullets(guide["questions"])}</ul></section>
