@@ -58,7 +58,7 @@ class Reply:
         return self.url
 
     def read(self, limit):
-        assert limit == 250_000
+        assert limit == 250_001
         return self.body
 
 
