@@ -17,6 +17,7 @@ import re
 import stat
 from html.parser import HTMLParser
 from pathlib import Path
+from subprocess import DEVNULL, PIPE, run as _fixed_uapi_run
 
 HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
@@ -382,7 +383,208 @@ def discover_neighbor_app_roots(home: Path = HOME) -> dict:
         return empty
 
 
-def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
+
+UAPI_OUTPUT_LIMIT = 131_072
+UAPI_TREE_NODE_LIMIT = 384
+UAPI_CMD = ("uapi", "--output=json", "PassengerApps", "list_applications")
+UAPI_TARGET_DOMAINS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
+REGISTRATION_MARKERS = (
+    "passenger_wsgi.py",
+    "manage.py",
+    "core/mojplaywin_views.py",
+    "mpw_commerce/product_checkout_page.py",
+    "mpw_commerce/templates/mpw_commerce/product_checkout.html",
+)
+
+
+def _reject_duplicate_json_keys(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError("duplicate source registration key")
+        result[name] = value
+    return result
+
+
+def _uapi_registered_app_records(raw: bytes):
+    """Parse one tightly bounded cPanel UAPI result, never return raw JSON."""
+    if type(raw) is not bytes or not 0 < len(raw) <= UAPI_OUTPUT_LIMIT:
+        raise ValueError("uapi response is missing or too large")
+    try:
+        data = json.loads(raw.decode("utf-8"),
+                          object_pairs_hook=_reject_duplicate_json_keys,
+                          parse_constant=lambda _: (_ for _ in ()).throw(
+                              ValueError("invalid JSON number")))
+    except (UnicodeError, ValueError, TypeError, RecursionError):
+        raise ValueError("invalid UAPI response") from None
+    if not isinstance(data, dict):
+        raise ValueError("invalid UAPI wrapper")
+    result = data.get("result")
+    if not isinstance(result, dict) or result.get("status") not in (1, "1", True):
+        raise ValueError("UAPI did not confirm a successful read")
+    stack = [(result.get("data", result), 0)]
+    inspected = 0
+    matches = []
+    seen = set()
+    while stack:
+        node, depth = stack.pop()
+        inspected += 1
+        if inspected > UAPI_TREE_NODE_LIMIT or depth > 12:
+            raise ValueError("UAPI tree beyond review budget")
+        if type(node) is dict:
+            if any(x in node for x in (
+                    "app_root", "app_path", "application_root",
+                    "app_uri", "base_uri", "application_uri")):
+                domain = node.get("domain")
+                if type(domain) is str and domain.casefold().strip() in UAPI_TARGET_DOMAINS:
+                    roots = [node.get(k) for k in (
+                        "app_root", "app_path", "application_root")
+                             if node.get(k) is not None]
+                    if not roots or any(type(r) is not str for r in roots):
+                        raise ValueError("missing or invalid target registration root")
+                    if len(set(roots)) != 1:
+                        raise ValueError("contradictory target roots")
+                    root = roots[0]
+                    if not root or len(root) > 1024:
+                        raise ValueError("invalid root size")
+                    # Collapse exact duplicates repeated by a cPanel wrapper,
+                    # but reject more than one independently registered target.
+                    key = (domain.casefold().strip(), root)
+                    if key not in seen:
+                        seen.add(key)
+                        matches.append(root)
+                    if len(matches) > 8:
+                        raise ValueError("too many target registrations")
+            for value in node.values():
+                if isinstance(value, (list, dict)):
+                    stack.append((value, depth + 1))
+        elif type(node) is list:
+            if len(node) > UAPI_TREE_NODE_LIMIT:
+                raise ValueError("UAPI list too large")
+            for value in node:
+                if isinstance(value, (list, dict)):
+                    stack.append((value, depth + 1))
+    return matches
+
+
+def _same_account_regular_root(raw_root: str, home: Path):
+    """Validate a literal registered root without resolving symlinks."""
+    if (type(raw_root) is not str or not raw_root.startswith("/")
+            or len(raw_root) > 1024 or "\x00" in raw_root
+            or "//" in raw_root):
+        return None
+    if any(part in ("", ".", "..") for part in raw_root.split("/")[1:]):
+        return None
+    if not home.is_dir() or home.is_symlink():
+        return None
+    root = Path(raw_root)
+    try:
+        relative = root.relative_to(home)
+    except ValueError:
+        return None
+    if not relative.parts or len(relative.parts) > 7:
+        return None
+    current = home
+    try:
+        for component in relative.parts:
+            current = current / component
+            if current.is_symlink() or not current.is_dir():
+                return None
+    except (OSError, ValueError):
+        return None
+    return root
+
+
+def inspect_uapi_registered_root(home: Path = HOME, runner=None) -> dict:
+    """One fixed, owner-local, read-only UAPI query; no paths in result.
+
+    This proves only an on-disk candidate's correspondence to a cPanel
+    registration. It does NOT prove Passenger loaded this WSGI module, that
+    Django rendered a checkout page, or any settled payment/entitlement.
+    """
+    result = {
+        "classification": "uapi_missing_or_unavailable",
+        "command_category": "PassengerApps.list_applications.readonly",
+        "target_registration_count_capped": 0,
+        "registered_root_sha256_prefix": None,
+        "registered_root_regular_same_account_directory": False,
+        "registered_source_marker_count": 0,
+        "registered_wsgi_marker_on_disk": False,
+        "registered_django_manage_marker_on_disk": False,
+        "registered_store_view_marker_on_disk": False,
+        "registered_checkout_view_marker_on_disk": False,
+        "registered_checkout_template_marker_on_disk": False,
+        "registered_checkout_view_sha256_prefix": None,
+        "registered_template_sha256_prefix": None,
+        "effective_passenger_worker_verified": False,
+        "effective_django_view_verified": False,
+        "effective_checkout_template_verified": False,
+        "buyer_email_post_verified": False,
+        "paid_settlement_verified": False,
+        "paid_delivery_verified": False,
+        "actual_collected_revenue": None,
+        "production_release_permitted": False,
+        "raw_registered_root_emitted": False,
+        "customer_data_read": False,
+        "external_payment_network_access": False,
+        "files_modified": False,
+    }
+    try:
+        completed = (runner or _fixed_uapi_run)(
+            list(UAPI_CMD), stdin=DEVNULL, stdout=PIPE, stderr=DEVNULL,
+            timeout=12, check=False,
+        )
+        if type(completed.returncode) is not int or completed.returncode != 0:
+            return result
+        registrations = _uapi_registered_app_records(completed.stdout)
+        result["target_registration_count_capped"] = len(registrations)
+        if len(registrations) != 1:
+            result["classification"] = (
+                "uapi_target_absent" if not registrations else
+                "uapi_target_ambiguous"
+            )
+            return result
+        raw = registrations[0]
+        # This digest uses the original exact UAPI text, which is precisely
+        # how the existing reviewed UAPI sanitiser computes it.
+        result["registered_root_sha256_prefix"] = hashlib.sha256(
+            raw.encode("utf-8")).hexdigest()[:16]
+        root = _same_account_regular_root(raw, home)
+        if root is None:
+            result["classification"] = "root_not_safe_inside_account"
+            return result
+        result["registered_root_regular_same_account_directory"] = True
+        marked = [_safe_read(root, rel) for rel in REGISTRATION_MARKERS]
+        flags = (
+            "registered_wsgi_marker_on_disk",
+            "registered_django_manage_marker_on_disk",
+            "registered_store_view_marker_on_disk",
+            "registered_checkout_view_marker_on_disk",
+            "registered_checkout_template_marker_on_disk",
+        )
+        for field, content in zip(flags, marked):
+            result[field] = content is not None
+        result["registered_source_marker_count"] = sum(
+            content is not None for content in marked)
+        if marked[3] is not None:
+            result["registered_checkout_view_sha256_prefix"] = hashlib.sha256(
+                marked[3]).hexdigest()[:16]
+        if marked[4] is not None:
+            result["registered_template_sha256_prefix"] = hashlib.sha256(
+                marked[4]).hexdigest()[:16]
+        result["classification"] = (
+            "registered_directory_has_commerce_source_on_disk"
+            if marked[2] is not None and marked[3] is not None
+            else "registered_directory_missing_commerce_source_markers"
+        )
+    except (OSError, ValueError, TypeError, UnicodeError, RecursionError,
+            TimeoutError):
+        # All failures are fixed categories without exception text or raw UAPI.
+        result["classification"] = "uapi_missing_or_unavailable"
+    return result
+
+
+def inspect(app: Path = APP, public: Path = PUBLIC, *, registration_runner=None, check_registration=False) -> dict:
     """Use explicit roots in isolated tests; never expose raw file contents."""
     guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
     template = _safe_read(app, "mpw_commerce/templates/mpw_commerce/product_checkout.html")
@@ -467,6 +669,10 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "passenger_stage_source_marker": wsgi_staging,
         "private_checkout_source_readable": template is not None,
         "neighbor_root_fingerprints": discover_neighbor_app_roots(app.parent),
+        "registered_root_disk_evidence": (
+            inspect_uapi_registered_root(app.parent, registration_runner)
+            if check_registration else {"classification": "not_requested_in_source_fixture",
+                                        "production_release_permitted": False}),
         "production_invoice_post_verified": False,
         "independent_chain_finality_verified": False,
         "authenticated_delivery_verified": False,
@@ -483,7 +689,7 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
 def main():
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise SystemExit("MPW_CPANEL_SOURCE_PROVENANCE=WRONG_ACCOUNT")
-    report = inspect()
+    report = inspect(check_registration=True)
     print("MPW_CPANEL_SOURCE_PROVENANCE=" + json.dumps(report, sort_keys=True))
     return 0
 
