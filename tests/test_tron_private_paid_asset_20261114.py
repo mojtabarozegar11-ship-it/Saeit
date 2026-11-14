@@ -62,7 +62,7 @@ class TronPrivatePaidFileTests(unittest.TestCase):
         return p
 
     def read(self, *, path="book.pdf", digest=None):
-        stream = self.scope["_file_from_private_root"](path, digest or self.digest)
+        stream = self.scope["_file_from_private_root"](path, self.digest if digest is None else digest)
         with stream:
             return stream.read()
 
@@ -258,9 +258,7 @@ class TronPrivatePaidFileTests(unittest.TestCase):
 
     def test_46_no_follow_symlink_guard_mandatory(self):
         with patch.object(os, "O_NOFOLLOW", 0):
-            # Runtime requires a real O_NOFOLLOW primitive; source must be
-            # reviewed for systems without it rather than silently following.
-            self.assertTrue(self.scope["_SAFE"].fullmatch("book.pdf"))
+            self.rejected()
 
     def test_47_identical_bytes_have_stable_digest(self):
         first = self.read()
