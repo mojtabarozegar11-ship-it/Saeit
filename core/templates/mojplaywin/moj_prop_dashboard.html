@@ -45,6 +45,12 @@
             <h3>{{ labels.4 }} {% if record.account.kind == "phase_one" %}I{% elif record.account.kind == "phase_two" %}II{% else %}{{ record.account.tier_index|add:"1" }}{% endif %}</h3></div>
           <span class="mp-account-status">{% if record.verified %}✓ {{ labels.12 }}{% else %}◌ {{ labels.17 }}{% endif %}</span>
         </div>
+        {% if record.selected_plan %}
+        <p class="mp-index" dir="ltr">{{ record.selected_plan.code }} ·
+          {{ plans_copy.starting }}: &#36;{{ record.selected_plan.starting_capital_usd }}
+          · {{ plans_copy.fee }}: {{ record.selected_plan.entry_fee_trx }} TRX
+        </p>
+        {% endif %}
         <dl class="mp-account-metrics">
           <div><dt>{{ labels.6 }}</dt><dd dir="ltr">${{ record.tier_capital|floatformat:"2" }}</dd></div>
           <div><dt>{{ labels.7 }}</dt><dd dir="ltr">${{ record.net_profit|floatformat:"2" }}</dd></div>
