@@ -1,4 +1,4 @@
-"""Deterministic prop-firm v1.1 policy engine. No external financial side effects.
+"""Deterministic prop-firm v1.2 policy engine. No external financial side effects.
 
 Never trust request/browser input as evidence for funding, progression or payout.
 Amounts use Decimal; source verification and atomic persistence live OUTSIDE this module.
@@ -36,6 +36,8 @@ class Policy:
     phase_one_goal_pct: Decimal = D("9.6")
     phase_two_goal_pct: Decimal = D("6")
     min_challenge_days: int = 6
+    min_closed_trades_per_challenge: int = 50
+    trader_bots_allowed: bool = True
     social_posts_per_platform_per_challenge: int = 1
     social_posting_platforms: tuple[str, str] = ("instagram", "facebook")
     max_daily_loss_pct: Decimal = D("4")
@@ -133,7 +135,7 @@ def _consistency_reasons(*, verified_profit, max_profitable_day):
 def assess_challenge(*, phase, account_capital, realized_net_profit,
                      trading_days, max_profitable_day, risk, evidence_verified=False,
                      prior_phase_passed=False, social_posts_verified=False,
-                     contract_version=None):
+                     contract_version=None, verified_cumulative_trades=0):
     """Only verified net realized profit qualifies; phase two requires phase one."""
     if isinstance(phase, bool) or phase not in (1, 2):
         raise ValueError("phase must be 1 or 2")
@@ -155,8 +157,12 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     version = POLICY.version if contract_version is None else contract_version
     if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
         raise ValueError("Unknown immutable challenge contract version")
-    if version == NEW_CONTRACT_VERSION and social_posts_verified is not True:
-        reasons.append("social_single_post_each_platform_unverified")
+    if version == NEW_CONTRACT_VERSION and phase == 2:
+        if social_posts_verified is not True:
+            reasons.append("social_single_post_each_platform_unverified")
+        trades = _days(verified_cumulative_trades, "verified_cumulative_trades")
+        if trades < POLICY.min_closed_trades_per_challenge:
+            reasons.append("minimum_50_distinct_closed_trades_not_met")
     if days < POLICY.min_challenge_days:
         reasons.append("minimum_trading_days_not_met")
     if profit < goal:
