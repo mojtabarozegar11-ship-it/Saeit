@@ -17,7 +17,7 @@ import re
 import stat
 from html.parser import HTMLParser
 from pathlib import Path
-from subprocess import DEVNULL, PIPE, run as _fixed_uapi_run
+from subprocess import DEVNULL, PIPE, TimeoutExpired, run as _fixed_uapi_run
 
 HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
@@ -578,7 +578,7 @@ def inspect_uapi_registered_root(home: Path = HOME, runner=None) -> dict:
             else "registered_directory_missing_commerce_source_markers"
         )
     except (OSError, ValueError, TypeError, UnicodeError, RecursionError,
-            TimeoutError):
+            TimeoutError, TimeoutExpired):
         # All failures are fixed categories without exception text or raw UAPI.
         result["classification"] = "uapi_missing_or_unavailable"
     return result
