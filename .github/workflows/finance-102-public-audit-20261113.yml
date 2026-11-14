@@ -1,0 +1,27 @@
+name: Finance 102 public read-only audit 20261113
+on:
+  pull_request:
+    paths:
+      - .github/workflows/finance-102-public-audit-20261113.yml
+      - scripts/finance_102_public_audit_20261113.py
+  push:
+    branches:
+      - audit/finance102-live-20261113
+    paths:
+      - .github/workflows/finance-102-public-audit-20261113.yml
+permissions:
+  contents: read
+jobs:
+  public-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify 102 existing public finance URLs without modifying sites
+        run: |
+          python3 -B scripts/finance_102_public_audit_20261113.py
