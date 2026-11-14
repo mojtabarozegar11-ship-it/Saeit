@@ -42,15 +42,29 @@ def period_statistics(executions, period):
 
     if not isinstance(period, CompletedPeriod):
         return None
+    if (not isinstance(period.start, datetime)
+            or not isinstance(period.end, datetime)
+            or period.start.tzinfo is None or period.start.utcoffset() is None
+            or period.end.tzinfo is None or period.end.utcoffset() is None
+            or period.start >= period.end):
+        return None
     per_day = defaultdict(lambda: Decimal("0"))
     cumulative = Decimal("0")
     for execution in executions:
         closed = getattr(execution, "closed_at", None)
-        if not isinstance(closed, datetime) or closed.tzinfo is None:
-            continue
+        if (not isinstance(closed, datetime)
+                or closed.tzinfo is None or closed.utcoffset() is None):
+            # Partial records cannot support an audited monthly result.
+            return None
         stamp = closed.astimezone(timezone.utc)
         if period.start <= stamp < period.end:
-            net = execution.net_realized_usd
+            # A caller must never add 'pending' or 'rejected' executions to
+            # period profits, even if the account's aggregate looks positive.
+            if getattr(execution, "reconciliation_status", None) != "verified":
+                return None
+            net = getattr(execution, "net_realized_usd", None)
+            if not isinstance(net, Decimal) or not net.is_finite():
+                return None
             cumulative += net
             per_day[stamp.date()] += net
     return {
