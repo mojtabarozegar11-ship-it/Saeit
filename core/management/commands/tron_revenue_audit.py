@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand
 
 from core.models import LedgerEntry, PaymentWebhookEvent
 from core.tron_gateway_invoice import TronGatewayInvoice
+from core.tron_gateway_settlement_claim import TronMainnetSettlementClaim
 from core.tron_gateway_web import PROVIDER
 from core.tron_gateway_verify import MAINNET_RECEIVER
 
@@ -33,7 +34,11 @@ class Command(BaseCommand):
         paid_ids = [i.payment_intent_id for i in invoices if i.status == "paid"]
         events = defaultdict(list)
         credits = defaultdict(list)
+        claims = defaultdict(list)
         if paid_ids:
+            for claim in TronMainnetSettlementClaim.objects.filter(
+                    payment_intent_id__in=paid_ids):
+                claims[claim.payment_intent_id].append(claim)
             for event in PaymentWebhookEvent.objects.filter(
                     provider=PROVIDER, payment_intent_id__in=paid_ids):
                 events[event.payment_intent_id].append(event)
@@ -75,7 +80,13 @@ class Command(BaseCommand):
                 c.metadata.get("proof_digest") == inv.proof_digest and
                 c.metadata.get("source_host") == inv.source_host
             ]
-            if (len(matching_events) == 1 and len(matching_credits) == 1 and
+            matching_claims = [
+                c for c in claims.get(inv.payment_intent_id, ())
+                if c.txid == inv.txid and c.provider == PROVIDER
+                and c.invoice_id == inv.pk and c.proof_digest == inv.proof_digest
+            ]
+            if (len(matching_claims) == 1 and len(matching_events) == 1
+                    and len(matching_credits) == 1 and
                     inv.payment_intent.status == "paid" and
                     inv.payment_intent.order_id == inv.order_id and
                     inv.order.status == "paid" and inv.txid and inv.proof_digest):
