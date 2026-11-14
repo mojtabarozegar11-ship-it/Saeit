@@ -128,6 +128,26 @@ class GuestAtomicPatchTests(SimpleTestCase):
             patch_commercial(namespace)
         self.assertEqual(namespace, original)
 
+    def test_nested_checkout_action_rejected_without_partial_install(self):
+        namespace = _namespace()
+        patterns = list(namespace["COMMERCIAL_URLPATTERNS"])
+        patterns[0] = ("/commerce/trx-easy/1/start/archive/", _handler)
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(patterns)
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous TRX URL route"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
+    def test_action_substring_in_nonterminal_route_rejected(self):
+        namespace = _namespace()
+        patterns = list(namespace["COMMERCIAL_URLPATTERNS"])
+        patterns[1] = ("/commerce/trx-easy/1/invoice/history/", _handler)
+        namespace["COMMERCIAL_URLPATTERNS"] = tuple(patterns)
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "Ambiguous TRX URL route"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
     def test_rejected_invoice_does_not_record_created_event(self):
         namespace = _namespace()
         patch_commercial(namespace)
