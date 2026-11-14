@@ -8,7 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone as django_timezone
 
-from .models import PropAccount, PropSocialEvidence
+from .models import PropAccount, PropChallengeEnrollment, PropSocialEvidence
 from .social_policy import (
     NEW_CONTRACT_VERSION, DURATION_DAYS, POST_START_GRACE_HOURS,
     aware_utc, valid_platform_post_url,
@@ -22,7 +22,7 @@ class SocialEvidenceRejected(ValueError):
 @transaction.atomic
 def submit_social_evidence(*, account_id, submitter, platform,
                            post_url, posted_at, explicit_consent=False):
-    """Record ONE pending platform link for a confirmed challenge purchase."""
+    """Record one link on either platform for the full paid challenge."""
     if not submitter or submitter.is_authenticated is not True or explicit_consent is not True:
         raise PermissionDenied("Trader login and informed consent are required")
     account = (
@@ -32,7 +32,11 @@ def submit_social_evidence(*, account_id, submitter, platform,
     )
     if account.trader.user_id != submitter.pk:
         raise PermissionDenied("Foreign account evidence is forbidden")
-    purchase = account.challenge_enrollment
+    # Serialize across both challenge phases attached to the same paid
+    # enrollment, not only against one account's row lock.
+    purchase = (PropChallengeEnrollment.objects.select_for_update()
+                .filter(pk=account.challenge_enrollment_id).first()
+                if account.challenge_enrollment_id else None)
     if (not purchase or purchase.trader_id != account.trader_id
             or purchase.settlement_verified is not True
             or purchase.terms_version != NEW_CONTRACT_VERSION
@@ -50,8 +54,8 @@ def submit_social_evidence(*, account_id, submitter, platform,
             or submitted_at > start + timedelta(hours=POST_START_GRACE_HOURS)
             or submitted_at > django_timezone.now()):
         raise SocialEvidenceRejected("Post must be published within the first 24 hours")
-    if PropSocialEvidence.objects.filter(enrollment=purchase, platform=platform).exists():
-        raise SocialEvidenceRejected("One post per platform for entire purchase already exists")
+    if PropSocialEvidence.objects.filter(enrollment=purchase).exists():
+        raise SocialEvidenceRejected("One post for entire paid challenge already exists")
     record = PropSocialEvidence(
         account=account, enrollment=purchase, platform=platform,
         post_url=post_url, posted_at=submitted_at,
