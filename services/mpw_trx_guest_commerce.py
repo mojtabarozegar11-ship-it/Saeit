@@ -311,17 +311,37 @@ def patch_commercial(namespace):
                                else method_decorator(wrapped))
         replacements[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
-    if isinstance(patterns, tuple):
-        rebuilt = []
-        route_names = (
-            ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-            ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-            ("/download/", "download_paid"),
-        )
-        for route, view in patterns:
-            route_name = next((name for token, name in route_names if token in route), None)
-            replacement = replacements.get(route_name, view)
-            rebuilt.append((route, replacement))
-        namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+    # Fail closed: replacing exported names without updating actual URL patterns
+    # silently leaves the unprotected legacy purchase handlers reachable.
+    if not isinstance(patterns, tuple):
+        raise RuntimeError("Expected immutable TRX URL pattern tuple")
+    route_names = (
+        ("/start/", "start_order"), ("/invoice/", "show_invoice"),
+        ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
+        ("/download/", "download_paid"),
+    )
+    seen = set()
+    rebuilt = []
+    for entry in patterns:
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise RuntimeError("Malformed TRX URL pattern")
+        route, view = entry
+        if not isinstance(route, str):
+            raise RuntimeError("Non-string TRX URL route")
+        matches = [name for token, name in route_names if token in route]
+        if len(matches) > 1:
+            raise RuntimeError("Ambiguous TRX URL route")
+        if matches:
+            name = matches[0]
+            if name in seen:
+                raise RuntimeError("Duplicate TRX URL route: " + name)
+            seen.add(name)
+            rebuilt.append((route, replacements[name]))
+        else:
+            rebuilt.append((route, view))
+    missing_routes = set(replacements) - seen
+    if missing_routes:
+        raise RuntimeError("Missing TRX URL routes: " + ", ".join(sorted(missing_routes)))
+    namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace.update(replacements)
     namespace["_mpw_guest_checkout_installed"] = True
