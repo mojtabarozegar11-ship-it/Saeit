@@ -93,3 +93,34 @@ class FarmInquiryPipelineTests(TestCase):
         self.insert(note="INTAKE_CONSENT_V1; confirmed_at=x; source=farm; source=company")
         report, _ = self.run_report()
         self.assertEqual(report["matched_inquiries"], 0)
+
+
+    def test_invalid_timestamp_farm_marker_not_counted(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=x; source=farm")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_naive_datetime_marker_not_counted(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=2026-11-14T11:00:00; source=farm")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_invalid_calendar_date_not_counted(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=2026-02-30T00:00:00+00:00; source=farm")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_fractional_timezone_aware_marker_counted(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00.123456+03:30; source=farm")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 1)
+
+    def test_staff_note_appended_after_marker_counted(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm\nPending client evidence")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 1)
+
+    def test_staff_note_before_marker_cannot_forge_origin(self):
+        self.insert(note="Manually created lead\nINTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
