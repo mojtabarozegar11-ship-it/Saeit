@@ -1,0 +1,29 @@
+name: Brand 24 coins offline identity and source checks
+on:
+  pull_request:
+    paths:
+      - 'factory_config/f41_brand_24_coin_registry_20261113.json'
+      - 'scripts/brand_24_coin_specs.py'
+      - 'tests/test_brand_24_coin_specs.py'
+      - '.github/workflows/brand-24-coins-offline-check.yml'
+permissions:
+  contents: read
+jobs:
+  offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate 24 brand identities and F41 compatibility
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_brand_24_coin_specs.py' -v
+          python3 -B scripts/brand_24_coin_specs.py
+          python3 -B scripts/brand_24_coin_specs.py --out "$RUNNER_TEMP/brand-24-private-specs"
+          python3 -B scripts/brand_24_coin_specs.py --verify "$RUNNER_TEMP/brand-24-private-specs"
