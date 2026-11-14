@@ -33,7 +33,7 @@ def company_contact(request):
         form = CompanySalesInquiryForm()
         return _private(render(request, "core/company_contact.html", {
             "form": form, "inquiry_received": received,
-        }))
+        }), public_form=not received)
     try:
         validate_body_size(request)
     except forms.ValidationError:
