@@ -27,3 +27,27 @@ The example farm model's additional `synthetic_example` field is an editorial ma
 **SOURCE** file commits and CI are not **LIVE** route proof. Inquiry CTA is not **PAYMENT** proof, and payment evidence is not **DELIVERY** proof. Before any non-draft release, review route ownership, current stylesheet and templates, mobile accessibility, authorized contact channel, data retention and compliance; demand evidence for a tested lawful invoice/receipt/download path.
 
 Do not merge/deploy, send customer mail, issue invoices, accept TRX or other money, or disclose customer information solely because this source package exists. The customer-facing price bands are exploratory, non-binding and only for the international service; local farm price is not approved.
+
+
+## Presale intake security handoff — 2026-11-14
+
+The upgraded *existing* two-offer qualifier uses the shared
+`scripts/revenue_intake_io.py` strict local reader/writer. It rejects
+duplicate consent keys, symlinked/non-regular input, non-finite JSON,
+oversized or invalid UTF-8 input, and pre-existing output paths; newly
+created anonymized reports are mode 0600. **This does not handle raw
+customer PII**, establish paid orders, send email or create an invoice.
+
+The concurrent parent branch also added a richer **10-channel** one-bot
+portfolio/CLI/pricing research module. The security handoff is deliberately
+layered on top rather than replacing those files. The canonical operating
+identity remains `mojtaba.bot.ai`; no independent bot is deployed.
+
+Local evidence: 15/15 strict I/O tests and 12/12 direct qualified service
+CLI integration tests passed with Python 3.13.5. The original repository
+test suites and live website acceptance remain separate requirements.
+
+Review `mojtaba-single-bot-intake-security-handoff-20261114.md` and
+the two `service-qc-*-template-*.md` files for scientific/technical
+client deliverable acceptance. Zero real income or 100% commercial
+completion must NOT be inferred from source-only passing tests.
