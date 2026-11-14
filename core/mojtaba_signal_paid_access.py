@@ -11,6 +11,7 @@ from datetime import timedelta
 import re
 
 from django.conf import settings
+from django.core.exceptions import DisallowedHost
 from django.http import Http404
 from django.utils import timezone
 
@@ -88,7 +89,7 @@ def paid_signal_access(request, invoice_id, sku, *, now=None):
         from .tron_gateway_web import _host, _owner, PROVIDER
         host, _ = _host(request)
         invoice = _owner(request, invoice_id, host)
-    except (Http404, TypeError, ValueError, AttributeError):
+    except (Http404, DisallowedHost, TypeError, ValueError, AttributeError):
         return denied("buyer_email_claim_or_exact_merchant_missing")
     intent, order = invoice.payment_intent, invoice.order
     if (invoice.status != "paid" or invoice.fulfillment_kind != "service"
