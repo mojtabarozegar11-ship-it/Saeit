@@ -1,12 +1,17 @@
 """Company trade mailbox: policy-gated email outbox for Economic Master Agent."""
 import hashlib
+import json
 import uuid
 
 from django.conf import settings
 from django.core.mail import EmailMessage
-from django.db import transaction
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+from django.db import DatabaseError, transaction
 
 from .economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
+from .models import ApprovalGrant
+from .trade_approval_scope import trade_email_approval_matches, trade_email_fingerprint
 
 
 TRADE_EMAIL_POLICY = {
@@ -17,24 +22,85 @@ TRADE_EMAIL_POLICY = {
     "audit_required": True,
     "real_send_default": False,
     "owner_approval_for_binding_commitments": True,
+    "durable_dispatch_reservation_before_smtp": True,
+    "unknown_delivery_requires_manual_reconciliation": True,
 }
 
 
 def mailbox_status():
     address = getattr(settings, "COMPANY_TRADE_EMAIL", "")
+    enabled_setting = bool(getattr(settings, "TRADE_EMAIL_ENABLED", False))
+    valid_sender = type(address) is str and address == address.strip()
+    if valid_sender:
+        try:
+            validate_email(address)
+        except ValidationError:
+            valid_sender = False
+    try:
+        mailbox = TradeMailbox.objects.filter(code="company-trade").only(
+            "active", "allow_outbound", "email_address",
+        ).first()
+        db_observed = True
+    except DatabaseError:
+        mailbox = None
+        db_observed = False
+    outbound_policy_ready = bool(
+        mailbox and mailbox.active and mailbox.allow_outbound
+        and mailbox.email_address == address
+    )
     return {
-        "configured": bool(address),
+        "configured": bool(valid_sender),
         "address": address,
-        "active": bool(getattr(settings, "TRADE_EMAIL_ENABLED", False)),
+        # A setting alone does not mean the mailbox can send, much less that
+        # any recipient got a message. This is only configuration readiness.
+        "active": bool(valid_sender and enabled_setting and outbound_policy_ready),
+        "transport_flag_enabled": enabled_setting,
+        "mailbox_policy_ready": outbound_policy_ready,
+        "mailbox_db_observed": db_observed,
+        "delivery_verified": False,
         "policy": dict(TRADE_EMAIL_POLICY),
     }
+
+
+def _validate_dispatch_address(address, code):
+    if (type(address) is not str or address != address.strip()
+            or not address or "\r" in address or "\n" in address):
+        raise RuntimeError(code)
+    try:
+        validate_email(address)
+    except ValidationError as exc:
+        raise RuntimeError(code) from exc
 
 
 def _trace_id():
     return uuid.uuid4().hex
 
 
-def _idempotency(recipient, subject, body):
+def _idempotency(recipient, subject, body, context=None):
+    # Bind the EXACT reviewed message plus structured commercial context.
+    # Stripping content or omitting quote details silently aliases distinct
+    # proposals, potentially returning a different draft to its customer.
+    try:
+        payload = json.dumps(
+            [recipient, subject, body, context or {}],
+            sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("TRADE_EMAIL_CONTEXT_INVALID") from exc
+    return hashlib.sha256(("v3:" + payload).encode("utf-8")).hexdigest()
+
+
+def _v2_idempotency(recipient, subject, body):
+    # Lookup only: retain historical exact records during a v2 -> v3 upgrade.
+    payload = json.dumps(
+        [recipient.strip().lower(), subject.strip(), body.strip()],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    return hashlib.sha256(("v2:" + payload).encode("utf-8")).hexdigest()
+
+
+def _legacy_idempotency(recipient, subject, body):
     raw = "|".join((recipient.strip().lower(), subject.strip(), body.strip()))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -42,6 +108,21 @@ def _idempotency(recipient, subject, body):
 @transaction.atomic
 def queue_trade_email(*, recipient, subject, body, trade_context=None):
     """Create an audited draft; never sends by itself."""
+    # Reject unusable or ambiguous drafts before writing mailbox/outbox rows.
+    if type(recipient) is not str or not recipient or recipient != recipient.strip() or "\r" in recipient or "\n" in recipient:
+        raise ValueError("TRADE_EMAIL_RECIPIENT_INVALID")
+    try:
+        validate_email(recipient)
+    except ValidationError as exc:
+        raise ValueError("TRADE_EMAIL_RECIPIENT_INVALID") from exc
+    if (type(subject) is not str or not subject.strip() or len(subject) > 300
+            or "\r" in subject or "\n" in subject):
+        raise ValueError("TRADE_EMAIL_SUBJECT_INVALID")
+    if (type(body) is not str or not body.strip()
+            or len(body.encode("utf-8")) > 100000):
+        raise ValueError("TRADE_EMAIL_BODY_INVALID")
+    if trade_context is not None and type(trade_context) is not dict:
+        raise ValueError("TRADE_EMAIL_CONTEXT_INVALID")
     mailbox, _ = TradeMailbox.objects.get_or_create(
         code="company-trade",
         defaults={
@@ -49,18 +130,37 @@ def queue_trade_email(*, recipient, subject, body, trade_context=None):
             "email_address": getattr(settings, "COMPANY_TRADE_EMAIL", ""),
         },
     )
-    key = _idempotency(recipient, subject, body)
-    outbox, created = TradeEmailOutbox.objects.get_or_create(
-        idempotency_key=key,
-        defaults={
-            "mailbox": mailbox,
-            "recipient": recipient,
-            "subject": subject,
-            "body": body,
-            "trade_context": trade_context or {},
-            "status": "queued",
-        },
+    key = _idempotency(recipient, subject, body, trade_context)
+    # Both former delimiter and v2 normalized-key rows remain accessible,
+    # but are reused ONLY for the exact same immutable message/context.
+    legacy_keys = (
+        _legacy_idempotency(recipient, subject, body),
+        _v2_idempotency(recipient, subject, body),
     )
+    old = next((
+        candidate for candidate in TradeEmailOutbox.objects.filter(
+            idempotency_key__in=legacy_keys,
+        ).select_related("mailbox")
+        if candidate.mailbox.code == "company-trade"
+        and candidate.recipient == recipient
+        and candidate.subject == subject
+        and candidate.body == body
+        and candidate.trade_context == (trade_context or {})
+    ), None)
+    if old is not None:
+        outbox, created = old, False
+    else:
+        outbox, created = TradeEmailOutbox.objects.get_or_create(
+            idempotency_key=key,
+            defaults={
+                "mailbox": mailbox,
+                "recipient": recipient,
+                "subject": subject,
+                "body": body,
+                "trade_context": trade_context or {},
+                "status": "queued",
+            },
+        )
     TradeEmailAudit.objects.create(
         outbox=outbox,
         action="queued" if created else "deduplicated",
@@ -70,36 +170,106 @@ def queue_trade_email(*, recipient, subject, body, trade_context=None):
     return outbox
 
 
-@transaction.atomic
-def send_queued_trade_email(outbox_id):
-    """Send one queued message under a row lock; never send a terminal item."""
-    outbox = (
-        TradeEmailOutbox.objects.select_for_update()
-        .select_related("mailbox")
-        .get(pk=outbox_id)
+def _finalize_dispatch(outbox_id, *, status, error=""):
+    """Persist one terminal delivery assessment; do not requeue uncertainty."""
+    with transaction.atomic():
+        item = TradeEmailOutbox.objects.select_for_update().get(pk=outbox_id)
+        if item.status != "dispatching":
+            raise RuntimeError("TRADE_EMAIL_DISPATCH_STATE_CHANGED_RECONCILE_REQUIRED")
+        item.status = status
+        item.error = error[:1000]
+        item.save(update_fields=["status", "error", "updated_at"])
+        TradeEmailAudit.objects.create(
+            outbox=item,
+            action=status,
+            trace_id=_trace_id(),
+            metadata={
+                "provider": "django-email",
+                "smtp_accepted": status == "sent",
+                # SMTP acceptance is not proof of inbox delivery or a sale.
+                "delivery_confirmed": False,
+            },
+        )
+        return item
+
+
+def send_queued_trade_email(outbox_id, *, grant_id=None):
+    """Use a durable one-shot reservation and exact owner grant before SMTP.
+
+    Reserve dispatch and consume permission in one committed transaction.
+    SMTP is called only AFTER commit. If SMTP reports an exception or an
+    ambiguous result, preserve 'delivery_unknown' and prohibit automatic
+    resend. A crash after reservation leaves 'dispatching' for reconciliation
+    rather than restoring an unsafe 'queued' state.
+    """
+    if isinstance(grant_id, bool) or not isinstance(grant_id, int) or grant_id <= 0:
+        raise RuntimeError("Trade email requires an exact owner grant")
+    # An outer atomic block would postpone the reservation commit until
+    # AFTER SMTP, destroying the durability guarantee.
+    if transaction.get_connection().in_atomic_block:
+        raise RuntimeError("TRADE_EMAIL_DISPATCH_REQUIRES_NO_OUTER_TRANSACTION")
+
+    with transaction.atomic():
+        outbox = (
+            TradeEmailOutbox.objects.select_for_update()
+            .select_related("mailbox")
+            .get(pk=outbox_id)
+        )
+        if outbox.status != "queued":
+            raise RuntimeError(f"Trade email is not queued (status={outbox.status}).")
+        grant = ApprovalGrant.objects.select_related("approval").filter(pk=grant_id).first()
+        if (grant is None or grant.approval.target_type != "TradeEmailOutbox"
+                or not trade_email_approval_matches(grant.approval, outbox)):
+            raise RuntimeError("TRADE_EMAIL_EXACT_OUTBOX_APPROVAL_REQUIRED")
+        scope = {
+            "action": "external_write",
+            "outbox_id": outbox.pk,
+            "message_sha256": trade_email_fingerprint(outbox),
+        }
+        if not getattr(settings, "TRADE_EMAIL_ENABLED", False):
+            raise RuntimeError("TRADE_EMAIL_ENABLED is false; real sending is disabled.")
+        if not outbox.mailbox.active or not outbox.mailbox.allow_outbound:
+            raise RuntimeError("Trade mailbox outbound policy is disabled.")
+        if not outbox.mailbox.email_address:
+            raise RuntimeError("Company trade mailbox has no configured sender address.")
+        # Legacy drafts and mutable records still need validation at the
+        # final approved boundary, before consuming a one-time owner grant.
+        _validate_dispatch_address(outbox.mailbox.email_address, "TRADE_EMAIL_SENDER_INVALID")
+        _validate_dispatch_address(outbox.recipient, "TRADE_EMAIL_RECIPIENT_INVALID")
+        from .approval import ApprovalService
+        ApprovalService().authorize_grant(grant_id, scope)
+
+        message = EmailMessage(
+            subject=outbox.subject,
+            body=outbox.body,
+            from_email=outbox.mailbox.email_address,
+            to=[outbox.recipient],
+            reply_to=[outbox.mailbox.email_address],
+        )
+        outbox.status = "dispatching"
+        outbox.save(update_fields=["status", "updated_at"])
+        TradeEmailAudit.objects.create(
+            outbox=outbox,
+            action="dispatch_reserved",
+            trace_id=_trace_id(),
+            metadata={
+                "grant_id": grant_id,
+                "sha256": scope["message_sha256"],
+                "provider": "django-email",
+            },
+        )
+        persisted_id = outbox.pk
+    # The reservation and one-time permission MUST be committed here.
+    try:
+        count = message.send(fail_silently=False)
+    except Exception as exc:
+        _finalize_dispatch(
+            persisted_id, status="delivery_unknown",
+            error=f"SMTP attempt raised {type(exc).__name__}; manual reconciliation required",
+        )
+        raise RuntimeError("TRADE_EMAIL_DELIVERY_UNKNOWN_RECONCILE_REQUIRED") from exc
+    return _finalize_dispatch(
+        persisted_id,
+        status="sent" if count == 1 else "delivery_unknown",
+        error="" if count == 1 else "Provider did not confirm one delivery; reconcile before further action",
     )
-    if outbox.status != "queued":
-        raise RuntimeError(f"Trade email is not queued (status={outbox.status}).")
-    if not getattr(settings, "TRADE_EMAIL_ENABLED", False):
-        raise RuntimeError("TRADE_EMAIL_ENABLED is false; real sending is disabled.")
-    if not outbox.mailbox.active or not outbox.mailbox.allow_outbound:
-        raise RuntimeError("Trade mailbox outbound policy is disabled.")
-    if not outbox.mailbox.email_address:
-        raise RuntimeError("Company trade mailbox has no configured sender address.")
-    message = EmailMessage(
-        subject=outbox.subject,
-        body=outbox.body,
-        from_email=outbox.mailbox.email_address,
-        to=[outbox.recipient],
-        reply_to=[outbox.mailbox.email_address],
-    )
-    count = message.send(fail_silently=False)
-    outbox.status = "sent" if count == 1 else "failed"
-    outbox.save(update_fields=["status", "updated_at"])
-    TradeEmailAudit.objects.create(
-        outbox=outbox,
-        action=outbox.status,
-        trace_id=_trace_id(),
-        metadata={"provider": "django-email", "count": count},
-    )
-    return outbox

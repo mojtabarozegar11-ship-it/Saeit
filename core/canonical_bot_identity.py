@@ -1,0 +1,87 @@
+"""Single-runtime identity gate for Mojtaba.bot.ai.
+
+Legacy database rows may remain during a verified handoff, but two active
+runtime identities are never accepted by a worker.
+"""
+from django.core.exceptions import ImproperlyConfigured
+
+CANONICAL_BOT_ID = "mojtaba.bot.ai"
+CANONICAL_BOT_CODE = "mojtaba-bot-ai"
+LEGACY_RUNTIME_ALIASES = ("economic-master-agent",)
+KNOWN_NONCANONICAL_CODES = (
+    "economic-master-agent",
+    "moj_1ro_1",
+    "content-director",
+    "knowledge-content-director",
+    "core_research",
+    "newsletter-specialist",
+    "newsletter-company-news",
+    "newsletter-world-watch",
+    "newsletter-unit-reports",
+    "company-activity-intelligence",
+    "content-research",
+)
+RUNTIME_CODES = (CANONICAL_BOT_CODE, *LEGACY_RUNTIME_ALIASES)
+AUDIT_CODES = (CANONICAL_BOT_CODE, *KNOWN_NONCANONICAL_CODES)
+
+
+def is_master_only_action(action):
+    """Economic execution belongs exclusively to the one active master row."""
+    return isinstance(action, str) and (
+        action.startswith("income_") or action == "master_self_improvement"
+    )
+
+
+def resolve_single_active_agent(agent_model):
+    """Return the sole active canonical/legacy runtime row, or fail closed."""
+    rows = list(
+        agent_model.objects.filter(
+            code__in=RUNTIME_CODES,
+            active=True,
+        ).order_by("code")
+    )
+    if len(rows) > 1:
+        raise ImproperlyConfigured("CANONICAL_BOT_MULTIPLE_ACTIVE")
+    return rows[0] if rows else None
+
+def audit_identity_rows(agent_model):
+    """Return a read-only identity census; never authorizes mutation."""
+    rows = list(
+        agent_model.objects.filter(code__in=AUDIT_CODES).order_by("code")
+    )
+    active = [row.code for row in rows if row.active]
+    # Fleet consolidation includes content/factory roles; runtime singleton
+    # safety includes ONLY the canonical economic master and its alias.
+    active_runtime = [code for code in active if code in RUNTIME_CODES]
+    if len(active_runtime) > 1:
+        runtime_status = "multiple_active_runtime_identities_blocked"
+    elif not active_runtime:
+        runtime_status = "no_active_master_runtime"
+    elif active_runtime[0] == CANONICAL_BOT_CODE:
+        runtime_status = "canonical_runtime_active"
+    else:
+        runtime_status = "legacy_runtime_active"
+    if len(active) == 0:
+        status = "no_known_active_runtime_identity"
+    elif active == [CANONICAL_BOT_CODE]:
+        status = "canonical_only"
+    elif len(active) == 1 and active[0] in KNOWN_NONCANONICAL_CODES:
+        status = "single_legacy_identity_requires_handoff"
+    else:
+        status = "parallel_identities_blocked"
+    return {
+        "canonical_bot_id": CANONICAL_BOT_ID,
+        "canonical_bot_code": CANONICAL_BOT_CODE,
+        "known_codes": list(AUDIT_CODES),
+        "registered_rows": [
+            {"code": row.code, "active": bool(row.active)} for row in rows
+        ],
+        "active_codes": active,
+        "active_count": len(active),
+        "status": status,  # Fleet-wide disposition, not the worker singleton.
+        "runtime_active_codes": active_runtime,
+        "runtime_active_count": len(active_runtime),
+        "runtime_status": runtime_status,
+        "live_scheduler_attested": False,
+        "retirement_authorized": False,
+    }

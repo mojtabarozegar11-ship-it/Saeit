@@ -1,6 +1,8 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, Product, Order, LedgerEntry
+from django.core.exceptions import ImproperlyConfigured
+from core.canonical_bot_identity import RUNTIME_CODES, resolve_single_active_agent
+from core.models import Agent, AgentTask, Product, Order, LedgerEntry
 
 @dataclass(frozen=True)
 class Candidate:
@@ -16,8 +18,14 @@ class Candidate:
 
 class AutonomousBrain:
     def observe(self):
+        # All completed, verified research remains readable after a handoff.
+        # Pending/failed work, however, belongs only to the one active runtime.
+        master = resolve_single_active_agent(Agent)
+        if master is None:
+            raise ImproperlyConfigured("MASTER_BRAIN_NO_ACTIVE_RUNTIME")
         products = Product.objects.all()
-        economic_tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+        economic_tasks = AgentTask.objects.filter(agent__code__in=RUNTIME_CODES)
+        active_tasks = AgentTask.objects.filter(agent=master)
         latest_offer = economic_tasks.filter(
             capability_code="income_offer_design"
         ).order_by("-created_at", "-pk").first()
@@ -56,7 +64,7 @@ class AutonomousBrain:
             capability_code="master_self_improvement", status="completed",
             output_data__verified_effect=True,
         ).exists()
-        self_improvement_failed = economic_tasks.filter(
+        self_improvement_failed = active_tasks.filter(
             capability_code="master_self_improvement", status="failed",
         ).exists()
         self_improvement_unverified = economic_tasks.filter(
@@ -77,8 +85,8 @@ class AutonomousBrain:
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
         return {
-            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
-            "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
+            "unfinished_tasks": active_tasks.filter(status__in=("queued","running","blocked")).count(),
+            "failed_tasks": active_tasks.filter(status="failed").count(),
             "market_research_complete": market_research_complete,
             "market_inventory_measured": latest_inventory is not None,
             "opportunity_scored": opportunity_scored,

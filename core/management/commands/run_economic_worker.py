@@ -2,7 +2,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
 from core.economic_tool_pack import build_economic_gateway
-from core.models import AgentTask
+from core.models import Agent, AgentTask
+from core.canonical_bot_identity import resolve_single_active_agent
 from core.worker_runner import WorkerRunner
 
 
@@ -29,6 +30,11 @@ class Command(BaseCommand):
         limit = self.MAX_DRAIN_TASKS if options["drain"] else requested_limit
         executed = 0
         attempted_ids = []
+        master_agent = resolve_single_active_agent(Agent)
+        if master_agent is None:
+            self.stdout.write("IDLE: no active canonical bot runtime.")
+            self.stdout.write("IDLE: no queued economic task.")
+            return
         gateway = build_economic_gateway()
         supported = frozenset(
             code for code, spec in gateway.describe().items()
@@ -37,12 +43,9 @@ class Command(BaseCommand):
         )
         runner = None
         for _ in range(limit):
-            # Never retry the same queued identity within this invocation.
-            # A failed or re-queued task is left for the normal retry policy.
             task_query = (
                 AgentTask.objects.filter(
-                    agent__code="economic-master-agent",
-                    agent__active=True,
+                    agent=master_agent,
                     status="queued",
                     capability_code__in=supported,
                     action_type=F("capability_code"),
@@ -57,7 +60,7 @@ class Command(BaseCommand):
                     raise CommandError("Explicit task is not queued with a matching registered economic tool")
                 if executed == 0:
                     unknown = AgentTask.objects.filter(
-                        agent__code="economic-master-agent", agent__active=True, status="queued",
+                        agent=master_agent, status="queued",
                     ).exclude(
                         capability_code__in=supported, action_type=F("capability_code"),
                     ).order_by("created_at", "pk").first()

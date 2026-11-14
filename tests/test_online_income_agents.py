@@ -1,6 +1,9 @@
 import pytest
+from django.core.management.base import CommandError
 
+from core.canonical_bot_identity import CANONICAL_BOT_CODE, RUNTIME_CODES
 from core.agent_registry import AgentRegistry
+from core.management.commands.seed_online_income_agents import CAPABILITIES
 from core.models import Agent, AgentCapability, AgentTask
 from core.task_runtime import TaskExecutionError, TaskRuntime
 from django.core.management import call_command
@@ -13,8 +16,22 @@ def test_seed_online_income_agents_is_idempotent_and_single_agent():
     master = Agent.objects.get(code="economic-master-agent")
     assert master.active is True
     assert Agent.objects.filter(code__startswith="income-", active=True).count() == 0
-    assert AgentCapability.objects.filter(code__startswith="income_").count() == 7
-    assert master.capabilities.filter(code__startswith="income_", active=True).count() == 7
+    expected_income_codes = {
+        code for code, *_ in CAPABILITIES if code.startswith("income_")
+    }
+    # The allowlist is authoritative; a new safe master module must not be
+    # mistaken for a second independent bot or an unregistered capability.
+    assert expected_income_codes
+    assert set(AgentCapability.objects.filter(
+        code__startswith="income_",
+    ).values_list("code", flat=True)) == expected_income_codes
+    assert set(master.capabilities.filter(
+        code__startswith="income_", active=True,
+    ).values_list("code", flat=True)) == expected_income_codes
+    assert "income_mojtrade_research_review" in expected_income_codes
+    assert list(Agent.objects.filter(
+        capabilities__code="income_mojtrade_research_review"
+    ).values_list("code", flat=True)) == ["economic-master-agent"]
 
 
 @pytest.mark.django_db
@@ -80,3 +97,112 @@ def test_economic_task_cannot_fake_completion_without_effect_evidence():
             {"action_performed": "report only"},
             execution_id=claimed.execution_id,
         )
+
+
+@pytest.mark.django_db
+def test_seed_never_reactivates_legacy_after_canonical_handoff():
+    """Preserve task history and require one active master on repeat seeding."""
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    legacy = Agent.objects.create(
+        code="economic-master-agent", name="Old master", mission="historical",
+        active=False,
+    )
+    old_task = AgentTask.objects.create(
+        agent=legacy, action_type="income_market_research", status="completed",
+    )
+    canonical = Agent.objects.create(
+        code=CANONICAL_BOT_CODE, name="Mojtaba.bot.ai",
+        mission="single master", active=True,
+    )
+    call_command("seed_online_income_agents")
+    call_command("seed_online_income_agents")
+    legacy.refresh_from_db()
+    canonical.refresh_from_db()
+    old_task.refresh_from_db()
+    assert legacy.active is False
+    assert canonical.active is True
+    assert old_task.agent_id == legacy.pk
+    assert Agent.objects.filter(code__in=RUNTIME_CODES, active=True).count() == 1
+    assert canonical.capabilities.filter(code="income_mojtrade_forward_audit", active=True).exists()
+    assert not legacy.capabilities.filter(code="income_mojtrade_forward_audit", active=True).exists()
+
+
+@pytest.mark.django_db
+def test_seed_uses_existing_canonical_without_creating_legacy():
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    canonical = Agent.objects.create(
+        code=CANONICAL_BOT_CODE, name="Mojtaba.bot.ai", mission="single", active=True,
+    )
+    call_command("seed_online_income_agents")
+    assert Agent.objects.filter(code="economic-master-agent").count() == 0
+    canonical.refresh_from_db()
+    assert canonical.active is True
+    assert canonical.capabilities.filter(code="master_self_improvement", active=True).exists()
+
+
+@pytest.mark.django_db
+def test_seed_rejects_two_active_runtimes_without_touching_capabilities():
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    legacy = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="legacy", active=True,
+    )
+    canonical = Agent.objects.create(
+        code=CANONICAL_BOT_CODE, name="Current", mission="canonical", active=True,
+    )
+    before = AgentCapability.objects.count()
+    with pytest.raises(CommandError, match="MASTER_SEED_MULTIPLE_ACTIVE_RUNTIME_IDENTITIES"):
+        call_command("seed_online_income_agents")
+    assert AgentCapability.objects.count() == before
+    legacy.refresh_from_db()
+    canonical.refresh_from_db()
+    assert legacy.active and canonical.active
+    assert legacy.name == "Old"
+    assert canonical.name == "Current"
+
+
+@pytest.mark.django_db
+def test_seed_refuses_to_restart_intentionally_deactivated_master():
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    disabled = Agent.objects.create(
+        code="economic-master-agent", name="Paused", mission="operator disabled",
+        active=False,
+    )
+    before = AgentCapability.objects.count()
+    with pytest.raises(CommandError, match="MASTER_SEED_REFUSES_INACTIVE_RUNTIME_REACTIVATION"):
+        call_command("seed_online_income_agents")
+    disabled.refresh_from_db()
+    assert disabled.active is False
+    assert AgentCapability.objects.count() == before
+
+
+@pytest.mark.django_db
+def test_seed_keeps_active_legacy_during_pending_canonical_handoff():
+    """A preprovisioned but inactive canonical row is not a handoff instruction."""
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    old = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="existing", active=True,
+    )
+    new = Agent.objects.create(
+        code=CANONICAL_BOT_CODE, name="Future", mission="pending", active=False,
+    )
+    call_command("seed_online_income_agents")
+    old.refresh_from_db()
+    new.refresh_from_db()
+    assert old.active is True and new.active is False
+    assert old.capabilities.filter(code="income_market_research", active=True).exists()
+    assert not new.capabilities.filter(code="income_market_research", active=True).exists()
+
+
+@pytest.mark.django_db
+def test_seed_refuses_deactivated_canonical_and_legacy_after_handoff():
+    Agent.objects.filter(code__in=RUNTIME_CODES).delete()
+    legacy = Agent.objects.create(
+        code="economic-master-agent", name="Old", mission="historical", active=False,
+    )
+    canonical = Agent.objects.create(
+        code=CANONICAL_BOT_CODE, name="Disabled", mission="paused", active=False,
+    )
+    with pytest.raises(CommandError, match="MASTER_SEED_REFUSES_INACTIVE_RUNTIME_REACTIVATION"):
+        call_command("seed_online_income_agents")
+    assert Agent.objects.filter(code__in=RUNTIME_CODES, active=True).count() == 0
+    assert canonical.pk and legacy.pk

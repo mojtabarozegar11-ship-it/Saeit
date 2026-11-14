@@ -158,9 +158,28 @@ class ObserverTests(unittest.TestCase):
                         with patch.object(observer, "_fetch_bitfinex_candles", side_effect=observer.MarketDataError("bitfinex_network_timeout")):
                             with self.assertRaisesRegex(
                                 observer.MarketDataError,
-                                "coinbase_http_403;bitstamp_http_403;binance_http_451;kraken_http_403;bitfinex_network_timeout",
+                                "coinbase_http_403;bitstamp_http_403;kraken_http_403;bitfinex_network_timeout",
                             ):
                                 observer._observed_signal("BTC-USD", self.now)
+
+    def test_binance_usdt_candles_are_never_mislabeled_as_usd_fallback(self):
+        with patch.object(observer, "_fetch_candles", side_effect=observer.MarketDataError("coinbase_unavailable")):
+            with patch.object(observer, "_fetch_bitstamp_candles", side_effect=observer.MarketDataError("bitstamp_unavailable")):
+                with patch.object(observer, "_fetch_binance_candles") as binance:
+                    with patch.object(observer, "_fetch_kraken_candles", return_value=sample(self.now)):
+                        result = observer._observed_signal("BTC-USD", self.now)
+        self.assertEqual(result["data_source"], observer.KRAKEN_SOURCE)
+        self.assertEqual(result["symbol"], "BTC/USD")
+        binance.assert_not_called()
+
+
+
+    def test_finished_usd_close_is_captured_as_reference_price(self):
+        payload = observer.observe(self.now, lambda product: sample(self.now))
+        for signal in payload["signals"]:
+            self.assertEqual(signal["reference_close_usd"], 179.0)
+            self.assertEqual(signal["timeframe"], "1h")
+            self.assertIn(signal["data_source"], observer.SOURCE)
 
 
 if __name__ == "__main__":

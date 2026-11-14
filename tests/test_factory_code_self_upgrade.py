@@ -82,6 +82,31 @@ class CodeSelfUpgradeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             upgrader.generate(self.src,self.src/"generated")
 
+    def test_rejects_symlinked_output_ancestor_into_checkout(self):
+        alias = self.root / "checkout-alias"
+        alias.symlink_to(self.src, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "UNSAFE_OUTPUT_ANCESTOR"):
+            upgrader.generate(self.src, alias / "private-candidates")
+        self.assertFalse((self.src / "private-candidates").exists())
+
+    def test_rejects_symlinked_output_ancestor_outside_checkout(self):
+        private = self.root / "actual-private"
+        private.mkdir()
+        alias = self.root / "private-alias"
+        alias.symlink_to(private, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "UNSAFE_OUTPUT_ANCESTOR"):
+            upgrader.generate(self.src, alias / "private-candidates")
+        self.assertFalse((private / "private-candidates").exists())
+
+    def test_atomic_report_rejects_symlinked_ancestor(self):
+        private = self.root / "actual-private"
+        (private / "reports").mkdir(parents=True)
+        alias = self.root / "reports-alias"
+        alias.symlink_to(private, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "CODE_UPGRADE_UNSAFE_OUTPUT"):
+            upgrader.atomic(alias / "reports" / "proof.json", {"valid": True})
+        self.assertFalse((private / "reports" / "proof.json").exists())
+
     def test_idempotent_candidate_contents_with_stable_sha(self):
         self.inject_two_known_faults_into_disposable_fixture()
         first=upgrader.generate(self.src,self.output)

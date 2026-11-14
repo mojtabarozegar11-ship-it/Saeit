@@ -2,9 +2,14 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
+from core.canonical_bot_identity import (
+    CANONICAL_BOT_CODE,
+    CANONICAL_BOT_ID,
+    resolve_single_active_agent,
+)
 from core.task_runtime import TaskExecutionError, TaskRuntime
 
-MASTER_AGENT_CODE = "economic-master-agent"
+MASTER_AGENT_CODE = CANONICAL_BOT_CODE
 
 class Command(BaseCommand):
     help = "Let the master agent observe state and autonomously choose its next work."
@@ -17,9 +22,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["stale_after_seconds"] < 300:
             raise CommandError("stale-after-seconds must be at least 300")
-        agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
+        agent = resolve_single_active_agent(Agent)
         if not agent:
-            self.stderr.write("Missing active economic-master-agent.")
+            self.stderr.write(f"Missing active canonical bot: {CANONICAL_BOT_ID}.")
             return
 
         queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()

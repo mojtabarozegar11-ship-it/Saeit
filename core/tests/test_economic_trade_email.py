@@ -3,8 +3,9 @@ from django.test import TestCase, override_settings
 
 from core.approval import ApprovalService
 from core.autonomous_external_trade import authorize_external_trade
-from core.economic_trade_email import mailbox_status, queue_trade_email, send_queued_trade_email
-from core.economic_trade_models import TradeEmailAudit, TradeMailbox
+from core.economic_trade_email import (_legacy_idempotency, mailbox_status,
+                                       queue_trade_email, send_queued_trade_email)
+from core.economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
 from core.models import ApprovalRequest
 
 
@@ -28,17 +29,73 @@ class EconomicTradeEmailTests(TestCase):
         self.assertEqual(TradeEmailAudit.objects.count(), 2)
         self.assertEqual(first.status, "queued")
 
-    @override_settings(TRADE_EMAIL_ENABLED=False)
-    def test_real_send_is_disabled_by_default(self):
+    def test_ambiguous_delimiter_keys_do_not_suppress_distinct_trade_drafts(self):
+        a = queue_trade_email(
+            recipient="buyer@example.test", subject="Offer|details", body="Pricing"
+        )
+        b = queue_trade_email(
+            recipient="buyer@example.test", subject="Offer", body="details|Pricing"
+        )
+        self.assertNotEqual(a.pk, b.pk)
+        self.assertNotEqual(a.idempotency_key, b.idempotency_key)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 2)
+
+    def test_preexisting_legacy_key_deduplicates_same_message_after_upgrade(self):
+        original = queue_trade_email(
+            recipient="buyer@example.test", subject="Old inquiry", body="Catalogue"
+        )
+        original.idempotency_key = _legacy_idempotency(
+            "buyer@example.test", "Old inquiry", "Catalogue"
+        )
+        original.save(update_fields=["idempotency_key"])
+        same = queue_trade_email(
+            recipient="buyer@example.test", subject="Old inquiry", body="Catalogue"
+        )
+        self.assertEqual(original.pk, same.pk)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 1)
+
+    def test_invalid_recipient_cannot_create_unusable_trade_draft(self):
+        for recipient in ("", "not-an-address", " buyer@example.test",
+                          "buyer@example.test\nBcc: victim@example.test", None):
+            with self.subTest(recipient=recipient):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_RECIPIENT_INVALID"):
+                    queue_trade_email(recipient=recipient, subject="Inquiry", body="Quote please")
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+        self.assertEqual(TradeMailbox.objects.count(), 0)
+
+    def test_header_injection_and_oversized_subject_cannot_queue(self):
+        for subject in ("", "Inquiry\r\nBcc: victim@example.test", "A" * 301, None):
+            with self.subTest(subject=str(subject)[:25]):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_SUBJECT_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject=subject, body="Quote")
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+
+    def test_blank_and_oversized_body_cannot_queue(self):
+        for body in ("", "   ", "B" * 100001, None):
+            with self.subTest(length=len(body) if body is not None else None):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_BODY_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject="Quote", body=body)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+
+    def test_trade_context_must_be_a_structured_object(self):
+        for context in ("opaque", [], 1, True):
+            with self.subTest(context=context):
+                with self.assertRaisesRegex(ValueError, "TRADE_EMAIL_CONTEXT_INVALID"):
+                    queue_trade_email(recipient="buyer@example.test", subject="Quote",
+                                      body="Details", trade_context=context)
+        self.assertEqual(TradeEmailOutbox.objects.count(), 0)
+
+    @override_settings(TRADE_EMAIL_ENABLED=True)
+    def test_direct_send_requires_owner_grant_even_if_mail_is_enabled(self):
         outbox = queue_trade_email(
             recipient="supplier@example.cn",
             subject="Trade inquiry",
             body="Draft only",
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, "requires an exact owner grant"):
             send_queued_trade_email(outbox.pk)
 
-    def test_non_queued_item_cannot_be_sent_again(self):
+    def test_terminal_item_without_grant_cannot_be_sent_again(self):
         outbox = queue_trade_email(
             recipient="supplier@example.cn",
             subject="Already handled",
@@ -46,9 +103,35 @@ class EconomicTradeEmailTests(TestCase):
         )
         outbox.status = "sent"
         outbox.save(update_fields=["status"])
+        # The mandatory grant check deliberately precedes reading message
+        # state. This test checks the direct, unauthorised entrypoint; the
+        # transactional sender tests cover terminal status with a valid grant.
         with override_settings(TRADE_EMAIL_ENABLED=True):
-            with self.assertRaisesRegex(RuntimeError, "not queued"):
+            with self.assertRaisesRegex(RuntimeError, "requires an exact owner grant"):
                 send_queued_trade_email(outbox.pk)
+        outbox.refresh_from_db()
+        self.assertEqual(outbox.status, "sent")
+
+    @override_settings(COMPANY_TRADE_EMAIL="company@example.test", TRADE_EMAIL_ENABLED=True)
+    def test_mailbox_setting_alone_is_not_an_active_outbound_policy(self):
+        initial = mailbox_status()
+        self.assertFalse(initial["active"])
+        outbox = queue_trade_email(
+            recipient="buyer@example.test", subject="Quote", body="Draft only"
+        )
+        self.assertFalse(mailbox_status()["active"])
+        outbox.mailbox.active = True
+        outbox.mailbox.allow_outbound = True
+        outbox.mailbox.save(update_fields=["active", "allow_outbound"])
+        ready = mailbox_status()
+        self.assertTrue(ready["active"])
+        self.assertTrue(ready["mailbox_policy_ready"])
+        self.assertFalse(ready["delivery_verified"])
+        with override_settings(COMPANY_TRADE_EMAIL="wrong-sender@example.test"):
+            self.assertFalse(mailbox_status()["active"])
+        with override_settings(COMPANY_TRADE_EMAIL="invalid-address"):
+            self.assertFalse(mailbox_status()["configured"])
+            self.assertFalse(mailbox_status()["active"])
 
     def test_status_does_not_expose_credentials(self):
         status = mailbox_status()
@@ -62,8 +145,16 @@ class ExternalTradeApprovalTests(TestCase):
             username="trade-owner",
             email="owner@example.com",
         )
-        request = authorize_external_trade(owner_id=owner.pk)
+        with self.assertRaisesRegex(ValueError, "outbox_id"):
+            authorize_external_trade(owner_id=owner.pk)
+        outbox = queue_trade_email(
+            recipient="buyer@example.org", subject="Private inquiry",
+            body="Please review this nonbinding trade inquiry.",
+        )
+        request = authorize_external_trade(owner_id=owner.pk, outbox_id=outbox.pk)
         request.refresh_from_db()
+        self.assertEqual(request.target_type, "TradeEmailOutbox")
+        self.assertEqual(request.target_id, str(outbox.pk))
         self.assertIsInstance(request, ApprovalRequest)
         self.assertEqual(request.status, "pending")
         self.assertFalse(request.grants.exists())

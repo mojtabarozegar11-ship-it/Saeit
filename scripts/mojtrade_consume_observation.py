@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import stat
 import tempfile
@@ -18,8 +19,11 @@ from pathlib import Path
 
 EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
 ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
+# USD-quoted spot markets only. Binance BTCUSDT/ETHUSDT cannot be
+# relabelled as BTC/USD or ETH/USD without breaking price provenance.
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
+    "bitstamp-public-ohlc",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
 })
@@ -89,14 +93,24 @@ def read_observation(path: Path, now: datetime | None = None) -> dict:
         observed_at = _timestamp(signal.get("observed_at"), "observed_at")
         if observed_at > now or observed_at > expires_at:
             raise ObservationError("observation_signal_time_invalid")
-        normalized.append({
+        item = {
             "id": _required_text(signal.get("id"), "signal_id"),
             "symbol": expected_symbol,
             "stance": stance,
             "observed_at": observed_at.isoformat(),
             "data_source": source,
             "method": _required_text(signal.get("method"), "signal_method"),
-        })
+        }
+        # Historical files may lack a reference close; never invent one.
+        # A present value must represent a finite positive USD spot close.
+        if "reference_close_usd" in signal:
+            price = signal["reference_close_usd"]
+            if (type(price) not in (float, int)
+                    or not math.isfinite(price)
+                    or not 0 < price <= 1_000_000_000):
+                raise ObservationError("observation_close_usd_invalid")
+            item["reference_close_usd"] = float(price)
+        normalized.append(item)
     return {
         "schema_version": 1,
         "report_type": "mojtrade-research-observation-consumption",
