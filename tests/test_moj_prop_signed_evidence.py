@@ -201,3 +201,34 @@ class BrokerSignedEvidenceTests(TestCase):
         ))
         self.assertEqual(PropExecution.objects.count(), 1)
         self.assertEqual(PropEquityObservation.objects.count(), 1)
+
+    def test_trailing_zeros_up_to_four_places_accepted(self):
+        for amount in ("100", "100.0", "100.0000", "0.0000", "1E+2"):
+            with self.subTest(amount=amount):
+                packet = self.packet(
+                    event_type="equity", event_id="mark" + str(len(amount)) + amount.replace(".","_").replace("+","_"),
+                    data={"equity_usd": amount, "is_session_open": False},
+                )
+                result = ingest_signed_evidence(**packet)
+                self.assertEqual(result["result"], "recorded_pending")
+
+    def test_reject_more_than_four_effective_fractional_digits(self):
+        with self.assertRaises(EvidenceRejected):
+            ingest_signed_evidence(**self.packet(
+                event_type="equity", event_id="too-precise",
+                data={"equity_usd": "100.00001", "is_session_open": False},
+            ))
+
+    def test_reject_more_than_fourteen_integer_digits(self):
+        with self.assertRaises(EvidenceRejected):
+            ingest_signed_evidence(**self.packet(
+                event_type="equity", event_id="too-large",
+                data={"equity_usd": "100000000000000", "is_session_open": False},
+            ))
+
+    def test_upper_ledger_boundary_accepted(self):
+        result = ingest_signed_evidence(**self.packet(
+            event_type="equity", event_id="valid-boundary",
+            data={"equity_usd": "99999999999999.9999", "is_session_open": False},
+        ))
+        self.assertEqual(result["result"], "recorded_pending")
