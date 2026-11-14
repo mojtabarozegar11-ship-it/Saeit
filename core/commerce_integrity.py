@@ -99,6 +99,41 @@ def provider_amount(raw):
     return exact_money(amount)
 
 
+
+def parse_strict_webhook_json(raw):
+    """No duplicate or nonfinite fields; JSON object only, never form/array."""
+    import json
+
+    def _pairs_unique(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("WEBHOOK_DUPLICATE_FIELD")
+            obj[key] = value
+        return obj
+
+    def _no_nonfinite(_value):
+        raise ValueError("WEBHOOK_NONFINITE_JSON")
+
+    if type(raw) is not bytes or not 1 <= len(raw) <= 16384:
+        raise ValueError("WEBHOOK_BODY_SIZE_INVALID")
+    try:
+        result = json.loads(
+            raw.decode("utf-8", "strict"),
+            object_pairs_hook=_pairs_unique, parse_constant=_no_nonfinite,
+        )
+    except (UnicodeError, json.JSONDecodeError):
+        raise ValueError("WEBHOOK_INVALID_JSON") from None
+    if type(result) is not dict:
+        raise ValueError("WEBHOOK_OBJECT_REQUIRED")
+    if set(result).difference({
+        "event_type", "payment_intent_id", "amount",
+        "currency", "provider_reference", "event_id",
+    }):
+        raise ValueError("WEBHOOK_UNEXPECTED_FIELDS")
+    return result
+
+
 def ledger_reference(provider, event_id):
     """Stable, unambiguous fixed-width ledger ref shared by revenue auditor."""
     if not valid_provider(provider) or not valid_event_id(event_id):
