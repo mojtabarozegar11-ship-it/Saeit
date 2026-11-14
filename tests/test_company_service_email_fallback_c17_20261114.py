@@ -17,7 +17,7 @@ class C17DirectEmailFallback(unittest.TestCase):
         for code in CODES:
             with self.subTest(code=code):
                 page = html_page(code, self.offers[code], self.guides[code])
-                self.assertIn('class="scope-primary-cta" href="'+CONTACT+'"', page)
+                self.assertIn('class="cta scope-primary-cta" href="'+CONTACT+'"', page)
                 self.assertIn("mailto:zomorodmelal@gmail.com?subject=", page)
                 self.assertIn("%5B" + code + "%5D", page)
                 self.assertIn('class="scope-email-fallback"', page)
