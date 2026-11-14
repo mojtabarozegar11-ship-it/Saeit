@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from .adapters import Blocked, Uncertain, send
+from .catalog import RESTRICTED_HANDLES
 from .transport import http_transport
 from .credential_vault import credential_for, has_credential
 from .youtube import upload_video
@@ -59,6 +60,12 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
     account = store.account(item["account_id"])
     if not account or not account["verified"] or account["brand"] != item["brand"]:
         raise Blocked("Official account ownership not verified")
+    # Owner's explicit ban is checked before reading credentials, claiming the
+    # queue item or opening a socket. Legacy approved rows cannot bypass it.
+    for key in ("destination", "public_url", "metricool_brand_id", "facebook_page_id"):
+        if any(denied in str(account.get(key, "")).casefold()
+               for denied in RESTRICTED_HANDLES):
+            raise Blocked("Owner-prohibited account: outbound publication forbidden")
     token = credential_for(account,env=env)
     if len(token) < 6:
         raise Blocked("No private token configured for exact account")
