@@ -44,7 +44,11 @@ class TenantDecision:
 def canonical_host(value):
     if not isinstance(value, str):
         raise ValueError("Host must be string")
-    host = value.strip().lower()
+    # Do not normalize whitespace away from a security boundary. Hostnames
+    # are compared as exact merchant scope identifiers.
+    if value != value.strip():
+        raise ValueError("Noncanonical hostname whitespace")
+    host = value.lower()
     if not host.isascii() or len(host) > 253 or not HOST_PATTERN.fullmatch(host):
         raise ValueError("Invalid canonical hostname")
     return host
