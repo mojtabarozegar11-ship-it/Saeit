@@ -966,46 +966,49 @@ class EmailFreeCheckoutReleaseTests(unittest.TestCase):
             b'<input name="invoice_reference" type="text">'
         ))
 
-    def test_source_digest_pinned_to_reviewed_implementation(self):
+    def test_hardened_guest_source_is_not_legacy_email_free_release(self):
         content = GUEST_FILE.read_bytes()
-        self.assertEqual(release.sha(content), release.APPROVED_GUEST_SHA256)
         self.assertTrue(GUEST_FILE.stat().st_size > 0)
-        self.assertNotIn(b"mpw_trx_email_recovery", content)
-        self.assertNotIn(b"bound_checkout", content)
+        self.assertNotEqual(release.sha(content), release.APPROVED_GUEST_SHA256)
+        self.assertIn(b"mpw_trx_email_recovery", content)
+        self.assertIn(b"bound_checkout", content)
+        self.assertTrue(release.OWNER_BUYER_EMAIL_REQUIRED)
+        with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_GUEST_SOURCE"):
+            release._source(GUEST_FILE)
 
-    def test_plan_builds_two_exact_changes_without_touching_ledger(self):
+    def test_legacy_plan_rejects_hardened_checkout_without_writes(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             live_guest, live_template = base / "guest.py", base / "checkout.html"
-            source = GUEST_FILE.read_bytes()
-            live_guest.write_bytes(source)
-            live_template.write_bytes(template())
+            original_guest = GUEST_FILE.read_bytes()
+            original_template = template()
+            live_guest.write_bytes(original_guest)
+            live_template.write_bytes(original_template)
             with patch.object(release, "GUEST", live_guest), patch.object(release, "TEMPLATE", live_template):
-                old, new = release.plan(GUEST_FILE)
-                self.assertEqual(new["guest"], old["guest"])
-                self.assertNotEqual(new["template"], old["template"])
-                self.assertEqual(live_template.read_bytes(), old["template"])
+                with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_GUEST_SOURCE"):
+                    release.plan(GUEST_FILE)
+            self.assertEqual(live_guest.read_bytes(), original_guest)
+            self.assertEqual(live_template.read_bytes(), original_template)
 
-    def test_second_plan_is_cleanly_idempotent(self):
+    def test_legacy_plan_never_claims_idempotent_after_email_removal(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             live_guest, live_template = base / "guest.py", base / "checkout.html"
-            live_guest.write_bytes(GUEST_FILE.read_bytes())
-            live_template.write_bytes(release.patch_template(template()))
+            original_guest = GUEST_FILE.read_bytes()
+            original_template = release.patch_template(template())
+            live_guest.write_bytes(original_guest)
+            live_template.write_bytes(original_template)
             with patch.object(release, "GUEST", live_guest), patch.object(release, "TEMPLATE", live_template):
-                old, new = release.plan(GUEST_FILE)
-                self.assertIsNone(new)
-                self.assertIn("template", old)
+                with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_GUEST_SOURCE"):
+                    release.plan(GUEST_FILE)
+            self.assertEqual(live_guest.read_bytes(), original_guest)
+            self.assertEqual(live_template.read_bytes(), original_template)
 
     def test_refuses_half_removed_template(self):
-        with tempfile.TemporaryDirectory() as folder:
-            base = Path(folder)
-            live_guest, live_template = base / "guest.py", base / "checkout.html"
-            live_guest.write_bytes(GUEST_FILE.read_bytes())
-            live_template.write_bytes(template().replace(release.EMAIL_LABEL, b""))
-            with patch.object(release, "GUEST", live_guest), patch.object(release, "TEMPLATE", live_template):
-                with self.assertRaisesRegex(RuntimeError, "EMAIL_LABEL_DRIFT"):
-                    release.plan(GUEST_FILE)
+        # Keep the independent template parser regression. The obsolete
+        # publish plan itself must reject the hardened guest source first.
+        with self.assertRaisesRegex(RuntimeError, "EMAIL_LABEL_DRIFT"):
+            release.patch_template(template().replace(release.EMAIL_LABEL, b""))
 
 
     def _fake_passenger_uapi(self, apps, *, status=1, code=0):
