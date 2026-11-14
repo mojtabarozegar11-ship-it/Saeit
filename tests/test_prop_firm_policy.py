@@ -21,7 +21,7 @@ class PropFirmPolicyTests(unittest.TestCase):
         self.assertEqual(POLICY.entry_trx, D("30"))
         self.assertEqual(POLICY.canonical_bot, "mojtaba.bot.ai")
         self.assertEqual(POLICY.promotion_cycle_days, 30)
-        self.assertIsNone(POLICY.completion_deadline_days)
+        self.assertEqual(POLICY.completion_deadline_days, 28)
         self.assertEqual(POLICY.inactivity_notice_days + POLICY.inactivity_grace_days,117)
 
     def test_14_levels_and_confirmed_level_eleven(self):
@@ -250,10 +250,10 @@ class PropFirmPolicyTests(unittest.TestCase):
                     self.assertFalse(decision.allowed)
                     self.assertIn(reason, decision.reasons)
 
-    def test_new_cohort_requires_both_social_platforms(self):
+    def test_new_cohort_requires_one_independently_reviewed_post(self):
         decision = self.challenge(social_posts_verified=False)
         self.assertFalse(decision.passed)
-        self.assertIn("social_daily_posts_both_platforms_unverified", decision.reasons)
+        self.assertIn("social_one_post_four_weeks_unverified", decision.reasons)
         self.assertTrue(self.challenge(social_posts_verified=True).passed)
 
     def test_social_truthy_fakes_do_not_approve_phase(self):
@@ -261,14 +261,14 @@ class PropFirmPolicyTests(unittest.TestCase):
             with self.subTest(forged=repr(forged)):
                 result = self.challenge(social_posts_verified=forged)
                 self.assertFalse(result.passed)
-                self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+                self.assertIn("social_one_post_four_weeks_unverified", result.reasons)
 
     def test_phase_two_still_requires_social_review(self):
         result = self.challenge(
             phase=2, realized_net_profit="6", max_profitable_day="1.8",
             prior_phase_passed=True, social_posts_verified=False,
         )
-        self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+        self.assertIn("social_one_post_four_weeks_unverified", result.reasons)
 
     def test_legacy_v11_contract_is_not_retroactively_penalized(self):
         result = self.challenge(
