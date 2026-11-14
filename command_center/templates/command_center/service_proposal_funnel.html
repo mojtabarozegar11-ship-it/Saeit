@@ -27,6 +27,7 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
   <nav class="actions">
     <a class="link primary" href="{{ admin_leads_url }}">رسیدگی به درخواست‌ها در CRM</a>
     <a class="link" href="{{ admin_workitems_url }}">پیگیری ارجاعات اجرایی</a>
+    <a class="link" href="{% url 'command_center_service_pricing_workbench' %}">محاسبه هزینه و قیمت پیشنهادی</a>
     <a class="link" href="{% url 'command_center_service_proposal_funnel_api' %}">داده تجمیعی JSON</a>
     <a class="link" href="{% url 'command_center_dashboard' %}">مرکز فرماندهی</a>
   </nav>
