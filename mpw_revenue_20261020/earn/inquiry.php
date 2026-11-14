@@ -2,6 +2,7 @@
 declare(strict_types=1);
 /* MojPlayWin first-party commercial inquiry. Isolated from checkout and customer accounts. */
 umask(0077);
+const MPW_OFFICIAL_INQUIRY_EMAIL = 'mojplaywin@gmail.com';
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: no-store, private');
 header('X-Content-Type-Options: nosniff');
@@ -24,6 +25,13 @@ $allowed = [
   'website-care'=>'Website Care & Maintenance'
 ];
 function h(string $v): string {return htmlspecialchars($v, ENT_QUOTES|ENT_SUBSTITUTE, 'UTF-8');}
+function oversized_inquiry_body($raw): bool {
+  // CONTENT_LENGTH can be absent (e.g. chunked transfer). Reject malformed
+  // lengths and every declared request greater than 12 KiB, including 12001.
+  if ($raw === null || $raw === '') return false;
+  if (!is_string($raw) || !preg_match('/\\A[0-9]{1,9}\\z/D', $raw)) return true;
+  return (int)$raw > 12000;
+}
 function clean($v, int $max): string {
   if (!is_string($v)) return '';
   $v = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', trim($v));
@@ -77,12 +85,13 @@ function store_inquiry(array $record): string {
   return $id;
 }
 if (!extension_loaded('mbstring') || !extension_loaded('openssl')) {
-  http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email support@mojplaywin.com.</p>';exit;
+  http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email '.h(MPW_OFFICIAL_INQUIRY_EMAIL).'.</p>';exit;
 }
 ini_set('session.use_strict_mode','1');
 session_set_cookie_params(['lifetime'=>0,'path'=>'/mpw-editorial/revenue' . '/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
 if (!@session_start()) {http_response_code(503);echo '<h1>Secure session unavailable</h1>';exit;}
-$slug=(string)($_POST['service']??$_GET['service']??'');
+$slugValue=$_POST['service']??$_GET['service']??'';
+$slug=is_string($slugValue) ? $slugValue : '';
 if (!array_key_exists($slug,$allowed)) {http_response_code(404);echo '<h1>Unknown service</h1>';exit;}
 $title=$allowed[$slug];
 $token=$_SESSION['mpw_inquiry_token']??bin2hex(random_bytes(24));
@@ -90,8 +99,9 @@ $_SESSION['mpw_inquiry_token']=$token;
 $errors=[];$sent=false;$reference='';
 $data=['name'=>'','email'=>'','company'=>'','website'=>'','details'=>'','timeline'=>''];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-  if (strlen((string)($_SERVER['CONTENT_LENGTH']??''))>6 && (int)($_SERVER['CONTENT_LENGTH']??0)>12000) $errors[]='Request is too large.';
-  if (!hash_equals($token,(string)($_POST['csrf']??''))) $errors[]='The form expired. Refresh and try again.';
+  if (oversized_inquiry_body($_SERVER['CONTENT_LENGTH']??null)) $errors[]='Request is too large.';
+  $submittedCsrf=$_POST['csrf']??null;
+  if (!is_string($submittedCsrf) || !hash_equals($token,$submittedCsrf)) $errors[]='The form expired. Refresh and try again.';
   if (!empty($_POST['fax_number'])) $errors[]='Submission rejected.';
   foreach ($data as $field=>$unused) $data[$field]=clean($_POST[$field]??'', $field==='details'?2000:($field==='email'?254:($field==='website'?300:120)));
   if (mb_strlen($data['name'])<2) $errors[]='Enter your name.';
@@ -109,12 +119,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $token=$_SESSION['mpw_inquiry_token'];
       $sent=true;
       $body="MojPlayWin commercial inquiry received and stored privately.\nService: ".$title."\nReference: ".$reference."\n\nReview the private cPanel revenue-inquiries record. No customer data is logged to CI.\n";
-      @mail('support@mojplaywin.com','New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
+      @mail(MPW_OFFICIAL_INQUIRY_EMAIL,'New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
     } catch (Throwable $e) {$errors[]='We could not securely save the request. Please use the email fallback.';error_log('MPW_INQUIRY_STORAGE_FAILURE');}
   }
 }
 $subject=rawurlencode($slug==='general' ? 'MojPlayWin business quote' : 'MojPlayWin '.$slug.' service enquiry');
-$fallback='mailto:support@mojplaywin.com?subject='.$subject;
+$fallback='mailto:'.MPW_OFFICIAL_INQUIRY_EMAIL.'?subject='.$subject;
 ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow"><title>Secure Inquiry — <?=h($title)?> | MojPlayWin</title><link rel="stylesheet" href="/mpw-editorial/revenue/assets/style.css"><style>
 .inquiry-wrap{max-width:790px;margin:40px auto;padding:clamp(20px,4vw,46px);background:#131d2e;border:1px solid #cda969;border-radius:22px}
 .inquiry-wrap h1{font-size:clamp(2rem,5vw,3rem)}
@@ -145,5 +155,5 @@ $fallback='mailto:support@mojplaywin.com?subject='.$subject;
 <button class="span-2" type="submit">Send secure inquiry</button>
 </form>
 <?php endif; ?>
-<p class="inquiry-note">Email fallback: <a href="<?=h($fallback)?>">support@mojplaywin.com — <?=h($title)?></a>. If you cannot receive a confirmation, retain your reference or contact support separately.</p>
+<p class="inquiry-note">Email fallback: <a href="<?=h($fallback)?>"><?=h(MPW_OFFICIAL_INQUIRY_EMAIL)?> — <?=h($title)?></a>. If you cannot receive a confirmation, retain your reference or contact support separately.</p>
 </div></main><footer>© 2026 MojPlayWin · <a href="/terms/">Terms</a> · <a href="/mpw-editorial/revenue/index.html">All 12 offers</a></footer></body></html>
