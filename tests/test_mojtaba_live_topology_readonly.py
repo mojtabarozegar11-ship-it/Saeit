@@ -603,3 +603,90 @@ def test_macro_cron_inventory_is_not_live_worker_attestation(tmp_path):
     assert row["attestation"]["canonical_worker_executed"] is False
     assert row["attestation"]["external_schedulers_fully_enumerated"] is False
     assert row["attestation"]["automatic_deactivation_authorized"] is False
+
+
+@pytest.mark.parametrize("argv", [
+    ["crontab", "-l"],
+    ["ps", "-eo", "args="],
+    ["systemctl", "list-units"],
+])
+def test_oversize_subprocess_output_is_not_a_complete_observation(argv):
+    from subprocess import CompletedProcess
+    huge_private_output = (
+        "python manage.py knowledge_agent_cycle --key=PRIVATE_VALUE\n" * 12000
+    )
+    assert len(huge_private_output) > observer.MAX_STDOUT_CHARS
+    with patch.object(observer.subprocess, "run", return_value=CompletedProcess(
+        args=argv, returncode=0, stdout=huge_private_output, stderr="",
+    )):
+        state, output = observer.call_readonly(argv)
+    assert state == "observed_truncated"
+    assert output == ""
+
+
+def test_exact_stdout_character_boundary_is_not_accidentally_rejected():
+    from subprocess import CompletedProcess
+    output = "X" * observer.MAX_STDOUT_CHARS
+    with patch.object(observer.subprocess, "run", return_value=CompletedProcess(
+        args=["crontab", "-l"], returncode=0, stdout=output, stderr="",
+    )):
+        state, returned = observer.call_readonly(["crontab", "-l"])
+    assert state == "observed"
+    assert returned == output
+
+
+def test_cron_501_lines_are_not_a_complete_worker_census(tmp_path):
+    cron = "@reboot python manage.py run_economic_worker\n" * 501
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", cron), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["state"] == "observed_truncated"
+    assert row["cron"]["enumerated_entries"] is None
+    assert row["cron"]["entries"] == []
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+    assert row["attestation"]["legacy_workers_retired"] is False
+
+
+def test_cron_exact_500_line_boundary_is_observed_not_attested(tmp_path):
+    cron = "@daily python manage.py knowledge_agent_cycle\n" * 500
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", cron), ("observed", ""),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["cron"]["state"] == "observed"
+    assert row["cron"]["enumerated_entries"] == 500
+    assert row["attestation"]["external_schedulers_fully_enumerated"] is False
+
+
+def test_process_20001_lines_do_not_claim_no_known_workers(tmp_path):
+    ps = "python unrelated-script\n" * 20000 + (
+        "python manage.py run_economic_worker\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ps),
+        ("observed", ""), ("observed", ""),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["processes"]["state"] == "observed_truncated"
+    assert row["processes"]["inspected"] is None
+    assert row["processes"]["route_match_counts"] == {}
+    assert row["attestation"]["canonical_worker_executed"] is False
+
+
+def test_systemd_1001_lines_fail_closed_instead_of_hiding_last_worker(tmp_path):
+    systemd = "unrelated.service loaded active running\n" * 1000 + (
+        "mojtaba-bot-ai.service loaded active running\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", ""),
+        ("observed", systemd), ("observed", systemd),
+    ]):
+        row = observer.collect("vps", home=tmp_path, username="githubops")
+    assert row["user_services"]["state"] == "observed_truncated"
+    assert row["system_services"]["state"] == "observed_truncated"
+    assert row["user_services"]["candidate_units"] == []
+    assert row["system_services"]["candidate_units"] == []
+    assert row["attestation"]["handoff_verified"] is False
