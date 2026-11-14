@@ -2,7 +2,7 @@
 import pytest
 
 from scripts.mpw_customer_support_live_gate_20261114 import (
-    INBOX, LEGACY, ORIGIN, ROUTES, ROUTE_IDENTITY, _same_public_url, assess, fetch_public
+    INBOX, LEGACY, ORIGIN, ROUTES, ROUTE_IDENTITY, _RejectRedirects, _same_public_url, assess, fetch_public
 )
 
 
@@ -93,3 +93,51 @@ def test_store_catalog_must_still_have_original_buyer_path_after_release():
     store = next(x for x in result["observations"] if x["route"] == "/store/")
     assert store["status"] == "UNRECOGNIZED_PAGE"
     assert store["page_identity_verified"] is False
+
+
+def test_text_or_comment_mailto_does_not_pass_live_acceptance():
+    base = {ORIGIN + path: (
+        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
+        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
+    ) for path in ROUTES}
+    route = ORIGIN + "/support/"
+    for spoof in (
+        '<p>mailto:' + INBOX + '</p>',
+        '<!-- <a href="mailto:' + INBOX + '">' + INBOX + '</a> -->',
+        '<script>const x = "mailto:' + INBOX + '";</script>',
+        '<template><a href="mailto:' + INBOX + '">hidden</a></template>',
+    ):
+        pages = dict(base)
+        pages[route] = ' '.join(ROUTE_IDENTITY["/support/"]) + spoof
+        report = assess(lambda url: pages[url])
+        assert report["ready_routes"] == 6
+        assert report["support_ready"] is False
+        support = next(item for item in report["observations"] if item["route"] == "/support/")
+        assert support["mailto_visible"] is False
+
+
+def test_mailto_requires_exact_address_and_single_href_attribute():
+    base = {ORIGIN + path: (
+        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
+        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
+    ) for path in ROUTES}
+    route = ORIGIN + "/contact/"
+    for bad in (
+        '<a href="mailto:' + INBOX + '.attacker.example">' + INBOX + '</a>',
+        '<a href="mailto:' + INBOX + '" href="https://example.com">' + INBOX + '</a>',
+    ):
+        pages = dict(base)
+        pages[route] = ' '.join(ROUTE_IDENTITY["/contact/"]) + bad
+        report = assess(lambda url: pages[url])
+        assert report["ready_routes"] == 6
+        assert report["support_ready"] is False
+    pages = dict(base)
+    pages[route] = ' '.join(ROUTE_IDENTITY["/contact/"]) + (
+        '<a href="mailto:' + INBOX + '?subject=Support">' + INBOX + '</a>')
+    assert assess(lambda url: pages[url])["ready_routes"] == 7
+
+
+def test_redirect_handler_rejects_external_redirect_before_following():
+    with pytest.raises(RuntimeError, match="UNEXPECTED_REDIRECT"):
+        _RejectRedirects().redirect_request(
+            None, None, 302, "Found", {}, "https://example.com/redirected")
