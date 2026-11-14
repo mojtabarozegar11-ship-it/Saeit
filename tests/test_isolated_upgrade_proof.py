@@ -1,14 +1,34 @@
 import json
 import os
+import hashlib
 from pathlib import Path
 import tempfile
 import time
 import unittest
 
-from core.isolated_upgrade_proof import inspect_isolated_proof
+from core.isolated_upgrade_proof import inspect_isolated_proof, EXPECTED_REPAIR_PATHS
 
 
 def valid_dossier():
+    # Fully typed synthetic manifest for the four reviewed repair paths.
+    # No source_root is supplied: fixture hashes are NOT independent proof
+    # that deployed production code matches this dossier.
+    inventory = []
+    previously_protected = []
+    for path in sorted(EXPECTED_REPAIR_PATHS):
+        raw = ("synthetic-before:" + path).encode("utf-8")
+        digest = hashlib.sha256(raw).hexdigest()
+        inventory.append({
+            "path": path,
+            "source_sha256": digest,
+            "source_bytes": len(raw),
+        })
+        previously_protected.append({
+            "path": path,
+            "source_sha256": digest,
+            "negative_case_blocked": True,
+            "new_code_edit_performed": False,
+        })
     return {
         "schema": "saeit.factory.code-self-upgrade.v1",
         "candidate_count": 0,
@@ -18,8 +38,12 @@ def valid_dossier():
         "unresolved_known_security_regressions": 0,
         "production_code_promotions": 0,
         "whole_code_autonomous_evolution_complete": False,
+        "factory_python_files_scanned": 4,
+        "modules_without_proven_repair": 0,
+        "private_verified_code_edits": 0,
+        "module_sha256_inventory": inventory,
         "candidates": [],
-        "already_protected_source_modules": [{"path": str(i)} for i in range(4)],
+        "already_protected_source_modules": previously_protected,
     }
 
 
@@ -32,6 +56,7 @@ class IsolatedProofTests(unittest.TestCase):
 
     def _write(self, data):
         self.path.write_text(json.dumps(data), encoding="utf-8")
+        os.chmod(self.path, 0o600)
 
     def test_fresh_consistent_private_dossier_is_inspectable_without_mutation(self):
         before = self.path.read_bytes()
@@ -39,6 +64,8 @@ class IsolatedProofTests(unittest.TestCase):
         self.assertEqual(result["candidate_count"], 0)
         self.assertEqual(result["preexisting_verified_repairs"], 4)
         self.assertEqual(result["production_code_promotions"], 0)
+        self.assertEqual(result["source_files_hash_verified"], 0)
+        self.assertEqual(result["source_verification_scope"], "source_root_not_provided")
         self.assertEqual(self.path.read_bytes(), before)
 
     def test_rejects_stale_dossier(self):
