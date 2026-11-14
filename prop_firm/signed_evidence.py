@@ -78,6 +78,19 @@ def _signature_ok(*, raw, signature, issued_at, key, account_id, source):
         raise EvidenceRejected("Signed evidence rejected")
 
 
+def _unique_json_pairs(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise EvidenceRejected("Duplicate JSON object key")
+        obj[key] = value
+    return obj
+
+
+def _reject_json_constant(value):
+    raise EvidenceRejected("Non-finite JSON number")
+
+
 def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
                            now=None):
     """Import one verified immutable identifier into account-owned ledger.
@@ -105,7 +118,9 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
     if abs((moment - timestamp).total_seconds()) > 300:
         raise EvidenceRejected("Expired or future evidence")
     try:
-        envelope = json.loads(raw.decode("utf-8"))
+        envelope = json.loads(raw.decode("utf-8"),
+                              object_pairs_hook=_unique_json_pairs,
+                              parse_constant=_reject_json_constant)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise EvidenceRejected("Invalid UTF-8 JSON evidence") from exc
     if not isinstance(envelope, dict) or set(envelope) != {
