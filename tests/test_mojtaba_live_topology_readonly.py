@@ -722,3 +722,39 @@ def test_cron_named_month_weekday_ranges_are_included(spec_line, expected_schedu
 ])
 def test_cron_named_tokens_still_reject_unrecognized_words(spec_line):
     assert observer.safe_cron(spec_line + "\n") == []
+
+
+@pytest.mark.parametrize("command,expected", [
+    ("python manage.py knowledge_agent_cycle", ["knowledge_agent_cycle"]),
+    ("python manage.py knowledge_agent_cycle.py", ["knowledge_agent_cycle"]),
+    ("/home/runner/knowledge_agent_cycle", ["knowledge_agent_cycle"]),
+    ("MoJTaBa-BoT-AI.service", ["mojtaba-bot-ai"]),
+    ("python /srv/site_agents.php", ["site_agents.php"]),
+    ("exec /srv/SAEIT_MOJTRADE_OBSERVER_V1", ["SAEIT_MOJTRADE_OBSERVER_V1"]),
+    ("python /srv/knowledge_agent_cycle_backup.py", []),
+    ("python /srv/knowledge_agent_cycle-old.py", []),
+    ("python /srv/backup_knowledge_agent_cycle.py", []),
+    ("python /srv/xmojtaba-bot-ai", []),
+    ("python /srv/mojtaba-bot-aiold", []),
+    ("python /srv/backup-site_agents.php", []),
+    ("python /srv/run_economic_worker_v2", []),
+    ("python /srv/newsletter_process_queue2", []),
+])
+def test_route_flag_boundaries_preserve_real_candidates(command, expected):
+    assert observer.route_flags(command) == expected
+
+
+def test_route_substring_false_positive_does_not_enter_census(tmp_path):
+    raw = (
+        "python /srv/knowledge_agent_cycle_backup.py --secret=PRIVATE_DATA\n"
+        "python /srv/backup_site_agents.php\n"
+    )
+    with patch.object(observer, "call_readonly", side_effect=[
+        ("observed", ""), ("observed", raw),
+        ("observed", ""), ("observed", ""),
+    ]):
+        report = observer.collect("vps", home=tmp_path, username="githubops")
+    assert report["processes"]["inspected"] == 2
+    assert report["processes"]["route_match_counts"] == {}
+    assert "PRIVATE_DATA" not in json.dumps(report)
+    assert report["attestation"]["canonical_worker_executed"] is False
