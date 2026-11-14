@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -27,32 +28,47 @@ USER_AGENT = "Zomorod-ReadOnly-Palette-Attestation/20261114"
 def inspect_path(route: str, marker: str) -> dict:
     assert route.startswith("/") and route != "/" and ".." not in route
     result = {"route": route, "expected_css_marker": marker, "method": "GET",
-              "production_writes": 0, "deployment_claim": False}
+              "production_writes": 0, "deployment_claim": False,
+              "host_file_identity_proven": False, "attempts": []}
     req = urllib.request.Request(BASE + route, headers={"User-Agent": USER_AGENT},
                                  method="GET")
-    try:
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = response.read(1024 * 1024 + 1)
-            result["http_status"] = response.status
-            result["content_type"] = response.headers.get("Content-Type", "")
-            result["truncated"] = len(data) > 1024 * 1024
-        data = data[:1024 * 1024]
-        html = data.decode("utf-8", errors="replace")
-        found = re.search('name="theme-color" content="([^"]+)"', html, re.I)
-        result.update({
-            "html_sha256": hashlib.sha256(data).hexdigest(),
-            "bytes_seen": len(data),
-            "theme_color": found.group(1) if found else None,
-            "marker_live": marker in html,
-            "olive_color_literal_live": OLIVE in html,
-            "live_css_status": "MARKER_VISIBLE" if marker in html
-                               else "NOT_PROVEN_FROM_PUBLIC_HTML",
-            "host_file_identity_proven": False
-        })
-    except (urllib.error.URLError, TimeoutError, OSError) as err:
-        result.update({"live_css_status": "UNKNOWN_FETCH_FAILED",
-                       "error": str(err)[:140],
-                       "host_file_identity_proven": False})
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=12 if attempt == 1 else 8) as response:
+                data = response.read(1024 * 1024 + 1)
+                result["http_status"] = response.status
+                result["content_type"] = response.headers.get("Content-Type", "")
+                result["truncated"] = len(data) > 1024 * 1024
+            data = data[:1024 * 1024]
+            html = data.decode("utf-8", errors="replace")
+            found = re.search('name="theme-color" content="([^"]+)"', html, re.I)
+            result.update({
+                "html_sha256": hashlib.sha256(data).hexdigest(),
+                "bytes_seen": len(data),
+                "theme_color": found.group(1) if found else None,
+                "marker_live": marker in html,
+                "olive_color_literal_live": OLIVE in html,
+                "live_css_status": "MARKER_VISIBLE" if marker in html
+                                   else "NOT_PROVEN_FROM_PUBLIC_HTML"
+            })
+            result["attempts"].append({"number": attempt, "ok": True,
+                                       "http_status": result["http_status"]})
+            result.pop("error", None)
+            return result
+        except urllib.error.HTTPError as err:
+            result["http_status"] = err.code
+            result["attempts"].append({"number": attempt, "ok": False,
+                                       "http_status": err.code, "kind": "HTTP_ERROR"})
+            result["live_css_status"] = "HTTP_ERROR_NOT_VERIFIED"
+            if err.code < 500 or attempt == 2:
+                return result
+        except (urllib.error.URLError, TimeoutError, OSError) as err:
+            result["attempts"].append({"number": attempt, "ok": False,
+                                       "kind": "NETWORK_ERROR"})
+            result.update({"live_css_status": "UNKNOWN_FETCH_FAILED",
+                           "error": str(err)[:140]})
+        if attempt == 1:
+            time.sleep(0.45)
     return result
 
 
