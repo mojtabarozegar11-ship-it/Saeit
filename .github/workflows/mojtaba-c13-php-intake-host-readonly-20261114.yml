@@ -78,7 +78,7 @@ jobs:
           timeout 25s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'if php -l "$HOME/public_html/ask-master/index.php" >/dev/null 2>&1; then echo "ZM_PHP_ENTRY_LINT=pass"; else echo "ZM_PHP_ENTRY_LINT=fail"; fi'
           echo "PHP_ORIGIN_READONLY_AUDIT=completed"
           echo "ZM_PHP_PRODUCTION_SOURCE_AUDIT=done"
-      - name: Read-only preflight for file-only six offer publication
+      - name: Read-only actual services-index source after six-page publication
         shell: bash
         env:
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -96,5 +96,4 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_services_public_index_readonly.py
-          timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_static_service_preflight.py
 
