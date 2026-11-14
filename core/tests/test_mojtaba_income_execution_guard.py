@@ -478,3 +478,4 @@ def test_internal_ledger_and_catalog_review_not_business_progress():
         assert result["evidence"]["kind"] in (
             "internal_ledger_inventory", "profit_baseline",
         )
+        assert result["next_action"].startswith("await_")
