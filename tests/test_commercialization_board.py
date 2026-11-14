@@ -153,6 +153,18 @@ class CommercializationBoardApiTests(TestCase):
         self.assertNotIn("wallet_address", raw)
         self.assertNotIn("invoice_reference", raw)
 
+    def test_paid_flag_is_counted_but_never_misreported_as_settled_trx_revenue(self):
+        Order.objects.create(
+            customer=self.visitor, status="paid", total="12.50", currency="USD",
+        )
+        self.client.force_login(self.staff)
+        data = self.client.get(self.endpoint()).json()
+        records = data["observed"]["shared_database"]
+        self.assertEqual(records["orders_with_paid_status_not_chain_proof"], 1)
+        self.assertFalse(records["settled_trx_revenue_independently_verified"])
+        self.assertIsNone(data["verified_income_usd"])
+        self.assertFalse(data["ready_for_live_payment"])
+
     def test_no_store_or_payment_rows_created_by_read(self):
         self.client.force_login(self.staff)
         before = (Product.objects.count(), Order.objects.count(),
