@@ -272,7 +272,12 @@ from .company_inquiry_models import CompanyInquiry
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
-    list_display = ("subject", "kind", "name", "organization", "status", "created_at")
+    list_display = ("subject", "service_label", "kind", "name", "organization", "status", "created_at")
+    @admin.display(description="مسیر خدمت")
+    def service_label(self, obj):
+        # Display classification without duplicating or rewriting the CRM.
+        return "تحلیل اقتصاد مزرعه" if obj.subject.startswith("ZM-FARM") else "سایر درخواست‌ها"
+
     list_filter = ("kind", "status", "created_at")
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
