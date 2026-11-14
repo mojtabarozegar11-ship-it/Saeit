@@ -55,6 +55,17 @@ class Migration(migrations.Migration):
             field=models.BooleanField(default=False),
         ),
         migrations.AlterField(
+            model_name="propsocialevidence", name="review_status",
+            field=models.CharField(
+                choices=[
+                    ("pending", "Pending independent review"),
+                    ("verified", "Verified and visible for four weeks"),
+                    ("rejected", "Rejected evidence"),
+                ],
+                default="pending", max_length=12,
+            ),
+        ),
+        migrations.AlterField(
             model_name="propsocialevidence", name="trading_day",
             field=models.DateField(blank=True, null=True),
         ),
