@@ -61,8 +61,12 @@ def audit_checkout_trace(payload):
         kind=e["event"]
         if kind == "checkout_created":
             if state["created"]: state["issues"].append("MULTIPLE_CHECKOUT_CREATIONS")
+            if state["confirmed"] or state["fulfilled"]:
+                state["issues"].append("CHECKOUT_CREATION_AFTER_PAYMENT_OR_DELIVERY")
             state["created"]=True
         elif kind == "payment_confirmed":
+            if not state["created"]:
+                state["issues"].append("PAYMENT_BEFORE_CHECKOUT_CREATION")
             if e["source"] != "gateway" or not e["payment_ref"]:
                 state["issues"].append("PAYMENT_NOT_GATEWAY_ATTESTED_IN_TRACE")
             else:
