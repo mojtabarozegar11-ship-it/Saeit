@@ -55,16 +55,19 @@ def authorize(request: ActionRequest) -> Decision:
     """
     if not isinstance(request, ActionRequest):
         return Decision.DENY
-    if not request.owner_id.strip() or not request.resource_id.strip():
+    # Host input is untrusted until validated. Truthy strings/integers are
+    # not proof of authentication or of a verified owner approval.
+    if (type(request.owner_id) is not str or not request.owner_id.strip()
+            or type(request.resource_id) is not str or not request.resource_id.strip()):
         return Decision.DENY
     if not isinstance(request.action, Action):
         return Decision.DENY
-    if not request.authenticated:
+    if request.authenticated is not True:
         return Decision.DENY
     if request.action not in SENSITIVE:
         return Decision.ALLOW
     if (
-        request.approval_verified
+        request.approval_verified is True
         and request.approved_action is request.action
         and request.approved_resource_id == request.resource_id
     ):

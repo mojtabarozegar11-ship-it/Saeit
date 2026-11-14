@@ -23,25 +23,30 @@ class Approval:
 
 def authorized(*, owner_id: str, operation: str, resource_id: str,
                approval: Approval | None, now: datetime | None = None) -> bool:
-    """Require an exact, unexpired, affirmative approval for sensitive actions.
+    """Return a decision only; host must independently authenticate and audit.
 
-    Missing or malformed input denies. Approval does not perform an action.
-    The caller must additionally validate the authenticated owner and persist
-    an audit record before performing any approved external operation.
+    Malformed or coerced values never constitute approval. This module neither
+    consumes a receipt nor executes payments, messages, deployments or trades.
     """
-    if not owner_id or not owner_id.strip() or not resource_id or not resource_id.strip():
-        return False
-    if not operation or not operation.strip():
+    fields = (owner_id, operation, resource_id)
+    if any(type(value) is not str or not value.strip() for value in fields):
         return False
     if operation not in SENSITIVE_OPERATIONS:
-        return False  # No implicit grant for unknown operations.
-    if approval is None or approval.approved is not True:
         return False
-    if (approval.owner_id, approval.operation, approval.resource_id) != (
-        owner_id, operation, resource_id
-    ):
+    if not isinstance(approval, Approval) or approval.approved is not True:
         return False
-    timestamp = now or datetime.now(timezone.utc)
-    if timestamp.tzinfo is None or approval.expires_at.tzinfo is None:
+    verified_fields = (approval.owner_id, approval.operation, approval.resource_id)
+    if any(type(value) is not str for value in verified_fields):
         return False
-    return timestamp < approval.expires_at
+    if verified_fields != fields:
+        return False
+    timestamp = now if now is not None else datetime.now(timezone.utc)
+    expiry = approval.expires_at
+    if not isinstance(timestamp, datetime) or not isinstance(expiry, datetime):
+        return False
+    try:
+        if timestamp.utcoffset() is None or expiry.utcoffset() is None:
+            return False
+        return timestamp < expiry
+    except (TypeError, ValueError, OverflowError):
+        return False

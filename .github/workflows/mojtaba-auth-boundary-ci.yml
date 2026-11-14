@@ -1,0 +1,34 @@
+name: Mojtaba bot authorization boundary (offline)
+
+on:
+  pull_request:
+    branches:
+      - integration/mojtaba-bot-ai-20261112
+    paths:
+      - ava_core/action_policy.py
+      - ava_core/approvals.py
+      - ava_core/operation_guard.py
+      - ava_core/operation_policy.py
+      - tests/test_mojtaba_authorization_boundary_20261114.py
+      - .github/workflows/mojtaba-auth-boundary-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  approval-policy-regressions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Offline authorization regressions
+        run: |
+          python -m unittest discover -s tests -p 'test_mojtaba_authorization_boundary_20261114.py' -v
+          python -m unittest discover -s tests -p 'test_action_policy.py' -v
+          python -m unittest discover -s tests -p 'test_operation_policy.py' -v
+          python -m unittest discover -s tests -p 'test_unified_approvals.py' -v
+      - name: Syntax verification
+        run: python -m compileall -q ava_core/action_policy.py ava_core/approvals.py ava_core/operation_guard.py ava_core/operation_policy.py tests/test_mojtaba_authorization_boundary_20261114.py
