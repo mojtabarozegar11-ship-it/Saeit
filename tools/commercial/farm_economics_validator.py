@@ -1,6 +1,6 @@
 """Offline, internal farm economics validator; no network, storage or prices."""
 import csv, io
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, DecimalException, getcontext
 from datetime import date
 
 FIELDS = ("enterprise_id","enterprise_type","period_start","period_end","currency","output_unit","production_quantity","sold_quantity","sales_revenue","other_revenue","variable_cost","fixed_cost","opportunity_cost")
@@ -47,21 +47,30 @@ def validate_csv(text):
             raise ValueError(f"line {line}: invalid decimal") from exc
         if any(not value.is_finite() or value < 0 for value in values.values()):
             raise ValueError(f"line {line}: negative or nonfinite value")
+        # Reject exponents the active Decimal arithmetic context cannot represent,
+        # including enormous quantities that would bypass money-only arithmetic.
+        decimal_context = getcontext()
+        if any(value and not (decimal_context.Emin <= value.adjusted() <= decimal_context.Emax)
+               for value in values.values()):
+            raise ValueError(f"line {line}: numeric magnitude/precision exceeds supported arithmetic")
         if values["sold_quantity"] > values["production_quantity"]:
             raise ValueError(f"line {line}: sold exceeds produced; inventory reconciliation required")
         if values["sold_quantity"] == 0 and values["sales_revenue"] != 0:
             raise ValueError(f"line {line}: sales revenue without sold quantity")
-        revenue = values["sales_revenue"] + values["other_revenue"]
-        contribution = revenue - values["variable_cost"]
-        operating = contribution - values["fixed_cost"]
-        economic = operating - values["opportunity_cost"]
-        # Period-level other revenue has no proven per-unit basis.
-        # If some output remains unsold, the costs of sold units cannot be
-        # isolated from this aggregate CSV. Do not invent a break-even.
-        fully_sold = values["sold_quantity"] == values["production_quantity"] and values["sold_quantity"] > 0
-        margin = ((values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"]
-                  if fully_sold else None)
-        break_even = values["fixed_cost"] / margin if margin is not None and margin > 0 else None
+        try:
+            revenue = values["sales_revenue"] + values["other_revenue"]
+            contribution = revenue - values["variable_cost"]
+            operating = contribution - values["fixed_cost"]
+            economic = operating - values["opportunity_cost"]
+            # Period-level other revenue has no proven per-unit basis.
+            # If some output remains unsold, the costs of sold units cannot be
+            # isolated from this aggregate CSV. Do not invent a break-even.
+            fully_sold = values["sold_quantity"] == values["production_quantity"] and values["sold_quantity"] > 0
+            margin = ((values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"]
+                      if fully_sold else None)
+            break_even = values["fixed_cost"] / margin if margin is not None and margin > 0 else None
+        except DecimalException as exc:
+            raise ValueError(f"line {line}: numeric magnitude/precision exceeds supported arithmetic") from exc
         # Break-even may be mathematically defined yet exceed reported production.
         if break_even is None:
             break_even_feasibility = "NOT_CALCULABLE"
