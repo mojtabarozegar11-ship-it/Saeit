@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from .service_sales_controls import list_service_cards
 
 def services(request):
     items = [
@@ -11,4 +12,4 @@ def services(request):
     if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
         from .mojplaywin_views import home
         return home(request)
-    return render(request, "core/services.html", {"items": items})
+    return render(request, "core/services.html", {"items": items, "service_offers": list_service_cards()})
