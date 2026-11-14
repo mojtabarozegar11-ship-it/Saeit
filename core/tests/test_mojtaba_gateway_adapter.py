@@ -8,7 +8,9 @@ import pytest
 from django.utils import timezone
 
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
-from core.mojtaba_modules.cyber_security import CyberModuleError
+from core.mojtaba_modules.cyber_security import (
+    CyberModuleError, verify_authorization,
+)
 from core.mojtaba_modules.gateway_adapter import (
     CANONICAL_AGENT_CODE, TOOL_ACTIONS, build_cyber_gateway_tools,
 )
@@ -214,6 +216,21 @@ def test_constant_byte_verifier_key_rejected():
         build_cyber_gateway_tools(b"\\x00" * 32, enable_offline=True)
     with pytest.raises(CyberModuleError, match="VERIFIER_KEY_INVALID"):
         build_cyber_gateway_tools(b"A" * 64, enable_offline=True)
+
+
+def test_direct_authorization_rejects_repeated_verifier_key():
+    """The module boundary must reject weak keys even without the gateway adapter."""
+    weak_key = b"A" * 64
+    grant = signed_manifest()
+    payload = {key: value for key, value in grant.items() if key != "signature"}
+    grant["signature"] = hmac.new(
+        weak_key,
+        json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                   separators=(",", ":"), allow_nan=False).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    with pytest.raises(CyberModuleError, match="VERIFIER_KEY_INVALID"):
+        verify_authorization(grant, weak_key)
 
 
 def test_short_period_repeated_verifier_keys_rejected():
