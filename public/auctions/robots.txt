@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /site-heritage/
+Disallow: /__zm_
+Disallow: /zm-agriculture-guides/
+Sitemap: https://zomorodmelal.ir/sitemap.xml
+Sitemap: https://zomorodmelal.ir/topics/sitemap.xml
+Sitemap: https://zomorodmelal.ir/sitemap-auctions.xml
