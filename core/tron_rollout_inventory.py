@@ -5,7 +5,7 @@ checkout installations. Additional independently owned subdomains need an
 explicit verified registration before anyone can issue an invoice.
 """
 from .signal_commercial_catalog import SIGNAL_BRANDS
-from .tron_tenant_policy import registered_scope
+from .tron_tenant_policy import registered_scope, canonical_host
 
 DISCOVERED_DOMAIN_ANCHORS = ("mojplaywin.com", "zomorodmelal.ir")
 EXTRA_PRIORITY = ("moj_prop",)
@@ -42,8 +42,39 @@ def inspect_rollout(registry=None, extra_owned_domains=None):
         if not isinstance(extra_owned_domains, (tuple, list)):
             raise ValueError("Additional verified domains must be a trusted list")
         anchors = (*anchors, *extra_owned_domains)
+    targets = list(rollout_targets())
+    additional_hosts = set()
+    # Add ONLY operator-supplied exact owned hosts that ALSO have a valid,
+    # fully attested tenant registration. No host wildcards or inherited
+    # payment rights; an extra anchor alone is not a merchant.
+    if extra_owned_domains is not None:
+        trusted_hosts = {canonical_host(host) for host in extra_owned_domains}
+        if isinstance(registry, dict):
+            for key in sorted(registry, key=str):
+                if not isinstance(key, tuple) or len(key) != 2:
+                    continue
+                host, brand = key
+                if (not isinstance(host, str) or not isinstance(brand, str)
+                        or host not in trusted_hosts or host in DISCOVERED_DOMAIN_ANCHORS
+                        or (brand and brand not in SIGNAL_BRANDS)):
+                    continue
+                decision = registered_scope(
+                    host=host, brand=brand, registry=registry,
+                    allowed_anchors=anchors,
+                )
+                if decision.eligible_for_checkout_review is not True:
+                    continue
+                additional_hosts.add(host)
+                targets.append({
+                    "host": host, "brand": brand,
+                    "section": "main_digital_store" if not brand
+                               else "market_signal_subscription",
+                    "path": "/store/" if not brand else f"/{brand}/market-signals/",
+                    "priority": 3 if not brand else 2,
+                })
+    targets.sort(key=lambda x: (x["priority"], x["host"], x["brand"]))
     entries = []
-    for item in rollout_targets():
+    for item in targets:
         decision = registered_scope(
             host=item["host"], brand=item["brand"], registry=registry,
             allowed_anchors=anchors,
@@ -59,6 +90,7 @@ def inspect_rollout(registry=None, extra_owned_domains=None):
     return {
         "known_canonical_site_domains": len(DISCOVERED_DOMAIN_ANCHORS),
         "logical_payment_scopes_not_hosts": len(entries),
+        "additional_registered_site_hosts": len(additional_hosts),
         "brand_routes_per_site": len(SIGNAL_BRANDS),
         "trading_bot": "mojtaba.bot.ai",
         "one_gateway_architecture": True,
