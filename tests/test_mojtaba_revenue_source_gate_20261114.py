@@ -79,8 +79,12 @@ def test_all_12_service_slugs_are_unique_and_allowlisted():
 def test_source_audit_blocks_wrong_service_detail_inquiry_url(sources):
     slug = "website-doctor"
     page = gate.SOURCE_ROOT + "/" + slug + "/index.html"
-    mutate(sources, page, "/earn/inquiry.php?service=website-doctor",
-           "/earn/inquiry.php?service=ai-automation")
+    p = sources / page
+    old = p.read_text("utf-8")
+    assert old.count("/earn/inquiry.php?service=website-doctor") >= 1
+    p.write_text(old.replace("/earn/inquiry.php?service=website-doctor",
+                             "/earn/inquiry.php?service=ai-automation"),
+                 encoding="utf-8")
     result = gate.audit(sources)
     assert not result["source_gate_passed"]
     assert "service_page:website-doctor" in [
@@ -186,8 +190,12 @@ def test_source_read_only_report_never_reports_sku879_as_checkout_verified():
 def test_html_comment_only_inquiry_link_fails_closed(sources):
     slug = "website-doctor"
     file = gate.SOURCE_ROOT + "/" + slug + "/index.html"
-    mutate(sources, file, 'href="/earn/inquiry.php?service=website-doctor"',
-           'href="/earn/inquiry.php?service=unrelated"')
+    p = sources / file
+    old = p.read_text("utf-8")
+    assert old.count('href="/earn/inquiry.php?service=website-doctor"') >= 1
+    p.write_text(old.replace('href="/earn/inquiry.php?service=website-doctor"',
+                             'href="/earn/inquiry.php?service=unrelated"'),
+                 encoding="utf-8")
     assert not gate.audit(sources)["source_gate_passed"]
 
 
