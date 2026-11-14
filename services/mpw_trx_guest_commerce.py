@@ -253,6 +253,49 @@ def patch_public(namespace):
     namespace["purchases"] = purchases
 
 
+def _route_action(route):
+    """Map only canonical guest TRX invoice routes to their protected handler.
+
+    URL patterns can put a Django converter after the action name, as in
+    /commerce/trx-easy/start/<int:product_id>/. The older suffix-only matcher
+    could not bind these real-world URLs, leaving checkout unprotected.
+    """
+    names = {
+        "start": "start_order", "invoice": "show_invoice",
+        "status": "invoice_status", "reconcile": "reconcile_invoice",
+        "download": "download_paid",
+    }
+    if not isinstance(route, str) or not route.startswith("/") or "//" in route or "?" in route or "#" in route:
+        raise RuntimeError("Malformed TRX URL route")
+    pieces = route.strip("/").split("/")
+    operations = [piece for piece in pieces if piece in names]
+    if pieces[:2] != ["commerce", "trx-easy"]:
+        if operations:
+            raise RuntimeError("TRX action route outside checkout prefix")
+        return None
+    actions = [piece for piece in pieces[2:] if piece in names]
+    if not actions:
+        return None
+    if len(actions) != 1 or len(pieces) != 4:
+        raise RuntimeError("Ambiguous TRX URL route")
+
+    def valid_identifier(segment):
+        if segment.isascii() and segment.isdecimal():
+            return segment != "0" and int(segment) > 0
+        if segment.startswith("<") and segment.endswith(">"):
+            converter, sep, variable = segment[1:-1].partition(":")
+            return bool(sep and converter in ("int", "uuid", "str", "slug")
+                        and variable.isidentifier() and not variable.startswith("_"))
+        return False
+
+    first, second = pieces[2:]
+    if first in names and valid_identifier(second):
+        return names[first]
+    if second in names and valid_identifier(first):
+        return names[second]
+    raise RuntimeError("Ambiguous TRX URL route")
+
+
 def patch_commercial(namespace):
     if namespace.get("_mpw_guest_checkout_installed") is True:
         return
@@ -305,11 +348,6 @@ def patch_commercial(namespace):
     # silently leaves the unprotected legacy purchase handlers reachable.
     if not isinstance(patterns, tuple):
         raise RuntimeError("Expected immutable TRX URL pattern tuple")
-    route_names = (
-        ("/start/", "start_order"), ("/invoice/", "show_invoice"),
-        ("/status/", "invoice_status"), ("/reconcile/", "reconcile_invoice"),
-        ("/download/", "download_paid"),
-    )
     seen = set()
     rebuilt = []
     for entry in patterns:
@@ -318,21 +356,8 @@ def patch_commercial(namespace):
         route, view = entry
         if not isinstance(route, str):
             raise RuntimeError("Non-string TRX URL route")
-        # Match a route's terminal action, not an incidental substring.
-        # For example /start/archive/ must not be mistaken for /start/.
-        normalized = route.rstrip("/") + "/"
-        matches = [name for token, name in route_names
-                   if token in normalized]
-        # Never rebind an unrelated endpoint that happens to end in /start/,
-        # /invoice/, etc.  The adapter owns only the TRX checkout URL tree.
-        # Reject a foreign action-shaped route rather than silently hijacking it.
-        if matches and not normalized.startswith("/commerce/trx-easy/"):
-            raise RuntimeError("TRX action route outside checkout prefix")
-        if len(matches) > 1 or (matches and not any(
-                normalized.endswith(token) for token, _ in route_names)):
-            raise RuntimeError("Ambiguous TRX URL route")
-        if matches:
-            name = matches[0]
+        name = _route_action(route)
+        if name:
             if name in seen:
                 raise RuntimeError("Duplicate TRX URL route: " + name)
             seen.add(name)
