@@ -268,13 +268,13 @@ def cpanel_php_registry_snapshot(home: Path) -> dict:
             )
             if "agents" not in tables:
                 return {**base, "state": "agents_table_unavailable"}
-            roles = [
-                (str(code), int(enabled)) for code, enabled in
-                conn.execute("SELECT code, enabled FROM agents ORDER BY code")
-            ]
-            # An unexpected enabled flag must not be silently reported as
-            # disabled: that could falsely support a retirement decision.
-            if any(enabled not in (0, 1) for _, enabled in roles):
+            roles = list(conn.execute(
+                "SELECT code, enabled FROM agents ORDER BY code"
+            ))
+            # Do not coerce SQLite REAL/TEXT/NULL flags: int(1.5) and
+            # int("1") would silently turn malformed values into approvals.
+            if any(type(code) is not str or type(enabled) is not int
+                   or enabled not in (0, 1) for code, enabled in roles):
                 return {**base, "state": "invalid_registry_enabled_flag"}
             known = [
                 {"code": code, "enabled": enabled == 1}
