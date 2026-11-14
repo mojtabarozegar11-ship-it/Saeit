@@ -121,6 +121,7 @@ document.getElementById('cafeInquiry').addEventListener('submit', async function
   }
   button.disabled=true;
   status.textContent='در حال اتصال امن به فرم رسمی شرکت…';
+  status.setAttribute('role','status');
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),12000);
   try{
@@ -156,6 +157,7 @@ document.getElementById('cafeInquiry').addEventListener('submit', async function
     submission.submit();
   }catch(error){
     status.textContent='ارتباط با سامانه برقرار نشد. اطلاعات در همین فرم باقی است؛ دوباره اقدام کنید یا تماس بگیرید.';
+    status.setAttribute('role','alert');
     button.disabled=false;
   }finally{
     clearTimeout(timeout);
