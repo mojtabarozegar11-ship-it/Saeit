@@ -132,6 +132,11 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # Unified TRON merchant gateway: explicit opt-in, never enabled by a code merge.
 TRON_UNIFIED_PUBLIC_ENABLED = env.bool("TRON_UNIFIED_PUBLIC_ENABLED", default=False)
+# Safety: do NOT let discovery/reconcile credit while legacy walletless
+# writer exclusivity has not been independently verified on the host.
+TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED = env.bool(
+    "TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED", default=False,
+)
 TRON_UNIFIED_DISCOVERY_ENABLED = env.bool("TRON_UNIFIED_DISCOVERY_ENABLED", default=False)
 TRON_UNIFIED_SHARED_RATE_LIMIT_READY = env.bool("TRON_UNIFIED_SHARED_RATE_LIMIT_READY", default=False)
 TRON_UNIFIED_RECEIVER = env("TRON_UNIFIED_RECEIVER", default="")
