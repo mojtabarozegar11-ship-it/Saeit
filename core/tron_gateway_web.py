@@ -163,6 +163,13 @@ def _new_invoice(email, host, language, product_id):
     # All database writes are atomic and rolling back a full cart on failure.
     with transaction.atomic():
         product, base_sun, fingerprint = _read_product(product_id, language)
+        # No payable invoice for a nonexistent/mutated digital product.
+        # Validate the actual private bytes before asking for real money.
+        if product.metadata.get("fulfillment_type") == "digital":
+            from .tron_gateway_delivery import _file_from_private_root
+            with _file_from_private_root(product.metadata.get("asset_relpath"),
+                                         product.metadata.get("sha256")):
+                pass
         user = _guest(email)
         order = Order.objects.create(customer=user, status="pending",
                                      total=product.price, currency=product.currency)
