@@ -175,7 +175,7 @@ def _new_invoice(email, host, language, product_id):
                     invoice = TronGatewayInvoice.objects.create(
                         order=order, payment_intent=intent, buyer_email=email,
                         source_host=host, language=language,
-                        receiver=MAINNET_RECEIVER,
+                        buyer_email_sha=_email_key(email), receiver=MAINNET_RECEIVER,
                         amount_sun=base_sun + 1 + secrets.randbelow(10000),
                         issued_ms=now_ms, expires_ms=now_ms + LINK_TTL * 1000,
                         claim_sha256=claim_sha, quote_fingerprint=fingerprint)
@@ -248,7 +248,10 @@ def email_claim(request, token):
     host, _ = _host(request)
     if len(token) > 100 or len(token) < 30:
         raise Http404
-    key = hashlib.sha256(token.encode("ascii")).hexdigest()
+    try:
+        key = hashlib.sha256(token.encode("ascii")).hexdigest()
+    except UnicodeEncodeError:
+        raise Http404("Invalid email claim")
     invoice = TronGatewayInvoice.objects.filter(claim_sha256=key, source_host=host).first()
     if invoice is None or invoice.expires_ms < int(time.time() * 1000):
         raise Http404("Email link expired")
@@ -356,10 +359,6 @@ def recovery_link(request, token):
     except (signing.BadSignature, signing.SignatureExpired, ValueError):
         raise Http404("Recovery link invalid")
     request.session["tron_verified_email"] = payload["e"]
-    invoices = list(TronGatewayInvoice.objects.filter(source_host=host).order_by(
-        "-created_at").filter(buyer_email__in=[
-            x.buyer_email for x in TronGatewayInvoice.objects.filter(
-                source_host=host).only("buyer_email")
-            if hmac.compare_digest(_email_key(x.buyer_email), payload["e"])
-        ])[:20])
+    invoices = list(TronGatewayInvoice.objects.filter(
+        source_host=host, buyer_email_sha=payload["e"]).order_by("-created_at")[:20])
     return _page(request, _context(None, "recovery_list", language, invoices=invoices))
