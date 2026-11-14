@@ -61,5 +61,33 @@ class PolicyTests(unittest.TestCase):
     def test_older_session_legacy_not_duplicated(self): self.assertEqual(policy.replay_inquiry_id([row(when=NOW-50)],FP_A,NOW),1)
 
 
+class NormalizationTests(unittest.TestCase):
+    def test_name_spaces(self): self.assertEqual(policy.normalize_customer_text("  Customer   Example "),"Customer Example")
+    def test_persian_zwnj(self): self.assertEqual(policy.normalize_customer_text("می\u200cخواهم"),"می\u200cخواهم")
+    def test_persian_spaced_text(self): self.assertEqual(policy.normalize_customer_text("  فروشگاه   کشاورزی "),"فروشگاه کشاورزی")
+    def test_name_newline_reject(self):
+        with self.assertRaises(ValueError): policy.normalize_customer_text("A\nB")
+    def test_name_bidi_reject(self):
+        with self.assertRaises(ValueError): policy.normalize_customer_text("A\u202eB")
+    def test_message_crlf_canonical(self): self.assertEqual(policy.normalize_customer_text("A\r\nB",multiline=True),"A\nB")
+    def test_message_tab_newline_allowed(self): self.assertEqual(policy.normalize_customer_text("A\n\tB",multiline=True),"A\n\tB")
+    def test_message_bidi_isolate_rejected(self):
+        with self.assertRaises(ValueError): policy.normalize_customer_text("A\u2066B",multiline=True)
+    def test_zero_width_space_rejected(self):
+        with self.assertRaises(ValueError): policy.normalize_customer_text("A\u200bB")
+    def test_phone_empty_valid(self): self.assertEqual(policy.normalize_optional_phone("  "),"")
+    def test_phone_valid_international(self): self.assertEqual(policy.normalize_optional_phone("+98 (912) 123-4567"),"+98 (912) 123-4567")
+    def test_phone_letters_denied(self):
+        with self.assertRaises(ValueError): policy.normalize_optional_phone("+98-call-me")
+    def test_phone_short_denied(self):
+        with self.assertRaises(ValueError): policy.normalize_optional_phone("123456")
+    def test_phone_long_denied(self):
+        with self.assertRaises(ValueError): policy.normalize_optional_phone("1234567890123456")
+    def test_email_domain_normalized(self): self.assertEqual(policy.normalize_customer_email(" Buyer@EXAMPLE.ORG "),"Buyer@example.org")
+    def test_email_local_preserved(self): self.assertEqual(policy.normalize_customer_email("Buyer@Example.org"),"Buyer@example.org")
+    def test_invalid_email_denied(self):
+        with self.assertRaises(ValueError): policy.normalize_customer_email("no-at-sign")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
