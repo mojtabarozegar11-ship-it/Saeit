@@ -106,3 +106,50 @@ def test_active_service_is_not_silently_reclassified_as_growth_ready():
         growth_experiment({})
     row.refresh_from_db()
     assert row.metadata["commercial_status"] == "mvp_built"
+
+
+@pytest.mark.django_db
+def test_growth_needs_a_genuine_private_deliverable_not_only_metadata():
+    row = seeded("mvp_built")
+    with pytest.raises(ValueError, match="MVP_ASSET_ATTESTATION_MISSING"):
+        growth_experiment({})
+    row.refresh_from_db()
+    assert row.metadata["commercial_status"] == "mvp_built"
+
+
+@pytest.mark.django_db
+def test_growth_advances_only_after_original_private_asset_is_verified(tmp_path):
+    from unittest.mock import patch
+    row = seeded("offer_designed")
+    with patch("core.economic_tool_pack.Path.home", return_value=tmp_path):
+        mvp = mvp_build({})
+        assert mvp["verified_effect"] is True
+        result = growth_experiment({})
+    row.refresh_from_db()
+    assert result["verified_effect"] is True
+    assert row.metadata["commercial_status"] == "growth_ready"
+    assert row.metadata["commercial_release"] == "not_published"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("tamper", ["bytes", "digest", "location"])
+def test_growth_rejects_modified_or_repointed_asset(tmp_path, tamper):
+    from pathlib import Path
+    from unittest.mock import patch
+    row = seeded("offer_designed")
+    with patch("core.economic_tool_pack.Path.home", return_value=tmp_path):
+        mvp_build({})
+        row.refresh_from_db()
+        asset = row.metadata["artifact"]
+        path = Path(asset["relative_path"])
+        if tamper == "bytes":
+            path.write_bytes(path.read_bytes() + b"tampered")
+        elif tamper == "digest":
+            asset["sha256"] = "0" * 64
+        else:
+            asset["relative_path"] = str(tmp_path / "outside-customer-file.html")
+        row.save(update_fields=["metadata"])
+        with pytest.raises(ValueError, match="MVP_ASSET_"):
+            growth_experiment({})
+    row.refresh_from_db()
+    assert row.metadata["commercial_status"] == "mvp_built"
