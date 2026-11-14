@@ -29,7 +29,19 @@ def run(opener=None):
         request=Request(URL, headers={"Accept":"application/json"}, method="GET")
         with browser.open(request, timeout=TIMEOUT) as response:
             status=response.getcode()
-        data.update(http_status=int(status), status=("unexpected_unauthenticated_success" if status==200 else "unexpected_status"))
+            content_type=str(getattr(response,"headers",{}).get("Content-Type","")).lower().split(";",1)[0].strip()
+        if status == 200:
+            # A login page can legitimately return HTTP 200 without API auth.
+            # Neither an HTTP 200 nor a JSON content-type proves an API account.
+            if content_type in ("text/html","application/xhtml+xml"):
+                label="html_response_unauthenticated_login_or_error"
+            elif content_type in ("application/json","text/json"):
+                label="json_response_unauthenticated_review_required"
+            else:
+                label="http200_unauthenticated_unknown_content_type"
+        else:
+            label="unexpected_status"
+        data.update(http_status=int(status), status=label)
     except HTTPError as exc:
         data.update(http_status=int(exc.code),status=("auth_challenge_expected" if exc.code in (401,403) else "http_error"))
     except (URLError, OSError, ValueError, ssl.SSLError) as exc:
