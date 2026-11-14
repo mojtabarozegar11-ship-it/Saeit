@@ -282,9 +282,6 @@ class PropFirmPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.challenge(contract_version="v1.0-user-supplied")
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_fifty_trades_required_across_both_stages_at_final_pass(self):
         self.assertEqual(POLICY.min_closed_trades_per_challenge, 50)
         self.assertTrue(POLICY.trader_bots_allowed)
@@ -316,3 +313,7 @@ if __name__ == "__main__":
         self.assertTrue(POLICY.trader_bots_allowed)
         self.assertFalse(POLICY.real_orders_enabled)
         self.assertFalse(POLICY.trx_checkout_enabled)
+
+
+if __name__ == "__main__":
+    unittest.main()
