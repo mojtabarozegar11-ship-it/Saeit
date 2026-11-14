@@ -54,7 +54,7 @@ jobs:
       SECRET_KEY: temporary-ci-schema-only-not-production
       DEBUG: 'False'
       ALLOWED_HOSTS: localhost,127.0.0.1
-      DATABASE_URL: sqlite:///${{ runner.temp }}/mpw-guest-email-schema-ci.sqlite3
+      DATABASE_URL: sqlite:////tmp/mpw-guest-email-schema-ci.sqlite3
       MPW_GUEST_RECOVERY_ENABLED: 'false'
       MPW_GUEST_RECOVERY_EMAIL_APPROVED: 'false'
     steps:
