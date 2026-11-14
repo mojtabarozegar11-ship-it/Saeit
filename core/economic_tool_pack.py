@@ -493,7 +493,23 @@ def service_package(payload):
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(tmp, 0o600)
-        os.replace(tmp, target)
+        try:
+            # Atomic, no-clobber publication. os.replace allowed two workers to
+            # overwrite the same output and both claim a new verified effect.
+            os.link(tmp, target, follow_symlinks=False)
+        except FileExistsError:
+            if (target.is_symlink() or not target.is_file()
+                    or target.read_bytes() != document.encode("utf-8")):
+                raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION")
+            return {
+                "action_performed": "Reused independently verified private service package.",
+                "verified_effect": False,
+                "evidence": _evidence("existing_service_package", {
+                    "service_code": payload["service_code"], "input_sha256": digest,
+                }),
+                "revenue_not_assessed": True,
+                "next_action": "owner_review_existing_deliverable",
+            }
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
