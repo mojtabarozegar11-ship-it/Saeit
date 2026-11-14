@@ -20,6 +20,8 @@ EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
 ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
+    "bitstamp-public-ohlc",
+    "binance-public-klines",
     "kraken-spot-public-ohlc",
     "bitfinex-public-candles",
 })

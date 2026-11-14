@@ -83,6 +83,30 @@ class ObservationConsumerTests(unittest.TestCase):
             with self.assertRaises(consumer.ObservationError):
                 consumer.read_observation(source, self.now)
 
+    def test_all_observer_fallback_sources_are_consumable(self):
+        # These exact provider identifiers are emitted by the market observer.
+        providers = (
+            "coinbase-exchange-public-candles",
+            "bitstamp-public-ohlc",
+            "binance-public-klines",
+            "kraken-spot-public-ohlc",
+            "bitfinex-public-candles",
+        )
+        with tempfile.TemporaryDirectory() as root:
+            private = Path(root) / "private"
+            private.mkdir(mode=0o700)
+            source = private / "observation.json"
+            for provider in providers:
+                with self.subTest(provider=provider):
+                    item = payload(self.now)
+                    item["signals"][0]["data_source"] = provider
+                    source.write_text(json.dumps(item), encoding="utf-8")
+                    os.chmod(source, 0o600)
+                    report = consumer.read_observation(source, self.now)
+                    self.assertEqual(report["signals"][0]["data_source"], provider)
+                    self.assertEqual(report["execution"], "disabled")
+                    self.assertEqual(report["orders"], 0)
+
     def test_rejects_missing_signal_identity_or_method(self):
         for field in ("id", "method"):
             with tempfile.TemporaryDirectory() as root:
