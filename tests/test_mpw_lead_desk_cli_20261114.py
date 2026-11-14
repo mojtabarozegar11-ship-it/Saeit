@@ -105,7 +105,7 @@ class CommercialLeadDeskTests(unittest.TestCase):
 
     def test_11_summary_extra_argument_rejected(self):
         proc=self.execute('summary','secret');self.assertEqual(proc.returncode,2)
-        self.assertIn('EXTRA_ARGUMENTS',proc.stderr)
+        self.assertIn('INVALID_PAGE',proc.stderr)
 
     def test_12_malformed_json_counted_invalid(self):
         p=self.root/('20261114-'+'1'*18+'.json');p.write_text('{');p.chmod(0o600)
@@ -191,6 +191,52 @@ class CommercialLeadDeskTests(unittest.TestCase):
         self.payload();before={p.name:p.read_bytes() for p in self.root.iterdir() if p.is_file()}
         self.summary();self.summary();after={p.name:p.read_bytes() for p in self.root.iterdir() if p.is_file()}
         self.assertEqual(before,after)
+
+
+    def test_33_pending_reference_list_is_pseudonymous(self):
+        _,name=self.payload();v=self.summary()
+        self.assertEqual(v['pending_references'],[name[9:27]])
+        self.assertNotIn('synthetic@client.example',json.dumps(v))
+
+    def test_34_recent_leads_prioritized(self):
+        self.payload(service='website-doctor');_,newest=self.payload(service='ai-automation')
+        v=self.summary();self.assertEqual(v['pending_references'][0],newest[9:27])
+
+    def test_35_pending_references_bounded_to_25(self):
+        for _ in range(30): self.payload()
+        v=self.summary();self.assertEqual(len(v['pending_references']),25)
+        self.assertTrue(v['pending_refs_truncated'])
+
+    def test_36_pending_summary_excludes_notified_marker(self):
+        _,name=self.payload();import hashlib
+        mark=self.root/('.owner-dispatched-'+hashlib.sha256(name.encode()).hexdigest()+'.json')
+        mark.write_text('notified');mark.chmod(0o600)
+        v=self.summary();self.assertEqual(v['pending_references'],[])
+
+    def test_37_invalid_page_0_rejected(self):
+        x=self.execute('summary','0');self.assertEqual(x.returncode,2)
+        self.assertIn('INVALID_PAGE',x.stderr)
+
+    def test_38_invalid_page_10000_rejected(self):
+        x=self.execute('summary','10000');self.assertEqual(x.returncode,2)
+        self.assertIn('INVALID_PAGE',x.stderr)
+
+    def test_39_page_two_scans_remaining_not_hidden(self):
+        for i in range(501):
+            name=f'20261114-{i+1:018X}.json'
+            p=self.root/name;p.write_text('not-json');p.chmod(0o600)
+        first=self.summary();second=self.execute('summary','2')
+        self.assertEqual(second.returncode,0,second.stderr)
+        v=json.loads(second.stdout.split('=',1)[1]);self.assertEqual(first['scanned'],500)
+        self.assertEqual(v['scanned'],1);self.assertEqual(v['page'],2)
+        self.assertEqual((v['total_files'],v['total_pages']),(501,2))
+        self.assertTrue(v['backlog_truncated'])
+
+    def test_40_page_outside_range_is_empty_not_misleading(self):
+        self.payload();r=self.execute('summary','2');self.assertEqual(r.returncode,0)
+        v=json.loads(r.stdout.split('=',1)[1]);self.assertEqual(v['scanned'],0)
+        self.assertEqual(v['total_files'],1)
+
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
