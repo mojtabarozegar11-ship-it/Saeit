@@ -43,7 +43,10 @@ def offer(brand, locale):
         "fa": "سیگنال‌های بازار — وضعیت عرضه و راستی‌آزمایی مستقل",
         "ar": "إشارات السوق — حالة الخدمة والتحقق المستقل",
     }
-    prefix = "ar/" if locale == "ar" else ""
+    # All 51 brand/locale offerings need uniquely addressable routes.
+    # Default host-language route still serves the existing English/Persian
+    # pages; the explicit /fa/ and /ar/ paths work on either owned website.
+    prefix = "" if locale == "en" else locale + "/"
     return SignalOffer(
         brand=brand,
         locale=locale,
