@@ -1,0 +1,62 @@
+name: Mojtaba private asset byte evidence — offline owner-gate tests
+
+on:
+  pull_request:
+    branches:
+      - fix/mojtaba-format-aware-fulfillment-20261114
+    paths:
+      - 'core/private_asset_byte_evidence.py'
+      - 'core/economic_master_agent.py'
+      - 'core/management/commands/mojtaba_private_asset_readonly.py'
+      - 'core/tests/test_mojtaba_private_asset_owner_gate_20261114.py'
+      - 'tests/test_mojtaba_private_asset_bytes_20261114.py'
+      - '.github/workflows/mojtaba-private-asset-byte-evidence-ci.yml'
+      - 'docs/revenue-p0/mojtaba_private_asset_byte_evidence_20261114.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-private-byte-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  no-remote-access:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 16
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "isolated-private-asset-byte-proof"
+      ALLOWED_HOSTS: "testserver,localhost,127.0.0.1,mojplaywin.com"
+      EMAIL_BACKEND: "django.core.mail.backends.locmem.EmailBackend"
+      TRADE_EMAIL_ENABLED: "false"
+      CROWN_STORE_ENABLED: "false"
+      MPW_PRIVATE_ASSET_AUDIT_APPROVED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Python syntax and standalone local filesystem security tests
+        run: |
+          python -m py_compile \
+            core/private_asset_byte_evidence.py \
+            core/economic_master_agent.py \
+            core/management/commands/mojtaba_private_asset_readonly.py \
+            tests/test_mojtaba_private_asset_bytes_20261114.py \
+            core/tests/test_mojtaba_private_asset_owner_gate_20261114.py
+          python -m unittest discover -s tests -p 'test_mojtaba_private_asset_bytes_20261114.py' -v
+      - name: Install existing pinned dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django system check without network/provider access
+        run: python manage.py check
+      - name: Isolated read-only file, buyer and prior format gate tests
+        run: |
+          python -m pytest -q \
+            core/tests/test_mojtaba_private_asset_owner_gate_20261114.py \
+            tests/test_mojtaba_private_asset_bytes_20261114.py \
+            core/tests/test_mojtaba_fulfillment_formats_20261114.py \
+            core/tests/test_mojtaba_fulfillment_preflight_20261114.py
