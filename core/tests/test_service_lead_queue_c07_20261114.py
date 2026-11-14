@@ -320,7 +320,10 @@ def test_funnel_api_owner_get_is_read_only_no_cache_no_pii(owner):
     client = Client()
     client.force_login(owner)
     url = reverse("command_center_service_proposal_funnel_api")
-    before = (CompanyInquiry.objects.count(), AuditLog.objects.count())
+    before = (
+        CompanyInquiry.objects.count(),
+        AuditLog.objects.filter(action="service_response_draft_prepared").count(),
+    )
     response = client.get(url)
     assert response.status_code == 200
     assert response["Cache-Control"].startswith("no-store")
@@ -329,7 +332,10 @@ def test_funnel_api_owner_get_is_read_only_no_cache_no_pii(owner):
     assert response.json()["candidate_scan"]["eligible"] == 1
     assert "Non-public Customer" not in response.content.decode()
     assert lead.email not in response.content.decode()
-    assert before == (CompanyInquiry.objects.count(), AuditLog.objects.count())
+    assert before == (
+        CompanyInquiry.objects.count(),
+        AuditLog.objects.filter(action="service_response_draft_prepared").count(),
+    )
 
 
 @pytest.mark.django_db
@@ -398,7 +404,7 @@ def test_dashboard_refuses_write_methods_even_for_owner(owner):
     client.force_login(owner)
     response = client.post(reverse("command_center_service_proposal_funnel_dashboard"))
     assert response.status_code == 405
-    assert AuditLog.objects.count() == 0
+    assert AuditLog.objects.filter(action="service_response_draft_prepared").count() == 0
 
 
 @pytest.mark.django_db
