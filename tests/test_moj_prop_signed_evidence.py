@@ -193,13 +193,24 @@ class BrokerSignedEvidenceTests(TestCase):
         self.assertEqual(projection["net_profit"], 0)
         self.assertIsNone(projection["assessment"])
 
-    def test_event_id_can_be_unique_within_separate_record_types(self):
+    def test_cross_type_replay_of_upstream_event_id_is_rejected(self):
         ingest_signed_evidence(**self.packet(event_id="same-event"))
+        with self.assertRaisesRegex(EvidenceRejected, "reused across event types"):
+            ingest_signed_evidence(**self.packet(
+                event_type="equity", event_id="same-event",
+                data={"equity_usd": "100", "is_session_open": False},
+            ))
+        self.assertEqual(PropExecution.objects.count(), 1)
+        self.assertEqual(PropEquityObservation.objects.count(), 0)
+
+    def test_reverse_cross_type_replay_is_rejected(self):
         ingest_signed_evidence(**self.packet(
             event_type="equity", event_id="same-event",
             data={"equity_usd": "100", "is_session_open": False},
         ))
-        self.assertEqual(PropExecution.objects.count(), 1)
+        with self.assertRaisesRegex(EvidenceRejected, "reused across event types"):
+            ingest_signed_evidence(**self.packet(event_id="same-event"))
+        self.assertEqual(PropExecution.objects.count(), 0)
         self.assertEqual(PropEquityObservation.objects.count(), 1)
 
     def test_trailing_zeros_up_to_four_places_accepted(self):
