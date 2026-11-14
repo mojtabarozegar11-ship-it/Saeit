@@ -619,7 +619,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         source = (root / "services/mpw_trx_guest_commerce.py").read_bytes()
         self.assertIn(b"bound_checkout", source)
         self.assertIn(b"mpw_trx_email_recovery", source)
-        with self.assertRaisesRegex(RuntimeError, "EMAIL_REQUIRED_SOURCE_CONTRACT_NOT_PROVEN"):
+        with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
             verify_email_free_guest_source(source)
         for old, new in (
             (b"httponly=True", b"httponly=False"),
@@ -628,7 +628,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (b"rights_cleared_for_sale(", b"skip_rights_gate("),
         ):
             with self.subTest(mutation=old):
-                with self.assertRaisesRegex(RuntimeError, "EMAIL_REQUIRED_SOURCE_CONTRACT_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
                     verify_email_free_guest_source(source.replace(old, new))
 
     def test_invoice_source_dependency_preflight_fails_closed(self):
