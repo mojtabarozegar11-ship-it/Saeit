@@ -15,6 +15,13 @@ class FarmEconomicsTests(unittest.TestCase):
     def test_partial_sell_through_blocks_unallocated_unit_cost(self):
         row=BASE.copy();row[6]="100";row[7]="80"
         self.assertEqual(validate_csv(sample(row))[0]["break_even_units"],"NOT_ATTAINABLE")
+    def test_revenue_without_sold_quantity(self):
+        row=BASE.copy();row[7]="0";row[8]="800"
+        with self.assertRaisesRegex(ValueError,"sales revenue without sold quantity"):
+            validate_csv(sample(row))
+    def test_other_revenue_without_sales_is_allowed(self):
+        row=BASE.copy();row[7]="0";row[8]="0"
+        self.assertEqual(validate_csv(sample(row))[0]["economic_profit"],"-530")
     def test_negative(self):
         row=BASE.copy();row[10]="-1"
         with self.assertRaises(ValueError):validate_csv(sample(row))
