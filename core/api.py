@@ -3,6 +3,13 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
+from .commerce_integrity import (
+    strict_id, strict_quantity, strict_key, valid_currency, valid_provider,
+    valid_event_id, valid_provider_ref, valid_provider_allowlist, exact_money,
+    exact_total, provider_amount, ledger_reference,
+)
+from django.db import IntegrityError
+
 from .approval import ApprovalService
 from .chat_operation_security import is_authorized_chat_operator
 from .task_runtime import TaskExecutionError, TaskRuntime
@@ -259,40 +266,56 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
     owner_field = "customer"
 
     def create(self, request, *args, **kwargs):
-        product_id = request.data.get("product_id")
-        quantity = request.data.get("quantity", 1)
-        try:
-            quantity = int(quantity)
-        except (TypeError, ValueError):
-            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        if quantity < 1:
-            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
-        except (Product.DoesNotExist, TypeError, ValueError):
-            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
+        """Issue a bounded pending order from a locked, currently active SKU.
 
-        from django.db import transaction
+        The database lock and eligibility check MUST share one atomic
+        transaction (PostgreSQL rejects SELECT FOR UPDATE outside it).
+        Buyer-supplied status/price/customer fields are never authoritative.
+        """
+        try:
+            product_id = strict_id(request.data.get("product_id"))
+            quantity = strict_quantity(request.data.get("quantity", 1))
+        except ValueError:
+            return Response(
+                {"detail": "A valid product ID and quantity from 1 to 100 are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
+            product = (Product.objects.select_for_update()
+                       .select_related("knowledge_article")
+                       .filter(pk=product_id, active=True,
+                               knowledge_article__published=True).first())
+            if product is None:
+                return Response(
+                    {"detail": "Active, published-knowledge-backed product not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            try:
+                total = exact_total(product.price, quantity)
+            except ValueError:
+                return Response(
+                    {"detail": "Product price or calculated order total is invalid."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if not valid_currency(product.currency):
+                return Response(
+                    {"detail": "Product currency is not configured for an invoice."},
+                    status=status.HTTP_409_CONFLICT,
+                )
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",
-                total=product.price * quantity,
+                total=total,
                 currency=product.currency,
             )
             item = OrderItem.objects.create(
-                order=order,
-                product=product,
-                quantity=quantity,
-                unit_price=product.price,
-                currency=product.currency,
+                order=order, product=product, quantity=quantity,
+                unit_price=product.price, currency=product.currency,
             )
         return Response(
-            {
-                "order": OrderSerializer(order).data,
-                "item": OrderItemSerializer(item).data,
-                "status": "created",
-            },
+            {"order": OrderSerializer(order).data,
+             "item": OrderItemSerializer(item).data, "status": "created"},
             status=status.HTTP_201_CREATED,
         )
 
@@ -311,50 +334,68 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create")
     def create_intent(self, request):
-        order_id = request.data.get("order_id")
-        key = str(request.data.get("idempotency_key", "")).strip()
-        if not order_id or not key:
+        """Create at most one pending gateway intent per order, atomically."""
+        try:
+            order_id = strict_id(request.data.get("order_id"))
+            key = strict_key(request.data.get("idempotency_key"))
+        except ValueError:
             return Response(
-                {"detail": "order_id and idempotency_key are required."},
+                {"detail": "Valid order ID and bounded idempotency key are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        order = Order.objects.filter(pk=order_id, customer=request.user).first()
-        if order is None:
-            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-        if order.status != "pending":
-            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
-
-        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.order_id != order.pk:
-                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
-            return Response(
-                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                status=status.HTTP_200_OK,
-            )
-
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
+        try:
+            with transaction.atomic():
+                order = (Order.objects.select_for_update()
+                         .filter(pk=order_id, customer=request.user).first())
+                if order is None:
+                    return Response({"detail": "Order not found."},
+                                    status=status.HTTP_404_NOT_FOUND)
+                if order.status != "pending":
+                    return Response({"detail": "Only pending orders can start payment."},
+                                    status=status.HTTP_409_CONFLICT)
+                try:
+                    exact_money(order.total)
+                except ValueError:
+                    return Response({"detail": "Order amount is invalid."},
+                                    status=status.HTTP_409_CONFLICT)
+                if not valid_currency(order.currency):
+                    return Response({"detail": "Order currency is invalid."},
+                                    status=status.HTTP_409_CONFLICT)
+                existing = (PaymentIntent.objects.select_for_update()
+                            .filter(order=order).first())
+                if existing is not None:
+                    if existing.idempotency_key != key:
+                        return Response({"detail": "This order already has a payment intent."},
+                                        status=status.HTTP_409_CONFLICT)
+                    return Response(
+                        {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                        status=status.HTTP_200_OK,
+                    )
+                if PaymentIntent.objects.filter(idempotency_key=key).exists():
+                    return Response(
+                        {"detail": "Idempotency key belongs to another order."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                intent = PaymentIntent.objects.create(
+                    order=order, amount=order.total, currency=order.currency,
+                    idempotency_key=key, status="awaiting_approval",
+                    provider="not_configured",
+                )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment", target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Owner approval required before initiating an external payment.",
+                    risk="critical", requested_by=request.user,
+                )
+        except IntegrityError:
+            # Concurrent unique-key/order collision must not become a 500 or
+            # accidentally create an unapproved second intent.
+            return Response({"detail": "Payment request already exists."},
+                            status=status.HTTP_409_CONFLICT)
         return Response(
-            {
-                "status": "approval_required",
-                "payment_intent": self.get_serializer(intent).data,
-                "approval": ApprovalRequestSerializer(approval).data,
-            },
+            {"status": "approval_required",
+             "payment_intent": self.get_serializer(intent).data,
+             "approval": ApprovalRequestSerializer(approval).data},
             status=status.HTTP_202_ACCEPTED,
         )
 
