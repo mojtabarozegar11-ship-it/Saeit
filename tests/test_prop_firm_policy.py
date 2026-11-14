@@ -143,5 +143,70 @@ class PropFirmPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             authorize_funding(requested_capital=100,unencumbered_cash=-1,payout_reserve=0)
 
+
+    def test_challenge_requires_literal_verified_evidence(self):
+        for untrusted in ("yes", "true", 1, ["approved"], object()):
+            with self.subTest(untrusted=repr(untrusted)):
+                decision = self.challenge(evidence_verified=untrusted)
+                self.assertFalse(decision.passed)
+                self.assertIn("reconciled_evidence_required", decision.reasons)
+
+    def test_phase_two_prior_success_must_be_literal_boolean(self):
+        for untrusted in ("yes", 1, ["pass"]):
+            with self.subTest(value=repr(untrusted)):
+                result = self.challenge(
+                    phase=2, realized_net_profit="6", max_profitable_day="1.8",
+                    prior_phase_passed=untrusted,
+                )
+                self.assertIn("phase_one_pass_required", result.reasons)
+
+    def test_promotion_funding_and_broker_evidence_fail_on_truthy_fakes(self):
+        kwargs = dict(
+            level_index=0, realized_monthly_profit="4",
+            trading_days=12, max_profitable_day="1",
+            risk=self.risk(equity=104, open_equity=104),
+            evidence_verified=True, funding_for_next_level=True,
+        )
+        for field in ("evidence_verified", "funding_for_next_level"):
+            for untrusted in ("yes", 1, ["approved"]):
+                with self.subTest(field=field, value=repr(untrusted)):
+                    result = assess_promotion(**{**kwargs, field: untrusted})
+                    self.assertFalse(result.eligible)
+                    self.assertIn(
+                        "reconciled_evidence_required" if field == "evidence_verified"
+                        else "next_level_funding_not_confirmed", result.reasons,
+                    )
+
+    def test_funding_requires_four_literal_true_attestations(self):
+        kwargs = dict(
+            requested_capital=100, unencumbered_cash=200, payout_reserve=20,
+            legal_approved=True, broker_approved=True,
+            kyc_approved=True, contracts_signed=True,
+        )
+        for field in ("legal_approved", "broker_approved",
+                      "kyc_approved", "contracts_signed"):
+            for value in ("approved", 1, {"pass": True}):
+                with self.subTest(field=field, value=repr(value)):
+                    self.assertFalse(
+                        authorize_funding(**{**kwargs, field: value}).authorized,
+                    )
+
+    def test_challenge_orders_require_literal_stop_and_broker_snapshot(self):
+        kwargs = dict(
+            account_capital=100, equity=100, day_open_equity=100,
+            risk_at_stop="0.4", open_risk_before=0, broker_minimum_risk="0.2",
+            verified_stop=True, authoritative_snapshot=True, mode="challenge",
+        )
+        self.assertTrue(authorize_order(**kwargs).allowed)
+        for field, reason in (
+            ("verified_stop", "stop_loss_required"),
+            ("authoritative_snapshot", "authoritative_broker_snapshot_required"),
+        ):
+            for value in ("yes", 1, {"status": "approved"}):
+                with self.subTest(field=field, value=repr(value)):
+                    decision = authorize_order(**{**kwargs, field: value})
+                    self.assertFalse(decision.allowed)
+                    self.assertIn(reason, decision.reasons)
+
 if __name__ == "__main__":
     unittest.main()
