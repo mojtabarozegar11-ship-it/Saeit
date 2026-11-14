@@ -53,10 +53,12 @@ def canonical_host(value):
 def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
     """Caller registry must be separately protected configuration, not HTTP JSON."""
     actual = canonical_host(host)
+    if not isinstance(brand, str):
+        # Untrusted JSON arrays/maps are unhashable. Validate the type BEFORE
+        # membership in a frozenset so a bad brand cannot trigger HTTP 500.
+        raise ValueError("Brand must be text")
     if brand and brand not in ACCEPTED_BRANDS:
         raise ValueError("Unknown branded route")
-    if not isinstance(brand, str):
-        raise ValueError("Brand must be text")
     anchors = DEFAULT_ALLOWED_ANCHORS if allowed_anchors is None else allowed_anchors
     if not isinstance(anchors, (tuple, list, set)) or not anchors:
         raise ValueError("Trusted anchor domains missing")
