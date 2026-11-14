@@ -9,12 +9,12 @@ from core.company_inquiry_models import CompanyInquiry
 
 
 class FarmInquiryPipelineTests(TestCase):
-    def insert(self, *, subject="ZM-FARM | درخواست تحلیل اقتصادی مزرعه", kind="commercial", status="new"):
+    def insert(self, *, subject="ZM-FARM | درخواست تحلیل اقتصادی مزرعه", kind="commercial", status="new", note="INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=farm"):
         return CompanyInquiry.objects.create(
             kind=kind, name="Private Customer Name",
             email="confidential@example.org", phone="09120000000",
             subject=subject, message="confidential farmland numbers",
-            status=status,
+            status=status, internal_note=note,
         )
 
     def run_report(self, days=30):
@@ -73,3 +73,23 @@ class FarmInquiryPipelineTests(TestCase):
         report, _ = self.run_report()
         self.assertIn("observed_at", report)
         self.assertEqual(report["data_source"], "configured Django CompanyInquiry database")
+
+    def test_generic_portal_subject_spoof_does_not_enter_farm_funnel(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=2026-11-14T12:00:00+00:00; source=company")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_no_server_consent_stamp_does_not_enter_farm_funnel(self):
+        self.insert(note="")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_subject_prefix_but_other_title_does_not_enter_farm_funnel(self):
+        self.insert(subject="ZM-FARM | customer-chosen forged other title")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
+
+    def test_forged_suffix_does_not_enter_farm_funnel(self):
+        self.insert(note="INTAKE_CONSENT_V1; confirmed_at=x; source=farm; source=company")
+        report, _ = self.run_report()
+        self.assertEqual(report["matched_inquiries"], 0)
