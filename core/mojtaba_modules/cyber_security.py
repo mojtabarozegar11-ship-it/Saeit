@@ -55,8 +55,11 @@ def _canonical(document: dict) -> bytes:
     if not isinstance(document, dict):
         raise CyberModuleError("AUTHORIZATION_INVALID")
     payload = {key: value for key, value in document.items() if key != "signature"}
-    return json.dumps(payload, sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":"), allow_nan=False).encode("utf-8")
+    try:
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                          separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise CyberModuleError("AUTHORIZATION_INVALID") from exc
 
 
 def _timestamp(value: str) -> datetime:
