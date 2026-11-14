@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory, override_settings
 from django.http import Http404
+from django.db import transaction, IntegrityError
 
-from core.models import LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent, Product
+from core.models import LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent, Product, TronMainnetSettlementClaim
 from core.tron_gateway_invoice import TronGatewayInvoice
 from core.tron_gateway_verify import MAINNET_RECEIVER
 from core.tron_gateway_web import (
@@ -23,9 +24,11 @@ PROOF = {
     "block_height": 9999999,
     "block_time_ms": 1800000000000,
     "proof_digest": "b" * 64,
+    "finality": "solidified",
 }
 
 
+@override_settings(TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED=True)
 class CommerceGatewayIntegrityTests(TestCase):
     def setUp(self):
         self.product = Product.objects.create(
@@ -87,6 +90,7 @@ class CommerceGatewayIntegrityTests(TestCase):
         self.assertEqual(invoice.payment_intent.status, "paid")
         self.assertEqual(PaymentWebhookEvent.objects.filter(event_id=PROOF["txid"]).count(), 1)
         self.assertEqual(LedgerEntry.objects.count(), 1)
+        self.assertEqual(TronMainnetSettlementClaim.objects.count(), 1)
         self.assertEqual(
             LedgerEntry.objects.get().metadata["source_host"], "mojplaywin.com")
 
@@ -139,6 +143,75 @@ class CommerceGatewayIntegrityTests(TestCase):
         self.assertTrue(_record_paid(one.pk, PROOF))
         self.assertFalse(_record_paid(two.pk, PROOF))
         self.assertEqual(LedgerEntry.objects.count(), 1)
+
+
+    @override_settings(TRON_UNIFIED_SETTLEMENT_EXCLUSIVE_CONFIRMED=False)
+    def test_missing_exclusive_legacy_writer_proof_prevents_all_new_credits(self):
+        invoice = self._payable()
+        self.assertFalse(_record_paid(invoice.pk, PROOF))
+        self.assertFalse(TronMainnetSettlementClaim.objects.exists())
+        self.assertFalse(PaymentWebhookEvent.objects.exists())
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_single_canonical_claim_and_idempotent_paid_retry(self):
+        invoice = self._payable()
+        self.assertTrue(_record_paid(invoice.pk, PROOF))
+        self.assertTrue(_record_paid(invoice.pk, PROOF))
+        claim = TronMainnetSettlementClaim.objects.get(txid=PROOF["txid"])
+        self.assertEqual(claim.payment_intent_id, invoice.payment_intent_id)
+        self.assertEqual(claim.invoice_id, invoice.pk)
+        self.assertEqual(TronMainnetSettlementClaim.objects.count(), 1)
+
+    def test_nonfinalized_fabricated_proof_denied(self):
+        invoice = self._payable()
+        self.assertFalse(_record_paid(invoice.pk, dict(PROOF, finality="confirmed")))
+        self.assertFalse(TronMainnetSettlementClaim.objects.exists())
+
+    def test_missing_proof_digest_denied(self):
+        invoice = self._payable()
+        invalid = dict(PROOF)
+        invalid.pop("proof_digest")
+        self.assertFalse(_record_paid(invoice.pk, invalid))
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_invalid_sender_denied_before_db_claim(self):
+        invoice = self._payable()
+        self.assertFalse(_record_paid(invoice.pk, dict(PROOF, sender_hex="bad")))
+        self.assertFalse(TronMainnetSettlementClaim.objects.exists())
+
+    def test_unrelated_preexisting_claim_cannot_block_new_tx(self):
+        first = self._payable()
+        second = self._payable("other@example.com")
+        self.assertTrue(_record_paid(first.pk, dict(PROOF, txid="d"*64)))
+        self.assertTrue(_record_paid(second.pk, PROOF))
+        self.assertEqual(TronMainnetSettlementClaim.objects.count(), 2)
+
+    def test_claim_primary_key_prevents_unrelated_provider_reuse(self):
+        invoice = self._payable()
+        TronMainnetSettlementClaim.objects.create(
+            txid=PROOF["txid"], provider="mpw_walletless_trx_v1",
+            invoice=invoice, payment_intent=invoice.payment_intent,
+            proof_digest="c"*64,
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                _record_paid(invoice.pk, PROOF)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, "awaiting_payment")
+        self.assertEqual(TronMainnetSettlementClaim.objects.count(), 1)
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_claim_rolls_back_when_financial_event_fails(self):
+        invoice = self._payable()
+        with patch("core.tron_gateway_web.PaymentWebhookEvent.objects.create",
+                   side_effect=IntegrityError("simulated failed event write")):
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    _record_paid(invoice.pk, PROOF)
+        self.assertFalse(TronMainnetSettlementClaim.objects.exists())
+        self.assertFalse(LedgerEntry.objects.exists())
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, "awaiting_payment")
 
     def test_expired_price_quote_cannot_start_sale(self):
         self.product.metadata["tron_quote_valid_until_ms"] = int(time.time() * 1000) - 1
