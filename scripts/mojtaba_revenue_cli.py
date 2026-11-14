@@ -17,6 +17,7 @@ from mojtaba_revenue_portfolio import (CANONICAL_BOT, OFFERS, evaluate,
                                         synthetic_kpis)
 from mojtaba_revenue_margin import estimate as estimate_synthetic_margin
 from mojtaba_farm_break_even import model as farm_model
+from mojtaba_farm_review_report import render as render_farm_review
 
 MAX_BYTES = 32768
 
@@ -40,11 +41,14 @@ def load_bounded_json(file_path: Path) -> dict:
 
 
 def output_private(target: Path, result: dict, input_path: Path) -> None:
+    return output_private_text(target, json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\\n", input_path)
+
+
+def output_private_text(target: Path, text: str, input_path: Path) -> None:
     if target.is_symlink() or target.resolve() == input_path.resolve():
         raise ValueError("OUTPUT_PATH_REJECTED")
     if not target.parent.is_dir() or target.parent.is_symlink():
         raise ValueError("OUTPUT_DIRECTORY_INVALID")
-    text = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     # Exclusive creation avoids overwrites, including race-created symlinks.
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
@@ -79,6 +83,7 @@ def main(argv=None) -> int:
     cmd.add_argument("--synthetic-kpis", type=Path, help="synthetic counts only")
     cmd.add_argument("--synthetic-margin", type=Path, help="synthetic currency-safe cost model; NEVER a quote")
     cmd.add_argument("--farm-analysis", type=Path, help="farm break-even and 27 sensitivities on aggregate numbers; not a quote")
+    cmd.add_argument("--farm-report", type=Path, help="Persian 27-scenario Markdown review worksheet; no invoice")
     parser.add_argument("--output", type=Path, help="create a NEW private 0600 JSON file")
     args = parser.parse_args(argv)
     try:
@@ -92,12 +97,21 @@ def main(argv=None) -> int:
             result = estimate_synthetic_margin(load_bounded_json(args.synthetic_margin))
         elif args.farm_analysis:
             result = farm_model(load_bounded_json(args.farm_analysis))
+        elif args.farm_report:
+            result = render_farm_review(load_bounded_json(args.farm_report))
         else:
             result = synthetic_kpis(load_bounded_json(args.synthetic_kpis))
+        input_path = args.qualify or args.synthetic_margin or args.farm_analysis or args.farm_report or args.synthetic_kpis
         if args.output:
-            output_private(args.output, result, args.qualify or args.synthetic_margin or args.farm_analysis or args.synthetic_kpis)
+            if args.farm_report:
+                output_private_text(args.output, result, input_path)
+            else:
+                output_private(args.output, result, input_path)
         else:
-            print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            if args.farm_report:
+                print(result, end="")
+            else:
+                print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     except (ValueError, OSError, PermissionError) as exc:
         # Do not reveal sensitive file paths, JSON content, or external tokens.
         print("MOJTABA_REVENUE_CLI=blocked_invalid_or_unsafe_input", file=sys.stderr)
