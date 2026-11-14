@@ -167,7 +167,9 @@ class _CheckoutFormInspector(HTMLParser):
             props = dict(attrs)
             name = str(props.get("name") or "").strip().lower()
             kind = str(props.get("type") or "text").strip().lower()
-            if kind not in ("hidden", "submit", "button", "checkbox", "radio"):
+            if (kind not in ("hidden", "submit", "button", "checkbox", "radio")
+                    and "required" in names and
+                    not any(flag in names for flag in ("disabled", "readonly", "hidden"))):
                 if name in ("email", "buyer_email", "customer_email", "purchase_email") or kind == "email":
                     self._active["email"] = True
             if name == "csrfmiddlewaretoken" and kind == "hidden":
