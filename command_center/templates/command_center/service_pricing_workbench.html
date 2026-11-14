@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>اقتصاد خدمات و بررسی قیمت داخلی | mojtaba.bot.ai</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#f3f6f9;color:#192f42;line-height:1.8}main{max-width:1000px;padding:24px 14px;margin:auto}.box{background:#fff;border:1px solid #dbe3eb;border-radius:14px;padding:20px;margin:16px 0}.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}.field{display:flex;flex-direction:column;gap:3px}.field label{font-weight:700;font-size:.91rem}input,select{width:100%;padding:11px;border:1px solid #afbbc7;border-radius:8px;font:inherit;background:white}button,a.link{padding:10px 17px;border-radius:8px;border:0;background:#11645e;color:#fff;cursor:pointer;text-decoration:none;font:inherit;display:inline-block}h1{font-size:1.45rem}h2{font-size:1.18rem}.warn{border-right:5px solid #ae7a2b}.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.kv div{padding:12px;background:#f3f7f9;border-radius:10px}.kv strong{display:block;font-size:1.25rem}.errorlist{color:#9d1833}.muted{color:#536574;font-size:.9rem}@media(max-width:550px){main{padding:12px}h1{font-size:1.22rem}}
+</style>
+</head><body><main>
+<a class="link" href="{% url 'command_center_service_proposal_funnel_dashboard' %}">بازگشت به کارتابل درخواست‌های خدمات</a>
+<h1>کارگاه محاسبه قیمت و سودآوری خدمات</h1>
+<section class="box warn">
+<p>این ابزار فقط <strong>سناریوی داخلی و فرضی</strong> محاسبه می‌کند. هیچ قیمت مشتری، قرارداد، فاکتور، پرداخت یا مجوز ارسال صادر نمی‌شود. تمام هزینه‌ها باید از منبع واقعی بررسی و به‌صورت دستی وارد شوند؛ هیچ هزینه‌ای پیش‌فرض صفر فرض نشده است.</p>
+<p>وصول وجه واقعی: نامعلوم | تعداد سفارش تحویل‌شده: نامعلوم | رضایت و ظرفیت تحویل: نیازمند شواهد و تأیید مستقل.</p>
+</section>
+<section class="box">
+<h2>پارامترهای الزامی برای یک خدمت و یک دوره ثابت</h2>
+<form method="post" autocomplete="off">
+{% csrf_token %}
+{{ form.non_field_errors }}
+<div class="cols">
+{% for field in form.visible_fields %}
+<div class="field">
+{{ field.label_tag }}
+{{ field }}
+{{ field.errors }}
+</div>
+{% endfor %}
+</div>
+<p class="muted">ارزهای ریال و تومان به یکدیگر تبدیل نمی‌شوند. این ابزار نرخ ارز یا کارمزد لحظه‌ای را از هیچ منبعی دریافت نمی‌کند.</p>
+<button type="submit">محاسبه داخلی سناریو</button>
+</form>
+</section>
+{% if scenario %}
+<section class="box" aria-label="نتیجه سناریو">
+<h2>نتیجه محاسبه – {{ scenario.currency }}</h2>
+<div class="kv">
+<div>قیمت پس از تخفیف<strong>{{ scenario.unit_price }}</strong></div>
+<div>هزینه متغیر هر واحد<strong>{{ scenario.variable_unit_cost }}</strong></div>
+<div>مشارکت هر واحد<strong>{{ scenario.unit_contribution }}</strong></div>
+<div>نقطه سربه‌سر (واحد)<strong>{% if scenario.break_even_units is not None %}{{ scenario.break_even_units }}{% else %}غیرقابل محاسبه{% endif %}</strong></div>
+<div>حداقل قیمت پوشش هزینه به ازای فروش مفروض<strong>{{ scenario.minimum_unit_sale_price_for_expected_units|default:"نامشخص" }}</strong></div>
+<div>نتیجه عملیاتی مفروض دوره<strong>{{ scenario.estimated_operating_result }}</strong></div>
+</div>
+<p>حاشیه مشارکت: {% if scenario.contribution_margin_percent is not None %}{{ scenario.contribution_margin_percent }}٪{% else %}نامشخص{% endif %}؛ پوشش سربه‌سر: {% if scenario.scenario_reaches_break_even %}بله (فقط در سناریو){% else %}خیر{% endif %}.</p>
+<p class="muted">وصول وجه واقعی: نامعلوم | سود تأییدشده: نامعلوم | قیمت دارای تأیید مالک: خیر | مجوز ارسال به مشتری: خیر.</p>
+</section>
+{% endif %}
+</main></body></html>

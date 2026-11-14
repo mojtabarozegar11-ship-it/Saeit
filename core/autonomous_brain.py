@@ -1,6 +1,8 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order, LedgerEntry
+from core.service_quote_draft import preview_candidates
+from core.service_lead_handoff import orphaned_handoff_snapshot
 
 @dataclass(frozen=True)
 class Candidate:
@@ -76,7 +78,19 @@ class AutonomousBrain:
             seen_at is not None and (last_review_at is None or seen_at > last_review_at)
             for seen_at in (latest_paid_order_at, latest_payment_entry_at)
         )
+        consented_queue = preview_candidates(limit=20)
+        consented_proposal_candidates = consented_queue["eligible_count"]
+        orphaned_queue = (
+            {"verified_candidate_count": 0, "uninspected": 0}
+            if consented_proposal_candidates
+            else orphaned_handoff_snapshot()
+        )
         return {
+            "consented_service_draft_candidates": consented_proposal_candidates,
+            "verified_orphaned_service_handoffs": orphaned_queue["verified_candidate_count"],
+            "orphaned_service_queue_uninspected": orphaned_queue["uninspected"],
+            "consented_service_queue_scan_limited": consented_queue["scan_limit_reached"],
+            "consented_service_queue_requires_triage": consented_queue["requires_human_review_count"],
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
@@ -102,6 +116,33 @@ class AutonomousBrain:
         # prerequisite. Check evidence first; never infer settled revenue.
         if s.get("financial_event_needs_reconcile", False):
             return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+        # A first-party customer request with recorded processing consent is a
+        # real acquisition signal. Prepare only an internal service response;
+        # never treat this as authorization to email, price or take payment.
+        if s.get("consented_service_draft_candidates", 0):
+            return [Candidate(
+                "income_service_proposal_prepare",
+                "Prepare a nonbinding scoped internal response to a consented real service inquiry.",
+                10, 10, 10, 1,
+            )]
+        if s.get("verified_orphaned_service_handoffs", 0):
+            return [Candidate(
+                "income_service_proposal_prepare",
+                "Recover an audited real service scope into a durable owner-desk follow-up.",
+                10, 10, 10, 1,
+            )]
+        if s.get("orphaned_service_queue_uninspected", 0):
+            return [Candidate(
+                "await_orphaned_service_queue_triage",
+                "Prepared service queue has uninspected records and needs bounded review.",
+                10, 10, 10, 1,
+            )]
+        if s.get("consented_service_queue_scan_limited", False):
+            return [Candidate(
+                "await_consent_queue_manual_triage",
+                "CRM scan reached its safe limit; do not claim absence of buyers or repeat empty planning.",
+                10, 10, 10, 1,
+            )]
         if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
             return [Candidate(
                 "await_external_self_improvement_review",

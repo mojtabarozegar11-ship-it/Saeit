@@ -23,6 +23,23 @@ if not DEBUG and not ALLOWED_HOSTS:
     raise RuntimeError("ALLOWED_HOSTS must contain at least one host when DEBUG=False")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
+# Zomorod Melal service-inquiry source-of-truth; default is the pre-existing
+# /ask-master PHP path. Enabling Django requires separate evidence-based review
+# of PHP->Django cutover, host routing, lawful data handling and rollback.
+SERVICE_INTAKE_SOURCE_OF_TRUTH = env(
+    "SERVICE_INTAKE_SOURCE_OF_TRUTH", default="legacy_ask_master_unverified"
+)
+SERVICE_INTAKE_DJANGO_ENABLED = env.bool("SERVICE_INTAKE_DJANGO_ENABLED", default=False)
+SERVICE_INTAKE_SINGLE_SOURCE_APPROVED = env.bool(
+    "SERVICE_INTAKE_SINGLE_SOURCE_APPROVED", default=False
+)
+SERVICE_INTAKE_ROLLBACK_VERIFIED = env.bool(
+    "SERVICE_INTAKE_ROLLBACK_VERIFIED", default=False
+)
+SERVICE_INTAKE_PRIVACY_REVIEWED = env.bool(
+    "SERVICE_INTAKE_PRIVACY_REVIEWED", default=False
+)
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

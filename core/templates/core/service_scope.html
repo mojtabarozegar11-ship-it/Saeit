@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ offer.title_fa }} | بررسی تخصصی، دامنه و خروجی | زمرد ملل{% endblock %}
+{% block meta_description %}{{ guide.pain }} برای دریافت بررسی اولیه خدمت {{ offer.title_fa }} از شرکت کشت و صنعت زمرد ملل، دامنه کار و مدارک را مشاهده کنید.{% endblock %}
+{% block page_head %}
+{{ block.super }}
+<link rel="canonical" href="{{ canonical }}">
+<script type="application/ld+json">{{ structured_data|safe }}</script>
+{% endblock %}
+{% block body_class %}services-page{% endblock %}
+{% block content %}
+<main class="zomorod-scope" dir="rtl" style="max-width:1100px;margin:auto;padding:1.5rem 1rem;line-height:1.85">
+  <nav aria-label="مسیر صفحه"><a href="{% url 'services' %}">خدمات تخصصی</a> / <span>{{ service_scope_code }}</span></nav>
+  <header style="padding:2rem 0">
+    <span>{{ service_scope_code }} · درخواست بررسی غیرتعهدآور</span>
+    <h1>{{ offer.title_fa }}</h1>
+    <p>{{ guide.pain }}</p>
+    <p><strong>مناسب برای:</strong> {{ offer.customer }}</p>
+    <p><strong>دامنه درخواست:</strong> بررسی امکان ارائه خدمت است، نه سفارش قطعی یا قرارداد.</p>
+    <a href="{{ contact.contact_url }}" class="scope-primary-cta" style="display:inline-block;padding:.8rem 1.2rem;background:#15584d;color:white;border-radius:.6rem;text-decoration:none">ثبت استعلام اولیه در فرم رسمی شرکت</a>
+    {% if not service_form_active %}
+    <p style="font-size:.9rem">فرم اصلی فعال شرکت روی مسیر موجود PHP قرار دارد. برای تشخیص خدمت در توضیحات فرم، کد <strong>{{ service_scope_code }}</strong> را درج کنید. این صفحه مشخصات شخصی شما را ذخیره نمی‌کند.</p>
+    {% endif %}
+  </header>
+  <section aria-labelledby="scope-questions">
+    <h2 id="scope-questions">این بررسی به چه تصمیم‌هایی پاسخ می‌دهد؟</h2>
+    <ul>{% for question in guide.questions %}<li>{{ question }}</li>{% endfor %}</ul>
+  </section>
+  <section aria-labelledby="scope-inputs">
+    <h2 id="scope-inputs">برای تعیین دامنه، چه داده‌هایی لازم است؟</h2>
+    <ul>{% for input in guide.intake %}<li>{{ input }}</li>{% endfor %}</ul>
+    <p>از ارسال رمز، اطلاعات حساس، اسناد پرداخت و فایل‌های محرمانه در فرم عمومی خودداری کنید. شیوه امن دریافت مدارک پس از بررسی تعیین می‌شود.</p>
+  </section>
+  <section aria-labelledby="scope-deliverables">
+    <h2 id="scope-deliverables">خروجی‌های قابل بررسی در پیشنهاد خدمت</h2>
+    <ul>{% for deliverable in offer.deliverables %}<li>{{ deliverable }}</li>{% endfor %}</ul>
+    <p><strong>معیار ارزیابی خروجی:</strong> {{ guide.acceptance }}</p>
+  </section>
+  <section aria-labelledby="scope-process">
+    <h2 id="scope-process">مراحل همکاری، بدون تعهد زودهنگام</h2>
+    <ol>
+      <li>ثبت عنوان و کد خدمت در فرم فعلی شرکت؛ بدون پرداخت در این مرحله</li>
+      <li>بررسی اعتبار درخواست و امکان انجام کار توسط کارشناسان</li>
+      <li>تعیین خروجی، هزینه واقعی، ظرفیت، حقوق داده و زمان‌بندی</li>
+      <li>ارائه پیشنهاد جداگانه فقط پس از تأیید مجاز و توافق بر شرایط</li>
+      <li>در صورت توافق و تسویه معتبر، آغاز خدمت و تحویل بر اساس معیار پذیرش</li>
+    </ol>
+    <p><strong>محدودیت:</strong> {{ offer.limitation }}</p>
+  </section>
+  <section aria-labelledby="scope-faq">
+    <h2 id="scope-faq">پرسش‌های رایج</h2>
+    <h3>قیمت این خدمت چقدر است؟</h3>
+    <p>قیمت قطعی هنوز تعیین نشده و به دامنه، داده‌های ورودی، ظرفیت و برآورد هزینه بستگی دارد. این صفحه پیشنهاد قیمت یا لینک پرداخت نیست.</p>
+    <h3>چه زمانی تحویل انجام می‌شود؟</h3>
+    <p>زمان تحویل تنها پس از بررسی ظرفیت اجرایی، مدارک و توافق مجاز اعلام می‌شود؛ موعد ثابت یا نتیجه تضمینی وجود ندارد.</p>
+    <h3>آیا ثبت فرم به معنی خرید است؟</h3>
+    <p>خیر. این فرم صرفاً برای درخواست بررسی است و قرارداد، پیش‌فاکتور، پرداخت یا سفارش قطعی نمی‌سازد.</p>
+  </section>
+  <section aria-label="مرحله بعدی" style="padding:2rem 1rem;border:1px solid #ccd9d7;border-radius:1rem;margin-top:1.5rem">
+    <h2>برای شروع، مسئله و کد خدمت را ثبت کنید</h2>
+    <p>کد درخواست: <strong>{{ service_scope_code }}</strong> | خدمت: <strong>{{ offer.title_fa }}</strong></p>
+    <a href="{{ contact.contact_url }}" style="display:inline-block;padding:.9rem 1.4rem;background:#15584d;color:white;border-radius:.6rem;text-decoration:none">ورود به فرم رسمی درخواست بررسی</a>
+  </section>
+</main>
+{% endblock %}
