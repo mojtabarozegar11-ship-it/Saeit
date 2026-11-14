@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from html.parser import HTMLParser
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -43,6 +44,47 @@ ROUTE_IDENTITY = {
 
 
 
+class _RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect before verifying the final URL."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("UNEXPECTED_REDIRECT")
+
+
+class _SupportMailtoLinks(HTMLParser):
+    """Look for an actual customer-facing mailto anchor, not source text."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.found = False
+        self._ignored = 0
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in ("script", "style", "template"):
+            self._ignored += 1
+            return
+        if self._ignored or tag != "a":
+            return
+        hrefs = [value for key, value in attrs if key.lower() == "href"]
+        if len(hrefs) != 1 or not isinstance(hrefs[0], str):
+            return
+        address = hrefs[0].split("?", 1)[0]
+        if address.lower() == "mailto:" + INBOX:
+            self.found = True
+
+    def handle_endtag(self, tag):
+        if tag.lower() in ("script", "style", "template") and self._ignored:
+            self._ignored -= 1
+
+
+def _has_support_mailto(html: str) -> bool:
+    parser = _SupportMailtoLinks()
+    parser.feed(html)
+    parser.close()
+    return parser.found
+
+
 def _same_public_url(expected: str, actual: str) -> bool:
     a, b = urllib.parse.urlsplit(expected), urllib.parse.urlsplit(actual)
     return (b.scheme == "https" and b.netloc == "mojplaywin.com"
@@ -58,7 +100,7 @@ def fetch_public(url: str) -> str:
         headers={"Cache-Control": "no-cache", "Pragma": "no-cache",
                  "User-Agent": "MojPlayWin-Support-ReadOnly-Check/1.0"},
     )
-    with urllib.request.urlopen(req, timeout=15) as response:
+    with urllib.request.build_opener(_RejectRedirects()).open(req, timeout=15) as response:
         if response.status != 200:
             raise RuntimeError("NON_200_RESPONSE")
         if not _same_public_url(url, response.geturl()):
@@ -81,7 +123,7 @@ def assess(fetcher: Callable[[str], str] = fetch_public) -> dict:
                 raise TypeError("INVALID_RESPONSE_TYPE")
             new = INBOX in html
             old = LEGACY in html
-            mailto = "mailto:" + INBOX in html
+            mailto = _has_support_mailto(html)
             page_identity = all(marker.lower() in html.lower()
                                 for marker in ROUTE_IDENTITY[path])
             label = "READY" if new and mailto and not old and page_identity else "MISSING_NEW_CONTACT"
