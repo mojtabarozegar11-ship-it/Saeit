@@ -278,3 +278,58 @@ def test_replan_allowlist_has_no_financial_or_external_actions():
     assert REPLAN_PREREQUISITES == {"income_mvp_build", "income_offer_design"}
     assert _failure_classification(ValueError("private password")) == "validation_or_policy"
     assert _failure_classification(RuntimeError("private password")) == "worker_execution"
+
+
+@pytest.mark.django_db
+def test_economic_worker_redacts_private_unsupported_capability(bot):
+    secret_code = "income_private_buyer_token_DO_NOT_LOG"
+    enqueue(bot, code=secret_code)
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway()), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        out = StringIO()
+        call_command("run_economic_worker", stdout=out)
+    runner.assert_not_called()
+    assert "BLOCKED_UNSUPPORTED" in out.getvalue()
+    assert secret_code not in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_economic_worker_redacts_raw_tool_failure_and_preserves_queue(bot):
+    task = enqueue(bot)
+    secret = "CUSTOMER_PRIVATE_PAYMENT_REFERENCE_SECRET"
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway()), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        runner.return_value.run.side_effect = RuntimeError(secret)
+        with pytest.raises(CommandError) as raised:
+            call_command("run_economic_worker")
+    assert secret not in str(raised.value)
+    assert "worker_execution_error" in str(raised.value)
+    task.refresh_from_db()
+    assert task.status == "queued"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("output,verified", [
+    ({"verified_effect": "yes"}, "0"),
+    ({"verified_effect": 1}, "0"),
+    ({"verified_effect": True}, "1"),
+    (None, "0"),
+    ("raw string", "0"),
+])
+def test_economic_worker_receipt_effect_must_be_explicit_boolean(
+        bot, output, verified):
+    task = enqueue(bot)
+    done = SimpleNamespace(pk=task.pk, status="completed", output_data=output)
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway()), patch(
+        "core.management.commands.run_economic_worker.WorkerRunner"
+    ) as runner:
+        runner.return_value.run.return_value = done
+        out = StringIO()
+        call_command("run_economic_worker", stdout=out)
+    assert f"internal_effect_verified={verified}" in out.getvalue()
+    assert "revenue_not_assessed=true" in out.getvalue()
