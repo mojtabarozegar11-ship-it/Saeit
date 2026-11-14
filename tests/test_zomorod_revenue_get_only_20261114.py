@@ -62,7 +62,12 @@ class Tests(TestCase):
     def test_timeout_and_retry_are_reported(self):
         reply=FakeResponse("test",MOD.ORIGIN+MOD.TARGETS[0])
         sequence=iter([URLError("timeout"),reply])
-        out=MOD.inspect(MOD.TARGETS[0],opener=lambda *a,**kw:next(sequence),sleeper=lambda _:None)
+        def opener(*args, **kwargs):
+            item=next(sequence)
+            if isinstance(item,Exception):
+                raise item
+            return item
+        out=MOD.inspect(MOD.TARGETS[0],opener=opener,sleeper=lambda _:None)
         self.assertEqual(len(out["attempts"]),2)
         self.assertFalse(out["attempts"][0]["ok"])
         self.assertTrue(out["attempts"][1]["ok"])
