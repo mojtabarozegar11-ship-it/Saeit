@@ -6,6 +6,7 @@ on:
     paths:
       - deploy/company_live_intake_readonly.py
       - deploy/company_static_service_preflight.py
+      - deploy/company_services_public_index_readonly.py
       - scripts/build_company_service_static_c13.py
       - deploy/company_public_service_live_check.py
       - tests/test_company_public_service_live_check_c13_20261114.py
@@ -94,5 +95,6 @@ jobs:
           timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_services_public_index_readonly.py
           timeout 60s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_static_service_preflight.py
 
