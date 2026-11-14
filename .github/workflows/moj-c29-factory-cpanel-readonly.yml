@@ -1,0 +1,41 @@
+name: C29 factory VPS to cPanel read-only operational revenue gate
+on:
+  push:
+    branches:
+      - ops/moj-c29-factory-vps-cpanel-readonly-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-c29-authorized-vps-cpanel-readonly
+  cancel-in-progress: false
+jobs:
+  factory-cpanel:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate established bridge without changing cPanel
+        run: |
+          set -euo pipefail
+          bash -n deploy/cpanel_direct_command.sh
+          git hash-object deploy/cpanel_direct_command.sh
+          echo 'MOJ_C29_EXISTING_BRIDGE_SOURCE=VALID'
+      - name: Check pinned VPS to cPanel SSH and Passenger inventory only
+        env:
+          FACTORY_VPS_RUNNER: '1'
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo 'MOJ_C29_CPANEL_BRIDGE=no_existing_authorized_host_key'
+            exit 0
+          fi
+          bash deploy/cpanel_direct_command.sh relay_preflight
+          bash deploy/cpanel_direct_command.sh cpanel_preflight
+          bash deploy/cpanel_direct_command.sh passenger_inventory
+          bash deploy/cpanel_direct_command.sh mpw_source_parity_readonly
+          bash deploy/cpanel_direct_command.sh mpw_sales_intake_readonly
+          echo 'MOJ_C29_FACTORY_SOURCE_AND_BUYER_INTAKE_READONLY=PASS'

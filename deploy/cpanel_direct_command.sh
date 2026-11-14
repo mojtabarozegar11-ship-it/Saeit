@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream|mpw_source_parity_readonly|mpw_sales_intake_readonly) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -86,6 +86,20 @@ EOF
       ;;
     zomorod_fields_verify_stream)
       zomorod_fields_verify_stream
+      ;;
+    mpw_source_parity_readonly)
+      guard=scripts/mpw_c29_cpanel_live_source_readonly.py
+      test -f "$guard" && test ! -L "$guard"
+      test "$(git hash-object -- "$guard")" = "0398f28f6d60b95ddbf21c2da467d9d88ef20f35"
+      timeout 65s ssh -T -F "$work/config" saeit-cpanel \
+        'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$guard"
+      ;;
+    mpw_sales_intake_readonly)
+      guard=scripts/mpw_sales_intake_readonly_20261024.py
+      test -f "$guard" && test ! -L "$guard"
+      test "$(git hash-object -- "$guard")" = "c4d84ca71a5162bc72aa7fd7d7bf6986e53941a0"
+      timeout 180s ssh -T -F "$work/config" saeit-cpanel \
+        'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$guard"
       ;;
     passenger_inventory)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
