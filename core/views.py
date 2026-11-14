@@ -590,6 +590,10 @@ def platform_page(request, section):
         page["knowledge_articles"] = articles
         page["knowledge_agent"] = {"active": bool(plan and plan.active), "start_date": str(plan.start_date) if plan else "1398/08/25", "cadence_hours": plan.cadence_hours if plan else 24, "books": books.count(), "sections": sum(books.values_list("generated_sections", flat=True)), "runs": KnowledgeAgentRun.objects.filter(plan=plan).count() if plan else 0, "approval": bool(plan and plan.require_owner_approval)}
     if section == "company":
+        # The same source-of-truth switch controls both the visible public
+        # company form and its POST handler; never advertise a disabled form.
+        from .service_intake_routing import django_service_intake_active
+        page["company_intake_django_active"] = django_service_intake_active()
         page["company_page_jsonld"] = _json.dumps({
             "@context":"https://schema.org",
             "@type":"WebPage",
