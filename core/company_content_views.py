@@ -45,9 +45,12 @@ class CompanyInquiryForm(forms.ModelForm):
         return ""
 
 
-# User-session-only duplicate suppression; no claim of global DB atomic uniqueness.
+# Session-only duplicate and intake-rate defenses; do not claim global anti-spam.
 _DUPLICATE_WINDOW_SECONDS = 15 * 60
 _SESSION_KEY = "zomorod_last_company_inquiry_v1"
+_RATE_KEY = "zomorod_company_inquiry_submissions_v1"
+_RATE_WINDOW_SECONDS = 60 * 60
+_RATE_NEW_LEADS = 6
 
 
 def _inquiry_fingerprint(cleaned):
@@ -97,7 +100,39 @@ def company_portal_home(request, *, service=None):
             "ticket": issue_receipt(record["inquiry_id"]),
         }))
 
-    inquiry = form.save()
+    # Rate-limit only *new* lead creation; repeat of a previously saved request
+    # above returns its existing receipt without counting another submission.
+    recent = request.session.get(_RATE_KEY, [])
+    if type(recent) is not list:
+        recent = []
+    recent = [
+        t for t in recent if type(t) is int
+        and 0 <= now - t < _RATE_WINDOW_SECONDS
+    ]
+    if len(recent) >= _RATE_NEW_LEADS:
+        from django.http import HttpResponse
+        response = HttpResponse(
+            "سقف درخواست‌های این نشست موقتاً تکمیل شده است؛ بعداً اقدام کنید.",
+            status=429, content_type="text/plain; charset=utf-8",
+        )
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        response["Retry-After"] = str(_RATE_WINDOW_SECONDS)
+        return response
+
+    # Keep a server-generated *non-sensitive* consent provenance in the
+    # pre-existing internal CRM notes field (no live migration, no PII echo).
+    # This marker is administrative evidence, not immutable legal certification.
+    from django.utils import timezone as django_timezone
+    created = django_timezone.now().isoformat(timespec="seconds")
+    origin = "farm" if service == "farm" else "company"
+    inquiry = form.save(commit=False)
+    inquiry.internal_note = (
+        "INTAKE_CONSENT_V1; confirmed_at=" + created + "; source=" + origin
+    )
+    inquiry.save()
+    recent.append(now)
+    request.session[_RATE_KEY] = recent
     request.session[_SESSION_KEY] = {
         "fingerprint": fingerprint, "created": now, "inquiry_id": inquiry.pk,
     }
