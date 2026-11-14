@@ -4,6 +4,8 @@ import uuid
 
 from django.conf import settings
 from django.core.mail import EmailMessage
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .economic_trade_models import TradeEmailAudit, TradeEmailOutbox, TradeMailbox
@@ -46,6 +48,21 @@ def _idempotency(recipient, subject, body):
 @transaction.atomic
 def queue_trade_email(*, recipient, subject, body, trade_context=None):
     """Create an audited draft; never sends by itself."""
+    # Reject unusable or ambiguous drafts before writing mailbox/outbox rows.
+    if type(recipient) is not str or not recipient or recipient != recipient.strip() or "\r" in recipient or "\n" in recipient:
+        raise ValueError("TRADE_EMAIL_RECIPIENT_INVALID")
+    try:
+        validate_email(recipient)
+    except ValidationError as exc:
+        raise ValueError("TRADE_EMAIL_RECIPIENT_INVALID") from exc
+    if (type(subject) is not str or not subject.strip() or len(subject) > 300
+            or "\r" in subject or "\n" in subject):
+        raise ValueError("TRADE_EMAIL_SUBJECT_INVALID")
+    if (type(body) is not str or not body.strip()
+            or len(body.encode("utf-8")) > 100000):
+        raise ValueError("TRADE_EMAIL_BODY_INVALID")
+    if trade_context is not None and type(trade_context) is not dict:
+        raise ValueError("TRADE_EMAIL_CONTEXT_INVALID")
     mailbox, _ = TradeMailbox.objects.get_or_create(
         code="company-trade",
         defaults={
