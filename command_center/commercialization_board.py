@@ -22,6 +22,7 @@ from core.models import (
 from core.mojplaywin_product_detail import PUBLIC_CATALOG
 from core.signal_commercial_catalog import catalog as signal_catalog
 from core.tron_rollout_inventory import inspect_rollout
+from prop_firm.plans import CHALLENGE_PLANS
 
 
 @staff_member_required
@@ -75,6 +76,16 @@ def commercialization_board_api(request):
     signal_rows = signal_catalog()
     rollout = inspect_rollout()
     data["financial_commerce"] = {
+        "moj_prop": {
+            "plan_products_configured": len(CHALLENGE_PLANS),
+            "plan_one_owner_fee_trx": str(CHALLENGE_PLANS[0].entry_fee_trx),
+            "additional_plan_prices_proposed_not_live": 9,
+            "same_policy_all_plans": True,
+            "valid_closed_trades_required": CHALLENGE_PLANS[0].minimum_verified_closed_trades,
+            "duration_days": CHALLENGE_PLANS[0].duration_days,
+            "live_challenge_checkout_verified": False,
+            "real_broker_funding_verified": False,
+        },
         "signals": {
             "known_financial_brands": len({row.brand for row in signal_rows}),
             "localization_contexts": len(signal_rows),
