@@ -161,6 +161,8 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         if not isinstance(counts, dict):
             raise ValueError("TOPOLOGY_PROCESS_COUNTS_INVALID")
         for tag, n in counts.items():
+            if type(tag) is not str:
+                raise ValueError("TOPOLOGY_PROCESS_COUNTS_INVALID")
             # Even an unrecognized route must have a valid nonnegative count:
             # otherwise a corrupt inventory could be silently discarded.
             count = trusted_count(n)
