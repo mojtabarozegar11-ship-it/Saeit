@@ -270,7 +270,7 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
 
 from .company_inquiry_models import CompanyInquiry
 from django.contrib import messages as django_messages
-from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, prepare_one
+from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, _code_for, prepare_one
 from .service_lead_handoff import handoff_prepared_inquiry
 from django.db import transaction
 
