@@ -367,6 +367,11 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                     if existing.idempotency_key != key:
                         return Response({"detail": "This order already has a payment intent."},
                                         status=status.HTTP_409_CONFLICT)
+                    # A retry must not silently reuse an invoice whose amount
+                    # or currency differs from the currently locked order.
+                    if existing.amount != order.total or existing.currency != order.currency:
+                        return Response({"detail": "Payment intent and order snapshot differ."},
+                                        status=status.HTTP_409_CONFLICT)
                     return Response(
                         {"status": "existing", "payment_intent": self.get_serializer(existing).data},
                         status=status.HTTP_200_OK,
@@ -442,7 +447,9 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             if type(event_type) is not str or event_type not in (
                     "payment.succeeded", "payment.failed"):
                 raise ValueError("WEBHOOK_EVENT_UNSUPPORTED")
-            if "event_id" in payload and payload["event_id"] != event_id:
+            # Event identity must be part of the HMAC-authenticated body.
+            # The header alone is mutable without invalidating that HMAC.
+            if payload.get("event_id") != event_id:
                 raise ValueError("WEBHOOK_EVENT_ID_MISMATCH")
             intent_id = strict_id(payload.get("payment_intent_id"))
             provider_reference = payload.get("provider_reference")
@@ -470,6 +477,13 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                             or existing.payment_intent_id != intent_id):
                         return Response({"detail": "Provider event ID collision."},
                                         status=status.HTTP_409_CONFLICT)
+                    # Do not acknowledge previously rejected or unfinished
+                    # events as successful deliveries on an identical retry.
+                    if existing.status != "processed":
+                        return Response(
+                            {"detail": "Provider event remains unprocessed or rejected."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
                     return Response(
                         {"status": existing.status, "event_id": event_id},
                         status=status.HTTP_200_OK,
@@ -503,6 +517,10 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                         or order.total != intent.amount
                         or order.currency != intent.currency):
                     return reject("Order or payment intent is not settleable.")
+                # A provider reference bound before settlement cannot be
+                # silently replaced by a different signed callback reference.
+                if intent.provider_reference and intent.provider_reference != provider_reference:
+                    return reject("Provider reference differs from the bound payment intent.")
                 if PaymentIntent.objects.filter(
                         provider=provider, provider_reference=provider_reference
                 ).exclude(pk=intent.pk).exists():

@@ -11,6 +11,8 @@ from core.commerce_integrity import ledger_reference
 
 
 def signed_post(client, payload, provider="named-provider", event_id="evt-1", secret="a"*32):
+    payload = dict(payload)
+    payload.setdefault("event_id", event_id)
     raw = json.dumps(payload, separators=(",", ":")).encode()
     signature = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return client.generic(

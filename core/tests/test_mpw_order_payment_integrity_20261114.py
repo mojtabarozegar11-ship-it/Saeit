@@ -86,6 +86,9 @@ class OrderPaymentSourceContractTests(TestCase):
         if isinstance(body, bytes):
             raw = body
         else:
+            # Event ID is authenticated inside the signed JSON, not only a header.
+            body = dict(body)
+            body.setdefault("event_id", event_id)
             raw = json.dumps(body, separators=(",", ":")).encode("utf-8")
         sig = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
         return APIClient().generic(
@@ -356,6 +359,84 @@ class OrderPaymentSourceContractTests(TestCase):
         intent = self.ready_intent(amount="125.49")
         self.assertEqual(self.signed_event(intent).status_code, 409)
         self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_46_header_event_id_swap_cannot_create_payment(self):
+        intent = self.ready_intent()
+        body = {
+            "event_type": "payment.succeeded",
+            "payment_intent_id": intent.pk,
+            "provider_reference": "actual-provider-reference-01",
+            "amount": "125.50", "currency": "USD",
+            "event_id": "original-signed-event",
+        }
+        response = self.signed_event(intent, body=body, event_id="forged-header-event")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PaymentWebhookEvent.objects.exists())
+        self.assertFalse(LedgerEntry.objects.exists())
+        intent.order.refresh_from_db()
+        self.assertEqual(intent.order.status, "pending")
+
+    def test_47_unsigned_event_identifier_missing_from_payload_denied(self):
+        intent = self.ready_intent()
+        raw = json.dumps({
+            "event_type": "payment.succeeded",
+            "payment_intent_id": intent.pk,
+            "provider_reference": "actual-provider-reference-01",
+            "amount": "125.50", "currency": "USD",
+        }).encode()
+        self.assertEqual(self.signed_event(intent, body=raw).status_code, 400)
+        self.assertFalse(PaymentWebhookEvent.objects.exists())
+
+    def test_48_rejected_event_cannot_be_replayed_as_success(self):
+        intent = self.ready_intent()
+        payload = {
+            "event_type": "payment.succeeded",
+            "payment_intent_id": intent.pk,
+            "provider_reference": "actual-provider-reference-01",
+            "amount": "125.49", "currency": "USD",
+        }
+        self.assertEqual(self.signed_event(intent, body=payload).status_code, 409)
+        self.assertEqual(self.signed_event(intent, body=payload).status_code, 409)
+        self.assertEqual(PaymentWebhookEvent.objects.count(), 1)
+        self.assertEqual(PaymentWebhookEvent.objects.first().status, "rejected")
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_49_prebound_provider_reference_cannot_be_overwritten(self):
+        intent = self.ready_intent()
+        intent.provider_reference = "bound-provider-reference-01"
+        intent.save(update_fields=["provider_reference"])
+        self.assertEqual(self.signed_event(intent).status_code, 409)
+        intent.refresh_from_db()
+        self.assertEqual(intent.provider_reference, "bound-provider-reference-01")
+        self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_50_matching_prebound_reference_still_settles(self):
+        intent = self.ready_intent()
+        intent.provider_reference = "actual-provider-reference-01"
+        intent.save(update_fields=["provider_reference"])
+        self.assertEqual(self.signed_event(intent).status_code, 200)
+        intent.refresh_from_db()
+        self.assertEqual(intent.status, "succeeded")
+        self.assertEqual(LedgerEntry.objects.count(), 1)
+
+    def test_51_changed_order_total_blocks_reused_invoice(self):
+        order = self.make_order()
+        payload = {"order_id": order.pk, "idempotency_key": "order-snapshot-0001"}
+        self.assertEqual(self.client.post("/api/payments/create/", payload, format="json").status_code, 202)
+        order.total = Decimal("126.50")
+        order.save(update_fields=["total"])
+        self.assertEqual(self.client.post("/api/payments/create/", payload, format="json").status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+        self.assertEqual(ApprovalRequest.objects.count(), 1)
+
+    def test_52_changed_order_currency_blocks_reused_invoice(self):
+        order = self.make_order()
+        payload = {"order_id": order.pk, "idempotency_key": "order-snapshot-0002"}
+        self.assertEqual(self.client.post("/api/payments/create/", payload, format="json").status_code, 202)
+        order.currency = "IRR"
+        order.save(update_fields=["currency"])
+        self.assertEqual(self.client.post("/api/payments/create/", payload, format="json").status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
 
     def test_45_payment_does_not_emit_real_delivery(self):
         intent = self.ready_intent()

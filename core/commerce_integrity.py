@@ -115,14 +115,22 @@ def parse_strict_webhook_json(raw):
     def _no_nonfinite(_value):
         raise ValueError("WEBHOOK_NONFINITE_JSON")
 
+    def _bounded_int(text):
+        # 16 KiB can still hold integers too large for Python's int parser.
+        # Integer identifiers accepted by this endpoint fit in 10 digits.
+        if len(text) > 10:
+            raise ValueError("WEBHOOK_INTEGER_TOO_LARGE")
+        return int(text)
+
     if type(raw) is not bytes or not 1 <= len(raw) <= 16384:
         raise ValueError("WEBHOOK_BODY_SIZE_INVALID")
     try:
         result = json.loads(
             raw.decode("utf-8", "strict"),
             object_pairs_hook=_pairs_unique, parse_constant=_no_nonfinite,
+            parse_int=_bounded_int,
         )
-    except (UnicodeError, json.JSONDecodeError):
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
         raise ValueError("WEBHOOK_INVALID_JSON") from None
     if type(result) is not dict:
         raise ValueError("WEBHOOK_OBJECT_REQUIRED")

@@ -164,6 +164,14 @@ class CommerceIntegrityPureTests(unittest.TestCase):
         value = parse_strict_webhook_json(b'{"amount":true}')["amount"]
         self.assert_rejected(provider_amount, value)
 
+    def test_39_deep_signed_json_nesting_is_fail_closed(self):
+        raw = b'{"amount":' + (b"[" * 1200) + b"1" + (b"]" * 1200) + b"}"
+        self.assert_rejected(parse_strict_webhook_json, raw)
+
+    def test_40_large_integer_in_bounded_body_is_fail_closed(self):
+        raw = b'{"payment_intent_id":' + (b"9" * 5000) + b"}"
+        self.assert_rejected(parse_strict_webhook_json, raw)
+
     def test_38_reference_cannot_contain_whitespace_or_unicode(self):
         for x in ("buyer test", "مشتری", "foo\nbar"):
             self.assertFalse(valid_provider_ref(x))
