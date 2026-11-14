@@ -188,15 +188,16 @@ class OriginDefenseTests(unittest.TestCase):
                             second["recommendations"][0]["source_tag"])
 
     def test_source_tag_no_tenant_separator_collision(self):
-        # Previously, unescaped pipe-delimited labels could alias two tenants.
-        one = self.run_plan(auth=signed(tenant_id="customer-x|group",
-                                        engagement_id="job-123"),
-                            evidence=traffic(tenant_id="customer-x|group"))
-        two = self.run_plan(auth=signed(tenant_id="customer-x",
-                                        engagement_id="group|job-123"),
-                            evidence=traffic(engagement_id="group|job-123"))
-        self.assertNotEqual(one["recommendations"][0]["source_tag"],
-                            two["recommendations"][0]["source_tag"])
+        # The current signed-context contract excludes '|', so neither
+        # ambiguous legacy label may reach the pseudonymization boundary.
+        with self.assertRaisesRegex(CyberModuleError, "TENANT_INVALID"):
+            self.run_plan(auth=signed(tenant_id="customer-x|group",
+                                      engagement_id="job-123"),
+                          evidence=traffic(tenant_id="customer-x|group"))
+        with self.assertRaisesRegex(CyberModuleError, "ENGAGEMENT_INVALID"):
+            self.run_plan(auth=signed(tenant_id="customer-x",
+                                      engagement_id="group|job-123"),
+                          evidence=traffic(engagement_id="group|job-123"))
 
 
 
