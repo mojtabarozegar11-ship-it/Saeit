@@ -1,15 +1,21 @@
 name: VPS Factory Production Continuity
 on:
-  schedule:
-    # Every hour: verify or recover the existing isolated VPS factory loop.
-    - cron: "13 * * * *"
-  push:
-    branches: [main]
-    paths: [.github/workflows/vps-factory-production-continuity.yml]
+  # Legacy factory continuity never runs source-patching or stop commands
+  # from schedule, push, PR, or commit-message tags. Separate existing
+  # system-health workflow retains its reviewed hourly read-only schedule.
   workflow_dispatch:
     inputs:
+      operation:
+        description: Read-only audit, authorized recovery, or authorized pause
+        required: true
+        type: choice
+        options:
+          - audit
+          - recover
+          - pause
+        default: audit
       recovery_authorized:
-        description: Owner has authorized a one-time factory loop recovery
+        description: Owner authorizes this one-time recover or pause operation
         required: true
         type: boolean
         default: false
@@ -24,9 +30,21 @@ concurrency:
   group: saeit-vps-factory-continuity
   cancel-in-progress: false
 jobs:
-  pause-loop-low-disk:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]')
+  # A manual dispatch lacking both owner assertions must FAIL, not silently
+  # turn green because the mutating recovery job was skipped.
+  blocked-unapproved-recovery:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && ((inputs.operation != 'audit' && inputs.operation != 'recover' && inputs.operation != 'pause') || github.actor != 'mojtabarozegar11-ship-it' || github.triggering_actor != 'mojtabarozegar11-ship-it' || github.run_attempt != '1' || (inputs.operation != 'audit' && (inputs.recovery_authorized != true || inputs.offhost_backup_verified != true))) }}"
     runs-on: ubuntu-24.04
+    steps:
+      - name: Refuse unapproved factory recovery
+        shell: bash
+        run: |
+          echo "FACTORY_RECOVERY_GATE=BLOCKED_UNAUTHORIZED_OR_REPLAY_OR_MISSING_APPROVAL"
+          exit 1
+
+  pause-loop-low-disk:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && github.triggering_actor == 'mojtabarozegar11-ship-it' && github.run_attempt == '1' && inputs.operation == 'pause' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 3
     steps:
       - name: Gracefully pause only the verified loop when free disk is below reserve
@@ -86,8 +104,8 @@ jobs:
           REMOTE
 
   audit-readonly:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
-    runs-on: ubuntu-24.04
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && github.triggering_actor == 'mojtabarozegar11-ship-it' && github.run_attempt == '1' && inputs.operation == 'audit' }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -177,12 +195,37 @@ jobs:
           else:
               print("FACTORY_AUDIT_FILESYSTEM_TOP_SCAN_COMPLETE=not_authorized")
           ' "$root"
-          current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
-          trap 'rm -f -- "$current"' EXIT
-          crontab -l > "$current" 2>/dev/null || : > "$current"
-          echo FACTORY_AUDIT_CRON_MASTER_TAGS="$(grep -Ec 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
-          echo FACTORY_AUDIT_CRON_LEECH_TAGS="$(grep -Ec 'LEECH|leech' "$current" || true)"
-          echo FACTORY_AUDIT_CRON_OTHER_LINES="$(grep -Ec -v 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
+          # Report only active lines from this verified githubops user's
+          # crontab. A failed read must never be interpreted as an empty file.
+          cron_source=""
+          if cron_source="$(LC_ALL=C crontab -l 2>&1)"; then
+            echo FACTORY_AUDIT_CRON_READ=observed
+          else
+            cron_rc=$?
+            if (( cron_rc == 1 )) && [[ "$cron_source" == "no crontab for githubops" ]]; then
+              cron_source=""
+              echo FACTORY_AUDIT_CRON_READ=none_installed
+            else
+              echo FACTORY_AUDIT_CRON_READ=unavailable_fail_closed
+              exit 1
+            fi
+          fi
+          # Never print crontab commands, paths, arguments or raw stderr.
+          printf '%s\n' "$cron_source" | awk '
+            /^[[:space:]]*(#|$)/ {next}
+            {
+              active++
+              if (/SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1/) master++
+              else other++
+              if (tolower($0) ~ /leech/) leech++
+            }
+            END {
+              printf "FACTORY_AUDIT_CRON_ACTIVE_LINES=%d\n", active+0
+              printf "FACTORY_AUDIT_CRON_MASTER_TAGS=%d\n", master+0
+              printf "FACTORY_AUDIT_CRON_LEECH_TAGS=%d\n", leech+0
+              printf "FACTORY_AUDIT_CRON_OTHER_LINES=%d\n", other+0
+            }
+          '
           ops="$root/operations"
           script="$ops/vps-only-loop.sh"
           pidfile="$ops/vps-only-loop.pid"
@@ -210,8 +253,10 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
-    runs-on: ubuntu-latest
+    # This job patches deployed Python and may start the factory. Only an
+    # owner-authorized manual event with a verified backup may run it.
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'mojtabarozegar11-ship-it' && github.triggering_actor == 'mojtabarozegar11-ship-it' && github.run_attempt == '1' && inputs.operation == 'recover' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true }}"
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
       - name: Ensure one running factory loop and report actual production progress
