@@ -305,3 +305,18 @@ def test_six_transactional_service_offers_are_above_general_topic_directory():
     assert offer_start < directory_first_card
     for code in SERVICE_CARDS:
         assert url(code) in html
+
+
+@pytest.mark.django_db
+@override_settings(**OFF)
+@pytest.mark.parametrize("code", SERVICE_CARDS)
+def test_optional_business_email_is_subject_only_and_does_not_submit_customer_data(code):
+    html=Client().get(url(code)).content.decode("utf-8")
+    assert 'class="scope-email-fallback"' in html
+    assert "mailto:zomorodmelal@gmail.com?subject=" in html
+    assert "%5B"+code+"%5D" in html
+    assert "از این صفحه پیام خودکار ارسال نمی‌شود" in html
+    assert "mailto:zomorodmelal@gmail.com?body=" not in html
+    assert "<form" not in html.lower()
+    assert CompanyInquiry.objects.count()==0
+    assert Order.objects.count()==0
