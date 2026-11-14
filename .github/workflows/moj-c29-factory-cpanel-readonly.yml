@@ -37,4 +37,5 @@ jobs:
           bash deploy/cpanel_direct_command.sh cpanel_preflight
           bash deploy/cpanel_direct_command.sh passenger_inventory
           bash deploy/cpanel_direct_command.sh mpw_source_parity_readonly
-          echo 'MOJ_C29_FACTORY_TO_CPANEL_SOURCE_PARITY_READONLY=PASS'
+          bash deploy/cpanel_direct_command.sh mpw_sales_intake_readonly
+          echo 'MOJ_C29_FACTORY_SOURCE_AND_BUYER_INTAKE_READONLY=PASS'
