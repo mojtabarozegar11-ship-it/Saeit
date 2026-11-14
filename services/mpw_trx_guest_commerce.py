@@ -96,19 +96,17 @@ def _new_user(request):
     if not Model._meta.get_field(field).unique:
         raise Http404("Guest identity field must be unique")
     query = {field: value}
-    user = Model.objects.filter(**query).first()
-    if user is None:
-        try:
-            # A random collision is extraordinarily unlikely; fail closed rather
-            # than reuse a principal whose owner cookie was never presented.
-            with transaction.atomic():
-                user = Model(**query)
-                user.set_unusable_password()
-                if hasattr(user, "is_active"):
-                    user.is_active = True
-                user.save(force_insert=True)
-        except IntegrityError as exc:
-            raise Http404("Guest identity allocation conflict") from exc
+    try:
+        # Never look up or reuse a principal without its signed owner cookie.
+        # A random collision is extraordinarily unlikely and must fail closed.
+        with transaction.atomic():
+            user = Model(**query)
+            user.set_unusable_password()
+            if hasattr(user, "is_active"):
+                user.is_active = True
+            user.save(force_insert=True)
+    except IntegrityError as exc:
+        raise Http404("Guest identity allocation conflict") from exc
     if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
