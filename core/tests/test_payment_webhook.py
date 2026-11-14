@@ -7,9 +7,10 @@ from django.test import override_settings
 from rest_framework.test import APIClient
 
 from core.models import LedgerEntry, Order, PaymentIntent, PaymentWebhookEvent
+from core.commerce_integrity import ledger_reference
 
 
-def signed_post(client, payload, provider="demo", event_id="evt-1", secret="test-secret"):
+def signed_post(client, payload, provider="named-provider", event_id="evt-1", secret="a"*32):
     raw = json.dumps(payload, separators=(",", ":")).encode()
     signature = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return client.generic(
@@ -24,7 +25,7 @@ def signed_post(client, payload, provider="demo", event_id="evt-1", secret="test
 
 
 @pytest.mark.django_db
-@override_settings(PAYMENT_WEBHOOK_SECRET="test-secret")
+@override_settings(PAYMENT_WEBHOOK_SECRET="a"*32, PAYMENT_WEBHOOK_ALLOWED_PROVIDERS=("named-provider",))
 def test_signed_success_webhook_settles_once(django_user_model):
     owner = django_user_model.objects.create_user(
         username="webhook-owner", password="x"
@@ -38,7 +39,7 @@ def test_signed_success_webhook_settles_once(django_user_model):
         currency=order.currency,
         idempotency_key="webhook-pay-1",
         status="ready_for_gateway",
-        provider="demo",
+        provider="named-provider",
     )
     client = APIClient()
     payload = {
@@ -55,22 +56,22 @@ def test_signed_success_webhook_settles_once(django_user_model):
     order.refresh_from_db()
     assert intent.status == "succeeded"
     assert order.status == "paid"
-    assert LedgerEntry.objects.filter(reference="payment:demo:evt-1").count() == 1
+    assert LedgerEntry.objects.filter(reference=ledger_reference("named-provider", "evt-1")).count() == 1
 
     second = signed_post(client, payload)
     assert second.status_code == 200
-    assert PaymentWebhookEvent.objects.filter(provider="demo", event_id="evt-1").count() == 1
-    assert LedgerEntry.objects.filter(reference="payment:demo:evt-1").count() == 1
+    assert PaymentWebhookEvent.objects.filter(provider="named-provider", event_id="evt-1").count() == 1
+    assert LedgerEntry.objects.filter(reference=ledger_reference("named-provider", "evt-1")).count() == 1
 
 
 @pytest.mark.django_db
-@override_settings(PAYMENT_WEBHOOK_SECRET="test-secret")
+@override_settings(PAYMENT_WEBHOOK_SECRET="a"*32, PAYMENT_WEBHOOK_ALLOWED_PROVIDERS=("named-provider",))
 def test_webhook_rejects_bad_signature(django_user_model):
     owner = django_user_model.objects.create_user(username="bad-sign", password="x")
     order = Order.objects.create(customer=owner, status="pending", total="100.00", currency="IRR")
     intent = PaymentIntent.objects.create(
         order=order, amount=order.total, currency=order.currency,
-        idempotency_key="bad-sign-1", status="ready_for_gateway", provider="demo"
+        idempotency_key="bad-sign-1", status="ready_for_gateway", provider="named-provider"
     )
     raw = json.dumps({
         "event_type": "payment.succeeded", "payment_intent_id": intent.pk,
@@ -79,7 +80,7 @@ def test_webhook_rejects_bad_signature(django_user_model):
     response = APIClient().generic(
         "POST", "/api/payment-webhooks/", data=raw,
         content_type="application/json",
-        HTTP_X_PAYMENT_PROVIDER="demo",
+        HTTP_X_PAYMENT_PROVIDER="named-provider",
         HTTP_X_PAYMENT_EVENT_ID="evt-bad",
         HTTP_X_PAYMENT_SIGNATURE="invalid",
     )
@@ -89,13 +90,13 @@ def test_webhook_rejects_bad_signature(django_user_model):
 
 
 @pytest.mark.django_db
-@override_settings(PAYMENT_WEBHOOK_SECRET="test-secret")
+@override_settings(PAYMENT_WEBHOOK_SECRET="a"*32, PAYMENT_WEBHOOK_ALLOWED_PROVIDERS=("named-provider",))
 def test_webhook_rejects_amount_mismatch(django_user_model):
     owner = django_user_model.objects.create_user(username="mismatch", password="x")
     order = Order.objects.create(customer=owner, status="pending", total="100.00", currency="IRR")
     intent = PaymentIntent.objects.create(
         order=order, amount=order.total, currency=order.currency,
-        idempotency_key="mismatch-1", status="ready_for_gateway", provider="demo"
+        idempotency_key="mismatch-1", status="ready_for_gateway", provider="named-provider"
     )
     response = signed_post(
         APIClient(),
