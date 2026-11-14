@@ -91,6 +91,17 @@ class MojPropChallengeCheckoutSafetyTests(SimpleTestCase):
                        existing_commitments_usd=850)
         self.assertEqual(x.maximum_initial_funded_accounts, 0)
 
+    def test_zero_or_fake_cohort_cannot_unlock_paid_prop_review(self):
+        for forged in (0, -1, True, False, "1", 1.0, 10001):
+            with self.subTest(value=repr(forged)), self.assertRaises(ValueError):
+                self.ready(required_first_tier_accounts=forged)
+
+    def test_single_real_cohort_keeps_existing_safe_preflight_behavior(self):
+        result = self.ready(required_first_tier_accounts=1)
+        self.assertTrue(result.eligible_for_external_legal_review)
+        self.assertFalse(result.checkout_enabled)
+        self.assertFalse(result.trading_enabled)
+
     def test_larger_cohort_requires_real_capacity(self):
         x = self.ready(free_treasury_usd=1000, protected_reserves_usd=0,
                        required_first_tier_accounts=11)
