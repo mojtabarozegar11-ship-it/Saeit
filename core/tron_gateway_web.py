@@ -347,7 +347,11 @@ def email_claim(request, token):
         key = hashlib.sha256(token.encode("ascii")).hexdigest()
     except UnicodeEncodeError:
         raise Http404("Invalid email claim")
-    invoice = TronGatewayInvoice.objects.filter(claim_sha256=key, source_host=host).first()
+    merchant = _merchant(host)
+    invoice = TronGatewayInvoice.objects.filter(
+        claim_sha256=key, source_host=host,
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+    ).first()
     if invoice is None or invoice.expires_ms < int(time.time() * 1000):
         raise Http404("Email link expired")
     request.session.cycle_key()
@@ -460,8 +464,11 @@ def recovery(request):
     try:
         email = _valid_email(request.POST.get("email", ""))
         _limit(request, email)
+        merchant = _merchant(host)
         has_invoices = TronGatewayInvoice.objects.filter(
-            buyer_email=email, source_host=host).exists()
+            buyer_email=email, source_host=host,
+            merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+        ).exists()
         if has_invoices:
             payload = {"h": host, "e": _email_key(email)}
             token = signing.dumps(payload, salt="tron:recovery:v1")
@@ -491,12 +498,16 @@ def recovery_link(request, token):
     request.session["tron_verified_email"] = payload["e"]
     request.session["tron_verified_host"] = host
     request.session["tron_verified_at"] = int(time.time())
+    merchant = _merchant(host)
     TronGatewayInvoice.objects.filter(
         source_host=host, buyer_email_sha=payload["e"],
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
         status="email_pending", expires_ms__gte=int(time.time()*1000)
     ).update(status="awaiting_payment")
     invoices = list(TronGatewayInvoice.objects.filter(
-        source_host=host, buyer_email_sha=payload["e"]).order_by("-created_at")[:20])
+        source_host=host, buyer_email_sha=payload["e"],
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+    ).order_by("-created_at")[:20])
     return _page(request, _context(None, "recovery_list", language, invoices=invoices))
 
 
