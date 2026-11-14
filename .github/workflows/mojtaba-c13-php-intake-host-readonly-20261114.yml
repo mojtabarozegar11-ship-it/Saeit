@@ -5,6 +5,8 @@ on:
       - feature/mojtaba-bot-lead-source-of-truth-c04-20261114
     paths:
       - deploy/company_live_intake_readonly.py
+      - deploy/company_public_service_live_check.py
+      - tests/test_company_public_service_live_check_c13_20261114.py
       - .github/workflows/mojtaba-c13-php-intake-host-readonly-20261114.yml
   workflow_dispatch:
 permissions:
@@ -31,6 +33,16 @@ jobs:
             echo "AUDITOR_ALLOWLIST_REVIEW_REQUIRED"
             exit 2
           fi
+      - name: Verify public service page check logic without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_company_public_service_live_check_c13_20261114.py' -q
+      - name: Independent GET visibility of all six commercial URLs
+        shell: bash
+        timeout-minutes: 2
+        continue-on-error: true
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -B deploy/company_public_service_live_check.py
       - name: Verify pinned cPanel host and stream read-only inspection via stdin
         shell: bash
         env:
