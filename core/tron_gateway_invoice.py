@@ -9,6 +9,8 @@ class TronGatewayInvoice(models.Model):
         "core.PaymentIntent", on_delete=models.PROTECT,
         related_name="tron_gateway_invoice")
     buyer_email = models.EmailField(max_length=254)
+    buyer_email_sha = models.CharField(max_length=64, db_index=True)
+    candidate_txid = models.CharField(max_length=64, blank=True, default="")
     source_host = models.CharField(max_length=150)
     language = models.CharField(max_length=2)
     receiver = models.CharField(max_length=34)
