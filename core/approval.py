@@ -24,6 +24,10 @@ class ApprovalService:
             raise ValueError("Only the designated owner can make this approval decision")
         if not get_user_model().objects.filter(pk=actor_id, is_active=True).exists():
             raise ValueError("Only an active designated owner can decide an approval")
+        if approval.target_type in {"PaymentIntent", "Product"}:
+            financial_owner = get_user_model().objects.filter(pk=actor_id).first()
+            if not is_authorized_chat_operator(financial_owner):
+                raise ValueError("Commerce approvals require the active designated superuser owner")
         if approval.target_type == "ChatOperation":
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
             if not is_authorized_chat_operator(operator) or approval.requested_by_id != actor_id:
@@ -74,9 +78,15 @@ class ApprovalService:
                 article.published = True
                 article.save(update_fields=["published", "updated_at"])
         elif approval.target_type == "PaymentIntent":
-            intent = PaymentIntent.objects.select_for_update().filter(pk=approval.target_id).first()
+            intent = PaymentIntent.objects.select_for_update().select_related("order").filter(pk=approval.target_id).first()
             if intent is None:
                 raise ValueError("Payment intent no longer exists")
+            purchased_item = intent.order.items.select_related("product").first()
+            if (purchased_item is None or purchased_item.product.owner_id != actor_id
+                    or intent.order.status != "pending"
+                    or intent.amount != intent.order.total
+                    or intent.currency != intent.order.currency):
+                raise ValueError("Payment approval does not match designated product owner and pending order")
             if approved:
                 if intent.status != "awaiting_approval":
                     raise ValueError("Payment intent is no longer awaiting approval")
@@ -89,6 +99,8 @@ class ApprovalService:
             product = Product.objects.select_for_update().select_related("knowledge_article").filter(pk=approval.target_id).first()
             if product is None:
                 raise ValueError("Product no longer exists")
+            if product.owner_id != actor_id:
+                raise ValueError("Product approval requires its designated owner")
             if approved and product.active:
                 raise ValueError("Product is already active")
             if approved:

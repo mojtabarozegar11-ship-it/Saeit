@@ -13,13 +13,14 @@ from .unified_bot_identity import BOT_CODE, EXECUTOR_RUNTIME_CODES
 
 
 from .orchestrator import MasterAgent
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
 from django.utils import timezone
 import hashlib
 import hmac
 import json
+import re
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, AuditLog, ChatMessage, ChatSession, Evidence, Finding,
@@ -362,51 +363,88 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
 
 
 class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
+    """Customer-owned intents; explicit product-owner approval, never billing."""
     queryset = PaymentIntent.objects.select_related("order__customer").all()
     serializer_class = PaymentIntentSerializer
-    permission_classes = [InternalStaffWritePermission]
+    permission_classes = [IsAuthenticated]
     owner_field = "order__customer"
+
+    def get_queryset(self):
+        user = self.request.user
+        if is_authorized_chat_operator(user):
+            return self.queryset
+        return self.queryset.filter(order__customer=user)
 
     @action(detail=False, methods=["post"], url_path="create")
     def create_intent(self, request):
         order_id = request.data.get("order_id")
-        key = str(request.data.get("idempotency_key", "")).strip()
-        if not order_id or not key:
+        key = request.data.get("idempotency_key")
+        if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{8,128}", key):
             return Response(
-                {"detail": "order_id and idempotency_key are required."},
+                {"detail": "A bounded idempotency_key (8-128 safe characters) is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        order = Order.objects.filter(pk=order_id, customer=request.user).first()
-        if order is None:
-            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-        if order.status != "pending":
-            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+        if type(order_id) not in (str, int) or not str(order_id).isdigit():
+            return Response({"detail": "A valid order_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            with transaction.atomic():
+                order = Order.objects.select_for_update().filter(
+                    pk=order_id, customer=request.user,
+                ).first()
+                if order is None:
+                    return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+                if order.status != "pending":
+                    return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+                if order.total <= 0 or not order.total.is_finite():
+                    return Response({"detail": "Invalid order amount."}, status=status.HTTP_409_CONFLICT)
 
-        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.order_id != order.pk:
-                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+                item = order.items.select_related("product__owner").first()
+                owner = item.product.owner if item is not None else None
+                if not is_authorized_chat_operator(owner):
+                    return Response(
+                        {"detail": "This product has no active designated payment approver."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                bound_key = PaymentIntent.objects.filter(idempotency_key=key).first()
+                if bound_key is not None and bound_key.order_id != order.pk:
+                    return Response(
+                        {"detail": "Idempotency key belongs to another order."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                existing = PaymentIntent.objects.filter(order=order).first()
+                if existing is not None:
+                    if existing.idempotency_key != key:
+                        return Response(
+                            {"detail": "An existing payment intent uses a different key."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    return Response(
+                        {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                        status=status.HTTP_200_OK,
+                    )
+
+                intent = PaymentIntent.objects.create(
+                    order=order,
+                    amount=order.total,
+                    currency=order.currency,
+                    idempotency_key=key,
+                    status="awaiting_approval",
+                    provider="not_configured",
+                )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment",
+                    target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Exact designated product owner approval required before any external payment.",
+                    risk="critical",
+                    requested_by=owner,
+                )
+        except (IntegrityError, ValueError, TypeError):
             return Response(
-                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                status=status.HTTP_200_OK,
+                {"detail": "Concurrent or invalid payment intent; inspect existing order state."},
+                status=status.HTTP_409_CONFLICT,
             )
-
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
         return Response(
             {
                 "status": "approval_required",
