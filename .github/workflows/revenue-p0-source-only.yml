@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/revenue-p0-source-only.yml"
       - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
+      - "scripts/mojtaba_revenue_cli.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
@@ -17,6 +19,8 @@ on:
     paths:
       - ".github/workflows/revenue-p0-source-only.yml"
       - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
+      - "scripts/mojtaba_revenue_cli.py"
       - "tests/test_revenue_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
@@ -32,6 +36,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run offline unit/source contracts
         run: python3 -m unittest discover -s tests -p 'test_revenue_*.py' -v
+      - name: Enforce ten-channel one-bot commercial gates and CLI invariants
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/revenue_dual_offer_qualifier.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_revenue*.py' -v
+      - name: Prove sample portfolio and KPI outputs are expressly synthetic
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --catalog >/tmp/mojtaba-catalog.json
+          python3 scripts/mojtaba_revenue_cli.py --qualify docs/revenue-p0/mojtaba-portfolio-inquiry.synthetic.json >/tmp/mojtaba-synthetic-inquiry.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-kpis docs/revenue-p0/mojtaba-portfolio-kpi.synthetic.json >/tmp/mojtaba-synthetic-kpis.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/mojtaba-catalog.json'))
+          b=json.load(open('/tmp/mojtaba-synthetic-inquiry.json'))
+          c=json.load(open('/tmp/mojtaba-synthetic-kpis.json'))
+          assert len(a['offers'])==10 and a['canonical_bot']=='mojtaba.bot.ai'
+          assert all(x['commercial_mode']=='inquiry_only' for x in a['offers'])
+          assert b['canonical_bot']=='mojtaba.bot.ai' and b['payment_verified'] is False
+          assert b['collected_revenue'] is None and b['auto_send'] is False
+          assert c['synthetic_example'] is True and c['actual_revenue'] is None
+          print('MOJTABA_SINGLE_BOT_PORTFOLIO=10; FINANCIAL_RELEASE=NO_GO; ACTUAL_REVENUE=UNKNOWN')
+          PY
       - name: Reject non-anonymized or phantom payment test output
         run: |
           python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-checkout-intake.synthetic.json > /tmp/revenue_checkout.json
