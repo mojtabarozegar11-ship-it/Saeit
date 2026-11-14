@@ -294,3 +294,14 @@ def test_copyable_brief_does_not_change_the_authoritative_intake_source():
     assert reverse("service_inquiry", args=["RS-03"]) in html
     assert LEGACY_INQUIRY_PATH not in html
     assert "<form" not in html.lower()
+
+
+@pytest.mark.django_db
+@override_settings(**OFF)
+def test_six_transactional_service_offers_are_above_general_topic_directory():
+    html = Client().get(reverse("services")).content.decode("utf-8")
+    offer_start = html.index('id="service-offers-heading"')
+    directory_first_card = html.index("دامپروری", html.index('<section class="services-grid">', offer_start + 1))
+    assert offer_start < directory_first_card
+    for code in SERVICE_CARDS:
+        assert url(code) in html
