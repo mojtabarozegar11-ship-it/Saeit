@@ -44,6 +44,12 @@ jobs:
           set -euo pipefail
           python manage.py check
           python manage.py makemigrations --check --dry-run
+      - name: Prepare static manifest as in authoritative Django CI
+        env:
+          SECRET_KEY: c19-local-ci-secret
+          DEBUG: "False"
+          ALLOWED_HOSTS: testserver,localhost,127.0.0.1,zomorodmelal.ir,mojplaywin.com
+        run: python manage.py collectstatic --noinput
       - name: Existing plus new exact source-boundary tests
         env:
           SECRET_KEY: c19-local-ci-secret
