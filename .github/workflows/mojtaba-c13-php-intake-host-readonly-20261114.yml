@@ -8,6 +8,7 @@ on:
       - deploy/company_c14_php_flow_readonly.py
       - deploy/company_c14_php_db_metadata_readonly.py
       - deploy/company_c15_form_data_lineage_readonly.py
+      - deploy/company_c15_public_ticket_tracking_readonly.py
       - deploy/company_static_service_preflight.py
       - deploy/company_services_public_index_readonly.py
       - scripts/build_company_service_static_c13.py
@@ -57,6 +58,13 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         run: PYTHONDONTWRITEBYTECODE=1 python3 -B deploy/company_public_service_live_check.py
+      - name: Real public GET distinction between inquiry and status tracking
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_c15_public_ticket_tracking_readonly.py").read_text("utf-8"))'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B deploy/company_c15_public_ticket_tracking_readonly.py
       - name: Verify pinned cPanel host and stream read-only inspection via stdin
         shell: bash
         env:
