@@ -196,6 +196,13 @@ class RoutingVerificationRegressionTests(SimpleTestCase):
     def test_signature_tampering_denied(self):
         self.assertFalse(self.verify({**self.context, "routing_digest": "0" * 64}))
 
+    def test_non_ascii_and_malformed_hmac_are_cleanly_rejected(self):
+        for digest in ("é" * 64, "x" * 64, "A" * 64, "0" * 63, "0" * 65):
+            with self.subTest(digest=digest[:8]):
+                self.assertFalse(self.verify({
+                    **self.context, "routing_digest": digest,
+                }))
+
     def test_product_sku_tampering_denied(self):
         self.assertFalse(self.verify({**self.context, "product_sku": "book-225"}))
 
