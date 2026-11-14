@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}استعلام خدمات و همکاری | شرکت کشت و صنعت زمرد ملل{% endblock %}
+{% block meta_description %}ثبت درخواست مشاوره تخصصی، ارزیابی اقتصادی و امکان‌سنجی، پروژه کشاورزی و همکاری تجاری با شرکت زمرد ملل. ثبت درخواست رایگان و بدون تعهد خرید است.{% endblock %}
+{% block content %}
+<section dir="rtl" id="commercial-inquiry" style="max-width:900px;margin:40px auto;padding:clamp(16px,3vw,36px);color:inherit">
+  <header><small>زمرد ملل · ثبت استعلام تخصصی</small>
+  <h1>درخواست مشاوره، پیشنهاد قیمت و همکاری</h1>
+  <p>درخواست شما صرفاً برای بررسی دامنهٔ خدمت و امکان پاسخ‌گویی داخلی ثبت می‌شود؛ این فرم قرارداد، پذیرش سفارش یا دستور پرداخت نیست.</p>
+  <p>زمینه‌های درخواست: ارزیابی اقتصادی تولید، امکان‌سنجی کشاورزی و گلخانه، پژوهش کاربردی، توسعه فناوری و همکاری تجاری.</p></header>
+  {% if inquiry_received %}
+  <div role="status" style="border:1px solid #669966;border-radius:12px;padding:16px;margin:20px 0">
+    <strong>فرم شما در سامانهٔ داخلی شرکت ثبت شد.</strong>
+    <p>ثبت به معنی تأیید پروژه، ارسال پیشنهاد، تماس قطعی یا پرداخت نیست. در این مرحله هیچ ایمیل خودکاری ارسال نشده است.</p>
+  </div>
+  {% endif %}
+  {% if form.errors %}
+  <div role="alert" style="border:1px solid #ae5757;border-radius:12px;padding:14px;margin:16px 0">
+    <strong>فرم ثبت نشد؛ موارد مشخص‌شده را اصلاح کنید.</strong>
+    {{ form.non_field_errors }}
+  </div>
+  {% endif %}
+  <form action="{% url 'contact' %}" method="post" accept-charset="utf-8" novalidate
+        style="display:grid;gap:15px;margin-top:20px">
+    {% csrf_token %}
+    {{ form.website }}
+    <div><label for="{{ form.kind.id_for_label }}">نوع درخواست *</label>{{ form.kind }}{{ form.kind.errors }}</div>
+    <div><label for="{{ form.name.id_for_label }}">نام و نام خانوادگی *</label>{{ form.name }}{{ form.name.errors }}</div>
+    <div><label for="{{ form.organization.id_for_label }}">نام سازمان (اختیاری)</label>{{ form.organization }}{{ form.organization.errors }}</div>
+    <div><label for="{{ form.email.id_for_label }}">ایمیل برای بررسی و پیگیری *</label>{{ form.email }}{{ form.email.errors }}</div>
+    <div><label for="{{ form.phone.id_for_label }}">تلفن (اختیاری)</label>{{ form.phone }}{{ form.phone.errors }}</div>
+    <div><label for="{{ form.subject.id_for_label }}">موضوع استعلام *</label>{{ form.subject }}{{ form.subject.errors }}</div>
+    <div><label for="{{ form.message.id_for_label }}">شرح خدمت موردنیاز (حداقل ۲۰ نویسه) *</label>{{ form.message }}{{ form.message.errors }}</div>
+    <label style="display:flex;align-items:flex-start;gap:10px">
+      {{ form.consent }}
+      <span>{{ form.consent.label }} *</span>
+    </label>
+    {{ form.consent.errors }}
+    <button type="submit" style="cursor:pointer;padding:15px 20px;min-height:48px;border-radius:10px">ثبت درخواست بدون پرداخت</button>
+  </form>
+  <aside style="margin-top:25px;border-top:1px solid #888;padding-top:15px">
+    <p>لطفاً رمز عبور، اطلاعات کارت، کلید خصوصی، مدارک پزشکی یا داده‌های محرمانهٔ غیرضروری ارسال نکنید. برای پیگیری یا درخواست حذف اطلاعات ثبت‌شده از مسیر رسمی تماس شرکت استفاده کنید.</p>
+    <p><a href="/services/">بازگشت به خدمات</a> · <a href="/company/">معرفی شرکت</a></p>
+  </aside>
+</section>
+<style>
+#commercial-inquiry input:not([type="checkbox"]):not([type="hidden"]),#commercial-inquiry select,#commercial-inquiry textarea{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:13px 12px;margin-top:6px;border:1px solid #888;border-radius:9px;background:transparent;color:inherit;font:inherit}
+#commercial-inquiry option{color:#111}
+#commercial-inquiry label{font-weight:600}
+#commercial-inquiry .errorlist{color:#bd4343;list-style:inside;padding:5px 0}
+#commercial-inquiry a{text-decoration:underline}
+</style>
+{% endblock %}

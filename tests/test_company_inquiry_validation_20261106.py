@@ -1,11 +1,12 @@
 """CRM lead-quality regression tests for the public company inquiry form."""
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.company_inquiry_models import CompanyInquiry
 
 
+@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir"], DEBUG=True)
 class CompanyInquiryValidationTests(TestCase):
     def payload(self):
         return {
@@ -16,15 +17,16 @@ class CompanyInquiryValidationTests(TestCase):
             "phone": "",
             "subject": "Request a quotation",
             "message": "Please tell me about the available service.",
+            "consent": "on",
         }
 
-    def submit(self, payload):
-        response = self.client.post(reverse("company"), data=payload)
-        self.assertEqual(response.status_code, 302)
+    def submit(self, payload, *, expected_status=422):
+        response = self.client.post(reverse("company"), data=payload, HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(response.status_code, expected_status)
         return response
 
     def test_valid_inquiry_creates_one_lead(self):
-        self.submit(self.payload())
+        self.submit(self.payload(), expected_status=302)
         self.assertEqual(CompanyInquiry.objects.count(), 1)
         inquiry = CompanyInquiry.objects.get()
         self.assertEqual(inquiry.status, "new")

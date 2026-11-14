@@ -125,6 +125,11 @@ class EconomicMasterAgent:
             "autonomous_spend_scope": "preauthorized_operating_budget_and_allowlisted_recurring_services_only",
         }
 
+    def inspect_sales_pipeline_readonly(self):
+        """Inspect the existing CompanyInquiry queue, not inferred revenue."""
+        from .company_sales_pipeline import sales_pipeline_snapshot
+        return sales_pipeline_snapshot()
+
     def inspect_fulfillment_preflight_readonly(self):
         """Inspect anonymized delivery blockers without issuing access."""
         from .fulfillment_preflight import fulfillment_preflight_snapshot

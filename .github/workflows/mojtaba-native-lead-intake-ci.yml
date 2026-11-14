@@ -1,0 +1,62 @@
+name: Mojtaba native lead intake and private sales pipeline (isolated)
+
+on:
+  pull_request:
+    branches:
+      - audit/mojtaba-fulfillment-recovery-20261114
+    paths:
+      - config/urls.py
+      - core/company_sales_intake.py
+      - core/company_sales_views.py
+      - core/company_content_views.py
+      - core/company_sales_pipeline.py
+      - core/economic_master_agent.py
+      - core/admin.py
+      - core/templates/core/platform_page.html
+      - core/templates/core/company_contact.html
+      - core/templates/core/services.html
+      - command_center/company_sales_pipeline.py
+      - command_center/urls.py
+      - core/management/commands/mojtaba_sales_pipeline_readonly.py
+      - core/tests/test_native_company_sales_intake_20261114.py
+      - tests/test_company_inquiry_validation_20261106.py
+      - .github/workflows/mojtaba-native-lead-intake-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  native-b2b-inquiry:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 17
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-company-crm-key"
+      ALLOWED_HOSTS: "testserver,zomorodmelal.ir,mojplaywin.com"
+      EMAIL_BACKEND: "django.core.mail.backends.locmem.EmailBackend"
+      TRADE_EMAIL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Native quote form, CRM, owner dashboard and revenue regressions
+        run: |
+          python -m pytest -q \
+            core/tests/test_native_company_sales_intake_20261114.py \
+            tests/test_company_inquiry_validation_20261106.py \
+            core/tests/test_mojtaba_revenue_evidence_20261114.py \
+            core/tests/test_commerce_funnel.py
+      - name: Source and form syntax checks
+        run: |
+          python -m compileall -q \
+            core/company_sales_intake.py core/company_sales_views.py \
+            core/company_sales_pipeline.py command_center/company_sales_pipeline.py \
+            core/company_content_views.py \
+            core/management/commands/mojtaba_sales_pipeline_readonly.py \
+            core/tests/test_native_company_sales_intake_20261114.py
