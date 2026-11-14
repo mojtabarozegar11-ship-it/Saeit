@@ -102,6 +102,41 @@ class BrokerSignedEvidenceTests(TestCase):
             ingest_signed_evidence(**wrong)
         self.assertFalse(PropExecution.objects.exists())
 
+    def test_signed_position_identity_and_bot_origin_are_stored_pending(self):
+        payload=self.packet(data={
+            "symbol":"XAUUSD", "gross_usd":"2.50", "fees_usd":"0.50",
+            "position_id":"broker-position-1001", "execution_origin":"bot",
+        })
+        result=ingest_signed_evidence(**payload)
+        self.assertEqual(result["result"],"recorded_pending")
+        row=PropExecution.objects.get(account=self.account)
+        self.assertEqual(row.external_position_id,"broker-position-1001")
+        self.assertEqual(row.execution_origin,"bot")
+        self.assertEqual(row.reconciliation_status,"pending")
+
+    def test_legacy_execution_without_position_id_does_not_fake_a_trade(self):
+        ingest_signed_evidence(**self.packet())
+        row=PropExecution.objects.get(account=self.account)
+        self.assertEqual(row.external_position_id,"")
+        self.assertEqual(row.execution_origin,"unknown")
+        from prop_firm.trade_count import count_challenge_trades
+        stats=count_challenge_trades([row],paid_at=NOW-timedelta(days=1))
+        self.assertEqual(stats.valid_closed_positions,0)
+
+    def test_partial_signed_execution_metadata_is_rejected(self):
+        for payload in (
+            {"symbol":"XAUUSD","gross_usd":"1","fees_usd":"0","position_id":"id1"},
+            {"symbol":"XAUUSD","gross_usd":"1","fees_usd":"0","execution_origin":"bot"},
+        ):
+            with self.subTest(payload=payload), self.assertRaises(EvidenceRejected):
+                ingest_signed_evidence(**self.packet(data=payload))
+
+    def test_unsupported_bot_origin_is_rejected_even_if_signed(self):
+        payload={"symbol":"XAUUSD","gross_usd":"1","fees_usd":"0",
+                 "position_id":"pos7","execution_origin":"spoofed"}
+        with self.assertRaises(EvidenceRejected):
+            ingest_signed_evidence(**self.packet(data=payload))
+
     def test_valid_equity_mark_is_pending(self):
         result = ingest_signed_evidence(**self.packet(
             event_type="equity", event_id="mark-1",
