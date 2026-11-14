@@ -323,6 +323,74 @@ class CheckoutReleaseFormTests(unittest.TestCase):
 
 
 
+    def test_rejects_source_csrf_inside_script(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input type="email" name="email" required>'
+                '<script>{% csrf_token %}</script></form>')
+        self.assertFalse(self.check(html, require_source_csrf=True))
+
+    def test_rejects_source_csrf_inside_textarea(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input type="email" name="email" required>'
+                '<textarea>{% csrf_token %}</textarea></form>')
+        self.assertFalse(self.check(html, require_source_csrf=True))
+
+    def test_rejects_rendered_csrf_inside_disabled_fieldset(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input type="email" name="email" required>'
+                '<fieldset disabled><input type="hidden" name="csrfmiddlewaretoken" value="'
+                + "A" * 64 + '"></fieldset></form>')
+        self.assertFalse(self.check(html, require_csrf=True))
+
+    def test_rejects_email_in_hidden_ancestor(self):
+        for ancestor in ('<div hidden>', '<div style="display: none">',
+                         '<section aria-hidden="true">', '<section style="opacity:0">'):
+            closing = '</div>' if ancestor.startswith('<div') else '</section>'
+            html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                    + ancestor + '<input name="email" type="email" required>'
+                    + closing + '</form>')
+            with self.subTest(ancestor=ancestor):
+                self.assertFalse(self.check(html))
+
+    def test_rejects_readonly_email(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required readonly></form>')
+        self.assertFalse(self.check(html))
+
+    def test_rejects_nested_invoice_forms(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input type="email" name="email" required>'
+                '</form></form>')
+        self.assertFalse(self.check(html))
+
+    def test_rejects_token_in_template_element(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '<input name="email" type="email" required>'
+                '<template>{% csrf_token %}</template></form>')
+        self.assertFalse(self.check(html, require_source_csrf=True))
+
+    def test_rejects_controls_inside_select_or_button(self):
+        for tag in ("select", "button"):
+            html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                    '<' + tag + '><input name="email" type="email" required></' + tag + '>'
+                    '</form>')
+            with self.subTest(tag=tag):
+                self.assertFalse(self.check(html))
+
+    def test_rejects_two_eligible_checkout_forms(self):
+        single = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                  '<input name="email" type="email" required></form>')
+        self.assertFalse(self.check(single + single))
+
+    def test_rejects_duplicate_source_csrf_tokens_in_one_form(self):
+        html = ('<form method="post" action="/commerce/trx-easy/start/72/">'
+                '{% csrf_token %}{% csrf_token %}'
+                '<input name="email" type="email" required></form>')
+        self.assertFalse(self.check(html, require_source_csrf=True))
+
+
+
 class CheckoutSourcePreflightTests(unittest.TestCase):
     """Temporary files only; never touch production hosting."""
 
