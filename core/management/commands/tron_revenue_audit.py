@@ -13,7 +13,6 @@ from django.core.management.base import BaseCommand
 from core.models import LedgerEntry, PaymentWebhookEvent
 from core.tron_gateway_invoice import TronGatewayInvoice
 from core.tron_gateway_web import PROVIDER
-from core.tron_gateway_verify import MAINNET_RECEIVER
 
 
 class Command(BaseCommand):
@@ -70,7 +69,9 @@ class Command(BaseCommand):
                 c.reference == "tron-mainnet:" + (inv.txid or "") and
                 c.amount == inv.order.total and c.currency == inv.order.currency and
                 type(c.metadata) is dict and
-                c.metadata.get("receiver") == MAINNET_RECEIVER and
+                c.metadata.get("receiver") == inv.receiver and
+                bool(inv.merchant_tenant_id) and
+                c.metadata.get("merchant_tenant_id") == inv.merchant_tenant_id and
                 c.metadata.get("amount_sun") == inv.amount_sun and
                 c.metadata.get("proof_digest") == inv.proof_digest and
                 c.metadata.get("source_host") == inv.source_host
