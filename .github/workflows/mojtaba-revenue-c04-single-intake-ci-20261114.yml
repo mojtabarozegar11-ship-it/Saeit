@@ -1,4 +1,4 @@
-name: C04 sole intake source of truth and CRM regression
+name: C04 sole intake source of truth and CRM regression final
 on:
   push:
     branches:
