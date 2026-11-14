@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import user_passes_test
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
@@ -75,6 +76,38 @@ def service_proposal_funnel_snapshot():
         "max_records": preview["scan_rows_max"],
     }
     return scoped
+
+
+
+@user_passes_test(
+    lambda user: bool(user.is_active and user.is_superuser),
+    login_url="/admin/login/",
+)
+@require_GET
+def service_proposal_funnel_dashboard(request):
+    """A real owner workbench; counts link to the existing protected CRM."""
+    from django.urls import reverse
+
+    snapshot = service_proposal_funnel_snapshot()
+    total = snapshot["total_consent_provenance"]
+    prepared = snapshot["draft_prepared_total"]
+    snapshot["preparation_percentage"] = (
+        round(100 * prepared / total, 2) if total else None
+    )
+    response = render(
+        request,
+        "command_center/service_proposal_funnel.html",
+        {
+            "funnel": snapshot,
+            "admin_leads_url": reverse("admin:core_companyinquiry_changelist"),
+        },
+    )
+    response["Cache-Control"] = "no-store, private, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    response["Vary"] = "Cookie"
+    return response
 
 
 @user_passes_test(
