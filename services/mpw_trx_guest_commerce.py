@@ -144,8 +144,6 @@ def _new_user(request):
     if email_field.max_length and len(email) > email_field.max_length:
         raise Http404("Buyer email exceeds storage limit")
     value = _guest_username(request)
-    if field.lower() in ("email", "email_address"):
-        value += "@guest.mojplaywin.com"
     if not Model._meta.get_field(field).unique:
         raise Http404("Guest identity field must be unique")
     query = {field: value}
@@ -208,7 +206,8 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     user, token = _identity(request, create=create)
-    if create and str(getattr(user, "username", "")).startswith("mpwguest_"):
+    user_identifier = getattr(user, "USERNAME_FIELD", "username")
+    if create and str(getattr(user, user_identifier, "")).startswith("mpwguest_"):
         # This check is also required when an existing signed guest cookie
         # bypasses _new_user. It protects all subsequent invoice attempts.
         expected = _buyer_email(request)
