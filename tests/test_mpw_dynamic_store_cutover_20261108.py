@@ -66,15 +66,29 @@ def bound_checkout(request, view, identity, install_cookie, args, kwargs):
 ''' + b'# checkout dependency fixture\n' * 15
 
 
+SAFE_CHECKOUT_HEADERS = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'none'; form-action 'self'; "
+        "frame-ancestors 'none'; base-uri 'self'"
+    ),
+    "Cache-Control": "private, no-store, max-age=0",
+}
+
+
 def public_buyer_body(route, title, action):
-    body = title + b" " + action
     if b"Create my TRX payment invoice" not in action:
-        return body
+        return title + b" " + action
     product_id = int(route.split("/")[3])
-    return (body +
-            f'<form method="post" action="/commerce/trx-easy/start/{product_id}/">'.encode() +
-            b'<input type="hidden" name="csrfmiddlewaretoken" value="synthetic-token">' +
-            b'</form>')
+    return (
+        b'<!doctype html><html><head><title>MojPlayWin checkout</title></head>'
+        b'<body><main><h1>' + title + b'</h1><p>' + action + b'</p>'
+        + f'<form method="post" action="/commerce/trx-easy/start/{product_id}/">'.encode()
+        + b'<input type="hidden" name="csrfmiddlewaretoken" value="' + b'A'*64 + b'">'
+        + b'<input type="email" name="email" required maxlength="254" autocomplete="email">'
+        + b'<button type="submit">Create my TRX payment invoice</button>'
+        + b'</form></main></body></html>'
+    )
 
 
 class DynamicStoreCutoverTests(unittest.TestCase):
@@ -436,6 +450,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
 
             def __init__(self, req, body):
                 self.url = req.full_url
+                self.headers = SAFE_CHECKOUT_HEADERS
                 self.body = body
 
             def __enter__(self):
@@ -476,6 +491,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
 
             def __init__(self, req):
                 self.url = req.full_url
+                self.headers = SAFE_CHECKOUT_HEADERS
                 path = urlsplit(req.full_url).path
                 title, action = next((t, a) for p, t, a in BUYER_ROUTE_PROBES if p == path)
                 self.body = public_buyer_body(path, title, action)
@@ -700,6 +716,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
 
             def __init__(self, req):
                 self.url = req.full_url
+                self.headers = SAFE_CHECKOUT_HEADERS
                 route = urlsplit(req.full_url).path
                 title, action = next((t, a) for p, t, a in BUYER_ROUTE_PROBES if p == route)
                 self.body = public_buyer_body(route, title, action)

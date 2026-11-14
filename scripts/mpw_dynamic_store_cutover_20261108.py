@@ -506,10 +506,11 @@ def public_response(run_id: str) -> bytes:
 
 
 class _InvoiceFormScanner(HTMLParser):
-    """Fail closed on email fields in ANY form, not merely the chosen invoice form.
+    """LEGACY email-free scanner, retained for rollback regressions only.
 
-    A safe-looking second form must not hide a buyer-email collection form.
-    This is a read-only release gate, not proof of a completed payment.
+    NOT the release acceptance gate. Production policy requires validated
+    buyer email plus the same real checkout markup/CSP checks as Django.
+    The public route probe now uses checkout_release_get_category instead.
     """
 
     def __init__(self, action: str) -> None:
@@ -610,10 +611,26 @@ def verify_public_buyer_routes(run_id: str) -> bool:
                         body = reply.read(250_000)
                         if title in body and action in body:
                             checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
-                            if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
+                            if not checkout:
                                 checked += 1
                                 continue
-                            category = "checkout_form_invalid"
+                            # The legacy email-FREE scanner below exists only
+                            # for old fail-closed regression tests. The real
+                            # buyer policy REQUIRES a validated email form.
+                            from services.mpw_checkout_release_assurance import (
+                                checkout_release_get_category, CHECKOUT_BODY_OK,
+                                FORM_NOT_PROVEN,
+                            )
+                            assessment = checkout_release_get_category(
+                                body, getattr(reply, "headers", None),
+                                int(route.split("/")[3]),
+                            )
+                            if assessment == CHECKOUT_BODY_OK:
+                                checked += 1
+                                continue
+                            category = ("checkout_form_invalid"
+                                        if assessment == FORM_NOT_PROVEN
+                                        else assessment)
             except urllib.error.HTTPError as exc:
                 category = ("http_" + str(exc.code) if exc.code in
                             (403, 404, 429, 500, 502, 503, 504) else "http_other")
