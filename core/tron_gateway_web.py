@@ -102,7 +102,8 @@ def _limit(request, email):
 
 
 def _read_product(product_id, locale):
-    product = Product.objects.filter(pk=product_id, active=True).first()
+    query = Product.objects.filter(pk=product_id, active=True)
+    product = query.first()
     if product is None or not Decimal("0") < product.price:
         raise Http404("Product unavailable")
     md = product.metadata if type(product.metadata) is dict else {}
@@ -143,9 +144,17 @@ def _guest(email):
     if model.USERNAME_FIELD != "username" or not model._meta.get_field("username").unique:
         raise ValueError("Guest user schema is not supported")
     name = "trxguest_" + _email_key(email)[:40]
-    user, _ = model.objects.get_or_create(
-        username=name, defaults={"email": email, "is_active": True})
-    if (user.email.lower() != email or not user.is_active or user.has_usable_password()):
+    user = model.objects.filter(username=name).first()
+    if user is None:
+        try:
+            with transaction.atomic():
+                user = model(username=name, email=email, is_active=True)
+                user.set_unusable_password()
+                user.save(force_insert=True)
+        except IntegrityError:
+            user = model.objects.filter(username=name).first()
+    if (user is None or user.email.lower() != email or
+            not user.is_active or user.has_usable_password()):
         raise ValueError("Guest identity conflict")
     return user
 
