@@ -38,7 +38,7 @@ footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
 <h2>{% if language == 'fa' %}پرداخت تأیید و ثبت شد{% else %}Payment verified and recorded{% endif %}</h2>
 <p>{% if language == 'fa' %}رسید تراکنش{% else %}Transaction receipt{% endif %}:</p><p class="number">{{ invoice.txid }}</p>
 {% if is_digital %}<a class="link" href="/pay/tron/download/{{ invoice.pk }}/">{% if language == 'fa' %}دریافت محصول دیجیتال (در صورت وجود){% else %}Download purchased digital item (if applicable){% endif %}</a>{% endif %}
-{% elif invoice.status == 'awaiting_payment' %}
+{% elif invoice.status == 'awaiting_payment' and settlement_ready %}
 {% if not invoice_expired %}
 <p class="warn">{% if language == 'fa' %}فقط دارایی اصلی TRX روی شبکه TRON. سایر توکن‌ها و شبکه‌ها پذیرفته نمی‌شوند. تنها مبلغ دقیق زیر را ارسال کنید.{% else %}Native TRX on TRON Mainnet only. Do not send USDT, other tokens, or assets from another chain. Send the exact amount below.{% endif %}</p>
 <p>{% if language == 'fa' %}آدرس مقصد{% else %}Receiving address{% endif %}:</p><p class="number" id="address">{{ recipient }}</p>
