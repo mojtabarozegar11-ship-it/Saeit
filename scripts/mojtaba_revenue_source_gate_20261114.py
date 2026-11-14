@@ -65,7 +65,8 @@ class _Links(HTMLParser):
 
 def _read(root: Path, relative: str) -> str:
     """Restrict inspection to local UTF-8 regular files with no symlink hops."""
-    if not isinstance(relative, str) or relative.startswith("/"):
+    if (not isinstance(relative, str) or relative.startswith("/")
+            or relative.startswith("./") or "/./" in relative):
         raise ValueError("UNSAFE_SOURCE_PATH")
     pieces = Path(relative).parts
     if not pieces or any(part in (".", "..") for part in pieces):
