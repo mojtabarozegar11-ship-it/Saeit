@@ -13,7 +13,7 @@ class PropFirmPolicyTests(unittest.TestCase):
     def challenge(self, **overrides):
         kwargs = dict(phase=1, account_capital=100, realized_net_profit="9.6",
                       trading_days=6, max_profitable_day=3, risk=self.risk(equity="110",
-                      open_equity="110"), evidence_verified=True)
+                      open_equity="110"), evidence_verified=True, social_posts_verified=True)
         kwargs.update(overrides)
         return assess_challenge(**kwargs)
 
@@ -210,3 +210,34 @@ class PropFirmPolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_new_cohort_requires_both_social_platforms(self):
+        decision = self.challenge(social_posts_verified=False)
+        self.assertFalse(decision.passed)
+        self.assertIn("social_daily_posts_both_platforms_unverified", decision.reasons)
+        self.assertTrue(self.challenge(social_posts_verified=True).passed)
+
+    def test_social_truthy_fakes_do_not_approve_phase(self):
+        for forged in (1, "yes", {"done": True}, ["ig", "fb"]):
+            with self.subTest(forged=repr(forged)):
+                result = self.challenge(social_posts_verified=forged)
+                self.assertFalse(result.passed)
+                self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+
+    def test_phase_two_still_requires_social_review(self):
+        result = self.challenge(
+            phase=2, realized_net_profit="6", max_profitable_day="1.8",
+            prior_phase_passed=True, social_posts_verified=False,
+        )
+        self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+
+    def test_legacy_v11_contract_is_not_retroactively_penalized(self):
+        result = self.challenge(
+            social_posts_verified=False,
+            contract_version="2026-11-14/v1.1",
+        )
+        self.assertTrue(result.passed)
+
+    def test_unknown_contract_version_fails_closed(self):
+        with self.assertRaises(ValueError):
+            self.challenge(contract_version="v1.0-user-supplied")
