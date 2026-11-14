@@ -121,5 +121,85 @@ class TronProofTests(unittest.TestCase):
                               ISSUED, EXPIRES, rpc=disagreement)
 
 
+    def test_unsafe_receiver_checksum_is_rejected(self):
+        with self.assertRaises(PaymentNotFinal):
+            address_hex(MAINNET_RECEIVER[:-1] + "4")
+
+    def test_unsafe_receiver_alphabet_is_rejected(self):
+        with self.assertRaises(PaymentNotFinal):
+            address_hex("0" + MAINNET_RECEIVER[1:])
+
+    def test_zero_amount_is_rejected(self):
+        with self.assertRaises(PaymentNotFinal):
+            verify_native_trx(TX, MAINNET_RECEIVER, 0, ISSUED,
+                              EXPIRES, rpc=self.fake_rpc)
+
+    def test_invoice_expiry_before_issue_is_rejected(self):
+        with self.assertRaises(PaymentNotFinal):
+            verify_native_trx(TX, MAINNET_RECEIVER, SUN, EXPIRES,
+                              ISSUED, rpc=self.fake_rpc)
+
+    def test_malformed_raw_data_is_rejected(self):
+        self.body["raw_data"] = ["malicious-non-dict"]
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_malformed_parameter_is_rejected(self):
+        self.body["raw_data"]["contract"][0]["parameter"] = ["not-an-object"]
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_malformed_recipient_type_is_rejected(self):
+        self.body["raw_data"]["contract"][0]["parameter"]["value"]["to_address"] = 1234
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_boolean_onchain_sun_amount_is_rejected(self):
+        self.body["raw_data"]["contract"][0]["parameter"]["value"]["amount"] = True
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_failed_transaction_body_is_rejected(self):
+        self.body["ret"][0]["contractRet"] = "OUT_OF_ENERGY"
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_top_level_failed_receipt_is_rejected(self):
+        self.receipt["result"] = "FAILED"
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_malformed_receipt_result_is_rejected(self):
+        self.receipt["receipt"] = ["broken"]
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_missing_block_height_is_rejected(self):
+        del self.receipt["blockNumber"]
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_wrong_sender_format_is_rejected(self):
+        self.body["raw_data"]["contract"][0]["parameter"]["value"]["owner_address"] = "T" * 34
+        with self.assertRaises(PaymentNotFinal):
+            self.verify()
+
+    def test_provider_timestamp_disagreement_is_rejected(self):
+        def disagreement(base, endpoint, txid):
+            value = self.fake_rpc(base, endpoint, txid)
+            if base == SOURCES[1][1] and endpoint.endswith("gettransactioninfobyid"):
+                value["blockTimeStamp"] += 1000
+            return value
+        with self.assertRaises(PaymentNotFinal):
+            verify_native_trx(TX, MAINNET_RECEIVER, SUN,
+                              ISSUED, EXPIRES, rpc=disagreement)
+
+    def test_same_provider_twice_is_not_independent(self):
+        from unittest.mock import patch
+        with patch("core.tron_gateway_verify.SOURCES", (SOURCES[0], SOURCES[0])):
+            with self.assertRaises(PaymentNotFinal):
+                self.verify()
+
+
 if __name__ == "__main__":
     unittest.main()
