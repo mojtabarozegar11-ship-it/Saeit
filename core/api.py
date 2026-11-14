@@ -313,7 +313,9 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         product_id = request.data.get("product_id")
         quantity = request.data.get("quantity", 1)
-        if type(quantity) is bool or not str(quantity).isdigit() or len(str(quantity)) > 3:
+        if type(quantity) not in (int, str) or not re.fullmatch(
+            r"[1-9][0-9]{0,2}", str(quantity),
+        ):
             return Response({"detail": "quantity must be an integer from 1 to 100."}, status=status.HTTP_400_BAD_REQUEST)
         quantity = int(quantity)
         if not 1 <= quantity <= 100:
@@ -328,10 +330,16 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
                 return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
             if product.price is None or not product.price.is_finite() or product.price <= 0:
                 return Response({"detail": "Product has no valid positive price."}, status=status.HTTP_409_CONFLICT)
+            total = product.price * quantity
+            if total >= Decimal("1000000000000"):
+                return Response(
+                    {"detail": "Order total exceeds the database amount range."},
+                    status=status.HTTP_409_CONFLICT,
+                )
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",
-                total=product.price * quantity,
+                total=total,
                 currency=product.currency,
             )
             item = OrderItem.objects.create(
@@ -555,7 +563,7 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 currency = payload.get("currency")
                 try:
                     amount_valid = (
-                        type(amount) in (str, int, float)
+                        type(amount) in (str, int)
                         and Decimal(str(amount)).is_finite()
                         and Decimal(str(amount)) == intent.amount
                     )
@@ -578,7 +586,9 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 order.status = "paid"
                 order.save(update_fields=["status", "updated_at"])
                 LedgerEntry.objects.create(
-                    reference=f"payment:{provider}:{event_id}"[:200],
+                    reference="payment:" + hashlib.sha256(
+                        f"{provider}:{event_id}".encode("utf-8")
+                    ).hexdigest(),
                     order=order,
                     payment_intent=intent,
                     entry_type="payment",
