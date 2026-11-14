@@ -6,11 +6,19 @@ from scripts.mpw_customer_support_live_gate_20261114 import (
 )
 
 
+def _valid_page(path):
+    catalog = ""
+    if path == "/store/":
+        catalog = "".join(
+            '<a href="/store/product/' + str(sku) + '/">View product</a>'
+            for sku in (72, 225, 879)
+        )
+    return ('<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
+            catalog + '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>')
+
+
 def test_all_seven_routes_must_expose_new_mailto_without_legacy():
-    pages = {ORIGIN + path: (
-        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
-        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
-    ) for path in ROUTES}
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
     report = assess(lambda url: pages[url])
     assert report["support_ready"] is True
     assert report["live_release_confirmed"] is True
@@ -20,10 +28,7 @@ def test_all_seven_routes_must_expose_new_mailto_without_legacy():
 
 
 def test_current_static_fallback_and_legacy_inbox_are_not_misreported_as_ready():
-    pages = {ORIGIN + p: (
-        '<html><body>' + ' '.join(ROUTE_IDENTITY[p]) +
-        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
-    ) for p in ROUTES}
+    pages = {ORIGIN + p: _valid_page(p) for p in ROUTES}
     pages[ORIGIN + "/store/"] = "MPW_STATIC_STORE_FALLBACK_V1"
     pages[ORIGIN + "/contact/"] = '<p>' + LEGACY + '</p>'
     pages[ORIGIN + "/support/"] = '<p>' + LEGACY + '</p>'
@@ -81,10 +86,7 @@ def test_generic_support_placeholder_does_not_fake_functional_pages():
 
 
 def test_store_catalog_must_still_have_original_buyer_path_after_release():
-    pages = {ORIGIN + path: (
-        '<body>' + ' '.join(ROUTE_IDENTITY[path]) +
-        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body>'
-    ) for path in ROUTES}
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
     target = ORIGIN + "/store/"
     pages[target] = pages[target].replace("/store/product/72/", "/broken-product-route/")
     result = assess(lambda url: pages[url])
@@ -96,10 +98,7 @@ def test_store_catalog_must_still_have_original_buyer_path_after_release():
 
 
 def test_text_or_comment_mailto_does_not_pass_live_acceptance():
-    base = {ORIGIN + path: (
-        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
-        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
-    ) for path in ROUTES}
+    base = {ORIGIN + path: _valid_page(path) for path in ROUTES}
     route = ORIGIN + "/support/"
     for spoof in (
         '<p>mailto:' + INBOX + '</p>',
@@ -117,10 +116,7 @@ def test_text_or_comment_mailto_does_not_pass_live_acceptance():
 
 
 def test_mailto_requires_exact_address_and_single_href_attribute():
-    base = {ORIGIN + path: (
-        '<html><body>' + ' '.join(ROUTE_IDENTITY[path]) +
-        '<a href="mailto:' + INBOX + '">' + INBOX + '</a></body></html>'
-    ) for path in ROUTES}
+    base = {ORIGIN + path: _valid_page(path) for path in ROUTES}
     route = ORIGIN + "/contact/"
     for bad in (
         '<a href="mailto:' + INBOX + '.attacker.example">' + INBOX + '</a>',
@@ -141,3 +137,57 @@ def test_redirect_handler_rejects_external_redirect_before_following():
     with pytest.raises(RuntimeError, match="UNEXPECTED_REDIRECT"):
         _RejectRedirects().redirect_request(
             None, None, 302, "Found", {}, "https://example.com/redirected")
+
+
+def test_all_three_store_products_require_real_same_origin_anchors():
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
+    store = ORIGIN + "/store/"
+    assert assess(lambda url: pages[url])["support_ready"] is True
+    for sku in (72, 225, 879):
+        anchor = '<a href="/store/product/' + str(sku) + '/">View product</a>'
+        pages[store] = _valid_page("/store/").replace(anchor, "")
+        # Remaining source copy can still mention the product ID.
+        pages[store] += "/store/product/" + str(sku) + "/"
+        report = assess(lambda url: pages[url])
+        entry = next(item for item in report["observations"] if item["route"] == "/store/")
+        assert not entry["store_product_links_verified"]
+        assert entry["status"] == "UNRECOGNIZED_PAGE"
+        assert report["ready_routes"] == 6
+
+
+def test_external_insecure_and_javascript_store_links_never_count():
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
+    store = ORIGIN + "/store/"
+    original = '<a href="/store/product/225/">View product</a>'
+    for spoof in (
+        '<a href="https://example.org/store/product/225/">View product</a>',
+        '<a href="http://mojplaywin.com/store/product/225/">View product</a>',
+        '<a href="javascript:location.href=\'/store/product/225/\'">View product</a>',
+        '<a href="/store/product/225/" href="https://example.org/">View product</a>',
+        '<!-- ' + original + ' -->',
+    ):
+        pages[store] = _valid_page("/store/").replace(original, spoof)
+        result = assess(lambda url: pages[url])
+        entry = next(item for item in result["observations"] if item["route"] == "/store/")
+        assert entry["store_product_links_verified"] is False
+        assert result["support_ready"] is False
+
+
+def test_html_base_tag_cannot_redirect_local_product_links():
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
+    pages[ORIGIN + "/store/"] = pages[ORIGIN + "/store/"].replace(
+        "<html>", '<html><head><base href="https://example.org/"></head>', 1)
+    result = assess(lambda url: pages[url])
+    entry = next(item for item in result["observations"] if item["route"] == "/store/")
+    assert entry["store_product_links_verified"] is False
+    assert result["support_ready"] is False
+
+
+def test_product_links_can_use_https_absolute_same_origin_urls():
+    pages = {ORIGIN + path: _valid_page(path) for path in ROUTES}
+    pages[ORIGIN + "/store/"] = pages[ORIGIN + "/store/"].replace(
+        'href="/store/product/879/"', 'href="' + ORIGIN + '/store/product/879/"')
+    result = assess(lambda url: pages[url])
+    store = next(item for item in result["observations"] if item["route"] == "/store/")
+    assert store["store_product_links_verified"] is True
+    assert result["support_ready"] is True
