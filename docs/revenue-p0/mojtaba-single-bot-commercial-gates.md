@@ -32,6 +32,24 @@ The last three are deliberately **not** public product offers. An idea, SKU, tit
 7. Only after verified payment and quality-control delivery, fulfill entitlement and obtain buyer confirmation. Keep a redacted immutable audit trail.
 8. Report receipts and net earnings from independent business/accounting evidence only — never from Python unittest, CI, sample KPI, HTTP 200, clicks, or mock orders.
 
+### Unit economics before a manually authorized quote
+
+The additional `scripts/mojtaba_revenue_margin.py` capability uses exact `Decimal`
+arithmetic on **synthetic-only** example costs and correctly distinguishes IRR
+whole units from USD cents. For an assumed direct cost `C`, overhead `H`,
+proportional processing fee `f` and target pre-tax contribution margin `m`:
+
+```text
+P_min = ceil_to_currency_unit((C + H) / (1 - f - m))
+```
+
+This is a **decision-support floor, not a final price**. The model deliberately
+excludes tax, fixed processing charges, refunds, price sensitivity, inventory
+cost uncertainty and legal compliance. It never authorizes a quote, invoice,
+transaction or delivery, even if the calculated margin is positive. Actual
+costs must be independently verified and an individual owner-approved quote
+issued through the existing lawful channel before any sale.
+
 ### Monetary constraints
 
 Existing MojPlayWin checkout service page displays **indicative, non-binding** USD 29–49 diagnosis and USD 79–149 bounded repair bands. These do not constitute owner-approved transaction prices. **All other listed models remain manual quotation without invented amounts**. The company site cannot present an operational payment gateway until contractual/identity/compliance gates are satisfied.
