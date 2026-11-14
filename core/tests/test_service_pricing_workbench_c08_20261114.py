@@ -222,3 +222,45 @@ def test_missing_or_unknown_service_code_never_generates_a_quote(owner):
         assert Order.objects.count() == 0
         assert WorkItem.objects.count() == 0
         assert "<script>alert(1)</script>" not in html
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("code", ("AGR-01","RS-01","RS-02","RS-03","WEB-01","SEO-01"))
+def test_sales_desk_get_shortcut_prefills_only_allowed_service_code(owner, code):
+    client=Client()
+    client.force_login(owner)
+    url=reverse("command_center_service_pricing_workbench")
+    response=client.get(url, {"service_code":code})
+    html=response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert f'value="{code}" selected' in html
+    assert 'name="base_unit_price"' in html
+    assert "نتیجه محاسبه" not in html
+    assert CompanyInquiry.objects.count()==0
+    assert WorkItem.objects.count()==0
+    assert Order.objects.count()==0
+
+@pytest.mark.django_db
+def test_sales_desk_get_shortcut_rejects_other_keys_and_never_prefills_money(owner):
+    client=Client()
+    client.force_login(owner)
+    url=reverse("command_center_service_pricing_workbench")
+    for value in ("../../secret","UNKNOWN-99","<script>alert(1)</script>","", "AGR-01&x=2"):
+        response=client.get(url, {"service_code":value,"base_unit_price":"99999999","customer_email":"private@example.invalid"})
+        html=response.content.decode("utf-8")
+        assert response.status_code==200
+        assert "نتیجه محاسبه" not in html
+        assert 'value="99999999"' not in html
+        assert "private@example.invalid" not in html
+        assert '<script>alert(1)</script>' not in html
+    assert Order.objects.count()==0
+    assert WorkItem.objects.count()==0
+
+@pytest.mark.django_db
+def test_dashboard_links_six_service_codes_into_private_workbench(owner):
+    client=Client()
+    client.force_login(owner)
+    html=client.get(reverse("command_center_service_proposal_funnel_dashboard")).content.decode("utf-8")
+    for code in ("AGR-01","RS-01","RS-02","RS-03","WEB-01","SEO-01"):
+        assert "service_code="+code in html
+    assert "بررسی هزینه و قیمت" in html
