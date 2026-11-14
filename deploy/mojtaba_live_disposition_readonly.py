@@ -154,9 +154,9 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         if not isinstance(entries, list):
             raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
         for row in entries:
-            if not isinstance(row, dict) or not isinstance(row.get("known_route_flags", []), list):
+            if not isinstance(row, dict) or not isinstance(row.get("known_route_flags"), list):
                 raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
-            flags = row.get("known_route_flags", [])
+            flags = row["known_route_flags"]
             if any(not isinstance(tag, str) for tag in flags):
                 raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
             for tag in set(flags):
@@ -186,7 +186,7 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         for unit in units:
             if not isinstance(unit, dict):
                 raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
-            flags = unit.get("known_route_flags", [])
+            flags = unit.get("known_route_flags")
             if not isinstance(flags, list) or any(not isinstance(tag, str) for tag in flags):
                 raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
             for tag in set(flags):
@@ -242,9 +242,11 @@ def identity_dispositions(cpanel: dict) -> list[dict]:
     """List each source-defined identity separately without declaring it live."""
     php = cpanel.get("private_php_site_registry", {})
     observed_php = php.get("state") == "source_registry_snapshot_only"
+    role_rows = php.get("agent_roles")
+    has_role_rows = isinstance(role_rows, list)
     seen_php = {}
-    if observed_php:
-        for row in php.get("agent_roles", []):
+    if observed_php and has_role_rows:
+        for row in role_rows:
             if (isinstance(row, dict)
                     and row.get("code") in PHP_ROLE_CODES
                     and type(row.get("enabled")) is bool):
@@ -253,6 +255,8 @@ def identity_dispositions(cpanel: dict) -> list[dict]:
     for code in PHP_ROLE_CODES:
         if not observed_php:
             registered = "unknown_registry_unobserved"
+        elif not has_role_rows:
+            registered = "unknown_role_rows_unavailable"
         elif code not in seen_php:
             registered = "not_in_observed_private_registry"
         elif seen_php[code]:
@@ -296,7 +300,7 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
     if len(identifiers) != len(set(identifiers)) or set(identifiers) - GROUPS.keys():
         raise ValueError("DISPOSITION_MANIFEST_GROUPS_UNRECONCILED")
     declared = set(identifiers)
-    unresolved = manifest.get("not_yet_enumerated_runtime_scopes", [])
+    unresolved = manifest.get("not_yet_enumerated_runtime_scopes")
     if not isinstance(unresolved, list) or any(not isinstance(s, str) for s in unresolved):
         raise ValueError("DISPOSITION_UNSCOPED_RUNTIME_INVALID")
     groups = []
