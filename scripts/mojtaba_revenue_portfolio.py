@@ -14,6 +14,8 @@ SCHEMA = "mojtaba.bot.ai.revenue-portfolio.v1"
 CANONICAL_BOT = "mojtaba.bot.ai"
 INQUIRY_ONLY = "inquiry_only"
 UNKNOWN = "UNKNOWN"
+MAX_SYNTHETIC_COUNT = 1_000_000_000
+MAX_SOURCE_CHECKS = 1_000_000
 
 @dataclass(frozen=True)
 class Offer:
@@ -147,7 +149,7 @@ def synthetic_kpis(counts: dict) -> dict:
         raise ValueError("KPI_SCHEMA_INVALID")
     if counts["synthetic_example"] is not True:
         raise ValueError("REAL_METRICS_REQUIRE_INDEPENDENT_RECEIPT_LEDGER")
-    if any(type(counts[x]) is not int or counts[x] < 0 for x in _KPI_KEYS):
+    if any(type(counts[x]) is not int or not 0 <= counts[x] <= MAX_SYNTHETIC_COUNT for x in _KPI_KEYS):
         raise ValueError("KPI_COUNTS_INVALID")
     if not (counts["delivered_orders"] <= counts["paid_orders"] <= counts["approved_quotes"]
             <= counts["qualified"] <= counts["inquiries"] <= counts["views"]):
@@ -169,7 +171,8 @@ def synthetic_kpis(counts: dict) -> dict:
 
 def no_revenue_claims_from_source(source_check_passes: int, *, receipts_verified: bool = False) -> dict:
     """A passing CI is not a deposit, payment confirmation or entitlement."""
-    if type(source_check_passes) is not int or source_check_passes < 0:
+    if (type(source_check_passes) is not int
+            or not 0 <= source_check_passes <= MAX_SOURCE_CHECKS):
         raise ValueError("INVALID_SOURCE_CHECK_COUNT")
     if type(receipts_verified) is not bool:
         raise ValueError("INVALID_RECEIPT_FLAG")
