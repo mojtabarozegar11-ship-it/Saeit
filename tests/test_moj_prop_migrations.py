@@ -2,10 +2,10 @@
 from io import StringIO
 
 from django.core.management import call_command
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 
-class MojPropMigrationConsistencyTests(SimpleTestCase):
+class MojPropMigrationConsistencyTests(TestCase):
     def test_migration_has_no_uncommitted_schema_changes(self):
         output = StringIO()
         # --check fails when Django would generate another migration.
