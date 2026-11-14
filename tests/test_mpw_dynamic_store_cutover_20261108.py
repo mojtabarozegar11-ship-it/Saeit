@@ -612,11 +612,15 @@ class DynamicStoreCutoverTests(unittest.TestCase):
         email_form = b'<form><input name="email" type="text"></form>'
         self.assertFalse(has_guarded_guest_invoice_form(email_form + good, 72))
 
-    def test_main_guest_adapter_is_email_free_signed_cookie_source(self):
-        # This test proves the repository source contract, not the deployed host.
+    def test_main_guest_adapter_refuses_legacy_email_free_cutover(self):
+        # The old release tool intentionally rejects the new email-bound
+        # checkout guard. Do not update that obsolete approval allowlist.
         root = Path(__file__).resolve().parents[1]
         source = (root / "services/mpw_trx_guest_commerce.py").read_bytes()
-        verify_email_free_guest_source(source)
+        self.assertIn(b"bound_checkout", source)
+        self.assertIn(b"mpw_trx_email_recovery", source)
+        with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+            verify_email_free_guest_source(source)
         for old, new in (
             (b"httponly=True", b"httponly=False"),
             (b"secure=True", b"secure=False"),
