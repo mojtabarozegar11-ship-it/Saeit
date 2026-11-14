@@ -69,6 +69,7 @@ footer{{color:#a9bed1;font-size:.83rem;border-top:1px solid #344257;margin-top:4
 <ol class="steps">{levels}</ol><p>ارتقای ماهانه حداکثر یک سطح، منوط به احراز عملکرد و وجود وجه کافی در شرکت است.</p>
 </section><section class="panel" aria-labelledby="promotion"><h2 id="promotion">شرایط ارتقا و برداشت</h2>
 <ul class="rules"><li>حداقل {p.min_challenge_days} روز معاملاتی معتبر در هر مرحله.</li>
+<li>برای هر روز معاملاتی معتبر از هر مرحله چالش، یک پست اصلی اینستاگرام و یک پست اصلی فیسبوک لازم است؛ پست‌ها باید شرط تبلیغاتی را شفاف اعلام کنند و توسط بررسی‌کننده مستقل تأیید شوند. شرط فقط برای خریداران جدید نسخه ۱٫۲ است.</li>
 <li>هر دوره ارتقا {p.promotion_cycle_days} روز است؛ هدف سود خالص {p.promotion_goal_pct}% و حداقل {p.promotion_min_days} روز معاملاتی.</li>
 <li>حداکثر ریسک هر سفارش {p.order_risk_pct}% و مجموع سفارش‌های باز {p.aggregate_risk_pct}% سرمایه سطح است.</li>
 <li>تکمیل چالش بدون مهلت اجباری است؛ اخطار عدم‌فعالیت پس از {p.inactivity_notice_days} روز و مهلت بعدی {p.inactivity_grace_days} روز.</li>

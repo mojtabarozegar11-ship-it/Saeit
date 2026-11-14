@@ -1,19 +1,17 @@
-# C21 — Cross-brand replay is NOT proof of independent signal performance
+# C21 — exact merchant-brand binding on already signed history
 
-Source-only security fix for the owner's second priority: selling market signals across owned websites and associated brand paths. The existing v1 `core.signal_history_evidence` adapter signed `source_id + event fields` but not `brand`. When multiple brands reused a provider source and key, the same v1 signed history could be presented as provenance for another brand. This could contaminate commercial subscription audits even if the independent trading-performance evidence gate still remained locked.
+**Reconciled against the advancing PR #2310 parent at exact SHA `32c749ce8ac78e64b9cadd61945599826726f3a1`.** The parent ALREADY includes brand in the v1 HMAC canonical signal payload, tests rejecting cross-brand replay, and bounded price formatting to prevent huge Decimal exponents. C21 deliberately **preserves all those fixes** and does **not** rename its signature format, modify the underlying signed payload, discard recent parent tests or demand needless v2 re-signing.
 
-## Resolved in this branch
-- Cryptographic envelope `mojtaba.signal.attested_source.v2` includes the **exact canonical 17-brand identity**.
-- Both signing and audit require an explicit trusted brand; malformed/missing/unknown brands fail before accepting signed records.
-- History commitment includes brand and cannot be silently reattributed; the audit result carries immutable brand/version metadata.
-- Subscription-preflight only qualifies a v2 signed audit when its brand **exactly matches** the trusted merchant brand supplied by the internal adapter. Cross-brand and old-v1 audits fail closed.
-- Legacy v1 signatures cannot be upgraded by changing a string; an authorized internal market adapter must explicitly re-sign the original source data for the right brand and preserve source/rights provenance.
-- Existing market source audit `core.signal_source_evidence` from PR #2315 signs brand independently. These adapters should ultimately be reconciled to **one canonical signature version and one replay ledger**; they are currently two source APIs, not proof of two live systems.
-- 17 source brands do NOT equal 17 owned public hostnames or 17 approved merchants. A signal is not sellable without legal authority, independently verified real history including losers/fees/slippage, customer delivery, refund terms and payment finality.
+## New, distinct commercial-review security boundary
 
-## Non-events
-No broker order, advice, signal publication, paid alert, customer email, social media post, external server deployment, on-chain settlement, file entitlement or checkout was performed. No new bot, cron or scheduler is created; solely `mojtaba.bot.ai` remains the operational identity.
+A source-authenticated `SignalAudit` can still be supplied to `subscription_preflight` for a different merchant brand unless this final review explicitly verifies the scope. The C21 change requires `merchant_brand` from the **trusted protected tenant registration**, checks `merchant_brand == history.brand` with exact registered 17-brand identity, and returns a separate `merchant_scope_matches_history` failure instead of qualifying a different storefront. Missing/invalid brands fail closed. The same-brand case **only allows owner review**; checkout, public signals, subscription delivery, trades, customer receipts and paid entitlements remain disabled.
 
-**Absolute prohibited target**: `Dr.mojtaba.rozegar`, its related Facebook Page ID `102203064721826` and Metricool brand `7317306`. No publishing or scheduling for this personal account.
+## Sibling integration and next gate
+- The parent already protects brand-bound signal history; this PR is ONLY the missing merchant-to-history review link, avoiding duplicate source implementations.
+- Separate [PR #2315](https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2315) stores signed `SignalSourceEvent` with a **different** source envelope and durable uniqueness. Do not combine HMAC formats or trust a source key across tenants until a reviewed adapter maps a signed record to the exact protected merchant scope, and reconciles immutable source/version/DB records.
+- [PR #2316](https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2316) verifies site host/brand routes but does not prove any customer bought a subscription. The 17 brand routes are not 17 independently verified owned public hosts or licensed businesses.
+- Independent trading history including losing trades, spread, slip/fees, time, legal license, customer permissions, refund/cancellation, TRX finality and proven subscription delivery are still required.
+- No live website deployment, broker trade, customer email, marketing post, checkout or wallet action. Single bot `mojtaba.bot.ai`.
+- Absolutely no posting/scheduling on owner profile `Dr.mojtaba.rozegar` including connected Metricool 7317306 and Facebook Page 102203064721826.
 
-**Release**: Draft only, based on exact parent PR #2310 head `d480bf29d2843cb89b7874e04e07787d48b3a015`. Parent advancement and PR #2315/#2316 changes must be reconciled before any merge. No hidden compatibility fallback to unsigned v1 events.
+**Engineering constraint:** preserve latest parent's price-bounding, brand signatures, and strong tests. Draft stacked on parent. A green unit test is not independent performance or cash.

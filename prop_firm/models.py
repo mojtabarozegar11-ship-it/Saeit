@@ -276,3 +276,97 @@ class PropProfitJournalLine(models.Model):
 
     def __str__(self):
         return f"provisional-line:{self.allocation_id}:{self.code}"
+
+
+
+class PropSocialEvidence(models.Model):
+    """Privately reviewed trader-authored posts, never an auto-publishing task.
+
+    Data are challenge-specific, may not be displayed publicly, and cannot
+    authorize payment/funding on their own. Only the evidence review service
+    may create or approve them; the administrative UI is read-only.
+    """
+    class Platform(models.TextChoices):
+        INSTAGRAM = "instagram", "Instagram"
+        FACEBOOK = "facebook", "Facebook"
+
+    class Review(models.TextChoices):
+        PENDING = "pending", "Pending independent review"
+        VERIFIED = "verified", "Verified by independent operator"
+        REJECTED = "rejected", "Rejected evidence"
+
+    account = models.ForeignKey(
+        PropAccount, on_delete=models.PROTECT, related_name="social_evidence"
+    )
+    platform = models.CharField(max_length=12, choices=Platform.choices)
+    trading_day = models.DateField(db_index=True)
+    post_url = models.URLField(max_length=512, unique=True)
+    posted_at = models.DateTimeField()
+    review_status = models.CharField(
+        max_length=12, choices=Review.choices, default=Review.PENDING
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.PROTECT, related_name="moj_prop_reviewed_social_posts"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    author_verified = models.BooleanField(default=False)
+    public_visible = models.BooleanField(default=False)
+    disclosure_verified = models.BooleanField(default=False)
+    content_compliant = models.BooleanField(default=False)
+    date_verified = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("account_id", "trading_day", "platform")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("account", "trading_day", "platform"),
+                name="mp_social_day_platform_unique",
+            ),
+            models.CheckConstraint(
+                condition=~Q(review_status="verified") | (
+                    Q(reviewed_by__isnull=False) & Q(reviewed_at__isnull=False)
+                    & Q(author_verified=True) & Q(public_visible=True)
+                    & Q(disclosure_verified=True) & Q(content_compliant=True)
+                    & Q(date_verified=True)
+                ),
+                name="mp_social_verified_review_gate",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        from .social_policy import utc_day, valid_platform_post_url
+        if self.account_id:
+            if self.account.kind not in (
+                PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO,
+            ):
+                raise ValidationError("Only simulated challenge days require social proofs")
+            if self.account.policy_version == "2026-11-14/v1.1":
+                raise ValidationError("Legacy paid cohorts cannot be retroactively changed")
+            if self.account.policy_version != POLICY.version:
+                raise ValidationError("Unsupported social challenge policy version")
+            if self.account.opened_at and self.posted_at and self.posted_at < self.account.opened_at:
+                raise ValidationError("Social publication predates challenge opening")
+            if self.account.trader_id and self.reviewed_by_id == self.account.trader.user_id:
+                raise ValidationError("Traders cannot independently verify their own posts")
+        if self.posted_at and self.trading_day and utc_day(self.posted_at) != self.trading_day:
+            raise ValidationError("Post must match its corresponding UTC trading day")
+        if not valid_platform_post_url(self.post_url, self.platform):
+            raise ValidationError("Unsupported post URL; profile pages are not proof")
+        if self.review_status == self.Review.VERIFIED:
+            if (not self.reviewed_by_id or self.reviewed_at is None
+                    or not all((
+                        self.author_verified, self.public_visible,
+                        self.disclosure_verified, self.content_compliant,
+                        self.date_verified,
+                    ))):
+                raise ValidationError("Independent approval and all post disclosures required")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"social-review:{self.account_id}:{self.trading_day}:{self.platform}"

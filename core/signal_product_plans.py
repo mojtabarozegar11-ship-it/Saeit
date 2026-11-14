@@ -61,8 +61,12 @@ def subscription_review(*, tenant, proofs):
     if not isinstance(proofs, dict):
         raise ValueError("A trusted proof set is required")
     blockers = [k for k in PROOF_REQUIRED if proofs.get(k) is not True]
-    if not tenant.eligible_for_checkout_review:
+    # Reject forged truthy values; a merchant is reviewable only after an
+    # explicit verified registry decision, never an HTTP-supplied "yes"/1.
+    if tenant.eligible_for_checkout_review is not True:
         blockers.append("merchant_approval_missing")
+    if tenant.payment_enabled is not False or tenant.invoice_created is not False:
+        blockers.append("unexpected_active_payment_or_invoice_claim")
     return {
         "eligible_for_external_review": not blockers,
         "missing": blockers,

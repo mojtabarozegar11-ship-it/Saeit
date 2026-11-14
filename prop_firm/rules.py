@@ -30,12 +30,14 @@ def percent(amount, rate):
 
 @dataclass(frozen=True)
 class Policy:
-    version: str = "2026-11-14/v1.1"
+    version: str = "2026-11-15/v1.2"
     canonical_bot: str = "mojtaba.bot.ai"
     entry_trx: Decimal = D("30")
     phase_one_goal_pct: Decimal = D("9.6")
     phase_two_goal_pct: Decimal = D("6")
     min_challenge_days: int = 6
+    social_posts_per_platform_per_verified_trading_day: int = 1
+    social_posting_platforms: tuple[str, str] = ("instagram", "facebook")
     max_daily_loss_pct: Decimal = D("4")
     max_total_loss_pct: Decimal = D("8")
     best_day_share_pct: Decimal = D("32")
@@ -130,7 +132,8 @@ def _consistency_reasons(*, verified_profit, max_profitable_day):
 
 def assess_challenge(*, phase, account_capital, realized_net_profit,
                      trading_days, max_profitable_day, risk, evidence_verified=False,
-                     prior_phase_passed=False):
+                     prior_phase_passed=False, social_posts_verified=False,
+                     contract_version=None):
     """Only verified net realized profit qualifies; phase two requires phase one."""
     if isinstance(phase, bool) or phase not in (1, 2):
         raise ValueError("phase must be 1 or 2")
@@ -142,10 +145,18 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     rate = POLICY.phase_one_goal_pct if phase == 1 else POLICY.phase_two_goal_pct
     goal = percent(capital, rate)
     reasons = list(risk.reasons)
+    if risk.allowed is not True:
+        reasons.append("risk_assessment_not_allowed")
     if phase == 2 and prior_phase_passed is not True:
         reasons.append("phase_one_pass_required")
     if evidence_verified is not True:
         reasons.append("reconciled_evidence_required")
+    from .social_policy import LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
+    version = POLICY.version if contract_version is None else contract_version
+    if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
+        raise ValueError("Unknown immutable challenge contract version")
+    if version == NEW_CONTRACT_VERSION and social_posts_verified is not True:
+        reasons.append("social_daily_posts_both_platforms_unverified")
     if days < POLICY.min_challenge_days:
         reasons.append("minimum_trading_days_not_met")
     if profit < goal:
@@ -166,6 +177,8 @@ def assess_promotion(*, level_index, realized_monthly_profit, trading_days,
     current = LEVELS[level_index]
     nxt = LEVELS[min(level_index + 1, len(LEVELS) - 1)]
     reasons = list(risk.reasons)
+    if risk.allowed is not True:
+        reasons.append("risk_assessment_not_allowed")
     if level_index == len(LEVELS) - 1:
         reasons.append("maximum_level_reached")
     if evidence_verified is not True:

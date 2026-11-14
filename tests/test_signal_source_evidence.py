@@ -125,6 +125,20 @@ class SignedSignalSourceRegressionTests(SimpleTestCase):
     def test_false_source_verified_flag_denied(self):
         self.assertFalse(self.assess(record={**self.record, "verified_source": False}).source_authenticated)
 
+    def test_unbounded_or_exponential_signal_prices_fail_before_authentication(self):
+        for value in ("1e1000000", "0." + "1"*50000, "۹۹۹", "1"*19):
+            with self.subTest(length=len(value)):
+                with self.assertRaises(ValueError):
+                    self.sign(record={**self.record, "entry": value})
+                outcome = self.assess(record={**self.record, "entry": value})
+                self.assertFalse(outcome.source_authenticated)
+
+    def test_valid_eight_decimal_price_precision_still_authenticates(self):
+        prices = {**self.record, "entry": "0.00000120",
+                  "stop_loss": "0.00000119", "take_profit": "0.00000121"}
+        result = self.assess(record=prices, signature=self.sign(record=prices))
+        self.assertTrue(result.source_authenticated)
+
     def test_invalid_record_shape_denied(self):
         self.assertFalse(self.assess(record={}).source_authenticated)
         self.assertFalse(self.assess(record={**self.record, "profit_guaranteed": True}).source_authenticated)

@@ -13,7 +13,7 @@ class PropFirmPolicyTests(unittest.TestCase):
     def challenge(self, **overrides):
         kwargs = dict(phase=1, account_capital=100, realized_net_profit="9.6",
                       trading_days=6, max_profitable_day=3, risk=self.risk(equity="110",
-                      open_equity="110"), evidence_verified=True)
+                      open_equity="110"), evidence_verified=True, social_posts_verified=True)
         kwargs.update(overrides)
         return assess_challenge(**kwargs)
 
@@ -67,6 +67,25 @@ class PropFirmPolicyTests(unittest.TestCase):
     def test_consistency_restriction(self):
         self.assertIn("profit_consistency_not_met",
                       self.challenge(max_profitable_day="3.1").reasons)
+
+    def test_challenge_refuses_failed_risk_decision_even_if_reasons_empty(self):
+        from prop_firm.rules import RiskDecision
+        blocked = RiskDecision(False, (), D("96"), D("92"))
+        result = self.challenge(risk=blocked)
+        self.assertFalse(result.passed)
+        self.assertIn("risk_assessment_not_allowed", result.reasons)
+
+    def test_promotion_refuses_failed_risk_without_reason_text(self):
+        from prop_firm.rules import RiskDecision
+        blocked = RiskDecision(False, (), D("96"), D("92"))
+        result = assess_promotion(
+            level_index=0, realized_monthly_profit="4",
+            trading_days=12, max_profitable_day="1",
+            risk=blocked, evidence_verified=True,
+            funding_for_next_level=True,
+        )
+        self.assertFalse(result.eligible)
+        self.assertIn("risk_assessment_not_allowed", result.reasons)
 
     def test_challenge_loss_breach_cannot_be_overridden_by_profit(self):
         self.assertFalse(self.challenge(risk=self.risk(equity=95)).passed)
@@ -207,6 +226,37 @@ class PropFirmPolicyTests(unittest.TestCase):
                     decision = authorize_order(**{**kwargs, field: value})
                     self.assertFalse(decision.allowed)
                     self.assertIn(reason, decision.reasons)
+
+    def test_new_cohort_requires_both_social_platforms(self):
+        decision = self.challenge(social_posts_verified=False)
+        self.assertFalse(decision.passed)
+        self.assertIn("social_daily_posts_both_platforms_unverified", decision.reasons)
+        self.assertTrue(self.challenge(social_posts_verified=True).passed)
+
+    def test_social_truthy_fakes_do_not_approve_phase(self):
+        for forged in (1, "yes", {"done": True}, ["ig", "fb"]):
+            with self.subTest(forged=repr(forged)):
+                result = self.challenge(social_posts_verified=forged)
+                self.assertFalse(result.passed)
+                self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+
+    def test_phase_two_still_requires_social_review(self):
+        result = self.challenge(
+            phase=2, realized_net_profit="6", max_profitable_day="1.8",
+            prior_phase_passed=True, social_posts_verified=False,
+        )
+        self.assertIn("social_daily_posts_both_platforms_unverified", result.reasons)
+
+    def test_legacy_v11_contract_is_not_retroactively_penalized(self):
+        result = self.challenge(
+            social_posts_verified=False,
+            contract_version="2026-11-14/v1.1",
+        )
+        self.assertTrue(result.passed)
+
+    def test_unknown_contract_version_fails_closed(self):
+        with self.assertRaises(ValueError):
+            self.challenge(contract_version="v1.0-user-supplied")
 
 if __name__ == "__main__":
     unittest.main()

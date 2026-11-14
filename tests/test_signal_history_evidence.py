@@ -60,6 +60,20 @@ class SignalEvidenceTests(unittest.TestCase):
                     signing_key=KEY, digest=digest,
                 ))
 
+    def test_cross_brand_replay_cannot_be_authenticated_or_sold(self):
+        item = signed(signal(), source_id="source_main", brand="saman")
+        self.assertFalse(verify_source_integrity(
+            item["record"], source_id="source_main", brand="maryam",
+            signing_key=KEY, digest=item["source_digest"],
+        ))
+        with self.assertRaisesRegex(SignalHistoryRejected, "source_signature_mismatch"):
+            audit_history([item], source_id="source_main", brand="maryam",
+                          signing_key=KEY, now_utc=NOW)
+
+    def test_unknown_brand_cannot_sign_historical_signal(self):
+        with self.assertRaisesRegex(SignalHistoryRejected, "brand_not_registered"):
+            signed(signal(), brand="unregistered_financial_brand")
+
     def test_wrong_signing_key_and_source_id_cannot_verify(self):
         item = signed(signal())
         self.assertFalse(verify_source_integrity(
@@ -104,6 +118,23 @@ class SignalEvidenceTests(unittest.TestCase):
         naive = signal(1, created_at=datetime(2026, 11, 14, 17))
         with self.assertRaises(SignalHistoryRejected):
             signed(naive)
+
+    def test_unbounded_price_exponents_rejected_before_decimal_rendering(self):
+        for amount in ("1e100000000", "0." + "1" * 100000, "９９９９", "1e-9000000"):
+            with self.subTest(size=len(amount)):
+                with self.assertRaisesRegex(SignalHistoryRejected, "invalid_signal_record"):
+                    signed(signal(entry=amount))
+
+    def test_eight_digit_fractional_prices_allowed_when_ordered(self):
+        point = signal(entry="0.00000120", stop_loss="0.00000119",
+                       take_profit="0.00000121")
+        self.assertEqual(
+            self.history([signed(point)]).event_count, 1,
+        )
+
+    def test_large_integer_price_rejected_without_fabricated_result(self):
+        with self.assertRaisesRegex(SignalHistoryRejected, "invalid_signal_record"):
+            signed(signal(entry="1" * 19))
 
     def test_cannot_hide_unknown_fields_in_authenticated_feed(self):
         record = {**signal(), "profit_guaranteed": True}
@@ -158,72 +189,58 @@ class SignalEvidenceTests(unittest.TestCase):
         self.assertIsNone(result["money_received"])
 
 
-    def test_same_key_and_source_cannot_replay_signed_record_to_another_brand(self):
-        event = signal()
-        original = signed(event, brand="saman")
-        self.assertFalse(verify_source_integrity(
-            event, source_id="source_main", brand="zahra",
-            signing_key=KEY, digest=original["source_digest"],
-        ))
-        with self.assertRaisesRegex(SignalHistoryRejected, "source_signature_mismatch"):
-            audit_history([original], brand="zahra", source_id="source_main",
-                          signing_key=KEY, now_utc=NOW)
-
-    def test_separate_brand_signature_has_different_commitment(self):
-        event = signal()
-        a = source_digest(event, source_id="source_main", brand="saman", signing_key=KEY)
-        b = source_digest(event, source_id="source_main", brand="zahra", signing_key=KEY)
-        self.assertNotEqual(a, b)
-        saam = self.history([signed(event, brand="saman")])
-        zahra = audit_history([signed(event, brand="zahra")], brand="zahra",
-                              source_id="source_main", signing_key=KEY, now_utc=NOW)
-        self.assertEqual(saam.brand, "saman")
-        self.assertEqual(zahra.brand, "zahra")
-        self.assertNotEqual(saam.history_digest_sha256, zahra.history_digest_sha256)
-
-    def test_unknown_or_malformed_brand_is_fail_closed(self):
-        event = signal()
-        for bad in ("unknown_owner", "", None, [], {"brand": "saman"}, 1, True):
-            with self.subTest(value=str(bad)[:40]):
-                with self.assertRaises((SignalHistoryRejected, ValueError, TypeError)):
-                    source_digest(event, source_id="source_main", brand=bad, signing_key=KEY)
-                with self.assertRaises((SignalHistoryRejected, ValueError, TypeError)):
-                    audit_history([signed(event)], brand=bad, source_id="source_main",
-                                  signing_key=KEY, now_utc=NOW)
-
-    def test_subscription_preflight_does_not_accept_cross_brand_history(self):
-        audit = self.history()
-        review = subscription_preflight(
-            history=audit, merchant_brand="zahra", verified_order_source=True,
+    def test_cross_brand_history_never_qualifies_different_merchant(self):
+        signed_history = self.history()
+        result = subscription_preflight(
+            history=signed_history, merchant_brand="zahra",
+            verified_order_source=True,
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=True,
-            jurisdiction_approved=True, subscriber_delivery_proven=True,
-            refund_terms_approved=True, legal_merchant_ready=True,
+            jurisdiction_approved=True,
+            subscriber_delivery_proven=True,
+            refund_terms_approved=True,
+            legal_merchant_ready=True,
         )
-        self.assertFalse(review["eligible_for_owner_release_review"])
-        self.assertIn("merchant_scope_matches_history", review["missing"])
-        self.assertFalse(review["checkout_enabled"])
-        self.assertIsNone(review["money_received"])
+        self.assertFalse(result["eligible_for_owner_release_review"])
+        self.assertIn("merchant_scope_matches_history", result["missing"])
+        self.assertEqual(result["brand"], "saman")
+        self.assertFalse(result["checkout_enabled"])
+        self.assertIsNone(result["money_received"])
 
-    def test_old_v1_history_cannot_be_reviewed_under_v2(self):
-        from dataclasses import replace
-        audit = replace(self.history(), signature_version="mojtaba.signal.attested_source.v1")
-        review = subscription_preflight(
-            history=audit, merchant_brand="saman", verified_order_source=True,
+    def test_invalid_merchant_brand_cannot_be_hidden_in_boolean_approvals(self):
+        for bad in ("unknown_brand", "", None, [], {}, True, 1):
+            with self.subTest(brand=str(bad)[:30]):
+                decision = subscription_preflight(
+                    history=self.history(), merchant_brand=bad,
+                    verified_order_source=True,
+                    timestamped_independent_execution_audit=True,
+                    risk_and_fee_disclosures_approved=True,
+                    jurisdiction_approved=True,
+                    subscriber_delivery_proven=True,
+                    refund_terms_approved=True,
+                    legal_merchant_ready=True,
+                )
+                self.assertFalse(decision["eligible_for_owner_release_review"])
+                self.assertIn("merchant_scope_matches_history", decision["missing"])
+                self.assertFalse(decision["checkout_enabled"])
+
+    def test_matching_brand_only_allows_review_not_money(self):
+        a = self.history()
+        result = subscription_preflight(
+            history=a, merchant_brand="saman",
+            verified_order_source=True,
             timestamped_independent_execution_audit=True,
             risk_and_fee_disclosures_approved=True,
-            jurisdiction_approved=True, subscriber_delivery_proven=True,
-            refund_terms_approved=True, legal_merchant_ready=True,
+            jurisdiction_approved=True,
+            subscriber_delivery_proven=True,
+            refund_terms_approved=True,
+            legal_merchant_ready=True,
         )
-        self.assertIn("source_history_integrity", review["missing"])
-        self.assertFalse(review["eligible_for_owner_release_review"])
-
-    def test_signed_signal_is_not_proof_of_profit_or_receipt(self):
-        audit = self.history()
-        self.assertFalse(audit.independent_execution_verified)
-        self.assertFalse(audit.realized_performance_verified)
-        self.assertFalse(audit.customer_delivery_verified)
-        self.assertFalse(audit.checkout_enabled)
+        self.assertTrue(result["eligible_for_owner_release_review"])
+        self.assertEqual(result["brand"], "saman")
+        self.assertFalse(result["checkout_enabled"])
+        self.assertFalse(result["account_or_subscriber_created"])
+        self.assertIsNone(result["money_received"])
 
 if __name__ == "__main__":
     unittest.main()

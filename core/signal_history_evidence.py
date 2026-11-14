@@ -1,6 +1,6 @@
 """Authenticated, private signal history QA for the ONE mojtaba.bot.ai worker.
 
-HMAC binds each record to its intended 17-brand distribution scope *after* a trusted adapter received it. A
+HMAC protects records *after* an approved source adapter received them. A
 matching signature is not independent proof of execution, performance,
 merchant authority, subscriber entitlement or legal clearance. Never auto-sell.
 No network, messaging, trades, payments, DB writes or buyer information.
@@ -20,6 +20,20 @@ MAX_RECORDS = 10000
 MAX_HISTORY_DAYS = 366 * 5
 SOURCE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,79}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+PRICE_FIELD = re.compile(r"[0-9]{1,18}(?:\.[0-9]{1,8})?\Z")
+
+
+def _bounded_prices(event):
+    # Reject huge exponents, Unicode numerals, and unbounded decimal strings
+    # *before* Decimal parsing/formatting can exhaust a worker's memory.
+    return (
+        type(event) is dict
+        and all(
+            type(event.get(name)) is str
+            and PRICE_FIELD.fullmatch(event[name]) is not None
+            for name in ("entry", "stop_loss", "take_profit")
+        )
+    )
 
 
 class SignalHistoryRejected(ValueError):
@@ -47,17 +61,17 @@ def _source(source):
 def _canonical(event, source_id, brand):
     """Only fixed non-identifying trade signal fields are signed."""
     _source(source_id)
-    if not isinstance(brand, str) or brand not in SIGNAL_BRANDS:
+    if type(brand) is not str or brand not in SIGNAL_BRANDS:
         raise SignalHistoryRejected("brand_not_registered")
-    if not inspect_signal_record(event):
+    if not _bounded_prices(event) or not inspect_signal_record(event):
         raise SignalHistoryRejected("invalid_signal_record")
     ts = event["created_at"]
     if ts.tzinfo is None or ts.utcoffset() != timedelta(0):
         raise SignalHistoryRejected("timestamp_not_utc")
     return json.dumps({
-        "format": "mojtaba.signal.attested_source.v2",
-        "brand": brand,
+        "format": "mojtaba.signal.attested_source.v1",
         "source_id": source_id,
+        "brand": brand,
         "event_id": event["event_id"],
         "symbol": event["symbol"],
         "side": event["side"],
@@ -90,7 +104,6 @@ class SignalAudit:
     event_count: int
     source_id: str
     brand: str
-    signature_version: str
     first_at_utc: str
     last_at_utc: str
     history_digest_sha256: str
@@ -108,7 +121,7 @@ def audit_history(entries, *, source_id, brand, signing_key, now_utc):
     Raises on *any* broken row. This is deliberately not a paid-signal adapter.
     """
     _source(source_id)
-    if not isinstance(brand, str) or brand not in SIGNAL_BRANDS:
+    if type(brand) is not str or brand not in SIGNAL_BRANDS:
         raise SignalHistoryRejected("brand_not_registered")
     if not isinstance(now_utc, datetime) or now_utc.tzinfo is None:
         raise SignalHistoryRejected("observation_time_invalid")
@@ -125,7 +138,7 @@ def audit_history(entries, *, source_id, brand, signing_key, now_utc):
         if not isinstance(item, dict) or set(item) != {"record", "source_digest"}:
             raise SignalHistoryRejected("history_envelope_invalid")
         record = item["record"]
-        if not isinstance(record, dict) or not inspect_signal_record(record):
+        if not _bounded_prices(record) or not inspect_signal_record(record):
             raise SignalHistoryRejected("signal_record_invalid")
         event_id = record["event_id"]
         if event_id in seen:
@@ -150,7 +163,6 @@ def audit_history(entries, *, source_id, brand, signing_key, now_utc):
         event_count=len(entries),
         source_id=source_id,
         brand=brand,
-        signature_version="mojtaba.signal.attested_source.v2",
         first_at_utc=entries[0]["record"]["created_at"].isoformat(),
         last_at_utc=entries[-1]["record"]["created_at"].isoformat(),
         history_digest_sha256=commitment,
@@ -167,11 +179,11 @@ def subscription_preflight(*, history: SignalAudit, merchant_brand, verified_ord
     if not isinstance(history, SignalAudit):
         raise SignalHistoryRejected("history_attestation_required")
     checks = {
-        "source_history_integrity": (history.integrity_verified_for_supplied_history is True
-                                     and history.signature_version == "mojtaba.signal.attested_source.v2"),
-        "merchant_scope_matches_history": (isinstance(merchant_brand, str)
-                                           and merchant_brand in SIGNAL_BRANDS
-                                           and merchant_brand == history.brand),
+        "source_history_integrity": history.integrity_verified_for_supplied_history is True,
+        "merchant_scope_matches_history": (
+            type(merchant_brand) is str and merchant_brand in SIGNAL_BRANDS
+            and history.brand == merchant_brand
+        ),
         "signed_order_source": verified_order_source is True,
         "independent_execution_audit": timestamped_independent_execution_audit is True,
         "risk_and_fee_disclosures": risk_and_fee_disclosures_approved is True,

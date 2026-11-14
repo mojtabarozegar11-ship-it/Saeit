@@ -18,6 +18,7 @@ from .signal_commercial_catalog import SIGNAL_BRANDS, inspect_signal_record
 
 _SOURCE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}\Z")
 _SIGNATURE = re.compile(r"[0-9a-f]{64}\Z")
+_SAFE_PRICE = re.compile(r"[0-9]{1,18}(?:\.[0-9]{1,8})?\Z")
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,14 @@ def canonical_signal_bytes(*, record, brand, source_id):
         raise ValueError("Unknown market-signal brand")
     if not isinstance(source_id, str) or not _SOURCE_ID.fullmatch(source_id):
         raise ValueError("Invalid trusted provider ID")
+    # Restrict untrusted prices BEFORE Decimal parsing in the shared record
+    # validator; huge exponents and unbounded strings are not brokerage data.
+    if type(record) is not dict or any(
+        type(record.get(field)) is not str
+        or _SAFE_PRICE.fullmatch(record[field]) is None
+        for field in ("entry", "stop_loss", "take_profit")
+    ):
+        raise ValueError("Unbounded or inexact signal price")
     if not inspect_signal_record(record):
         raise ValueError("Invalid structured signal")
     payload = {

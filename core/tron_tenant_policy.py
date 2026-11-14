@@ -53,10 +53,12 @@ def canonical_host(value):
 def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
     """Caller registry must be separately protected configuration, not HTTP JSON."""
     actual = canonical_host(host)
+    # Validate type BEFORE set membership: an HTTP-supplied array/dict
+    # must cause a clean refusal, not an unhashable 500 response.
+    if type(brand) is not str:
+        raise ValueError("Brand must be text")
     if brand and brand not in ACCEPTED_BRANDS:
         raise ValueError("Unknown branded route")
-    if not isinstance(brand, str):
-        raise ValueError("Brand must be text")
     anchors = DEFAULT_ALLOWED_ANCHORS if allowed_anchors is None else allowed_anchors
     if not isinstance(anchors, (tuple, list, set)) or not anchors:
         raise ValueError("Trusted anchor domains missing")
@@ -101,7 +103,12 @@ def registered_scope(*, host, brand="", registry=None, allowed_anchors=None):
 
 def signed_routing_context(*, decision, product_sku, key):
     """Produce an internal routing token; it cannot settle or create invoices."""
-    if not isinstance(decision, TenantDecision) or not decision.eligible_for_checkout_review:
+    if (
+        not isinstance(decision, TenantDecision)
+        or decision.eligible_for_checkout_review is not True
+        or decision.payment_enabled is not False
+        or decision.invoice_created is not False
+    ):
         raise ValueError("Tenant requires verified review gates")
     if not isinstance(key, str) or len(key) < 32:
         raise ValueError("Missing trusted signing key")

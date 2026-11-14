@@ -80,6 +80,26 @@ class SignalSubscriptionCommercialTests(SimpleTestCase):
         self.assertFalse(x["eligible_for_external_review"])
         self.assertIn("merchant_approval_missing", x["missing"])
 
+    def test_false_like_merchant_claims_cannot_pass_external_review(self):
+        from dataclasses import replace
+        for forged in ("yes", 1, ["verified"], {"approved": True}):
+            with self.subTest(forged=repr(forged)):
+                result = self.full_review(
+                    tenant=replace(self.tenant(),
+                                   eligible_for_checkout_review=forged),
+                )
+                self.assertFalse(result["eligible_for_external_review"])
+                self.assertIn("merchant_approval_missing", result["missing"])
+
+    def test_unexpected_live_payment_or_invoice_claim_blocks_review(self):
+        from dataclasses import replace
+        for change in ({"payment_enabled": True}, {"invoice_created": True}):
+            with self.subTest(change=change):
+                result = self.full_review(tenant=replace(self.tenant(), **change))
+                self.assertFalse(result["eligible_for_external_review"])
+                self.assertIn("unexpected_active_payment_or_invoice_claim",
+                              result["missing"])
+
     def test_moj_prop_tenant_cannot_sell_signal_subscriptions(self):
         with self.assertRaises(ValueError):
             self.full_review(tenant=self.tenant(brand="moj_prop"))

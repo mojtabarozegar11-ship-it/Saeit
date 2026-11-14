@@ -29,6 +29,19 @@ class MojPropCatalogTests(unittest.TestCase):
             self.assertTrue(item["hero"][5].strip())
             self.assertEqual(sum(path["active"] for path in item["locale_links"]), 1)
 
+    def test_social_rule_disclosed_in_all_twenty_languages(self):
+        for code in SUPPORTED_CODES:
+            with self.subTest(locale=code):
+                context = page_context(code)
+                self.assertEqual(
+                    set(context["social"]), {"title", "body", "disclosure"}
+                )
+                self.assertTrue(all(context["social"].values()))
+                self.assertEqual(context["social_platforms"], ("instagram", "facebook"))
+                self.assertEqual(context["social_daily_post_per_platform"], 1)
+        self.assertIn("Instagram", page_context("en")["social"]["body"])
+        self.assertIn("اینستاگرام", page_context("fa")["social"]["body"])
+
     def test_urls_and_breadcrumb_identity(self):
         self.assertEqual(page_context()["canonical_url"], "/moj-prop/")
         self.assertEqual(page_context("ar")["canonical_url"], "/moj-prop/ar/")
@@ -70,6 +83,8 @@ class MojPropCatalogTests(unittest.TestCase):
         self.assertIn('noindex,nofollow', page)
         self.assertIn('hreflang="{{ item.code }}"', page)
         self.assertIn('data-availability="preview-only"', page)
+        self.assertIn("mp-social-requirement", page)
+        self.assertIn("social.disclosure", page)
 
 
 try:
