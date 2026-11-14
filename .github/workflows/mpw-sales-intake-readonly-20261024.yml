@@ -14,6 +14,8 @@ on:
       - "tests/test_mpw_runner_port_reachability_readonly.py"
       - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
       - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "scripts/mpw_cpanel_https_surface_readonly.py"
+      - "tests/test_mpw_cpanel_https_surface_readonly.py"
   push:
     branches: [main]
     paths:
@@ -30,6 +32,8 @@ on:
       - "tests/test_mpw_runner_port_reachability_readonly.py"
       - "scripts/mpw_cpanel_uapi_https_revenue_readonly.py"
       - "tests/test_mpw_cpanel_uapi_https_revenue_readonly.py"
+      - "scripts/mpw_cpanel_https_surface_readonly.py"
+      - "tests/test_mpw_cpanel_https_surface_readonly.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -68,6 +72,13 @@ jobs:
           set -euo pipefail
           python3 -B -m unittest discover -s tests -p 'test_mpw_runner_port_reachability_readonly.py' -v
           python3 -B scripts/mpw_runner_port_reachability_readonly.py
+      - name: Verify cPanel HTTPS auth gate without token or customer access
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_https_surface_readonly.py' -v
+          python3 -B scripts/mpw_cpanel_https_surface_readonly.py
       - name: Audit HTTPS UAPI fail-closed protocol and 30 nonmutating cases
         env:
           PYTHONDONTWRITEBYTECODE: "1"
