@@ -35,6 +35,21 @@ from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, 
 PROVIDER = "zomorod_tron_mainnet_v1"
 LINK_TTL = 1800
 RECEIPT_RECOVERY_TTL = 900
+SESSION_EMAIL_TTL = 900
+SHARED_CACHE_BACKENDS = frozenset((
+    "django.core.cache.backends.redis.RedisCache",
+    "django.core.cache.backends.memcached.PyMemcacheCache",
+    "django.core.cache.backends.memcached.PyLibMCCache",
+    "django_redis.cache.RedisCache",
+))
+
+
+def _shared_rate_limit_ready():
+    """Refuse per-worker LocMemCache even if a flag was accidentally enabled."""
+    configured = getattr(settings, "CACHES", {}).get("default", {})
+    return (isinstance(configured, dict) and
+            configured.get("BACKEND") in SHARED_CACHE_BACKENDS)
+
 
 
 def _host(request):
@@ -44,6 +59,7 @@ def _host(request):
     if (not request.is_secure() or
             getattr(settings, "TRON_UNIFIED_PUBLIC_ENABLED", False) is not True or
             getattr(settings, "TRON_UNIFIED_SHARED_RATE_LIMIT_READY", False) is not True or
+            not _shared_rate_limit_ready() or
             getattr(settings, "TRON_UNIFIED_RECEIVER", "") != MAINNET_RECEIVER):
         raise Http404("Checkout is not yet available")
     permitted = getattr(settings, "TRON_UNIFIED_ALLOWED_HOSTS", ())
@@ -87,14 +103,22 @@ def _limit(request, email, purpose="email"):
     if not isinstance(ip, str) or not ip or len(ip) > 80:
         raise Http404("Rate limit unavailable")
     now = int(time.time() // 3600)
-    identity = hashlib.sha256(
-        (str(settings.SECRET_KEY) + "|trx-rate|" + purpose + "|" + ip + "|" + email + "|" + str(now)).encode()
-    ).hexdigest()
-    key = "tron:email:" + identity
+    # Independent counters prevent spraying random emails from one IP or
+    # attacking one address across many different IPs.
+    limit = 12 if purpose == "verify" else 4
+    counters = (
+        ("pair:" + ip + "|" + email, limit),
+        ("ip:" + ip, 100 if purpose == "verify" else 40),
+        ("email:" + email, 30 if purpose == "verify" else 10),
+    )
     try:
-        count = 1 if cache.add(key, 1, timeout=3600) else cache.incr(key)
-        if count > (12 if purpose == "verify" else 4):
-            raise Http404("Rate limit")
+        for scope, ceiling in counters:
+            identity = hmac.new(str(settings.SECRET_KEY).encode(),
+                (purpose + "|" + scope + "|" + str(now)).encode(), hashlib.sha256).hexdigest()
+            key = "tron:rate:" + identity
+            count = 1 if cache.add(key, 1, timeout=3600) else cache.incr(key)
+            if count > ceiling:
+                raise Http404("Rate limit")
     except Http404:
         raise
     except Exception as exc:
@@ -238,7 +262,10 @@ def _mail_link(request, invoice, token):
 def _owner(request, invoice_id, host):
     invoice = TronGatewayInvoice.objects.select_related(
         "order", "payment_intent").filter(pk=invoice_id, source_host=host).first()
-    if invoice is None or request.session.get("tron_verified_email") != _email_key(invoice.buyer_email):
+    when = request.session.get("tron_verified_at")
+    if (invoice is None or request.session.get("tron_verified_email") != _email_key(invoice.buyer_email)
+            or request.session.get("tron_verified_host") != host
+            or type(when) is not int or not 0 <= int(time.time()) - when <= SESSION_EMAIL_TTL):
         raise Http404("Invoice access requires verified email")
     return invoice
 
@@ -291,7 +318,10 @@ def email_claim(request, token):
     invoice = TronGatewayInvoice.objects.filter(claim_sha256=key, source_host=host).first()
     if invoice is None or invoice.expires_ms < int(time.time() * 1000):
         raise Http404("Email link expired")
+    request.session.cycle_key()
     request.session["tron_verified_email"] = _email_key(invoice.buyer_email)
+    request.session["tron_verified_host"] = host
+    request.session["tron_verified_at"] = int(time.time())
     if invoice.status == "email_pending":
         TronGatewayInvoice.objects.filter(pk=invoice.pk, status="email_pending").update(
             status="awaiting_payment")
@@ -415,7 +445,14 @@ def recovery_link(request, token):
             raise ValueError
     except (signing.BadSignature, signing.SignatureExpired, ValueError):
         raise Http404("Recovery link invalid")
+    request.session.cycle_key()
     request.session["tron_verified_email"] = payload["e"]
+    request.session["tron_verified_host"] = host
+    request.session["tron_verified_at"] = int(time.time())
+    TronGatewayInvoice.objects.filter(
+        source_host=host, buyer_email_sha=payload["e"],
+        status="email_pending", expires_ms__gte=int(time.time()*1000)
+    ).update(status="awaiting_payment")
     invoices = list(TronGatewayInvoice.objects.filter(
         source_host=host, buyer_email_sha=payload["e"]).order_by("-created_at")[:20])
     return _page(request, _context(None, "recovery_list", language, invoices=invoices))
