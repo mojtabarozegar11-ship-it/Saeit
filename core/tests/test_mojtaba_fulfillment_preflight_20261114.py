@@ -50,7 +50,7 @@ class FulfillmentReadinessTests(TestCase):
             active=True, owner=self.owner, metadata=dict(self.meta),
         )
         self.order = Order.objects.create(
-            customer=self.buyer, status="paid", total="30.00", currency="USD",
+            customer=self.buyer, status="paid", total=Decimal("30.00"), currency="USD",
         )
         self.item = OrderItem.objects.create(
             order=self.order, product=self.product, quantity=1,
