@@ -5,6 +5,8 @@ issue payable invoices or rely on a screenshot or buyer statement as proof.
 """
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError
+from django.db.models import F
+from django.utils import timezone
 
 from core.tron_gateway_invoice import TronGatewayInvoice
 from core.tron_gateway_verify import PaymentNotFinal, TX_PATTERN, verify_native_trx
@@ -21,11 +23,17 @@ class Command(BaseCommand):
         count = options["limit"]
         if not 1 <= count <= 1000:
             raise ValueError("Limit must be between 1 and 1000")
-        invoices = TronGatewayInvoice.objects.filter(
-            status="awaiting_payment").exclude(candidate_txid="").order_by("id")[:count]
+        # Least-recently-attempted first, so an unavailable old transfer never
+        # prevents a later valid customer invoice from being processed.
+        invoices = list(TronGatewayInvoice.objects.filter(
+            status="awaiting_payment").exclude(candidate_txid="").order_by(
+                "reconcile_attempted_at", "id")[:count])
         attempted = settled = held = 0
-        for invoice in invoices.iterator():
+        for invoice in invoices:
             attempted += 1
+            TronGatewayInvoice.objects.filter(pk=invoice.pk, status="awaiting_payment").update(
+                reconcile_attempted_at=timezone.now(),
+                reconcile_attempts=F("reconcile_attempts") + 1)
             tx = invoice.candidate_txid
             if not TX_PATTERN.fullmatch(tx):
                 held += 1
