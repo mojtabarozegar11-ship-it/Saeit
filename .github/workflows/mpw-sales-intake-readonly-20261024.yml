@@ -47,6 +47,10 @@ jobs:
           assert route_bucket("/store/product/72/checkout/") == "product_checkout"
           print("MPW_SALES_FUNNEL_ROUTE_CLASSIFICATION=PASS")
           PY
+          echo "Running stdlib-only safe transport and source attestation regressions"
+          python3 -B -m unittest discover -s tests -p 'test_mpw_cpanel_direct_first_transport_readonly.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_cpanel_source_attestation_readonly.py' -v
+          echo "MPW_READONLY_TRANSPORT_AND_SOURCE_REGRESSIONS=PASS"
       - name: Establish fail-closed fingerprint-pinned direct-first cPanel route
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
