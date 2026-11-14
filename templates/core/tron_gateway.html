@@ -31,7 +31,7 @@ footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
 <p>{% if language == 'fa' %}رسید تراکنش{% else %}Transaction receipt{% endif %}:</p><p class="number">{{ invoice.txid }}</p>
 <a class="link" href="/pay/tron/download/{{ invoice.pk }}/">{% if language == 'fa' %}دریافت محصول دیجیتال (در صورت وجود){% else %}Download purchased digital item (if applicable){% endif %}</a>
 {% elif invoice.status == 'awaiting_payment' %}
-{% if invoice.expires_ms %}
+{% if not invoice_expired %}
 <p class="warn">{% if language == 'fa' %}فقط دارایی اصلی TRX روی شبکه TRON. سایر توکن‌ها و شبکه‌ها پذیرفته نمی‌شوند. تنها مبلغ دقیق زیر را ارسال کنید.{% else %}Native TRX on TRON Mainnet only. Do not send USDT, other tokens, or assets from another chain. Send the exact amount below.{% endif %}</p>
 <p>{% if language == 'fa' %}آدرس مقصد{% else %}Receiving address{% endif %}:</p><p class="number" id="address">{{ recipient }}</p>
 <p>{% if language == 'fa' %}مبلغ دقیق قابل پرداخت{% else %}Exact amount to pay{% endif %}:</p><p class="number" id="amount">{{ trx_amount }} TRX</p>
@@ -40,7 +40,7 @@ footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
 <label for="txid">{% if language == 'fa' %}شناسه تراکنش ۶۴ کاراکتری (پس از ارسال){% else %}64-character transaction ID (after transfer){% endif %}</label>
 <input name="txid" id="txid" spellcheck="false" autocapitalize="off" autocomplete="off" minlength="64" maxlength="64" required>
 <button type="submit">{% if language == 'fa' %}بررسی مستقل پرداخت{% else %}Verify payment on-chain{% endif %}</button></form>
-{% endif %}
+{% else %}<p class="warn">{% if language == 'fa' %}مهلت این صورتحساب به پایان رسیده است. پرداخت جدید نفرستید. اگر در زمان اعتبار پرداخت کرده‌اید، شناسه تراکنش را زیر وارد کنید.{% else %}Invoice expired. Do not send any new payment. If you paid before expiry, you can still submit your original transaction ID.{% endif %}</p>{% endif %}
 {% else %}
 <p class="warn">{% if language == 'fa' %}این صورتحساب قابل پرداخت نیست. مبلغی ارسال نکنید.{% else %}This invoice is not payable. Do not send funds.{% endif %}</p>
 {% endif %}
