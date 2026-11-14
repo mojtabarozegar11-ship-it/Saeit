@@ -269,6 +269,7 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
     fields = ("media_type", "title", "description", "image", "video", "target_path", "newsletter_story", "project_label", "research_domain", "tags", "published", "published_at")
 
 from .company_inquiry_models import CompanyInquiry
+from .company_inquiry_policy import provenance
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
@@ -276,7 +277,7 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     @admin.display(description="مسیر خدمت")
     def service_label(self, obj):
         # Display classification without duplicating or rewriting the CRM.
-        return "تحلیل اقتصاد مزرعه" if obj.subject.startswith("ZM-FARM") else "سایر درخواست‌ها"
+        return "تحلیل اقتصاد مزرعه" if provenance(obj.kind, obj.subject, obj.internal_note) else "سایر درخواست‌ها"
 
     list_filter = ("kind", "status", "created_at")
     search_fields = ("name", "organization", "email", "subject", "message")
