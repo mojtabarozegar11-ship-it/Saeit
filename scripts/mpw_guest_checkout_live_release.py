@@ -22,64 +22,108 @@ def digest(b): return hashlib.sha256(b).hexdigest()
 def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 
 
-def has_buyer_email_form(markup, expected_action=None, action_prefix=None):
- """Require buyer-email input within the actual invoice POST form.
+def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
+                         require_csrf=False, require_source_csrf=False):
+ """Validate ONE email input and CSRF token in the SAME TRX invoice POST form.
 
- expected_action is an exact path match for the rendered checkout. A separate
- template-source preflight checks presence before mutating any remote file.
+ This does not prove browser visibility, email ownership or chain settlement.
  """
  from html.parser import HTMLParser
+ import re
 
- class EmailFormParser(HTMLParser):
+ if type(markup) is not str or len(markup)>180000:
+  return False
+
+ class InvoiceFormParser(HTMLParser):
   def __init__(self):
-   super().__init__()
-   self.forms = []
-   self.found = False
+   super().__init__(convert_charrefs=True)
+   self.forms=[]
+   self.found=False
 
-  def handle_starttag(self, tag, attrs):
-   attributes = dict(attrs)
-   if tag == 'form':
-    method_ok = str(attributes.get('method') or '').lower() == 'post'
-    action = str(attributes.get('action') or '')
-    action_ok = (expected_action is None or action == expected_action)
-    action_ok = action_ok and (action_prefix is None or action.startswith(action_prefix))
-    self.forms.append(method_ok and action_ok)
-   elif tag == 'input' and self.forms and self.forms[-1]:
-    if (attributes.get('name') == 'email'
-        and str(attributes.get('type') or '').lower() == 'email'
-        and 'required' in attributes
-        and 'disabled' not in attributes):
-     self.found = True
+  def handle_starttag(self,tag,attrs):
+   if self.found:
+    return
+   names=[key for key,_ in attrs]
+   attributes=dict(attrs)
+   if tag=='form':
+    method=str(attributes.get('method') or '').lower()
+    action=str(attributes.get('action') or '')
+    valid=(method=='post' and re.fullmatch(
+      r'/commerce/trx-easy/start/[1-9][0-9]*/',action) is not None
+      and (expected_action is None or action==expected_action)
+      and (action_prefix is None or action.startswith(action_prefix))
+      and len(names)==len(set(names)))
+    self.forms.append({'valid':valid,'email':0,'csrf':False,
+                       'source_csrf':False,'fieldset_disabled':0})
+   elif self.forms:
+    form=self.forms[-1]
+    if tag=='fieldset' and 'disabled' in attributes:
+     form['fieldset_disabled']+=1
+    if tag=='input':
+     if attributes.get('name')=='csrfmiddlewaretoken':
+      if str(attributes.get('type') or '').lower()=='hidden':
+       form['csrf']=True
+     if attributes.get('name')=='email':
+      valid_email=(str(attributes.get('type') or '').lower()=='email'
+        and 'required' in attributes and 'disabled' not in attributes
+        and 'hidden' not in attributes and form['fieldset_disabled']==0
+        and attributes.get('aria-hidden')!='true'
+        and 'display:none' not in str(attributes.get('style') or '').replace(' ','').lower()
+        and len(names)==len(set(names)))
+      # Count EVERY email input: a duplicate, hidden or malformed input
+      # cannot make the corresponding form pass.
+      form['email']+=1 if valid_email else 2
 
-  def handle_endtag(self, tag):
-   if tag == 'form' and self.forms:
-    self.forms.pop()
+  def handle_data(self,data):
+   if self.forms and re.search(r'{%\s*csrf_token\s*%}',data):
+    self.forms[-1]['source_csrf']=True
 
- parser = EmailFormParser()
+  def handle_endtag(self,tag):
+   if not self.forms:
+    return
+   if tag=='fieldset' and self.forms[-1]['fieldset_disabled']:
+    self.forms[-1]['fieldset_disabled']-=1
+   if tag=='form':
+    form=self.forms.pop()
+    if (form['valid'] and form['email']==1
+        and (not require_csrf or form['csrf'])
+        and (not require_source_csrf or form['source_csrf'])):
+     self.found=True
+
+ parser=InvoiceFormParser()
  parser.feed(markup)
  parser.close()
  return parser.found
 
 
 def preflight_checkout_email_template():
- """Block a release before any backup, file mutation or Passenger restart.
-
- This is a conservative source gate, NOT proof of successful rendered checkout.
- Its exact runtime route binding is checked by verify() after installation.
- """
+ """Fail before any production write if buyer form or CSRF is absent."""
  path=APP/'mpw_commerce/templates/mpw_commerce/product_checkout.html'
- if path.is_symlink() or not path.is_file() or APP not in path.parents:
+ if path.is_symlink() or not path.is_file() or not path.is_relative_to(APP):
   fail('CHECKOUT_TEMPLATE_MISSING_OR_UNSAFE')
- if path.stat().st_size>180000:
-  fail('CHECKOUT_TEMPLATE_OVERSIZE')
  try:
-  markup=path.read_text('utf8')
- except (OSError, UnicodeError) as exc:
+  root=APP.resolve(strict=True)
+  parent=path.parent
+  while parent!=APP:
+   if parent.is_symlink():
+    fail('CHECKOUT_TEMPLATE_PARENT_SYMLINK')
+   parent=parent.parent
+  if not path.resolve(strict=True).is_relative_to(root):
+   fail('CHECKOUT_TEMPLATE_OUTSIDE_APP')
+  if path.stat().st_size>180000:
+   fail('CHECKOUT_TEMPLATE_OVERSIZE')
+  raw=path.read_bytes()
+  if len(raw)>180000:
+   fail('CHECKOUT_TEMPLATE_OVERSIZE')
+  markup=raw.decode('utf8')
+ except (OSError,UnicodeError,RuntimeError) as exc:
+  if isinstance(exc,RuntimeError):
+   raise
   fail('CHECKOUT_TEMPLATE_UNREADABLE:'+type(exc).__name__)
  if not has_buyer_email_form(markup,
-                             action_prefix='/commerce/trx-easy/start/'):
+      action_prefix='/commerce/trx-easy/start/',require_source_csrf=True):
   fail('GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING')
- return True
+ return digest(raw)
 
 
 def guard():
@@ -183,7 +227,7 @@ def restart():
 
 def publish(run,src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
- preflight_checkout_email_template()
+ template_sha=preflight_checkout_email_template()
  if not needed:
   print('MPW_GUEST_RELEASE=ALREADY_INSTALLED')
   return
@@ -197,6 +241,9 @@ def publish(run,src_path):
  with (d/'manifest.json').open('x') as f: os.fchmod(f.fileno(),0o600);json.dump(manifest,f,sort_keys=True);f.flush();os.fsync(f.fileno())
  changed=[]
  upgrading=manifest['guest_before'] is not None
+ # Recheck source exactly before any file mutation: fail closed on template drift.
+ if preflight_checkout_email_template()!=template_sha:
+  fail('CHECKOUT_TEMPLATE_CHANGED_DURING_RELEASE')
  try:
   if upgrading:
    atomic(TARGETS['guest'],src,expected=manifest['guest_before']);changed.append('guest')
@@ -259,8 +306,9 @@ def verify():
   if response.status_code!=200: fail('ANONYMOUS_CHECKOUT_HTTP:'+str(pid)+':'+str(response.status_code))
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
-  if not has_buyer_email_form(body,expected_action=f'/commerce/trx-easy/start/{pid}/'):
-   fail('GUEST_EMAIL_POST_FORM_MISSING_OR_WRONG_ACTION:'+str(pid))
+  if not has_buyer_email_form(body,expected_action=f'/commerce/trx-easy/start/{pid}/',
+                              require_csrf=True):
+   fail('GUEST_EMAIL_OR_CSRF_POST_FORM_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
  try:
