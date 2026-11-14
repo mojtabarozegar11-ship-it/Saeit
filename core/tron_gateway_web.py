@@ -123,6 +123,12 @@ def _read_product(product_id, locale):
                 raise Http404("Asset rights not established")
         if md["rights_asset_sha256"].lower() != md["sha256"].lower():
             raise Http404("Approved asset has changed")
+    # Never allow a perpetually stale merchant fiat/crypto quote.
+    expires = md.get("tron_quote_valid_until_ms")
+    current_ms = int(time.time() * 1000)
+    if (type(expires) is not int or
+            not current_ms < expires <= current_ms + 24 * 3600 * 1000):
+        raise Http404("Merchant TRX quote expired or unreviewed")
     if locale == "en" and product.currency != "USD":
         raise Http404("English checkout requires USD catalogue price")
     if locale == "fa" and product.currency not in ("TOMAN", "IRT", "IRR"):
@@ -134,7 +140,7 @@ def _read_product(product_id, locale):
         raise Http404("Current TRX quotation not approved")
     # Approved fixed merchant quote prevents speculative or invented FX rates.
     fingerprint = hashlib.sha256(
-        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}".encode()
+        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{expires}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}".encode()
     ).hexdigest()
     return product, base_sun, fingerprint
 
@@ -200,7 +206,14 @@ def _new_invoice(email, host, language, product_id):
                         buyer_email_sha=_email_key(email), receiver=MAINNET_RECEIVER,
                         amount_sun=amount_sun,
                         issued_ms=now_ms, expires_ms=now_ms + LINK_TTL * 1000,
-                        claim_sha256=claim_sha, quote_fingerprint=fingerprint)
+                        claim_sha256=claim_sha, quote_fingerprint=fingerprint,
+                        fulfillment_kind=product.metadata["fulfillment_type"],
+                        asset_relpath_snapshot=(product.metadata.get("asset_relpath") or "")
+                        if product.metadata["fulfillment_type"] == "digital" else "",
+                        asset_sha256_snapshot=(product.metadata.get("sha256") or "")
+                        if product.metadata["fulfillment_type"] == "digital" else "",
+                        rights_document_sha256_snapshot=(product.metadata.get("rights_document_sha256") or "")
+                        if product.metadata["fulfillment_type"] == "digital" else "")
                 break
             except IntegrityError:
                 continue
@@ -318,6 +331,10 @@ def _record_paid(invoice_id, proof):
                       "sender_hex": proof["sender_hex"],
                       "block_height": proof["block_height"],
                       "proof_digest": proof["proof_digest"],
+                      "source_host": invoice.source_host,
+                      "language": invoice.language,
+                      "merchant_invoice_id": invoice.pk,
+                      "fulfillment_kind": invoice.fulfillment_kind,
                       "webhook_event_id": event.pk})
         invoice.txid = proof["txid"]
         invoice.proof_digest = proof["proof_digest"]
@@ -358,8 +375,7 @@ def invoice_page(request, invoice_id):
         else:
             error = "Invoice is not payable" if invoice.status != "paid" else None
     item = OrderItem.objects.filter(order=invoice.order).select_related("product").first()
-    digital = bool(item and type(item.product.metadata) is dict and
-                   item.product.metadata.get("fulfillment_type") == "digital")
+    digital = bool(item and invoice.fulfillment_kind == "digital")
     return _page(request, _context(invoice, "invoice", language, error=error,
                                   is_digital=digital))
 
