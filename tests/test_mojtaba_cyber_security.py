@@ -124,6 +124,16 @@ class InternalCyberModuleTests(unittest.TestCase):
         self.assertIn("[REDACTED]", report["findings"][0]["evidence_summary"])
         self.assertNotIn("supersecret", str(report))
 
+    def test_basic_authorization_credentials_redacted(self):
+        row = {**evidence()["findings"][0],
+               "evidence_summary": "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+               "title": "Authorization: Bearer sensitive-token"}
+        report = self.run_review(data=evidence(findings=[row]))
+        rendered = str(report)
+        self.assertNotIn("dXNlcjpwYXNzd29yZA==", rendered)
+        self.assertNotIn("sensitive-token", rendered)
+        self.assertIn("[REDACTED]", rendered)
+
     def test_scope_cannot_be_wildcard(self):
         with self.assertRaisesRegex(CyberModuleError, "ASSET_INVALID"):
             self.run_review(auth=signed(allowed_assets=["*.example.com"]))
