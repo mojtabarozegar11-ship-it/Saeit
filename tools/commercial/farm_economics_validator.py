@@ -13,6 +13,7 @@ def validate_csv(text):
     result = []
     # A single enterprise cannot be aggregated twice across overlapping periods.
     periods_by_enterprise = {}
+    dimensions_by_enterprise = {}
     for line, row in enumerate(reader, 2):
         if None in row or any(value is None or not value.strip() for value in row.values()):
             raise ValueError(f"line {line}: incomplete/extra field")
@@ -27,6 +28,12 @@ def validate_csv(text):
         if any(row[key].lstrip().startswith(("=","+","-","@")) for key in ("enterprise_id","enterprise_type","output_unit")):
             raise ValueError(f"line {line}: unsafe label")
         enterprise_key = row["enterprise_id"].strip().casefold()
+        if not enterprise_key or not row["enterprise_type"].strip() or not row["output_unit"].strip():
+            raise ValueError(f"line {line}: empty enterprise identifier/type/unit")
+        dimensions = (row["currency"], row["enterprise_type"].strip().casefold(), row["output_unit"].strip().casefold())
+        previous_dimensions = dimensions_by_enterprise.setdefault(enterprise_key, dimensions)
+        if dimensions != previous_dimensions:
+            raise ValueError(f"line {line}: inconsistent enterprise currency/type/output unit across periods")
         previous_periods = periods_by_enterprise.setdefault(enterprise_key, [])
         for prior_start, prior_end in previous_periods:
             if start <= prior_end and prior_start <= end:
