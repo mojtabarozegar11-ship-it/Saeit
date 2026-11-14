@@ -1,0 +1,70 @@
+name: MOJ Revenue P0-P3 buyer and tenant safety - cycle26
+on:
+  push:
+    branches:
+      - fix/moj-priority-p0p3-buyer-scope-c26-20261114
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-priority-c26-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  django-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact source and test syntax without secrets
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          paths=(
+             'prop_firm/portal.py',
+             'prop_firm/challenge_commerce.py',
+             'core/tron_rollout_inventory.py',
+             'core/financial_brand_pages.py',
+             'tests/test_moj_prop_prior_phase_sequence.py',
+             'tests/test_moj_prop_zero_funded_account_guard.py',
+             'tests/test_tron_subsite_candidate_isolation.py',
+             'tests/test_signal_brand_canonical_host_locale.py',
+          )
+          for path in paths:
+              ast.parse(Path(path).read_text(encoding='utf8'),filename=path)
+          print('MOJ_PRIORITY_C26_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Install existing Django project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Run 51 real Django regression cases
+        env:
+          SECRET_KEY: moj-ci-only-not-production
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python manage.py test \
+            tests.test_moj_prop_prior_phase_sequence \
+            tests.test_moj_prop_zero_funded_account_guard \
+            tests.test_tron_subsite_candidate_isolation \
+            tests.test_signal_brand_canonical_host_locale \
+            --verbosity 1
+      - name: No live-trade, invoice or customer-payment activation check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          prop=Path('prop_firm/rules.py').read_text()
+          run=Path('prop_firm/challenge_commerce.py').read_text()
+          merchant=Path('core/tron_rollout_inventory.py').read_text()
+          assert 'real_orders_enabled: bool = False' in prop
+          assert 'trx_checkout_enabled: bool = False' in prop
+          assert 'checkout_enabled: bool = False' in run
+          assert '"checkout_enabled": False' in merchant
+          assert '"invoice_created": False' in merchant
+          print('MOJ_PRIORITY_C26_FINANCIAL_WRITE_STAYS_DISABLED=PASS')
+          PY
