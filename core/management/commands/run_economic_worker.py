@@ -64,7 +64,7 @@ class Command(BaseCommand):
                     if unknown:
                         self.stdout.write(
                             f"BLOCKED_UNSUPPORTED: task={unknown.pk} "
-                            f"capability={unknown.capability_code} requires_review=true"
+                            "requires_review=true"
                         )
                     else:
                         self.stdout.write("IDLE: no queued economic task.")
@@ -76,11 +76,17 @@ class Command(BaseCommand):
             try:
                 completed = runner.run(task.pk)
             except Exception as exc:
-                raise CommandError(f"Task {task.pk} execution failed: {exc}") from exc
+                # Provider/tool exceptions may contain credentials, private
+                # inputs or customer data. Suppress chained tracebacks as
+                # well as the direct CLI message to avoid accidental leakage.
+                raise CommandError(
+                    f"Task {task.pk} execution failed: worker_execution_error"
+                ) from None
             if completed.status != "completed":
                 raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
             executed += 1
-            verified_effect = bool((completed.output_data or {}).get('verified_effect', False))
+            output = completed.output_data if isinstance(completed.output_data, dict) else {}
+            verified_effect = output.get("verified_effect") is True
             self.stdout.write(self.style.SUCCESS(
                 f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
