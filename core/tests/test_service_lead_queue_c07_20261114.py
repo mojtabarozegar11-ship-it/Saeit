@@ -423,7 +423,6 @@ def test_dashboard_computes_prepared_over_consent_records_not_over_sales(owner):
     html = client.get(reverse("command_center_service_proposal_funnel_dashboard")).content.decode()
     assert "50.0٪" in html
     assert "درآمد وصول‌شده" in html
-    assert "فقط" not in ""  # No assertion about real cash from an internal ratio.
 
 
 @pytest.mark.django_db
