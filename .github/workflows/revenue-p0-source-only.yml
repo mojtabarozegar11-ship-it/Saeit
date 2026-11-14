@@ -1,0 +1,137 @@
+name: Revenue P0 source-only non-deployment checks
+on:
+  push:
+    branches:
+      - work/revenue-dual-offer-readiness-20261114
+    paths:
+      - ".github/workflows/revenue-p0-source-only.yml"
+      - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
+      - "scripts/mojtaba_revenue_cli.py"
+      - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "scripts/mojtaba_revenue_margin.py"
+      - "scripts/mojtaba_farm_break_even.py"
+      - "scripts/mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_break_even.py"
+      - "tests/test_mojtaba_revenue*.py"
+      - "tests/test_revenue_*.py"
+      - "docs/revenue-p0/**"
+      - "core/templates/core/services.html"
+      - "core/templates/mojplaywin/section.html"
+      - "core/templates/brands/mojplaywin/page.html"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/revenue-p0-source-only.yml"
+      - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
+      - "scripts/mojtaba_revenue_cli.py"
+      - "scripts/mojtaba_revenue_public_attestation_readonly.py"
+      - "scripts/mojtaba_revenue_margin.py"
+      - "scripts/mojtaba_farm_break_even.py"
+      - "scripts/mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_review_report.py"
+      - "tests/test_mojtaba_farm_break_even.py"
+      - "tests/test_mojtaba_revenue*.py"
+      - "tests/test_revenue_*.py"
+      - "docs/revenue-p0/**"
+      - "core/templates/core/services.html"
+      - "core/templates/mojplaywin/section.html"
+      - "core/templates/brands/mojplaywin/page.html"
+permissions:
+  contents: read
+jobs:
+  isolated-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run offline unit/source contracts
+        run: python3 -m unittest discover -s tests -p 'test_revenue_*.py' -v
+      - name: Enforce ten-channel one-bot commercial gates and CLI invariants
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_revenue_portfolio.py scripts/mojtaba_revenue_cli.py scripts/mojtaba_revenue_margin.py scripts/mojtaba_revenue_public_attestation_readonly.py scripts/mojtaba_farm_break_even.py scripts/mojtaba_farm_review_report.py scripts/revenue_dual_offer_qualifier.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_revenue*.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_farm_break_even.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojtaba_farm_review_report.py' -v
+      - name: Run real farm economics and bounded pricing math offline
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --farm-analysis docs/revenue-p0/mojtaba-farm-break-even.synthetic.json > /tmp/mojtaba-farm-output.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-margin docs/revenue-p0/mojtaba-synthetic-margin-usd.json > /tmp/mojtaba-margin-usd.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-margin docs/revenue-p0/mojtaba-synthetic-margin-irr.json > /tmp/mojtaba-margin-irr.json
+          python3 - <<'PY'
+          import json
+          f=json.load(open('/tmp/mojtaba-farm-output.json'))
+          u=json.load(open('/tmp/mojtaba-margin-usd.json'))
+          r=json.load(open('/tmp/mojtaba-margin-irr.json'))
+          assert f['canonical_bot']=='mojtaba.bot.ai'
+          assert f['estimated_profit_irr']=='500000000'
+          assert f['breakeven_quantity_kg_ceil']=='5000'
+          assert f['scenario_count']==27 and f['quote_approved'] is False
+          assert f['payment_collected'] is False
+          assert u['gross_price_floor_synthetic']=='36.77'
+          assert r['gross_price_floor_synthetic']=='1500000'
+          assert u['invoice_created'] is False
+          print('MOJTABA_FARM_ECONOMICS=27_SCENARIOS_VERIFIED; USD_IRR_MARGIN_CALCULATED; ORDER_AND_PAYMENT=NOT_VERIFIED')
+          PY
+      - name: Generate usable private-style Persian economic report offline
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --farm-report docs/revenue-p0/mojtaba-farm-break-even.synthetic.json >/tmp/mojtaba-farm-report.md
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('/tmp/mojtaba-farm-report.md').read_text(encoding='utf8')
+          assert s.startswith('# برگه بررسی اقتصاد تولید')
+          assert s.count('| +') + s.count('| -') >= 27
+          assert 'بدون شماره فاکتور' in s and 'نه سفارش و نه درآمد وصول‌شده' in s
+          print('MOJTABA_FARM_REPORT=27_SCENARIOS; NO_CLIENT_SEND_NO_INVOICE_NO_SETTLEMENT')
+          PY
+      - name: Prove sample portfolio and KPI outputs are expressly synthetic
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_cli.py --catalog >/tmp/mojtaba-catalog.json
+          python3 scripts/mojtaba_revenue_cli.py --qualify docs/revenue-p0/mojtaba-portfolio-inquiry.synthetic.json >/tmp/mojtaba-synthetic-inquiry.json
+          python3 scripts/mojtaba_revenue_cli.py --synthetic-kpis docs/revenue-p0/mojtaba-portfolio-kpi.synthetic.json >/tmp/mojtaba-synthetic-kpis.json
+          python3 - <<'PY'
+          import json
+          a=json.load(open('/tmp/mojtaba-catalog.json'))
+          b=json.load(open('/tmp/mojtaba-synthetic-inquiry.json'))
+          c=json.load(open('/tmp/mojtaba-synthetic-kpis.json'))
+          assert len(a['offers'])==10 and a['canonical_bot']=='mojtaba.bot.ai'
+          assert all(x['commercial_mode']=='inquiry_only' for x in a['offers'])
+          assert b['canonical_bot']=='mojtaba.bot.ai' and b['payment_verified'] is False
+          assert b['collected_revenue'] is None and b['auto_send'] is False
+          assert c['synthetic_example'] is True and c['actual_revenue'] is None
+          print('MOJTABA_SINGLE_BOT_PORTFOLIO=10; FINANCIAL_RELEASE=NO_GO; ACTUAL_REVENUE=UNKNOWN')
+          PY
+      - name: Observe public service pages and canonical domain via GET only
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_revenue_public_attestation_readonly.py
+      - name: Keep non-mutating public evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojtaba-revenue-get-only-readiness
+          path: ${{ runner.temp }}/mojtaba-revenue-attestation/
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Reject non-anonymized or phantom payment test output
+        run: |
+          python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-checkout-intake.synthetic.json > /tmp/revenue_checkout.json
+          python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-farm-intake.synthetic.json > /tmp/revenue_farm.json
+          python3 - <<'PY'
+          import json
+          for item in ('/tmp/revenue_checkout.json', '/tmp/revenue_farm.json'):
+              result=json.load(open(item,encoding='utf-8'))
+              assert result['canonical_bot']=='mojtaba.bot.ai'
+              assert result['order_state']=='inquiry_only'
+              assert result['payment_state']=='not_requested'
+              assert result['delivery_state']=='not_delivered'
+              assert result['personal_data_exported'] is False
+          print('REVENUE_SOURCE_ONLY=passed; payment_and_delivery=UNVERIFIED')
+          PY
