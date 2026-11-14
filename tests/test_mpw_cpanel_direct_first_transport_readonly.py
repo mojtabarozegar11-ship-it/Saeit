@@ -175,5 +175,39 @@ class DirectFirstTransportTests(unittest.TestCase):
         self.assertIn("RequestTTY no", config.read_text())
 
 
+    def test_25_direct_path_never_reads_vps_key(self):
+        touched = []
+        def observed_key(secret, path):
+            touched.append(path.name)
+        with patch.dict(os.environ, {"RUNNER_TEMP": str(self.home),
+                                     "HOST_KEY": "authorized-host-key",
+                                     "VPS_KEY": ""}):
+            with patch.object(m, "_key", side_effect=observed_key):
+                with patch.object(m, "_scan", return_value=True):
+                    with patch.object(m, "_cpanel_identity", return_value=True):
+                        self.assertEqual(m.main(), 0)
+        self.assertEqual(touched, ["host.key"])
+
+    def test_26_direct_config_has_no_vps_identity_or_host(self):
+        path = self.home / "config"
+        m._config(path, self.home, via_vps=False)
+        content = path.read_text()
+        self.assertNotIn("Host saeit-vps", content)
+        self.assertNotIn("vps.key", content)
+        self.assertNotIn("vps.known", content)
+
+    def test_27_fallback_still_checks_vps_key(self):
+        touched = []
+        def observed_key(secret, path):
+            touched.append(path.name)
+        with patch.dict(os.environ, {"RUNNER_TEMP": str(self.home),
+                                     "HOST_KEY": "authorized-host-key",
+                                     "VPS_KEY": "authorized-vps-key"}):
+            with patch.object(m, "_key", side_effect=observed_key):
+                with patch.object(m, "_scan", side_effect=[False, False]):
+                    self.assertEqual(m.main(), 2)
+        self.assertEqual(touched, ["host.key", "vps.key"])
+
+
 if __name__ == "__main__":
     unittest.main()
