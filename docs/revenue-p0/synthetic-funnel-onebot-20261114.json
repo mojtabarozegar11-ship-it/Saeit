@@ -1,0 +1,12 @@
+{
+  "schema": "mojtaba.bot.ai.synthetic-funnel.v1",
+  "synthetic_example": true,
+  "counts": {
+    "views": 100,
+    "inquiries": 10,
+    "qualified": 5,
+    "approved_quotes": 4,
+    "settled_orders": 2,
+    "delivered_orders": 1
+  }
+}
