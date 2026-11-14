@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, RequestFactory
 
 from command_center.commerce_funnel import commerce_funnel_api
 from core.commerce_funnel import record_funnel_event
@@ -15,10 +15,12 @@ class CommerceFunnelTests(TestCase):
         )
 
     def test_event_is_bounded_and_contains_no_identity_fields(self):
-        request = self.client.get(
+        # Build a request without rendering the home page: funnel telemetry
+        # is independent of WhiteNoise's production staticfiles manifest.
+        request = RequestFactory().get(
             "/", {"utm_source": "newsletter", "utm_medium": "email", "utm_campaign": "spring"},
             HTTP_HOST="mojplaywin.com",
-        ).wsgi_request
+        )
         record_funnel_event(request, "view_item", self.product)
         event = CommerceFunnelEvent.objects.get()
         self.assertEqual(event.source, "newsletter")
@@ -63,7 +65,10 @@ class CommerceFunnelTests(TestCase):
         render_view.assert_called_once()
 
     def test_staff_summary_is_read_only_and_requires_staff(self):
-        record_funnel_event(self.client.get("/", HTTP_HOST="mojplaywin.com").wsgi_request, "view_item", self.product)
+        record_funnel_event(
+            RequestFactory().get("/", HTTP_HOST="mojplaywin.com"),
+            "view_item", self.product,
+        )
         self.assertNotEqual(self.client.get("/staff/command-center/api/commerce-funnel/").status_code, 200)
         user = get_user_model().objects.create_superuser("owner", "owner@example.com", "safe-test-password")
         self.client.force_login(user)
