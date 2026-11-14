@@ -12,6 +12,7 @@ import sys
 
 PREFIX = "ZM_PUBLIC_INTAKE_READONLY="
 EXPECTED_TARGETS = frozenset(("canonical_php", "company_page", "contact_page"))
+OPTIONAL_TARGETS = frozenset(("status_page",))
 REQUIRED_PUBLIC = (
     "public_html_observed",
     "same_origin_https",
@@ -22,17 +23,17 @@ def evaluate_report(report):
     if not isinstance(report, dict) or report.get("mode") != "public_readonly_get_no_credentials":
         raise ValueError("invalid_public_probe_contract")
     observations = report.get("results")
-    if not isinstance(observations, list) or len(observations) != 3:
+    if not isinstance(observations, list) or len(observations) not in (3, 4):
         raise ValueError("invalid_public_probe_results")
     by_name = {}
     for row in observations:
         if not isinstance(row, dict) or row.get("target") in by_name:
             raise ValueError("invalid_probe_row")
         name = row.get("target")
-        if name not in EXPECTED_TARGETS:
+        if name not in (EXPECTED_TARGETS | OPTIONAL_TARGETS):
             raise ValueError("unknown_probe_target")
         by_name[name] = row
-    if set(by_name) != EXPECTED_TARGETS:
+    if not EXPECTED_TARGETS.issubset(by_name) or set(by_name) - EXPECTED_TARGETS - OPTIONAL_TARGETS:
         raise ValueError("missing_probe_target")
 
     form = by_name["canonical_php"]
@@ -60,6 +61,8 @@ def evaluate_report(report):
     for page in ("company_page", "contact_page"):
         if by_name[page].get("http_status") != 200:
             issues.append(page + "_public_http_200_not_observed")
+    if "status_page" in by_name and by_name["status_page"].get("http_status") != 200:
+        issues.append("status_page_public_http_200_not_observed")
 
     # These cannot be certified by any public GET or isolated test, and must
     # remain blockers even if every visible front-end structure is present.
@@ -80,6 +83,10 @@ def evaluate_report(report):
         ),
         "public_php_same_origin_https_action_observed": target in (
             "same_origin_default", "same_origin_https"
+        ),
+        "public_php_status_page_observed": (
+            by_name["status_page"].get("http_status") == 200
+            if "status_page" in by_name else None
         ),
         "real_customer_post_submitted": False,
         "cash_settlement_verified": None,
