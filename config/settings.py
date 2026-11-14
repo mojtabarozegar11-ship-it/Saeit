@@ -130,3 +130,23 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+# Unified TRON merchant gateway: explicit opt-in, never enabled by a code merge.
+TRON_UNIFIED_PUBLIC_ENABLED = env.bool("TRON_UNIFIED_PUBLIC_ENABLED", default=False)
+TRON_UNIFIED_DISCOVERY_ENABLED = env.bool("TRON_UNIFIED_DISCOVERY_ENABLED", default=False)
+TRON_UNIFIED_SHARED_RATE_LIMIT_READY = env.bool("TRON_UNIFIED_SHARED_RATE_LIMIT_READY", default=False)
+TRON_UNIFIED_RECEIVER = env("TRON_UNIFIED_RECEIVER", default="")
+TRON_UNIFIED_ALLOWED_HOSTS = env.list("TRON_UNIFIED_ALLOWED_HOSTS", default=[])
+TRON_UNIFIED_PRIVATE_DIGITAL_ROOT = env("TRON_UNIFIED_PRIVATE_DIGITAL_ROOT", default="")
+TRON_UNIFIED_TRONGRID_API_KEY = env("TRON_UNIFIED_TRONGRID_API_KEY", default="")
+
+# A shared Redis cache may be used if the operator has installed it and has
+# verified its cross-worker atomic increments. No costly service is started here.
+TRON_UNIFIED_CACHE_URL = env("TRON_UNIFIED_CACHE_URL", default="")
+if TRON_UNIFIED_CACHE_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": TRON_UNIFIED_CACHE_URL,
+            "KEY_PREFIX": "zm_tron_v1",
+        }
+    }
