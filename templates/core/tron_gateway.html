@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="{{ language }}" dir="{% if language == 'fa' %}rtl{% else %}ltr{% endif %}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>{% if language == 'fa' %}پرداخت امن TRON | زمرد ملل{% else %}Secure TRON checkout | MojPlayWin{% endif %}</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{background:{% if language == 'fa' %}#071e19{% else %}#091629{% endif %};color:#f4f8f5;font:16px system-ui,-apple-system,sans-serif;margin:0;padding:24px}
+main{max-width:680px;margin:24px auto;background:#152d30;border:1px solid #537f7c;border-radius:22px;padding:clamp(20px,5vw,38px);box-shadow:0 20px 90px #0004}
+h1{font-size:clamp(24px,5vw,33px)}p{line-height:1.8}.muted{color:#c6d3d0}.number{overflow-wrap:anywhere;font:600 17px ui-monospace,monospace;background:#072021;padding:15px;border-radius:10px}
+input{width:100%;font:inherit;color:#fff;background:#061b20;border:1px solid #6b928c;border-radius:10px;padding:14px;margin:8px 0 18px}
+button,.link{display:inline-block;padding:13px 19px;border-radius:12px;background:#d5b878;color:#101d1a;font:700 16px system-ui;border:0;cursor:pointer;text-decoration:none}
+a{color:#bfe2e0}.warn{padding:15px;border-inline-start:4px solid #dcb778;background:#3b3020}.error{color:#ffb4a8}
+footer{border-top:1px solid #48615c;margin-top:30px;padding-top:14px}
+</style></head>
+<body><main>
+{% if language == 'fa' %}<p>زمرد ملل · درگاه پرداخت مستقیم TRON</p><h1>پرداخت با TRX</h1>
+{% else %}<p>MojPlayWin · Direct TRON merchant gateway</p><h1>Pay securely with TRX</h1>{% endif %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if stage == 'catalog' %}
+<h2>{% if language == 'fa' %}محصولات آماده فروش{% else %}Verified, ready-to-sell products{% endif %}</h2>
+{% for product, amount in products %}
+<section style="border-block-end:1px solid #48615c;padding:15px 0">
+<strong>{{ product.title }}</strong><p>{{ product.price }} {{ product.currency }} · {% if language == 'fa' %}قیمت پایه تقریبی{% else %}Base quoted amount{% endif %}: {{ amount }} TRX</p>
+<a class="link" href="/pay/tron/product/{{ product.pk }}/">{% if language == 'fa' %}خرید با TRX{% else %}Buy with TRX{% endif %}</a></section>
+{% empty %}<p>{% if language == 'fa' %}در حال حاضر محصول تأییدشده و آماده فروش در این صفحه وجود ندارد.{% else %}No rights-approved, fulfillment-ready products are listed on this page.{% endif %}</p>{% endfor %}
+{% if has_more %}<a href="?page={{ next_page }}">{% if language == 'fa' %}صفحه بعد{% else %}Next page{% endif %}</a>{% endif %}
+{% elif stage == 'start' %}
+<h2>{{ product.title }}</h2>
+<p class="muted">{% if language == 'fa' %}قیمت فهرست: {{ product.price }} {{ product.currency }}. مبلغ قطعی TRX پس از ساخت صورتحساب مشخص می‌شود.{% else %}List price: {{ product.price }} {{ product.currency }}. Your precise TRX amount is locked on the invoice.{% endif %}</p>
+<form method="post">{% csrf_token %}
+<label for="email">{% if language == 'fa' %}ایمیل خریدار (الزامی){% else %}Buyer email (required){% endif %}</label>
+<input name="email" id="email" type="email" autocomplete="email" maxlength="254" required>
+<button type="submit">{% if language == 'fa' %}ارسال لینک امن صورتحساب{% else %}Email my secure invoice{% endif %}</button></form>
+{% elif stage == 'sent' %}
+<p>{% if language == 'fa' %}لینک تأیید و صورتحساب به ایمیل واردشده ارسال شد. تا مشاهده صورتحساب اختصاصی، وجهی نفرستید.{% else %}An email confirmation and private invoice link have been requested. Do not send funds before you open the invoice.{% endif %}</p>
+{% elif stage == 'invoice' %}
+<p>{% if language == 'fa' %}شماره صورتحساب{% else %}Invoice{% endif %}: #{{ invoice.pk }}</p>
+{% if invoice.status == 'paid' %}
+<h2>{% if language == 'fa' %}پرداخت تأیید و ثبت شد{% else %}Payment verified and recorded{% endif %}</h2>
+<p>{% if language == 'fa' %}رسید تراکنش{% else %}Transaction receipt{% endif %}:</p><p class="number">{{ invoice.txid }}</p>
+{% if is_digital %}<a class="link" href="/pay/tron/download/{{ invoice.pk }}/">{% if language == 'fa' %}دریافت محصول دیجیتال (در صورت وجود){% else %}Download purchased digital item (if applicable){% endif %}</a>{% endif %}
+{% elif invoice.status == 'awaiting_payment' %}
+{% if not invoice_expired %}
+<p class="warn">{% if language == 'fa' %}فقط دارایی اصلی TRX روی شبکه TRON. سایر توکن‌ها و شبکه‌ها پذیرفته نمی‌شوند. تنها مبلغ دقیق زیر را ارسال کنید.{% else %}Native TRX on TRON Mainnet only. Do not send USDT, other tokens, or assets from another chain. Send the exact amount below.{% endif %}</p>
+<p>{% if language == 'fa' %}آدرس مقصد{% else %}Receiving address{% endif %}:</p><p class="number" id="address">{{ recipient }}</p>
+<p>{% if language == 'fa' %}مبلغ دقیق قابل پرداخت{% else %}Exact amount to pay{% endif %}:</p><p class="number" id="amount">{{ trx_amount }} TRX</p>
+<p class="muted">{% if language == 'fa' %}برای شناسایی مستقل هر خرید، مبلغ صورتحساب ممکن است حداکثر ۰٫۰۱ TRX از قیمت پایه تفاوت داشته باشد. پس از پایان اعتبار صورتحساب، وجه نفرستید.{% else %}To identify your payment independently, the exact invoice may include up to 0.01 TRX in unique-amount adjustment. Do not transfer after invoice expiry.{% endif %}</p>
+
+{% else %}<p class="warn">{% if language == 'fa' %}مهلت این صورتحساب به پایان رسیده است. پرداخت جدید نفرستید. اگر در زمان اعتبار پرداخت کرده‌اید، شناسه تراکنش را زیر وارد کنید.{% else %}Invoice expired. Do not send any new payment. If you paid before expiry, you can still submit your original transaction ID.{% endif %}</p>{% endif %}
+<form method="post">{% csrf_token %}
+<label for="txid">{% if language == 'fa' %}شناسه تراکنش ۶۴ کاراکتری (پس از ارسال){% else %}64-character transaction ID (after transfer){% endif %}</label>
+<input name="txid" id="txid" spellcheck="false" autocapitalize="off" autocomplete="off" minlength="64" maxlength="64" required>
+<button type="submit">{% if language == 'fa' %}بررسی مستقل پرداخت{% else %}Verify payment on-chain{% endif %}</button></form>
+{% else %}
+<p class="warn">{% if language == 'fa' %}این صورتحساب قابل پرداخت نیست. مبلغی ارسال نکنید.{% else %}This invoice is not payable. Do not send funds.{% endif %}</p>
+{% endif %}
+{% elif stage == 'recovery' %}
+<form method="post">{% csrf_token %}<label for="email">{% if language == 'fa' %}ایمیل ثبت‌شده{% else %}Your checkout email{% endif %}</label>
+<input type="email" name="email" id="email" required><button>{% if language == 'fa' %}ارسال لینک بازیابی{% else %}Email recovery link{% endif %}</button></form>
+{% elif stage == 'recovery_sent' %}
+<p>{% if language == 'fa' %}در صورت وجود سفارش، لینک بازیابی به ایمیل ارسال می‌شود.{% else %}If invoices are associated with that email, a recovery link will be sent.{% endif %}</p>
+{% elif stage == 'recovery_list' %}
+<h2>{% if language == 'fa' %}صورتحساب‌های شما{% else %}Your invoices{% endif %}</h2>
+{% for item in invoices %}<p><a href="/pay/tron/invoice/{{ item.pk }}/">#{{ item.pk }} · {{ item.status }} · {{ item.order.currency }} {{ item.order.total }}</a></p>
+{% empty %}<p>{% if language == 'fa' %}صورتحسابی ثبت نشده است.{% else %}No invoices found.{% endif %}</p>{% endfor %}
+{% endif %}
+<footer><p><a href="/pay/tron/recover/">{% if language == 'fa' %}بازیابی خرید با ایمیل{% else %}Recover purchase by email{% endif %}</a></p>
+<p class="muted">{% if language == 'fa' %}پرداخت تنها پس از تأیید مستقل بلاکچین نهایی می‌شود. هیچ کلید خصوصی یا اتصال کیف پولی لازم نیست.{% else %}Payment is final only after independent blockchain verification. No wallet connection or private key is required.{% endif %}</p></footer>
+</main></body></html>
