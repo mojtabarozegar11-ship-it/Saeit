@@ -69,6 +69,8 @@ class RevenueInquirySource(unittest.TestCase):
         self.assertIn("سفارش دوره‌ای",self.cafe)
         self.assertIn("قیمت، ظرفیت تولید و تحویل هنوز قطعی نیستند",self.cafe)
         self.assertIn("فرم پرداخت یا تعهد قطعی تأمین ندارد",self.cafe)
+        self.assertIn("status.setAttribute(\'role\',\'alert\')",self.cafe)
+        self.assertIn("status.setAttribute(\'role\',\'status\')",self.cafe)
 
     def test_preserve_templates_and_homepage(self):
         for p in ("public/index.html","core/templates/base.html"):
