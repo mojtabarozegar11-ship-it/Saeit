@@ -1,0 +1,50 @@
+name: MPW cPanel provenance bridge hardening and full CI unblock (offline)
+on:
+  push:
+    branches: [fix/mpw-readonly-bridge-full-ci-unblock-20261114]
+  pull_request:
+    branches: [fix/mpw-cpanel-source-provenance-bridge-only-20261114]
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile critical Python and validate bash syntax
+        run: |
+          python3 -m py_compile tests/test_zomorod_fields_release_guard.py tests/test_mpw_cpanel_dispatch_boundaries_20261114.py
+          bash -n deploy/cpanel_direct_command.sh
+      - name: Run 29 new adversarial contract tests
+        run: python3 -m unittest discover -s tests -p 'test_mpw_cpanel_dispatch_boundaries_20261114.py' -v
+      - name: Recheck existing read-only source and bridge contracts
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+      - name: Execute exact two historical pytest functions via stdlib AST isolation
+        run: |
+          python3 - <<'PY'
+          import ast
+          import tempfile
+          from pathlib import Path
+          root=Path.cwd()
+          path=root/'tests/test_zomorod_fields_release_guard.py'
+          parsed=ast.parse(path.read_text())
+          names={
+            'test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid',
+            'test_cpanel_relay_denies_unlisted_release_and_requires_host_key',
+          }
+          nodes=[n for n in parsed.body if isinstance(n,ast.FunctionDef) and n.name in names]
+          assert {n.name for n in nodes}==names
+          scope={'SOURCE':root/'scripts/zomorod_fields_guard_20261113.py'}
+          exec(compile(ast.Module(body=nodes,type_ignores=[]),str(path),'exec'),scope)
+          scope['test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid']()
+          with tempfile.TemporaryDirectory() as directory:
+              scope['test_cpanel_relay_denies_unlisted_release_and_requires_host_key'](Path(directory))
+          print('HISTORICAL_EXACT_TEST_FUNCTIONS=2/2_PASS; NO_REMOTE_CONNECTION=YES')
+          PY
+      - name: Explicit source-only NO-GO
+        run: echo 'NO_CPANEL_SSH=YES; NO_PAYMENT=YES; NO_DEPLOY=YES; MAIN_ONLY_OWNER_GATED=YES'

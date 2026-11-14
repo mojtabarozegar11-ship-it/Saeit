@@ -496,7 +496,7 @@ def test_cpanel_zero_write_audit_relay_is_pinned_and_syntax_valid():
     script = relay.read_text()
     assert 'django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream|mpw_source_provenance)' in script
     assert script.count('zomorod_fields_audit_live)') == 2  # both relay modes
-    assert script.count('zomorod_fields_verify_stream)') == 3  # allowlist + both relay modes
+    assert script.count('zomorod_fields_verify_stream)') == 2  # both relay modes; exact allowlist checked above
     assert script.count('zomorod_fields_audit_stream') == 3  # definition + both modes
     assert 'aeffb90f93e690bcc94d320dcee5d9ed9b4c2e32' in script
     assert 'git hash-object -- "$guard"' in script
