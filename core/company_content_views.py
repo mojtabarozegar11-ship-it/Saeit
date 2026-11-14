@@ -28,7 +28,10 @@ def company_content_feed(request, slug):
 
 
 class CompanyInquiryForm(forms.ModelForm):
-    """Validate public inquiries before adding a sales lead to the CRM."""
+    """Validate explicit-consent leads before storing in the existing CRM."""
+
+    consent = forms.BooleanField(required=True, label="با ثبت درخواست و بررسی اطلاعات برای پاسخ‌گویی موافقم")
+    website = forms.CharField(required=False, widget=forms.HiddenInput)
 
     message = forms.CharField(max_length=5000, strip=True)
 
@@ -36,16 +39,91 @@ class CompanyInquiryForm(forms.ModelForm):
         model = CompanyInquiry
         fields = ("kind", "name", "organization", "email", "phone", "subject", "message")
 
+    def clean_website(self):
+        if self.cleaned_data.get("website"):
+            raise forms.ValidationError("درخواست نامعتبر است")
+        return ""
+
+
+# User-session-only duplicate suppression; no claim of global DB atomic uniqueness.
+_DUPLICATE_WINDOW_SECONDS = 15 * 60
+_SESSION_KEY = "zomorod_last_company_inquiry_v1"
+
+
+def _inquiry_fingerprint(cleaned):
+    import json
+    from django.utils.crypto import salted_hmac
+    fields = ("kind", "name", "organization", "email", "phone", "subject", "message")
+    content = json.dumps(
+        {key: cleaned.get(key, "") for key in fields},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    return salted_hmac("company.inquiry.duplicate.v1", content).hexdigest()
+
 
 def company_portal_home(request):
+    """Write a real CRM lead once, return signed receipt; never send mail."""
     from django.shortcuts import redirect
-    from django.contrib import messages
-    if request.method == "POST":
-        form = CompanyInquiryForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
-        else:
-            messages.error(request, "اطلاعات درخواست معتبر نیست؛ فیلدهای الزامی، نوع همکاری و نشانی ایمیل را بررسی کنید.")
-        return redirect("company")
-    return None
+    from django.urls import reverse
+    if request.method != "POST":
+        raise Http404("Use the company intake form")
+
+    form = CompanyInquiryForm(request.POST)
+    if not form.is_valid():
+        response = render(request, "core/company_inquiry_retry.html", {"form": form}, status=400)
+        response["Cache-Control"] = "no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+
+    from django.utils import timezone
+    from .company_inquiry_receipts import issue_receipt
+    fingerprint = _inquiry_fingerprint(form.cleaned_data)
+    record = request.session.get(_SESSION_KEY)
+    now = int(timezone.now().timestamp())
+    if (type(record) is dict and record.get("fingerprint") == fingerprint
+            and type(record.get("created")) is int
+            and 0 <= now - record["created"] < _DUPLICATE_WINDOW_SECONDS
+            and type(record.get("inquiry_id")) is int
+            and CompanyInquiry.objects.filter(pk=record["inquiry_id"]).exists()):
+        return redirect(reverse("company_inquiry_receipt", kwargs={
+            "ticket": issue_receipt(record["inquiry_id"]),
+        }))
+
+    inquiry = form.save()
+    request.session[_SESSION_KEY] = {
+        "fingerprint": fingerprint, "created": now, "inquiry_id": inquiry.pk,
+    }
+    return redirect(reverse("company_inquiry_receipt", kwargs={
+        "ticket": issue_receipt(inquiry.pk),
+    }))
+
+
+def company_inquiry_receipt(request, ticket):
+    """Signed, privacy-minimal 30-day status check; no anonymous CRM PII."""
+    from django.views.decorators.cache import never_cache
+    from django.views.decorators.http import require_GET
+    from .company_inquiry_receipts import verify_receipt
+
+    @never_cache
+    @require_GET
+    def _show(request, ticket):
+        inquiry_id = verify_receipt(ticket)
+        status = CompanyInquiry.objects.filter(pk=inquiry_id).values_list("status", flat=True).first()
+        if status is None:
+            raise Http404("Receipt not found")
+        descriptions = {
+            "new": "درخواست دریافت شد؛ هنوز پذیرش قرارداد نیست",
+            "reviewing": "درخواست در حال بررسی کارشناسی است",
+            "approved": "تأیید اولیه بررسی؛ نه قرارداد یا پرداخت",
+            "closed": "پرونده بررسی بسته شده است",
+        }
+        response = render(request, "core/company_inquiry_receipt.html", {
+            "status_text": descriptions.get(status, "وضعیت در حال بازبینی است"),
+        })
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["Referrer-Policy"] = "no-referrer"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+
+    return _show(request, ticket)
