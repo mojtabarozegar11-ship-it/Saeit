@@ -324,7 +324,7 @@ def test_growth_ready_without_new_money_evidence_does_not_repeat_profit_review()
     brain = AutonomousBrain()
     assert brain.candidates(state)[0].action == "await_external_acquisition"
     state["financial_event_needs_reconcile"] = True
-    assert brain.candidates(state)[0].action == "income_revenue_verify"
+    assert brain.candidates(state)[0].action == "await_external_settlement_evidence"
 
 
 def test_new_payment_evidence_takes_priority_over_internal_research():
@@ -335,4 +335,4 @@ def test_new_payment_evidence_takes_priority_over_internal_research():
         "growth_ready": 0, "orders": 1, "paid_orders": 1,
         "financial_event_needs_reconcile": True,
     }
-    assert AutonomousBrain().candidates(state)[0].action == "income_revenue_verify"
+    assert AutonomousBrain().candidates(state)[0].action == "await_external_settlement_evidence"
