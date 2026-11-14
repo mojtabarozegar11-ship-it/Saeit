@@ -41,7 +41,7 @@ def load_bounded_json(file_path: Path) -> dict:
 
 
 def output_private(target: Path, result: dict, input_path: Path) -> None:
-    return output_private_text(target, json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\\n", input_path)
+    return output_private_text(target, json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n", input_path)
 
 
 def output_private_text(target: Path, text: str, input_path: Path) -> None:
