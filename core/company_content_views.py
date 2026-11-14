@@ -113,7 +113,13 @@ def company_portal_home(request):
 
     if request.method == "POST":
         # Defensive bound before attempting to parse a large attacker payload.
-        if len(request.body) > 12000:
+        # CSRF middleware can consume the POST stream before this view.
+        # Check declared content length rather than re-reading request.body.
+        try:
+            declared_length = int(request.META.get("CONTENT_LENGTH") or 0)
+        except (ValueError, TypeError):
+            declared_length = 0
+        if declared_length > 12000:
             from django.http import HttpResponse
             return HttpResponse("Request too large", status=413,
                                 content_type="text/plain; charset=utf-8")
