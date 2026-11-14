@@ -17,6 +17,7 @@ MANIFEST_SCHEMA = "mojtaba.bot.ai.cyber.engagement.v1"
 EVIDENCE_SCHEMA = "mojtaba.bot.ai.cyber.evidence.v1"
 HOST_RE = re.compile(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 FINDING_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
+CONTEXT_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
 REDACTIONS = (
     re.compile(r"(?i)(authorization\s*:\s*(?:bearer|basic)\s+)\S+"),
     re.compile(r"(?i)((?:password|secret|api[_-]?key|token)\s*[=:]\s*)\S+"),
@@ -107,9 +108,9 @@ def verify_authorization(engagement: dict, verify_key: bytes, *,
     expected = hmac.new(verify_key, _canonical(engagement), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise CyberModuleError("SIGNATURE_INVALID")
-    if not isinstance(engagement.get("tenant_id"), str) or not engagement["tenant_id"].strip():
+    if not isinstance(engagement.get("tenant_id"), str) or not CONTEXT_ID_RE.fullmatch(engagement["tenant_id"]):
         raise CyberModuleError("TENANT_INVALID")
-    if not isinstance(engagement.get("engagement_id"), str) or not engagement["engagement_id"].strip():
+    if not isinstance(engagement.get("engagement_id"), str) or not CONTEXT_ID_RE.fullmatch(engagement["engagement_id"]):
         raise CyberModuleError("ENGAGEMENT_INVALID")
     targets = engagement.get("allowed_assets")
     if not isinstance(targets, list) or not 1 <= len(targets) <= 200:
