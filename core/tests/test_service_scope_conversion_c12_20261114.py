@@ -255,3 +255,42 @@ def test_service_page_works_without_request_user_session(db):
     response = client.get(url("AGR-01"))
     assert response.status_code == 200
     assert CompanyInquiry.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(**OFF)
+@pytest.mark.parametrize("code", SERVICE_CARDS)
+def test_prepared_inquiry_brief_carries_exact_service_code_without_buyer_pii(code):
+    res = Client().get(url(code))
+    html = res.content.decode("utf-8")
+    assert 'id="service-brief-text"' in html
+    assert "کد خدمت: " + code in html
+    assert SERVICE_CARDS[code]["title_fa"] in html
+    assert SCOPE_GUIDES[code]["acceptance"] in html
+    assert "لطفاً پیش از هر تعهد" in html
+    assert 'name="email"' not in html
+    assert 'name="phone"' not in html
+    assert CompanyInquiry.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(**OFF)
+def test_copy_action_is_local_only_and_has_manual_accessibility_fallback():
+    html = Client().get(url("AGR-01")).content.decode("utf-8")
+    assert 'id="copy-service-brief"' in html
+    assert 'role="status"' in html
+    assert 'aria-live="polite"' in html
+    assert "navigator.clipboard.writeText(field.value)" in html
+    assert "field.focus(); field.select()" in html
+    assert "fetch(" not in html
+    assert "XMLHttpRequest" not in html
+
+
+@pytest.mark.django_db
+@override_settings(**ON)
+def test_copyable_brief_does_not_change_the_authoritative_intake_source():
+    html = Client().get(url("RS-03")).content.decode("utf-8")
+    assert "RS-03" in html
+    assert reverse("service_inquiry", args=["RS-03"]) in html
+    assert LEGACY_INQUIRY_PATH not in html
+    assert "<form" not in html.lower()
