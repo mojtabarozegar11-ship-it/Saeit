@@ -279,7 +279,12 @@ def _record_paid(invoice_id, proof):
             "order", "payment_intent").get(pk=invoice_id)
         if invoice.status == "paid":
             return invoice.txid == proof["txid"]
-        if invoice.status != "awaiting_payment":
+        if (invoice.status != "awaiting_payment" or invoice.order.status != "pending"
+                or invoice.payment_intent.status != "awaiting_payment"
+                or invoice.payment_intent.provider != PROVIDER
+                or invoice.payment_intent.order_id != invoice.order_id
+                or invoice.payment_intent.amount != invoice.order.total
+                or invoice.payment_intent.currency != invoice.order.currency):
             return False
         event = PaymentWebhookEvent.objects.create(
             provider=PROVIDER, event_id=proof["txid"], event_type="tron_finalized",
