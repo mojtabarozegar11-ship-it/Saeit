@@ -152,5 +152,36 @@ class ReadinessGateTests(unittest.TestCase):
         self.assertNotIn("Traceback", output.getvalue())
 
 
+    def test_optional_status_page_preserves_valid_conservative_form_evaluation(self):
+        r = report(form={"consent_named_in_candidate": False})
+        r["results"].insert(1, {
+            "target": "status_page", "http_status": 200,
+            "observation": "public_html_observed"
+        })
+        outcome = evaluate_report(r)
+        self.assertEqual(outcome["readiness"], "NO_GO_REQUIRES_PRODUCTION_HOST_EVIDENCE")
+        self.assertTrue(outcome["public_php_status_page_observed"])
+        self.assertIn("named_consent_field_not_observed", outcome["public_structural_findings"])
+        self.assertFalse(outcome["release_authorized"])
+
+    def test_status_page_404_is_explicit_observation_not_a_lead_failure_claim(self):
+        r = report()
+        r["results"].append({"target": "status_page", "http_status": 404})
+        outcome = evaluate_report(r)
+        self.assertIn("status_page_public_http_200_not_observed", outcome["public_structural_findings"])
+        self.assertFalse(outcome["public_php_status_page_observed"])
+        self.assertFalse(outcome["release_authorized"])
+
+    def test_duplicate_optional_or_unrecognized_fifth_target_remains_rejected(self):
+        r = report()
+        r["results"].append({"target": "status_page", "http_status": 200})
+        r["results"].append({"target": "hidden_db", "http_status": 200})
+        with self.assertRaises(ValueError):
+            evaluate_report(r)
+        r["results"][4]["target"] = "status_page"
+        with self.assertRaises(ValueError):
+            evaluate_report(r)
+
+
 if __name__ == "__main__":
     unittest.main()
