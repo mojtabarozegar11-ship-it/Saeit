@@ -317,6 +317,7 @@ def invoice_page(request, invoice_id):
     invoice = _owner(request, invoice_id, host)
     error = None
     if request.method == "POST":
+        _limit(request, invoice.buyer_email)
         txid = request.POST.get("txid", "").strip().lower()
         if invoice.status == "awaiting_payment":
             try:
@@ -333,7 +334,11 @@ def invoice_page(request, invoice_id):
             invoice.refresh_from_db()
         else:
             error = "Invoice is not payable" if invoice.status != "paid" else None
-    return _page(request, _context(invoice, "invoice", language, error=error))
+    item = OrderItem.objects.filter(order=invoice.order).select_related("product").first()
+    digital = bool(item and type(item.product.metadata) is dict and
+                   item.product.metadata.get("fulfillment_type") == "digital")
+    return _page(request, _context(invoice, "invoice", language, error=error,
+                                  is_digital=digital))
 
 
 @never_cache
