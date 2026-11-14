@@ -140,7 +140,8 @@ def service_inquiry(request, service_code):
         if request.method == "GET":
             return _no_cache(redirect(LEGACY_INQUIRY_PATH))
         response = _no_cache(HttpResponse(
-            "این مسیر فعلاً پذیرش درخواست ندارد؛ فرم اصلی خدمات را باز کنید.",
+            "این مسیر فعلاً پذیرش درخواست ندارد. "
+            f'<a href="{LEGACY_INQUIRY_PATH}">فرم اصلی درخواست خدمات</a> را باز کنید.',
             status=503,
         ))
         response["Retry-After"] = "3600"
