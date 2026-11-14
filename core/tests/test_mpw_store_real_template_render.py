@@ -37,7 +37,7 @@ class MojPlayWinStoreRealTemplateTests(SimpleTestCase):
         # No unmounted checkout URL may be advertised as a functioning sale.
         self.assertNotIn(b"/store/product/72/checkout/", response.content)
         self.assertNotIn(b"/store/product/225/checkout/", response.content)
-        self.assertIn(b"verified personal invoice", response.content)
+        self.assertIn(b"Never send funds to an address found outside your verified order invoice.", response.content)
 
     @override_settings(
         STORAGES={
