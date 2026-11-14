@@ -1,0 +1,64 @@
+name: MOJ PROP C28 paid four-week causality and signal subscription gates
+on:
+  push:
+    branches:
+      - fix/moj-prop-c28-four-week-evidence-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-prop-c28-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  stage-and-commerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Parse real updated stage and test source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          for path in ('prop_firm/portal.py','tests/test_moj_prop_c28_paid_phase_causality.py',
+                       'prop_firm/social_policy.py','prop_firm/challenge_commerce.py'):
+              ast.parse(Path(path).read_text(),filename=path)
+          print('MOJ_C28_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Install project Python dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Run real database and business contract regressions
+        env:
+          SECRET_KEY: moj-c28-only-test-key-not-live
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 manage.py test \
+            tests.test_moj_prop_c28_paid_phase_causality \
+            tests.test_moj_prop_social_policy \
+            tests.test_moj_prop_challenge_commerce \
+            tests.test_prop_firm_policy \
+            tests.test_signal_commercial_catalog \
+            tests.test_signal_source_evidence \
+            --verbosity 1
+          echo 'MOJ_C28_STAGE_AND_SIGNAL_DJANGO=PASS'
+      - name: Assert no actual paid challenges or trades can be initiated
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          policy=Path('prop_firm/rules.py').read_text()
+          terms=Path('prop_firm/social_policy.py').read_text()
+          portal=Path('prop_firm/portal.py').read_text()
+          assert 'real_orders_enabled: bool = False' in policy
+          assert 'trx_checkout_enabled: bool = False' in policy
+          assert 'social_posts_per_platform_per_challenge: int = 1' in policy
+          assert 'DURATION_DAYS = 28' in terms
+          assert 'prior = completed_prior_phase_one(account)' in portal
+          assert 'social_posts_verified=' in portal
+          print('MOJ_C28_FINANCIAL_PRODUCTION_HELD=PASS')
+          PY
