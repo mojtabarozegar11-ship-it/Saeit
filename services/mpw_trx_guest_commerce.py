@@ -287,7 +287,8 @@ def patch_commercial(namespace):
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
-                if view_name == "start_order":
+                if view_name == "start_order" and 200 <= response.status_code < 400:
+                    # A rejected invoice must never be counted as created.
                     # Order creation and its response are authoritative. The
                     # separate analytics lookup may be absent or unavailable.
                     try:
