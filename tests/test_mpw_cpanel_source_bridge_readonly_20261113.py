@@ -61,7 +61,16 @@ class SourceBridgeContractTests(unittest.TestCase):
         content = (ROOT / SCRIPT).read_text()
         self.assertNotIn("import django", content)
         self.assertNotIn("urllib.request", content)
-        self.assertNotIn("subprocess", content)
+        # Exactly one fixed, bounded, owner-local PassengerApps UAPI lookup
+        # is now permitted. Arbitrary subprocess, shell and payment calls
+        # remain prohibited and are independently exercised in 54 tests.
+        self.assertIn('UAPI_CMD = ("uapi", "--output=json", "PassengerApps", "list_applications")', content)
+        self.assertIn("timeout=12, check=False", content)
+        self.assertIn("UAPI_OUTPUT_LIMIT = 131_072", content)
+        self.assertIn("stderr=DEVNULL", content)
+        for banned in ("shell=True", "Popen(", "subprocess.call(",
+                       "subprocess.check_output(", "os.popen("):
+            self.assertNotIn(banned, content)
         self.assertNotIn("requests.", content)
         self.assertNotIn("os.system", content)
         self.assertNotIn(".write_bytes(", content)
