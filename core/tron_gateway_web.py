@@ -81,19 +81,19 @@ def _valid_email(raw):
     return email
 
 
-def _limit(request, email):
+def _limit(request, email, purpose="email"):
     # Deployment requires a verified multi-worker shared cache, not LocMemCache.
     ip = request.META.get("REMOTE_ADDR", "")
     if not isinstance(ip, str) or not ip or len(ip) > 80:
         raise Http404("Rate limit unavailable")
     now = int(time.time() // 3600)
     identity = hashlib.sha256(
-        (str(settings.SECRET_KEY) + "|trx-rate|" + ip + "|" + email + "|" + str(now)).encode()
+        (str(settings.SECRET_KEY) + "|trx-rate|" + purpose + "|" + ip + "|" + email + "|" + str(now)).encode()
     ).hexdigest()
     key = "tron:email:" + identity
     try:
         count = 1 if cache.add(key, 1, timeout=3600) else cache.incr(key)
-        if count > 4:
+        if count > (12 if purpose == "verify" else 4):
             raise Http404("Rate limit")
     except Http404:
         raise
@@ -317,7 +317,7 @@ def invoice_page(request, invoice_id):
     invoice = _owner(request, invoice_id, host)
     error = None
     if request.method == "POST":
-        _limit(request, invoice.buyer_email)
+        _limit(request, invoice.buyer_email, purpose="verify")
         txid = request.POST.get("txid", "").strip().lower()
         if invoice.status == "awaiting_payment":
             try:
