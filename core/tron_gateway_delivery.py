@@ -12,6 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from .models import LedgerEntry, OrderItem, PaymentWebhookEvent
+from .tron_gateway_settlement_claim import TronMainnetSettlementClaim
 from .tron_gateway_web import PROVIDER, _host, _owner, _private
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,220}\Z")
@@ -74,7 +75,11 @@ def download_paid(request, invoice_id):
             or not invoice.txid or not invoice.proof_digest
             or invoice.txid != intent.provider_reference):
         raise Http404("Paid receipt not verified")
-    if (PaymentWebhookEvent.objects.filter(
+    if (not TronMainnetSettlementClaim.objects.filter(
+            txid=invoice.txid, provider=PROVIDER, invoice=invoice,
+            payment_intent=intent, proof_digest=invoice.proof_digest,
+        ).exists()
+            or PaymentWebhookEvent.objects.filter(
             provider=PROVIDER, event_id=invoice.txid,
             payment_intent=intent, status="processed",
             payload_hash=invoice.proof_digest).count() != 1
