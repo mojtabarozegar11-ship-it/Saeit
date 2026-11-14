@@ -459,8 +459,14 @@ def check_actual_staging_store() -> None:
             guest_adapter.is_symlink() or not guest_adapter.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     verify_guarded_store_source(target.read_bytes())
-    verify_email_free_guest_source(guest_adapter.read_bytes())
-    verify_email_free_invoice_sources(APP)
+    # The real guest adapter validates buyer email; do not demand obsolete
+    # email-FREE behavior. This is SOURCE ONLY and cannot authorize release.
+    if str(APP) not in sys.path:
+        sys.path.insert(0, str(APP))
+    from scripts.mpw_email_required_preflight_20261114 import require_source
+    require_source(APP)
+    # Actual migration, effective template and customer money remain unknown.
+    # Public cutover still requires owner policy gate and does not run here.
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True

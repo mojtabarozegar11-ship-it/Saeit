@@ -1,0 +1,38 @@
+name: MojPlayWin buyer-email source preflight only (no release)
+on:
+  push:
+    branches: [fix/mpw-email-required-cutover-preflight-20261114]
+  pull_request:
+    branches: [audit/mpw-onepass-sales-20261113]
+permissions:
+  contents: read
+jobs:
+  source-only-email-claim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile reviewed release preflight
+        run: python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py scripts/mpw_email_required_preflight_20261114.py
+      - name: Check real buyer-email source with adversarial tests
+        run: python3 -m unittest discover -s tests -p 'test_mpw_email_required_preflight_20261114.py' -v
+      - name: Retest original rollback and cutover safety
+        run: python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
+      - name: Verify no commercial permissions
+        run: |
+          python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/mpw_guest_email_source.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          s=Path('/tmp/mpw_guest_email_source.json').read_text()
+          assert s.startswith('MPW_EMAIL_REQUIRED_SOURCE=')
+          r=json.loads(s.split('=',1)[1])
+          assert r['source_candidate_complete']
+          assert r['canonical_bot']=='mojtaba.bot.ai'
+          assert r['effective_passenger_root_verified'] is False
+          assert r['settled_payment_verified'] is False
+          assert r['paid_delivery_verified'] is False
+          assert r['release_authorized'] is False
+          assert r['actual_collected_revenue'] is None
+          print('MPW_SOURCE=EMAIL_REQUIRED_CANDIDATE; LIVE=UNKNOWN; PAYMENT=UNKNOWN; RELEASE=DENIED')
+          PY

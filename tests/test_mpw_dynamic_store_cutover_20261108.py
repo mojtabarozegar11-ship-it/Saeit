@@ -244,7 +244,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (root / "services/mpw_trx_guest_commerce.py").write_bytes(
                 SAFE_GUEST_EMAIL_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", root):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "EMAIL_REQUIRED_SOURCE_CONTRACT_NOT_PROVEN"):
                     check_actual_staging_store()
 
     @staticmethod
@@ -308,7 +308,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (app / "services/mpw_trx_email_recovery.py").write_bytes(
                 SAFE_RECOVERY_CHECKOUT_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", app):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "EMAIL_REQUIRED_SOURCE_CONTRACT_NOT_PROVEN"):
                     check_actual_staging_store()
 
     def setUp(self):
