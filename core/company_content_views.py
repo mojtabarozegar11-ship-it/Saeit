@@ -138,9 +138,12 @@ def company_portal_home(request):
             declared = int(request.META.get("CONTENT_LENGTH", "0") or "0")
         except (ValueError, TypeError):
             declared = -1
-        if declared < 0 or declared > 30000:
-            messages.error(request, "حجم درخواست نامعتبر است؛ متن کوتاه‌تری وارد کنید.")
-            return redirect("company")
+        if declared < 0 or declared > 12000:
+            from django.http import HttpResponse
+            return HttpResponse(
+                "Request too large", status=413,
+                content_type="text/plain; charset=utf-8",
+            )
         form = CompanyInquiryForm(request.POST)
         if form.is_valid():
             inquiry = form.save(commit=False)
