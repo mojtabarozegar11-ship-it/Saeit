@@ -406,8 +406,10 @@ class PropSocialEvidence(models.Model):
         if not start <= published <= start + timedelta(hours=POST_START_GRACE_HOURS):
             raise ValidationError("Post must be published within 24 hours of purchase")
         if self.review_status == self.Review.VERIFIED:
+            from django.utils import timezone as _django_timezone
             reviewed = aware_utc(self.reviewed_at, "reviewed_at")
             if (reviewed < published + timedelta(days=DURATION_DAYS)
+                    or reviewed > _django_timezone.now()
                     or not self.reviewed_by_id
                     or self.reviewed_by.is_staff is not True
                     or self.reviewed_by_id == self.account.trader.user_id
