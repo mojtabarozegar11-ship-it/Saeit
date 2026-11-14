@@ -45,6 +45,16 @@ BANNER = (
     'if available. Never send passwords, verification codes or wallet recovery phrases.</p>'
     '</section>'
 )
+# SKU 879 final rights/delivery are not yet established for public checkout.
+# Keep its details route and invite a buyer inquiry; do not create an invoice.
+SKU879_OLD_CHECKOUT_CTA = (
+    '<a class="button" href="/store/product/879/checkout/">Guest checkout with TRX</a>'
+)
+SKU879_INQUIRY_CTA = (
+    '<a class="button" href="mailto:mojplaywin@gmail.com?subject=SKU%20879%20Availability">'
+    'Ask about availability before buying</a>'
+)
+
 RUN_PATTERN = re.compile(r"^[0-9]{9,20}$")
 SHA_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -62,7 +72,9 @@ def patched_html(original: bytes) -> bytes:
     if html.count(SUPPORT_ID) == 1:
         if (html.count(BANNER) != 1 or html.count(CSS) != 1 or
                 html.count(CATALOG_ANCHOR) != 1 or
-                html.index(SUPPORT_ID) >= html.index(CATALOG_ANCHOR)):
+                html.index(SUPPORT_ID) >= html.index(CATALOG_ANCHOR) or
+                html.count(SKU879_OLD_CHECKOUT_CTA) != 0 or
+                html.count(SKU879_INQUIRY_CTA) != 1):
             raise RuntimeError("PARTIAL_SUPPORT_EDIT")
         return original
     if SUPPORT_ID in html or "mpw-static-shop-support" in html or EMAIL in html:
@@ -78,13 +90,15 @@ def patched_html(original: bytes) -> bytes:
         "Atelier Interior",
         "/store/product/72/checkout/",
         "/store/product/225/checkout/",
-        "/store/product/879/checkout/",
+        SKU879_OLD_CHECKOUT_CTA,
         "Product details, payment verification and delivery remain server-controlled.",
     )
-    if any(html.count(part) != 1 for part in required):
+    if (any(html.count(part) != 1 for part in required)
+            or SKU879_INQUIRY_CTA in html):
         raise RuntimeError("STORE_PRODUCT_OR_PAYMENT_GUARD_MISMATCH")
     out = html.replace(HEAD_ANCHOR, CSS + HEAD_ANCHOR, 1)
     out = out.replace(CATALOG_ANCHOR, BANNER + CATALOG_ANCHOR, 1)
+    out = out.replace(SKU879_OLD_CHECKOUT_CTA, SKU879_INQUIRY_CTA, 1)
     if out.index(SUPPORT_ID) >= out.index(CATALOG_ANCHOR):
         raise RuntimeError("SUPPORT_BANNER_NOT_BEFORE_CATALOG")
     return out.encode("utf-8")
