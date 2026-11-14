@@ -28,6 +28,15 @@ class CheckoutTraceTests(unittest.TestCase):
         result=audit_checkout_trace(payload(events))
         self.assertEqual(result['replayed_events_ignored'],1)
         self.assertEqual(result['issues_count'],0)
+    def test_payment_failure_after_confirmation_is_ambiguous_and_flagged(self):
+        events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY),
+                event('e3','payment_failed','gateway'),event('e4','fulfilled','server')]
+        issues=audit_checkout_trace(payload(events))['orders'][0]['issues']
+        self.assertIn('FAILURE_AFTER_CONFIRMATION_REQUIRES_REVIEW',issues)
+    def test_failed_attempt_before_later_valid_confirmation_is_allowed(self):
+        events=[event('e1','checkout_created'),event('e2','payment_failed','gateway'),
+                event('e3','payment_confirmed','gateway',PAY),event('e4','fulfilled','server')]
+        self.assertEqual(audit_checkout_trace(payload(events))['issues_count'],0)
     def test_paid_but_no_fulfillment_is_not_declared_clean(self):
         events=[event('e1','checkout_created'),event('e2','payment_confirmed','gateway',PAY)]
         result=audit_checkout_trace(payload(events))
