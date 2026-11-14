@@ -117,6 +117,20 @@ class FourWeekProofTests(TestCase):
         with self.assertRaises(SocialEvidenceRejected):
             self.submit("instagram",phase=self.phase2)
 
+    def test_future_dated_settlement_cannot_start_four_week_challenge(self):
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone as django_timezone
+        with self.assertRaises(ValidationError):
+            PropChallengeEnrollment.objects.create(
+                trader=self.profile,
+                verified_invoice_ref="future-paid-should-not-activate",
+                confirmed_at=django_timezone.now() + timedelta(days=1),
+                settlement_verified=True,
+            )
+        self.assertFalse(PropChallengeEnrollment.objects.filter(
+            verified_invoice_ref="future-paid-should-not-activate",
+        ).exists())
+
     def test_purchase_identity_must_be_trusted(self):
         self.enrollment.settlement_verified=False
         self.enrollment.save()
