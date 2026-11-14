@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from django.db import transaction
 from django.utils import timezone
 
@@ -31,6 +32,7 @@ def _bot_service_actor():
         username=SERVICE_ACTOR_USERNAME,
         defaults={
             "email": "",
+            "password": make_password(None),
             "is_active": False,
             "is_staff": False,
             "is_superuser": False,
