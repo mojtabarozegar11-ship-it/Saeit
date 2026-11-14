@@ -6,6 +6,8 @@ on:
     paths:
       - "services/mpw_checkout_render_contract.py"
       - "tests/test_mpw_checkout_inert_control_gate_20261114.py"
+      - "tests/test_mpw_public_checkout_hidden_controls_20261114.py"
+      - "scripts/mpw_onepass_public_sales_audit_20261113.py"
       - ".github/workflows/mpw-checkout-inert-gate-20261114.yml"
   pull_request:
     branches:
@@ -24,6 +26,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_mpw_checkout_render_contract_20261114.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_checkout_inert_control_gate_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_public_sales_audit_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_public_checkout_hidden_controls_20261114.py' -v
       - name: Observe ten public buyer routes using GET only; do not fail build for live unknowns
         shell: bash
         run: |
