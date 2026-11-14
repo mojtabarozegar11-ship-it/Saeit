@@ -1,4 +1,4 @@
-"""Nonpayment contract for the first-priority 30 TRX Moj Prop challenge.
+"""Nonpayment review contract for the ten-plan MOJ PROP catalog.
 
 A signed tenant context alone cannot authorize selling an assessment promising
 real capital. Only independently evidenced legal, broker, treasury, identity,
@@ -41,6 +41,10 @@ class ChallengeOfferDecision:
     trading_enabled: bool = False
     plan_code: str = DEFAULT_PLAN_CODE
     proposed_fee_not_live: bool = True
+    owner_declared_business_status: str = "unknown"
+    owner_declared_funded: bool = False
+    independent_capital_proof_on_record: bool = False
+    temporarily_inactive_pending_funding: bool = False
 
 
 def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
@@ -59,8 +63,14 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
     if not isinstance(attestations, dict):
         raise ValueError("Malformed readiness attestations")
     blockers = [
-        key for key in REQUIRED if attestations.get(key) is not True
+        key for key in REQUIRED
+        if not (plan.number > 1 and key == "minimum_order_size_compatible_with_100_usd")
+        and attestations.get(key) is not True
     ]
+    # The owner explicitly marked Plans 2..10 temporarily inactive.
+    # Even a complete readiness claim may NOT override that commercial hold.
+    if plan.temporary_owner_hold:
+        blockers.append("plan_temporarily_inactive_pending_owner_funding")
     if plan.number > 1:
         for key in ("selected_plan_broker_lot_approved",
                     "selected_plan_customer_terms_approved",
@@ -95,4 +105,8 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
         trading_enabled=False,
         plan_code=plan.code,
         proposed_fee_not_live=True,
+        owner_declared_business_status=plan.business_status,
+        owner_declared_funded=plan.capital_funded_owner_declared,
+        independent_capital_proof_on_record=plan.funding_independently_verified,
+        temporarily_inactive_pending_funding=plan.temporary_owner_hold,
     )
