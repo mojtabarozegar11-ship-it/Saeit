@@ -137,6 +137,10 @@ def brand_product_detail(request, product_id):
         "listed_in_database": matched,
         "purchase_available": available_for_checkout,
         "approved_purchase_url": purchase_url,
+        "database_price_usd": (
+            str(db_product.price) if matched and db_product.currency == "USD"
+            else None
+        ),
         "return_path": "/store/",
         "is_preview": not matched,
     }
