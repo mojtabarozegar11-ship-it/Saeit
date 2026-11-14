@@ -23,7 +23,7 @@ def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
 
 
 def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
-                         require_csrf=False, require_source_csrf=False):
+                         require_csrf=False, require_source_csrf=False, require_submit=False):
  """Conservative same-form check, not proof of email ownership or live settlement."""
  from html.parser import HTMLParser
  import re
@@ -66,20 +66,32 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
                       r'(?:[1-9][0-9]*|\{\{\s*product\.(?:pk|id)\s*\}\})/')
     rendered_pattern=r'/commerce/trx-easy/start/[1-9][0-9]*/'
     form_hidden=self._concealed(tag,attributes) or any(h or d for _,h,d in self.document_parents)
-    valid=(not form_hidden and method=='post' and re.fullmatch(template_pattern if require_source_csrf else rendered_pattern,action) is not None
+    safe_form=(attributes.get('enctype') in (None,'application/x-www-form-urlencoded')
+        and attributes.get('target') in (None,'_self')
+        and 'onsubmit' not in attributes and 'novalidate' not in attributes)
+    valid=(safe_form and not form_hidden and method=='post' and re.fullmatch(template_pattern if require_source_csrf else rendered_pattern,action) is not None
        and (expected_action is None or expected_action==action)
        and (action_prefix is None or action.startswith(action_prefix))
        and len(keys)==len(set(keys)))
-    self.forms.append({'valid':valid,'email':0,'csrf':0,'source_csrf':0,'parents':[]})
+    self.forms.append({'valid':valid,'email':0,'csrf':0,'source_csrf':0,'submit':0,'parents':[]})
    elif not self.forms:
     if tag not in self._VOID:
      self.document_parents.append((tag,self._concealed(tag,attributes),tag=='fieldset' and 'disabled' in attributes))
    else:
     form=self.forms[-1]
+    outer_accessible=self._accessible()
     if tag not in self._VOID:
      form['parents'].append((tag,self._concealed(tag,attributes),tag=='fieldset' and 'disabled' in attributes))
     if tag in {'input','textarea','select','button'}:
-     accessible=self._accessible()
+     accessible=outer_accessible if tag=='button' else self._accessible()
+     if ((tag=='button' and str(attributes.get('type') or 'submit').lower()=='submit')
+         or (tag=='input' and str(attributes.get('type') or '').lower()=='submit')):
+      submit_ok=(accessible and not self._concealed('input',attributes)
+          and 'disabled' not in attributes and 'form' not in attributes
+          and not any(k in attributes for k in ('formaction','formmethod',
+              'formenctype','formtarget','formnovalidate','onclick'))
+          and len(keys)==len(set(keys)))
+      form['submit']+=1 if submit_ok else 2
      if attributes.get('name')=='csrfmiddlewaretoken':
       value=str(attributes.get('value') or '')
       ok=(tag=='input' and str(attributes.get('type') or '').lower()=='hidden'
@@ -112,7 +124,8 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
      form['valid']=False
     if (form['valid'] and form['email']==1
        and (not require_csrf or form['csrf']==1)
-       and (not require_source_csrf or form['source_csrf']==1)):
+       and (not require_source_csrf or form['source_csrf']==1)
+       and (not require_submit or form['submit']==1)):
      self.matches+=1
    else:
     parents=self.forms[-1]['parents']
@@ -151,7 +164,8 @@ def preflight_checkout_email_template():
    raise
   fail('CHECKOUT_TEMPLATE_UNREADABLE:'+type(exc).__name__)
  if not has_buyer_email_form(markup,
-      action_prefix='/commerce/trx-easy/start/',require_source_csrf=True):
+      action_prefix='/commerce/trx-easy/start/',require_source_csrf=True,
+      require_submit=True):
   fail('GUEST_EMAIL_TEMPLATE_CONTRACT_MISSING')
  return digest(raw)
 
@@ -337,7 +351,7 @@ def verify():
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
   if not has_buyer_email_form(body,expected_action=f'/commerce/trx-easy/start/{pid}/',
-                              require_csrf=True):
+                              require_csrf=True,require_submit=True):
    fail('GUEST_EMAIL_OR_CSRF_POST_FORM_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
