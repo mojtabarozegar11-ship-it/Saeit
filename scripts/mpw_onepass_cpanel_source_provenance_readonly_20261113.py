@@ -295,6 +295,93 @@ def classify_wsgi_stage_assignment(raw, app: Path) -> str:
             if value.value == str(app) else "wsgi_other_app_literal_on_disk")
 
 
+
+MAX_NEIGHBOR_ENTRIES = 96
+MAX_NEIGHBOR_ROOTS = 16
+
+
+def _safe_regular_marker(root: Path, relative: str, limit: int = 240_000) -> bool:
+    """Inspect file type/size only; NEVER read neighboring source contents."""
+    if root.is_symlink() or not root.is_dir():
+        return False
+    dest = root / relative
+    parent = dest
+    while parent != root:
+        if parent.is_symlink():
+            return False
+        parent = parent.parent
+    try:
+        info = dest.stat()
+    except (OSError, ValueError):
+        return False
+    return stat.S_ISREG(info.st_mode) and 0 < info.st_size <= limit
+
+
+def discover_neighbor_app_roots(home: Path = HOME) -> dict:
+    """Bounded fingerprint-only inventory of immediate same-account app roots.
+
+    The UAPI application root fingerprint may not equal either historic
+    cutover assumption. This identifies *candidate registrations on disk*
+    without logging directory names, root paths, WSGI source or secrets.
+    No candidate is proof of an effective Passenger worker or checkout.
+    """
+    empty = {
+        "status": "home_unavailable_or_unsafe",
+        "inspected_entries_capped": 0,
+        "candidate_count": 0,
+        "candidates": [],
+        "effective_passenger_worker_attested": False,
+        "release_permitted": False,
+    }
+    try:
+        if home.is_symlink() or not home.is_dir():
+            return empty
+        candidates = []
+        inspected = 0
+        with os.scandir(home) as iterator:
+            for entry in iterator:
+                inspected += 1
+                if inspected > MAX_NEIGHBOR_ENTRIES:
+                    return dict(empty, status="entry_budget_exceeded",
+                                inspected_entries_capped=MAX_NEIGHBOR_ENTRIES)
+                if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+                    continue
+                root = home / entry.name
+                wsgi = _safe_regular_marker(root, "passenger_wsgi.py")
+                manage = _safe_regular_marker(root, "manage.py")
+                store = _safe_regular_marker(root, "core/mojplaywin_views.py")
+                checkout = _safe_regular_marker(
+                    root, "mpw_commerce/product_checkout_page.py")
+                if not (wsgi or (manage and store and checkout)):
+                    continue
+                if len(candidates) >= MAX_NEIGHBOR_ROOTS:
+                    return dict(empty, status="candidate_budget_exceeded",
+                                inspected_entries_capped=inspected)
+                kind = (
+                    "wsgi_and_mpw_checkout_markers" if wsgi and store and checkout
+                    else "wsgi_marker_only" if wsgi
+                    else "mpw_checkout_source_markers"
+                )
+                candidates.append({
+                    "root_sha256_prefix": hashlib.sha256(
+                        str(root).encode("utf-8")).hexdigest()[:16],
+                    "marker_class": kind,
+                    "effective_checkout_verified": False,
+                    "registered_root_verified": False,
+                })
+        # Comparing SHA prefixes is possible offline against the separately
+        # sanitized UAPI record. No full path is ever emitted.
+        candidates.sort(key=lambda item: item["root_sha256_prefix"])
+        if len({x["root_sha256_prefix"] for x in candidates}) != len(candidates):
+            return dict(empty, status="fingerprint_collision_unverified",
+                        inspected_entries_capped=inspected)
+        return dict(empty, status="bounded_immediate_home_scan",
+                    inspected_entries_capped=inspected,
+                    candidate_count=len(candidates), candidates=candidates)
+    except (OSError, ValueError, TypeError, UnicodeError):
+        return empty
+
+
 def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
     """Use explicit roots in isolated tests; never expose raw file contents."""
     guest = _safe_read(app, "services/mpw_trx_guest_commerce.py")
@@ -379,6 +466,7 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
         "wsgi_app_assignment_source": wsgi_class,
         "passenger_stage_source_marker": wsgi_staging,
         "private_checkout_source_readable": template is not None,
+        "neighbor_root_fingerprints": discover_neighbor_app_roots(app.parent),
         "production_invoice_post_verified": False,
         "independent_chain_finality_verified": False,
         "authenticated_delivery_verified": False,
