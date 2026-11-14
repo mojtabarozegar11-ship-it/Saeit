@@ -162,6 +162,19 @@ class FourWeekProofTests(TestCase):
                 posted_at=START+timedelta(hours=2),explicit_consent=True,
             )
 
+    def test_future_dated_post_cannot_be_stored_via_direct_model_save(self):
+        from django.core.exceptions import ValidationError
+        from unittest.mock import patch
+        row = PropSocialEvidence(
+            account=self.phase1, enrollment=self.enrollment,
+            platform="instagram", post_url=self.url("instagram"),
+            posted_at=START + timedelta(hours=2),
+        )
+        with patch("django.utils.timezone.now", return_value=START - timedelta(seconds=1)):
+            with self.assertRaises(ValidationError):
+                row.save()
+        self.assertFalse(PropSocialEvidence.objects.exists())
+
     def test_post_after_first_24_hours_is_disallowed(self):
         with self.assertRaises(SocialEvidenceRejected):
             self.submit(posted_at=START+timedelta(hours=25))
