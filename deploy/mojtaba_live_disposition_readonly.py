@@ -304,7 +304,8 @@ def preview(vps: dict, cpanel: dict, manifest: dict, *, repository_root: Path) -
                         unknown_enabled = trusted_count(unknown_enabled)
                         if (known_enabled + unknown_enabled != obs["php_enabled_records_not_active_bots"]
                                 or known_enabled > obs["php_known_roles_found"]
-                                or obs["php_enabled_records_not_active_bots"] > trusted_count(php.get("records"))):
+                                or (php.get("records") is not None
+                                    and obs["php_enabled_records_not_active_bots"] > trusted_count(php["records"]))):
                             blockers.append("php_enabled_identity_counts_inconsistent")
                         else:
                             obs["php_known_enabled_records_not_active_bots"] = known_enabled
