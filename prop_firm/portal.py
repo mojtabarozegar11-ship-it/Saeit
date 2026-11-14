@@ -21,19 +21,25 @@ def _day(value):
     return value.astimezone(utc_timezone.utc).date()
 
 
-def account_projection(account, *, as_of=None):
+def account_projection(account, *, as_of=None, evidence_cutoff=None):
     """Return verified-only account facts. No unverified data enters calculations."""
     if not isinstance(account, PropAccount) or not account.pk:
         raise ValueError("Persisted PropAccount required")
 
+    # A past period must never be evaluated against transactions booked later.
+    all_executions = PropExecution.objects.filter(account=account)
+    all_equity = PropEquityObservation.objects.filter(account=account)
+    if evidence_cutoff is not None:
+        if getattr(evidence_cutoff, "tzinfo", None) is None or evidence_cutoff.utcoffset() is None:
+            raise ValueError("evidence_cutoff must be timezone-aware")
+        all_executions = all_executions.filter(closed_at__lt=evidence_cutoff)
+        all_equity = all_equity.filter(observed_at__lt=evidence_cutoff)
     executions = list(
-        PropExecution.objects.filter(account=account, reconciliation_status="verified")
+        all_executions.filter(reconciliation_status="verified")
         .order_by("-closed_at", "-pk")
     )
-    partial_trades = PropExecution.objects.filter(account=account).exclude(
-        reconciliation_status="verified").exists()
-    partial_equity = PropEquityObservation.objects.filter(account=account).exclude(
-        reconciliation_status="verified").exists()
+    partial_trades = all_executions.exclude(reconciliation_status="verified").exists()
+    partial_equity = all_equity.exclude(reconciliation_status="verified").exists()
 
     day_totals = defaultdict(lambda: ZERO)
     total_net = ZERO
@@ -47,8 +53,7 @@ def account_projection(account, *, as_of=None):
     # Review the entire verified equity stream, not just the latest mark.
     # The operator must attest coverage of all session hours and positions.
     snapshots = list(
-        PropEquityObservation.objects.filter(
-            account=account, reconciliation_status="verified")
+        all_equity.filter(reconciliation_status="verified")
         .order_by("observed_at", "pk")
     )
     equity = snapshots[-1] if snapshots else None
