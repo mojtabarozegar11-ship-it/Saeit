@@ -6,6 +6,7 @@ from django.urls import reverse
 from core.company_inquiry_models import CompanyInquiry
 
 
+@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir"], DEBUG=True)
 class CompanyInquiryValidationTests(TestCase):
     def payload(self):
         return {
