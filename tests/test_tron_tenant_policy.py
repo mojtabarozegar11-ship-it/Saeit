@@ -3,6 +3,7 @@ from django.test import SimpleTestCase
 from core.tron_tenant_policy import (
     CANONICAL_CHAIN, CANONICAL_ASSET, REQUIRED_ATTESTATIONS,
     canonical_host, registered_scope, signed_routing_context,
+    verify_signed_routing_context,
 )
 
 TEST_KEY = "development-only-internal-scope-key-should-not-be-reused"
@@ -136,3 +137,90 @@ class TronMultiTenantTests(SimpleTestCase):
             signed_routing_context(
                 decision=self.match(registry={}), product_sku="book-72", key=TEST_KEY
             )
+
+
+class RoutingVerificationRegressionTests(SimpleTestCase):
+    """Safety contract for source-authenticated multi-tenant TRX routing."""
+
+    def setUp(self):
+        self.registry = {("mojplaywin.com", ""): dict(MERCHANT)}
+        self.decision = registered_scope(
+            host="mojplaywin.com", registry=self.registry,
+        )
+        self.context = signed_routing_context(
+            decision=self.decision, product_sku="book-72", key=TEST_KEY,
+        )
+
+    def verify(self, context=None, **changes):
+        return verify_signed_routing_context(
+            context=self.context if context is None else context,
+            key=changes.pop("key", TEST_KEY),
+            registry=changes.pop("registry", self.registry),
+            **changes,
+        )
+
+    def test_valid_signed_routing_context_accepted_only_as_scope(self):
+        self.assertTrue(self.verify())
+        self.assertFalse(self.context["is_invoice"])
+        self.assertFalse(self.context["is_paid"])
+        self.assertFalse(self.context["checkout_enabled"])
+
+    def test_signature_tampering_denied(self):
+        self.assertFalse(self.verify({**self.context, "routing_digest": "0" * 64}))
+
+    def test_product_sku_tampering_denied(self):
+        self.assertFalse(self.verify({**self.context, "product_sku": "book-225"}))
+
+    def test_brand_tampering_denied(self):
+        self.assertFalse(self.verify({**self.context, "brand": "saman"}))
+
+    def test_tenant_identity_tampering_denied(self):
+        self.assertFalse(self.verify({**self.context, "tenant_id": "other"}))
+
+    def test_host_tampering_denied(self):
+        self.assertFalse(self.verify({**self.context, "domain": "www.mojplaywin.com"}))
+
+    def test_external_host_spoof_denied(self):
+        self.assertFalse(self.verify({**self.context, "domain": "mojplaywin.com.attacker.com"}))
+
+    def test_other_chain_denied(self):
+        self.assertFalse(self.verify({**self.context, "network": "tron-testnet"}))
+        self.assertFalse(self.verify({**self.context, "asset": "USDT"}))
+
+    def test_payment_flags_cannot_be_promoted(self):
+        for flag in ("is_invoice", "is_paid", "checkout_enabled"):
+            for value in (True, 0, None, "false"):
+                with self.subTest(flag=flag, value=value):
+                    self.assertFalse(self.verify({**self.context, flag: value}))
+
+    def test_extra_payload_fields_denied(self):
+        self.assertFalse(self.verify({**self.context, "destination_address": "fake"}))
+
+    def test_missing_payload_fields_denied(self):
+        value = dict(self.context)
+        value.pop("routing_digest")
+        self.assertFalse(self.verify(value))
+
+    def test_no_registry_denied(self):
+        self.assertFalse(self.verify(registry=None))
+        self.assertFalse(self.verify(registry={}))
+
+    def test_revoked_attestation_invalidates_previous_signature(self):
+        registry = {("mojplaywin.com", ""): {
+            **MERCHANT, "custody_control_verified": False,
+        }}
+        self.assertFalse(self.verify(registry=registry))
+
+    def test_rotated_tenant_id_invalidates_old_signature(self):
+        registry = {("mojplaywin.com", ""): {
+            **MERCHANT, "tenant_id": "replacement_merchant",
+        }}
+        self.assertFalse(self.verify(registry=registry))
+
+    def test_rotated_signing_key_invalidates_old_signature(self):
+        self.assertFalse(self.verify(key="another-private-merchant-signing-key-example"))
+
+    def test_malformed_data_denied(self):
+        for payload in (None, [], "invalid", {}, {"routing_digest": "x"}):
+            with self.subTest(payload=payload):
+                self.assertFalse(self.verify(payload))
