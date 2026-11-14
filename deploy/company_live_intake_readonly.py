@@ -87,6 +87,31 @@ def collect(sources: list[tuple[str, bytes]]) -> dict[str, bool]:
         for key, pattern in INDICATORS.items()
     }
 
+def report_django_scope_source() -> None:
+    """Read only deployed source identity; never infer effective Passenger routing."""
+    path = Path.home() / "Saeit" / "core" / "service_scope_pages.py"
+    expected = os.environ.get("ZM_EXPECTED_SERVICE_SCOPE_SHA256", "")
+    expected_ok = re.fullmatch(r"[0-9a-f]{64}", expected) is not None
+    if path.is_symlink() or not path.is_file():
+        print_fact("DJANGO_C12_SCOPE_SOURCE_PRESENT", "false")
+        print_fact("DJANGO_C12_SCOPE_SHA256_MATCH", "unknown")
+        return
+    try:
+        meta = path.stat()
+        if not stat.S_ISREG(meta.st_mode) or meta.st_size > MAX_SINGLE_BYTES:
+            raise OSError("unsafe deployed source")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        print_fact("DJANGO_C12_SCOPE_SOURCE_PRESENT", "true")
+        print_fact(
+            "DJANGO_C12_SCOPE_SHA256_MATCH",
+            "true" if expected_ok and digest == expected
+            else "false" if expected_ok else "unknown",
+        )
+    except OSError:
+        print_fact("DJANGO_C12_SCOPE_SOURCE_PRESENT", "unknown")
+        print_fact("DJANGO_C12_SCOPE_SHA256_MATCH", "unknown")
+
+
 def main() -> int:
     if os.environ.get("PYTHONDONTWRITEBYTECODE") not in (None, "1"):
         print_fact("STATE", "ENVIRONMENT_REJECTED")
@@ -102,6 +127,7 @@ def main() -> int:
         print_fact("CUSTOMER_CONSENT_VERIFIED", "unknown")
         print_fact("CRM_HANDOFF_VERIFIED", "unknown")
         return 14
+    report_django_scope_source()
     print_fact("SOURCE_COUNT", len(sources))
     print_fact("SOURCE_TOTAL_BYTES", sum(len(data) for _, data in sources))
     print_fact("ENTRY_SHA256", hashlib.sha256(sources[0][1]).hexdigest())
