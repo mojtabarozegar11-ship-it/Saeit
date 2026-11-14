@@ -11,7 +11,8 @@ def validate_csv(text):
     if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)) or set(reader.fieldnames) != set(FIELDS):
         raise ValueError("invalid CSV header")
     result = []
-    seen = set()
+    # A single enterprise cannot be aggregated twice across overlapping periods.
+    periods_by_enterprise = {}
     for line, row in enumerate(reader, 2):
         if None in row or any(value is None or not value.strip() for value in row.values()):
             raise ValueError(f"line {line}: incomplete/extra field")
@@ -25,10 +26,14 @@ def validate_csv(text):
             raise ValueError(f"line {line}: invalid currency")
         if any(row[key].lstrip().startswith(("=","+","-","@")) for key in ("enterprise_id","enterprise_type","output_unit")):
             raise ValueError(f"line {line}: unsafe label")
-        identity = (row["enterprise_id"].strip().casefold(), start, end)
-        if identity in seen:
-            raise ValueError(f"line {line}: duplicate enterprise-period")
-        seen.add(identity)
+        enterprise_key = row["enterprise_id"].strip().casefold()
+        previous_periods = periods_by_enterprise.setdefault(enterprise_key, [])
+        for prior_start, prior_end in previous_periods:
+            if start <= prior_end and prior_start <= end:
+                if start == prior_start and end == prior_end:
+                    raise ValueError(f"line {line}: duplicate enterprise-period")
+                raise ValueError(f"line {line}: overlapping enterprise-period")
+        previous_periods.append((start, end))
         try:
             values = {key: Decimal(row[key]) for key in NUMBERS}
         except InvalidOperation as exc:
