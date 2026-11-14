@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_guest_checkout_live_release.py services/mpw_trx_guest_commerce.py scripts/test_mpw_guest_first_order_identity.py
           python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_guest_email_contract_20261114.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_onefile_release_gate.py'
       - name: Record storefront baseline
         run: |
