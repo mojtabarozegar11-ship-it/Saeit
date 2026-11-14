@@ -107,8 +107,20 @@ def bounded_observation_state(state: str, output: str, limit: int) -> str:
 
 
 def route_flags(command: str) -> list[str]:
-    lower = command.casefold()
-    return [tag for tag in ROUTES if tag.casefold() in lower]
+    """Match allowlisted route identifiers, not substrings of other names.
+
+    These are still *indicators*, never verified live worker identities.
+    A suffix like '_backup' or '-old' must not create a false candidate.
+    The boundary permits '.py' source suffixes and path separators.
+    """
+    return [
+        tag for tag in ROUTES
+        if re.search(
+            r"(?<![0-9a-z_.-])" + re.escape(tag) + r"(?![0-9a-z_-])",
+            command,
+            flags=re.IGNORECASE,
+        )
+    ]
 
 
 def call_readonly(args: list[str], *, timeout: int = 10) -> tuple[str, str]:
