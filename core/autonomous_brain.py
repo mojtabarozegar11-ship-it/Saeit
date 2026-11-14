@@ -53,6 +53,18 @@ class AutonomousBrain:
                 created_at__gt=latest_research.created_at,
             ).exists()
         )
+        # An internal inventory score is still a completed MEASUREMENT, not
+        # independently accepted commercial validation. Track it separately
+        # so the next hourly cycle does not requeue the same no-op score.
+        opportunity_inventory_scored = bool(
+            latest_research
+            and economic_tasks.filter(
+                capability_code="income_opportunity_score",
+                status="completed",
+                created_at__gt=latest_research.created_at,
+                output_data__evidence__kind="product_inventory",
+            ).exists()
+        )
         self_improvement_complete = economic_tasks.filter(
             capability_code="master_self_improvement", status="completed",
             output_data__verified_effect=True,
@@ -83,6 +95,7 @@ class AutonomousBrain:
             "market_research_complete": market_research_complete,
             "market_inventory_measured": latest_inventory is not None,
             "opportunity_scored": opportunity_scored,
+            "opportunity_inventory_scored": opportunity_inventory_scored,
             "active_products": products.filter(active=True).count(),
             "offer_designed": products.filter(metadata__commercial_status="offer_designed").count(),
             "mvp_built": products.filter(metadata__commercial_status="mvp_built").count(),
@@ -135,9 +148,15 @@ class AutonomousBrain:
                 10, 10, 10, 1,
             )]
         if not s["opportunity_scored"]:
+            if s.get("opportunity_inventory_scored", False):
+                return [Candidate(
+                    "await_external_opportunity_acceptance",
+                    "The internal score exists, but no independent buyer-market acceptance has been verified.",
+                    10, 10, 10, 1,
+                )]
             return [Candidate(
                 "income_opportunity_score",
-                "Market research is verified; score the opportunity before offer design.",
+                "Market research is verified; score the opportunity once before seeking independent acceptance.",
                 10, 9, 9, 1,
             )]
         # Reconcile after a *new* order/payment event, not on every clock tick.
