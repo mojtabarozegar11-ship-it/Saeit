@@ -64,3 +64,13 @@ def test_existing_company_schema_is_preserved_and_not_duplicated():
     assert pb.count('type="application/ld+json"')==1
     assert "mpw-company-schema-20261019" not in pb
     assert 'property="og:description"' in pb
+
+
+def test_b2b_contact_destination_uses_verified_mojplaywin_gmail():
+    assert mpw.MAIL == "mojplaywin@gmail.com"
+    assert 'mailto:mojplaywin@gmail.com?subject=Business%20Partnership' in mpw.BUSINESS
+    assert 'support@mojplaywin.com' not in mpw.BUSINESS
+    a,b=mpw.compose(about(),company())
+    for html in (a,b):
+        assert 'mailto:mojplaywin@gmail.com?subject=Business%20Partnership' in html
+        assert 'mailto:support@mojplaywin.com' not in html

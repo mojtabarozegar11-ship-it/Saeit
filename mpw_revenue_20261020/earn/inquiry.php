@@ -77,7 +77,7 @@ function store_inquiry(array $record): string {
   return $id;
 }
 if (!extension_loaded('mbstring') || !extension_loaded('openssl')) {
-  http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email support@mojplaywin.com.</p>';exit;
+  http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email mojplaywin@gmail.com.</p>';exit;
 }
 ini_set('session.use_strict_mode','1');
 session_set_cookie_params(['lifetime'=>0,'path'=>'/mpw-editorial/revenue' . '/','secure'=>true,'httponly'=>true,'samesite'=>'Lax']);
@@ -109,12 +109,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $token=$_SESSION['mpw_inquiry_token'];
       $sent=true;
       $body="MojPlayWin commercial inquiry received and stored privately.\nService: ".$title."\nReference: ".$reference."\n\nReview the private cPanel revenue-inquiries record. No customer data is logged to CI.\n";
-      @mail('support@mojplaywin.com','New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
+      @mail('mojplaywin@gmail.com','New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
     } catch (Throwable $e) {$errors[]='We could not securely save the request. Please use the email fallback.';error_log('MPW_INQUIRY_STORAGE_FAILURE');}
   }
 }
 $subject=rawurlencode($slug==='general' ? 'MojPlayWin business quote' : 'MojPlayWin '.$slug.' service enquiry');
-$fallback='mailto:support@mojplaywin.com?subject='.$subject;
+$fallback='mailto:mojplaywin@gmail.com?subject='.$subject;
 ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow"><title>Secure Inquiry — <?=h($title)?> | MojPlayWin</title><link rel="stylesheet" href="/mpw-editorial/revenue/assets/style.css"><style>
 .inquiry-wrap{max-width:790px;margin:40px auto;padding:clamp(20px,4vw,46px);background:#131d2e;border:1px solid #cda969;border-radius:22px}
 .inquiry-wrap h1{font-size:clamp(2rem,5vw,3rem)}
@@ -145,5 +145,5 @@ $fallback='mailto:support@mojplaywin.com?subject='.$subject;
 <button class="span-2" type="submit">Send secure inquiry</button>
 </form>
 <?php endif; ?>
-<p class="inquiry-note">Email fallback: <a href="<?=h($fallback)?>">support@mojplaywin.com — <?=h($title)?></a>. If you cannot receive a confirmation, retain your reference or contact support separately.</p>
+<p class="inquiry-note">Email fallback: <a href="<?=h($fallback)?>">mojplaywin@gmail.com — <?=h($title)?></a>. If you cannot receive a confirmation, retain your reference or contact support separately.</p>
 </div></main><footer>© 2026 MojPlayWin · <a href="/terms/">Terms</a> · <a href="/mpw-editorial/revenue/index.html">All 12 offers</a></footer></body></html>
