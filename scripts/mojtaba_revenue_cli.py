@@ -15,42 +15,17 @@ import sys
 
 from mojtaba_revenue_portfolio import (CANONICAL_BOT, OFFERS, evaluate,
                                         synthetic_kpis)
+from mojtaba_revenue_safeio import read_json, create_private_json
 
 MAX_BYTES = 32768
 
 
 def load_bounded_json(file_path: Path) -> dict:
-    if file_path.is_symlink() or not file_path.is_file():
-        raise ValueError("INPUT_NOT_A_REGULAR_FILE")
-    st = file_path.stat()
-    if not 0 < st.st_size <= MAX_BYTES:
-        raise ValueError("INPUT_SIZE_NOT_ALLOWED")
-    raw = file_path.read_bytes()
-    if len(raw) != st.st_size:
-        raise ValueError("INPUT_CHANGED_DURING_READ")
-    try:
-        obj = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValueError("INPUT_JSON_INVALID") from exc
-    if type(obj) is not dict:
-        raise ValueError("INPUT_MUST_BE_OBJECT")
-    return obj
+    return read_json(file_path, limit=MAX_BYTES)
 
 
 def output_private(target: Path, result: dict, input_path: Path) -> None:
-    if target.is_symlink() or target.resolve() == input_path.resolve():
-        raise ValueError("OUTPUT_PATH_REJECTED")
-    if not target.parent.is_dir() or target.parent.is_symlink():
-        raise ValueError("OUTPUT_DIRECTORY_INVALID")
-    text = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    # Exclusive creation avoids overwrites, including race-created symlinks.
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    fd = os.open(target, flags, stat.S_IRUSR | stat.S_IWUSR)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(text)
-
+    create_private_json(target, result, input_path=input_path)
 
 def catalog() -> dict:
     return {

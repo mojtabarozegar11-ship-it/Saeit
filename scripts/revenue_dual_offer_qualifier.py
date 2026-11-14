@@ -8,6 +8,7 @@ No third-party dependencies or network access.
 import argparse
 import json
 from pathlib import Path
+import sys
 from mojtaba_revenue_portfolio import CANONICAL_BOT
 
 OFFERS = {
@@ -91,28 +92,24 @@ def qualify(data):
 
 
 def main(argv=None):
+    from mojtaba_revenue_safeio import read_json, create_private_json
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input_file", help="LOCAL JSON file only; do not put customer PII in it")
-    parser.add_argument("--output", help="LOCAL anonymized result JSON path")
+    parser.add_argument("input_file", type=Path, help="LOCAL non-sensitive JSON metadata")
+    parser.add_argument("--output", type=Path, help="create NEW 0600 JSON; never overwrite")
     args = parser.parse_args(argv)
-    source = Path(args.input_file)
-    if not source.is_file() or source.stat().st_size > 65536:
-        parser.error("expected a local JSON file of at most 64 KiB")
     try:
-        obj = json.loads(source.read_text(encoding="utf-8"))
+        obj = read_json(args.input_file, limit=65536)
         result = qualify(obj)
-    except (ValueError, UnicodeError) as exc:
-        parser.error(str(exc))
-    serialized = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    if args.output:
-        target = Path(args.output)
-        if target.is_symlink():
-            parser.error("output symlinks are not accepted")
-        if target.resolve() == source.resolve():
-            parser.error("refusing to overwrite intake input")
-        target.write_text(serialized, encoding="utf-8")
-    else:
-        print(serialized, end="")
+        if args.output:
+            create_private_json(args.output, result, input_path=args.input_file)
+        else:
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        if isinstance(exc, ValueError) and str(exc) == "INPUT_OVERWRITE_DENIED":
+            print("refusing to overwrite input file", file=sys.stderr)
+        else:
+            print("SERVICE_INTAKE=BLOCKED_INVALID_OR_UNSAFE_INPUT", file=sys.stderr)
+        return 2
     return 0
 
 

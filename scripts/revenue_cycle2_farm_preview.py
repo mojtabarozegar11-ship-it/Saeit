@@ -68,14 +68,12 @@ def generate(data):
 
 
 def main(argv=None):
+    from mojtaba_revenue_safeio import read_json
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sample_json", type=Path)
     args = parser.parse_args(argv)
     try:
-        path = args.sample_json
-        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= 16384:
-            raise ValueError("SAMPLE_FILE_NOT_ALLOWED")
-        result = generate(json.loads(path.read_text(encoding="utf-8")))
+        result = generate(read_json(args.sample_json, limit=16384))
     except (ValueError, OSError, UnicodeError, json.JSONDecodeError):
         print("FARM_SAMPLE=BLOCKED", file=sys.stderr)
         return 2
