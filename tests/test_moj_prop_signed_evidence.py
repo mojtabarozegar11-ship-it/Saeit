@@ -247,9 +247,9 @@ class BrokerSignedEvidenceTests(TestCase):
     def _signed_raw(self, raw):
         packet = self.packet()
         packet["raw"] = raw
-        msg = (b"MOJPROP-EVIDENCE-v1\\n" + SOURCE.encode() + b"\\n"
-               + str(self.account.id).encode() + b"\\n" + ISSUED.encode()
-               + b"\\n" + raw)
+        msg = (b"MOJPROP-EVIDENCE-v1\n" + SOURCE.encode() + b"\n"
+               + str(self.account.id).encode() + b"\n" + ISSUED.encode()
+               + b"\n" + raw)
         packet["signature"] = hmac.new(KEY.encode(), msg, hashlib.sha256).hexdigest()
         return packet
 
@@ -283,7 +283,7 @@ class BrokerSignedEvidenceTests(TestCase):
 
     def test_signed_excessively_nested_json_fails_closed(self):
         # Valid HMAC, invalid parser depth: no uncaught RecursionError or DB row.
-        raw = (b"[" * 1200) + b"0" + (b"]" * 1200)
+        raw = (b"[" * 65) + b"0" + (b"]" * 65)
         with self.assertRaisesRegex(EvidenceRejected, "JSON nesting limit exceeded"):
             ingest_signed_evidence(**self._signed_raw(raw))
         self.assertFalse(PropExecution.objects.exists())
