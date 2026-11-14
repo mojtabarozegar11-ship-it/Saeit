@@ -5,6 +5,7 @@ Shared Django commerce models may not reflect the separate TRX production
 runtime; therefore a database status is *never* reported as proven revenue.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
@@ -35,13 +36,18 @@ def commercialization_board_api(request):
     }
     # These counts show events, not unique buyers, paid orders, or cash revenue.
     listed = {
-        row["id"]: row["title"]
+        row["id"]: row
         for row in Product.objects.filter(pk__in=PUBLIC_CATALOG, active=True)
-        .values("id", "title")
+        .values("id", "title", "price", "currency")
     }
     matches = sorted(
         sku for sku, info in PUBLIC_CATALOG.items()
-        if listed.get(sku) == info["title"]
+        if listed.get(sku, {}).get("title") == info["title"]
+    )
+    price_matches = sorted(
+        sku for sku in matches
+        if listed[sku]["currency"] == "USD"
+        and listed[sku]["price"] == Decimal(PUBLIC_CATALOG[sku]["expected_price_usd"])
     )
 
     data = build_board()  # no invented operator attestations
@@ -50,6 +56,8 @@ def commercialization_board_api(request):
         "catalog_cards_declared": len(PUBLIC_CATALOG),
         "catalog_products_active_title_matched": len(matches),
         "catalog_matched_ids": matches,
+        "catalog_products_active_price_matched": len(price_matches),
+        "catalog_price_verified_listing_ids": price_matches,
         "shared_database": {
             "active_products_all_brands": Product.objects.filter(active=True).count(),
             "orders_all_brands": Order.objects.count(),
