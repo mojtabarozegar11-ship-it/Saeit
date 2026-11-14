@@ -269,10 +269,18 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
     fields = ("media_type", "title", "description", "image", "video", "target_path", "newsletter_story", "project_label", "research_domain", "tags", "published", "published_at")
 
 from .company_inquiry_models import CompanyInquiry
+from django.contrib import messages as django_messages
+from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, prepare_one
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
-    list_display = ("subject", "kind", "name", "organization", "status", "days_open", "service_code", "created_at")
+    list_display = (
+        "subject", "kind", "name", "organization", "status",
+        "days_open", "service_code", "has_consent_provenance",
+        "draft_prepared", "created_at",
+    )
+    actions = ("prepare_scoped_service_response",)
+    actions_on_bottom = True
     list_per_page = 50
     ordering = ("created_at", "pk")
     list_filter = ("kind", "status", "created_at")
@@ -293,4 +301,54 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
         return next(
             (code for code in SERVICE_CARDS if (obj.subject or "").startswith(f"[{code}] ")),
             "—",
+        )
+
+
+    @admin.display(description="منشأ درخواست دارای رضایت", boolean=True)
+    def has_consent_provenance(self, obj):
+        return isinstance(obj.internal_note, str) and obj.internal_note.startswith(SOURCE_MARKER)
+
+    @admin.display(description="پیش‌نویس داخلی آماده شده", boolean=True)
+    def draft_prepared(self, obj):
+        return isinstance(obj.internal_note, str) and DRAFT_MARKER in obj.internal_note
+
+    @admin.action(
+        description="Mojtaba.bot.ai: آماده‌سازی حداکثر ۲۰ پیش‌نویس داخلی، بدون ارسال",
+        permissions=["change"],
+    )
+    def prepare_scoped_service_response(self, request, queryset):
+        """Write useful, scoped proposals inside the authenticated CRM.
+
+        Explicit staff action only: no customer contact, price, invoice,
+        publication, or queue-triggering external side effect.
+        """
+        if not self.has_change_permission(request):
+            self.message_user(
+                request, "مجوز ویرایش درخواست‌ها وجود ندارد.",
+                level=django_messages.ERROR,
+            )
+            return
+        n = queryset.count()
+        if n > 20:
+            self.message_user(
+                request, "حداکثر ۲۰ درخواست را برای یک اقدام انتخاب کنید.",
+                level=django_messages.ERROR,
+            )
+            return
+        prepared = 0
+        skipped = 0
+        for record_id in queryset.order_by("pk").values_list("pk", flat=True):
+            result = prepare_one(record_id)
+            if result["state"] == "prepared_internal_draft":
+                prepared += 1
+            else:
+                skipped += 1
+        self.message_user(
+            request,
+            (
+                f"پیش‌نویس داخلی آماده: {prepared} | "
+                f"نیازمند بررسی یا نامعتبر: {skipped} | "
+                "ارسال پیام: ۰ | وصول وجه: تأییدنشده"
+            ),
+            level=django_messages.SUCCESS if prepared else django_messages.WARNING,
         )
