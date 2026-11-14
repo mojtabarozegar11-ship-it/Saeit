@@ -313,8 +313,13 @@ class PropChallengeEnrollment(models.Model):
         from .social_policy import NEW_CONTRACT_VERSION, aware_utc
         if self.terms_version != NEW_CONTRACT_VERSION:
             raise ValidationError("New enrollment uses pre-disclosed v1.2 contract")
-        if not self.verified_invoice_ref or not self.verified_invoice_ref.strip():
-            raise ValidationError("Trusted payment receipt reference required")
+        import re
+        if (type(self.verified_invoice_ref) is not str
+                or re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9._:-]{0,95}",
+                    self.verified_invoice_ref,
+                ) is None):
+            raise ValidationError("Bounded canonical payment reference required")
         from django.utils import timezone as _django_timezone
         confirmed = aware_utc(self.confirmed_at, "confirmed_at")
         if confirmed > _django_timezone.now():
