@@ -41,6 +41,11 @@ def read_strict_json(path, *, max_bytes=MAX_BYTES):
         if not stat.S_ISREG(meta.st_mode) or meta.st_size > max_bytes:
             raise ValueError("intake must be a regular file at most 64 KiB")
         raw = handle.read(max_bytes + 1)
+        after = os.fstat(handle.fileno())
+        if (len(raw) != meta.st_size or after.st_size != meta.st_size
+                or after.st_mtime_ns != meta.st_mtime_ns
+                or after.st_ctime_ns != meta.st_ctime_ns):
+            raise ValueError("intake changed during read")
     if len(raw) > max_bytes:
         raise ValueError("intake exceeds maximum length")
     try:
