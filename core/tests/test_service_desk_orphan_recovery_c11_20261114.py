@@ -61,7 +61,7 @@ def test_auto_master_gateway_recovers_prepared_proposals(prepared):
     assert result["state"] == "evidenced_draft_handoff_recovered"
     assert result["verified_effect"] is True
     assert WorkItem.objects.count() == 1
-    assert prepared.pk == WorkItem.objects.get().source_id or str(prepared.pk) == WorkItem.objects.get().source_id
+    assert WorkItem.objects.get().source_id == str(prepared.pk)
 
 
 @pytest.mark.django_db
@@ -178,7 +178,7 @@ def test_more_than_five_hundred_candidates_have_explicit_incomplete_state(db):
 
 
 @pytest.mark.django_db
-def test_recent_verified_buyer_not_starved_behind_501_invalid_history(prepared):
+def test_recent_verified_buyer_not_starved_behind_501_invalid_history(db):
     CompanyInquiry.objects.bulk_create([
         CompanyInquiry(
             kind="project", name="Historic CRM Record",
@@ -188,11 +188,18 @@ def test_recent_verified_buyer_not_starved_behind_501_invalid_history(prepared):
         )
         for _ in range(MAX_ORPHAN_SCAN + 1)
     ])
+    late = CompanyInquiry.objects.create(
+        kind="project", name="Recent Buyer", email="recent@example.invalid",
+        subject="[AGR-01] Newer legitimate scope",
+        message="Please prepare a documented farm profitability and costing study.",
+        internal_note=SOURCE_MARKER, status="new",
+    )
+    prepare_one(late.pk)
     snapshot = orphaned_handoff_snapshot()
     assert snapshot["verified_candidate_count"] == 1
     outcome = recover_one_orphaned_handoff()
     assert outcome["verified_effect"] is True
-    assert WorkItem.objects.count() == 1
+    assert WorkItem.objects.get().source_id == str(late.pk)
 
 
 @pytest.mark.django_db
