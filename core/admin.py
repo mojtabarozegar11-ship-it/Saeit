@@ -272,6 +272,29 @@ from .company_inquiry_models import CompanyInquiry
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
+    """Restrict visitor-submitted contact details to the active owner."""
+    def _owner(self, request):
+        user = getattr(request, "user", None)
+        return bool(
+            user and user.is_authenticated and user.is_active and
+            user.is_staff and user.is_superuser
+        )
+
+    def has_module_permission(self, request):
+        return self._owner(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._owner(request)
+
+    def has_add_permission(self, request):
+        return self._owner(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._owner(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     list_display = ("subject", "kind", "name", "organization", "status", "created_at")
     list_filter = ("kind", "status", "created_at")
     search_fields = ("name", "organization", "email", "subject", "message")
