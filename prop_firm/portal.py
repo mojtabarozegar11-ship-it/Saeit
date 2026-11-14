@@ -112,12 +112,20 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     promotion_stats = None
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-            prior = account.trader.accounts.filter(
-                kind=PropAccount.Kind.PHASE_ONE,
-                status=PropAccount.Status.PASSED,
-                reconciled_by_operator=True,
-                policy_version=POLICY.version,
-            ).exclude(pk=account.pk).exists()
+            # Phase-two qualification must be based on a *previously
+            # completed* phase-one of this same trader. A phase-one passed
+            # after phase-two opened, or a passed row with no completion time,
+            # must never retroactively qualify a challenge.
+            prior = False
+            if account.kind == PropAccount.Kind.PHASE_TWO and account.opened_at is not None:
+                prior = account.trader.accounts.filter(
+                    kind=PropAccount.Kind.PHASE_ONE,
+                    status=PropAccount.Status.PASSED,
+                    reconciled_by_operator=True,
+                    policy_version=POLICY.version,
+                    closed_at__isnull=False,
+                    closed_at__lte=account.opened_at,
+                ).exclude(pk=account.pk).exists()
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
                 account_capital=account.starting_capital_usd,
