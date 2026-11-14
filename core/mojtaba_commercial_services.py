@@ -190,7 +190,7 @@ def seo(data):
         ):
             raise InvalidService("duplicate or unknown SEO control")
         known.add(key)
-        if item["priority"] not in ("high", "medium", "low"):
+        if type(item["priority"]) is not str or item["priority"] not in ("high", "medium", "low"):
             raise InvalidService("unknown severity")
         if type(item["evidence_ref"]) is not str:
             raise InvalidService("invalid SEO evidence reference type")
