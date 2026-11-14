@@ -79,6 +79,10 @@ def audit_checkout_trace(payload):
     results=[]
     for order_ref,state in sorted(states.items()):
         if not state["created"]: state["issues"].append("MISSING_CHECKOUT_CREATION")
+        # A payment-like trace without any delivery event must not be labelled clean.
+        # The trace itself cannot establish whether delivery eventually occurred.
+        if state["confirmed"] and not state["fulfilled"]:
+            state["issues"].append("PAYMENT_WITHOUT_FULFILLMENT_IN_TRACE")
         issues=list(dict.fromkeys(state["issues"]))
         results.append({"order_ref":order_ref,"status":"REVIEW_REQUIRED" if issues else "NO_STRUCTURAL_ISSUES",
                         "issues":issues,"payment_references_seen":len(state["payments"]),
