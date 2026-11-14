@@ -25,10 +25,12 @@ class _DenyRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _get_page(params, *, api_key):
+def _get_page(params, *, api_key, receiver=MAINNET_RECEIVER):
+    # Only a validated mainnet base58 address may enter the URL path.
+    address_hex(receiver)
     """Only this exact account endpoint is permitted; redirects are prohibited."""
     query = urllib.parse.urlencode(params)
-    url = f"{API}/v1/accounts/{MAINNET_RECEIVER}/transactions?{query}"
+    url = f"{API}/v1/accounts/{receiver}/transactions?{query}"
     request = urllib.request.Request(
         url, method="GET",
         headers={
@@ -82,7 +84,7 @@ def native_candidate(tx, *, recipient_hex):
     return (txid.lower(), value["amount"], stamp)
 
 
-def receiver_candidates(*, min_ms: int, max_ms: int,
+def receiver_candidates(*, min_ms: int, max_ms: int, receiver=MAINNET_RECEIVER,
                         pages: int = 3, fetch=_get_page):
     """Bounded, paginated, receiver-specific history, with no settlement writes.
 
@@ -104,13 +106,18 @@ def receiver_candidates(*, min_ms: int, max_ms: int,
         "max_timestamp": str(max_ms),
         "order_by": "block_timestamp,desc",
     }
-    recipient_hex = address_hex(MAINNET_RECEIVER)
+    recipient_hex = address_hex(receiver)
     visited = set()
     seen_tx = set()
     found = []
     truncated = False
     for index in range(pages):
-        doc = fetch(params, api_key=api_key)
+        # Preserve legacy mock injection only for the already verified default
+        # receiver. Every additional merchant passes the exact receiver.
+        if receiver == MAINNET_RECEIVER:
+            doc = fetch(params, api_key=api_key)
+        else:
+            doc = fetch(params, api_key=api_key, receiver=receiver)
         for record in doc["data"]:
             candidate = native_candidate(record, recipient_hex=recipient_hex)
             if candidate is not None and candidate[0] not in seen_tx:
