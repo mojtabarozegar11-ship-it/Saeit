@@ -48,12 +48,18 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
    if tag=='form':
     method=str(attributes.get('method') or '').lower()
     action=str(attributes.get('action') or '')
+    # Static Django source may contain the canonical product.pk/id variable;
+    # rendered checkout MUST still resolve to the exact numeric product route.
+    invoice_route=(r'/commerce/trx-easy/start/'
+                   r'(?:[1-9][0-9]*'
+                   r'|\{\{\s*product\.(?:pk|id)\s*\}\})/')
     valid=(method=='post' and re.fullmatch(
+      invoice_route if require_source_csrf else
       r'/commerce/trx-easy/start/[1-9][0-9]*/',action) is not None
       and (expected_action is None or action==expected_action)
       and (action_prefix is None or action.startswith(action_prefix))
       and len(names)==len(set(names)))
-    self.forms.append({'valid':valid,'email':0,'csrf':False,
+    self.forms.append({'valid':valid,'email':0,'csrf':0,
                        'source_csrf':False,'fieldset_disabled':0})
    elif self.forms:
     form=self.forms[-1]
@@ -61,14 +67,19 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
      form['fieldset_disabled']+=1
     if tag=='input':
      if attributes.get('name')=='csrfmiddlewaretoken':
-      if str(attributes.get('type') or '').lower()=='hidden':
-       form['csrf']=True
+      value=str(attributes.get('value') or '')
+      csrf_valid=(str(attributes.get('type') or '').lower()=='hidden'
+                  and 'disabled' not in attributes
+                  and 32<=len(value)<=128 and value.isascii()
+                  and value.isalnum() and len(names)==len(set(names)))
+      form['csrf']+=1 if csrf_valid else 2
      if attributes.get('name')=='email':
       valid_email=(str(attributes.get('type') or '').lower()=='email'
         and 'required' in attributes and 'disabled' not in attributes
         and 'hidden' not in attributes and form['fieldset_disabled']==0
-        and attributes.get('aria-hidden')!='true'
-        and 'display:none' not in str(attributes.get('style') or '').replace(' ','').lower()
+        and str(attributes.get('aria-hidden') or '').lower()!='true'
+        and 'display:none' not in re.sub(
+            r'\s+','',str(attributes.get('style') or '').lower())
         and len(names)==len(set(names)))
       # Count EVERY email input: a duplicate, hidden or malformed input
       # cannot make the corresponding form pass.
@@ -86,7 +97,7 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
    if tag=='form':
     form=self.forms.pop()
     if (form['valid'] and form['email']==1
-        and (not require_csrf or form['csrf'])
+        and (not require_csrf or form['csrf']==1)
         and (not require_source_csrf or form['source_csrf'])):
      self.found=True
 
