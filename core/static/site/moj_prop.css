@@ -163,3 +163,14 @@ body.mojplaywin-prop main#main-content{display:block;width:min(1560px,100%);max-
 @media(max-width:1050px){.mp-prop .mp-plan-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:670px){.mp-prop .mp-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:375px){.mp-prop .mp-plan-grid{grid-template-columns:1fr}}
+
+
+/* Owner-attested business status; distinct from independently verified checkout. */
+.mp-prop .mp-plan-business-status{font-size:.79rem;line-height:1.55;
+ margin:9px 0 4px;padding:9px 11px;border-radius:9px;
+ border:1px solid rgba(202,172,116,.29);background:rgba(202,172,116,.07);
+ color:#e0c79a;min-height:3.2em}
+.mp-prop .mp-plan-business-status[data-plan-owner-state="owner_declared_active"]{
+ border-color:rgba(116,199,149,.49);background:rgba(50,130,87,.17);color:#b4ead0}
+.mp-prop .mp-plan-business-status[data-plan-owner-state="funding_in_progress_temporary_inactive"]{
+ border-color:rgba(205,180,116,.33);color:#dfc29a}
