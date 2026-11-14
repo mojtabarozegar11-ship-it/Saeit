@@ -497,3 +497,35 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+class SignalSourceEvent(models.Model):
+    """Pending-audit broker signal, never a paid subscription or delivery.
+
+    A database uniqueness constraint makes simultaneous replay attempts fail
+    closed across workers. Rows contain no subscriber or wallet information.
+    """
+    brand = models.CharField(max_length=32)
+    source_id = models.CharField(max_length=64)
+    event_id = models.CharField(max_length=100)
+    event_at = models.DateTimeField()
+    canonical_payload = models.TextField()
+    payload_sha256 = models.CharField(max_length=64)
+    source_signature = models.CharField(max_length=64)
+    state = models.CharField(max_length=24, default="pending_audit", editable=False)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["brand", "source_id", "event_id"],
+                name="sig_source_event_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["brand", "-received_at"],
+                         name="sig_evt_brand_recent"),
+        ]
+
+    def __str__(self):
+        return f"signal:{self.brand}:{self.source_id}:{self.event_id}"
