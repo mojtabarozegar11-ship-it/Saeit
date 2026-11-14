@@ -270,11 +270,9 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
 
 from .company_inquiry_models import CompanyInquiry
 from django.contrib import messages as django_messages
-from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, _code_for, prepare_one
-from command_center.models import WorkItem
+from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, prepare_one
+from .service_lead_handoff import handoff_prepared_inquiry
 from django.db import transaction
-from django.utils import timezone
-from datetime import timedelta
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
@@ -367,31 +365,17 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
                     skipped += 1 if result["state"] != "prepared_internal_draft" else 0
                     continue
 
-                source_id = str(row.pk)
-                existing = WorkItem.objects.filter(
-                    source_type="company_service_proposal",
-                    source_id=source_id,
-                ).order_by("pk").first()
-                if existing:
-                    workitems_existing += 1
-                    continue
-                code = _code_for(row)
-                WorkItem.objects.create(
-                    source_type="company_service_proposal",
-                    source_id=source_id,
-                    title=f"بررسی و قیمت‌گذاری خدمت {code} — پرونده #{row.pk}",
-                    description=(
-                        "درخواست دارای رضایت ثبت‌شده و پیش‌نویس داخلی است. "
-                        "اطلاعات مشتری را فقط در CRM اصلی مشاهده کنید. "
-                        "دامنه، ظرفیت، حقوق داده، هزینه و مجوز قیمت را جداگانه "
-                        "بررسی کنید؛ این کارتابل مجوز ارسال، قرارداد یا دریافت وجه نیست."
-                    ),
-                    status="open",
-                    priority="high",
-                    created_by=request.user,
-                    due_at=timezone.now() + timedelta(hours=24),
+                outcome = handoff_prepared_inquiry(
+                    row.pk, created_by=request.user,
                 )
-                workitems_created += 1
+                if outcome["state"] == "desk_workitem_created":
+                    workitems_created += 1
+                elif outcome["state"] == "existing_desk_workitem":
+                    workitems_existing += 1
+                else:
+                    # No permission, proof, or scope -> do not report a
+                    # successful operational handoff.
+                    skipped += 1
         self.message_user(
             request,
             (
