@@ -125,6 +125,29 @@ class EconomicMasterAgent:
             "autonomous_spend_scope": "preauthorized_operating_budget_and_allowlisted_recurring_services_only",
         }
 
+    def inspect_private_delivery_bytes_readonly(self, product_id):
+        """Owner-gated file-byte evidence, NEVER permission to sell/deliver."""
+        from django.conf import settings
+        from .models import Product
+        from .private_asset_byte_evidence import (
+            _result, verify_private_asset_readonly,
+        )
+
+        # Production starts disabled; enable only after separate owner approval.
+        if getattr(settings, "MPW_PRIVATE_ASSET_AUDIT_APPROVED", False) is not True:
+            return _result("OWNER_APPROVAL_REQUIRED")
+        if type(product_id) is not int or not 1 <= product_id <= 2147483647:
+            return _result("PRODUCT_IDENTIFIER_INVALID")
+        product = Product.objects.select_related("owner").filter(pk=product_id).first()
+        if product is None or product.active is not True:
+            return _result("PRODUCT_NOT_ACTIVE_OR_MISSING")
+        owner = product.owner
+        if (owner is None or owner.is_active is not True
+                or owner.is_staff is not True or owner.is_superuser is not True):
+            return _result("PRODUCT_OWNER_UNAUTHORIZED")
+        root = getattr(settings, "MPW_PRIVATE_DELIVERY_ROOT", None)
+        return verify_private_asset_readonly(product.metadata, private_root=root)
+
     def inspect_fulfillment_preflight_readonly(self):
         """Inspect anonymized delivery blockers without issuing access."""
         from .fulfillment_preflight import fulfillment_preflight_snapshot

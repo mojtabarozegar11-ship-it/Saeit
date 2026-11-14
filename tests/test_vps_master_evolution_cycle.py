@@ -21,11 +21,22 @@ class EvolutionTests(unittest.TestCase):
         state = root / "evolution.json"
         with sqlite3.connect(db) as conn:
             conn.execute("CREATE TABLE core_agent (id INTEGER PRIMARY KEY, code TEXT, active INTEGER)")
-            conn.execute("CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT, action_type TEXT, output_data TEXT)")
+            conn.execute("CREATE TABLE core_agenttask (id INTEGER PRIMARY KEY, agent_id INTEGER, status TEXT, action_type TEXT, output_data TEXT, execution_id TEXT DEFAULT '', attempt_count INTEGER DEFAULT 0)")
             conn.execute("INSERT INTO core_agent VALUES (1,'economic-master-agent',1)")
-            for action in actions:
-                conn.execute("INSERT INTO core_agenttask(agent_id,status,action_type,output_data) VALUES (1,'completed',?,?)",
-                             (action,json.dumps({"verified_effect":True})))
+            for ordinal, action in enumerate(actions, 1):
+                # The real evaluator requires an execution ID, attempt count
+                # and concrete internal evidence. This fixture stays synthetic.
+                output = {
+                    "verified_effect": True,
+                    "action_performed": "validated " + action,
+                    "evidence": {"fixture_digest": "a" * 64},
+                }
+                conn.execute(
+                    "INSERT INTO core_agenttask("
+                    "agent_id,status,action_type,output_data,execution_id,attempt_count"
+                    ") VALUES (1,'completed',?,?,?,1)",
+                    (action, json.dumps(output), f"offline-exec-{ordinal}"),
+                )
             for _ in range(failures):
                 conn.execute("INSERT INTO core_agenttask(agent_id,status,action_type,output_data) VALUES (1,'failed','example','{}')")
         state.write_text(json.dumps({
@@ -42,7 +53,7 @@ class EvolutionTests(unittest.TestCase):
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"],20)
             self.assertEqual(out["recent_new_verified_action_types"],1)
-            self.assertEqual(out["decision"],"hold_serial_chain_no_verified_diversity")
+            self.assertEqual(out["decision"],"hold_serial_chain_until_verified_progress")
 
     def test_diverse_verified_actions_do_not_expand_product_volume(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -62,7 +73,7 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db, state)
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"], 20)
-            self.assertEqual(out["decision"], "enable_serial_chain_up_to_20")
+            self.assertEqual(out["decision"], "enable_serial_chain_after_verified_diverse_progress")
 
     def test_existing_nonprivate_directory_fails_without_chmod_side_effect(self):
         with tempfile.TemporaryDirectory() as temp:
