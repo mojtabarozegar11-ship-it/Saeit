@@ -1,0 +1,85 @@
+name: C13 publish six genuine scoped service pages (no DB/PHP modifications)
+on:
+  push:
+    branches:
+      - feature/mojtaba-bot-lead-source-of-truth-c04-20261114
+    paths:
+      - .github/workflows/mojtaba-c13-static-sales-release-20261114.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-c13-static-release
+  cancel-in-progress: false
+jobs:
+  release-six:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojtaba-bot-lead-source-of-truth-c04-20261114' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact release and no stored credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare six non-PII static buyer pages from one authoritative catalogue
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_scope_static_host_apply_c13.py").read_text(encoding="utf-8"))'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/build_company_service_static_c13.py
+          test "$(find build/company-scope-static -name index.html -type f | wc -l)" -eq 6
+          grep -q 'ZM_C13_RELEASE_V1' deploy/company_scope_static_host_apply_c13.py
+      - name: Publish ONLY six newly absent static files, GET verify and hash-rollback if verification fails
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="${RUNNER_TEMP}/zm-c13-six-sales-${GITHUB_RUN_ID}"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          sshcmd=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125)
+          rollback_on_failure=0
+          host_source_base64="$(base64 -w0 deploy/company_scope_static_host_apply_c13.py)"
+          execute_host() {
+            "${sshcmd[@]}" "PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import base64;exec(base64.b64decode(\"$host_source_base64\"))' $1"
+          }
+          on_exit() {
+            status=$?
+            trap - EXIT
+            if [ "$rollback_on_failure" = 1 ]; then
+              echo "ZM_C13_RELEASE_VERIFICATION_FAILED=attempting_hash_verified_rollback"
+              if ! execute_host rollback < /dev/null; then
+                echo "ZM_C13_RELEASE_ROLLBACK_REQUIRES_OPERATOR_INSPECTION=true"
+                status=91
+              fi
+            fi
+            rm -rf -- "$d"
+            exit "$status"
+          }
+          trap on_exit EXIT
+          # Guard against duplicate or modified directories; never overwrite prior content.
+          "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_static_service_preflight.py
+          tar -C build/company-scope-static -cf "$d/offers.tar" AGR-01 RS-01 RS-02 RS-03 WEB-01 SEO-01
+          test "$(tar -tf "$d/offers.tar" | grep -c 'index.html$')" -eq 6
+          rollback_on_failure=1
+          execute_host apply < "$d/offers.tar"
+          echo "ZM_C13_RELEASE_FILES_CREATED=true"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B deploy/company_public_service_live_check.py | tee "$d/public-check.txt"
+          grep -qx 'ZM_SCOPE_PAGES_VERIFIED_PUBLIC=6/6' "$d/public-check.txt"
+          for code in AGR-01 RS-01 RS-02 RS-03 WEB-01 SEO-01; do
+            key="${code//-/_}"
+            grep -qx "ZM_SERVICE_${key}_HTTP=200" "$d/public-check.txt"
+            grep -qx "ZM_SERVICE_${key}_PROVEN_PUBLIC=true" "$d/public-check.txt"
+          done
+          echo "ZM_C13_SIX_PUBLIC_PAGES_VERIFIED=6/6"
+          rollback_on_failure=0
+          echo "ZM_C13_RELEASE_PHP_UNCHANGED=true"
+          echo "ZM_C13_RELEASE_CUSTOMER_DB_UNCHANGED=true"
+          echo "ZM_C13_RELEASE_PAYMENT_FUNCTIONS_UNCHANGED=true"
