@@ -81,6 +81,31 @@ class TronMultiTenantTests(SimpleTestCase):
         self.assertFalse(z.eligible_for_checkout_review)
         self.assertIn("tenant_registry_missing", z.missing)
 
+    def test_malformed_brand_collections_are_cleanly_denied(self):
+        for forged in ([], {}, ["saman"], {"brand": "saman"}, 1, True, None):
+            with self.subTest(value=repr(forged)), self.assertRaises(ValueError):
+                self.match(brand=forged)
+
+    def test_forged_truthy_routing_scope_never_issues_signed_context(self):
+        from dataclasses import replace
+        scope = self.match()
+        for value in ("yes", 1, ["approved"]):
+            with self.subTest(value=repr(value)), self.assertRaises(ValueError):
+                signed_routing_context(
+                    decision=replace(scope, eligible_for_checkout_review=value),
+                    product_sku="book-72", key=TEST_KEY,
+                )
+
+    def test_unexpected_paid_or_invoice_flags_on_scope_are_denied(self):
+        from dataclasses import replace
+        scope = self.match()
+        for value in ({"payment_enabled": True}, {"invoice_created": True}):
+            with self.subTest(change=value), self.assertRaises(ValueError):
+                signed_routing_context(
+                    decision=replace(scope, **value),
+                    product_sku="book-72", key=TEST_KEY,
+                )
+
     def test_unknown_brand_rejected(self):
         with self.assertRaises(ValueError):
             self.match(brand="hacker")
