@@ -157,7 +157,7 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
                     hit_counts[("user_cron", tag)] += 1
     processes = snapshot.get("processes", {})
     if processes.get("state") == "observed":
-        counts = processes.get("route_match_counts", {})
+        counts = processes.get("route_match_counts")
         if not isinstance(counts, dict):
             raise ValueError("TOPOLOGY_PROCESS_COUNTS_INVALID")
         for tag, n in counts.items():
