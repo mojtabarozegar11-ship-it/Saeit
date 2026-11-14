@@ -331,8 +331,11 @@ def inspect(app: Path = APP, public: Path = PUBLIC) -> dict:
                 b"mpw-buy-email" in template.lower()
                 and inspector.email_controls == 0
             )
-            template_state = ("email_field_present" if inspector.email_controls
-                              else "email_not_found_static_source")
+            template_state = (
+                "email_source_ambiguous" if inspector.email_controls and inspector.rejection_codes
+                else "email_field_present" if inspector.email_controls
+                else "email_not_found_static_source"
+            )
         except (UnicodeError, ValueError):
             template_state = "unreadable_static_source"
     # Presence on disk does not establish the effective Apache or Passenger
