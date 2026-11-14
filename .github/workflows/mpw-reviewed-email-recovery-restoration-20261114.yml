@@ -47,3 +47,48 @@ jobs:
           PY
       - name: Confirm no SMTP/SSH/migration execution or production money
         run: echo 'EMAIL_SENT=NO; MIGRATIONS_EXECUTED=NO; DB_READ=NO; SSH=NO; TRX=NO; PRODUCTION_EDIT=NO'
+  django-temporary-schema-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      SECRET_KEY: temporary-ci-schema-only-not-production
+      DEBUG: 'False'
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: sqlite:///${{ runner.temp }}/mpw-guest-email-schema-ci.sqlite3
+      MPW_GUEST_RECOVERY_ENABLED: 'false'
+      MPW_GUEST_RECOVERY_EMAIL_APPROVED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing project requirements only
+        run: python -m pip install -r requirements.txt
+      - name: Validate all Django models and existing URL graph
+        run: python manage.py check
+      - name: Require fully matching models and migrations with no generated source
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply reviewed migrations only to disposable isolated CI SQLite
+        run: python manage.py migrate --noinput
+      - name: Verify exact three guest email tables exist in disposable SQLite
+        run: |
+          python - <<'PY'
+          import os
+          import django
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          django.setup()
+          from django.apps import apps
+          from django.db import connection
+          from django.conf import settings
+          expected={'GuestOrderEmail','GuestRecoveryToken','GuestRecoveryRate'}
+          models={m.__name__:m for m in apps.get_app_config('core').get_models() if m.__name__ in expected}
+          assert set(models)==expected
+          existing=set(connection.introspection.table_names())
+          assert all(model._meta.db_table in existing for model in models.values())
+          assert getattr(settings,'MPW_GUEST_RECOVERY_ENABLED',False) is False
+          assert getattr(settings,'MPW_GUEST_RECOVERY_EMAIL_APPROVED',False) is False
+          assert 'sqlite' in connection.vendor
+          print('CI_SCHEMA=3/3_PRESENT; MAIL=DISABLED; PRODUCTION_DB=NOT_TOUCHED')
+          PY
