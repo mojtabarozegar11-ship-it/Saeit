@@ -99,8 +99,9 @@ def sales_case_action(request, case_id, operation):
         length = -1
     if length < 0 or length > MAX_POST_BYTES:
         return _private(HttpResponse("Invalid request size", status=413))
-    form = (CompanyReviewForm(request.POST) if operation == "review"
-            else CompanyDraftQuoteForm(request.POST))
+    form = (CompanyReviewForm(request.POST, case_kind=case.kind)
+            if operation == "review"
+            else CompanyDraftQuoteForm(request.POST, case_kind=case.kind))
     if not form.is_valid():
         return _detail(
             request, case,
