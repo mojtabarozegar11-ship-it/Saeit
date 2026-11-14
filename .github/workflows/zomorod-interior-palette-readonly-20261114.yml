@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/zomorod_interior_background_palette_readonly_20261114.cjs'
+      - 'scripts/zomorod_interior_census_policy_20261114.cjs'
+      - 'tests/zomorod_interior_census_policy_20261114.test.cjs'
       - 'scripts/zomorod_interior_olive_rehearsal_20261114.cjs'
       - 'tests/test_zomorod_interior_olive_source_20261114.py'
       - 'public/tala/index.html'
@@ -41,6 +43,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_zomorod_interiors_olive_expanded_20261114.py' -v
+      - name: Verify offline census policy invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/zomorod_interior_census_policy_20261114.cjs
+          node --check scripts/zomorod_interior_background_palette_readonly_20261114.cjs
+          node --test tests/zomorod_interior_census_policy_20261114.test.cjs
       - name: GET-only public CSS marker visibility check (no deploy)
         shell: bash
         run: |
