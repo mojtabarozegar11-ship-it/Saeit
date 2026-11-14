@@ -51,6 +51,7 @@ def test_orphan_is_recovered_as_real_workitem_not_fake_buyer_contact(prepared):
     assert result["evidence"]["inquiry_id"] == prepared.pk
     assert result["evidence"]["cash_reconciled"] is False
     assert WorkItem.objects.get(pk=result["evidence"]["workitem_id"]).status == "open"
+    prepared.refresh_from_db()
     assert prepared.status == "reviewing"
     assert Order.objects.count() == 0
 
