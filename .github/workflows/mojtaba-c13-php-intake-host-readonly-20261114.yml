@@ -1,4 +1,4 @@
-name: C13-C14 PHP intake origin and sales-flow audit, no customer data
+name: C13-C15 PHP intake and DB provenance audit, no customer data
 on:
   push:
     branches:
@@ -7,6 +7,7 @@ on:
       - deploy/company_live_intake_readonly.py
       - deploy/company_c14_php_flow_readonly.py
       - deploy/company_c14_php_db_metadata_readonly.py
+      - deploy/company_c15_form_data_lineage_readonly.py
       - deploy/company_static_service_preflight.py
       - deploy/company_services_public_index_readonly.py
       - scripts/build_company_service_static_c13.py
@@ -86,6 +87,9 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_c14_php_db_metadata_readonly.py").read_text("utf-8"))'
           timeout 75s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_c14_php_db_metadata_readonly.py
           echo "ZM_C14_PHP_SQLITE_METADATA_AUDIT=complete"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_c15_form_data_lineage_readonly.py").read_text("utf-8"))'
+          timeout 75s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_c15_form_data_lineage_readonly.py
+          echo "ZM_C15_PHP_DB_LINEAGE_READONLY=complete"
       - name: Read-only actual services-index source after six-page publication
         shell: bash
         env:
