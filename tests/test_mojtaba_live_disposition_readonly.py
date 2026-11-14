@@ -433,6 +433,45 @@ def test_timestamp_shape_fails_closed_without_runtime_traceback(tmp_path, bad_ti
         module.parse_snapshot(path, "vps", now=datetime.now(timezone.utc))
 
 
+
+def test_observed_cron_missing_route_flags_does_not_claim_no_candidate():
+    vps = snap("vps")
+    vps["cron"]["entries"] = [{"schedule": "0 * * * *"}]
+    with pytest.raises(ValueError, match="TOPOLOGY_CRON_ENTRIES_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
+@pytest.mark.parametrize("layer", [
+    "user_services", "system_services", "user_timers", "system_timers",
+])
+def test_observed_systemd_unit_missing_route_flags_is_not_empty(layer):
+    vps = snap("vps")
+    vps[layer]["candidate_units"] = [{"unit_name_digest": "a" * 16}]
+    with pytest.raises(ValueError, match="TOPOLOGY_SYSTEMD_UNITS_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
+def test_manifest_missing_unscoped_runtime_inventory_is_not_complete():
+    manifest = dict(MANIFEST)
+    manifest.pop("not_yet_enumerated_runtime_scopes", None)
+    with pytest.raises(ValueError, match="DISPOSITION_UNSCOPED_RUNTIME_INVALID"):
+        module.preview(snap("vps"), snap("cpanel"), manifest, repository_root=ROOT)
+
+
+def test_php_registry_without_role_rows_cannot_claim_roles_absent():
+    cpanel = snap("cpanel", private_php_site_registry={
+        "state": "source_registry_snapshot_only",
+        "known_roles_found": 11,
+        "enabled_count": 10,
+    })
+    observed = module.identity_dispositions(cpanel)
+    php_roles = [row for row in observed if row["source"] == "cpanel_php_sqlite"]
+    assert len(php_roles) == len(module.PHP_ROLE_CODES)
+    assert all(row["registration_state"] == "unknown_role_rows_unavailable"
+               for row in php_roles)
+    assert all(row["retirement_authorized"] is False for row in php_roles)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
