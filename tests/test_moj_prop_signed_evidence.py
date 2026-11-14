@@ -243,3 +243,40 @@ class BrokerSignedEvidenceTests(TestCase):
             data={"equity_usd": "99999999999999.9999", "is_session_open": False},
         ))
         self.assertEqual(result["result"], "recorded_pending")
+
+    def _signed_raw(self, raw):
+        packet = self.packet()
+        packet["raw"] = raw
+        msg = (b"MOJPROP-EVIDENCE-v1\\n" + SOURCE.encode() + b"\\n"
+               + str(self.account.id).encode() + b"\\n" + ISSUED.encode()
+               + b"\\n" + raw)
+        packet["signature"] = hmac.new(KEY.encode(), msg, hashlib.sha256).hexdigest()
+        return packet
+
+    def test_signed_duplicate_top_level_key_rejected(self):
+        raw = ('{"account_id":"%s","event_id":"event-a","event_id":"event-b",'
+               '"event_type":"execution","recorded_at":"%s",'
+               '"data":{"symbol":"EURUSD","gross_usd":"5","fees_usd":"0"}}'
+               % (self.account.id, RECORDED)).encode()
+        with self.assertRaisesRegex(EvidenceRejected, "Duplicate JSON"):
+            ingest_signed_evidence(**self._signed_raw(raw))
+        self.assertFalse(PropExecution.objects.exists())
+
+    def test_signed_duplicate_nested_financial_key_rejected(self):
+        raw = ('{"account_id":"%s","event_id":"event-a",'
+               '"event_type":"execution","recorded_at":"%s",'
+               '"data":{"symbol":"EURUSD","gross_usd":"5",'
+               '"gross_usd":"5000","fees_usd":"0"}}'
+               % (self.account.id, RECORDED)).encode()
+        with self.assertRaisesRegex(EvidenceRejected, "Duplicate JSON"):
+            ingest_signed_evidence(**self._signed_raw(raw))
+        self.assertFalse(PropExecution.objects.exists())
+
+    def test_signed_nonfinite_json_literal_rejected(self):
+        raw = ('{"account_id":"%s","event_id":"event-a",'
+               '"event_type":"execution","recorded_at":"%s",'
+               '"data":{"symbol":"EURUSD","gross_usd":NaN,"fees_usd":"0"}}'
+               % (self.account.id, RECORDED)).encode()
+        with self.assertRaisesRegex(EvidenceRejected, "Non-finite JSON"):
+            ingest_signed_evidence(**self._signed_raw(raw))
+        self.assertFalse(PropExecution.objects.exists())
