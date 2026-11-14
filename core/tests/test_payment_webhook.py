@@ -102,7 +102,8 @@ def test_webhook_rejects_amount_mismatch(django_user_model):
         APIClient(),
         {
             "event_type": "payment.succeeded", "payment_intent_id": intent.pk,
-            "amount": "99.00", "currency": "IRR"
+            "amount": "99.00", "currency": "IRR",
+            "provider_reference": "provider-ref-amount-mismatch"
         },
         event_id="evt-mismatch",
     )
