@@ -21,6 +21,7 @@ from core.academy_views import (
 from core.services_views import services
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
+from core.company_sales_views import company_contact
 from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
