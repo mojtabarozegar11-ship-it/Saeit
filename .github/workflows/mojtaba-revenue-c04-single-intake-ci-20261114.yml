@@ -1,9 +1,13 @@
-name: C04-C06 unified company and service CRM intake
+name: C04-C07 unified company intake, qualified lead queue and owner funnel
 on:
   pull_request:
     paths:
       - .github/workflows/mojtaba-revenue-c04-single-intake-ci-20261114.yml
       - core/service_quote_draft.py
+      - core/admin.py
+      - command_center/service_proposal_funnel.py
+      - command_center/urls.py
+      - core/tests/test_service_lead_queue_c07_20261114.py
       - core/management/commands/mojtaba_prepare_service_drafts.py
       - core/tests/test_service_proposal_conversion_c05_20261114.py
       - core/economic_tool_pack.py
@@ -21,6 +25,10 @@ on:
     paths:
       - .github/workflows/mojtaba-revenue-c04-single-intake-ci-20261114.yml
       - core/service_quote_draft.py
+      - core/admin.py
+      - command_center/service_proposal_funnel.py
+      - command_center/urls.py
+      - core/tests/test_service_lead_queue_c07_20261114.py
       - core/management/commands/mojtaba_prepare_service_drafts.py
       - core/tests/test_service_proposal_conversion_c05_20261114.py
       - core/economic_tool_pack.py
@@ -60,12 +68,14 @@ jobs:
           python -m py_compile command_center/service_intake_diagnostics.py command_center/urls.py
           python -m py_compile core/management/commands/mojtaba_intake_source_readonly.py
           python -m py_compile core/service_quote_draft.py core/autonomous_brain.py core/economic_tool_pack.py
+          python -m py_compile core/admin.py command_center/service_proposal_funnel.py command_center/urls.py
           python -m py_compile core/management/commands/mojtaba_prepare_service_drafts.py
           python -m py_compile core/management/commands/seed_online_income_agents.py core/company_content_views.py core/views.py
           python -m py_compile core/tests/test_company_portal_single_source_c06_20261114.py tests/test_company_inquiry_validation_20261106.py
           python -m py_compile command_center/tests/test_service_intake_source_c04_20261114.py
           python -m py_compile core/tests/test_service_lead_intake_c03_20261114.py
           python -m py_compile core/tests/test_service_proposal_conversion_c05_20261114.py
+          python -m py_compile core/tests/test_service_lead_queue_c07_20261114.py
       - name: Verify Django system and URL configuration
         run: python manage.py check
       - name: Preserve prior pricing and service science regression gates
@@ -82,4 +92,5 @@ jobs:
             command_center/tests/test_service_intake_source_c04_20261114.py \
             core/tests/test_service_proposal_conversion_c05_20261114.py \
             core/tests/test_company_portal_single_source_c06_20261114.py \
-            tests/test_company_inquiry_validation_20261106.py
+            tests/test_company_inquiry_validation_20261106.py \
+            core/tests/test_service_lead_queue_c07_20261114.py
