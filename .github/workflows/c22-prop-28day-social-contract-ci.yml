@@ -5,6 +5,7 @@ on:
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
+      - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
       - 'tests/test_moj_prop_social_policy.py'
       - 'tests/test_moj_prop_social_review.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
@@ -12,6 +13,7 @@ on:
     paths:
       - 'prop_firm/social_policy.py'
       - 'prop_firm/models.py'
+      - 'prop_firm/migrations/0005_alter_propsocialevidence_review_status.py'
       - 'tests/test_moj_prop_social_policy.py'
       - 'tests/test_moj_prop_social_review.py'
       - '.github/workflows/c22-prop-28day-social-contract-ci.yml'
