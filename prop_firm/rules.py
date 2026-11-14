@@ -36,7 +36,7 @@ class Policy:
     phase_one_goal_pct: Decimal = D("9.6")
     phase_two_goal_pct: Decimal = D("6")
     min_challenge_days: int = 6
-    social_posts_per_platform_per_verified_trading_day: int = 1
+    social_posts_per_platform_per_challenge: int = 1
     social_posting_platforms: tuple[str, str] = ("instagram", "facebook")
     max_daily_loss_pct: Decimal = D("4")
     max_total_loss_pct: Decimal = D("8")
@@ -48,9 +48,9 @@ class Policy:
     promotion_cycle_days: int = 30
     trader_profit_share_pct: Decimal = D("70")
     company_profit_share_pct: Decimal = D("30")
-    inactivity_notice_days: int = 78
-    inactivity_grace_days: int = 39
-    completion_deadline_days: None = None
+    inactivity_notice_days: int = 14
+    inactivity_grace_days: int = 14
+    completion_deadline_days: int = 28
     real_orders_enabled: bool = False
     trx_checkout_enabled: bool = False
 
@@ -156,7 +156,7 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     if version not in (LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION):
         raise ValueError("Unknown immutable challenge contract version")
     if version == NEW_CONTRACT_VERSION and social_posts_verified is not True:
-        reasons.append("social_daily_posts_both_platforms_unverified")
+        reasons.append("social_single_post_each_platform_unverified")
     if days < POLICY.min_challenge_days:
         reasons.append("minimum_trading_days_not_met")
     if profit < goal:
