@@ -15,6 +15,57 @@
 - Per-trade stop-risk max **0.8%** and cumulative open stop-risk **1.6%** of tier capital; block an order if broker minimum lot/stop distance cannot fit.
 - Monthly net profit sharing **70% trader / 30% company**, on cumulative realized net P&L exceeding previously *allocated* profit. Losses must be recouped first; no double payment.
 
+## Ten MOJ PROP variants — plan 1 + nine new plans (pre-launch)
+
+The owner's Plan 1 remains **30 TRX** and begins its **conditional** real-funded
+ladder at **$100**. Nine new **proposed** plans offer differentiated starting
+capital and entry fees. Every plan shares the same immutable v1.2 rules:
+two simulated phases, 28 total calendar days, minimum six valid trading days
+per phase, 50 unique reconciled closed positions across both phases combined,
+one Instagram + one Facebook post retained 28 days, trading bots permitted,
+9.6%/6% net stage goals, 4% daily and 8% total drawdown, 32% consistency,
+0.8% risk/order, 1.6% open risk, 70/30 split and a 14-step capital ladder.
+
+| Plan SKU | Starting capital if funded (USD) | Proposed entry fee (TRX) |
+|---|---:|---:|
+| MOJ-PROP-01 | 100 | **30 (original)** |
+| MOJ-PROP-02 | 200 | 45 |
+| MOJ-PROP-03 | 400 | 75 |
+| MOJ-PROP-04 | 800 | 120 |
+| MOJ-PROP-05 | 1,500 | 200 |
+| MOJ-PROP-06 | 3,000 | 330 |
+| MOJ-PROP-07 | 5,000 | 500 |
+| MOJ-PROP-08 | 10,000 | 800 |
+| MOJ-PROP-09 | 20,000 | 1,250 |
+| MOJ-PROP-10 | 35,000 | 2,000 |
+
+These are **ten separate product identities**, not ten new websites or ten
+active brokerage accounts. No SKU is approved for checkout. **Prices for
+Plans 2–10 are internal commercial proposals**, not binding offers, and need
+explicit rate-sheet approval before any customer contract or TRX invoice.
+
+All plans may progress only forward in the original **14 funded capital tiers**
+(up to $100,000) after independent funding, KYC/AML, broker, legal and
+operational verification. A higher-tier buyer may never be silently allocated
+a lower starting tier. The existing 30-day one-tier-at-a-time funded
+promotion model remains intact.
+
+Implementation: `plans.py` is the sole ten-plan catalog;
+`PropChallengeEnrollment.plan_code` is immutable per confirmed purchase
+(migration `0006_ten_plan_enrollment.py`); both challenge phase accounts
+must use its exact starting tier and P&L baseline. `challenge_commerce.py`
+performs **tier-specific** treasury/cash/contract/broker readiness. The
+proposed cohort economics in `economics.py` use the matching plan's fee
+and funding reserve instead of treating every customer as a $100 liability.
+`moj_prop_page.py` publishes nonpayable read-only cards in 20 languages;
+the authenticated dashboard identifies the selected plan. Neither component
+creates invoices, withdrawals, live trades or customer registrations.
+
+**No financial side effects:** no live charging, seller payout,
+funding approval, broker access, social posting or production deployment.
+Reconciled paid invoice, product acceptance, independently verified treasury,
+contract and country compliance must precede any external launch.
+
 ## Corrected four-week challenge and social posting requirement — new v1.2 buyers
 
 - The **entire two-phase simulated trading challenge lasts 28 consecutive
