@@ -356,6 +356,25 @@ def test_disposition_rejects_malformed_process_route_counts(counts):
         module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
 
 
+
+@pytest.mark.parametrize("flags", [[{}], [None], [123]])
+def test_cron_rejects_unhashable_or_nonstring_route_flags(flags):
+    vps = snap("vps")
+    vps["cron"]["state"] = "observed"
+    vps["cron"]["entries"] = [{"known_route_flags": flags}]
+    with pytest.raises(ValueError, match="TOPOLOGY_CRON_ENTRIES_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
+@pytest.mark.parametrize("units", [None, "wrong", [None], [{"known_route_flags": "mojcoin"}], [{"known_route_flags": [{}]}]])
+def test_systemd_rejects_malformed_candidate_units(units):
+    vps = snap("vps")
+    vps["user_services"]["state"] = "observed"
+    vps["user_services"]["candidate_units"] = units
+    with pytest.raises(ValueError, match="TOPOLOGY_SYSTEMD_UNITS_INVALID"):
+        module.preview(vps, snap("cpanel"), MANIFEST, repository_root=ROOT)
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
