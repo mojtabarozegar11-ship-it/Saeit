@@ -312,3 +312,23 @@ def test_existing_operator_cli_reflects_same_company_post_source():
     assert data["company_portal_django_post_enabled"] is False
     assert data["live_php_form_verified"] is None
     assert data["real_revenue_collected"] is None
+
+
+@pytest.mark.django_db
+@override_settings(**ENABLE_FLAGS)
+def test_company_portal_enforces_csrf_when_client_requires_it():
+    response = Client(enforce_csrf_checks=True).post(reverse("company"), payload())
+    assert response.status_code == 403
+    assert CompanyInquiry.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(**DISABLE_FLAGS)
+def test_inactive_company_portal_requires_no_customer_post_or_session():
+    client = Client()
+    response = client.get(reverse("company"))
+    assert response.status_code == 200
+    assert "name=\"email\"" not in response.content.decode("utf-8").split(
+        "id=\"company-request\"", 1
+    )[-1].split("</section>", 1)[0]
+    assert CompanyInquiry.objects.count() == 0
