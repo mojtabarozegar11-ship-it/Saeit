@@ -72,3 +72,103 @@ class RolloutCoverageTests(SimpleTestCase):
         self.assertEqual(len(main), 1)
         self.assertEqual(len(prop), 1)
         self.assertNotEqual(main[0]["section"], prop[0]["section"])
+
+
+    def test_fully_approved_new_subdomain_is_included_once(self):
+        reg = {
+            ("signals.mojplaywin.com", "saman"): {
+                "tenant_id": "new_signal_merchant", "network": CANONICAL_CHAIN,
+                "asset": CANONICAL_ASSET,
+                **{key: True for key in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = inspect_rollout(
+            registry=reg, extra_owned_domains=["signals.mojplaywin.com"],
+        )
+        self.assertEqual(result["logical_payment_scopes_not_hosts"], 38)
+        self.assertEqual(result["additional_registered_site_hosts"], 1)
+        new = [x for x in result["entries"]
+               if x["host"] == "signals.mojplaywin.com"]
+        self.assertEqual(len(new), 1)
+        self.assertEqual(new[0]["brand"], "saman")
+        self.assertTrue(new[0]["eligible_for_adapter_review"])
+        self.assertFalse(new[0]["checkout_enabled"])
+
+    def test_new_host_without_merchant_registration_stays_excluded(self):
+        result = inspect_rollout(extra_owned_domains=["signals.mojplaywin.com"])
+        self.assertEqual(result["logical_payment_scopes_not_hosts"], 37)
+        self.assertEqual(result["additional_registered_site_hosts"], 0)
+
+    def test_new_subdomain_does_not_inherit_parent_wallet_scope(self):
+        reg = {
+            ("mojplaywin.com", "saman"): {
+                "tenant_id": "main_signal_merchant", "network": CANONICAL_CHAIN,
+                "asset": CANONICAL_ASSET,
+                **{key: True for key in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = inspect_rollout(
+            registry=reg, extra_owned_domains=["signals.mojplaywin.com"],
+        )
+        self.assertEqual(result["additional_registered_site_hosts"], 0)
+
+    def test_new_host_with_missing_attestation_stays_excluded(self):
+        reg = {
+            ("signals.mojplaywin.com", "saman"): {
+                "tenant_id": "new_signal_merchant", "network": CANONICAL_CHAIN,
+                "asset": CANONICAL_ASSET,
+                **{key: True for key in REQUIRED_ATTESTATIONS},
+                "network_settlement_verified": False,
+            },
+        }
+        result = inspect_rollout(
+            registry=reg, extra_owned_domains=["signals.mojplaywin.com"],
+        )
+        self.assertEqual(result["additional_registered_site_hosts"], 0)
+
+    def test_new_host_with_unregistered_brand_stays_excluded(self):
+        reg = {
+            ("signals.mojplaywin.com", "notregistered"): {
+                "tenant_id": "other_merchant", "network": CANONICAL_CHAIN,
+                "asset": CANONICAL_ASSET,
+                **{key: True for key in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = inspect_rollout(
+            registry=reg, extra_owned_domains=["signals.mojplaywin.com"],
+        )
+        self.assertEqual(result["additional_registered_site_hosts"], 0)
+
+    def test_new_host_cannot_cross_duplicate_tenant_ids(self):
+        merchant = {
+            "tenant_id": "shared_danger", "network": CANONICAL_CHAIN,
+            "asset": CANONICAL_ASSET,
+            **{key: True for key in REQUIRED_ATTESTATIONS},
+        }
+        reg = {
+            ("signals.mojplaywin.com", "saman"): merchant,
+            ("mojplaywin.com", "saman"): merchant,
+        }
+        result = inspect_rollout(
+            registry=reg, extra_owned_domains=["signals.mojplaywin.com"],
+        )
+        self.assertEqual(result["additional_registered_site_hosts"], 0)
+
+    def test_identical_hosts_list_does_not_duplicate_merchant_routes(self):
+        reg = {
+            ("shop.mojplaywin.com", ""): {
+                "tenant_id": "shop_merchant", "network": CANONICAL_CHAIN,
+                "asset": CANONICAL_ASSET,
+                **{key: True for key in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = inspect_rollout(
+            registry=reg,
+            extra_owned_domains=["shop.mojplaywin.com", "shop.mojplaywin.com"],
+        )
+        self.assertEqual(result["logical_payment_scopes_not_hosts"], 38)
+        self.assertEqual(result["additional_registered_site_hosts"], 1)
+
+    def test_unowned_malformed_extra_hostname_fails_closed(self):
+        with self.assertRaises(ValueError):
+            inspect_rollout(extra_owned_domains=["https://evil.org"])
