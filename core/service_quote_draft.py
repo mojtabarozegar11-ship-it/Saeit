@@ -140,7 +140,7 @@ def _candidate_filter():
         service_q |= Q(kind=kind, subject__startswith=f"[{code}] ")
     return (
         CompanyInquiry.objects.filter(
-            status="new", internal_note__contains=SOURCE_MARKER
+            status="new", internal_note__startswith=SOURCE_MARKER
         )
         .filter(service_q)
         .exclude(internal_note__contains=DRAFT_MARKER)
