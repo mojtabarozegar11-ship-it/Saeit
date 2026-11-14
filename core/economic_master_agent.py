@@ -108,6 +108,11 @@ class EconomicMasterAgent:
             },
         }
 
+    def inspect_intake_source_configuration_readonly(self):
+        """Inspect routing gates without reading customer data or publishing sales."""
+        from .service_intake_routing import service_intake_source_snapshot
+        return service_intake_source_snapshot()
+
     def inspect_lead_workqueue_readonly(self, *, status="all", kind="all", page=1):
         """Owner-scoped data contract: use only behind authenticated staff context."""
         from command_center.lead_workqueue import lead_workqueue_snapshot

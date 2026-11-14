@@ -10,6 +10,24 @@
   <div class="services-index">SERVICES<br><strong>15</strong></div>
   <div class="services-copy"><span>AGRICULTURE · KNOWLEDGE · SERVICES</span><h1>یک مرجع برای<br><em>کشاورزی ایران</em></h1><p>راهنمای کشاورزی زمرد ملل؛ از دامپروری، باغبانی و گلخانه تا ژنتیک و اصلاح نژاد، طیور، آبزیان، نهاده، بذر، کود، سم و خدمات کشاورزی.</p></div>
 </section>
+<section class="services-grid" aria-labelledby="service-offers-heading">
+  <div class="services-copy"><h2 id="service-offers-heading">درخواست بررسی خدمات تخصصی</h2><p>برای بررسی امکان ارائه خدمت، شرح مسئله را ثبت کنید. قیمت، ظرفیت و زمان تحویل فقط پس از بررسی و توافق تعیین می‌شوند.</p></div>
+  {% for offer in service_offers %}
+  <article class="services-core-card">
+    <span>{{ offer.service_code }}</span>
+    <h3>{{ offer.title_fa }}</h3>
+    <p><strong>مناسب برای:</strong> {{ offer.customer }}</p>
+    <p><strong>خروجی‌های احتمالی پس از بررسی دامنه:</strong></p>
+    <ul>{% for deliverable in offer.deliverables %}<li>{{ deliverable }}</li>{% endfor %}</ul>
+    <p><strong>محدودیت:</strong> {{ offer.limitation }}</p>
+    <p>قیمت و ظرفیت پس از برآورد و تأیید جداگانه تعیین می‌شود.</p>
+    <a href="{% url 'service_scope_page' offer.service_code %}" aria-label="جزئیات و دامنه {{ offer.title_fa }}">جزئیات، مدارک لازم و مراحل همکاری ↗</a>
+    <p>برای شناسایی دقیق خدمت، هنگام ثبت درخواست کد <strong>{{ offer.service_code }}</strong> را در توضیحات وارد کنید.</p>
+    <a href="{{ offer.contact_url }}" aria-label="درخواست بررسی {{ offer.title_fa }} با کد {{ offer.service_code }}">ثبت استعلام در فرم اصلی شرکت ↗</a>
+  </article>
+  {% endfor %}
+</section>
+
 <section class="services-grid">
   {% for item in items %}<article class="services-core-card"><div class="services-no">{{ item.no }}</div><span>{{ item.meta }}</span><h2>{{ item.title }}</h2><p>{{ item.text }}</p><a href="{{ item.url }}">ورود به خدمت ↗</a></article>{% endfor %}
   <article class="services-domain services-domain-agriculture"><div class="services-no">06</div><span>AGRICULTURE · VALUE CHAIN</span><h2>کشاورزی</h2><p>از پژوهش و نهاده تا کشت، تولید، فرآوری، بسته‌بندی و زنجیره ارزش.</p><a href="/agriculture/">ورود به کشاورزی ↗</a></article>
@@ -23,17 +41,7 @@
   <article class="services-domain services-domain-platform"><div class="services-no">14</div><span>AI · INTELLIGENCE</span><h2>هوش مصنوعی</h2><p>ابزارها و عامل‌های هوشمند برای پژوهش، تحلیل و اجرای کنترل‌شده.</p><a href="/agents/">ورود به هوش مصنوعی ↗</a></article>
   <article class="services-domain services-domain-platform"><div class="services-no">15</div><span>KNOWLEDGE · ENCYCLOPEDIA</span><h2>دانشنامه</h2><p>مرجع ساختاریافته دانش، مفاهیم و محتوای قابل استفاده پلتفرم.</p><a href="/knowledge/">ورود به دانشنامه ↗</a></article>
 </section>
-<section class="services-grid" aria-labelledby="service-offers-heading">
-  <div class="services-copy"><h2 id="service-offers-heading">درخواست بررسی خدمات تخصصی</h2><p>برای بررسی امکان ارائه خدمت، شرح مسئله را ثبت کنید. قیمت، ظرفیت و زمان تحویل فقط پس از بررسی و توافق تعیین می‌شوند.</p></div>
-  {% for offer in service_offers %}
-  <article class="services-core-card">
-    <span>{{ offer.service_code }}</span>
-    <h3>{{ offer.title_fa }}</h3>
-    <p>{{ offer.customer }}</p><p>{{ offer.limitation }}</p>
-    <a href="{% url 'service_inquiry' offer.service_code %}" aria-label="درخواست بررسی {{ offer.title_fa }}">درخواست بررسی اولیه ↗</a>
-  </article>
-  {% endfor %}
-</section>
+
 <section class="services-map" aria-label="معماری خدمات"><div><span>PLATFORM MAP</span><h2>یک هاب، چند مسیر مستقل</h2><p>کاربر از صفحه اصلی وارد خدمات می‌شود و بدون خروج از معماری پلتفرم، به حوزه تخصصی موردنیاز خود می‌رسد.</p></div><div class="services-map-flow"><b>خدمات</b><i>→</i><span>کشاورزی</span><span>صنعت</span><span>بازار</span><i>→</i><span>آب‌وهوا</span><span>اقتصاد</span><span>استودیو</span></div></section>
 <section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>صفحه اصلی؛ یک درگاه برای همه خدمات و زنجیره‌ها.</h2><p>کشاورزی، صنعت و بازار در خدمات یکپارچه شده‌اند و آب‌وهوا، اقتصاد و استودیو نیز به‌عنوان مسیرهای مستقل این پلتفرم از همین درگاه قابل دسترسی‌اند.</p><a href="/company/">شرکت ↗</a></section>
 {% endblock %}

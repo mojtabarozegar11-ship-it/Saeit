@@ -269,10 +269,20 @@ class CompanyGalleryMediaAdmin(admin.ModelAdmin):
     fields = ("media_type", "title", "description", "image", "video", "target_path", "newsletter_story", "project_label", "research_domain", "tags", "published", "published_at")
 
 from .company_inquiry_models import CompanyInquiry
+from django.contrib import messages as django_messages
+from .service_quote_draft import DRAFT_MARKER, SOURCE_MARKER, _code_for, prepare_one
+from .service_lead_handoff import handoff_prepared_inquiry
+from django.db import transaction
 
 @admin.register(CompanyInquiry)
 class CompanyInquiryAdmin(admin.ModelAdmin):
-    list_display = ("subject", "kind", "name", "organization", "status", "days_open", "service_code", "created_at")
+    list_display = (
+        "subject", "kind", "name", "organization", "status",
+        "days_open", "service_code", "has_consent_provenance",
+        "draft_prepared", "created_at",
+    )
+    actions = ("prepare_scoped_service_response",)
+    actions_on_bottom = True
     list_per_page = 50
     ordering = ("created_at", "pk")
     list_filter = ("kind", "status", "created_at")
@@ -293,4 +303,88 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
         return next(
             (code for code in SERVICE_CARDS if (obj.subject or "").startswith(f"[{code}] ")),
             "—",
+        )
+
+
+    @admin.display(description="منشأ درخواست دارای رضایت", boolean=True)
+    def has_consent_provenance(self, obj):
+        return isinstance(obj.internal_note, str) and obj.internal_note.startswith(SOURCE_MARKER)
+
+    @admin.display(description="پیش‌نویس داخلی آماده شده", boolean=True)
+    def draft_prepared(self, obj):
+        return isinstance(obj.internal_note, str) and DRAFT_MARKER in obj.internal_note
+
+    @admin.action(
+        description="Mojtaba.bot.ai: آماده‌سازی حداکثر ۲۰ پیش‌نویس داخلی، بدون ارسال",
+        permissions=["change"],
+    )
+    def prepare_scoped_service_response(self, request, queryset):
+        """Write useful, scoped proposals inside the authenticated CRM.
+
+        Explicit staff action only: no customer contact, price, invoice,
+        publication, or queue-triggering external side effect.
+        """
+        if not self.has_change_permission(request):
+            self.message_user(
+                request, "مجوز ویرایش درخواست‌ها وجود ندارد.",
+                level=django_messages.ERROR,
+            )
+            return
+        n = queryset.count()
+        if n > 20:
+            self.message_user(
+                request, "حداکثر ۲۰ درخواست را برای یک اقدام انتخاب کنید.",
+                level=django_messages.ERROR,
+            )
+            return
+        prepared = 0
+        skipped = 0
+        workitems_created = 0
+        workitems_existing = 0
+        for record_id in queryset.order_by("pk").values_list("pk", flat=True):
+            # Acquire the same source inquiry row lock used by prepare_one.
+            # This makes the internal handoff atomic on transactional databases
+            # without creating a new agent or a duplicate customer store.
+            with transaction.atomic():
+                row = CompanyInquiry.objects.select_for_update().filter(
+                    pk=record_id,
+                ).first()
+                if row is None:
+                    skipped += 1
+                    continue
+                result = prepare_one(record_id)
+                if result["state"] == "prepared_internal_draft":
+                    prepared += 1
+                row.refresh_from_db()
+                if not (
+                    row.status == "reviewing"
+                    and row.internal_note.startswith(SOURCE_MARKER)
+                    and DRAFT_MARKER in row.internal_note
+                    and _code_for(row) is not None
+                ):
+                    skipped += 1 if result["state"] != "prepared_internal_draft" else 0
+                    continue
+
+                outcome = handoff_prepared_inquiry(
+                    row.pk, created_by=request.user,
+                )
+                if outcome["state"] == "desk_workitem_created":
+                    workitems_created += 1
+                elif outcome["state"] == "existing_desk_workitem":
+                    workitems_existing += 1
+                else:
+                    # No permission, proof, or scope -> do not report a
+                    # successful operational handoff.
+                    skipped += 1
+        self.message_user(
+            request,
+            (
+                f"پیش‌نویس داخلی جدید: {prepared} | "
+                f"ارجاع واقعی به کارتابل: {workitems_created} | "
+                f"ارجاع موجود: {workitems_existing} | "
+                f"نیازمند اصلاح: {skipped} | "
+                "ارسال پیام: ۰ | وصول وجه: تأییدنشده"
+            ),
+            level=django_messages.SUCCESS if (prepared or workitems_created)
+            else django_messages.WARNING,
         )

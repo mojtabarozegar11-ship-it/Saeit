@@ -1,0 +1,67 @@
+name: C13 scoped static sales route canary (self-cleaning)
+on:
+  push:
+    branches:
+      - feature/mojtaba-bot-lead-source-of-truth-c04-20261114
+    paths:
+      - .github/workflows/mojtaba-c13-static-route-canary-20261114.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-c13-static-release
+  cancel-in-progress: false
+jobs:
+  canary:
+    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojtaba-bot-lead-source-of-truth-c04-20261114' }}"
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate precise static canary owner source
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -c 'import ast,pathlib;ast.parse(pathlib.Path("deploy/company_scope_static_host_apply_c13.py").read_text(encoding="utf-8"))'
+      - name: Create and immediately remove isolated canary (no database or PHP changes)
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="${RUNNER_TEMP}/zm-c13-static-canary-${GITHUB_RUN_ID}"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          sshcmd=(ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125)
+          created=0
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if [ "$created" = 1 ]; then
+              "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B - canary_remove' < deploy/company_scope_static_host_apply_c13.py || result=90
+            fi
+            rm -rf -- "$d"
+            exit "$result"
+          }
+          trap cleanup EXIT
+          "${sshcmd[@]}" 'PYTHONDONTWRITEBYTECODE=1 python3 -B - canary_create' < deploy/company_scope_static_host_apply_c13.py
+          created=1
+          status="$(curl -sS -k --max-time 20 --max-redirs 0 -o "$d/body" -w '%{http_code}' 'https://zomorodmelal.ir/services/scope/_c13_probe_20261114/' || true)"
+          # The TLS-verified second probe is authoritative. Never accept insecure-only visibility.
+          secure_status="$(curl -sS --proto '=https' --max-time 20 --max-redirs 0 -o "$d/secure-body" -w '%{http_code}' 'https://zomorodmelal.ir/services/scope/_c13_probe_20261114/' || true)"
+          echo "ZM_C13_CANARY_HTTP_TLS_VERIFIED=$secure_status"
+          if [ "$secure_status" = "200" ] && printf 'ZM_C13_STATIC_ROUTING_PROOF_20261114\n' | cmp -s - "$d/secure-body"; then
+            echo "ZM_C13_CANARY_PHYSICAL_WEB_ROUTE=verified"
+          else
+            echo "ZM_C13_CANARY_PHYSICAL_WEB_ROUTE=not_proven"
+            exit 17
+          fi
+          echo "ZM_C13_CANARY_DATA_STORAGE=none"

@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from .service_sales_controls import list_service_cards
+from .service_intake_routing import service_contact_card
 
 def services(request):
     items = [
@@ -12,4 +13,10 @@ def services(request):
     if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
         from .mojplaywin_views import home
         return home(request)
-    return render(request, "core/services.html", {"items": items, "service_offers": list_service_cards()})
+    offers = [
+        {**offer, **service_contact_card(offer["service_code"])}
+        for offer in list_service_cards()
+    ]
+    return render(request, "core/services.html", {
+        "items": items, "service_offers": offers,
+    })

@@ -20,6 +20,7 @@ from core.academy_views import (
 )
 from core.services_views import services
 from core.service_lead_views import service_inquiry
+from core.service_scope_pages import service_scope_page
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.faremah_views import faremah_home
@@ -99,6 +100,7 @@ urlpatterns = [
     path("education/course/<slug:slug>/certificate/issue/", education_issue_certificate, name="education_issue_certificate_legacy"),
     path("academy/", academy, name="academy"),
     path("services/", services, name="services"),
+    path("services/scope/<slug:service_code>/", service_scope_page, name="service_scope_page"),
     path("services/request/<slug:service_code>/", service_inquiry, name="service_inquiry"),
     path("staff/command-center/", include("command_center.urls")),
     path("staff/", staff_dashboard, name="staff_management"),
