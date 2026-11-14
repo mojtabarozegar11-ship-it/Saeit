@@ -59,6 +59,8 @@ def run_one(store, post_id, *, env=None, transport=None, execute=False, actor="p
     account = store.account(item["account_id"])
     if not account or not account["verified"] or account["brand"] != item["brand"]:
         raise Blocked("Official account ownership not verified")
+    from .owner_policy import assert_destination_allowed
+    assert_destination_allowed(account)  # Before accessing credentials or claiming a post.
     token = credential_for(account,env=env)
     if len(token) < 6:
         raise Blocked("No private token configured for exact account")
