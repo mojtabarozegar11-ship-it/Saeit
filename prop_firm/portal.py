@@ -13,6 +13,7 @@ from decimal import Decimal
 from .models import PropAccount, PropEquityObservation, PropExecution, PropSocialEvidence
 from .social_policy import check_social_posting, LEGACY_CONTRACT_VERSION, NEW_CONTRACT_VERSION
 from .trade_count import count_challenge_trades
+from .plans import plan_for_code
 from .rules import (
     POLICY, LEVELS, RiskDecision, assess_risk, assess_challenge, assess_promotion,
 )
@@ -119,10 +120,19 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
     purchase = account.challenge_enrollment if account.kind in (
         PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO
     ) else None
+    selected_plan = None
+    if purchase is not None:
+        try:
+            selected_plan = plan_for_code(purchase.plan_code)
+        except ValueError:
+            selected_plan = None
     if (account.policy_version == NEW_CONTRACT_VERSION and account.kind in (
             PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO)):
         purchase_window_valid = bool(
-            purchase and purchase.trader_id == account.trader_id
+            purchase and selected_plan
+            and account.starting_capital_usd == selected_plan.starting_capital_usd
+            and account.tier_index == selected_plan.starting_tier_index
+            and purchase.trader_id == account.trader_id
             and purchase.settlement_verified is True
             and purchase.terms_version == NEW_CONTRACT_VERSION
         )
@@ -236,6 +246,8 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         "challenge_trade_count": challenge_trade_count,
         "purchase_window_valid": purchase_window_valid,
         "challenge_purchase": purchase,
+        "selected_plan": selected_plan,
+        "plan_code": selected_plan.code if selected_plan else None,
         "promotion_period": promotion_period,
         "promotion_statistics": promotion_stats,
         "verified": fully_verified,
