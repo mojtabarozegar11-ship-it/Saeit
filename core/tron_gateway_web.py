@@ -286,6 +286,11 @@ def _record_paid(invoice_id, proof):
                 or invoice.payment_intent.amount != invoice.order.total
                 or invoice.payment_intent.currency != invoice.order.currency):
             return False
+        # Old MojPlayWin's independent walletless provider may already have
+        # attributed the same on-chain hash. Never knowingly credit twice.
+        if (PaymentWebhookEvent.objects.filter(event_id=proof["txid"]).exists()
+                or LedgerEntry.objects.filter(reference__endswith=":" + proof["txid"]).exists()):
+            return False
         event = PaymentWebhookEvent.objects.create(
             provider=PROVIDER, event_id=proof["txid"], event_type="tron_finalized",
             payment_intent=invoice.payment_intent, payload_hash=proof["proof_digest"],
@@ -385,3 +390,28 @@ def recovery_link(request, token):
     invoices = list(TronGatewayInvoice.objects.filter(
         source_host=host, buyer_email_sha=payload["e"]).order_by("-created_at")[:20])
     return _page(request, _context(None, "recovery_list", language, invoices=invoices))
+
+
+@never_cache
+@require_http_methods(["GET"])
+def catalog(request):
+    """Ready-to-sell products only; no hardcoded fake SKU inventory."""
+    host, language = _host(request)
+    try:
+        page = int(request.GET.get("page", "1"))
+    except (ValueError, TypeError):
+        raise Http404("Invalid page")
+    if not 1 <= page <= 100:
+        raise Http404("Invalid page")
+    # Small, bounded server-side slice; no direct HTML rendering of metadata.
+    start = (page - 1) * 50
+    products = []
+    for product in Product.objects.filter(active=True).order_by("id")[start:start + 50]:
+        try:
+            p, sun, _ = _read_product(product.pk, language)
+            products.append((p, f"{Decimal(sun)/Decimal(1000000):.6f}"))
+        except Http404:
+            continue
+    return _page(request, _context(None, "catalog", language,
+                                    products=products, next_page=page + 1,
+                                    has_more=Product.objects.filter(active=True).count() > start + 50))
