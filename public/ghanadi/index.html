@@ -122,6 +122,8 @@ document.getElementById('inquiryPanel').addEventListener('submit',async event=>{
   const panel=event.currentTarget;
   const button=document.getElementById('submitInquiry');
   const status=document.getElementById('inquiryStatus');
+  // Prevent duplicate leads while obtaining a one-time official CSRF token.
+  if(button.disabled || !panel.reportValidity())return;
   const text=document.getElementById('inquiryText').value;
   if(!text||text.length>2500){
     status.textContent='فهرست انتخاب‌ها خالی یا بیش از حد طولانی است؛ دوباره آن را آماده کنید.';
