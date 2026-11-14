@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from core.company_inquiry_models import CompanyInquiry
+from command_center.models import WorkItem
 from core.service_quote_draft import (
     BOT_ID, DRAFT_MARKER, KIND_BY_CODE, SOURCE_MARKER, preview_candidates,
 )
@@ -24,6 +25,7 @@ def service_proposal_funnel_snapshot():
     source = CompanyInquiry.objects.filter(
         internal_note__startswith=SOURCE_MARKER
     )
+    desk = WorkItem.objects.filter(source_type="company_service_proposal")
     scoped = {
         "bot": BOT_ID,
         "read_only": True,
@@ -37,6 +39,16 @@ def service_proposal_funnel_snapshot():
         "closed": source.filter(status="closed").count(),
         "draft_prepared_total": source.filter(
             internal_note__contains=DRAFT_MARKER
+        ).count(),
+        # Real internal execution handoff, not an accepted external order.
+        "workitems_total": desk.count(),
+        "workitems_open": desk.filter(status="open").count(),
+        "workitems_in_progress": desk.filter(status="in_progress").count(),
+        "workitems_blocked": desk.filter(status="blocked").count(),
+        "workitems_done": desk.filter(status="done").count(),
+        "workitems_due_now": desk.filter(
+            status__in=("open", "in_progress", "blocked"),
+            due_at__lt=now,
         ).count(),
         "awaiting_initial_review_over_24h": source.filter(
             status="new", created_at__lt=now - timedelta(hours=24)
@@ -102,6 +114,7 @@ def service_proposal_funnel_dashboard(request):
         {
             "funnel": snapshot,
             "admin_leads_url": reverse("admin:core_companyinquiry_changelist"),
+            "admin_workitems_url": reverse("admin:command_center_workitem_changelist"),
         },
     )
     response["Cache-Control"] = "no-store, private, max-age=0"
