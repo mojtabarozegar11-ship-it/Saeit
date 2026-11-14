@@ -20,6 +20,37 @@ IMPORT='from services.mpw_trx_guest_commerce import patch_{kind} as _mpw_patch_{
 
 def digest(b): return hashlib.sha256(b).hexdigest()
 def fail(s): raise RuntimeError('MPW_GUEST_RELEASE_ABORT: '+s)
+
+
+def has_buyer_email_form(markup):
+ """Require a browser-visible contractual email input in a POST invoice form."""
+ from html.parser import HTMLParser
+
+ class EmailFormParser(HTMLParser):
+  def __init__(self):
+   super().__init__()
+   self.forms = []
+   self.found = False
+
+  def handle_starttag(self, tag, attrs):
+   attributes = dict(attrs)
+   if tag == 'form':
+    self.forms.append(str(attributes.get('method') or '').lower() == 'post')
+   elif tag == 'input' and self.forms and self.forms[-1]:
+    if (attributes.get('name') == 'email'
+        and str(attributes.get('type') or '').lower() == 'email'
+        and 'required' in attributes
+        and str(attributes.get('disabled') or '') != 'disabled'):
+     self.found = True
+
+  def handle_endtag(self, tag):
+   if tag == 'form' and self.forms:
+    self.forms.pop()
+
+ parser = EmailFormParser()
+ parser.feed(markup)
+ parser.close()
+ return parser.found
 def guard():
  if pwd.getpwuid(os.geteuid()).pw_name!='zomorod2': fail('WRONG_ACCOUNT')
  for p in (APP,PUBLIC):
@@ -195,6 +226,7 @@ def verify():
   if response.status_code!=200: fail('ANONYMOUS_CHECKOUT_HTTP:'+str(pid)+':'+str(response.status_code))
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
+  if not has_buyer_email_form(body): fail('GUEST_EMAIL_POST_FORM_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
  try:
