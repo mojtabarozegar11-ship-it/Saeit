@@ -82,7 +82,7 @@ def _validate_metadata(metadata):
 
 
 def _open_private_root(root):
-    if type(root) not in (str, Path):
+    if not isinstance(root, (str, Path)):
         raise _Rejected("ROOT_NOT_CONFIGURED")
     p = Path(root)
     if (not p.is_absolute() or ".." in p.parts or not p.parts
@@ -208,7 +208,7 @@ def verify_private_asset_readonly(metadata, *, private_root=None) -> dict:
             asset_digest, size, first, _ = _read_verified_regular(
                 root_fd, f"{ref}.{fmt}", MAX_ASSET_BYTES,
             )
-            if first[:5] != b"%PDF-" if fmt == "pdf" else first[:4] != b"PK\x03\x04":
+            if (fmt == "pdf" and first[:5] != b"%PDF-") or (fmt != "pdf" and first[:4] != b"PK\x03\x04"):
                 raise _Rejected("ASSET_SIGNATURE_INVALID")
             if asset_digest != asset_sha:
                 raise _Rejected("ASSET_SHA256_MISMATCH")
