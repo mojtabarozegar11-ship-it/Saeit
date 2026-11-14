@@ -13,6 +13,7 @@ from core.service_lead_views import MAX_POST_BYTES, _request_size_allowed
 from core.service_sales_controls import SERVICE_CARDS
 
 
+@override_settings(DEBUG=True)
 class ServiceInquiryFlowTests(TestCase):
     def setUp(self):
         self.url = reverse("service_inquiry", kwargs={"service_code": "AGR-01"})
