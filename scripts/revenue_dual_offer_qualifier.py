@@ -8,6 +8,7 @@ No third-party dependencies or network access.
 import argparse
 import json
 from pathlib import Path
+from mojtaba_revenue_portfolio import CANONICAL_BOT
 
 OFFERS = {
     "website_checkout_repair": {
@@ -72,7 +73,7 @@ def qualify(data):
     # Every inquiry requires an individual scope/terms/payment-route approval.
     return {
         "schema": "mojtaba.bot.ai.service-intake.v1",
-        "canonical_bot": "mojtaba.bot.ai",
+        "canonical_bot": CANONICAL_BOT,
         "offer": offer,
         "package": package,
         "market": record["market"],
