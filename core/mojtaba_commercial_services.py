@@ -27,8 +27,10 @@ def exact(obj, keys):
 
 
 def dec(value, *, positive=False):
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        raise InvalidService("invalid numeric type")
+    # Floats have already lost exact decimal precision before conversion;
+    # prices, costs and physical quantities must be supplied as text or ints.
+    if isinstance(value, bool) or not isinstance(value, (int, str, Decimal)):
+        raise InvalidService("exact numeric string or integer required")
     try:
         result = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
