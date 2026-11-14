@@ -38,9 +38,23 @@ class MojPropCatalogTests(unittest.TestCase):
                 )
                 self.assertTrue(all(context["social"].values()))
                 self.assertEqual(context["social_platforms"], ("instagram", "facebook"))
-                self.assertEqual(context["social_daily_post_per_platform"], 1)
-        self.assertIn("Instagram", page_context("en")["social"]["body"])
-        self.assertIn("اینستاگرام", page_context("fa")["social"]["body"])
+                self.assertEqual(context["social_required_post_count"], 1)
+        self.assertIn("Instagram OR Facebook", page_context("en")["social"]["body"])
+        self.assertIn("اینستاگرام یا فیسبوک", page_context("fa")["social"]["body"])
+
+    def test_one_post_not_two_or_daily_across_all_locales(self):
+        for code in SUPPORTED_CODES:
+            with self.subTest(code=code):
+                context = page_context(code)
+                self.assertEqual(context["social_required_post_count"], 1)
+                self.assertIn("28", context["social"]["body"] if code != "fa"
+                              else context["social"]["body"].replace("۲۸", "28"))
+        page = (Path(__file__).resolve().parents[1] /
+                "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf8")
+        self.assertIn("Instagram OR Facebook", page)
+        self.assertIn("social_required_post_count", page)
+        self.assertNotIn("VERIFIED TRADING DAY", page)
+        self.assertNotIn("social_daily_post_per_platform", page)
 
     def test_urls_and_breadcrumb_identity(self):
         self.assertEqual(page_context()["canonical_url"], "/moj-prop/")
