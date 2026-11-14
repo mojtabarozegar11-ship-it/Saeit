@@ -1,0 +1,30 @@
+name: MOJ revenue consolidation verification
+on:
+  push:
+    branches:
+      - fix/moj-revenue-unified-20261115
+permissions:
+  contents: read
+jobs:
+  evidence-and-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "branch-ci-nonproduction-secret-only"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Validate Django and migrations
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+      - name: Target all revenue consolidation regressions
+        run: |
+          pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py
