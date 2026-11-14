@@ -7,7 +7,7 @@ FIELDS = ("enterprise_id","enterprise_type","period_start","period_end","currenc
 NUMBERS = FIELDS[6:]
 
 def validate_csv(text):
-    reader = csv.DictReader(io.StringIO(text))
+    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
     if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)) or set(reader.fieldnames) != set(FIELDS):
         raise ValueError("invalid CSV header")
     result = []
