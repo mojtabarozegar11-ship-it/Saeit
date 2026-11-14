@@ -149,7 +149,13 @@ class DirectFirstTransportTests(unittest.TestCase):
     def test_22_direct_auth_failure_can_retry_pinned_vps(self):
         with patch.dict(os.environ, {"RUNNER_TEMP": str(self.home), "HOST_KEY": "mock",
                                      "VPS_KEY": "mock"}):
-            with self.mock_successful_keys(), patch.object(m, "_scan", return_value=True) as scans:
+            def scan_with_direct_known(*args, **kwargs):
+                if args[0] == m.CPANEL_HOST and not kwargs.get("via"):
+                    m._write_private(self.home / "mpw-sales-audit-ssh" / "host.known",
+                                     "[host]:1396 ssh-ed25519 fake-for-test\\n")
+                return True
+            with self.mock_successful_keys(), patch.object(m, "_scan",
+                    side_effect=scan_with_direct_known) as scans:
                 with patch.object(m, "_cpanel_identity", side_effect=[False, True]):
                     self.assertEqual(m.main(), 0)
                     self.assertEqual(scans.call_count, 3)
