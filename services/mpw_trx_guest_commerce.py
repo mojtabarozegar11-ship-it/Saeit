@@ -51,10 +51,25 @@ def _read_user(request):
         return None
 
 
+def _assert_usable_guest_cache(settings):
+    """Fail closed when the configured default cache cannot enforce a rate cap.
+
+    Django's DummyCache.add() reports success without storing a counter, so
+    allowing that backend would silently permit unlimited guest creation.
+    """
+    try:
+        backend = settings.CACHES["default"]["BACKEND"]
+    except (AttributeError, KeyError, TypeError) as exc:
+        raise Http404("Guest checkout rate cache is not configured") from exc
+    if not isinstance(backend, str) or not backend.strip() or backend.endswith(".DummyCache"):
+        raise Http404("Guest checkout rate cache is not operational")
+
+
 def _rate_limit(request):
     """Bound guest account creation; store only an HMAC-derived IP bucket."""
     from django.conf import settings
     from django.core.cache import cache
+    _assert_usable_guest_cache(settings)
     ip = request.META.get("REMOTE_ADDR", "")
     if not ip or len(ip) > 80:
         raise Http404
