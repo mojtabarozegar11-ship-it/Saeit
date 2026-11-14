@@ -86,13 +86,23 @@ class PropAccount(models.Model):
 
     def clean(self):
         super().clean()
+        if not isinstance(self.tier_index, int) or not 0 <= self.tier_index < len(LEVELS):
+            raise ValidationError({"tier_index": "Invalid capital tier"})
         if self.kind == self.Kind.FUNDED:
             if self.starting_capital_usd != LEVELS[self.tier_index]:
                 raise ValidationError({"starting_capital_usd": "Must match the funded tier"})
             if not self.reference:
                 raise ValidationError({"reference": "Broker reference required for funded accounts"})
-        elif self.starting_capital_usd != Decimal("100"):
-            raise ValidationError({"starting_capital_usd": "Simulation assessment uses a $100 baseline"})
+        else:
+            if self.tier_index != 0:
+                raise ValidationError({"tier_index": "Simulated evaluation has no funded tier"})
+            if self.starting_capital_usd != Decimal("100"):
+                raise ValidationError({"starting_capital_usd": "Simulation assessment uses a $100 baseline"})
+
+    def save(self, *args, **kwargs):
+        # The ORM save path must not bypass tier consistency.
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.kind} / {self.id}"
