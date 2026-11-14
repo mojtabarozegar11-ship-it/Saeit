@@ -26,7 +26,7 @@ MAX_BYTES = 240_000
 
 def _load(root, relative):
     """Bounded, regular, non-symlink app file. Never leaks its contents."""
-    if type(root) is not Path or root.is_symlink() or not root.is_dir():
+    if not isinstance(root, Path) or root.is_symlink() or not root.is_dir():
         return None
     path = root
     for element in Path(relative).parts:
