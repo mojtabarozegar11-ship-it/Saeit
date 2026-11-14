@@ -62,6 +62,10 @@ def commercialization_board_api(request):
         "shared_database": {
             "active_products_all_brands": Product.objects.filter(active=True).count(),
             "orders_all_brands": Order.objects.count(),
+            "orders_with_paid_status_not_chain_proof": Order.objects.filter(
+                status="paid"
+            ).count(),
+            "settled_trx_revenue_independently_verified": False,
             "payment_intents_all_brands": PaymentIntent.objects.count(),
             "provider_selected_intents_all_brands": PaymentIntent.objects.exclude(
                 provider="not_configured").count(),
@@ -106,6 +110,7 @@ def commercialization_board_api(request):
     }
     data["warnings"] = [
         "An intent, webhook, or analytics event is not independently reconciled cash.",
+        "A paid status flag in shared order rows is NOT a verified TRON settlement, receipt or collected revenue.",
         "The external MojPlayWin TRX runtime may not be represented in this Django database.",
         "Do not accept payments until pricing, rights, confirmed chain settlement and delivery are verified.",
     ]
