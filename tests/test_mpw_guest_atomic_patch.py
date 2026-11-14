@@ -37,6 +37,25 @@ def _namespace():
 
 
 class GuestAtomicPatchTests(SimpleTestCase):
+    def test_guest_cookie_is_sent_on_purchase_recovery_route(self):
+        """A checkout cookie must also reach /purchases/ in the same browser."""
+        from http.cookies import SimpleCookie
+        from services.mpw_trx_guest_commerce import _install_cookie, COOKIE, COOKIE_PATH
+        response = _install_cookie(HttpResponse("ok"), "signed-owner-receipt")
+        cookie = response.cookies[COOKIE]
+        self.assertEqual(COOKIE_PATH, "/")
+        self.assertEqual(cookie["path"], "/")
+        self.assertTrue(cookie["secure"])
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        self.assertEqual(cookie.value, "signed-owner-receipt")
+
+    def test_guest_recovery_cookie_remains_noncacheable(self):
+        from services.mpw_trx_guest_commerce import _install_cookie
+        response = _install_cookie(HttpResponse("ok"), "signed-owner-receipt")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("Cookie", response["Vary"])
+
     def test_missing_last_handler_leaves_all_routes_untouched(self):
         namespace = _namespace()
         namespace.pop("_download_paid")
