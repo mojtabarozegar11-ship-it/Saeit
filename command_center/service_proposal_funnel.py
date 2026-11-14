@@ -17,6 +17,7 @@ from core.service_quote_draft import (
     BOT_ID, DRAFT_MARKER, KIND_BY_CODE, SOURCE_MARKER, preview_candidates,
 )
 from core.service_intake_routing import service_intake_source_snapshot
+from core.service_lead_handoff import orphaned_handoff_snapshot
 
 
 def service_proposal_funnel_snapshot():
@@ -77,6 +78,13 @@ def service_proposal_funnel_snapshot():
                 internal_note__contains=DRAFT_MARKER
             ).count(),
         }
+    stranded = orphaned_handoff_snapshot()
+    scoped["stranded_desk_handoff"] = {
+        "verified_count": stranded["verified_candidate_count"],
+        "inspected": stranded["inspected"],
+        "uninspected": stranded["uninspected"],
+        "scan_complete": stranded["scan_complete"],
+    }
     preview = preview_candidates(limit=20)
     scoped["candidate_scan"] = {
         "inspected": preview["candidate_count"],
