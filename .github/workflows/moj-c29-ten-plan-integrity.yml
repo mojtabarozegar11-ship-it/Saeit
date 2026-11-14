@@ -1,0 +1,64 @@
+name: MOJ C29 ten-plan phase chronology, fifty closed trades, bot allowance
+on:
+  push:
+    branches:
+      - fix/moj-revenue-c29-integrated-prop-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-c29-prop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  current-ten-plan-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source and preserve ten-plan/50-closed-trade rules
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          for f in ('prop_firm/portal.py','tests/test_moj_c29_ten_plan_stage_causality.py'):
+              ast.parse(Path(f).read_text(),filename=f)
+          rules=Path('prop_firm/rules.py').read_text()
+          plans=Path('prop_firm/plans.py').read_text()
+          source=Path('prop_firm/portal.py').read_text()
+          assert 'min_closed_trades_per_challenge: int = 50' in rules
+          assert 'trader_bots_allowed: bool = True' in rules
+          assert 'ALL_PLANS_SELLABLE = False' in plans
+          assert 'prior = completed_paid_phase_one_before_stage_two(account)' in source
+          assert 'social_posts_verified=' in source
+          print('MOJ_C29_TEN_PLAN_TERMS_PRESERVED=PASS')
+          PY
+      - name: Install existing requirements
+        run: python3 -m pip install -r requirements.txt
+      - name: Prepare Django static manifest for dashboard templates
+        env:
+          SECRET_KEY: moj-c29-test-not-production
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: python3 manage.py collectstatic --noinput
+      - name: Run real ten-plan Django and phase progression regressions
+        env:
+          SECRET_KEY: moj-c29-test-not-production
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: |
+          python3 manage.py test \
+            tests.test_moj_c29_ten_plan_stage_causality \
+            tests.test_moj_prop_ten_plans \
+            tests.test_moj_prop_ten_plan_commerce \
+            tests.test_moj_prop_plan_enrollment \
+            tests.test_moj_prop_fifty_trades \
+            tests.test_moj_prop_plan_qualification \
+            tests.test_moj_prop_social_policy \
+            tests.test_moj_prop_social_review \
+            tests.test_moj_prop_dashboard \
+            tests.test_prop_firm_policy --verbosity 1
+          echo 'MOJ_C29_TEN_PLAN_FIFTY_TRADES_DJANGO=PASS'

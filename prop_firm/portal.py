@@ -6,6 +6,7 @@ breaches; missing session-open data and incomplete reconciliation fail closed.
 from collections import defaultdict
 from datetime import timedelta
 from datetime import timezone as utc_timezone
+from django.db.models import F
 from django.utils import timezone as django_timezone
 from .periods import most_recent_completed_period, period_statistics
 from decimal import Decimal
@@ -23,6 +24,50 @@ ZERO = Decimal("0")
 
 def _day(value):
     return value.astimezone(utc_timezone.utc).date()
+
+
+def completed_paid_phase_one_before_stage_two(account):
+    """Prevent retroactive, cross-plan and cross-purchase phase-two approval.
+
+    The historical v1.1 rule also needs an earlier reconciled completed stage,
+    never merely another account whose status currently reads PASSED.
+    """
+    if (not isinstance(account, PropAccount)
+            or account.kind != PropAccount.Kind.PHASE_TWO
+            or not account.pk or account.opened_at is None):
+        return False
+    q = account.trader.accounts.filter(
+        kind=PropAccount.Kind.PHASE_ONE,
+        status=PropAccount.Status.PASSED,
+        reconciled_by_operator=True,
+        policy_version=account.policy_version,
+        opened_at__isnull=False,
+        closed_at__isnull=False,
+        opened_at__lte=F("closed_at"),
+        closed_at__lte=account.opened_at,
+    ).exclude(pk=account.pk)
+    if account.policy_version == NEW_CONTRACT_VERSION:
+        purchase = account.challenge_enrollment
+        if (purchase is None or purchase.trader_id != account.trader_id
+                or purchase.settlement_verified is not True
+                or purchase.terms_version != NEW_CONTRACT_VERSION):
+            return False
+        try:
+            start = purchase.confirmed_at
+            end = start + timedelta(days=POLICY.completion_deadline_days)
+        except (ValueError, TypeError, OverflowError):
+            return False
+        if (start.tzinfo is None or start.utcoffset() is None
+                or not start <= account.opened_at < end):
+            return False
+        q = q.filter(
+            challenge_enrollment=purchase,
+            starting_capital_usd=account.starting_capital_usd,
+            tier_index=account.tier_index,
+            opened_at__gte=start,
+            closed_at__lt=end,
+        )
+    return q.exists()
 
 
 def account_projection(account, *, as_of=None, evidence_cutoff=None):
@@ -139,6 +184,11 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         if purchase_window_valid:
             start = purchase.confirmed_at
             end = start + timedelta(days=POLICY.completion_deadline_days)
+            # Both stages must open and close inside this exact paid window.
+            # A current PASSED flag cannot retrospectively extend the contract.
+            if (account.opened_at is None or not start <= account.opened_at < end
+                    or (account.closed_at is not None and account.closed_at > end)):
+                purchase_window_valid = False
             # Every broker event must be inside the four-week TRADING window.
             # Invalid events cannot be silently excluded to improve results.
             if any(not start <= event.closed_at < end for event in executions):
@@ -187,15 +237,7 @@ def account_projection(account, *, as_of=None, evidence_cutoff=None):
         # by both simulated phases. An absent purchase never creates readiness.
     if risk is not None:
         if account.kind in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-            prior = account.trader.accounts.filter(
-                kind=PropAccount.Kind.PHASE_ONE,
-                status=PropAccount.Status.PASSED,
-                reconciled_by_operator=True,
-                policy_version=account.policy_version,
-            )
-            if account.policy_version == NEW_CONTRACT_VERSION:
-                prior = prior.filter(challenge_enrollment=purchase)
-            prior = prior.exclude(pk=account.pk).exists()
+            prior = completed_paid_phase_one_before_stage_two(account)
             assessment = assess_challenge(
                 phase=1 if account.kind == PropAccount.Kind.PHASE_ONE else 2,
                 account_capital=account.starting_capital_usd,
