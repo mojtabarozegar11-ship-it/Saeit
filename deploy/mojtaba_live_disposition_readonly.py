@@ -143,7 +143,12 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
     hit_counts = Counter()
     cron = snapshot.get("cron", {})
     if cron.get("state") == "observed":
-        for row in cron.get("entries", []):
+        entries = cron.get("entries", [])
+        if not isinstance(entries, list):
+            raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
+        for row in entries:
+            if not isinstance(row, dict) or not isinstance(row.get("known_route_flags", []), list):
+                raise ValueError("TOPOLOGY_CRON_ENTRIES_INVALID")
             for tag in set(row.get("known_route_flags", [])):
                 if tag in allowed:
                     hit_counts[("user_cron", tag)] += 1
