@@ -313,7 +313,7 @@ class PropChallengeEnrollment(models.Model):
 
 
 class PropSocialEvidence(models.Model):
-    """Exactly two original posts per verified purchase: one per platform."""
+    """Exactly one original Instagram OR Facebook post per verified purchase."""
     class Platform(models.TextChoices):
         INSTAGRAM = "instagram", "Instagram"
         FACEBOOK = "facebook", "Facebook"
@@ -354,8 +354,8 @@ class PropSocialEvidence(models.Model):
         ordering = ("enrollment_id", "platform")
         constraints = [
             models.UniqueConstraint(
-                fields=("enrollment", "platform"),
-                name="mp_social_enrollment_platform_unique",
+                fields=("enrollment",),
+                name="mp_social_enrollment_single_post",
             ),
             models.CheckConstraint(
                 condition=~Q(review_status="verified") | (
