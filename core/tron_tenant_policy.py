@@ -111,3 +111,41 @@ def signed_routing_context(*, decision, product_sku, key):
         "is_paid": False,
         "checkout_enabled": False,
     }
+
+
+def verify_signed_routing_context(*, context, key, registry, allowed_anchors=None):
+    """Validate a routing assertion against CURRENT protected merchant registry.
+
+    This verifier is for internal routing only. It does not authorize checkout,
+    create an invoice, prove an on-chain transfer, or provide replay prevention.
+    Never use an HTTP-supplied registry or HMAC key.
+    """
+    if not isinstance(context, dict) or set(context) != {
+        "domain", "brand", "tenant_id", "product_sku", "network", "asset",
+        "routing_digest", "is_invoice", "is_paid", "checkout_enabled",
+    }:
+        return False
+    # Reject edited or forged paid flags, including 0 and other false-like data.
+    if (context["is_invoice"] is not False or context["is_paid"] is not False
+            or context["checkout_enabled"] is not False):
+        return False
+    if (context["network"] != CANONICAL_CHAIN
+            or context["asset"] != CANONICAL_ASSET
+            or not isinstance(context["routing_digest"], str)
+            or len(context["routing_digest"]) != 64):
+        return False
+    try:
+        decision = registered_scope(
+            host=context["domain"], brand=context["brand"],
+            registry=registry, allowed_anchors=allowed_anchors,
+        )
+        if (decision.eligible_for_checkout_review is not True
+                or decision.tenant_id != context["tenant_id"]
+                or decision.host != context["domain"]):
+            return False
+        expected = signed_routing_context(
+            decision=decision, product_sku=context["product_sku"], key=key,
+        )
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return hmac.compare_digest(context["routing_digest"], expected["routing_digest"])
