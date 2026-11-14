@@ -123,6 +123,24 @@
        state.position=strip.scrollLeft;
      });
    }
+   // Recalculate the repeating span after viewport/font/layout changes.
+   // A stale span can make the rail jump or expose an empty seam on mobile rotation.
+   const refreshPeriod=()=>{
+     const measured=periodOnce();
+     if(!(measured>50))return;
+     const oldPeriod=state.period;
+     if(Math.abs(measured-oldPeriod)<1)return;
+     const phase=oldPeriod>0?((Math.abs(strip.scrollLeft)%oldPeriod)/oldPeriod):0;
+     state.period=measured;
+     strip.scrollLeft=-phase*measured;
+     state.position=strip.scrollLeft;
+     state.delayUntil=performance.now()+400;
+   };
+   if('ResizeObserver' in window){
+     const resizeObserver=new ResizeObserver(refreshPeriod);
+     resizeObserver.observe(strip);
+     originals.forEach(item=>resizeObserver.observe(item));
+   }else window.addEventListener('resize',refreshPeriod,{passive:true});
    rotators.push(state);
  }
  if('IntersectionObserver' in window){
