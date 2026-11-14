@@ -108,6 +108,11 @@ class EconomicMasterAgent:
             },
         }
 
+    def inspect_lead_workqueue_readonly(self, *, status="all", kind="all", page=1):
+        """Owner-scoped data contract: use only behind authenticated staff context."""
+        from command_center.lead_workqueue import lead_workqueue_snapshot
+        return lead_workqueue_snapshot(status=status, kind=kind, page=page)
+
     def inspect_revenue_operations_readonly(self, *, days=30):
         """Aggregate existing CRM/funnel records; never imply settled revenue."""
         from command_center.revenue_operations import build_operations_snapshot

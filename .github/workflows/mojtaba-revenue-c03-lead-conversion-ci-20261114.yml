@@ -1,0 +1,50 @@
+name: Mojtaba bot service lead conversion cycle C03 final with CLI
+on:
+  push:
+    branches:
+      - feature/mojtaba-bot-service-lead-conversion-c03-20261114
+    paths:
+      - .github/workflows/mojtaba-revenue-c03-lead-conversion-ci-20261114.yml
+permissions:
+  contents: read
+jobs:
+  verify-private-crm-public-lead:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      SECRET_KEY: local-isolated-ci-key-no-live-access
+      DEBUG: 'True'
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DATABASE_URL: sqlite:///test-c03-isolated.sqlite3
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing pinned project dependency ranges
+        run: python -m pip install -r requirements.txt
+      - name: Compile all changed application and test files
+        run: |
+          python -m py_compile core/service_lead_views.py core/service_sales_controls.py core/services_views.py
+          python -m py_compile command_center/lead_workqueue.py core/economic_master_agent.py
+          python -m py_compile config/urls.py command_center/urls.py core/admin.py
+          python -m py_compile core/tests/test_service_lead_intake_c03_20261114.py
+          python -m py_compile command_center/tests/test_lead_workqueue_c03_20261114.py
+          python -m py_compile core/management/commands/mojtaba_lead_queue_readonly.py core/management/commands/mojtaba_offer_catalog_readonly.py
+          python -m py_compile command_center/tests/test_lead_cli_c03_20261114.py
+      - name: Validate Django routes and app
+        run: python manage.py check
+      - name: Confirm prior revenue arithmetic and service gate regressions
+        run: |
+          python -m unittest discover -s core/tests -p 'test_revenue_unit_economics_20261114.py' -q
+          python -m unittest discover -s core/tests -p 'test_service_sales_controls_20261114.py' -q
+      - name: End-to-end CRM and lead consent tests on isolated Django SQLite
+        run: |
+          python -m pytest -q --disable-warnings --maxfail=1 \
+            command_center/tests/test_revenue_operations_20261114.py \
+            core/tests/test_service_lead_intake_c03_20261114.py \
+            command_center/tests/test_lead_workqueue_c03_20261114.py \
+            command_center/tests/test_lead_cli_c03_20261114.py
