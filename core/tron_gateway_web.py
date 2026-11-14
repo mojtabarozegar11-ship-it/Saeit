@@ -186,13 +186,19 @@ def _new_invoice(email, host, language, product_id):
         # Globally unique amount at this one receiver, across ALL historical
         # invoices; never recycle a quote for a later payment.
         for _ in range(48):
+            amount_sun = base_sun + 1 + secrets.randbelow(10000)
+            # Legacy walletless invoices reserve this receiver+SUN under an
+            # older global idempotency fingerprint. Reuse would be unsafe.
+            legacy_key = "wltrx1:" + hashlib.sha256(MAINNET_RECEIVER.encode("ascii")).hexdigest() + ":" + str(amount_sun)
+            if PaymentIntent.objects.filter(idempotency_key=legacy_key).exists():
+                continue
             try:
                 with transaction.atomic():
                     invoice = TronGatewayInvoice.objects.create(
                         order=order, payment_intent=intent, buyer_email=email,
                         source_host=host, language=language,
                         buyer_email_sha=_email_key(email), receiver=MAINNET_RECEIVER,
-                        amount_sun=base_sun + 1 + secrets.randbelow(10000),
+                        amount_sun=amount_sun,
                         issued_ms=now_ms, expires_ms=now_ms + LINK_TTL * 1000,
                         claim_sha256=claim_sha, quote_fingerprint=fingerprint)
                 break
