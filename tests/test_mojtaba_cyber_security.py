@@ -152,6 +152,20 @@ class InternalCyberModuleTests(unittest.TestCase):
         self.assertEqual(report["mode"], "offline_evidence")
 
 
+    def test_finding_identifier_cannot_expose_contact_or_secret(self):
+        for raw in ("user@example.com", "Authorization: Bearer secret",
+                    "<script>alert(1)</script>", "first\\nsecond", "", "f" * 101):
+            with self.subTest(raw=raw):
+                row = {**evidence()["findings"][0], "finding_id": raw}
+                with self.assertRaisesRegex(CyberModuleError, "FINDING_ID_INVALID"):
+                    self.run_review(data=evidence(findings=[row]))
+
+    def test_safe_uuid_style_finding_identifier_remains_supported(self):
+        row = {**evidence()["findings"][0],
+               "finding_id": "f_0a1b2c3d-1234-5678-abcd-example"}
+        report = self.run_review(data=evidence(findings=[row]))
+        self.assertEqual(report["findings"][0]["finding_id"], row["finding_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

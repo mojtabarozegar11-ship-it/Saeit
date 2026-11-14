@@ -188,6 +188,30 @@ class IncidentResponseTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 64)
 
+    def test_backup_tags_are_tenant_isolated_even_for_same_engagement(self):
+        original = self.plan()["backup_assessments"][0]["backup_tag"]
+        other = self.plan(
+            incident(tenant_id="tenant-2"),
+            grant(tenant_id="tenant-2"),
+        )["backup_assessments"][0]["backup_tag"]
+        self.assertNotEqual(original, other)
+
+    def test_backup_tag_framing_prevents_separator_collision(self):
+        left = self.plan(
+            incident(tenant_id="tenant|x", engagement_id="case"),
+            grant(tenant_id="tenant|x", engagement_id="case"),
+        )["backup_assessments"][0]["backup_tag"]
+        right = self.plan(
+            incident(tenant_id="tenant", engagement_id="x|case"),
+            grant(tenant_id="tenant", engagement_id="x|case"),
+        )["backup_assessments"][0]["backup_tag"]
+        self.assertNotEqual(left, right)
+
+    def test_backup_tag_not_plain_dictionary_hash(self):
+        tag = self.plan()["backup_assessments"][0]["backup_tag"]
+        unsalted = hashlib.sha256(b"engagement-1|b-1").hexdigest()[:16]
+        self.assertNotEqual(tag, unsalted)
+
 
 if __name__ == "__main__":
     unittest.main()

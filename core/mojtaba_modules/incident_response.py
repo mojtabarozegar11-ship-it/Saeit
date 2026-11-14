@@ -7,6 +7,7 @@ erase evidence, or authorize counterattacks. A plan is not an executed action.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -150,8 +151,15 @@ def plan_incident_response(*, engagement: dict, incident: dict,
         if captured > clock or captured > _timestamp(scope["expires_at"]):
             raise CyberModuleError("BACKUP_TIMESTAMP_INVALID")
         # Incoming backup attestations are never independent proof of restore health.
-        recovery.append({"backup_tag": hashlib.sha256(
-            (scope["engagement_id"] + "|" + backup_id).encode("utf-8")
+        # A plain SHA256 of a low-entropy backup id permits dictionary
+        # recovery and cross-tenant linkage. The HMAC scope is unambiguous,
+        # customer-isolated and uses the trusted verifier key, never user input.
+        private_context = json.dumps(
+            [scope["tenant_id"], scope["engagement_id"], backup_id],
+            ensure_ascii=False, separators=(",", ":"),
+        ).encode("utf-8")
+        recovery.append({"backup_tag": hmac.new(
+            verify_key, private_context, hashlib.sha256,
         ).hexdigest()[:16], "integrity_claim": integrity,
             "immutable_claim": immutable, "captured_at": captured.isoformat(),
             "digest_present": True, "restore_test_verified": False})

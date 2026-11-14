@@ -16,6 +16,7 @@ MODULE_ID = "cyber_security"
 MANIFEST_SCHEMA = "mojtaba.bot.ai.cyber.engagement.v1"
 EVIDENCE_SCHEMA = "mojtaba.bot.ai.cyber.evidence.v1"
 HOST_RE = re.compile(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+FINDING_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
 REDACTIONS = (
     re.compile(r"(?i)(authorization\s*:\s*bearer\s+)\S+"),
     re.compile(r"(?i)((?:password|secret|api[_-]?key|token)\s*[=:]\s*)\S+"),
@@ -140,7 +141,9 @@ def review_offline_evidence(*, engagement: dict, evidence: dict, verify_key: byt
             raise CyberModuleError("ASSET_OUT_OF_SCOPE")
         identifier = finding.get("finding_id")
         severity = finding.get("severity")
-        if not isinstance(identifier, str) or not 1 <= len(identifier) <= 100 or identifier in ids:
+        # Identifiers are echoed verbatim in reports: reject embedded
+        # addresses, credentials, control characters and markup.
+        if not isinstance(identifier, str) or not FINDING_ID_RE.fullmatch(identifier) or identifier in ids:
             raise CyberModuleError("FINDING_ID_INVALID")
         ids.add(identifier)
         if not isinstance(severity, str) or severity not in SEVERITIES:
