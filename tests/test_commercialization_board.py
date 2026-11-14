@@ -16,9 +16,18 @@ from core.mojplaywin_product_detail import PUBLIC_CATALOG
 
 
 class PureCommercializationBoardTests(SimpleTestCase):
-    def test_all_eight_business_lines_exist(self):
-        self.assertEqual(len(SECTORS), 8)
+    def test_all_ten_business_lines_exist(self):
+        self.assertEqual(len(SECTORS), 10)
         self.assertEqual(set(SECTORS), set(PRIORITY))
+
+    def test_owner_four_priorities_are_immutable(self):
+        self.assertEqual(
+            PRIORITY[:4],
+            ("moj_prop", "signal_subscriptions", "tron_gateway", "digital_books"),
+        )
+        self.assertEqual(len(SECTORS["signal_subscriptions"]), 7)
+        self.assertEqual(len(SECTORS["tron_gateway"]), 8)
+        self.assertEqual(sum(len(v) for v in SECTORS.values()), 57)
 
     def test_all_lines_are_blocked_without_evidence(self):
         result = build_board()
@@ -63,7 +72,7 @@ class PureCommercializationBoardTests(SimpleTestCase):
                 self.assertEqual(a.missing, ())
         result = build_board({n: {g: True for g in gs} for n, gs in SECTORS.items()})
         self.assertFalse(result["ready_for_live_payment"])
-        self.assertEqual(result["eligible_for_commercial_review"], 8)
+        self.assertEqual(result["eligible_for_commercial_review"], 10)
 
     def test_out_of_scope_flags_do_not_override_missing_required_fields(self):
         a = assess_sector("moj_prop", {"is_admin": True, "automatic_payment": True})
@@ -239,7 +248,7 @@ class CommercializationBoardApiTests(TestCase):
         response = self.client.get(reverse("command_center_commercialization_page"))
         self.assertNotEqual(response.status_code, 200)
 
-    def test_private_html_page_lists_eight_lines_without_enable_button(self):
+    def test_private_html_page_lists_ten_lines_without_enable_button(self):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("command_center_commercialization_page"))
         self.assertEqual(response.status_code, 200)
