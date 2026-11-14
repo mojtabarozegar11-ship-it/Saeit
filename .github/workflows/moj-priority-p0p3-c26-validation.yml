@@ -41,7 +41,7 @@ jobs:
           PY
       - name: Install existing Django project requirements
         run: python -m pip install -r requirements.txt
-      - name: Run 51 real Django regression cases
+      - name: Run 53 real Django regression cases
         env:
           SECRET_KEY: moj-ci-only-not-production
           DEBUG: 'False'
