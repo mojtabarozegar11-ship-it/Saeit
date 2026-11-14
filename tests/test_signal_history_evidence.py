@@ -119,6 +119,23 @@ class SignalEvidenceTests(unittest.TestCase):
         with self.assertRaises(SignalHistoryRejected):
             signed(naive)
 
+    def test_unbounded_price_exponents_rejected_before_decimal_rendering(self):
+        for amount in ("1e100000000", "0." + "1" * 100000, "９９９９", "1e-9000000"):
+            with self.subTest(size=len(amount)):
+                with self.assertRaisesRegex(SignalHistoryRejected, "invalid_signal_record"):
+                    signed(signal(entry=amount))
+
+    def test_eight_digit_fractional_prices_allowed_when_ordered(self):
+        point = signal(entry="0.00000120", stop_loss="0.00000119",
+                       take_profit="0.00000121")
+        self.assertEqual(
+            self.history([signed(point)]).event_count, 1,
+        )
+
+    def test_large_integer_price_rejected_without_fabricated_result(self):
+        with self.assertRaisesRegex(SignalHistoryRejected, "invalid_signal_record"):
+            signed(signal(entry="1" * 19))
+
     def test_cannot_hide_unknown_fields_in_authenticated_feed(self):
         record = {**signal(), "profit_guaranteed": True}
         with self.assertRaises(SignalHistoryRejected):
