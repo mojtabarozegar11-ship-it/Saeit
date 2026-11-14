@@ -142,3 +142,24 @@ body.mojplaywin-prop main#main-content{display:block;width:min(1560px,100%);max-
 .mp-desk[dir=rtl] .mp-desk-header h1,.mp-desk[dir=rtl] .mp-desk>section h2{font-family:Tahoma,Arial,sans-serif}
 @media(max-width:700px){.mp-desk-header{align-items:start;flex-direction:column;padding-top:40px}.mp-account-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.mp-account-metrics{grid-template-columns:1fr}.mp-account-header{flex-direction:column;align-items:start}.mp-desk-nav .mp-identity-copy strong{font-size:.78rem}}
+
+
+/* Ten genuine prelaunch plan variations, deliberately no buy controls */
+.mp-prop .mp-plan-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:13px}
+.mp-prop .mp-plan-card{background:linear-gradient(155deg,#1c2024,#0c0e11);
+ border:1px solid var(--mp-line);border-radius:16px;padding:17px 14px 19px;
+ min-width:0;display:flex;flex-direction:column;gap:6px}
+.mp-prop .mp-plan-card:first-child{border-color:var(--mp-gold);
+ box-shadow:inset 0 0 0 1px rgba(231,189,121,.19)}
+.mp-prop .mp-plan-top{display:flex;justify-content:space-between;align-items:center;
+ gap:7px;flex-wrap:wrap;color:var(--mp-gold);font-size:.8rem;font-weight:700}
+.mp-prop .mp-plan-code{font-size:.57rem;letter-spacing:.06em;color:var(--mp-muted)}
+.mp-prop .mp-plan-field{margin:5px 0 0;color:#bcb8b1;font-size:.74rem}
+.mp-prop .mp-plan-capital{color:#fff;font-size:clamp(1.12rem,2.1vw,1.7rem);line-height:1.3}
+.mp-prop .mp-plan-fee{font-size:1.12rem;color:var(--mp-gold)}
+.mp-prop .mp-plan-meta{margin:6px 0;color:#c4c8cb;font-size:.68rem;letter-spacing:.04em}
+.mp-prop .mp-plan-lock{margin-top:auto;padding-top:12px;
+ border-top:1px solid var(--mp-line);color:var(--mp-muted);font-size:.72rem}
+@media(max-width:1050px){.mp-prop .mp-plan-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:670px){.mp-prop .mp-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:375px){.mp-prop .mp-plan-grid{grid-template-columns:1fr}}
