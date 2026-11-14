@@ -19,6 +19,8 @@ from core.models import (
     LedgerEntry, PaymentWebhookEvent,
 )
 from core.mojplaywin_product_detail import PUBLIC_CATALOG
+from core.signal_commercial_catalog import catalog as signal_catalog
+from core.tron_rollout_inventory import inspect_rollout
 
 
 @staff_member_required
@@ -61,6 +63,27 @@ def commercialization_board_api(request):
             name: by_event.get(name, 0) for name, _ in CommerceFunnelEvent.EVENT_CHOICES
         },
         "funnel_window_days": 30,
+    }
+    signal_rows = signal_catalog()
+    rollout = inspect_rollout()
+    data["financial_commerce"] = {
+        "signals": {
+            "known_financial_brands": len({row.brand for row in signal_rows}),
+            "localization_contexts": len(signal_rows),
+            "live_subscriptions_verified": sum(
+                row.checkout_enabled is True for row in signal_rows
+            ),
+            "canonical_bot": "mojtaba.bot.ai",
+        },
+        "tron": {
+            "grounded_site_domains": rollout["known_canonical_site_domains"],
+            "isolated_logical_scopes": rollout["logical_payment_scopes_not_hosts"],
+            "invoice_created_by_this_api": False,
+            "live_gateway_verified_by_this_api": False,
+        },
+        "owner_priority_order": [
+            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+        ],
     }
     data["warnings"] = [
         "An intent, webhook, or analytics event is not independently reconciled cash.",
