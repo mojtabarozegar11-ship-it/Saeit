@@ -37,6 +37,22 @@ def _namespace():
 
 
 class GuestAtomicPatchTests(SimpleTestCase):
+    def test_guest_principal_is_not_derived_from_csrf_cookie(self):
+        from services.mpw_trx_guest_commerce import _guest_username
+        request = RequestFactory().post("/commerce/trx-easy/72/start/")
+        request.META["CSRF_COOKIE"] = "a" * 32
+        first = _guest_username(request)
+        second = _guest_username(request)
+        self.assertTrue(first.startswith("mpwguest_"))
+        self.assertEqual(len(first), len("mpwguest_") + 40)
+        self.assertNotEqual(first, second)
+        self.assertNotIn("a" * 32, first)
+
+    def test_guest_principal_does_not_require_csrf_as_owner_secret(self):
+        from services.mpw_trx_guest_commerce import _guest_username
+        request = RequestFactory().post("/commerce/trx-easy/72/start/")
+        self.assertTrue(_guest_username(request).startswith("mpwguest_"))
+
     def test_guest_cookie_is_sent_on_purchase_recovery_route(self):
         """A checkout cookie must also reach /purchases/ in the same browser."""
         from http.cookies import SimpleCookie
