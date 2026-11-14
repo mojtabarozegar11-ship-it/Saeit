@@ -3,7 +3,7 @@ declare(strict_types=1);
 /** Read-only commercial lead desk: never sends mail, creates orders or modifies inquiries. */
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit(2); }
 umask(0077);
-function abort_private(string $reason): never { fwrite(STDERR, 'MPW_LEAD_DESK_ABORT: '.$reason."\n"); exit(2); }
+function abort_private(string $reason): void { fwrite(STDERR, 'MPW_LEAD_DESK_ABORT: '.$reason."\n"); exit(2); }
 function secured(string $path, bool $dir=false): bool {
     if (is_link($path) || ($dir ? !is_dir($path) : !is_file($path))) return false;
     $mode=@fileperms($path);
@@ -15,7 +15,7 @@ function fixture_root(): ?string {
     if (!is_string($root) || $root==='') abort_private('FIXTURE_ROOT_REQUIRED');
     $resolved=realpath($root);
     $tmp=realpath(sys_get_temp_dir());
-    if ($resolved===false || $tmp===false || !str_starts_with($resolved,$tmp.DIRECTORY_SEPARATOR)
+    if ($resolved===false || $tmp===false || substr($resolved,0,strlen($tmp.DIRECTORY_SEPARATOR))!==$tmp.DIRECTORY_SEPARATOR
         || !secured($resolved,true) || !secured($resolved.'/.mpw-fixture')) abort_private('INVALID_TEST_FIXTURE');
     return $resolved;
 }
@@ -73,7 +73,7 @@ function main_cli(array $args): void {
         'total_pages'=>max(1,(int)ceil(count($files)/500)),
         'backlog_truncated'=>count($files)>500];
     if (($args[1]??'')==='inspect') {
-        $reference=$args[2];$matches=array_values(array_filter($files,static fn($n)=>str_ends_with($n,'-'.$reference.'.json')));
+        $reference=$args[2];$matches=array_values(array_filter($files,static fn($n)=>substr($n,-strlen('-'.$reference.'.json'))==='-'.$reference.'.json'));
         if (count($matches)!==1) abort_private('REFERENCE_NOT_FOUND');
         $files=$matches;
     } else $files=array_slice($files,($report['page']-1)*500,500);
