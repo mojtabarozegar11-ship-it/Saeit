@@ -126,7 +126,13 @@ def parse_snapshot(path: Path, expected_role: str, *, now: datetime) -> dict:
             item.get("expected_user_verified") is not True or
             item["attestation"].get("automatic_deactivation_authorized") is not False):
         raise ValueError("TOPOLOGY_IDENTITY_OR_READONLY_INVALID")
-    when = datetime.fromisoformat(item["captured_at_utc"].replace("Z", "+00:00"))
+    timestamp = item.get("captured_at_utc")
+    if not isinstance(timestamp, str):
+        raise ValueError("TOPOLOGY_TIMESTAMP_INVALID")
+    try:
+        when = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("TOPOLOGY_TIMESTAMP_INVALID") from exc
     if when.tzinfo is None or not now - timedelta(hours=1) <= when <= now + timedelta(minutes=2):
         raise ValueError("TOPOLOGY_STALE_OR_FUTURE")
     return item
