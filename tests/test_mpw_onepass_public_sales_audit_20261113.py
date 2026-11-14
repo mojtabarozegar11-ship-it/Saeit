@@ -642,6 +642,137 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(policies["/store/product/72/checkout/"],
                          "script_self_only")
 
+    def test_checkout_form_novalidate_cannot_bypass_buyer_email_requirement(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace("<form method=", "<form novalidate method=", 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_checkout_form_target_override_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace("<form method=", '<form target="_blank" method=', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_checkout_plain_text_encoding_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace("<form method=", '<form enctype="text/plain" method=', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_checkout_non_utf8_encoding_contract_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace("<form method=", '<form accept-charset="iso-8859-1" method=', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_button_validation_bypass_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace('<button type="submit">',
+                            '<button type="submit" formnovalidate>', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_button_formaction_override_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace('<button type="submit">',
+                            '<button type="submit" formaction="/other/">', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_button_formmethod_override_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace('<button type="submit">',
+                            '<button type="submit" formmethod="get">', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_button_formenctype_override_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace('<button type="submit">',
+                            '<button type="submit" formenctype="text/plain">', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_button_formtarget_override_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required>')
+        html = html.replace('<button type="submit">',
+                            '<button type="submit" formtarget="_blank">', 1)
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_submit_input_all_overrides_rejected(self):
+        baseline = checkout(72, '<input type="email" name="email" required>')
+        for attribute in ("formnovalidate", 'formaction="/other/"',
+                          'formmethod="get"', 'formenctype="text/plain"',
+                          'formtarget="_blank"'):
+            with self.subTest(attribute=attribute):
+                html = baseline.replace(
+                    '<button type="submit">Create TRX invoice</button>',
+                    '<input type="submit" ' + attribute + '>', 1)
+                self.assertEqual(MOD.classify_html("checkout", 72, html),
+                                 "checkout_post_action_unverified")
+
+    def test_hidden_buyer_email_is_not_verified_contact(self):
+        html = checkout(72, '<input type="email" name="email" required hidden>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_multi_address_buyer_email_is_not_single_contact(self):
+        html = checkout(72, '<input type="email" name="email" required multiple>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_buyer_email_detached_with_form_attribute_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required form="other">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_email_unusable_maxlength_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required maxlength="3">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_duplicate_required_email_attribute_rejected(self):
+        html = checkout(72, '<input type="email" name="email" required required>')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "checkout_post_action_unverified")
+
+    def test_normal_usable_buyer_email_form_still_classified(self):
+        html = checkout(72, '<input type="email" name="email" required maxlength="254">')
+        self.assertEqual(MOD.classify_html("checkout", 72, html),
+                         "buyer_email_input_get_ok_not_paid")
+
+    def test_same_origin_path_or_query_switch_does_not_pass(self):
+        class FakeResponse:
+            status = 200
+            headers = {"Content-Type": "text/html"}
+            def __init__(self, target):
+                self.target = target
+            def __enter__(self):
+                return self
+            def __exit__(self, *unused):
+                return False
+            def geturl(self):
+                return self.target
+            def read(self, unused):
+                raise AssertionError("body must not be read after URL mismatch")
+        class FakeOpener:
+            def __init__(self, target):
+                self.target = target
+            def open(self, request, timeout):
+                self.request = request
+                return FakeResponse(self.target)
+        for target in ("https://mojplaywin.com/store/product/72/",
+                       "https://mojplaywin.com/store/product/72/checkout/?leak=1",
+                       "https://mojplaywin.com/store/product/72/checkout/#anchor"):
+            with self.subTest(target=target):
+                opener = FakeOpener(target)
+                self.assertEqual(
+                    MOD.observe("/store/product/72/checkout/", "checkout", 72,
+                                5, opener), "unexpected_destination")
+                self.assertEqual(opener.request.get_method(), "GET")
+
     def test_zero_financial_actions_and_unknown_sales(self):
         class Offline:
             def open(self, req, timeout=None):
