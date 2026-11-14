@@ -13,7 +13,7 @@ from django.urls import NoReverseMatch, reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
-from .models import LedgerEntry, OrderItem, Product
+from .models import LedgerEntry, OrderItem, PaymentIntent, Product
 from .crown_tron_receipts import PROVIDER as WALLETLESS_PROVIDER, verified_walletless_credit
 from .crown_checkout import gateway_ready
 
@@ -21,19 +21,25 @@ SKUS = ("cd-spectre", "cd-valkyrie", "cd-tempest", "cd-phoenix", "cd-sovereign")
 
 
 def owned_skus(user):
-    if not user.is_authenticated:
+    if getattr(user, "is_authenticated", False) is not True:
         return []
     owned = set()
     items = OrderItem.objects.filter(
         order__customer=user, order__status="paid",
         product__product_type="game_cosmetic", quantity=1,
-    ).select_related("order__payment_intent", "product")
+    ).select_related("order", "product")
     for item in items:
-        sku = (item.product.metadata or {}).get("crown_sku")
-        if sku not in SKUS:
+        metadata = item.product.metadata if isinstance(item.product.metadata, dict) else {}
+        sku = metadata.get("crown_sku")
+        if type(sku) is not str or sku not in SKUS:
             continue
         order = item.order
-        intent = order.payment_intent
+        # A paid Order may have no PaymentIntent due to a legacy migration,
+        # reconciliation gap or orphaned sale. Never throw an HTTP 500 or
+        # grant an entitlement for that record.
+        intent = PaymentIntent.objects.filter(order_id=order.pk).first()
+        if intent is None:
+            continue
         if (order.total <= 0 or intent.amount != order.total
                 or order.currency != "USD" or intent.currency != order.currency
                 or item.currency != order.currency or item.unit_price <= 0

@@ -125,6 +125,11 @@ class EconomicMasterAgent:
             "autonomous_spend_scope": "preauthorized_operating_budget_and_allowlisted_recurring_services_only",
         }
 
+    def inspect_fulfillment_preflight_readonly(self):
+        """Inspect anonymized delivery blockers without issuing access."""
+        from .fulfillment_preflight import fulfillment_preflight_snapshot
+        return fulfillment_preflight_snapshot()
+
     def inspect_revenue_evidence_readonly(self):
         """The sole canonical agent can inspect evidence; it cannot mint cash."""
         from .revenue_evidence_gate import revenue_evidence_snapshot
