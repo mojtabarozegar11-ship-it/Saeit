@@ -79,4 +79,16 @@ class FarmEconomicsTests(unittest.TestCase):
     def test_same_enterprise_different_period_allowed(self):
         row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31"
         self.assertEqual(len(validate_csv(sample()+",".join(row)+"\n")),2)
+    def test_mixed_currency_same_enterprise_rejected(self):
+        row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31";row[4]="EUR"
+        with self.assertRaisesRegex(ValueError,"inconsistent enterprise currency"):
+            validate_csv(sample()+",".join(row)+"\n")
+    def test_mixed_output_unit_same_enterprise_rejected(self):
+        row=BASE.copy();row[2]="2026-07-01";row[3]="2026-12-31";row[5]="tonne"
+        with self.assertRaisesRegex(ValueError,"inconsistent enterprise currency"):
+            validate_csv(sample()+",".join(row)+"\n")
+    def test_empty_enterprise_identifier_rejected(self):
+        row=BASE.copy();row[0]="  "
+        with self.assertRaisesRegex(ValueError,"empty enterprise identifier"):
+            validate_csv(sample(row))
 if __name__=="__main__":unittest.main()
