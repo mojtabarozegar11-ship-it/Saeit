@@ -1,5 +1,8 @@
 """MojPlayWin product detail recovery without enabling unverified commerce."""
 from django.test import TestCase, override_settings
+from django.db import DatabaseError
+from unittest.mock import patch
+from core.models import CommerceFunnelEvent
 from core.models import Product
 from core.mojplaywin_product_detail import PUBLIC_CATALOG
 
@@ -83,6 +86,47 @@ class MojPlayWinProductDetailsTests(TestCase):
         for unsafe in ('<form', 'sendtransaction(', '/commerce/trx-easy/start/',
                        'walletconnect', 'payment_confirmed'):
             self.assertNotIn(unsafe, html)
+
+    def test_product_detail_records_a_view_not_a_sale(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", currency="USD", price="7.50",
+        )
+        response = self.get(72)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="view_item").count(), 1)
+        self.assertEqual(CommerceFunnelEvent.objects.filter(event_name="payment_confirmed").count(), 0)
+
+    def test_missing_optional_analytics_does_not_break_product_detail(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", currency="USD", price="7.50",
+        )
+        with patch("core.commerce_funnel.record_funnel_event", side_effect=RuntimeError("analytics off")):
+            response = self.get(72)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, PUBLIC_CATALOG[72]["title"])
+
+    def test_catalog_database_error_degrades_to_safe_preview(self):
+        with patch("core.mojplaywin_product_detail.Product.objects.filter",
+                   side_effect=DatabaseError("unavailable optional product table")):
+            response = self.get(72)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertContains(response, "Catalog preview")
+        self.assertNotContains(response, "Buy now")
+
+    def test_unmatched_product_does_not_create_funnel_view(self):
+        response = self.get(72)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CommerceFunnelEvent.objects.exists())
+
+    def test_three_product_catalog_does_not_claim_live_buy_in_text(self):
+        response = self.client.get("/store/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Buy securely with TRX")
+        self.assertNotContains(response, "View details &amp; purchase")
+        self.assertContains(response, "Never send funds to an address found outside your verified order invoice.")
 
     def test_strict_catalog_id_count(self):
         self.assertEqual(set(PUBLIC_CATALOG), {72, 225, 879})
