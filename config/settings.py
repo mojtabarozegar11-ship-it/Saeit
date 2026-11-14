@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "command_center",
     # Accounting ledger is part of the production management desk.
     "accounting.apps.AccountingConfig",
+    "prop_firm.apps.MojPropConfig",
 ]
 
 MIDDLEWARE = [
