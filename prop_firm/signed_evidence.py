@@ -124,6 +124,15 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         # A signed but excessively nested packet must fail closed, not raise HTTP 500.
         raise EvidenceRejected("Invalid UTF-8 JSON evidence") from exc
+    # Bound structural complexity independently of the JSON parser recursion limit.
+    stack = [(envelope, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if isinstance(node, (dict, list)):
+            if depth > 64:
+                raise EvidenceRejected("JSON nesting limit exceeded")
+            children = node.values() if isinstance(node, dict) else node
+            stack.extend((child, depth + 1) for child in children)
     if not isinstance(envelope, dict) or set(envelope) != {
         "account_id", "event_id", "event_type", "recorded_at", "data"
     }:
