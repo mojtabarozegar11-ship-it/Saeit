@@ -472,6 +472,32 @@ def test_php_registry_without_role_rows_cannot_claim_roles_absent():
     assert all(row["retirement_authorized"] is False for row in php_roles)
 
 
+
+def test_duplicate_php_role_rows_never_claim_unique_enabled_state():
+    php = {"state": "source_registry_snapshot_only", "agent_roles": [
+        {"code": "commerce", "enabled": True},
+        {"code": "commerce", "enabled": False},
+    ]}
+    identities = module.identity_dispositions(
+        snap("cpanel", private_php_site_registry=php))
+    commerce = next(r for r in identities if r["source"] == "cpanel_php_sqlite"
+                    and r["code"] == "commerce")
+    assert commerce["registration_state"] == "duplicate_role_records_unreconciled"
+    assert commerce["retirement_authorized"] is False
+
+
+def test_invalid_php_enabled_value_distinct_from_absent_identity():
+    php = {"state": "source_registry_snapshot_only", "agent_roles": [
+        {"code": "commerce", "enabled": "1"},
+    ]}
+    identities = module.identity_dispositions(
+        snap("cpanel", private_php_site_registry=php))
+    commerce = next(r for r in identities if r["source"] == "cpanel_php_sqlite"
+                    and r["code"] == "commerce")
+    assert commerce["registration_state"] == "invalid_enabled_role_record_unreconciled"
+    assert commerce["retirement_authorized"] is False
+
+
 def test_php_disabled_record_cannot_justify_deactivating_live_scheduler():
     php = {
         "state": "source_registry_snapshot_only",
@@ -497,7 +523,7 @@ def test_non_boolean_site_enabled_value_is_not_accepted_as_valid_record():
     identities = module.identity_dispositions(
         snap("cpanel", private_php_site_registry=php)
     )
-    assert identities[0]["registration_state"] == "not_in_observed_private_registry"
+    assert identities[0]["registration_state"] == "invalid_enabled_role_record_unreconciled"
 
 
 def test_source_groups_cover_trading_coin_cycles_and_off_host_runtimes():
