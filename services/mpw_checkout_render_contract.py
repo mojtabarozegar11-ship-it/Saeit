@@ -50,7 +50,7 @@ class _CheckoutParser(HTMLParser):
 
     @staticmethod
     def _visually_inert(tag, attrs):
-        style = re.sub(r"\\s+", "", (attrs.get("style") or "").casefold())
+        style = re.sub(r"\s+", "", (attrs.get("style") or "").casefold())
         # Inline style, hidden/inert and ARIA-hidden/disabled control states
         # cannot prove an interactable buyer form on a source-only review.
         return (
@@ -112,14 +112,20 @@ class _CheckoutParser(HTMLParser):
             return
         if any(name in OVERRIDE_ATTRIBUTES for name in names) or "form" in names:
             self.errors.add("submit_override")
-        if inert:
-            self.errors.add("inert_checkout_control")
         if any(names.count(key) > 1 for key in
                ("name", "value", "type", "required", "disabled", "readonly",
                 "id", "maxlength", "minlength", "pattern", "autocomplete")):
             self.errors.add("duplicate_control_attribute")
         name = (attrs.get("name") or "").strip().casefold()
         kind = (attrs.get("type") or ("submit" if tag == "button" else "text")).casefold()
+        is_buyer_control = (
+            name == "csrfmiddlewaretoken" or name in EMAIL_FIELDS or kind == "email"
+            or "email" in (attrs.get("id") or "").casefold()
+            or (attrs.get("autocomplete") or "").casefold() == "email"
+            or kind in ("submit", "image")
+        )
+        if inert and is_buyer_control:
+            self.errors.add("inert_checkout_control")
         if tag == "input" and name == "csrfmiddlewaretoken":
             self.form["csrf"].append((kind, attrs.get("value"), inert or "disabled" in attrs))
         if (name in EMAIL_FIELDS or kind == "email"
