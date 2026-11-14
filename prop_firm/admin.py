@@ -2,6 +2,7 @@
 from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
+    PropProfitAllocation, PropProfitJournalLine,
 )
 
 
@@ -44,3 +45,21 @@ class PropEquityAdmin(LockedAuditAdmin):
 @admin.register(PropDecisionLog)
 class PropDecisionAdmin(LockedAuditAdmin):
     list_display = ("id", "account_id", "category", "qualifies", "policy_version", "recorded_at")
+
+
+
+@admin.register(PropProfitAllocation)
+class PropProfitAllocationAdmin(LockedAuditAdmin):
+    """Inspectable draft allocations; no approval or payout actions."""
+    list_display = (
+        "id", "account_id", "period_number", "eligible_profit_usd",
+        "trader_profit_usd", "company_profit_usd", "status",
+    )
+    list_filter = ("status", "policy_version")
+
+
+@admin.register(PropProfitJournalLine)
+class PropProfitJournalAdmin(LockedAuditAdmin):
+    """Inspect three-sided internal memo journal; never an accounts-payable UI."""
+    list_display = ("id", "allocation_id", "code", "side", "amount_usd")
+    list_filter = ("code", "side")
