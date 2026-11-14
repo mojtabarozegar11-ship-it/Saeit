@@ -225,7 +225,8 @@ class RevenueEvidenceTests(TestCase):
         )
 
         result = revenue_verify({})
-        assert result["verified_effect"] is True  # The inventory audit was performed.
+        assert result["verified_effect"] is False  # Internal inventory is not independent revenue.
+        assert result["business_effect_verified"] is False
         assert result["verified_revenue"] is None  # Cash was NOT independently proven.
         assert result["revenue_status"] == "external_settlement_evidence_required"
         assert "'payment_entries': 2" in result["evidence"]["value"]
