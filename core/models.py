@@ -500,3 +500,4 @@ class EducationCertificate(T):
 
 # Register the cross-site, evidence-backed TRON invoice with the existing core app.
 from .tron_gateway_invoice import TronGatewayInvoice  # noqa: E402,F401
+from .tron_gateway_settlement_claim import TronMainnetSettlementClaim  # noqa: E402,F401
