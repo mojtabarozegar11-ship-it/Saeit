@@ -29,6 +29,7 @@ INQUIRY = SOURCE_ROOT + "/inquiry.php"
 HUB = SOURCE_ROOT + "/index.html"
 BOT_MANIFEST = "runtime/mojtaba_bot_disposition_sources_v1.json"
 BOT_EVIDENCE = "runtime/mojtaba_readonly_evidence_20261112_154350Z.json"
+REVENUE_CONTRACT = "runtime/mojtaba_revenue_offers_contract_v1.json"
 STORE = "core/templates/mojplaywin/store.html"
 FARM = "product_recipes/farm_enterprise_economics/README.md"
 
@@ -113,6 +114,7 @@ def audit(root: Path = ROOT) -> dict:
     farm = _read(root, FARM)
     manifest = json.loads(_read(root, BOT_MANIFEST))
     historical = json.loads(_read(root, BOT_EVIDENCE))
+    offer_contract = json.loads(_read(root, REVENUE_CONTRACT))
     hub_links = _links(hub)
     php_ids = _php_offer_ids(php)
 
@@ -180,6 +182,57 @@ def audit(root: Path = ROOT) -> dict:
           isinstance(manifest.get("sources"), list) and len(manifest["sources"]) > 0,
           "Source-defined roles are not proof of independently running bots")
 
+    # An offer registry is an internal classification, NOT a customer-facing
+    # automation, an independent bot or evidence of legal settlement.
+    check("revenue_contract_identity",
+          offer_contract.get("canonical_bot_id") == CANONICAL_BOT and
+          offer_contract.get("schema") == "mojtaba.bot.ai.revenue-offers.v1",
+          "All revenue work is one canonical agent's internal mission")
+    check("revenue_contract_scope",
+          offer_contract.get("scope") == "repository_source_only_no_live_sales_attestation",
+          "No unverified live readiness claim may enter the release contract")
+    check("revenue_automatic_write_denied",
+          all(offer_contract.get(key) is False for key in
+              ("auto_spend_authorized", "auto_publication_authorized",
+               "auto_email_authorized", "automatic_live_trading_authorized")),
+          "No spend, publication, email or trading authority is created")
+    expected_service_ids = {"website-doctor", "farm-profitability-break-even"}
+    offers_registry = offer_contract.get("offers")
+    check("revenue_service_scope",
+          isinstance(offers_registry, list) and
+          len(offers_registry) == len(expected_service_ids) and
+          {x.get("id") for x in offers_registry if isinstance(x, dict)} ==
+          expected_service_ids and
+          all(x.get("quote_mode") == "manual_review_only" and
+                  x.get("payment_verified") is False and
+                  x.get("delivery_verified") is False and
+                  x.get("received_revenue_verified") is False
+                  for x in offers_registry if isinstance(x, dict)),
+          "Two bounded pilot services are quote-only and not sold")
+    products_registry = offer_contract.get("digital_products")
+    check("revenue_product_scope",
+          isinstance(products_registry, list) and
+          len(products_registry) == len(SKU) and
+          {x.get("sku") for x in products_registry if isinstance(x, dict)} ==
+          set(SKU) and
+          all(x.get(field) is False
+              for x in products_registry if isinstance(x, dict)
+              for field in ("rights_verified_live", "private_file_hash_verified_live",
+                            "order_email_verified_live", "server_chain_finality_verified_live",
+                            "delivery_verified_live", "received_revenue_verified_live")),
+          "Three SKUs remain blocked without real buyer and legal evidence")
+    check("revenue_paid_unknown",
+          offer_contract.get("confirmed_paid_order_count") is None and
+          offer_contract.get("confirmed_revenue_amount") is None and
+          offer_contract.get("last_live_inventory_verified_at") is None,
+          "No fake sales count, received cash or live inventory")
+    check("revenue_manual_client_handoff",
+          isinstance(offer_contract.get("lead_evidence_required"), list) and
+          {"agreed_scope", "accepted_quote", "compliant_paid_receipt",
+           "private_delivery_receipt"}.issubset(
+               set(offer_contract["lead_evidence_required"])),
+          "Scope, accepted quote, paid evidence and delivery receipt are required")
+
     passed = sum(item["passed"] for item in checks)
     source_routes = sum(offer["source_link_verified"] for offer in offers)
     return {
@@ -190,6 +243,7 @@ def audit(root: Path = ROOT) -> dict:
         "source_gate_passed": passed == len(checks),
         "service_source_routes": {"linked": source_routes, "total": len(SERVICES)},
         "service_offers": offers,
+        "pilot_service_ids": ["website-doctor", "farm-profitability-break-even"],
         "product_ids": list(SKU),
         "live_cpanel_checkout_verified": None,
         "live_inquiries_verified": None,
