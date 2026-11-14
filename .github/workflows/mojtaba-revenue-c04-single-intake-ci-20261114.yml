@@ -1,4 +1,4 @@
-name: C04-C12 one-bot CRM and conversion-ready service scope
+name: C04-C13 one-bot CRM, commercial sitemap and service scope
 on:
   pull_request:
     paths:
@@ -6,6 +6,8 @@ on:
       - core/service_quote_draft.py
       - core/service_lead_handoff.py
       - core/service_scope_pages.py
+      - core/seo_views.py
+      - core/tests/test_service_scope_sitemap_c13_20261114.py
       - core/templates/core/service_scope.html
       - core/templates/core/services.html
       - config/urls.py
@@ -46,6 +48,8 @@ on:
       - core/service_quote_draft.py
       - core/service_lead_handoff.py
       - core/service_scope_pages.py
+      - core/seo_views.py
+      - core/tests/test_service_scope_sitemap_c13_20261114.py
       - core/templates/core/service_scope.html
       - core/templates/core/services.html
       - config/urls.py
@@ -108,6 +112,7 @@ jobs:
           python -m py_compile core/service_quote_draft.py core/autonomous_brain.py core/economic_tool_pack.py
           python -m py_compile core/service_lead_handoff.py core/tests/test_autonomous_service_desk_handoff_c10_20261114.py
           python -m py_compile core/service_scope_pages.py core/tests/test_service_scope_conversion_c12_20261114.py
+          python -m py_compile core/seo_views.py core/tests/test_service_scope_sitemap_c13_20261114.py
           python -m py_compile core/tests/test_service_desk_orphan_recovery_c11_20261114.py
           python -m py_compile core/management/commands/mojtaba_reconcile_service_handoffs.py core/tests/test_service_reconciliation_cli_c11_20261114.py
           python -m py_compile core/admin.py command_center/service_proposal_funnel.py command_center/urls.py
@@ -153,4 +158,5 @@ jobs:
             core/tests/test_autonomous_service_desk_handoff_c10_20261114.py \
             core/tests/test_service_desk_orphan_recovery_c11_20261114.py \
             core/tests/test_service_reconciliation_cli_c11_20261114.py \
-            core/tests/test_service_scope_conversion_c12_20261114.py
+            core/tests/test_service_scope_conversion_c12_20261114.py \
+            core/tests/test_service_scope_sitemap_c13_20261114.py
