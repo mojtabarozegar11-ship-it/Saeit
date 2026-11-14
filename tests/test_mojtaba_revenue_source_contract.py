@@ -118,11 +118,10 @@ class RevenueSourceContracts(unittest.TestCase):
         self.assertNotIn("transaction.submit", wf)
 
     def test_source_status_remains_not_paid_or_deployed(self):
-        for text_path in ("scripts/mojtaba_revenue_cli.py",
-                          "scripts/mojtaba_revenue_portfolio.py"):
-            source = (ROOT / text_path).read_text("utf8")
-            self.assertIn("mojtaba.bot.ai", source)
+        cli = (ROOT / "scripts/mojtaba_revenue_cli.py").read_text("utf8")
+        self.assertIn("CANONICAL_BOT", cli)
         src = (ROOT / "scripts/mojtaba_revenue_portfolio.py").read_text("utf8")
+        self.assertIn('CANONICAL_BOT = "mojtaba.bot.ai"', src)
         self.assertIn('"collected_revenue": None', src)
         self.assertIn('"payment_verified": False', src)
         self.assertIn('"production_deployed": False', src)
