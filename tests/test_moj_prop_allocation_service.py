@@ -216,3 +216,91 @@ class MojPropProvisionalAllocationTests(TestCase):
         self.assertEqual(a.trader_profit_usd, Decimal("0.00"))
         self.assertEqual(a.company_profit_usd, Decimal(".01"))
         self.assertEqual(a.journal_lines.count(), 2)
+
+
+    def test_late_processing_of_three_months_preserves_every_period(self):
+        self.trade_day(day=10, pnl="3", initial_equity="100", final_equity="103")
+        self.trade_day(day=40, pnl="-2", initial_equity="103", final_equity="101")
+        self.trade_day(day=70, pnl="4", initial_equity="101", final_equity="105")
+        first = self.stage(90)
+        second = self.stage(90)
+        third = self.stage(90)
+        self.assertEqual([first.period_number, second.period_number, third.period_number],
+                         [1, 2, 3])
+        self.assertEqual([first.eligible_profit_usd, second.eligible_profit_usd,
+                          third.eligible_profit_usd],
+                         [Decimal("3"), Decimal("0"), Decimal("2")])
+        self.assertEqual(PropProfitAllocation.objects.count(), 3)
+        self.assertEqual(self.stage(90).pk, third.pk)
+
+    def test_early_future_evidence_does_not_pollute_past_month(self):
+        self.trade_day(day=10, pnl="3", initial_equity="100", final_equity="103")
+        PropExecution.objects.create(
+            account=self.account, external_event_id="future-pending", data_source="untrusted",
+            symbol="FUTURE", closed_at=OPENED + timedelta(days=45),
+            gross_realized_usd=999, total_fees_usd=0,
+            reconciliation_status="pending", evidence_digest="",
+        )
+        a = self.stage(60)
+        self.assertEqual(a.period_number, 1)
+        self.assertEqual(a.eligible_profit_usd, Decimal("3.00"))
+        # The next stage still must reject untrusted/unverified later events.
+        with self.assertRaises(AllocationRejected):
+            self.stage(60)
+
+    def test_same_profit_with_tampered_symbol_fails_closed(self):
+        self.trade_day(day=10, pnl="3")
+        self.stage(30)
+        PropExecution.objects.filter(account=self.account).update(symbol="CHANGED")
+        with self.assertRaises(AllocationRejected):
+            self.stage(30)
+
+    def test_same_profit_with_tampered_equity_mark_fails_closed(self):
+        self.trade_day(day=10, pnl="3")
+        self.stage(30)
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False
+        ).update(equity_usd=Decimal("102.5"))
+        with self.assertRaises(AllocationRejected):
+            self.stage(30)
+
+    def test_requested_month_zero_bool_or_float_refused(self):
+        self.trade_day()
+        for invalid in (0, -1, True, 1.0, "1"):
+            with self.subTest(invalid=invalid), self.assertRaises(AllocationRejected):
+                stage_provisional_allocation(
+                    account_id=self.account.pk,
+                    as_of=OPENED + timedelta(days=60),
+                    period_number=invalid,
+                )
+
+    def test_skipping_a_month_is_refused_even_after_ninety_days(self):
+        self.trade_day()
+        with self.assertRaises(AllocationRejected):
+            stage_provisional_allocation(
+                account_id=self.account.pk,
+                as_of=OPENED + timedelta(days=90),
+                period_number=3,
+            )
+
+    def test_unfinished_selected_future_month_is_refused(self):
+        self.trade_day()
+        with self.assertRaises(AllocationRejected):
+            stage_provisional_allocation(
+                account_id=self.account.pk,
+                as_of=OPENED + timedelta(days=30),
+                period_number=2,
+            )
+
+    def test_existing_older_period_cannot_be_replayed_after_next_recorded(self):
+        self.trade_day(day=10, pnl="3")
+        a1 = self.stage(30)
+        a2 = self.stage(60)
+        self.assertEqual(a2.period_number, 2)
+        with self.assertRaises(AllocationRejected):
+            stage_provisional_allocation(
+                account_id=self.account.pk,
+                as_of=OPENED + timedelta(days=60),
+                period_number=1,
+            )
+        self.assertEqual(a1.period_number, 1)
