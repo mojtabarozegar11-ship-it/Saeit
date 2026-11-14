@@ -173,7 +173,8 @@ def route_hits(snapshot: dict, permitted: tuple[str, ...]) -> dict:
         status = snapshot.get(layer, {})
         if status.get("state") != "observed":
             continue
-        units = status.get("candidate_units", [])
+        # Missing evidence must not masquerade as an empty unit inventory.
+        units = status.get("candidate_units")
         if not isinstance(units, list):
             raise ValueError("TOPOLOGY_SYSTEMD_UNITS_INVALID")
         for unit in units:
