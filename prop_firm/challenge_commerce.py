@@ -58,7 +58,9 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
     ]
     if (merchant_tenant.host not in ("mojplaywin.com", "www.mojplaywin.com")
             or merchant_tenant.brand != "moj_prop"
-            or merchant_tenant.eligible_for_checkout_review is not True):
+            or merchant_tenant.eligible_for_checkout_review is not True
+            or merchant_tenant.payment_enabled is not False
+            or merchant_tenant.invoice_created is not False):
         blockers.append("dedicated_moj_prop_tron_merchant_not_verified")
     capacity = funded_capacity(
         tier_index=0, unencumbered_cash_usd=free_treasury_usd,
