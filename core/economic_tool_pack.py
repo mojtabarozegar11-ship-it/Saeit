@@ -303,6 +303,33 @@ def growth_experiment(payload):
     ).order_by("id").first()
     if not product:
         raise ValueError("No built MVP exists; run income_mvp_build first.")
+    # A stage label alone is not a deliverable. Before any growth-ready claim,
+    # prove the exact private workbook still exists with original bytes.
+    asset = (product.metadata or {}).get("artifact")
+    if not isinstance(asset, dict):
+        raise ValueError("MVP_ASSET_ATTESTATION_MISSING")
+    root = Path.home() / "factory-runtime" / "private" / "master-agent" / "product-assets"
+    target = root / f"digital-project-audit-{int(product.pk)}-v1.html"
+    digest = asset.get("sha256")
+    recorded_path = asset.get("relative_path")
+    recorded_bytes = asset.get("bytes")
+    if (
+        not isinstance(recorded_path, str) or recorded_path != str(target)
+        or not isinstance(digest, str) or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+        or type(recorded_bytes) is not int or recorded_bytes <= 0
+        or root.is_symlink() or target.is_symlink() or not target.is_file()
+    ):
+        raise ValueError("MVP_ASSET_ATTESTATION_INVALID")
+    try:
+        if target.stat().st_size != recorded_bytes:
+            raise ValueError("MVP_ASSET_BYTES_MISMATCH")
+        with target.open("rb") as reader:
+            actual_sha = hashlib.file_digest(reader, "sha256").hexdigest()
+    except OSError as exc:
+        raise ValueError("MVP_ASSET_UNAVAILABLE") from exc
+    if actual_sha != digest:
+        raise ValueError("MVP_ASSET_HASH_MISMATCH")
     product.metadata = {
         **(product.metadata or {}),
         "commercial_status": "growth_ready",
