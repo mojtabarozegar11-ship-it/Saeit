@@ -1,0 +1,58 @@
+name: Zomorod existing store active-source attestation — pinned read only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-store-source-attestation-20261114.yml'
+      - 'scripts/zomorod_cpanel_store_provenance_readonly_20261114.py'
+      - 'scripts/zomorod_cpanel_store_readonly_relay_20261114.sh'
+      - 'tests/test_zomorod_cpanel_store_provenance_readonly_20261114.py'
+      - 'scripts/zomorod_vps_transport_diagnostic_readonly_20261114.py'
+      - 'tests/test_zomorod_vps_transport_diagnostic_readonly_20261114.py'
+permissions:
+  contents: read
+concurrency:
+  group: zm-native-store-provenance-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  read-only-cpanel-store:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/zomorod-entire-site-readonly-20261113'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded source inspection and pinned relay policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_cpanel_store_provenance_readonly_20261114.py' -v
+          bash -n scripts/zomorod_cpanel_store_readonly_relay_20261114.sh
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_vps_transport_diagnostic_readonly_20261114.py' -v
+      - name: Diagnose TCP 22 and SSH key algorithms without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/zomorod_vps_transport_diagnostic_readonly_20261114.py |
+            tee "$RUNNER_TEMP/zm-vps-transport.json"
+          python3 -c 'import json,os,sys; p=os.path.join(os.environ["RUNNER_TEMP"],"zm-vps-transport.json"); r=json.load(open(p)); ok=r["status"]=="tcp22_open_rsa_observed_unverified"; print("ZM_CPANEL_PROVENANCE_PREFLIGHT="+("rsa_seen_not_authenticated" if ok else r["status"])); sys.exit(0 if ok else 5)'
+      - name: Read exact active PHP SHA and two CSS flags only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash scripts/zomorod_cpanel_store_readonly_relay_20261114.sh |
+            tee "$RUNNER_TEMP/zm-store-source-provenance.jsonl"
+      - name: Retain sanitized source evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-store-cpanel-source-provenance
+          path: |
+            ${{ runner.temp }}/zm-store-source-provenance.jsonl
+            ${{ runner.temp }}/zm-vps-transport.json
+          retention-days: 7
+          if-no-files-found: warn

@@ -7,6 +7,15 @@ on:
     paths:
       - "content/zomorod-v11/**"
       - "content/zomorod-business/app.php"
+      - "public/ghanadi/index.html"
+      - "public/ghanadi/cafe-shiraz/index.html"
+      - "core/tests/test_ghanadi_b2b_source.py"
+      - "tests/test_zomorod_revenue_inquiry_source_20261114.py"
+      - "tests/test_zomorod_store_sales_contact_fallback_20261114.py"
+      - "tests/test_zomorod_revenue_get_only_20261114.py"
+      - "scripts/zomorod_revenue_inquiry_live_readonly_20261114.py"
+      - "scripts/zomorod_store_public_css_parity_readonly_20261114.py"
+      - "tests/test_zomorod_store_public_css_parity_20261114.py"
       - ".github/workflows/zomorod-v11-test.yml"
 permissions:
   contents: read
@@ -20,12 +29,36 @@ jobs:
         with:
           php-version: '8.3'
           extensions: pdo_sqlite,sqlite3,curl
+      - name: B2B and existing paid-store inquiry safeguards, offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_revenue_inquiry_source_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_store_sales_contact_fallback_20261114.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_revenue_get_only_20261114.py' -v
+          python3 -m unittest discover -s core/tests -p 'test_ghanadi_b2b_source.py' -v
+      - name: Public revenue inquiry route and official form contract, GET-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/zomorod_revenue_inquiry_live_readonly_20261114.py
+      - name: Preserve GET-only commercial readiness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-revenue-inquiry-readonly
+          path: ${{ runner.temp }}/zm-revenue-inquiry-readonly/
+          retention-days: 7
+          if-no-files-found: warn
       - name: Syntax and isolated functional data tests
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile content/zomorod-v11/search_build.py
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_store_public_css_parity_20261114.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/zomorod_store_public_css_parity_readonly_20261114.py
           for file in content/zomorod-v11/*.php content/zomorod-business/app.php; do php -l "$file"; done
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_existing_store_mobile_source_20261113.py' -v
           export D="$RUNNER_TEMP/private"
           mkdir -m 700 "$D"
           php -r 'require "content/zomorod-v11/site_agents.php"; $d=zmAgentDb(getenv("D"));if($d->query("SELECT COUNT(*) FROM agents")->fetchColumn()!=11)exit(3);$d->exec("INSERT INTO runs(agent_code,status,http_code,duration_ms,detail) VALUES('"'master'"','"'ok'"',200,24,'"'test'"')");$rows=$d->query("SELECT * FROM runs")->fetchAll();if(!str_contains(zmAgentChart($rows),"<svg"))exit(4);echo "AGENT_CHART_REAL_ROWS=1\n";'
