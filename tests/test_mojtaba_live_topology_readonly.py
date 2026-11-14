@@ -193,6 +193,8 @@ def test_manual_live_workflow_never_runs_on_pull_request_or_push():
     assert "ProxyJump saeit-vps" in workflow
     assert "StrictHostKeyChecking yes" in workflow
     assert "MOJTABA_TWO_HOST_OBSERVATION=" in workflow
+    assert '"php_known_enabled_rows": php.get("known_enabled_count")' in workflow
+    assert '"php_unknown_enabled_rows": php.get("unknown_enabled_count")' in workflow
     assert "automatic_deactivation_authorized" in workflow
     assert "ssh -F" in workflow
     assert "rm -rf --" in workflow  # Only ephemeral CI-runner SSH key material.
