@@ -168,3 +168,78 @@ class MojPropDashboardTests(TestCase):
         before = PropAccount.objects.count()
         self.request_dashboard()
         self.assertEqual(PropAccount.objects.count(), before)
+
+    def test_historical_daily_breach_cannot_be_hidden_by_recovery(self):
+        PropExecution.objects.create(
+            account=self.account, external_event_id="historical-trade",
+            data_source="verified-adapter", symbol="GBPUSD",
+            closed_at=SOURCE_DATE, gross_realized_usd=Decimal("10"),
+            reconciliation_status="verified",
+        )
+        PropEquityObservation.objects.create(
+            account=self.account, external_event_id="start",
+            observed_at=datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+            is_session_open=True, equity_usd=100, reconciliation_status="verified",
+        )
+        PropEquityObservation.objects.create(
+            account=self.account, external_event_id="breach",
+            observed_at=datetime(2026, 11, 14, 10, 0, tzinfo=timezone.utc),
+            equity_usd=96, reconciliation_status="verified",
+        )
+        PropEquityObservation.objects.create(
+            account=self.account, external_event_id="recovery",
+            observed_at=datetime(2026, 11, 14, 15, 0, tzinfo=timezone.utc),
+            equity_usd=110, reconciliation_status="verified",
+        )
+        self.account.reconciled_by_operator = True
+        self.account.save(update_fields=["reconciled_by_operator"])
+        result = account_projection(self.account)
+        self.assertFalse(result["verified"])
+        self.assertFalse(result["risk"].allowed)
+        self.assertIn("daily_loss_floor_reached", result["risk"].reasons)
+        self.assertFalse(result["assessment"].passed)
+
+    def test_incomplete_equity_and_unverified_execution_block_qualification(self):
+        PropExecution.objects.create(
+            account=self.account, external_event_id="verified-one",
+            data_source="verified-adapter", symbol="USDJPY",
+            closed_at=SOURCE_DATE, gross_realized_usd=Decimal("10"),
+            reconciliation_status="verified",
+        )
+        PropExecution.objects.create(
+            account=self.account, external_event_id="in-review",
+            data_source="verified-adapter", symbol="AUDUSD",
+            closed_at=SOURCE_DATE, gross_realized_usd=Decimal("100"),
+            reconciliation_status="pending",
+        )
+        PropEquityObservation.objects.create(
+            account=self.account, external_event_id="open-day",
+            observed_at=SOURCE_DATE, equity_usd=100, is_session_open=True,
+            reconciliation_status="verified",
+        )
+        self.account.reconciled_by_operator = True
+        self.account.save(update_fields=["reconciled_by_operator"])
+        result = account_projection(self.account)
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["net_profit"], Decimal("10"))
+        self.assertFalse(result["assessment"].passed)
+
+    def test_duplicate_daily_open_is_not_a_clean_reconciliation(self):
+        PropExecution.objects.create(
+            account=self.account, external_event_id="valid-trade",
+            data_source="verified-adapter", symbol="EURUSD",
+            closed_at=SOURCE_DATE, gross_realized_usd=1,
+            reconciliation_status="verified",
+        )
+        for event_id, hour in (("first_open", 8), ("second_open", 9)):
+            PropEquityObservation.objects.create(
+                account=self.account, external_event_id=event_id,
+                observed_at=datetime(2026, 11, 14, hour, tzinfo=timezone.utc),
+                equity_usd=100, is_session_open=True,
+                reconciliation_status="verified",
+            )
+        self.account.reconciled_by_operator = True
+        self.account.save(update_fields=["reconciled_by_operator"])
+        result = account_projection(self.account)
+        self.assertFalse(result["verified"])
+        self.assertIn("duplicate_session_open", result["risk"].reasons)
