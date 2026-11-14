@@ -10,11 +10,11 @@ from core.models import ApprovalGrant, ApprovalRequest
 @pytest.mark.django_db
 def test_approved_request_can_issue_and_consume_scoped_one_time_grant():
     User = get_user_model()
-    owner = User.objects.create_user(username="grant-owner", password="pass", is_staff=True)
+    owner = User.objects.create_superuser(username="grant-owner", password="pass", email="grant1@example.invalid")
     approval = ApprovalRequest.objects.create(
-        action_type="production_change",
-        target_type="AgentTask",
-        target_id="99",
+        action_type="publish",
+        target_type="KnowledgeArticle",
+        target_id="1",
         reason="owner grant test",
         risk="high",
         status="approved",
@@ -34,7 +34,7 @@ def test_approved_request_can_issue_and_consume_scoped_one_time_grant():
 @pytest.mark.django_db
 def test_grant_rejects_scope_mismatch_and_expiry():
     User = get_user_model()
-    owner = User.objects.create_user(username="grant-owner-2", password="pass", is_staff=True)
+    owner = User.objects.create_superuser(username="grant-owner-2", password="pass", email="grant2@example.invalid")
     approval = ApprovalRequest.objects.create(
         action_type="payment",
         target_type="Order",
