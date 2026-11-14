@@ -16,6 +16,7 @@ from django.http import Http404
 from django.utils import timezone
 
 from .company_inquiry_models import CompanyInquiry
+from .models import AuditLog
 
 COMPANY_HOSTS = frozenset({"zomorodmelal.ir", "www.zomorodmelal.ir"})
 FORM_VERSION = "2026-11-14-consent-v1"
