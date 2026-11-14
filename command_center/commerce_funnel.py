@@ -29,12 +29,14 @@ def commerce_funnel_api(request):
             unknown_events += item["n"]
 
     # Preselect 25 most-active products; no unbounded per-product N+1 queries.
-    ranking = list(
+    ranking_probe = list(
         rows.filter(product_id__isnull=False)
         .values("product_id", "product__title")
         .annotate(n=Count("pk"))
-        .order_by("-n", "product_id")[:25]
+        .order_by("-n", "product_id")[:26]
     )
+    products_truncated = len(ranking_probe) > 25
+    ranking = ranking_probe[:25]
     selected = [r["product_id"] for r in ranking]
     summaries = {
         r["product_id"]: {
@@ -62,7 +64,7 @@ def commerce_funnel_api(request):
         "unknown_events": unknown_events,
         "products": [summaries[r["product_id"]] for r in ranking],
         "product_limit": 25,
-        "products_truncated": len(ranking) == 25,
+        "products_truncated": products_truncated,
         "event_count_not_unique_buyers": True,
         "independently_settled_cash": None,
         "independently_verified_delivery": None,
