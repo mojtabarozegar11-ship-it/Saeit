@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone as django_timezone
 
 from .rules import LEVELS, POLICY
 
@@ -398,7 +399,9 @@ class PropSocialEvidence(models.Model):
         if self.review_status == self.Review.VERIFIED:
             reviewed = aware_utc(self.reviewed_at, "reviewed_at")
             if (reviewed < published + timedelta(days=DURATION_DAYS)
+                    or reviewed > django_timezone.now()
                     or not self.reviewed_by_id
+                    or not self.reviewed_by.is_staff
                     or self.reviewed_by_id == self.account.trader.user_id
                     or not all((
                         self.author_verified, self.public_visible,
@@ -408,6 +411,33 @@ class PropSocialEvidence(models.Model):
                 raise ValidationError("28-day public lifetime and independent review required")
 
     def save(self, *args, **kwargs):
+        # A reviewed URL is evidence, not a mutable draft or an advertising
+        # command. The original participant, enrollment, platform and link
+        # must never be silently reassigned after submission.
+        if self.pk and not self._state.adding:
+            old = type(self).objects.filter(pk=self.pk).first()
+            if old is not None:
+                immutable = (
+                    "account_id", "enrollment_id", "platform",
+                    "post_url", "posted_at",
+                )
+                if any(getattr(old, field) != getattr(self, field)
+                       for field in immutable):
+                    raise ValidationError(
+                        "Submitted social evidence identity is immutable"
+                    )
+                if old.review_status != self.Review.PENDING:
+                    review_fields = (
+                        "review_status", "reviewed_by_id", "reviewed_at",
+                        "author_verified", "public_visible",
+                        "disclosure_verified", "content_compliant",
+                        "date_verified", "continued_visibility_verified",
+                    )
+                    if any(getattr(old, field) != getattr(self, field)
+                           for field in review_fields):
+                        raise ValidationError(
+                            "Final human social review cannot be rewritten"
+                        )
         self.full_clean()
         return super().save(*args, **kwargs)
 
