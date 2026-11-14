@@ -36,6 +36,11 @@ def test_market_research_and_scoring_are_verified_before_offer_design():
     state["market_research_complete"] = True
     assert brain.candidates(state)[0].action == "income_opportunity_score"
 
+    # The first internal scoring task is a measurement, not a verified
+    # market outcome; do not enqueue it again just to manufacture progress.
+    state["opportunity_inventory_scored"] = True
+    assert brain.candidates(state)[0].action == "await_external_opportunity_acceptance"
+
     state["opportunity_scored"] = True
     assert brain.candidates(state)[0].action == "income_offer_design"
 
@@ -324,7 +329,7 @@ def test_growth_ready_without_new_money_evidence_does_not_repeat_profit_review()
     brain = AutonomousBrain()
     assert brain.candidates(state)[0].action == "await_external_acquisition"
     state["financial_event_needs_reconcile"] = True
-    assert brain.candidates(state)[0].action == "income_revenue_verify"
+    assert brain.candidates(state)[0].action == "await_external_settlement_evidence"
 
 
 def test_new_payment_evidence_takes_priority_over_internal_research():
@@ -335,4 +340,4 @@ def test_new_payment_evidence_takes_priority_over_internal_research():
         "growth_ready": 0, "orders": 1, "paid_orders": 1,
         "financial_event_needs_reconcile": True,
     }
-    assert AutonomousBrain().candidates(state)[0].action == "income_revenue_verify"
+    assert AutonomousBrain().candidates(state)[0].action == "await_external_settlement_evidence"

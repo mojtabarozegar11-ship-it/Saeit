@@ -61,9 +61,11 @@ def test_economic_worker_bounded_drain_never_repeats_a_task(drain, expected):
         executed_ids.append(task_id)
         AgentTask.objects.filter(pk=task_id).update(status="completed")
         return SimpleNamespace(pk=task_id, status="completed",
-                               output_data={"action_performed": "verified_action"})
+                               action_type="income_market_research",
+                               output_data={"action_performed": "verified_action",
+                                            "verified_effect": True})
 
-    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {}})
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
     with patch("core.management.commands.run_economic_worker.build_economic_gateway",
                return_value=gateway), patch(
                    "core.management.commands.run_economic_worker.WorkerRunner"
@@ -161,7 +163,7 @@ def test_legacy_worker_is_a_single_controlled_dispatcher_and_requires_active_age
             "action_performed": "internal_inspection", "verified_effect": True,
         })
 
-    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {}})
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
     with patch("core.management.commands.run_economic_worker.build_economic_gateway",
                return_value=gateway), patch(
                    "core.management.commands.run_economic_worker.WorkerRunner"

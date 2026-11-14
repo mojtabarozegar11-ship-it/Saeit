@@ -5,6 +5,7 @@ financial commitments remain behind the existing approval boundary.
 """
 import hashlib
 import html
+import json
 import os
 import importlib.util
 from pathlib import Path
@@ -26,8 +27,9 @@ def _evidence(kind, value):
 def inspect_project(payload):
     result = ProductionGate().evaluate()
     return {
-        "action_performed": "Ran production readiness inspection against live Django configuration, database, migrations and runtime health.",
-        "verified_effect": True,
+        "action_performed": "Ran a read-only configuration/DB inspection; no new delivered or commercial outcome was produced.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("production_gate", {"ready": result.ready, "checks": result.checks, "reasons": list(result.reasons)}),
         "next_action": "repair_project" if not result.ready else "build_product",
     }
@@ -37,8 +39,9 @@ def market_research(payload):
     active_products = Product.objects.filter(active=True).count()
     queued = AgentTask.objects.filter(status="queued").count()
     return {
-        "action_performed": "Measured current internal commercial inventory and execution backlog.",
-        "verified_effect": True,
+        "action_performed": "Measured internal catalog and queue only; external demand and new commercial outcomes remain unverified.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("database_measurement", {"active_products": active_products, "queued_tasks": queued}),
         "next_action": "income_opportunity_score",
     }
@@ -47,22 +50,32 @@ def market_research(payload):
 def opportunity_score(payload):
     products = list(Product.objects.filter(active=True).values("id", "title", "price", "currency")[:25])
     return {
-        "action_performed": "Scored the current sellable inventory starting point from persisted product records.",
-        "verified_effect": True,
+        "action_performed": "Reviewed internal inventory options; no independent customer demand or paid result was demonstrated.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("product_inventory", {"count": len(products), "products": products}),
         "next_action": "income_offer_design",
     }
 
 
 
+OFFER_TITLE = "Digital Project & Automation Audit"
+OFFER_LIFECYCLE = ("offer_designed", "mvp_built", "growth_ready")
+
+
 def offer_design(payload):
-    offer = Product.objects.filter(
-        title="Digital Project & Automation Audit",
+    # Re-entrant manual/queued invocations may arrive after MVP or growth.
+    # Reusing a later-stage record cannot be mistaken for a new paid offer.
+    matches = list(Product.objects.filter(
+        title=OFFER_TITLE,
         product_type="service",
-        metadata__commercial_status="offer_designed",
-    ).order_by("id").first()
-    if offer:
-        product = offer
+        metadata__commercial_status__in=OFFER_LIFECYCLE,
+    ).order_by("pk")[:2])
+    if len(matches) > 1:
+        # Never choose between possibly duplicated customer-facing offerings.
+        raise ValueError("DUPLICATE_OFFER_REQUIRES_RECONCILIATION")
+    if matches:
+        product = matches[0]
         created = False
     else:
         product = Product.objects.create(
@@ -81,12 +94,16 @@ def offer_design(payload):
         created = True
     return {
         "action_performed": f"{'Created' if created else 'Reused'} isolated draft offer {product.pk}: {product.title}.",
-        "verified_effect": True,
+        "verified_effect": created,
         "evidence": _evidence("product_record", {
             "id": product.pk, "status": product.metadata.get("commercial_status"),
             "active": product.active, "price": str(product.price),
         }),
-        "next_action": "income_mvp_build",
+        "next_action": (
+            "income_mvp_build" if product.metadata.get("commercial_status") == "offer_designed"
+            else "income_growth_experiment" if product.metadata.get("commercial_status") == "mvp_built"
+            else "await_external_acquisition"
+        ),
     }
 
 MVP_SECTIONS = (
@@ -251,7 +268,12 @@ footer{{border-top:2px solid var(--gold);margin-top:24px;padding-top:12px;font-s
 
 
 def mvp_build(payload):
-    product = Product.objects.filter(metadata__commercial_status="offer_designed").order_by("id").first()
+    product = Product.objects.filter(
+        title=OFFER_TITLE,
+        product_type="service",
+        active=False,
+        metadata__commercial_status="offer_designed",
+    ).order_by("id").first()
     if not product:
         raise ValueError("No designed offer exists; run income_offer_design first.")
     asset = build_mvp_asset(product.pk, product.title)
@@ -277,9 +299,41 @@ def mvp_build(payload):
         "next_action": "income_growth_experiment",
     }
 def growth_experiment(payload):
-    product = Product.objects.filter(metadata__commercial_status="mvp_built").order_by("id").first()
+    product = Product.objects.filter(
+        title=OFFER_TITLE,
+        product_type="service",
+        active=False,
+        metadata__commercial_status="mvp_built",
+    ).order_by("id").first()
     if not product:
         raise ValueError("No built MVP exists; run income_mvp_build first.")
+    # A stage label alone is not a deliverable. Before any growth-ready claim,
+    # prove the exact private workbook still exists with original bytes.
+    asset = (product.metadata or {}).get("artifact")
+    if not isinstance(asset, dict):
+        raise ValueError("MVP_ASSET_ATTESTATION_MISSING")
+    root = Path.home() / "factory-runtime" / "private" / "master-agent" / "product-assets"
+    target = root / f"digital-project-audit-{int(product.pk)}-v1.html"
+    digest = asset.get("sha256")
+    recorded_path = asset.get("relative_path")
+    recorded_bytes = asset.get("bytes")
+    if (
+        not isinstance(recorded_path, str) or recorded_path != str(target)
+        or not isinstance(digest, str) or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+        or type(recorded_bytes) is not int or recorded_bytes <= 0
+        or root.is_symlink() or target.is_symlink() or not target.is_file()
+    ):
+        raise ValueError("MVP_ASSET_ATTESTATION_INVALID")
+    try:
+        if target.stat().st_size != recorded_bytes:
+            raise ValueError("MVP_ASSET_BYTES_MISMATCH")
+        with target.open("rb") as reader:
+            actual_sha = hashlib.file_digest(reader, "sha256").hexdigest()
+    except OSError as exc:
+        raise ValueError("MVP_ASSET_UNAVAILABLE") from exc
+    if actual_sha != digest:
+        raise ValueError("MVP_ASSET_HASH_MISMATCH")
     product.metadata = {
         **(product.metadata or {}),
         "commercial_status": "growth_ready",
@@ -313,7 +367,8 @@ def revenue_verify(payload):
             "Inspected internal payment and settlement entry counts; "
             "withheld revenue claims pending independent external reconciliation."
         ),
-        "verified_effect": True,
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("internal_ledger_inventory", {
             "payment_entries": payment_events,
             "settlement_candidates": settlement_candidates,
@@ -321,7 +376,7 @@ def revenue_verify(payload):
         }),
         "verified_revenue": None,
         "revenue_status": "external_settlement_evidence_required",
-        "next_action": "income_profit_optimize",
+        "next_action": "await_external_settlement_evidence",
     }
 
 
@@ -329,9 +384,10 @@ def profit_optimize(payload):
     active = list(Product.objects.filter(active=True).values("id", "title", "price", "currency")[:100])
     return {
         "action_performed": "Measured active sellable catalog for the next allocation decision without fabricating margin data.",
-        "verified_effect": True,
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("profit_baseline", {"active_products": len(active), "products": active}),
-        "next_action": "income_market_research",
+        "next_action": "await_real_cost_and_customer_evidence",
     }
 
 
@@ -362,7 +418,8 @@ def master_self_improvement(payload):
                 "Inspected the existing fresh, private factory self-upgrade dossier "
                 "without modifying factory source or starting a competing runner."
             ),
-            "verified_effect": True,  # the *inspection*, not source improvement
+            "verified_effect": False,  # existing evidence inspection is not a new repair
+            "business_effect_verified": False,
             "evidence": _evidence("independent_factory_upgrade_dossier_inspection", proof),
             "code_improvement_performed": False,
             "production_promotion": False,
@@ -396,6 +453,110 @@ def master_self_improvement(payload):
     }
 
 
+
+def service_package(payload):
+    """Produce one private, source-verified deliverable for an authorized task.
+
+    This is an INTERNAL capability of the existing economic master; no new agent,
+    worker, scheduler, buyer communication, transaction or public file is made.
+    """
+    from .mojtaba_commercial_services import generate, private_dir
+    if not isinstance(payload, dict) or set(payload) != {"service_code", "data"}:
+        raise ValueError("SERVICE_PACKAGE_INPUT_INVALID")
+    try:
+        canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                               separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("SERVICE_PACKAGE_JSON_INVALID") from exc
+    if len(canonical) > 65536:
+        raise ValueError("SERVICE_PACKAGE_INPUT_TOO_LARGE")
+    digest = hashlib.sha256(canonical).hexdigest()
+    try:
+        document = generate(payload, digest)
+    except (TypeError, ValueError) as exc:
+        # Do not log or echo original client values through provider stacktraces.
+        raise ValueError("SERVICE_PACKAGE_VALIDATION_FAILED") from None
+
+    root = private_dir()
+    target = root / f"{payload['service_code']}-{digest[:20]}.md"
+    if target.is_symlink():
+        raise ValueError("SERVICE_PACKAGE_OUTPUT_SYMLINK")
+    if target.exists():
+        if not target.is_file() or target.read_text(encoding="utf-8") != document:
+            raise ValueError("SERVICE_PACKAGE_OUTPUT_COLLISION")
+        return {
+            "action_performed": "Verified existing private service package; no new deliverable produced.",
+            "verified_effect": False, "evidence": _evidence("existing_service_package", {
+                "service_code": payload["service_code"], "input_sha256": digest,
+            }),
+            "revenue_not_assessed": True,
+            "next_action": "owner_review_existing_deliverable",
+        }
+    fd, tmp = tempfile.mkstemp(prefix=".service-", dir=str(root))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(document)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(tmp, 0o600)
+        try:
+            # Atomic, no-clobber publication. os.replace allowed two workers to
+            # overwrite the same output and both claim a new verified effect.
+            os.link(tmp, target, follow_symlinks=False)
+        except FileExistsError:
+            if (target.is_symlink() or not target.is_file()
+                    or target.read_bytes() != document.encode("utf-8")):
+                raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION")
+            return {
+                "action_performed": "Reused independently verified private service package.",
+                "verified_effect": False,
+                "evidence": _evidence("existing_service_package", {
+                    "service_code": payload["service_code"], "input_sha256": digest,
+                }),
+                "revenue_not_assessed": True,
+                "next_action": "owner_review_existing_deliverable",
+            }
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    written = target.read_bytes()
+    if hashlib.sha256(written).hexdigest() != hashlib.sha256(
+            document.encode("utf-8")).hexdigest():
+        raise ValueError("SERVICE_PACKAGE_POSTWRITE_INTEGRITY_FAILED")
+    return {
+        "action_performed": "Created verified private nonbinding service analysis package.",
+        "verified_effect": True,
+        "evidence": _evidence("private_service_package", {
+            "service_code": payload["service_code"], "input_sha256": digest,
+            "output_sha256": hashlib.sha256(written).hexdigest(),
+            "bytes": len(written),
+            "customer_delivered": False, "revenue_verified": False,
+        }),
+        "customer_delivered": False,
+        "revenue_not_assessed": True,
+        "next_action": "owner_review_service_deliverable",
+    }
+
+
+def quote_packet(payload):
+    """Create one private, nonbinding cost scenario; never an approved quote."""
+    from .mojtaba_private_quote import prepare_private_quote
+    outcome = prepare_private_quote(payload)
+    return {
+        "action_performed": (
+            "Created private cost-verified six-service quote scenario."
+            if outcome["created"] else
+            "Verified existing private quote scenario; no new quote produced."
+        ),
+        "verified_effect": outcome["created"] is True,
+        "evidence": _evidence("private_quote_scenario", outcome),
+        "price_approved": False,
+        "external_payment_verified": False,
+        "revenue_not_assessed": True,
+        "next_action": "owner_review_service_price_and_legal_payment",
+    }
+
+
 def factory_native_review(payload):
     # This executor is intentionally *private VPS-only*. Never accept a
     # caller-supplied root, production website path, or output destination.
@@ -409,6 +570,8 @@ def build_economic_gateway():
     return ToolGateway([
         ToolSpec(code="factory_native_review",handler=factory_native_review,risk="low"),
         ToolSpec(code="factory_f41_private_build",handler=build_verified_order,risk="low"),
+        ToolSpec(code="income_service_package", handler=service_package, risk="medium"),
+        ToolSpec(code="income_quote_scenario", handler=quote_packet, risk="medium"),
         ToolSpec(code="income_market_research", handler=market_research, risk="medium"),
         ToolSpec(code="income_opportunity_score", handler=opportunity_score, risk="medium"),
         ToolSpec(code="income_offer_design", handler=offer_design, risk="medium"),
