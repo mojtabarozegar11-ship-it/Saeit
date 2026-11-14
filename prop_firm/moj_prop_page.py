@@ -99,7 +99,7 @@ def page_context(code="en"):
         "faq": t["faq"],
         "footer": t["footer"],
         "social": t["social"],
-        "social_daily_post_per_platform": p.social_posts_per_platform_per_verified_trading_day,
+        "social_required_post_count": p.social_posts_per_challenge,
         "social_platforms": p.social_posting_platforms,
         "levels": level_items,
         "entry": f"{p.entry_trx} TRX",
