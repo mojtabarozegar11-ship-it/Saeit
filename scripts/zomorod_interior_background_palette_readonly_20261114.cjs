@@ -4,10 +4,7 @@
 'use strict';
 const {chromium}=require('playwright');
 const fs=require('fs'),path=require('path');
-const pages=['/about/','/company/','/services/','/research/','/agriculture/',
-'/industry/','/knowledge/','/economy/','/market/','/contact/','/store/',
-'/tala/','/ghanadi/','/faremah/','/amozeshgah/','/business/','/apps/',
-'/games/','/news/','/newsletter/','/studio/','/auctions/'];
+const {PAGES,classify,summarize}=require('./zomorod_interior_census_policy_20261114.cjs');
 const excludedHomepage='/';
 const out=path.join(process.env.RUNNER_TEMP||'/tmp','zm-interior-olive-palette-readonly');
 fs.mkdirSync(out,{recursive:true});
@@ -15,14 +12,28 @@ fs.mkdirSync(out,{recursive:true});
   const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
   const all=[];
   try{
-    for(const uri of pages){
-      const p=await browser.newPage({viewport:{width:390,height:850},
-        locale:'fa-IR',reducedMotion:'reduce'});
-      const item={path:uri};
-      try{
-        const response=await p.goto('https://zomorodmelal.ir'+uri,{
-          waitUntil:'domcontentloaded',timeout:24000});
-        await p.waitForTimeout(90);
+
+    for(const uri of PAGES){
+      const item={path:uri,attempts:[],censusComplete:false};
+      for(let attempt=1;attempt<=2;attempt++){
+        const p=await browser.newPage({viewport:{width:390,height:850},
+          locale:'fa-IR',reducedMotion:'reduce'});
+        const started=Date.now();
+        try{
+          // One sequential browser page; bounded retry only if the first fetch fails.
+          const response=await p.goto('https://zomorodmelal.ir'+uri,{
+            waitUntil:'domcontentloaded',timeout:attempt===1?16000:12000});
+          item.http=response?.status();
+          item.documentPath=new URL(p.url()).pathname;
+          if(item.http!==200 || item.documentPath!==uri){
+            item.attempts.push({number:attempt,ok:false,http:item.http,
+              documentPath:item.documentPath,durationMs:Date.now()-started});
+            // 4xx/mismatched paths are definitive observations, not timeouts.
+            if(item.documentPath!==uri || (item.http>=400&&item.http<500))break;
+            if(attempt<2)await new Promise(r=>setTimeout(r,450));
+            continue;
+          }
+          await p.waitForTimeout(90);
         const styles=await p.evaluate(()=>{
           const rgb=(s)=>{
             const a=(s||'').match(/^rgba?\(([^)]+)\)/);
@@ -64,26 +75,54 @@ fs.mkdirSync(out,{recursive:true});
             visibleBackgroundPalette:[...new Set(bands.map(x=>x.bg))].slice(0,20)
           };
         });
-        Object.assign(item,{http:response?.status(),...styles});
-      }catch(e){item.error=String(e).slice(0,210);}
+
+          Object.assign(item,styles,{censusComplete:true});
+          // The public HTML marker does NOT prove the identity of a host file.
+          const marker=({
+            '/ghanadi/':'ZM_INTERIOR_OLIVE_SCOPED_20261114',
+            '/ghanadi/cafe-shiraz/':'ZM_INTERIOR_OLIVE_CAFE_20261114',
+            '/auctions/':'zm-auctions-inner-olive-20261114'})[uri];
+          if(marker){
+            item.expectedMarker=marker;
+            item.markerInPublicHtml=await p.evaluate(m=>
+              document.documentElement.outerHTML.includes(m),marker);
+            item.hostFileIdentityProven=false;
+          }
+          item.attempts.push({number:attempt,ok:true,http:item.http,
+            durationMs:Date.now()-started});
+          delete item.error;
+          break;
+        }catch(e){
+          item.error=String(e).slice(0,210);
+          item.censusComplete=false;
+          item.attempts.push({number:attempt,ok:false,
+            error:item.error,durationMs:Date.now()-started});
+          if(attempt<2)await new Promise(r=>setTimeout(r,450));
+        }finally{
+          await p.close();
+        }
+      }
+      item.censusStatus=classify(item);
       console.log('ZM_INTERIOR_PALETTE '+JSON.stringify(item));
       all.push(item);
-      await p.close();
     }
   }finally{await browser.close()}
-  const ok=all.filter(x=>x.http===200).length;
-  const summary={total:all.length,http200:ok,fetchErrors:all.length-ok,
-    pageSourcesUnchanged:true,liveWrites:0,formsSubmitted:0,
-    excludedHomepage,pathsWithBlackBands:all.filter(x=>x.blackBands?.length).map(x=>x.path)};
+
+  const summary=summarize(all,PAGES);
   console.log('ZM_INTERIOR_PALETTE_SUMMARY '+JSON.stringify(summary));
   fs.writeFileSync(path.join(out,'computed-palette.json'),JSON.stringify({summary,pages:all},null,2));
   if(process.env.GITHUB_STEP_SUMMARY){
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-      '\n## Existing interior pages: computed background palette (no changes)\n\n'+
-      '| URL | Background | Dark full-width bands | HTTP |\n|---|---|---:|---:|\n'+
-      all.map(x=>'| '+x.path+' | '+(x.bodyBg||'no response')+
-        ' | '+(x.blackBands?.length||0)+' | '+(x.http||0)+' |\n').join('')+
-      '\nHomepage excluded. This is a style census, not release or approved redesign.\n');
+      '\\n## Existing interior pages: computed backgrounds (no site changes)\\n\\n'+
+      '| URL | Background | Result | Dark full-width bands | HTTP | Attempts |\\n'+
+      '|---|---|---|---:|---:|---:|\\n'+
+      all.map(x=>'| '+x.path+' | '+(x.bodyBg||'unavailable')+
+        ' | '+x.censusStatus+' | '+(x.blackBands?.length||0)+
+        ' | '+(x.http||0)+' | '+x.attempts.length+' |\\n').join('')+
+      '\n**Verified DOM:** '+summary.inspected+'/'+summary.total+
+      '; **transient failures recovered:** '+summary.transientFailures.length+
+      '; **unknown routes:** '+summary.failedRoutes.length+
+      '. Homepage excluded. Timeouts and missing pages are never counted as success.\\n');
   }
-  if(ok<all.length-3)process.exitCode=1;
+  if(!summary.allRoutesInspected)process.exitCode=1;
 })().catch(e=>{console.error('ZM_INTERIOR_PALETTE_FATAL',e);process.exitCode=1});
