@@ -246,7 +246,7 @@ def case_drafts(case_id):
 
 
 def make_review_form(inquiry):
-    return CompanyReviewForm(initial={
+    return CompanyReviewForm(case_kind=inquiry.kind, initial={
         "request_token": new_desk_token(),
         "revision": inquiry.updated_at.isoformat(),
         "service_code": SERVICE_BY_KIND.get(inquiry.kind, (("", ""),))[0][0],
