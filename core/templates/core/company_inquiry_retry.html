@@ -11,7 +11,7 @@ a{color:#176749}p{max-width:100%}
 </style></head><body><main><article>
 <h1>بررسی دوباره اطلاعات درخواست</h1>
 <p>درخواست هنوز در سامانه ثبت نشده است. خطاها را اصلاح کنید و دوباره ثبت کنید؛ اطلاعات معتبر واردشده حفظ شده است.</p>
-<form action="/company/" method="post">{% csrf_token %}
+<form action="{{ form_action|default:'/company/' }}" method="post">{% csrf_token %}
 {{ form.non_field_errors }}
 {{ form.as_p }}
 <button type="submit">ثبت درخواست برای بررسی</button>
