@@ -70,6 +70,14 @@ class InternalCyberModuleTests(unittest.TestCase):
         self.assertEqual(report["mode"], "offline_evidence")
         self.assertEqual(len(report["audit_sha256"]), 64)
 
+    def test_non_json_authorization_fails_closed(self):
+        for invalid in (object(), {1, 2}, float("nan")):
+            with self.subTest(value=type(invalid).__name__):
+                auth = signed()
+                auth["extra"] = invalid
+                with self.assertRaisesRegex(CyberModuleError, "AUTHORIZATION_INVALID"):
+                    self.run_review(auth=auth)
+
     def test_no_signature(self):
         unsigned = signed()
         unsigned.pop("signature")
