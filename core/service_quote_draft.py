@@ -29,6 +29,10 @@ MAX_MESSAGE_CHARS = 3_500
 MAX_NAME_CHARS = 180
 MAX_SUBJECT_CHARS = 200
 MAX_BATCH = 20
+# Bound a single read to avoid costly full CRM scans while looking past the
+# initial incomplete records. The old first-20 truncation could starve a later
+# eligible customer indefinitely.
+MAX_SCAN = 500
 KIND_BY_CODE = {
     "AGR-01": "project",
     "RS-01": "research",
@@ -44,7 +48,7 @@ def _allowed_source(row) -> bool:
     # Only consented C04 company forms; never import unverified historical
     # email contacts, old PHP leads, or third-party databases.
     note = row.internal_note
-    return isinstance(note, str) and SOURCE_MARKER in note
+    return isinstance(note, str) and note.startswith(SOURCE_MARKER)
 
 
 def _code_for(row) -> str | None:
@@ -144,20 +148,42 @@ def _candidate_filter():
     )
 
 
+def _scan_candidates():
+    """Bounded, deterministic candidate review; return no private fields.
+
+    A failed record is counted with a fixed reason code, never printed. The
+    extra row distinguishes 'no buyer' from 'more queue not yet inspected'.
+    """
+    rows = list(_candidate_filter()[:MAX_SCAN + 1])
+    limit_reached = len(rows) > MAX_SCAN
+    inspected = rows[:MAX_SCAN]
+    eligible_ids = []
+    reasons = {}
+    for row in inspected:
+        state = _eligible(row)
+        if state == "eligible":
+            eligible_ids.append(row.pk)
+        else:
+            reasons[state] = reasons.get(state, 0) + 1
+    return eligible_ids, reasons, len(inspected), limit_reached
+
+
 def preview_candidates(limit=MAX_BATCH) -> dict:
-    """No writes, no PII; only an internal candidate census."""
+    """Read-only lead quality census across up to MAX_SCAN candidate rows."""
     if type(limit) is not int or not 1 <= limit <= MAX_BATCH:
         raise ValueError("invalid_batch_limit")
-    # Bounded scan; malformed rows are retained for human review.
-    rows = list(_candidate_filter()[:limit])
+    eligible_ids, reasons, inspected, limited = _scan_candidates()
     return {
         "bot": BOT_ID,
         "mode": "read_only",
-        "candidate_count": len(rows),
-        "eligible_count": sum(_eligible(row) == "eligible" for row in rows),
-        "requires_human_review_count": sum(
-            _eligible(row) != "eligible" for row in rows
-        ),
+        "candidate_count": inspected,
+        "eligible_count": min(len(eligible_ids), limit),
+        "eligible_seen_in_scan": len(eligible_ids),
+        "requires_human_review_count": sum(reasons.values()),
+        "review_reason_counts": dict(sorted(reasons.items())),
+        "scan_rows_max": MAX_SCAN,
+        "scan_limit_reached": limited,
+        "scan_complete": not limited,
         "customer_details_exposed": False,
         "emails_sent": 0,
         "prices_set": 0,
@@ -226,14 +252,28 @@ def prepare_one(inquiry_id: int) -> dict:
 
 
 def prepare_next() -> dict:
-    """One bounded internal action; do not fabricate work when no lead exists."""
-    candidates = list(_candidate_filter()[:MAX_BATCH])
-    for candidate in candidates:
-        if _eligible(candidate) == "eligible":
-            return prepare_one(candidate.pk)
+    """Prepare one real lead, even behind invalid historic CRM entries.
+
+    Do not tell the master bot there is no work when the bounded scan has not
+    reached the end of the queue. A large malformed backlog needs operator
+    triage, not fabricated progress or a parallel worker.
+    """
+    eligible_ids, reasons, inspected, limited = _scan_candidates()
+    for inquiry_id in eligible_ids:
+        result = prepare_one(inquiry_id)
+        if result.get("verified_effect") is True:
+            return result
+        # Concurrent staff/bot changes can invalidate a selected row. Try
+        # other already-observed eligible records rather than abandoning work.
     return {
-        "state": "no_eligible_consented_service_inquiry",
+        "state": (
+            "scan_limit_reached_requires_manual_triage"
+            if limited else "no_eligible_consented_service_inquiry"
+        ),
         "verified_effect": False,
+        "candidate_count_inspected": inspected,
+        "requires_human_review_count": sum(reasons.values()),
+        "scan_limit_reached": limited,
         "customer_contacted": False,
         "external_payment_received": None,
     }
