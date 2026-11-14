@@ -13,6 +13,7 @@ from django.views.decorators.http import require_GET
 
 from .models import LedgerEntry, OrderItem, PaymentWebhookEvent
 from .tron_gateway_web import PROVIDER, _host, _owner, _private, _read_product
+from .tron_gateway_verify import MAINNET_RECEIVER
 
 _SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,220}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -143,6 +144,11 @@ def download_paid(request, invoice_id):
             invoice.status != "paid" or intent.status != "paid"
             or intent.provider != PROVIDER or order.status != "paid"
             or invoice.verified_at is None
+            or invoice.receiver != MAINNET_RECEIVER
+            or intent.amount != order.total
+            or intent.currency != order.currency
+            or type(invoice.amount_sun) is not int
+            or invoice.amount_sun <= 0
             or type(invoice.txid) is not str
             or _TXID.fullmatch(invoice.txid) is None
             or type(invoice.proof_digest) is not str
@@ -161,7 +167,11 @@ def download_paid(request, invoice_id):
         entry_type="credit", amount=order.total,
         currency=order.currency,
     )[:2])
-    if len(events) != 1 or len(credits) != 1:
+    if (len(events) != 1 or len(credits) != 1
+            or LedgerEntry.objects.filter(
+                order=order,
+                entry_type__in=("refund", "chargeback", "reversal"),
+            ).exists()):
         raise Http404("Merchant credit evidence incomplete")
     meta = credits[0].metadata
     if (type(meta) is not dict or meta.get("network") != "tron-mainnet"
