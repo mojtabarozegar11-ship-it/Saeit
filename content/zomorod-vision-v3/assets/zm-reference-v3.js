@@ -93,8 +93,10 @@
    else if(typeof motionPreference.addListener==='function')motionPreference.addListener(onMotionChange);
    strip.addEventListener('mouseenter',()=>{state.hovered=trueHover.matches;});
    strip.addEventListener('mouseleave',()=>{state.hovered=false;});
-   strip.addEventListener('focusin',()=>{state.focused=keyboardFocus||document.activeElement===strip;});
-   strip.addEventListener('focusout',()=>{state.focused=strip.contains(document.activeElement);});
+   // Pause for every focus source (keyboard, assistive technology or script), not only keyboard heuristics.
+   strip.addEventListener('focusin',()=>{state.focused=true;});
+   // relatedTarget is the next focus destination; activeElement may still be stale during focusout.
+   strip.addEventListener('focusout',event=>{state.focused=Boolean(event.relatedTarget&&strip.contains(event.relatedTarget));});
    strip.addEventListener('pointerdown',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
    strip.addEventListener('wheel',()=>{state.delayUntil=performance.now()+7000;},{passive:true});
    // Keyboard-accessible manual navigation, including the photo rail without arrow buttons.
