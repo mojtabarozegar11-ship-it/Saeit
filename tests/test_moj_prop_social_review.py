@@ -1,230 +1,226 @@
-"""Verified social content is a separate, privately reviewed challenge pass gate."""
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+"""Django regressions for exactly one externally reviewed social post per paid cohort.
 
+Never publishes posts, creates a live invoice, transfers TRX or trades.
+"""
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from prop_firm.models import (
-    PropTrader, PropAccount, PropExecution, PropEquityObservation,
-    PropSocialEvidence,
+    PropTrader, PropAccount, PropChallengeEnrollment, PropSocialEvidence,
 )
-from prop_firm.portal import account_projection
 from prop_firm.rules import POLICY
 from prop_firm.social_review_service import (
     SocialEvidenceRejected, submit_social_evidence, review_social_evidence,
 )
 
-START = datetime(2026,11,1,0,0,tzinfo=timezone.utc)
-CHECKED = {
+START = timezone.now() - timedelta(days=32)
+FACTS = {
     "author_verified": True,
     "public_visible": True,
     "disclosure_verified": True,
     "content_compliant": True,
     "date_verified": True,
+    "continued_visibility_verified": True,
 }
 
 
-class MojPropSocialEvidenceTests(TestCase):
+class OnePostEnrollmentDatabaseTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        User = get_user_model()
-        cls.trader_user = User.objects.create_user(
-            username="social_trader", password="unit-test-only"
+        U = get_user_model()
+        cls.trader = U.objects.create_user(
+            username="one_post_buyer", password="test-only"
         )
-        cls.other_user = User.objects.create_user(
-            username="social_other", password="unit-test-only"
+        cls.other = U.objects.create_user(
+            username="other_buyer", password="test-only"
         )
-        cls.reviewer = User.objects.create_user(
-            username="social_staff", password="unit-test-only", is_staff=True
+        cls.operator = U.objects.create_user(
+            username="one_post_operator", password="test-only", is_staff=True
         )
-        cls.profile = PropTrader.objects.create(user=cls.trader_user)
-        cls.account = PropAccount.objects.create(
+        cls.profile = PropTrader.objects.create(user=cls.trader)
+        cls.purchase = PropChallengeEnrollment.objects.create(
+            trader=cls.profile, verified_invoice_ref="synthetic-test-only-invoice",
+            confirmed_at=START, settlement_verified=True,
+            terms_version=POLICY.version,
+        )
+        cls.phase1 = PropAccount.objects.create(
             trader=cls.profile, kind=PropAccount.Kind.PHASE_ONE,
             status=PropAccount.Status.ACTIVE,
-            opened_at=START, policy_version=POLICY.version,
+            opened_at=START, challenge_enrollment=cls.purchase,
+            policy_version=POLICY.version,
+        )
+        cls.phase2 = PropAccount.objects.create(
+            trader=cls.profile, kind=PropAccount.Kind.PHASE_TWO,
+            status=PropAccount.Status.ACTIVE,
+            opened_at=START, challenge_enrollment=cls.purchase,
+            policy_version=POLICY.version,
         )
 
-    def make_trade(self, day_idx=0, pnl="1.60"):
-        date_time = START + timedelta(days=day_idx)
-        initial = Decimal("100.00") + Decimal(day_idx) * Decimal("1.60")
-        PropEquityObservation.objects.create(
-            account=self.account, external_event_id=f"open-{day_idx}",
-            observed_at=date_time + timedelta(hours=8),
-            is_session_open=True, equity_usd=initial,
-            reconciliation_status="verified",
-        )
-        PropExecution.objects.create(
-            account=self.account, external_event_id=f"trade-{day_idx}",
-            data_source="simulator-approved", symbol="XAUUSD",
-            closed_at=date_time + timedelta(hours=12),
-            gross_realized_usd=Decimal(pnl), total_fees_usd=Decimal("0.00"),
-            reconciliation_status="verified",
-        )
-        PropEquityObservation.objects.create(
-            account=self.account, external_event_id=f"close-{day_idx}",
-            observed_at=date_time + timedelta(hours=14),
-            is_session_open=False, equity_usd=initial + Decimal(pnl),
-            reconciliation_status="verified",
-        )
-
-    def stage(self, day_idx=0, platform="instagram"):
-        day = (START + timedelta(days=day_idx)).date()
-        post_at = START + timedelta(days=day_idx, hours=16)
-        url = (
-            f"https://www.instagram.com/p/unique-{day_idx}"
-            if platform == "instagram"
-            else f"https://www.facebook.com/trader/posts/{90000 + day_idx}"
-        )
-        return submit_social_evidence(
-            account_id=self.account.pk, submitter=self.trader_user,
-            trading_day=day, platform=platform, post_url=url, posted_at=post_at,
+    def submit(self, *, account=None, platform="instagram", **changes):
+        data = dict(
+            account_id=(account or self.phase1).pk,
+            submitter=self.trader,
+            platform=platform,
+            post_url=("https://www.instagram.com/p/one-post-example"
+                      if platform == "instagram" else
+                      "https://www.facebook.com/trader/posts/998877"),
+            posted_at=START + timedelta(hours=1),
             explicit_consent=True,
         )
+        data.update(changes)
+        return submit_social_evidence(**data)
 
-    def approve(self, row, **facts):
+    def approve(self, row, **changes):
         return review_social_evidence(
-            evidence_id=row.pk, reviewer=self.reviewer,
-            audited_facts={**CHECKED, **facts},
-            reviewed_at=row.posted_at + timedelta(hours=2),
+            evidence_id=row.pk,
+            reviewer=self.operator,
+            audited_facts={**FACTS, **changes},
+            reviewed_at=row.posted_at + timedelta(days=28, hours=1),
         )
 
-    def test_customer_cannot_submit_without_explicit_consent(self):
-        self.make_trade()
-        with self.assertRaises(PermissionDenied):
-            submit_social_evidence(
-                account_id=self.account.pk, submitter=self.trader_user,
-                trading_day=START.date(), platform="instagram",
-                post_url="https://www.instagram.com/p/test", posted_at=START + timedelta(hours=16),
-            )
-        self.assertFalse(PropSocialEvidence.objects.exists())
+    def test_one_instagram_post_is_stored_as_pending(self):
+        row = self.submit()
+        self.assertEqual(row.review_status, "pending")
+        self.assertEqual(PropSocialEvidence.objects.count(), 1)
+        self.assertEqual(row.enrollment_id, self.purchase.pk)
 
-    def test_unverified_trade_day_cannot_get_proof(self):
-        with self.assertRaises(SocialEvidenceRejected):
-            self.stage()
-        self.assertFalse(PropSocialEvidence.objects.exists())
-
-    def test_customer_cannot_submit_for_other_account(self):
-        self.make_trade()
-        with self.assertRaises(PermissionDenied):
-            submit_social_evidence(
-                account_id=self.account.pk, submitter=self.other_user,
-                trading_day=START.date(), platform="instagram",
-                post_url="https://www.instagram.com/p/test", posted_at=START + timedelta(hours=16),
-                explicit_consent=True,
-            )
-
-    def test_one_post_per_day_platform_only(self):
-        self.make_trade()
-        row = self.stage()
-        self.assertEqual(row.review_status, PropSocialEvidence.Review.PENDING)
-        with self.assertRaises(SocialEvidenceRejected):
-            self.stage()
+    def test_one_facebook_post_is_valid_alternative(self):
+        row = self.submit(platform="facebook")
+        self.assertEqual(row.platform, "facebook")
         self.assertEqual(PropSocialEvidence.objects.count(), 1)
 
-    def test_post_date_must_match_trade_day(self):
-        self.make_trade()
+    def test_second_post_same_network_is_blocked(self):
+        self.submit()
         with self.assertRaises(SocialEvidenceRejected):
-            submit_social_evidence(
-                account_id=self.account.pk, submitter=self.trader_user,
-                trading_day=START.date(), platform="facebook",
-                post_url="https://facebook.com/trader/posts/mismatch",
-                posted_at=START + timedelta(days=1), explicit_consent=True,
-            )
+            self.submit()
+        self.assertEqual(PropSocialEvidence.objects.count(), 1)
 
-    def test_nonstaff_cannot_verify_social_posts(self):
-        self.make_trade()
-        row = self.stage()
+    def test_second_post_different_network_is_not_required_or_allowed(self):
+        self.submit()
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit(platform="facebook")
+        self.assertEqual(PropSocialEvidence.objects.count(), 1)
+
+    def test_both_simulated_phases_share_single_purchase_evidence(self):
+        self.submit(account=self.phase1)
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit(account=self.phase2, platform="facebook")
+        self.assertEqual(PropSocialEvidence.objects.count(), 1)
+
+    def test_post_without_explicit_consent_is_denied(self):
+        with self.assertRaises(PermissionDenied):
+            self.submit(explicit_consent=False)
+        self.assertFalse(PropSocialEvidence.objects.exists())
+
+    def test_post_from_different_account_owner_denied(self):
+        with self.assertRaises(PermissionDenied):
+            self.submit(submitter=self.other)
+
+    def test_unsettled_purchase_never_unlocks_post(self):
+        self.purchase.settlement_verified = False
+        self.purchase.save()
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit()
+
+    def test_old_policy_account_not_retroactively_forced(self):
+        self.phase1.policy_version = "2026-11-14/v1.1"
+        self.phase1.save()
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit()
+
+    def test_post_after_24_hours_rejected(self):
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit(posted_at=START + timedelta(hours=25))
+
+    def test_post_before_purchase_rejected(self):
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit(posted_at=START - timedelta(minutes=1))
+
+    def test_banned_owner_profile_not_valid(self):
+        with self.assertRaises(SocialEvidenceRejected):
+            self.submit(post_url="https://www.instagram.com/p/dr.mojtaba.rozegar")
+
+    def test_nonstaff_cannot_approve(self):
+        row = self.submit()
         with self.assertRaises(PermissionDenied):
             review_social_evidence(
-                evidence_id=row.pk, reviewer=self.trader_user, audited_facts=CHECKED
+                evidence_id=row.pk, reviewer=self.other,
+                audited_facts=FACTS,
             )
 
-    def test_all_manual_checks_required_before_verified(self):
-        self.make_trade()
-        row = self.stage()
-        approved = self.approve(row, disclosure_verified=False)
-        self.assertEqual(approved.review_status, "rejected")
-        self.assertFalse(approved.disclosure_verified)
+    def test_buyer_cannot_approve_own_post(self):
+        row = self.submit()
+        with self.assertRaises(PermissionDenied):
+            review_social_evidence(
+                evidence_id=row.pk, reviewer=self.trader,
+                audited_facts=FACTS,
+            )
+
+    def test_review_before_full_four_weeks_fails(self):
+        row = self.submit()
+        with self.assertRaises(SocialEvidenceRejected):
+            review_social_evidence(
+                evidence_id=row.pk, reviewer=self.operator,
+                audited_facts=FACTS,
+                reviewed_at=row.posted_at + timedelta(days=27),
+            )
+
+    def test_independent_28_day_review_changes_status(self):
+        row = self.submit()
+        result = self.approve(row)
+        self.assertEqual(result.review_status, "verified")
+        self.assertTrue(result.continued_visibility_verified)
+        self.assertEqual(result.reviewed_by_id, self.operator.pk)
+
+    def test_missing_disclosure_is_rejected(self):
+        row = self.submit()
+        result = self.approve(row, disclosure_verified=False)
+        self.assertEqual(result.review_status, "rejected")
+
+    def test_rejected_review_cannot_be_replayed(self):
+        row = self.submit()
+        self.approve(row, content_compliant=False)
         with self.assertRaises(SocialEvidenceRejected):
             self.approve(row)
 
-    def test_approved_post_keeps_audited_reviewer(self):
-        self.make_trade()
-        row = self.stage()
-        verified = self.approve(row)
-        self.assertEqual(verified.review_status,"verified")
-        self.assertEqual(verified.reviewed_by, self.reviewer)
-        self.assertEqual(verified.reviewed_at, row.posted_at + timedelta(hours=2))
-        self.assertTrue(verified.disclosure_verified)
-
-    def test_review_cannot_be_replayed_after_verified(self):
-        self.make_trade()
-        row = self.stage()
-        self.approve(row)
+    def test_missing_manual_fact_cannot_be_reviewed(self):
+        row = self.submit()
+        facts = dict(FACTS)
+        facts.pop("date_verified")
         with self.assertRaises(SocialEvidenceRejected):
-            self.approve(row)
+            review_social_evidence(
+                evidence_id=row.pk, reviewer=self.operator,
+                audited_facts=facts,
+                reviewed_at=row.posted_at + timedelta(days=28, hours=1),
+            )
 
-    def test_phase_cannot_pass_with_missing_posts(self):
-        for i in range(6):
-            self.make_trade(i)
-        self.account.reconciled_by_operator = True
-        self.account.save()
-        state = account_projection(self.account)
-        self.assertTrue(state["verified"])
-        self.assertFalse(state["assessment"].passed)
-        self.assertIn(
-            "social_daily_posts_both_platforms_unverified",
-            state["assessment"].reasons,
+    def test_database_itself_rejects_duplicate_across_platforms(self):
+        row = self.submit()
+        competing = PropSocialEvidence(
+            account=self.phase2, enrollment=self.purchase,
+            platform="facebook",
+            post_url="https://www.facebook.com/trader/posts/33333",
+            posted_at=row.posted_at,
         )
-        self.assertEqual(state["social_posting"].required_instagram, 6)
-        self.assertEqual(state["social_posting"].required_facebook, 6)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PropSocialEvidence.objects.bulk_create([competing])
+        self.assertEqual(PropSocialEvidence.objects.count(), 1)
 
-    def test_full_six_day_both_platform_reviews_allow_trading_pass(self):
-        for i in range(6):
-            self.make_trade(i)
-            self.approve(self.stage(i,"instagram"))
-            self.approve(self.stage(i,"facebook"))
-        self.account.reconciled_by_operator = True
-        self.account.save()
-        state = account_projection(self.account)
-        self.assertTrue(state["verified"])
-        self.assertTrue(state["social_posting"].satisfied)
-        self.assertEqual(state["social_posting"].reviewed_instagram, 6)
-        self.assertEqual(state["social_posting"].reviewed_facebook, 6)
-        self.assertTrue(state["assessment"].passed)
-
-    def test_one_missing_facebook_review_delays_pass_not_breach(self):
-        for i in range(6):
-            self.make_trade(i)
-            self.approve(self.stage(i,"instagram"))
-            if i != 5:
-                self.approve(self.stage(i,"facebook"))
-        self.account.reconciled_by_operator = True
-        self.account.save()
-        state = account_projection(self.account)
-        self.assertFalse(state["assessment"].passed)
-        self.assertEqual(state["social_posting"].reviewed_facebook, 5)
-        self.assertEqual(self.account.status, PropAccount.Status.ACTIVE)
-
-    def test_social_proof_cannot_change_existing_funded_account(self):
-        funded = PropAccount.objects.create(
-            trader=self.profile, kind=PropAccount.Kind.FUNDED,
-            starting_capital_usd=Decimal("100"), reference="funded-social-test",
-            opened_at=START,
+    def test_foreign_enrollment_is_not_accepted(self):
+        other_profile = PropTrader.objects.create(user=self.other)
+        other_enrollment = PropChallengeEnrollment.objects.create(
+            trader=other_profile,
+            verified_invoice_ref="synthetic-other-purchase",
+            confirmed_at=START,
+            settlement_verified=True,
+            terms_version=POLICY.version,
         )
-        row = PropSocialEvidence(
-            account=funded, platform="instagram", trading_day=START.date(),
-            post_url="https://instagram.com/p/no-funded", posted_at=START+timedelta(hours=16),
-        )
-        with self.assertRaises(ValidationError):
-            row.save()
-
-    def test_old_cohort_cannot_be_retroactively_given_social_evidence(self):
-        self.account.policy_version = "2026-11-14/v1.1"
-        self.account.save()
-        self.make_trade()
+        self.phase1.challenge_enrollment = other_enrollment
+        self.phase1.save()
         with self.assertRaises(SocialEvidenceRejected):
-            self.stage()
+            self.submit()
