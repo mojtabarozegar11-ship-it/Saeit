@@ -158,12 +158,15 @@ class CommerceGatewayIntegrityTests(TestCase):
         from django.test.utils import override_settings
         from core.tron_gateway_delivery import _file_from_private_root
         with tempfile.TemporaryDirectory() as tmpdir:
-            data = b"Invoice-specific rights-protected digital material\n"
-            Path(tmpdir, "lesson.bin").write_bytes(data)
+            data = b"%PDF-1.7\nInvoice-specific rights-protected digital material\n%%EOF\n"
+            Path(tmpdir).chmod(0o700)
+            asset = Path(tmpdir, "lesson.pdf")
+            asset.write_bytes(data)
+            asset.chmod(0o600)
             md = dict(self.product.metadata)
             md.update({
                 "fulfillment_type": "digital",
-                "asset_relpath": "lesson.bin",
+                "asset_relpath": "lesson.pdf",
                 "sha256": hashlib.sha256(data).hexdigest(),
                 "rights_asset_sha256": hashlib.sha256(data).hexdigest(),
                 "rights_document_sha256": "d"*64,
@@ -172,7 +175,7 @@ class CommerceGatewayIntegrityTests(TestCase):
             self.product.save(update_fields=["metadata"])
             with override_settings(TRON_UNIFIED_PRIVATE_DIGITAL_ROOT=tmpdir):
                 invoice = self._issue()
-                self.assertEqual(invoice.asset_relpath_snapshot, "lesson.bin")
+                self.assertEqual(invoice.asset_relpath_snapshot, "lesson.pdf")
                 self.assertEqual(invoice.asset_sha256_snapshot, hashlib.sha256(data).hexdigest())
                 self.assertEqual(invoice.fulfillment_kind, "digital")
                 with _file_from_private_root(invoice.asset_relpath_snapshot,

@@ -126,8 +126,10 @@ def _limit(request, email, purpose="email"):
         raise Http404("Rate limit unavailable") from exc
 
 
-def _read_product(product_id, locale):
+def _read_product(product_id, locale, *, lock=False):
     query = Product.objects.filter(pk=product_id, active=True)
+    if lock:
+        query = query.select_for_update()
     product = query.first()
     if product is None or not Decimal("0") < product.price:
         raise Http404("Product unavailable")
@@ -165,7 +167,7 @@ def _read_product(product_id, locale):
         raise Http404("Current TRX quotation not approved")
     # Approved fixed merchant quote prevents speculative or invented FX rates.
     fingerprint = hashlib.sha256(
-        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{expires}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}".encode()
+        f"{product.pk}|{product.price}|{product.currency}|{base_sun}|{expires}|{md.get('sha256','')}|{md.get('rights_document_sha256','')}|{kind}|{md.get('asset_relpath','')}|{md.get('rights_asset_sha256','')}|{tuple(md.get(k) is True for k in required)}".encode()
     ).hexdigest()
     return product, base_sun, fingerprint
 
@@ -191,16 +193,20 @@ def _guest(email):
 
 
 def _new_invoice(email, host, language, product_id):
-    # All database writes are atomic and rolling back a full cart on failure.
+    # Hash up to 128 MiB before entering a financial database transaction.
+    # Confirm same immutable approved offer under row lock after preflight.
+    product, base_sun, fingerprint = _read_product(product_id, language)
+    if product.metadata.get("fulfillment_type") == "digital":
+        from .tron_gateway_delivery import _file_from_private_root
+        with _file_from_private_root(product.metadata.get("asset_relpath"),
+                                     product.metadata.get("sha256")):
+            pass
     with transaction.atomic():
-        product, base_sun, fingerprint = _read_product(product_id, language)
-        # No payable invoice for a nonexistent/mutated digital product.
-        # Validate the actual private bytes before asking for real money.
-        if product.metadata.get("fulfillment_type") == "digital":
-            from .tron_gateway_delivery import _file_from_private_root
-            with _file_from_private_root(product.metadata.get("asset_relpath"),
-                                         product.metadata.get("sha256")):
-                pass
+        product, locked_sun, locked_fingerprint = _read_product(
+            product_id, language, lock=True,
+        )
+        if locked_sun != base_sun or locked_fingerprint != fingerprint:
+            raise ValueError("Product changed during checkout")
         user = _guest(email)
         order = Order.objects.create(customer=user, status="pending",
                                      total=product.price, currency=product.currency)
