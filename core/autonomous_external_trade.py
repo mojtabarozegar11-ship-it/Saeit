@@ -66,10 +66,16 @@ def execute_one_authorized_outbox(*, grant_id):
         "message_sha256": trade_email_fingerprint(outbox),
     }
     status = mailbox_status()
-    if not status["configured"] or not status["active"]:
+    # Separate transport/config readiness from the per-mailbox opt-out.
+    # mailbox_status.active is false for BOTH cases, so checking it first
+    # incorrectly masks the deliberate mailbox-policy denial.
+    if not status["configured"] or not status["transport_flag_enabled"]:
         raise RuntimeError("Trade sender is not configured or outbound sending is disabled.")
     if not outbox.mailbox.active or not outbox.mailbox.allow_outbound:
         raise RuntimeError("Trade mailbox outbound policy is disabled.")
+    # A sender-address mismatch or unreadable policy remains a hard denial.
+    if not status["active"]:
+        raise RuntimeError("Trade sender is not configured or outbound sending is disabled.")
 
     # The locked sender itself consumes the one-time grant; no direct caller
     # can bypass it merely by enabling email in the environment.
