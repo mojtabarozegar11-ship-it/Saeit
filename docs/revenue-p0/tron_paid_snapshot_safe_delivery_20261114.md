@@ -64,4 +64,10 @@ PR مادر #2299 یک مسیر جدید واحد TRON برای سایت فار�
 - `core/tron_gateway_delivery.py` — محل اصلی source fix.
 - `tests/test_tron_private_paid_asset_20261114.py` — ۵۰ تست pure.
 - `core/tests/test_tron_buyer_paid_delivery_20261114.py` — ۵۰ تست Django.
-- `.github/workflows/tron-private-buyer-delivery-20261114.yml` — آزمون منبع، ۱۱۳ مورد با ۱۳ TRON RPC تست قبلی.
+- `.github/workflows/tron-private-buyer-delivery-20261114.yml` — آزمون منبع، ۱۲۸ مورد شامل ۵۰ تست فایل، ۵۰ تست Django و ۲۸ تست TRON RPC موجود.
+
+## شواهد نهایی آزمایش و migration
+- [GitHub Actions scoped #43576590800](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/43576590800)، job `132392052492`: **SUCCESS، 50/50 unittest + 78/78 pytest = 128/128 PASS**.
+- `python manage.py check`: بدون خطا؛ `python manage.py makemigrations --check --dry-run`: **No changes detected**.
+- مانع واقعی کشف‌شده حین تست: فیلدهای snapshot و reconcile در مدل در یک snapshot اولیه migration وجود نداشت؛ نسخه والد #2299 طی توسعه آن‌ها را به `0041_trongatewayinvoice` اضافه کرد. اصلاح این شاخه migration اصلی را با نسخه والد یکسان کرد و migration افزایشی موقتِ تکراریِ ایجادشده در همین چرخه کنار گذاشته شد؛ **هیچ data/schema واقعی از سرور حذف نشده است**.
+- کد انتشار فقط روی branch Draft است؛ schema production اجرا/مهاجرت داده نشده، انتقال TRX یا فروش واقعی انجام نشده است.
