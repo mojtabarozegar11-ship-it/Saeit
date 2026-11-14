@@ -273,10 +273,16 @@ def patch_commercial(namespace):
         "reconcile_invoice": ("_reconcile_invoice", False, require_POST, True),
         "download_paid": ("_download_paid", False, require_GET, False),
     }
+    # Validate every handler before mutating the namespace. Otherwise a missing
+    # late handler leaves early routes patched while installation remains false.
+    missing = [inner_name for inner_name, *_ in targets.values()
+               if namespace.get(inner_name) is None]
+    if missing:
+        raise RuntimeError("Expected TRX handler missing: " + ", ".join(missing))
+
+    replacements = {}
     for public_name, (inner_name, create, method_decorator, csrf) in targets.items():
-        inner = namespace.get(inner_name)
-        if inner is None:
-            raise RuntimeError("Expected TRX handler missing: " + inner_name)
+        inner = namespace[inner_name]
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
@@ -299,7 +305,7 @@ def patch_commercial(namespace):
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
-        namespace[public_name] = make_view(inner, create, public_name)
+        replacements[public_name] = make_view(inner, create, public_name)
     patterns = namespace.get("COMMERCIAL_URLPATTERNS")
     if isinstance(patterns, tuple):
         rebuilt = []
@@ -310,7 +316,8 @@ def patch_commercial(namespace):
         )
         for route, view in patterns:
             route_name = next((name for token, name in route_names if token in route), None)
-            replacement = namespace.get(route_name, view)
+            replacement = replacements.get(route_name, view)
             rebuilt.append((route, replacement))
         namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
+    namespace.update(replacements)
     namespace["_mpw_guest_checkout_installed"] = True
