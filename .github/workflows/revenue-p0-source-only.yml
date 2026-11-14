@@ -6,7 +6,10 @@ on:
     paths:
       - ".github/workflows/revenue-p0-source-only.yml"
       - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/revenue_intake_io.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
       - "tests/test_revenue_*.py"
+      - "tests/test_mojtaba_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
       - "core/templates/mojplaywin/section.html"
@@ -17,7 +20,10 @@ on:
     paths:
       - ".github/workflows/revenue-p0-source-only.yml"
       - "scripts/revenue_dual_offer_qualifier.py"
+      - "scripts/revenue_intake_io.py"
+      - "scripts/mojtaba_revenue_portfolio.py"
       - "tests/test_revenue_*.py"
+      - "tests/test_mojtaba_*.py"
       - "docs/revenue-p0/**"
       - "core/templates/core/services.html"
       - "core/templates/mojplaywin/section.html"
@@ -32,6 +38,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run offline unit/source contracts
         run: python3 -m unittest discover -s tests -p 'test_revenue_*.py' -v
+      - name: Run single-bot offline portfolio and strict CLI tests
+        run: python3 -m unittest discover -s tests -p 'test_mojtaba_*.py' -v
       - name: Reject non-anonymized or phantom payment test output
         run: |
           python3 scripts/revenue_dual_offer_qualifier.py docs/revenue-p0/example-checkout-intake.synthetic.json > /tmp/revenue_checkout.json
