@@ -32,7 +32,7 @@ def has_buyer_email_form(markup, expected_action=None, action_prefix=None,
 
  class InvoiceFormParser(HTMLParser):
   _VOID={'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}
-  _INERT={'script','style','textarea','template','noscript'}
+  _INERT={'script','style','textarea','template','noscript','select','option','button'}
   def __init__(self):
    super().__init__(convert_charrefs=True)
    self.forms=[]
