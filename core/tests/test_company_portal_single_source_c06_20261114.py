@@ -265,8 +265,9 @@ def test_legacy_reply_does_not_echo_any_submitted_private_fields():
 def test_exact_duplicate_has_truthful_reuse_feedback_instead_of_second_success():
     from django.contrib.messages import get_messages
     client = Client()
-    first = client.post(reverse("company"), payload(), follow=True)
-    assert "درخواست برای بررسی ثبت شد" in first.content.decode("utf-8")
+    first = client.post(reverse("company"), payload(), follow=False)
+    first_notices = list(get_messages(first.wsgi_request))
+    assert any("درخواست برای بررسی ثبت شد" in str(m) for m in first_notices)
     second = client.post(reverse("company"), payload(), follow=False)
     notices = list(get_messages(second.wsgi_request))
     assert any("ثبت تکراری انجام نشد" in str(message) for message in notices)
