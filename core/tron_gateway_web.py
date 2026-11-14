@@ -30,7 +30,7 @@ from django.views.decorators.http import require_http_methods
 
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 from .tron_gateway_invoice import TronGatewayInvoice
-from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, verify_native_trx
+from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, verify_native_trx
 
 PROVIDER = "zomorod_tron_mainnet_v1"
 LINK_TTL = 1800
@@ -220,7 +220,8 @@ def _owner(request, invoice_id, host):
 def _context(invoice, stage, language, **extra):
     ctx = {"stage": stage, "language": language, "invoice": invoice,
            "trx_amount": f"{Decimal(invoice.amount_sun)/Decimal(1000000):.6f}" if invoice else None,
-           "recipient": MAINNET_RECEIVER}
+           "recipient": MAINNET_RECEIVER,
+           "invoice_expired": bool(invoice and invoice.expires_ms < int(time.time() * 1000))}
     ctx.update(extra)
     return ctx
 
@@ -319,6 +320,9 @@ def invoice_page(request, invoice_id):
         txid = request.POST.get("txid", "").strip().lower()
         if invoice.status == "awaiting_payment":
             try:
+                if not TX_PATTERN.fullmatch(txid):
+                    raise PaymentNotFinal("Invalid transaction candidate")
+                TronGatewayInvoice.objects.filter(pk=invoice.pk, status="awaiting_payment").update(candidate_txid=txid)
                 proof = verify_native_trx(
                     txid, invoice.receiver, invoice.amount_sun,
                     invoice.issued_ms, invoice.expires_ms)
