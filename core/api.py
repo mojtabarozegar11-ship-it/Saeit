@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import re
+from decimal import Decimal, InvalidOperation
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, AuditLog, ChatMessage, ChatSession, Evidence, Finding,
@@ -456,49 +457,78 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class PaymentWebhookViewSet(viewsets.ViewSet):
+    """Strictly configured provider callback; not independent cash settlement."""
     permission_classes = [AllowAny]
 
     def create(self, request):
-        provider = str(request.headers.get("X-Payment-Provider", "")).strip()
-        event_id = str(request.headers.get("X-Payment-Event-Id", "")).strip()
-        signature = str(request.headers.get("X-Payment-Signature", "")).strip()
+        provider = str(request.headers.get("X-Payment-Provider", ""))
+        event_id = str(request.headers.get("X-Payment-Event-Id", ""))
+        signature = str(request.headers.get("X-Payment-Signature", ""))
+        configured_provider = str(getattr(settings, "PAYMENT_WEBHOOK_PROVIDER", "") or "")
         secret = str(getattr(settings, "PAYMENT_WEBHOOK_SECRET", "") or "")
-        if not provider or not event_id or not signature or not secret:
-            return Response({"detail": "Webhook authentication headers are required."}, status=status.HTTP_401_UNAUTHORIZED)
+        # No generic shared-secret provider impersonation, and never accept
+        # the sentinel provider on an unconfigured deployment.
+        if (not configured_provider or configured_provider == "not_configured"
+                or provider != configured_provider or not secret):
+            return Response({"detail": "Payment provider is not explicitly configured."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        if (not re.fullmatch(r"[A-Za-z0-9._:-]{1,50}", provider)
+                or not re.fullmatch(r"[A-Za-z0-9._:-]{1,200}", event_id)
+                or not re.fullmatch(r"[0-9a-f]{64}", signature)):
+            return Response({"detail": "Invalid signed event envelope."},
+                            status=status.HTTP_401_UNAUTHORIZED)
 
         raw = request.body
+        if len(raw) > 32768:
+            return Response({"detail": "Webhook body exceeds the configured limit."},
+                            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
         expected = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
-            return Response({"detail": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
-
+            return Response({"detail": "Invalid webhook signature."},
+                            status=status.HTTP_401_UNAUTHORIZED)
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return Response({"detail": "Webhook payload must be valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Webhook payload must be valid JSON."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(payload, dict):
+            return Response({"detail": "Webhook payload must be a JSON object."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        event_type = str(payload.get("event_type", "")).strip()
+        event_type = payload.get("event_type")
         intent_id = payload.get("payment_intent_id")
-        provider_reference = str(payload.get("provider_reference", "")).strip()
-        if not event_type or not intent_id:
-            return Response({"detail": "event_type and payment_intent_id are required."}, status=status.HTTP_400_BAD_REQUEST)
+        provider_reference = payload.get("provider_reference")
+        if event_type not in ("payment.succeeded", "payment.failed"):
+            return Response({"detail": "Unsupported payment event type."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if (type(intent_id) not in (int, str) or not str(intent_id).isdigit()
+                or not isinstance(provider_reference, str)
+                or not 1 <= len(provider_reference) <= 200
+                or provider_reference != provider_reference.strip()):
+            return Response({"detail": "Valid intent ID and provider reference are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         payload_hash = hashlib.sha256(raw).hexdigest()
         with transaction.atomic():
             existing = PaymentWebhookEvent.objects.select_for_update().filter(
-                provider=provider, event_id=event_id
+                provider=provider, event_id=event_id,
             ).first()
             if existing:
-                return Response(
-                    {"status": existing.status, "event_id": event_id},
-                    status=status.HTTP_200_OK,
-                )
+                if existing.payload_hash != payload_hash:
+                    return Response(
+                        {"detail": "Webhook event ID reused with different content."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                return Response({"status": existing.status, "event_id": event_id},
+                                status=status.HTTP_200_OK)
 
-            intent = PaymentIntent.objects.select_for_update().select_related("order").filter(
-                pk=intent_id, provider=provider
+            intent = PaymentIntent.objects.select_for_update().filter(
+                pk=intent_id, provider=provider,
             ).first()
             if intent is None:
-                return Response({"detail": "Payment intent not found for provider."}, status=status.HTTP_404_NOT_FOUND)
-
+                return Response({"detail": "Payment intent not found for configured provider."},
+                                status=status.HTTP_404_NOT_FOUND)
+            order = Order.objects.select_for_update().get(pk=intent.order_id)
             event = PaymentWebhookEvent.objects.create(
                 provider=provider,
                 event_id=event_id,
@@ -508,64 +538,82 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 status="received",
             )
 
-            if event_type == "payment.succeeded":
-                amount = str(payload.get("amount", ""))
-                currency = str(payload.get("currency", "")).strip()
-                if amount != str(intent.amount) or currency != intent.currency:
-                    event.status = "rejected"
-                    event.error = "Amount or currency mismatch."
-                    event.processed_at = timezone.now()
-                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
-                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+            # Both success and failure may only transition a pending order
+            # whose intent was specifically approved for this provider.
+            settleable = (
+                intent.status in ("ready_for_gateway", "gateway_pending")
+                and order.status == "pending"
+                and intent.amount == order.total
+                and intent.currency == order.currency
+                and intent.amount.is_finite() and intent.amount > 0
+                and not PaymentIntent.objects.filter(
+                    provider=provider, provider_reference=provider_reference,
+                ).exclude(pk=intent.pk).exists()
+            )
+            if event_type == "payment.succeeded" and settleable:
+                amount = payload.get("amount")
+                currency = payload.get("currency")
+                try:
+                    amount_valid = (
+                        type(amount) in (str, int, float)
+                        and Decimal(str(amount)).is_finite()
+                        and Decimal(str(amount)) == intent.amount
+                    )
+                except (InvalidOperation, TypeError, ValueError):
+                    amount_valid = False
+                if not amount_valid or currency != intent.currency:
+                    settleable = False
+                if LedgerEntry.objects.filter(
+                    payment_intent=intent, entry_type="payment",
+                ).exists():
+                    settleable = False
 
-                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
-                    event.status = "rejected"
-                    event.error = "Payment intent is not in a settleable state."
-                    event.processed_at = timezone.now()
-                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
-                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
-
+            if not settleable:
+                event.status = "rejected"
+                event.error = "Payment event is inconsistent with approved pending order."
+            elif event_type == "payment.succeeded":
                 intent.status = "succeeded"
                 intent.provider_reference = provider_reference
                 intent.save(update_fields=["status", "provider_reference", "updated_at"])
-
-                order = intent.order
                 order.status = "paid"
                 order.save(update_fields=["status", "updated_at"])
-
-                LedgerEntry.objects.get_or_create(
-                    reference=f"payment:{provider}:{event_id}",
-                    defaults={
-                        "order": order,
-                        "payment_intent": intent,
-                        "entry_type": "payment",
-                        "amount": intent.amount,
-                        "currency": intent.currency,
-                        "metadata": {"provider": provider, "event_id": event_id},
-                    },
+                LedgerEntry.objects.create(
+                    reference=f"payment:{provider}:{event_id}"[:200],
+                    order=order,
+                    payment_intent=intent,
+                    entry_type="payment",
+                    amount=intent.amount,
+                    currency=intent.currency,
+                    metadata={"provider": provider, "event_id": event_id},
                 )
                 event.status = "processed"
-            elif event_type == "payment.failed":
+            else:
+                # A late "failed" event must never demote succeeded intent or
+                # a paid order. The settleable guard enforces this.
                 intent.status = "failed"
                 intent.provider_reference = provider_reference
                 intent.save(update_fields=["status", "provider_reference", "updated_at"])
                 event.status = "processed"
-            else:
-                event.status = "ignored"
 
             event.processed_at = timezone.now()
-            event.save(update_fields=["status", "processed_at", "updated_at"])
+            event.save(update_fields=["status", "error", "processed_at", "updated_at"])
             AuditLog.objects.create(
                 actor_type="payment_provider",
                 actor_id=provider,
                 action="payment_webhook_processed",
                 target_type="PaymentIntent",
                 target_id=str(intent.pk),
-                after_state={"event_id": event_id, "event_type": event_type, "status": event.status},
-                trace_id=f"payment-webhook-{provider}-{event_id}",
+                after_state={
+                    "event_id": event_id, "event_type": event_type,
+                    "status": event.status, "settlement_independently_attested": False,
+                },
+                # AuditLog.trace_id is max_length=100. Do not concatenate
+                # the untrusted 200-character event ID into it.
+                trace_id=f"payment-webhook-{payload_hash[:40]}",
             )
 
-        return Response({"status": event.status, "event_id": event_id}, status=status.HTTP_200_OK)
+        return Response({"status": event.status, "event_id": event_id},
+                        status=status.HTTP_200_OK)
 
 
 class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
