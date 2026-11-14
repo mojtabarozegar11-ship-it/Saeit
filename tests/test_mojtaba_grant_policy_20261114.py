@@ -33,9 +33,9 @@ class PolicyContractTests(unittest.TestCase):
 
     def test_03_mailbox_exact(self):
         self.assertEqual(require_exact_grant_scope(
-            approval("external_write", "TradeMailbox", "company-trade"),
-            {"action": "external_write", "target": "company-trade"},
-        )["target"], "company-trade")
+            approval("external_write", "TradeEmailOutbox", "5"),
+            {"action": "external_write", "outbox_id": 5, "message_digest": "a" * 64},
+        )["outbox_id"], 5)
 
     def test_04_paid_knowledge_exact(self):
         self.assertEqual(require_exact_grant_scope(
@@ -84,8 +84,8 @@ class PolicyContractTests(unittest.TestCase):
 
     def test_18_wrong_mailbox(self):
         self.assert_denied(
-            approval("external_write", "TradeMailbox", "not-company-trade"),
-            {"action": "external_write", "target": "not-company-trade"},
+            approval("external_write", "TradeEmailOutbox", "5"),
+            {"action": "external_write", "outbox_id": 6, "message_digest": "a" * 64},
         )
 
     def test_19_paid_run_bool(self):

@@ -13,7 +13,7 @@ import re
 _SCOPE_SCHEMAS = {
     "publish": ("KnowledgeArticle", frozenset({"action", "target"}), "high"),
     "payment": ("Order", frozenset({"action", "target"}), "critical"),
-    "external_write": ("TradeMailbox", frozenset({"action", "target"}), "high"),
+    "external_write": ("TradeEmailOutbox", frozenset({"action", "outbox_id", "message_digest"}), "high"),
     "knowledge_content_generation": (
         "AgentTask", frozenset({"action", "run_id", "paid_model"}), "high",
     ),
@@ -56,8 +56,12 @@ def require_exact_grant_scope(approval, scope) -> dict:
         if type(scope["target"]) is not str or scope["target"] != f"{prefix}:{target_id}":
             raise ValueError("GRANT_OBJECT_SCOPE_MISMATCH")
     elif action == "external_write":
-        if target_id != "company-trade" or scope["target"] != "company-trade":
-            raise ValueError("GRANT_MAILBOX_SCOPE_MISMATCH")
+        if (_DECIMAL_ID.fullmatch(target_id) is None
+                or type(scope["outbox_id"]) is not int
+                or scope["outbox_id"] != int(target_id)
+                or type(scope["message_digest"]) is not str
+                or re.fullmatch(r"[a-f0-9]{64}", scope["message_digest"]) is None):
+            raise ValueError("GRANT_MAIL_SCOPE_NOT_BOUND_TO_ONE_MESSAGE")
     else:
         if (_DECIMAL_ID.fullmatch(target_id) is None
                 or type(scope["run_id"]) is not int

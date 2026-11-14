@@ -6,7 +6,9 @@ production scheduler or external connector is touched.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from core.economic_trade_email import queue_trade_email
+from core.trade_outbox_scope import message_digest
 from django.utils import timezone
 
 from core.approval import ApprovalService
@@ -178,12 +180,27 @@ class GrantBindingDatabaseTests(TestCase):
             self.service.authorize_grant(grant.pk, self.scope)
 
     def test_27_mailbox_action_bound(self):
+        with override_settings(COMPANY_TRADE_EMAIL="trade@example.invalid"):
+            outbox = queue_trade_email(
+                recipient="buyer@example.invalid", subject="Requested quote",
+                body="Here is the scope requested by the buyer.",
+                trade_context={
+                    "contact_basis": "requested_quote",
+                    "basis_evidence_sha256": "a" * 64,
+                },
+            )
+        outbox.mailbox.active = True
+        outbox.mailbox.allow_outbound = True
+        outbox.mailbox.save(update_fields=["active", "allow_outbound"])
         approval = ApprovalRequest.objects.create(
-            action_type="external_write", target_type="TradeMailbox",
-            target_id="company-trade", reason="One company mailbox",
+            action_type="external_write", target_type="TradeEmailOutbox",
+            target_id=str(outbox.pk), reason="One exact queued B2B message",
             risk="high", status="approved", requested_by=self.owner,
         )
-        scope = {"action": "external_write", "target": "company-trade"}
+        scope = {
+            "action": "external_write", "outbox_id": outbox.pk,
+            "message_digest": message_digest(outbox),
+        }
         grant = self.issue(approval=approval, scope=scope)
         self.assertEqual(self.service.authorize_grant(grant.pk, scope).scope, scope)
 
