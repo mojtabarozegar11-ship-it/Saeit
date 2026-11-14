@@ -282,3 +282,67 @@ class MojPropOnePostFourWeekEvidenceTests(TestCase):
         self.assertEqual(PropAccount.objects.count(), 1)
         self.assertEqual(PropExecution.objects.count(), 0)
         self.assertEqual(PropEquityObservation.objects.count(), 0)
+
+    def test_submitted_original_post_url_cannot_be_replaced(self):
+        row = self.stage()
+        row.post_url = "https://instagram.com/p/replacement999"
+        with self.assertRaisesRegex(ValidationError, "immutable"):
+            row.save()
+        row.refresh_from_db()
+        self.assertEqual(row.post_url, "https://instagram.com/p/onepostABC123")
+
+    def test_pending_original_platform_cannot_be_reassigned(self):
+        row = self.stage()
+        row.platform = "facebook"
+        with self.assertRaisesRegex(ValidationError, "immutable"):
+            row.save()
+
+    def test_pending_original_enrollment_cannot_be_changed(self):
+        row = self.stage()
+        row.enrollment_id = None
+        with self.assertRaisesRegex(ValidationError, "immutable"):
+            row.save()
+
+    def test_final_staff_review_cannot_revert_to_pending(self):
+        row = self.approve(self.stage())
+        row.review_status = "pending"
+        with self.assertRaisesRegex(ValidationError, "cannot be rewritten"):
+            row.save()
+        self.assertEqual(
+            PropSocialEvidence.objects.get(pk=row.pk).review_status, "verified",
+        )
+
+    def test_final_public_visibility_attestation_cannot_be_revised(self):
+        row = self.approve(self.stage())
+        row.continued_visibility_verified = False
+        with self.assertRaisesRegex(ValidationError, "cannot be rewritten"):
+            row.save()
+
+    def test_nonstaff_cannot_force_verified_row_directly_through_model(self):
+        row = self.stage()
+        row.review_status = "verified"
+        row.reviewed_at = REVIEWED
+        row.reviewed_by = self.other_user
+        for key in FACTS:
+            setattr(row, key, True)
+        with self.assertRaises(ValidationError):
+            row.save()
+        self.assertEqual(
+            PropSocialEvidence.objects.get(pk=row.pk).review_status, "pending",
+        )
+
+    def test_future_dated_staff_verification_is_denied_by_model(self):
+        row = self.stage()
+        row.review_status = "verified"
+        row.reviewed_at = datetime.now(timezone.utc) + timedelta(days=2)
+        row.reviewed_by = self.reviewer
+        for key in FACTS:
+            setattr(row, key, True)
+        with self.assertRaises(ValidationError):
+            row.save()
+
+    def test_verified_staff_reviewer_cannot_change_original_post_time(self):
+        row = self.approve(self.stage())
+        row.posted_at = row.posted_at + timedelta(minutes=10)
+        with self.assertRaisesRegex(ValidationError, "immutable"):
+            row.save()
