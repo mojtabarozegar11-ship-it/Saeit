@@ -66,6 +66,11 @@ class DefaultSourceOfTruthTests(TestCase):
         self.assertNotIn("Location", response)
         self.assertEqual(response["Retry-After"], "3600")
 
+    def test_disabled_post_shows_canonical_recovery_link(self):
+        response = self.client.post(self.url, self.payload)
+        self.assertContains(response, LEGACY_INQUIRY_PATH, status_code=503)
+        self.assertNotIn("Buyer@Example.COM", response.content.decode("utf-8"))
+
     def test_disabled_post_has_not_stored_any_lead(self):
         self.client.post(self.url, self.payload)
         self.assertEqual(CompanyInquiry.objects.count(), 0)
