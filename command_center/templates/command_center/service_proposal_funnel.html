@@ -60,9 +60,9 @@ small,p{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(auto
 <section class="panel" style="margin-top:15px">
 <h2>وضعیت خدمات</h2>
 <div class="scroll">
-<table><thead><tr><th>خدمت</th><th>کل پرونده‌های دارای رضایت</th><th>جدید</th><th>در حال بررسی</th><th>پیش‌نویس آماده</th></tr></thead>
+<table><thead><tr><th>خدمت</th><th>کل پرونده‌های دارای رضایت</th><th>جدید</th><th>در حال بررسی</th><th>پیش‌نویس آماده</th><th>اقدام بعدی</th></tr></thead>
 <tbody>{% for code, counters in funnel.by_service.items %}
-<tr><th scope="row">{{ code }}</th><td>{{ counters.total }}</td><td>{{ counters.new }}</td><td>{{ counters.reviewing }}</td><td>{{ counters.internal_draft_prepared }}</td></tr>
+<tr><th scope="row">{{ code }}</th><td>{{ counters.total }}</td><td>{{ counters.new }}</td><td>{{ counters.reviewing }}</td><td>{{ counters.internal_draft_prepared }}</td><td><a class="link" href="{% url 'command_center_service_pricing_workbench' %}?service_code={{ code|urlencode }}" aria-label="برآورد داخلی خدمت {{ code }}">بررسی هزینه و قیمت</a></td></tr>
 {% endfor %}</tbody></table>
 </div>
 </section>
