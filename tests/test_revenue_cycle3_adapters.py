@@ -45,7 +45,11 @@ class FourAdapterContracts(unittest.TestCase):
 
     def copied(self, name):
         target = self.root / (name + ".json")
-        target.write_bytes(INPUTS[name].read_bytes())
+        # The central evaluator has a stricter schema than quote packets.
+        data = json.loads(INPUTS[name].read_text(encoding="utf-8"))
+        if name == "central":
+            data.pop("work_package", None)
+        target.write_text(json.dumps(data), encoding="utf-8")
         return target
 
     def test_01_all_four_accept_known_synthetic_inputs(self):
@@ -157,7 +161,7 @@ class FourAdapterContracts(unittest.TestCase):
 
     def test_14_dual_output_is_inquiry_only(self):
         src = self.copied("dual")
-        target = self.root / "dual.json"
+        target = self.root / "dual-result.json"
         self.assertEqual(run("dual", src, output=target).returncode, 0)
         q = json.loads(target.read_text())
         self.assertEqual(q["order_state"], "inquiry_only")

@@ -104,8 +104,11 @@ def main(argv=None):
             create_private_json(args.output, result, input_path=args.input_file)
         else:
             print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
-    except (OSError, ValueError, UnicodeError, json.JSONDecodeError):
-        print("SERVICE_INTAKE=BLOCKED_INVALID_OR_UNSAFE_INPUT", file=sys.stderr)
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        if isinstance(exc, ValueError) and str(exc) == "INPUT_OVERWRITE_DENIED":
+            print("refusing to overwrite input file", file=sys.stderr)
+        else:
+            print("SERVICE_INTAKE=BLOCKED_INVALID_OR_UNSAFE_INPUT", file=sys.stderr)
         return 2
     return 0
 
