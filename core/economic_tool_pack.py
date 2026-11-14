@@ -27,8 +27,9 @@ def _evidence(kind, value):
 def inspect_project(payload):
     result = ProductionGate().evaluate()
     return {
-        "action_performed": "Ran production readiness inspection against live Django configuration, database, migrations and runtime health.",
-        "verified_effect": True,
+        "action_performed": "Ran a read-only configuration/DB inspection; no new delivered or commercial outcome was produced.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("production_gate", {"ready": result.ready, "checks": result.checks, "reasons": list(result.reasons)}),
         "next_action": "repair_project" if not result.ready else "build_product",
     }
@@ -38,8 +39,9 @@ def market_research(payload):
     active_products = Product.objects.filter(active=True).count()
     queued = AgentTask.objects.filter(status="queued").count()
     return {
-        "action_performed": "Measured current internal commercial inventory and execution backlog.",
-        "verified_effect": True,
+        "action_performed": "Measured internal catalog and queue only; external demand and new commercial outcomes remain unverified.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("database_measurement", {"active_products": active_products, "queued_tasks": queued}),
         "next_action": "income_opportunity_score",
     }
@@ -48,8 +50,9 @@ def market_research(payload):
 def opportunity_score(payload):
     products = list(Product.objects.filter(active=True).values("id", "title", "price", "currency")[:25])
     return {
-        "action_performed": "Scored the current sellable inventory starting point from persisted product records.",
-        "verified_effect": True,
+        "action_performed": "Reviewed internal inventory options; no independent customer demand or paid result was demonstrated.",
+        "verified_effect": False,
+        "business_effect_verified": False,
         "evidence": _evidence("product_inventory", {"count": len(products), "products": products}),
         "next_action": "income_offer_design",
     }
@@ -415,7 +418,8 @@ def master_self_improvement(payload):
                 "Inspected the existing fresh, private factory self-upgrade dossier "
                 "without modifying factory source or starting a competing runner."
             ),
-            "verified_effect": True,  # the *inspection*, not source improvement
+            "verified_effect": False,  # existing evidence inspection is not a new repair
+            "business_effect_verified": False,
             "evidence": _evidence("independent_factory_upgrade_dossier_inspection", proof),
             "code_improvement_performed": False,
             "production_promotion": False,
