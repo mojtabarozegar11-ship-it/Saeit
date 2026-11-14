@@ -1,98 +1,98 @@
-"""Staff-reviewed social evidence staging. Never publishes, advertises or buys.
+"""Offline private social proof workflow for a single 28-day paid challenge.
 
-The trader supplies their own existing public post URLs only after explicitly
-accepting the contract. A separate staff member must inspect each live link
-and attest author/date/advertising disclosure/content. No Meta API tokens or
-account access is requested, and no Instagram/Facebook write endpoint exists.
+No Meta account credentials, automated publishing or public evidence intake
+endpoint. A trusted settled purchase is required before URL submission.
 """
-from datetime import datetime, time, timedelta, timezone
-
+from datetime import timedelta
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone as django_timezone
 
-from .models import PropAccount, PropExecution, PropSocialEvidence
-from .social_policy import NEW_CONTRACT_VERSION, utc_day, valid_platform_post_url
+from .models import PropAccount, PropSocialEvidence
+from .social_policy import (
+    NEW_CONTRACT_VERSION, DURATION_DAYS, POST_START_GRACE_HOURS,
+    aware_utc, valid_platform_post_url,
+)
 
 
 class SocialEvidenceRejected(ValueError):
     pass
 
 
-def _verified_trade_on(account, trading_day):
-    start = datetime.combine(trading_day, time.min, tzinfo=timezone.utc)
-    return PropExecution.objects.filter(
-        account=account,
-        reconciliation_status="verified",
-        closed_at__gte=start, closed_at__lt=start + timedelta(days=1),
-    ).exists()
-
-
 @transaction.atomic
-def submit_social_evidence(*, account_id, submitter, trading_day,
-                           platform, post_url, posted_at, explicit_consent=False):
-    """Store a pending URL privately, without granting a passed challenge."""
-    if (not submitter or not submitter.is_authenticated or explicit_consent is not True):
-        raise PermissionDenied("Trader login and informed social-post consent are required")
-    account = PropAccount.objects.select_for_update().select_related("trader").get(pk=account_id)
-    if account.trader.user_id != submitter.pk:
-        raise PermissionDenied("Cannot submit proof to another trader's account")
-    if account.policy_version != NEW_CONTRACT_VERSION:
-        raise SocialEvidenceRejected("Older contracts cannot acquire this condition retroactively")
-    if account.kind not in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
-        raise SocialEvidenceRejected("Only active simulated challenge phases qualify")
-    if account.status not in (PropAccount.Status.WAITING, PropAccount.Status.ACTIVE):
-        raise SocialEvidenceRejected("Account is no longer accepting social evidence")
-    if not valid_platform_post_url(post_url, platform):
-        raise SocialEvidenceRejected("Unsupported post URL or platform")
-    if posted_at > django_timezone.now():
-        raise SocialEvidenceRejected("Future social publications cannot be evidence")
-    if utc_day(posted_at) != trading_day or not _verified_trade_on(account, trading_day):
-        raise SocialEvidenceRejected("One post must match a verified UTC trading day")
-    if PropSocialEvidence.objects.filter(
-        account=account, trading_day=trading_day, platform=platform
-    ).exists():
-        raise SocialEvidenceRejected("Proof already staged for this platform and trading day")
-    row = PropSocialEvidence(
-        account=account, trading_day=trading_day, platform=platform,
-        post_url=post_url, posted_at=posted_at,
+def submit_social_evidence(*, account_id, submitter, platform,
+                           post_url, posted_at, explicit_consent=False):
+    """Record ONE pending platform link for a confirmed challenge purchase."""
+    if not submitter or submitter.is_authenticated is not True or explicit_consent is not True:
+        raise PermissionDenied("Trader login and informed consent are required")
+    account = (
+        PropAccount.objects.select_for_update().select_related(
+            "trader", "challenge_enrollment"
+        ).get(pk=account_id)
     )
-    row.save()
-    return row
+    if account.trader.user_id != submitter.pk:
+        raise PermissionDenied("Foreign account evidence is forbidden")
+    purchase = account.challenge_enrollment
+    if (not purchase or purchase.trader_id != account.trader_id
+            or purchase.settlement_verified is not True
+            or purchase.terms_version != NEW_CONTRACT_VERSION
+            or account.policy_version != NEW_CONTRACT_VERSION):
+        raise SocialEvidenceRejected("Trusted settled prospective purchase required")
+    if account.kind not in (PropAccount.Kind.PHASE_ONE, PropAccount.Kind.PHASE_TWO):
+        raise SocialEvidenceRejected("Only simulation challenge accounts accept social proof")
+    if account.status not in (PropAccount.Status.WAITING, PropAccount.Status.ACTIVE):
+        raise SocialEvidenceRejected("Challenge account is not active")
+    if not valid_platform_post_url(post_url, platform):
+        raise SocialEvidenceRejected("Unsupported post URL or blocked account")
+    submitted_at = aware_utc(posted_at, "posted_at")
+    start = aware_utc(purchase.confirmed_at, "confirmed_at")
+    if (submitted_at < start
+            or submitted_at > start + timedelta(hours=POST_START_GRACE_HOURS)
+            or submitted_at > django_timezone.now()):
+        raise SocialEvidenceRejected("Post must be published within the first 24 hours")
+    if PropSocialEvidence.objects.filter(enrollment=purchase, platform=platform).exists():
+        raise SocialEvidenceRejected("One post per platform for entire purchase already exists")
+    record = PropSocialEvidence(
+        account=account, enrollment=purchase, platform=platform,
+        post_url=post_url, posted_at=submitted_at,
+    )
+    record.save()
+    return record
 
 
 @transaction.atomic
-def review_social_evidence(*, evidence_id, reviewer, audited_facts,
-                           reviewed_at=None):
-    """Human-controlled review; no links are opened or posted by this service."""
+def review_social_evidence(*, evidence_id, reviewer, audited_facts, reviewed_at=None):
+    """Independent human verifies original post still public after four weeks."""
     if not reviewer or reviewer.is_authenticated is not True or reviewer.is_staff is not True:
-        raise PermissionDenied("Only independent staff may review social evidence")
-    if not isinstance(audited_facts, dict) or set(audited_facts) != {
+        raise PermissionDenied("Independent staff role required")
+    fields = {
         "author_verified", "public_visible", "disclosure_verified",
-        "content_compliant", "date_verified",
-    }:
-        raise SocialEvidenceRejected("Complete manual review facts are required")
-    row = PropSocialEvidence.objects.select_for_update().select_related(
-        "account__trader", "reviewed_by"
-    ).get(pk=evidence_id)
+        "content_compliant", "date_verified", "continued_visibility_verified",
+    }
+    if not isinstance(audited_facts, dict) or set(audited_facts) != fields:
+        raise SocialEvidenceRejected("All six manually reviewed facts required")
+    row = (
+        PropSocialEvidence.objects.select_for_update().select_related(
+            "account__trader", "enrollment",
+        ).get(pk=evidence_id)
+    )
     if reviewer.pk == row.account.trader.user_id:
-        raise PermissionDenied("Self-verification forbidden")
+        raise PermissionDenied("A participant may not approve their own post")
     if row.review_status != PropSocialEvidence.Review.PENDING:
-        raise SocialEvidenceRejected("Reviewed evidence cannot be silently overwritten")
-    if not _verified_trade_on(row.account, row.trading_day):
-        raise SocialEvidenceRejected("Trading day has lost verified status")
-    now = django_timezone.now() if reviewed_at is None else reviewed_at
-    if (now.tzinfo is None or now.utcoffset() is None
-            or now < row.posted_at or now > django_timezone.now()):
-        raise SocialEvidenceRejected("Review time must be valid and after publication")
-    all_checked = all(value is True for value in audited_facts.values())
+        raise SocialEvidenceRejected("Final proof decisions cannot be overwritten")
+    now = django_timezone.now() if reviewed_at is None else aware_utc(reviewed_at, "reviewed_at")
+    if (now > django_timezone.now()
+            or now < row.posted_at + timedelta(days=DURATION_DAYS)
+            or row.enrollment.settlement_verified is not True):
+        raise SocialEvidenceRejected("28-day publication lifetime not yet independently provable")
+    valid = all(audited_facts[key] is True for key in fields)
     row.review_status = (
-        PropSocialEvidence.Review.VERIFIED if all_checked
+        PropSocialEvidence.Review.VERIFIED if valid
         else PropSocialEvidence.Review.REJECTED
     )
     row.reviewed_by = reviewer
     row.reviewed_at = now
-    for field, value in audited_facts.items():
-        setattr(row, field, value is True)
+    for key in fields:
+        setattr(row, key, audited_facts[key] is True)
     row.save()
     return row
