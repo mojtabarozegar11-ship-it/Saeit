@@ -131,12 +131,27 @@ jobs:
                   'bounded_complete': not pending,
                   'not_runtime_import_proof': True,
               }
+          def missing_fulfillment_symbols():
+              target = root / 'services/mpw_walletless_django_test_bridge.py'
+              try:
+                  if target.is_symlink() or not target.is_file() or target.stat().st_size > 524288:
+                      return None
+                  tree = ast.parse(target.read_text(encoding='utf8'))
+                  return sorted({
+                      alias.name for node in ast.walk(tree)
+                      if isinstance(node, ast.ImportFrom)
+                      and node.module == 'mpw_commerce.fulfillment'
+                      for alias in node.names
+                  })
+              except (OSError, ValueError, UnicodeError, SyntaxError):
+                  return None
           result = {
               'read_only': True,
               'passenger_entry_mentions_examined_app_root': passenger_staging,
               'asset_integrity_file_state': integrity_file_state(),
               'canonical_download_resolver_present': (root / 'mpw_commerce/downloads.py').is_file(),
               'legacy_guest_fulfillment_present': (root / 'mpw_commerce/fulfillment.py').is_file(),
+              'missing_fulfillment_imported_symbols': missing_fulfillment_symbols(),
               'legacy_guest_product_source_present': (root / 'mpw_guest_trx_20261020/guest_product.py').is_file(),
               'static_checkout_import_gap': import_gap_summary(),
               'merchant_app_dir_present': bool(root.is_dir() and not root.is_symlink()),
