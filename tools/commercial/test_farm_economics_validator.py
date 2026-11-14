@@ -30,6 +30,19 @@ class FarmEconomicsTests(unittest.TestCase):
         with self.assertRaises(ValueError):validate_csv(sample(headers=FIELDS[:-1]+("fixed_cost",)))
     def test_empty(self):
         with self.assertRaises(ValueError):validate_csv(",".join(FIELDS)+"\n")
+    def test_duplicate_enterprise_period_is_rejected(self):
+        rows = sample() + ",".join(BASE) + "\n"
+        with self.assertRaisesRegex(ValueError, "duplicate enterprise reporting period"):
+            validate_csv(rows)
+    def test_changed_amount_does_not_hide_duplicate_period(self):
+        changed = BASE.copy(); changed[8] = "950"
+        rows = sample() + ",".join(changed) + "\n"
+        with self.assertRaisesRegex(ValueError, "duplicate enterprise reporting period"):
+            validate_csv(rows)
+    def test_distinct_enterprise_periods_are_allowed(self):
+        changed = BASE.copy(); changed[2] = "2026-07-01"; changed[3] = "2026-12-31"
+        rows = sample() + ",".join(changed) + "\n"
+        self.assertEqual(len(validate_csv(rows)), 2)
     def test_zero_sales(self):
         row=BASE.copy();row[7]="0";row[8]="0"
         self.assertEqual(validate_csv(sample(row))[0]["break_even_units"],"NOT_ATTAINABLE")
