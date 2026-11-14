@@ -1,0 +1,147 @@
+"""Regression tests for prop v1.1; standard-library only."""
+import unittest
+from decimal import Decimal as D
+from prop_firm.rules import (
+    POLICY, LEVELS, dec, assess_risk, assess_challenge, assess_promotion,
+    calculate_payout, authorize_funding, authorize_order,
+)
+
+class PropFirmPolicyTests(unittest.TestCase):
+    def risk(self, capital=100, equity=100, open_equity=100):
+        return assess_risk(account_capital=capital, equity=equity, day_open_equity=open_equity)
+
+    def challenge(self, **overrides):
+        kwargs = dict(phase=1, account_capital=100, realized_net_profit="9.6",
+                      trading_days=6, max_profitable_day=3, risk=self.risk(equity="110",
+                      open_equity="110"), evidence_verified=True)
+        kwargs.update(overrides)
+        return assess_challenge(**kwargs)
+
+    def test_product_contract(self):
+        self.assertEqual(POLICY.entry_trx, D("30"))
+        self.assertEqual(POLICY.canonical_bot, "mojtaba.bot.ai")
+        self.assertEqual(POLICY.promotion_cycle_days, 30)
+        self.assertIsNone(POLICY.completion_deadline_days)
+        self.assertEqual(POLICY.inactivity_notice_days + POLICY.inactivity_grace_days,117)
+
+    def test_14_levels_and_confirmed_level_eleven(self):
+        self.assertEqual((len(LEVELS), LEVELS[10], LEVELS[-1], sum(LEVELS)),
+                         (14, D("50000"), D("100000"), D("381000")))
+
+    def test_no_external_side_effect_flags(self):
+        self.assertFalse(POLICY.real_orders_enabled)
+        self.assertFalse(POLICY.trx_checkout_enabled)
+
+    def test_float_nan_infinity_bool_rejected(self):
+        for v in (0.1, True, "NaN", "Infinity", "bad"):
+            with self.subTest(v=v), self.assertRaises(ValueError):
+                dec(v)
+
+    def test_daily_equity_floor_inclusive(self):
+        self.assertIn("daily_loss_floor_reached",self.risk(equity=96).reasons)
+        self.assertTrue(self.risk(equity="96.01").allowed)
+
+    def test_total_equity_floor(self):
+        self.assertIn("total_loss_floor_reached",self.risk(equity=92, open_equity=95).reasons)
+
+    def test_challenge_first_phase_exact_target(self):
+        self.assertTrue(self.challenge().passed)
+        self.assertEqual(self.challenge().goal_usd,D("9.6"))
+
+    def test_challenge_second_phase_requires_prior_stage(self):
+        without=self.challenge(phase=2,realized_net_profit=6,max_profitable_day="1.8")
+        self.assertFalse(without.passed)
+        self.assertIn("phase_one_pass_required", without.reasons)
+        with_prior=self.challenge(phase=2,realized_net_profit=6,
+                                  max_profitable_day="1.8",prior_phase_passed=True)
+        self.assertTrue(with_prior.passed)
+
+    def test_no_unverified_challenge_pass(self):
+        result=self.challenge(evidence_verified=False)
+        self.assertFalse(result.passed)
+        self.assertIn("reconciled_evidence_required",result.reasons)
+
+    def test_minimum_challenge_days(self):
+        self.assertIn("minimum_trading_days_not_met",self.challenge(trading_days=5).reasons)
+
+    def test_consistency_restriction(self):
+        self.assertIn("profit_consistency_not_met",
+                      self.challenge(max_profitable_day="3.1").reasons)
+
+    def test_challenge_loss_breach_cannot_be_overridden_by_profit(self):
+        self.assertFalse(self.challenge(risk=self.risk(equity=95)).passed)
+
+    def test_promotion_exact_one_level_and_funding_gate(self):
+        blocked=assess_promotion(level_index=0,realized_monthly_profit=4,
+            trading_days=12,max_profitable_day=1,risk=self.risk(equity=104,open_equity=104),
+            evidence_verified=True)
+        self.assertFalse(blocked.eligible)
+        self.assertEqual(blocked.next_level,D("200"))
+        allowed=assess_promotion(level_index=0,realized_monthly_profit=4,
+            trading_days=12,max_profitable_day=1,risk=self.risk(equity=104,open_equity=104),
+            evidence_verified=True,funding_for_next_level=True)
+        self.assertTrue(allowed.eligible)
+
+    def test_no_level_beyond_100000(self):
+        result=assess_promotion(level_index=13,realized_monthly_profit=4000,
+            trading_days=12,max_profitable_day=1000,
+            risk=self.risk(capital=100000,equity=104000,open_equity=104000),
+            evidence_verified=True,funding_for_next_level=True)
+        self.assertFalse(result.eligible)
+        self.assertEqual(result.next_level,D("100000"))
+
+    def test_70_30_settlement_and_loss_carryforward(self):
+        first=calculate_payout(cumulative_realized_net_profit=50,previously_allocated_profit=0)
+        self.assertEqual((first.trader_usd,first.company_usd),(D("35.00"),D("15.00")))
+        down=calculate_payout(cumulative_realized_net_profit=20,
+                              previously_allocated_profit=first.new_allocated_high_water_usd)
+        self.assertEqual(down.eligible_profit_usd,0)
+        recovered=calculate_payout(cumulative_realized_net_profit=70,
+                              previously_allocated_profit=first.new_allocated_high_water_usd)
+        self.assertEqual((recovered.eligible_profit_usd,recovered.trader_usd,recovered.company_usd),
+                         (D("20.00"),D("14.00"),D("6.00")))
+        fractional=calculate_payout(cumulative_realized_net_profit="0.03",previously_allocated_profit=0)
+        self.assertEqual(fractional.trader_usd+fractional.company_usd,D("0.03"))
+
+    def test_funding_blocked_without_cash_and_compliance(self):
+        blocked=authorize_funding(requested_capital=100,unencumbered_cash=100,payout_reserve=10)
+        self.assertFalse(blocked.authorized)
+        self.assertIn("unencumbered_capital_insufficient",blocked.reasons)
+        confirmed=authorize_funding(requested_capital=100,unencumbered_cash=110,
+            payout_reserve=10,legal_approved=True,broker_approved=True,
+            kyc_approved=True,contracts_signed=True)
+        self.assertTrue(confirmed.authorized)
+
+    def test_real_orders_hard_disabled_even_with_external_claims(self):
+        result=authorize_order(account_capital=100,equity=100,day_open_equity=100,
+             risk_at_stop="0.4",open_risk_before=0,broker_minimum_risk="0.2",
+             verified_stop=True,authoritative_snapshot=True,mode="real",
+             execution_authorized=True)
+        self.assertFalse(result.allowed)
+        self.assertIn("real_execution_disabled",result.reasons)
+
+    def test_broker_lot_infeasible_and_aggregate_limit(self):
+        kwargs=dict(account_capital=100,equity=100,day_open_equity=100,
+            risk_at_stop="0.8",open_risk_before=0,broker_minimum_risk="1.1",
+            verified_stop=True,authoritative_snapshot=True,mode="challenge")
+        self.assertIn("broker_minimum_lot_not_feasible",authorize_order(**kwargs).reasons)
+        kwargs.update(risk_at_stop="0.7",broker_minimum_risk="0.1",open_risk_before="1.0")
+        self.assertIn("aggregate_risk_limit",authorize_order(**kwargs).reasons)
+
+    def test_missing_stop_and_snapshot_block(self):
+        decision=authorize_order(account_capital=100,equity=100,day_open_equity=100,
+            risk_at_stop="0.4",open_risk_before=0,broker_minimum_risk="0.2",mode="challenge")
+        self.assertIn("stop_loss_required",decision.reasons)
+        self.assertIn("authoritative_broker_snapshot_required",decision.reasons)
+
+    def test_invalid_phase_level_and_negative_cash(self):
+        with self.assertRaises(ValueError):
+            self.challenge(phase=3)
+        with self.assertRaises(ValueError):
+            assess_promotion(level_index=14,realized_monthly_profit=4,trading_days=12,
+                max_profitable_day=1,risk=self.risk(),evidence_verified=True)
+        with self.assertRaises(ValueError):
+            authorize_funding(requested_capital=100,unencumbered_cash=-1,payout_reserve=0)
+
+if __name__ == "__main__":
+    unittest.main()
