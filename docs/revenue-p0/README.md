@@ -51,3 +51,40 @@ Review `mojtaba-single-bot-intake-security-handoff-20261114.md` and
 the two `service-qc-*-template-*.md` files for scientific/technical
 client deliverable acceptance. Zero real income or 100% commercial
 completion must NOT be inferred from source-only passing tests.
+
+
+## Canonical 10-offer revenue CLI: secure input parity (2026-11-14)
+
+Both the two-service qualifier and `scripts/mojtaba_revenue_cli.py` now
+use `scripts/revenue_intake_io.py` for local JSON input and output. This
+fixes inconsistent duplicate-consent parsing, unsafe file/size-check races,
+NaN/Infinity acceptance, overly nested metadata and potentially clobbered
+result files. The original ten-offer catalogue and all manual approval
+policies are preserved. No additional bot or payment integration is created.
+
+The 10-offer CLI continues to cap input at **32 KiB**; the two-service
+qualifier permits up to **64 KiB**. Shared JSON structure limits (depth
+64, 4096 nodes) exist only for *small, PII-free metadata*, not uploaded
+customer documents. The Python guards are not consent to process real
+identifying or payment data in GitHub.
+
+### Independent local checks
+```sh
+python3 -m unittest -v tests.test_revenue_intake_io
+python3 -m unittest -v tests.test_mojtaba_revenue_cli_hardening
+python3 -m unittest -v tests.test_mojtaba_revenue_portfolio
+python3 -m unittest -v tests.test_mojtaba_revenue_source_contract
+python3 -m unittest -v tests.test_mojtaba_revenue_cli
+```
+
+One local run on the exact shared IO module confirmed **23/23** passing
+tests and one temporary run of the exact two-service qualifier with
+12 subprocess scenarios also passed. The primary 10-offer CLI tests
+were authored and wired into the source-only workflow but must be run
+on a full, exact branch checkout before claiming them as passed. No CI,
+production deployment, collected cash, invoices or live route proof
+is established by this README.
+
+See `mojtaba-revenue-cli-security-cycle-20261114-fa.md` for the
+regression that initially failed and was fixed, plus the outstanding
+legal/receipt/delivery proof required for a paying customer.
