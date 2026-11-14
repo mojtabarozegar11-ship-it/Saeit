@@ -16,6 +16,7 @@ import sys
 from mojtaba_revenue_portfolio import (CANONICAL_BOT, OFFERS, evaluate,
                                         synthetic_kpis)
 from mojtaba_revenue_margin import estimate as estimate_synthetic_margin
+from mojtaba_farm_break_even import model as farm_model
 
 MAX_BYTES = 32768
 
@@ -77,6 +78,7 @@ def main(argv=None) -> int:
     cmd.add_argument("--qualify", type=Path, help="PII-free local intake metadata")
     cmd.add_argument("--synthetic-kpis", type=Path, help="synthetic counts only")
     cmd.add_argument("--synthetic-margin", type=Path, help="synthetic currency-safe cost model; NEVER a quote")
+    cmd.add_argument("--farm-analysis", type=Path, help="farm break-even and 27 sensitivities on aggregate numbers; not a quote")
     parser.add_argument("--output", type=Path, help="create a NEW private 0600 JSON file")
     args = parser.parse_args(argv)
     try:
@@ -88,10 +90,12 @@ def main(argv=None) -> int:
             result = evaluate(load_bounded_json(args.qualify))
         elif args.synthetic_margin:
             result = estimate_synthetic_margin(load_bounded_json(args.synthetic_margin))
+        elif args.farm_analysis:
+            result = farm_model(load_bounded_json(args.farm_analysis))
         else:
             result = synthetic_kpis(load_bounded_json(args.synthetic_kpis))
         if args.output:
-            output_private(args.output, result, args.qualify or args.synthetic_margin or args.synthetic_kpis)
+            output_private(args.output, result, args.qualify or args.synthetic_margin or args.farm_analysis or args.synthetic_kpis)
         else:
             print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     except (ValueError, OSError, PermissionError) as exc:
