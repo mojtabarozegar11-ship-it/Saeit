@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}درخواست بررسی خدمت {{ offer.title_fa }} | زمرد ملل{% endblock %}
+{% block meta_description %}ثبت درخواست غیرالزام‌آور بررسی خدمت {{ offer.title_fa }} در شرکت کشت و صنعت زمرد ملل؛ بدون تعهد قیمت، قرارداد یا نتیجه تضمینی.{% endblock %}
+{% block body_class %}services-page{% endblock %}
+{% block content %}
+<main class="service-inquiry" style="max-width:860px;margin:0 auto;padding:2rem 1.25rem" dir="rtl">
+  <nav aria-label="مسیر صفحه"><a href="{% url 'services' %}">خدمات شرکت</a> / {{ offer.service_code }}</nav>
+  <h1>درخواست بررسی: {{ offer.title_fa }}</h1>
+  <p>{{ offer.customer }} — لطفاً مسئله و داده‌های موردنیاز را توضیح دهید. ثبت درخواست، تعهد ارائه خدمت یا پذیرش قرارداد نیست.</p>
+  <section aria-labelledby="deliverables-title">
+    <h2 id="deliverables-title">خروجی‌های پیشنهادی برای بررسی</h2>
+    <ul>{% for item in offer.deliverables %}<li>{{ item }}</li>{% endfor %}</ul>
+    <p><strong>محدودیت علمی/تجاری:</strong> {{ offer.limitation }}</p>
+    <p><strong>قیمت:</strong> پس از بررسی دامنه، هزینه، ظرفیت و مجوز اعلام خواهد شد. در این صفحه پرداخت انجام نمی‌شود.</p>
+  </section>
+  {% if received %}
+    <section role="status" aria-live="polite" style="padding:1rem;border:1px solid currentColor;margin:1rem 0">
+      <strong>درخواست شما ثبت یا با درخواست تکراری اخیر تطبیق داده شد.</strong>
+      <p>اطلاعات برای بررسی داخلی دریافت شده است؛ این پیام تأیید قرارداد، قیمت، پرداخت یا زمان تحویل نیست.</p>
+    </section>
+  {% endif %}
+  <section aria-labelledby="service-form-title">
+    <h2 id="service-form-title">ارسال درخواست بررسی اولیه</h2>
+    <p>اطلاعات تماس فقط برای بررسی درخواست و پاسخ کارشناسی نگهداری می‌شود. از ارسال رمز، اطلاعات پرداخت یا داده محرمانه غیرضروری خودداری کنید.</p>
+    <form method="post" action="{% url 'service_inquiry' offer.service_code %}" enctype="application/x-www-form-urlencoded">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      {% for field in form %}
+        {% if field.is_hidden %}{{ field }}{% else %}
+          <div style="margin:1rem 0">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+            <div>{{ field }}</div>
+            {% if field.errors %}<div role="alert">{{ field.errors }}</div>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+      <button type="submit">ثبت درخواست غیرالزام‌آور</button>
+    </form>
+  </section>
+</main>
+{% endblock %}
