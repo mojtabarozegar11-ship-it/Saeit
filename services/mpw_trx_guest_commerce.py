@@ -7,7 +7,6 @@ The browser gets a signed, secure owner cookie so no account signup is needed.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import secrets
 import time
 
@@ -75,22 +74,17 @@ def _rate_limit(request):
 
 
 def _guest_username(request):
-    """Stable per-browser identity for concurrent first POSTs, never the raw CSRF secret."""
-    from django.conf import settings
-    csrf = request.META.get("CSRF_COOKIE", "")
-    # csrf_protect has already validated the request before this function runs.
-    if not isinstance(csrf, str) or len(csrf) != 32 or not csrf.isascii() or not csrf.isalnum():
-        raise Http404("Open the checkout page before submitting an invoice")
-    digest = hmac.new(
-        str(settings.SECRET_KEY).encode("utf8"),
-        ("mpw:guest:csrf:v2:" + csrf).encode("ascii"),
-        hashlib.sha256,
-    ).hexdigest()[:40]
-    return "mpwguest_" + digest
+    """Issue an unguessable account identity; CSRF is not an ownership credential.
+
+    CSRF cookies can be read or shared independently of the signed owner cookie.
+    Deriving a persistent buyer identity from CSRF would let a caller who knows
+    that value recreate a signed owner cookie for an existing guest account.
+    """
+    return "mpwguest_" + secrets.token_hex(20)
 
 
 def _new_user(request):
-    """Resolve both simultaneous first orders to one unique password-disabled user."""
+    """Create a unique password-disabled guest; ownership comes only from signed cookie."""
     from django.contrib.auth import get_user_model
     from django.db import IntegrityError, transaction
     _rate_limit(request)
@@ -105,18 +99,16 @@ def _new_user(request):
     user = Model.objects.filter(**query).first()
     if user is None:
         try:
-            # The auth username/email field must retain its database uniqueness.
-            # If another request wins this insert, its committed user is reused.
+            # A random collision is extraordinarily unlikely; fail closed rather
+            # than reuse a principal whose owner cookie was never presented.
             with transaction.atomic():
                 user = Model(**query)
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
                 user.save(force_insert=True)
-        except IntegrityError:
-            user = Model.objects.filter(**query).first()
-            if user is None:
-                raise
+        except IntegrityError as exc:
+            raise Http404("Guest identity allocation conflict") from exc
     if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
