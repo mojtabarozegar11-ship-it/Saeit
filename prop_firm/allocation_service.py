@@ -67,10 +67,21 @@ def _journal_is_balanced(allocation):
         expected.add("trader_credit")
     if allocation.company_profit_usd:
         expected.add("company_credit")
+    target = {
+        "pool_debit": ("debit", allocation.eligible_profit_usd),
+        "trader_credit": ("credit", allocation.trader_profit_usd),
+        "company_credit": ("credit", allocation.company_profit_usd),
+    }
+    correctly_typed = all(
+        line.side == target[line.code][0]
+        and line.amount_usd == target[line.code][1]
+        for line in rows if line.code in target
+    )
     return (
         debit == credit == allocation.eligible_profit_usd
         and types == expected
         and len(rows) == len(expected)
+        and correctly_typed
         and allocation.trader_profit_usd + allocation.company_profit_usd
             == allocation.eligible_profit_usd
     )
