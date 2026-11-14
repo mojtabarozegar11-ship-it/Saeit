@@ -16,15 +16,16 @@ class CompanyInquiryValidationTests(TestCase):
             "phone": "",
             "subject": "Request a quotation",
             "message": "Please tell me about the available service.",
+            "consent": "on",
         }
 
-    def submit(self, payload):
+    def submit(self, payload, *, expected_status=422):
         response = self.client.post(reverse("company"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, expected_status)
         return response
 
     def test_valid_inquiry_creates_one_lead(self):
-        self.submit(self.payload())
+        self.submit(self.payload(), expected_status=302)
         self.assertEqual(CompanyInquiry.objects.count(), 1)
         inquiry = CompanyInquiry.objects.get()
         self.assertEqual(inquiry.status, "new")
