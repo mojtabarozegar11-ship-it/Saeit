@@ -7,7 +7,14 @@ class FarmEconomicsTests(unittest.TestCase):
     def test_profit(self):
         result=validate_csv(sample())[0]
         self.assertEqual(result["economic_profit"],"270")
+        self.assertEqual(result["break_even_units"],"NOT_ATTAINABLE")
+    def test_fully_sold_break_even(self):
+        row=BASE.copy();row[6]="80"
+        result=validate_csv(sample(row))[0]
         self.assertEqual(result["break_even_units"],"32")
+    def test_partial_sell_through_blocks_unallocated_unit_cost(self):
+        row=BASE.copy();row[6]="100";row[7]="80"
+        self.assertEqual(validate_csv(sample(row))[0]["break_even_units"],"NOT_ATTAINABLE")
     def test_negative(self):
         row=BASE.copy();row[10]="-1"
         with self.assertRaises(ValueError):validate_csv(sample(row))
