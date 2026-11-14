@@ -1,0 +1,231 @@
+"""Independent commercial release evidence is mandatory; no live payments."""
+import json
+
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+
+from core.commercialization_readiness import (
+    SECTORS, PRIORITY, assess_sector, build_board,
+)
+from core.models import (
+    Product, Order, PaymentIntent, LedgerEntry,
+    PaymentWebhookEvent, CommerceFunnelEvent,
+)
+from core.mojplaywin_product_detail import PUBLIC_CATALOG
+
+
+class PureCommercializationBoardTests(SimpleTestCase):
+    def test_all_eight_business_lines_exist(self):
+        self.assertEqual(len(SECTORS), 8)
+        self.assertEqual(set(SECTORS), set(PRIORITY))
+
+    def test_all_lines_are_blocked_without_evidence(self):
+        result = build_board()
+        self.assertEqual(result["eligible_for_commercial_review"], 0)
+        self.assertFalse(result["ready_for_live_payment"])
+        for line in result["sectors"]:
+            self.assertEqual(line["outcome"], "not_released")
+            self.assertEqual(line["percent_evidenced"], 0)
+            self.assertEqual(line["complete"], 0)
+            self.assertEqual(len(line["missing"]), line["required"])
+
+    def test_dict_of_sector_attestations_required(self):
+        for invalid in ("yes", True, 1, ["ready"]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                build_board(invalid)
+
+    def test_one_verified_gate_not_enough(self):
+        x = assess_sector("digital_books", {"content_final": True})
+        self.assertEqual(x.completed, 1)
+        self.assertEqual(x.outcome, "not_released")
+
+    def test_truthy_flags_cannot_forge_attestation(self):
+        for value in (1, "true", "yes", [], object()):
+            with self.subTest(value=repr(value)):
+                x = assess_sector("digital_books", {"content_final": value})
+                self.assertEqual(x.completed, 0)
+
+    def test_unknown_business_line_rejected(self):
+        with self.assertRaises(ValueError):
+            assess_sector("fake_cash")
+
+    def test_invalid_sector_attestation_rejected(self):
+        with self.assertRaises(ValueError):
+            assess_sector("moj_prop", "all ready")
+
+    def test_all_gates_are_only_eligible_for_review(self):
+        for name, gates in SECTORS.items():
+            with self.subTest(name=name):
+                a = assess_sector(name, {g: True for g in gates})
+                self.assertEqual(a.outcome, "eligible_for_commercial_review")
+                self.assertEqual(a.percent_evidenced, 100)
+                self.assertEqual(a.missing, ())
+        result = build_board({n: {g: True for g in gs} for n, gs in SECTORS.items()})
+        self.assertFalse(result["ready_for_live_payment"])
+        self.assertEqual(result["eligible_for_commercial_review"], 8)
+
+    def test_out_of_scope_flags_do_not_override_missing_required_fields(self):
+        a = assess_sector("moj_prop", {"is_admin": True, "automatic_payment": True})
+        self.assertEqual(a.completed, 0)
+
+    def test_moj_prop_requires_legal_and_real_broker_gates(self):
+        required = SECTORS["moj_prop"]
+        self.assertIn("jurisdiction_legal_approval", required)
+        self.assertIn("broker_contract_verified", required)
+        self.assertIn("funding_and_reserves_attested", required)
+        self.assertIn("payout_and_trx_controls_live", required)
+
+    def test_banned_instagram_profile_in_result(self):
+        a = build_board()
+        self.assertTrue(a["never_auto_post_social"])
+        self.assertEqual(a["excluded_instagram_profile"], "Dr.mojtaba.rozegar")
+
+    def test_no_fabricated_verified_income(self):
+        self.assertIsNone(build_board()["verified_income_usd"])
+
+    def test_gate_counts_are_exact(self):
+        a = assess_sector("website_kits", {
+            "artifact_complete": True, "license_reviewed": True,
+        })
+        self.assertEqual(a.completed, 2)
+        self.assertEqual(a.required, 5)
+        self.assertEqual(a.percent_evidenced, 40)
+
+    def test_one_missing_gate_blocks_review(self):
+        x = {g: True for g in SECTORS["digital_books"]}
+        x.pop("recovery_verified")
+        a = assess_sector("digital_books", x)
+        self.assertEqual(a.outcome, "not_released")
+        self.assertEqual(a.missing, ("recovery_verified",))
+
+
+class CommercializationBoardApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        U = get_user_model()
+        cls.staff = U.objects.create_user(
+            username="commstaff", password="staff-test-password-only", is_staff=True
+        )
+        cls.visitor = U.objects.create_user(
+            username="commuser", password="user-test-password-only"
+        )
+
+    def endpoint(self):
+        return reverse("command_center_commercialization_api")
+
+    def test_anonymous_denied(self):
+        response = self.client.get(self.endpoint())
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_nonstaff_denied(self):
+        self.client.force_login(self.visitor)
+        response = self.client.get(self.endpoint())
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_staff_can_inspect_without_mutating(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.endpoint())
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["ready_for_live_payment"])
+
+    def test_post_never_mutates(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(self.endpoint(), {"enable_payment": "true"})
+        self.assertEqual(response.status_code, 405)
+
+    def test_no_customer_pii(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.endpoint())
+        raw = json.dumps(response.json())
+        self.assertNotIn("commstaff", raw)
+        self.assertNotIn("commuser", raw)
+        self.assertNotIn("wallet_address", raw)
+        self.assertNotIn("invoice_reference", raw)
+
+    def test_no_store_or_payment_rows_created_by_read(self):
+        self.client.force_login(self.staff)
+        before = (Product.objects.count(), Order.objects.count(),
+                  PaymentIntent.objects.count(), LedgerEntry.objects.count())
+        for _ in range(2):
+            self.client.get(self.endpoint())
+        after = (Product.objects.count(), Order.objects.count(),
+                 PaymentIntent.objects.count(), LedgerEntry.objects.count())
+        self.assertEqual(before, after)
+
+    def test_secure_private_response_headers(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.endpoint())
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+
+    def test_catalog_only_counts_genuine_active_titles(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="book", price="7.50", currency="USD"
+        )
+        Product.objects.create(
+            pk=225, title="Unrelated content", active=True,
+            product_type="book", price="4.00", currency="USD"
+        )
+        Product.objects.create(
+            pk=879, title=PUBLIC_CATALOG[879]["title"], active=False,
+            product_type="kit", price="6.80", currency="USD"
+        )
+        self.client.force_login(self.staff)
+        obs = self.client.get(self.endpoint()).json()["observed"]
+        self.assertEqual(obs["catalog_products_active_title_matched"], 1)
+        self.assertEqual(obs["catalog_matched_ids"], [72])
+
+    def test_shared_db_order_count_not_claimed_as_paid(self):
+        order = Order.objects.create(customer=self.visitor, status="paid", total="1.00", currency="USD")
+        PaymentIntent.objects.create(
+            order=order, amount="1.00", currency="USD", provider="provider_one",
+            idempotency_key="financial-intent-not-revenue", status="settled",
+        )
+        self.client.force_login(self.staff)
+        result = self.client.get(self.endpoint()).json()
+        self.assertEqual(result["observed"]["shared_database"]["orders_all_brands"], 1)
+        self.assertEqual(result["observed"]["shared_database"]["provider_selected_intents_all_brands"], 1)
+        self.assertIsNone(result["verified_income_usd"])
+        self.assertFalse(result["ready_for_live_payment"])
+
+    def test_local_ledger_entry_is_not_external_settlement(self):
+        order = Order.objects.create(customer=self.visitor, total="1.00", currency="USD")
+        LedgerEntry.objects.create(
+            order=order, entry_type="credit", amount="1.00",
+            currency="USD", reference="unverified-fixture-ledger"
+        )
+        self.client.force_login(self.staff)
+        data = self.client.get(self.endpoint()).json()
+        self.assertEqual(data["observed"]["shared_database"]["internal_ledger_entries_all_brands"], 1)
+        self.assertIsNone(data["verified_income_usd"])
+
+    def test_webhook_received_is_not_successful_payout(self):
+        PaymentWebhookEvent.objects.create(
+            provider="unknown", event_id="webhook_1",
+            event_type="payment", payload_hash="none"
+        )
+        self.client.force_login(self.staff)
+        data = self.client.get(self.endpoint()).json()
+        self.assertEqual(data["observed"]["shared_database"]["webhook_events_all_brands"], 1)
+        self.assertFalse(data["ready_for_live_payment"])
+
+    def test_funnel_events_are_aggregate_not_sales(self):
+        CommerceFunnelEvent.objects.create(event_name="payment_confirmed")
+        CommerceFunnelEvent.objects.create(event_name="view_item")
+        self.client.force_login(self.staff)
+        body = self.client.get(self.endpoint()).json()
+        events = body["observed"]["funnel_events_last_30_days_all_brands"]
+        self.assertEqual(events["payment_confirmed"], 1)
+        self.assertEqual(events["view_item"], 1)
+        self.assertIsNone(body["verified_income_usd"])
+
+    def test_route_is_inside_private_staff_area(self):
+        self.assertEqual(self.endpoint(), "/staff/command-center/api/commercialization/")
+
+    def test_external_trx_runtime_is_not_claimed_to_be_local_models(self):
+        self.client.force_login(self.staff)
+        obs = self.client.get(self.endpoint()).json()["observed"]
+        self.assertEqual(obs["source"], "shared_django_models_not_external_trx_settlement")
