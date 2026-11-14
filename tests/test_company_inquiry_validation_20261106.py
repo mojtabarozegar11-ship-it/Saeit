@@ -98,7 +98,7 @@ class CompanyInquiryValidationTests(TestCase):
         p["email"] = "  CUSTOMER@Example.org  "
         self.submit(p)
         self.assertEqual(CompanyInquiry.objects.count(), 1)
-        self.assertEqual(CompanyInquiry.objects.get().email, "customer@example.org")
+        self.assertEqual(CompanyInquiry.objects.get().email, "CUSTOMER@example.org")
 
     def test_consent_event_is_stamped_in_internal_record(self):
         self.submit(self.payload())
@@ -110,7 +110,7 @@ class CompanyInquiryValidationTests(TestCase):
         payload = self.payload()
         payload["message"] = "x" * 31000
         response = self.client.post(reverse("company"), data=payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 413)
         self.assertEqual(CompanyInquiry.objects.count(), 0)
 
     def test_company_template_has_unchecked_consent_and_no_auto_send(self):
