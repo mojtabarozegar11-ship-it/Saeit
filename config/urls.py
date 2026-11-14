@@ -71,7 +71,7 @@ urlpatterns = [
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
-    path("contact/", RedirectView.as_view(url="/ask-master/index.php?service=1", permanent=False), name="contact"),
+    path("contact/", company_contact, name="contact"),
     path("weather/", weather, name="weather"),
     # Canonical education platform under the requested company path.
     path("amozeshgah/", education, name="education"),
