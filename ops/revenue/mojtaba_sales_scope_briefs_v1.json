@@ -1,0 +1,62 @@
+{
+  "schema": "mojtaba.bot.ai.sales-scope-briefs.v1",
+  "canonical_bot_id": "mojtaba.bot.ai",
+  "scope": "source_only_draft_no_live_sales",
+  "briefs": [
+    {
+      "offer_id": "farm_economics",
+      "path": "docs/sales/mojtaba-20261114/farm_economics.md",
+      "distinct_scope": "ارزیابی حاشیه سود و نقطه سربه‌سر"
+    },
+    {
+      "offer_id": "water_productivity",
+      "path": "docs/sales/mojtaba-20261114/water_productivity.md",
+      "distinct_scope": "سناریوهای مدیریت آب و راندمان"
+    },
+    {
+      "offer_id": "project_feasibility",
+      "path": "docs/sales/mojtaba-20261114/project_feasibility.md",
+      "distinct_scope": "مدل جریان نقدی و ریسک سرمایه‌گذاری"
+    },
+    {
+      "offer_id": "market_entry",
+      "path": "docs/sales/mojtaba-20261114/market_entry.md",
+      "distinct_scope": "کانال فروش و اعتبارسنجی تقاضا"
+    },
+    {
+      "offer_id": "equipment_economics",
+      "path": "docs/sales/mojtaba-20261114/equipment_economics.md",
+      "distinct_scope": "هزینه چرخه عمر ماشین‌آلات"
+    },
+    {
+      "offer_id": "research_analysis",
+      "path": "docs/sales/mojtaba-20261114/research_analysis.md",
+      "distinct_scope": "طراحی روش‌شناسی و کیفیت داده"
+    },
+    {
+      "offer_id": "agri_ai_assessment",
+      "path": "docs/sales/mojtaba-20261114/agri_ai_assessment.md",
+      "distinct_scope": "سنجش کفایت داده و معیار پذیرش AI"
+    },
+    {
+      "offer_id": "cashflow_advisory",
+      "path": "docs/sales/mojtaba-20261114/cashflow_advisory.md",
+      "distinct_scope": "پیش‌بینی ۱۳ هفته‌ای نقدینگی"
+    },
+    {
+      "offer_id": "cafe_b2b_supply",
+      "path": "docs/sales/mojtaba-20261114/cafe_b2b_supply.md",
+      "distinct_scope": "استعلام دوره‌ای تأمین کافه"
+    },
+    {
+      "offer_id": "physical_catalogue",
+      "path": "docs/sales/mojtaba-20261114/physical_catalogue.md",
+      "distinct_scope": "برگه استعلام SKU و پیش‌فاکتور"
+    },
+    {
+      "offer_id": "farm_direct_supply",
+      "path": "docs/sales/mojtaba-20261114/farm_direct_supply.md",
+      "distinct_scope": "تطبیق درجه، مقدار و حمل محصول"
+    }
+  ]
+}
