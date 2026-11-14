@@ -387,7 +387,8 @@ class BuyerReceiptAndPrivateDownloadTests(TestCase):
         self.assertEqual(TronGatewayInvoice.objects.count(), before)
 
     def test_42_invoice_prequote_does_not_change_paid_invoice(self):
-        self.test_40_valid_prequote_creates_one_pending_email_invoice_without_sending()
+        with override_settings(TRON_UNIFIED_PRIVATE_DIGITAL_ROOT=str(self.root)):
+            _new_invoice("thirdbuyer@example.invalid", "mojplaywin.com", "en", self.product.pk)
         self.invoice.refresh_from_db()
         self.assertEqual(self.invoice.status, "paid")
         self.assertEqual(self.invoice.txid, self.txid)
