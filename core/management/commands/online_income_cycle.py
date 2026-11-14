@@ -24,8 +24,10 @@ class Command(BaseCommand):
 
         queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
         if queued:
+            # Task.action_type can originate from a legacy/untrusted queue.
+            # Never copy a raw capability string into general runner logs.
             self.stdout.write(
-                f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
+                f"BRAIN_CONTINUE task={queued.pk} status={queued.status}"
             )
             return
 
