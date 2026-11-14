@@ -111,8 +111,15 @@ class MojPropProvisionalAllocationTests(TestCase):
 
     def test_second_period_cannot_skip_first(self):
         self.trade_day()
+        # A delayed month-one reconciliation must be accepted rather than lost.
         with self.assertRaises(AllocationRejected):
-            self.stage(60)
+            stage_provisional_allocation(
+                account_id=self.account.pk, as_of=OPENED + timedelta(days=60),
+                period_number=2,
+            )
+        first = self.stage(60)
+        self.assertEqual(first.period_number, 1)
+        self.assertEqual(first.eligible_profit_usd, Decimal("3.00"))
 
     def test_rejected_kyc_blocks_allocation(self):
         self.trade_day()
