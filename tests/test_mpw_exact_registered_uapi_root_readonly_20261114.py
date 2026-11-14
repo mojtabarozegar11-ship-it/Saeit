@@ -265,3 +265,34 @@ class RegisteredRootEvidenceTests(unittest.TestCase):
     def test_48_uapi_nonfinite_json_number_refused(self):
         self.assertEqual(self.inspect(b'{"result":{"status":1,"data":[NaN]}}')["classification"],
                          "uapi_missing_or_unavailable")
+
+    def test_49_required_email_control_in_same_root_source_classified(self):
+        self.files["template"].write_bytes(
+            b'<form method="post" action="/commerce/trx-easy/start/72/">'
+            b'<input type="email" name="email" required></form>')
+        self.assertTrue(self.inspect()["registered_template_required_email_control_on_disk"])
+
+    def test_50_email_label_without_control_not_counted(self):
+        self.files["template"].write_bytes(
+            b'<!-- <input name="email" type="email" required> -->')
+        self.assertFalse(self.inspect()["registered_template_required_email_control_on_disk"])
+
+    def test_51_hidden_email_in_registered_template_not_counted(self):
+        self.files["template"].write_bytes(
+            b'<form method="post" action="/commerce/trx-easy/start/72/">'
+            b'<input type="email" name="email" required hidden></form>')
+        self.assertFalse(self.inspect()["registered_template_required_email_control_on_disk"])
+
+    def test_52_registered_checkout_csp_string_only_static_marker(self):
+        self.files["checkout"].write_bytes(b'header = "script-src \x27none\x27"')
+        r=self.inspect()
+        self.assertTrue(r["registered_checkout_view_script_src_marker_on_disk"])
+        self.assertFalse(r["effective_django_view_verified"])
+
+    def test_53_registered_checkout_without_script_src_marker_unproven(self):
+        self.files["checkout"].write_bytes(b'def checkout(): return None')
+        self.assertFalse(self.inspect()["registered_checkout_view_script_src_marker_on_disk"])
+
+    def test_54_registered_template_invalid_utf8_fail_closed(self):
+        self.files["template"].write_bytes(b"\xff\xff")
+        self.assertFalse(self.inspect()["registered_template_required_email_control_on_disk"])

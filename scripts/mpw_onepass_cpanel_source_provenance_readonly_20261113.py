@@ -516,6 +516,8 @@ def inspect_uapi_registered_root(home: Path = HOME, runner=None) -> dict:
         "registered_checkout_template_marker_on_disk": False,
         "registered_checkout_view_sha256_prefix": None,
         "registered_template_sha256_prefix": None,
+        "registered_template_required_email_control_on_disk": False,
+        "registered_checkout_view_script_src_marker_on_disk": False,
         "effective_passenger_worker_verified": False,
         "effective_django_view_verified": False,
         "effective_checkout_template_verified": False,
@@ -572,6 +574,22 @@ def inspect_uapi_registered_root(home: Path = HOME, runner=None) -> dict:
         if marked[4] is not None:
             result["registered_template_sha256_prefix"] = hashlib.sha256(
                 marked[4]).hexdigest()[:16]
+        # Static source signals ONLY. HTML tokens in a comment or hidden
+        # input must not substitute for a usable required email field.
+        if marked[3] is not None:
+            result["registered_checkout_view_script_src_marker_on_disk"] = (
+                b"script-src" in marked[3].lower())
+        if marked[4] is not None:
+            try:
+                parser = StaticCheckoutControlInspector()
+                parser.feed(marked[4].decode("utf-8"))
+                parser.close()
+                result["registered_template_required_email_control_on_disk"] = (
+                    parser.forms == 1 and parser.post_forms == 1
+                    and parser.email_controls == 1
+                    and not parser.rejection_codes)
+            except (UnicodeError, ValueError):
+                result["registered_template_required_email_control_on_disk"] = False
         result["classification"] = (
             "registered_directory_has_commerce_source_on_disk"
             if marked[2] is not None and marked[3] is not None
