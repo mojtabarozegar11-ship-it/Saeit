@@ -40,6 +40,7 @@ class Meta:
 
 USERS = {}
 STALE_LOOKUP = False
+REJECT_NEXT_INSERT = False
 
 
 class Query:
@@ -78,7 +79,11 @@ class User:
         return not self.unusable
 
     def save(self, force_insert=False):
+        global REJECT_NEXT_INSERT
         assert force_insert is True
+        if REJECT_NEXT_INSERT:
+            REJECT_NEXT_INSERT = False
+            raise IntegrityError("unique buyer-email conflict")
         if self.username in USERS:
             raise IntegrityError("duplicate")
         self.pk = len(USERS) + 1
@@ -131,7 +136,7 @@ def load_real_functions():
 
 
 def run():
-    global STALE_LOOKUP
+    global STALE_LOOKUP, REJECT_NEXT_INSERT
     install_fake_django()
     functions = load_real_functions()
     def request(secret, email="buyer@domain.org", duplicate=False):
@@ -162,6 +167,14 @@ def run():
             pass
         else:
             raise AssertionError("unsafe guest buyer input accepted")
+    assert len(USERS) == 2
+    REJECT_NEXT_INSERT = True
+    try:
+        functions["_new_user"](request("F" * 32, "conflict@domain.org"))
+    except Http404:
+        pass
+    else:
+        raise AssertionError("unrelated unique email conflict did not fail closed")
     assert len(USERS) == 2
     print("MPW_GUEST_CONCURRENT_ORDER_IDENTITY=PASS;SIMULATED_USERS=2;REAL_DB_WRITES=0;NETWORK=0")
 
