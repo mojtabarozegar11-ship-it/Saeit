@@ -111,11 +111,13 @@ def safe_cron(stdout: str) -> list[dict]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("@"):
-            schedule, separator, command = line.partition(" ")
-            schedule = schedule.casefold()
-            if schedule not in CRON_MACROS or not separator or not command.strip():
+            macro_fields = line.split(maxsplit=1)
+            if len(macro_fields) != 2:
                 continue
-            command = command.strip()
+            schedule, command = macro_fields
+            schedule = schedule.casefold()
+            if schedule not in CRON_MACROS or not command.strip():
+                continue
         else:
             parts = line.split(maxsplit=5)
             if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
