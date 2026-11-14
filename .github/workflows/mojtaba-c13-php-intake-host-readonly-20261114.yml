@@ -49,5 +49,8 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           echo "CPANEL_FINGERPRINT=verified"
-          timeout 75s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < deploy/company_live_intake_readonly.py
+          expected_scope="$(sha256sum core/service_scope_pages.py | awk '{print $1}')"
+          if [[ ! "$expected_scope" =~ ^[0-9a-f]{64}$ ]]; then exit 66; fi
+          timeout 75s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 "ZM_EXPECTED_SERVICE_SCOPE_SHA256=$expected_scope PYTHONDONTWRITEBYTECODE=1 python3 -B -" < deploy/company_live_intake_readonly.py
+          timeout 25s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no -p 1396 zomorod2@178.239.147.125 'if php -l "$HOME/public_html/ask-master/index.php" >/dev/null 2>&1; then echo "ZM_PHP_ENTRY_LINT=pass"; else echo "ZM_PHP_ENTRY_LINT=fail"; fi'
           echo "PHP_ORIGIN_READONLY_AUDIT=completed"
