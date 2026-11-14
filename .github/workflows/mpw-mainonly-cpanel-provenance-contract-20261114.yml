@@ -1,0 +1,44 @@
+name: MPW owner-only cPanel source provenance bridge contract — no remote access
+on:
+  push:
+    branches: [fix/mpw-cpanel-source-provenance-bridge-only-20261114]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/cpanel_direct_command.sh'
+      - '.github/workflows/cpanel-direct-command-bridge.yml'
+      - 'scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
+      - 'tests/test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py'
+      - 'tests/test_mpw_cpanel_source_bridge_readonly_20261113.py'
+permissions:
+  contents: read
+jobs:
+  exact-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static shell syntax — never invoke cPanel over PR
+        run: bash -n deploy/cpanel_direct_command.sh
+      - name: Test source-only provenance and pinned bridge in isolation
+        run: |
+          python3 -m py_compile scripts/mpw_onepass_cpanel_source_provenance_readonly_20261113.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onepass_cpanel_source_provenance_readonly_20261113.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_cpanel_source_bridge_readonly_20261113.py' -v
+      - name: Verify main-only read-only operation remains owner-gated
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow=Path('.github/workflows/cpanel-direct-command-bridge.yml').read_text()
+          shell=Path('deploy/cpanel_direct_command.sh').read_text()
+          assert "github.ref == 'refs/heads/main'" in workflow
+          assert 'runs-on: [self-hosted, factory-vps]' in workflow
+          assert workflow.count('          - mpw_source_provenance') == 1
+          assert shell.count('  mpw_source_provenance)') == 2
+          assert 'CPANEL_DIRECT_OPERATION_DENIED' in shell
+          assert 'zohal.pws-dns.net' in shell
+          assert '178.239.147.125' not in shell
+          print('SOURCE_BRIDGE=SOURCE_ONLY_PASS; REMOTE_CONNECTION=NOT_ATTEMPTED; LIVE_RELEASE=DENIED')
+          PY
