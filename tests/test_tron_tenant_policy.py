@@ -139,6 +139,9 @@ class TronMultiTenantTests(SimpleTestCase):
             )
 
 
+_UNSPECIFIED_CONTEXT = object()
+
+
 class RoutingVerificationRegressionTests(SimpleTestCase):
     """Safety contract for source-authenticated multi-tenant TRX routing."""
 
@@ -151,9 +154,9 @@ class RoutingVerificationRegressionTests(SimpleTestCase):
             decision=self.decision, product_sku="book-72", key=TEST_KEY,
         )
 
-    def verify(self, context=None, **changes):
+    def verify(self, context=_UNSPECIFIED_CONTEXT, **changes):
         return verify_signed_routing_context(
-            context=self.context if context is None else context,
+            context=self.context if context is _UNSPECIFIED_CONTEXT else context,
             key=changes.pop("key", TEST_KEY),
             registry=changes.pop("registry", self.registry),
             **changes,
