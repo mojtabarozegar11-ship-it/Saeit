@@ -1,0 +1,55 @@
+name: Mojtaba single-bot B2B outbox safety (isolated)
+
+on:
+  pull_request:
+    branches:
+      - audit/mojtaba-grant-binding-20261114
+    paths:
+      - core/autonomous_external_trade.py
+      - core/economic_trade_email.py
+      - core/trade_outbox_scope.py
+      - core/grant_scope_policy.py
+      - core/approval.py
+      - core/tests/test_trade_outbox_scope_20261114.py
+      - core/tests/test_economic_trade_email.py
+      - core/tests/test_grant_binding_20261114.py
+      - tests/test_mojtaba_grant_policy_20261114.py
+      - .github/workflows/mojtaba-b2b-outbox-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-outbound-contracts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 14
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-secret-key"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      TRADE_EMAIL_ENABLED: "false"
+      EMAIL_BACKEND: "django.core.mail.backends.locmem.EmailBackend"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Isolated outbox and grant regression gate
+        run: |
+          python -m pytest -q \
+            core/tests/test_trade_outbox_scope_20261114.py \
+            core/tests/test_economic_trade_email.py \
+            core/tests/test_grant_binding_20261114.py \
+            core/tests/test_approval_grants.py \
+            tests/test_mojtaba_grant_policy_20261114.py
+      - name: Compile source and tests
+        run: |
+          python -m compileall -q \
+            core/autonomous_external_trade.py core/economic_trade_email.py \
+            core/trade_outbox_scope.py core/grant_scope_policy.py core/approval.py \
+            core/tests/test_trade_outbox_scope_20261114.py
