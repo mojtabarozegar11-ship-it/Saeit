@@ -1,0 +1,72 @@
+name: TRX C28 independently registered site wallets and paid delivery
+on:
+  push:
+    branches:
+      - fix/tron-c28-merchant-wallet-isolation-20261115
+permissions:
+  contents: read
+concurrency:
+  group: trx-c28-wallet-separation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  merchant-and-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Parse exact source, ensure no live merchant defaults or transfers
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          files=('core/tron_gateway_merchant_registry.py','core/tron_gateway_web.py',
+                 'core/tron_gateway_invoice.py','core/tron_gateway_discovery.py',
+                 'core/management/commands/tron_discover.py',
+                 'core/management/commands/tron_revenue_audit.py',
+                 'core/migrations/0042_trongatewayinvoice_merchant_tenant_id.py',
+                 'tests/test_tron_c28_site_merchant_isolation.py',
+                 'tests/test_tron_c28_two_site_paid_invoice_flow.py')
+          for p in files: ast.parse(Path(p).read_text(),filename=p)
+          settings=Path('config/settings.py').read_text()
+          assert 'TRON_UNIFIED_SITE_MERCHANTS = env.json(' in settings
+          assert 'default={}' in settings
+          assert 'TRON_UNIFIED_PUBLIC_ENABLED = env.bool(' in settings
+          s=Path('core/tron_gateway_web.py').read_text()
+          assert 'merchant_tenant_id=merchant.tenant_id' in s
+          assert 'receiver=merchant.receiver' in s
+          print('TRX_C28_MERCHANT_TENANT_WALLET_BINDING_SOURCE=PASS')
+          PY
+      - name: Install existing Django dependencies
+        run: python3 -m pip install -r requirements.txt
+      - name: Check schema without changing a live database
+        env:
+          SECRET_KEY: trx-c28-offline-tests-only
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+        run: python3 manage.py makemigrations --check --dry-run
+      - name: Run real Django merchant and invoice/finality tests, no live RPC
+        env:
+          SECRET_KEY: trx-c28-offline-tests-only
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 manage.py test \
+            tests.test_tron_c28_site_merchant_isolation \
+            tests.test_tron_c28_two_site_paid_invoice_flow \
+            tests.test_tron_gateway_commerce_integrity \
+            tests.test_unified_tron_gateway_verify \
+            tests.test_tron_gateway_discovery \
+            --verbosity 1
+          echo 'TRX_C28_SITE_MERCHANT_DJANGO_INTEGRITY=PASS'
+      - name: Run 50 synthetic private buyer-byte file guards
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_tron_private_paid_asset_20261114.py' -v
+          echo 'TRX_C28_PRIVATE_BYTES=PASS'

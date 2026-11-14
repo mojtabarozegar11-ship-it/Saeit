@@ -12,6 +12,7 @@ class TronGatewayInvoice(models.Model):
     buyer_email_sha = models.CharField(max_length=64, db_index=True)
     candidate_txid = models.CharField(max_length=64, blank=True, default="")
     source_host = models.CharField(max_length=150)
+    merchant_tenant_id = models.CharField(max_length=64, blank=True, default="")
     language = models.CharField(max_length=2)
     receiver = models.CharField(max_length=34)
     amount_sun = models.BigIntegerField()

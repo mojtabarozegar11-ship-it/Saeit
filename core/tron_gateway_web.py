@@ -31,7 +31,8 @@ from django.views.decorators.http import require_http_methods
 
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 from .tron_gateway_invoice import TronGatewayInvoice
-from .tron_gateway_verify import MAINNET_RECEIVER, PaymentNotFinal, TX_PATTERN, verify_native_trx
+from .tron_gateway_verify import PaymentNotFinal, TX_PATTERN, verify_native_trx
+from .tron_gateway_merchant_registry import configured_site_merchant, MerchantConfigurationError
 
 PROVIDER = "zomorod_tron_mainnet_v1"
 LINK_TTL = 1800
@@ -60,17 +61,26 @@ def _host(request):
     if (not request.is_secure() or
             getattr(settings, "TRON_UNIFIED_PUBLIC_ENABLED", False) is not True or
             getattr(settings, "TRON_UNIFIED_SHARED_RATE_LIMIT_READY", False) is not True or
-            not _shared_rate_limit_ready() or
-            getattr(settings, "TRON_UNIFIED_RECEIVER", "") != MAINNET_RECEIVER):
+            not _shared_rate_limit_ready()):
         raise Http404("Checkout is not yet available")
     permitted = getattr(settings, "TRON_UNIFIED_ALLOWED_HOSTS", ())
     if type(permitted) not in (tuple, list) or host not in permitted:
         raise Http404("Host not permitted for TRON checkout")
+    try:
+        _merchant(host)
+    except MerchantConfigurationError as exc:
+        raise Http404("Independent merchant configuration unavailable") from exc
     if host == roots[0] or host.endswith("." + roots[0]):
         return host, "fa"
     if host == roots[1] or host.endswith("." + roots[1]):
         return host, "en"
     raise Http404("Unknown merchant brand")
+
+
+def _merchant(host):
+    return configured_site_merchant(
+        host, getattr(settings, "TRON_UNIFIED_SITE_MERCHANTS", {}),
+    )
 
 
 def _private(response):
@@ -193,6 +203,8 @@ def _guest(email):
 
 
 def _new_invoice(email, host, language, product_id):
+    # A legitimate source host never borrows a different site's wallet.
+    merchant = _merchant(host)
     # Hash up to 128 MiB before entering a financial database transaction.
     # Confirm same immutable approved offer under row lock after preflight.
     product, base_sun, fingerprint = _read_product(product_id, language)
@@ -226,7 +238,7 @@ def _new_invoice(email, host, language, product_id):
             amount_sun = base_sun + 1 + secrets.randbelow(10000)
             # Legacy walletless invoices reserve this receiver+SUN under an
             # older global idempotency fingerprint. Reuse would be unsafe.
-            legacy_key = "wltrx1:" + hashlib.sha256(MAINNET_RECEIVER.encode("ascii")).hexdigest() + ":" + str(amount_sun)
+            legacy_key = "wltrx1:" + hashlib.sha256(merchant.receiver.encode("ascii")).hexdigest() + ":" + str(amount_sun)
             if PaymentIntent.objects.filter(idempotency_key=legacy_key).exists():
                 continue
             try:
@@ -234,7 +246,8 @@ def _new_invoice(email, host, language, product_id):
                     invoice = TronGatewayInvoice.objects.create(
                         order=order, payment_intent=intent, buyer_email=email,
                         source_host=host, language=language,
-                        buyer_email_sha=_email_key(email), receiver=MAINNET_RECEIVER,
+                        merchant_tenant_id=merchant.tenant_id,
+                        buyer_email_sha=_email_key(email), receiver=merchant.receiver,
                         amount_sun=amount_sun,
                         issued_ms=now_ms, expires_ms=now_ms + LINK_TTL * 1000,
                         claim_sha256=claim_sha, quote_fingerprint=fingerprint,
@@ -271,6 +284,15 @@ def _mail_link(request, invoice, token):
 def _owner(request, invoice_id, host):
     invoice = TronGatewayInvoice.objects.select_related(
         "order", "payment_intent").filter(pk=invoice_id, source_host=host).first()
+    # Exact host, approved tenant, and invoice's snapshotted receiver must
+    # still agree. A sibling brand/host cannot borrow buyer email proof.
+    try:
+        merchant = _merchant(host)
+    except MerchantConfigurationError as exc:
+        raise Http404("Merchant no longer verified") from exc
+    if (invoice is None or invoice.merchant_tenant_id != merchant.tenant_id
+            or invoice.receiver != merchant.receiver):
+        raise Http404("Merchant invoice binding unavailable")
     when = request.session.get("tron_verified_at")
     if (invoice is None or request.session.get("tron_verified_email") != _email_key(invoice.buyer_email)
             or request.session.get("tron_verified_host") != host
@@ -282,7 +304,7 @@ def _owner(request, invoice_id, host):
 def _context(invoice, stage, language, **extra):
     ctx = {"stage": stage, "language": language, "invoice": invoice,
            "trx_amount": f"{Decimal(invoice.amount_sun)/Decimal(1000000):.6f}" if invoice else None,
-           "recipient": MAINNET_RECEIVER,
+           "recipient": invoice.receiver if invoice else None,
            "invoice_expired": bool(invoice and invoice.expires_ms < int(time.time() * 1000))}
     ctx.update(extra)
     return ctx
@@ -325,7 +347,11 @@ def email_claim(request, token):
         key = hashlib.sha256(token.encode("ascii")).hexdigest()
     except UnicodeEncodeError:
         raise Http404("Invalid email claim")
-    invoice = TronGatewayInvoice.objects.filter(claim_sha256=key, source_host=host).first()
+    merchant = _merchant(host)
+    invoice = TronGatewayInvoice.objects.filter(
+        claim_sha256=key, source_host=host,
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+    ).first()
     if invoice is None or invoice.expires_ms < int(time.time() * 1000):
         raise Http404("Email link expired")
     request.session.cycle_key()
@@ -343,6 +369,13 @@ def _record_paid(invoice_id, proof):
     with transaction.atomic():
         invoice = TronGatewayInvoice.objects.select_for_update().select_related(
             "order", "payment_intent").get(pk=invoice_id)
+        try:
+            merchant = _merchant(invoice.source_host)
+        except MerchantConfigurationError:
+            return False
+        if (invoice.merchant_tenant_id != merchant.tenant_id
+                or invoice.receiver != merchant.receiver):
+            return False
         if invoice.status == "paid":
             return invoice.txid == proof["txid"]
         if (invoice.status != "awaiting_payment" or invoice.order.status != "pending"
@@ -367,7 +400,8 @@ def _record_paid(invoice_id, proof):
             reference="tron-mainnet:" + proof["txid"],
             metadata={"asset": "TRX", "network": "tron-mainnet",
                       "amount_sun": invoice.amount_sun,
-                      "receiver": MAINNET_RECEIVER,
+                      "receiver": invoice.receiver,
+                      "merchant_tenant_id": invoice.merchant_tenant_id,
                       "sender_hex": proof["sender_hex"],
                       "block_height": proof["block_height"],
                       "proof_digest": proof["proof_digest"],
@@ -430,8 +464,11 @@ def recovery(request):
     try:
         email = _valid_email(request.POST.get("email", ""))
         _limit(request, email)
+        merchant = _merchant(host)
         has_invoices = TronGatewayInvoice.objects.filter(
-            buyer_email=email, source_host=host).exists()
+            buyer_email=email, source_host=host,
+            merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+        ).exists()
         if has_invoices:
             payload = {"h": host, "e": _email_key(email)}
             token = signing.dumps(payload, salt="tron:recovery:v1")
@@ -461,12 +498,16 @@ def recovery_link(request, token):
     request.session["tron_verified_email"] = payload["e"]
     request.session["tron_verified_host"] = host
     request.session["tron_verified_at"] = int(time.time())
+    merchant = _merchant(host)
     TronGatewayInvoice.objects.filter(
         source_host=host, buyer_email_sha=payload["e"],
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
         status="email_pending", expires_ms__gte=int(time.time()*1000)
     ).update(status="awaiting_payment")
     invoices = list(TronGatewayInvoice.objects.filter(
-        source_host=host, buyer_email_sha=payload["e"]).order_by("-created_at")[:20])
+        source_host=host, buyer_email_sha=payload["e"],
+        merchant_tenant_id=merchant.tenant_id, receiver=merchant.receiver,
+    ).order_by("-created_at")[:20])
     return _page(request, _context(None, "recovery_list", language, invoices=invoices))
 
 

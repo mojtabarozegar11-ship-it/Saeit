@@ -26,6 +26,13 @@ PROOF = {
 }
 
 
+@override_settings(TRON_UNIFIED_SITE_MERCHANTS={
+    "mojplaywin.com": {
+        "tenant_id": "mojplaywin_site",
+        "receiver": MAINNET_RECEIVER,
+        "network": "tron-mainnet", "asset": "TRX", "approved": True,
+    },
+})
 class CommerceGatewayIntegrityTests(TestCase):
     def setUp(self):
         self.product = Product.objects.create(
@@ -60,6 +67,8 @@ class CommerceGatewayIntegrityTests(TestCase):
         self.assertEqual(invoice.order.status, "pending")
         self.assertEqual(invoice.payment_intent.status, "awaiting_payment")
         self.assertEqual(invoice.status, "email_pending")
+        self.assertEqual(invoice.merchant_tenant_id, "mojplaywin_site")
+        self.assertEqual(invoice.receiver, MAINNET_RECEIVER)
         self.assertFalse(invoice.order.customer.has_usable_password())
         self.assertEqual(invoice.order.items.count(), 1)
         self.assertEqual(LedgerEntry.objects.count(), 0)

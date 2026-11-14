@@ -16,7 +16,8 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.tron_gateway_invoice import TronGatewayInvoice
-from core.tron_gateway_verify import PaymentNotFinal, MAINNET_RECEIVER, verify_native_trx
+from core.tron_gateway_verify import PaymentNotFinal, verify_native_trx
+from core.tron_gateway_merchant_registry import configured_site_merchant, MerchantConfigurationError
 from core.tron_gateway_discovery import receiver_candidates
 from core.tron_gateway_web import _record_paid
 
@@ -29,8 +30,7 @@ class Command(BaseCommand):
         parser.add_argument("--max-checks", type=int, default=12)
 
     def handle(self, *args, **options):
-        if (getattr(settings, "TRON_UNIFIED_DISCOVERY_ENABLED", False) is not True
-                or getattr(settings, "TRON_UNIFIED_RECEIVER", "") != MAINNET_RECEIVER):
+        if getattr(settings, "TRON_UNIFIED_DISCOVERY_ENABLED", False) is not True:
             self.stdout.write("tron_discover disabled")
             return
         pages, max_checks = options["pages"], options["max_checks"]
@@ -45,27 +45,62 @@ class Command(BaseCommand):
         if not recent:
             self.stdout.write("tron_discover pending=0")
             return
-        earliest_ms = min(inv.issued_ms for inv in recent)
-        try:
-            discovered, truncated = receiver_candidates(
-                min_ms=max(1, earliest_ms - 10_000),
-                max_ms=now_ms, pages=pages)
-        except PaymentNotFinal:
-            self.stdout.write("tron_discover indexer_unavailable=1 credited=0")
-            return
-        by_amount = defaultdict(list)
+        # A deposit is never matched across different registered receivers or
+        # merchant tenants, even when invoice SUN values happen to coincide.
+        # Bounded to four receiver groups per invocation to prevent runaway
+        # indexer costs from a large number of approved site/subsite wallets.
+        by_receiver = defaultdict(list)
+        held_invalid_registry = 0
+        registry = getattr(settings, "TRON_UNIFIED_SITE_MERCHANTS", {})
         for inv in recent:
-            by_amount[inv.amount_sun].append(inv)
+            try:
+                merchant = configured_site_merchant(inv.source_host, registry)
+            except MerchantConfigurationError:
+                held_invalid_registry += 1
+                continue
+            if (inv.merchant_tenant_id != merchant.tenant_id
+                    or inv.receiver != merchant.receiver):
+                held_invalid_registry += 1
+                continue
+            by_receiver[inv.receiver].append(inv)
+        receiver_groups = sorted(by_receiver)
+        # A fixed oldest-first limit would permanently starve site wallets
+        # beyond the fourth. Rotate disjoint groups every 15-minute slot;
+        # max four wallets per run and bounded GET/API usage are preserved.
+        group_size = 4
+        total_batches = max(1, (len(receiver_groups) + group_size - 1) // group_size)
+        receiver_batch = (now_ms // 900_000) % total_batches
+        from_index = receiver_batch * group_size
+        chosen_receivers = receiver_groups[from_index:from_index + group_size]
+        omitted_receivers = len(receiver_groups) - len(chosen_receivers)
         candidates = []
         seen_invoice = set()
-        for txid, sun, stamp in discovered:
-            for inv in by_amount.get(sun, ()):
-                if inv.pk in seen_invoice:
-                    continue
-                if not inv.issued_ms - 10_000 <= stamp <= inv.expires_ms + 60_000:
-                    continue
-                seen_invoice.add(inv.pk)
-                candidates.append((inv, txid))
+        discovered_count = 0
+        truncated = omitted_receivers > 0
+        indexer_unavailable = 0
+        for receiver in chosen_receivers:
+            invoices = by_receiver[receiver]
+            try:
+                discovered, was_truncated = receiver_candidates(
+                    min_ms=max(1, min(x.issued_ms for x in invoices) - 10_000),
+                    max_ms=now_ms, pages=pages, receiver=receiver,
+                )
+            except PaymentNotFinal:
+                indexer_unavailable += 1
+                continue
+            discovered_count += len(discovered)
+            truncated = truncated or was_truncated
+            by_amount = defaultdict(list)
+            for inv in invoices:
+                by_amount[inv.amount_sun].append(inv)
+            for txid, sun, stamp in discovered:
+                for inv in by_amount.get(sun, ()):
+                    if inv.pk in seen_invoice:
+                        continue
+                    if not inv.issued_ms - 10_000 <= stamp <= inv.expires_ms + 60_000:
+                        continue
+                    seen_invoice.add(inv.pk)
+                    candidates.append((inv, txid))
         # Fairness: rotate older failed checks instead of starving new buyers.
         candidates.sort(key=lambda pair: (
             pair[0].reconcile_attempted_at is not None,
@@ -90,6 +125,9 @@ class Command(BaseCommand):
             except (PaymentNotFinal, IntegrityError, ValueError, OSError):
                 held += 1
         self.stdout.write(
-            f"tron_discover candidates={len(discovered)} matched={len(candidates)} "
-            f"inspected={inspected} paid={paid} held={held} "
+            f"tron_discover candidate_count={discovered_count} "
+            f"matched={len(candidates)} receivers_checked={len(chosen_receivers)} "
+            f"receivers_omitted={omitted_receivers} invalid_tenant_holds={held_invalid_registry} "
+            f"indexer_unavailable={indexer_unavailable} inspected={inspected} "
+            f"paid={paid} held={held} "
             f"truncated={int(truncated or len(candidates) > max_checks)}")
