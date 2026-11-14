@@ -75,6 +75,12 @@ ROUTES = (
     "SAEIT_MOJTRADE_OBSERVER_V1",
 )
 CRON_TOKENS = re.compile(r"^[0-9*/?,LW#-]{1,40}$", re.IGNORECASE)
+# These are standard crontab shortcut schedules, not comments. Omitting them
+# silently hides possible legacy workers from a retirement readiness review.
+CRON_MACROS = frozenset({
+    "@reboot", "@yearly", "@annually", "@monthly",
+    "@weekly", "@daily", "@midnight", "@hourly",
+})
 
 
 def route_flags(command: str) -> list[str]:
@@ -102,15 +108,24 @@ def safe_cron(stdout: str) -> list[dict]:
     out = []
     for line in stdout.splitlines()[:500]:
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("@"):
+        if not line or line.startswith("#"):
             continue
-        parts = line.split(maxsplit=5)
-        if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
-            continue
-        flags = route_flags(parts[5])
+        if line.startswith("@"):
+            schedule, separator, command = line.partition(" ")
+            schedule = schedule.casefold()
+            if schedule not in CRON_MACROS or not separator or not command.strip():
+                continue
+            command = command.strip()
+        else:
+            parts = line.split(maxsplit=5)
+            if len(parts) != 6 or not all(CRON_TOKENS.fullmatch(x) for x in parts[:5]):
+                continue
+            schedule = " ".join(parts[:5])
+            command = parts[5]
+        flags = route_flags(command)
         out.append({
-            "schedule": " ".join(parts[:5]),
-            "command_digest": hashlib.sha256(parts[5].encode()).hexdigest()[:16],
+            "schedule": schedule,
+            "command_digest": hashlib.sha256(command.encode()).hexdigest()[:16],
             "known_route_flags": flags,
         })
     return out
@@ -304,13 +319,20 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
     processes = safe_processes(ps_raw) if process_state == "observed" else {
         "inspected": None, "route_match_counts": {}, "process_identity_proven": False
     }
+    php_registry = (
+        cpanel_php_registry_snapshot(root) if role == "cpanel"
+        else {"state": "not_applicable", "database_state_proves_live_workers": False}
+    )
+    # A registered source or a missing DB does not prove a SQL query happened.
+    # Only a successfully read aggregate snapshot warrants database_queried=True.
+    database_queried = php_registry.get("state") == "source_registry_snapshot_only"
     return {
         "schema": SCHEMA,
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "host_role": role,
         "expected_user_verified": True,
         "read_only": True,
-        "database_queried": False,
+        "database_queried": database_queried,
         "external_network_used": False,
         "cron": {
             "state": cron_state, "enumerated_entries": len(cron_rows)
@@ -331,10 +353,7 @@ def collect(role: str, *, home: Path | None = None, username: str | None = None)
             "service_name_indicators_only": True,
         },
         "installed_source_digests": safe_source_digests(root, role),
-        "private_php_site_registry": (
-            cpanel_php_registry_snapshot(root) if role == "cpanel"
-            else {"state": "not_applicable", "database_state_proves_live_workers": False}
-        ),
+        "private_php_site_registry": php_registry,
         "attestation": {
             "source_code_deployment_matches_pr": False,
             "canonical_worker_executed": False,
