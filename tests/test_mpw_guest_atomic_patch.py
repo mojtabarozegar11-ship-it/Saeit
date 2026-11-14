@@ -190,3 +190,17 @@ class GuestAtomicPatchTests(SimpleTestCase):
             response = namespace["start_order"](request, product_id=72)
         self.assertEqual(response.status_code, 201)
         event.assert_called_once_with(request, "invoice_created", product)
+
+    def test_foreign_start_route_cannot_be_hijacked(self):
+        namespace = _namespace()
+        namespace["COMMERCIAL_URLPATTERNS"] += (("/other-service/start/", _handler),)
+        original = namespace.copy()
+        with self.assertRaisesRegex(RuntimeError, "TRX action route outside checkout prefix"):
+            patch_commercial(namespace)
+        self.assertEqual(namespace, original)
+
+    def test_unrelated_foreign_route_remains_untouched(self):
+        namespace = _namespace()
+        namespace["COMMERCIAL_URLPATTERNS"] += (("/other-service/help/", _handler),)
+        patch_commercial(namespace)
+        self.assertIs(namespace["COMMERCIAL_URLPATTERNS"][-1][1], _handler)
