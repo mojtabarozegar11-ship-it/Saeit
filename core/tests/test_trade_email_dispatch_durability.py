@@ -66,6 +66,19 @@ def test_dispatch_reservation_and_permission_are_recorded_before_smtp(ready_emai
     smtp.assert_not_called()
 
 
+
+@override_settings(TRADE_EMAIL_ENABLED=True)
+def test_smtp_acceptance_never_claims_inbox_delivery(ready_email):
+    outbox, grant = ready_email
+    with patch("core.economic_trade_email.EmailMessage.send", return_value=1) as smtp:
+        result = send_queued_trade_email(outbox.pk, grant_id=grant.pk)
+    smtp.assert_called_once()
+    assert result.status == "sent"  # Transport accepted one message.
+    audit = TradeEmailAudit.objects.get(outbox=outbox, action="sent")
+    assert audit.metadata["smtp_accepted"] is True
+    assert audit.metadata["delivery_confirmed"] is False
+
+
 @override_settings(TRADE_EMAIL_ENABLED=True)
 def test_provider_exception_does_not_roll_back_one_shot_reservation(ready_email):
     outbox, grant = ready_email
