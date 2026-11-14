@@ -61,3 +61,30 @@ class CompanyInquiryValidationTests(TestCase):
         payload["name"] = " "
         self.submit(payload, expected_status=400)
         self.assertFalse(CompanyInquiry.objects.exists())
+
+    def test_valid_name_and_organization_whitespace_normalized(self):
+        payload = self.payload()
+        payload["name"] = "  Customer   Example "
+        payload["organization"] = "  Farm  Group "
+        self.submit(payload)
+        lead = CompanyInquiry.objects.get()
+        self.assertEqual(lead.name, "Customer Example")
+        self.assertEqual(lead.organization, "Farm Group")
+
+    def test_email_domain_normalized_but_local_part_preserved(self):
+        payload = self.payload()
+        payload["email"] = "Buyer@EXAMPLE.ORG"
+        self.submit(payload)
+        self.assertEqual(CompanyInquiry.objects.get().email, "Buyer@example.org")
+
+    def test_bidi_control_in_subject_not_accepted(self):
+        payload = self.payload()
+        payload["subject"] = "Important\u202eFake"
+        self.submit(payload, expected_status=400)
+        self.assertFalse(CompanyInquiry.objects.exists())
+
+    def test_invalid_phone_not_accepted(self):
+        payload = self.payload()
+        payload["phone"] = "+98-call-me"
+        self.submit(payload, expected_status=400)
+        self.assertFalse(CompanyInquiry.objects.exists())
