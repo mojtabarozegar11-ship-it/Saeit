@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - fix/moj-revenue-unified-20261115
+concurrency:
+  group: moj-revenue-consolidation-exclusive
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -27,4 +30,4 @@ jobs:
           python manage.py migrate --noinput
       - name: Target all revenue consolidation regressions
         run: |
-          pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py
+          pytest -q tests/test_moj_prop_periods.py tests/test_signal_source_store.py tests/test_tron_rollout_inventory.py tests/test_commercialization_board.py tests/test_signal_source_admin.py
