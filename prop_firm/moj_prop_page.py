@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .rules import LEVELS, POLICY
+from .plans import CHALLENGE_PLANS, plan_public_summary
 
 EXPECTED_GROUPS = {
     "nav": 4, "hero": 7, "stats": 4, "steps": 5,
@@ -44,6 +45,11 @@ def catalog():
                 or set(trading) != {"title", "body", "bots"}
                 or any(not isinstance(v, str) or not v.strip() for v in trading.values())):
             raise ValueError(f"Missing verified trade / bot disclosure: {code}")
+        plan_copy = item.get("plans")
+        if (not isinstance(plan_copy, dict)
+                or set(plan_copy) != {"title", "body", "starting", "fee", "maximum", "notice"}
+                or any(not isinstance(v, str) or not v.strip() for v in plan_copy.values())):
+            raise ValueError(f"Missing localized ten-plan selection disclosure: {code}")
         social = item.get("social")
         if (not isinstance(social, dict) or set(social) != {"title", "body", "disclosure"}
                 or any(not isinstance(v, str) or not v.strip() for v in social.values())):
@@ -104,6 +110,9 @@ def page_context(code="en"):
         "faq": t["faq"],
         "footer": t["footer"],
         "social": t["social"],
+        "plans_copy": t["plans"],
+        "challenge_plans": [plan_public_summary(plan) for plan in CHALLENGE_PLANS],
+        "number_of_plans": len(CHALLENGE_PLANS),
         "trading": t["trading"],
         "minimum_closed_trades": p.min_closed_trades_per_challenge,
         "trader_bots_allowed": p.trader_bots_allowed,
