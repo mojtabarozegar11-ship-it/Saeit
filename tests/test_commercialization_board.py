@@ -284,7 +284,7 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         codes = [x["code"] for x in response.context["sectors"]]
         self.assertEqual(codes[:4], [
-            "moj_prop", "signal_subscriptions", "tron_gateway", "digital_books",
+            "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
         ])
         self.assertContains(response, "۱۱ بخش")
 
