@@ -3,7 +3,9 @@
 Run with Django settings configured: python -m pytest tests/test_mpw_guest_atomic_patch.py
 No network, database writes, payments or deployment are performed by these tests.
 """
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, RequestFactory
+from django.http import HttpResponse
+from unittest.mock import patch, MagicMock
 
 from services.mpw_trx_guest_commerce import patch_commercial
 
@@ -70,3 +72,30 @@ class GuestAtomicPatchTests(SimpleTestCase):
         self.assertIs(namespace["COMMERCIAL_URLPATTERNS"], patterns)
         for name, original in installed.items():
             self.assertIs(namespace[name], original)
+
+    def test_rejected_invoice_does_not_record_created_event(self):
+        namespace = _namespace()
+        patch_commercial(namespace)
+        request = RequestFactory().post("/commerce/trx-easy/start/72/")
+        request._dont_enforce_csrf_checks = True
+        with patch("services.mpw_trx_guest_commerce._dispatch",
+                   return_value=HttpResponse(status=400)), \
+             patch("services.mpw_trx_guest_commerce._record_funnel_event_best_effort") as event:
+            response = namespace["start_order"](request, product_id=72)
+        self.assertEqual(response.status_code, 400)
+        event.assert_not_called()
+
+    def test_accepted_invoice_records_created_event(self):
+        namespace = _namespace()
+        patch_commercial(namespace)
+        request = RequestFactory().post("/commerce/trx-easy/start/72/")
+        request._dont_enforce_csrf_checks = True
+        product = MagicMock()
+        with patch("services.mpw_trx_guest_commerce._dispatch",
+                   return_value=HttpResponse(status=201)), \
+             patch("core.models.Product") as model, \
+             patch("services.mpw_trx_guest_commerce._record_funnel_event_best_effort") as event:
+            model.objects.filter.return_value.first.return_value = product
+            response = namespace["start_order"](request, product_id=72)
+        self.assertEqual(response.status_code, 201)
+        event.assert_called_once_with(request, "invoice_created", product)
