@@ -45,14 +45,23 @@
     <p class="lead">{{ catalog.description }}</p>
     <h2 style="font-size:1.1rem;color:#f1d5a3;margin-top:29px">What's included</h2>
     <ul>{% for feature in catalog.details %}<li>{{ feature }}</li>{% endfor %}</ul>
-    <div class="price"><strong>{{ catalog.listed_price }}</strong>
-      <small>Catalog-listed price. This page is informational, not a checkout or payment invoice.</small></div>
+    <div class="price"><strong>{% if database_price_usd %}US &#36;{{ database_price_usd }}{% else %}{{ catalog.listed_price }}{% endif %}</strong>
+      <small>{% if database_price_usd %}Current product catalog USD price; the secure checkout will quote native TRX separately.{% else %}Reference catalog price only; this is not a payment invoice.{% endif %}</small></div>
+    {% if purchase_available and approved_purchase_url %}
+    <div class="unavailable" role="status">
+      The existing private gateway has verified this product for the current site.
+      Your email-only order and native TRX amount will be confirmed on its secure page.
+      Never send funds to an address found outside your verified order invoice.
+    </div>
+    <a class="back" href="{{ approved_purchase_url }}">Continue to verified TRX checkout</a>
+    {% else %}
     <div class="unavailable" role="status">
       {% if is_preview %}Catalog preview. Product database availability is not confirmed.
       {% else %}Product details are listed. Mainnet payment and private delivery are not verified in this release.
       {% endif %}
       Do not transfer TRX to an unverified address. Purchasing on this page is not enabled.
     </div>
+    {% endif %}
     <a class="back" href="{{ return_path }}">Browse the digital store <span aria-hidden="true">↗</span></a>
   </div>
 </div>
