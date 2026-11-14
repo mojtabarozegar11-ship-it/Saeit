@@ -23,16 +23,16 @@ def signal(i=1, **changes):
     return event
 
 
-def signed(record, source_id="source_main"):
+def signed(record, source_id="source_main", brand="saman"):
     return {"record": record, "source_digest": source_digest(
-        record, source_id=source_id, signing_key=KEY,
+        record, source_id=source_id, brand=brand, signing_key=KEY,
     )}
 
 
 class SignalEvidenceTests(unittest.TestCase):
     def history(self, values=None, **changes):
         records = [signed(signal(i)) for i in (1, 2, 3)] if values is None else values
-        return audit_history(records, source_id="source_main",
+        return audit_history(records, source_id="source_main", brand="saman",
                              signing_key=KEY, now_utc=NOW, **changes)
 
     def test_three_ordered_source_signed_records_have_deterministic_digest(self):
@@ -48,7 +48,7 @@ class SignalEvidenceTests(unittest.TestCase):
 
     def test_record_mutation_breaks_authenticated_source_integrity(self):
         record = signal()
-        digest = source_digest(record, source_id="source_main", signing_key=KEY)
+        digest = source_digest(record, source_id="source_main", brand="saman", signing_key=KEY)
         for field, value in (
             ("entry", "4100"), ("stop_loss", "3995"),
             ("take_profit", "4200"), ("event_id", "broker.changed"),
@@ -56,18 +56,32 @@ class SignalEvidenceTests(unittest.TestCase):
             with self.subTest(field=field):
                 tampered = {**record, field: value}
                 self.assertFalse(verify_source_integrity(
-                    tampered, source_id="source_main",
+                    tampered, source_id="source_main", brand="saman",
                     signing_key=KEY, digest=digest,
                 ))
+
+    def test_cross_brand_replay_cannot_be_authenticated_or_sold(self):
+        item = signed(signal(), source_id="source_main", brand="saman")
+        self.assertFalse(verify_source_integrity(
+            item["record"], source_id="source_main", brand="maryam",
+            signing_key=KEY, digest=item["source_digest"],
+        ))
+        with self.assertRaisesRegex(SignalHistoryRejected, "source_signature_mismatch"):
+            audit_history([item], source_id="source_main", brand="maryam",
+                          signing_key=KEY, now_utc=NOW)
+
+    def test_unknown_brand_cannot_sign_historical_signal(self):
+        with self.assertRaisesRegex(SignalHistoryRejected, "brand_not_registered"):
+            signed(signal(), brand="unregistered_financial_brand")
 
     def test_wrong_signing_key_and_source_id_cannot_verify(self):
         item = signed(signal())
         self.assertFalse(verify_source_integrity(
-            item["record"], source_id="another_source",
+            item["record"], source_id="another_source", brand="saman",
             signing_key=KEY, digest=item["source_digest"],
         ))
         self.assertFalse(verify_source_integrity(
-            item["record"], source_id="source_main",
+            item["record"], source_id="source_main", brand="saman",
             signing_key=b"another-privileged-key-long-enough-to-pass-checks",
             digest=item["source_digest"],
         ))
@@ -75,7 +89,7 @@ class SignalEvidenceTests(unittest.TestCase):
     def test_blank_short_keys_cannot_authenticate(self):
         for key in (b"", b"short", "not-bytes", 123, None):
             with self.subTest(key=key), self.assertRaises(SignalHistoryRejected):
-                source_digest(signal(), source_id="source_main", signing_key=key)
+                source_digest(signal(), source_id="source_main", brand="saman", signing_key=key)
 
     def test_duplicate_ids_in_history_are_refused_even_if_each_signed(self):
         event = signal(1)
