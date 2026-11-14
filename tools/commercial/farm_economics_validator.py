@@ -69,6 +69,10 @@ def validate_csv(text):
             margin = ((values["sales_revenue"] - values["variable_cost"]) / values["sold_quantity"]
                       if fully_sold else None)
             break_even = values["fixed_cost"] / margin if margin is not None and margin > 0 else None
+            # Unlike the operating threshold above, economic break-even also
+            # recovers the disclosed opportunity cost; exclude unmatched other revenue.
+            economic_break_even = ((values["fixed_cost"] + values["opportunity_cost"]) / margin
+                                   if margin is not None and margin > 0 else None)
         except DecimalException as exc:
             raise ValueError(f"line {line}: numeric magnitude/precision exceeds supported arithmetic") from exc
         # Break-even may be mathematically defined yet exceed reported production.
@@ -99,6 +103,14 @@ def validate_csv(text):
             "economic_profit": str(economic),
             "break_even_units": str(break_even) if break_even is not None else "NOT_ATTAINABLE",
             "break_even_feasibility": break_even_feasibility,
+            "break_even_basis": "OPERATING_FIXED_COST_ONLY_EXCLUDES_OTHER_REVENUE",
+            "economic_break_even_units": (str(economic_break_even) if economic_break_even is not None
+                                           else "NOT_ATTAINABLE"),
+            "economic_break_even_feasibility": (
+                "NOT_CALCULABLE" if economic_break_even is None else
+                "EXCEEDS_REPORTED_PRODUCTION" if economic_break_even > values["production_quantity"] else
+                "WITHIN_REPORTED_PRODUCTION"),
+            "economic_break_even_basis": "FIXED_AND_OPPORTUNITY_COST_EXCLUDES_OTHER_REVENUE",
         })
     if not result:
         raise ValueError("empty dataset")
