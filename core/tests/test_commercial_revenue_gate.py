@@ -459,6 +459,16 @@ class CommercialGateTests(unittest.TestCase):
         validate_offer(offer, tenant_registry={"moj_prop": "mojplaywin.com"})
 
 
+    def test_malformed_merchant_host_dns_labels_are_rejected(self):
+        for host in ("shop..example.com", "shop.-bad.example",
+                     "bad-.example.com", "x" * 64 + ".example.com",
+                     ("a." * 126) + "com"):
+            with self.subTest(host=host[:32]), self.assertRaisesRegex(
+                    CommercialGateError, "canonical_host_invalid"):
+                validate_offer(self.offer(canonical_host=host))
+        validate_offer(self.offer(canonical_host="store.mojplaywin.com"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
