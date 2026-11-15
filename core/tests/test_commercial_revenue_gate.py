@@ -403,7 +403,7 @@ class CommercialGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
-            for event_id in ("quote\\nspoof", "quote\\tspoof", "x" * 129, "évent-52"):
+            for event_id in ("quote" + chr(10) + "spoof", "quote" + chr(9) + "spoof", "x" * 129, "évent-52"):
                 with self.subTest(event_id=event_id):
                     with self.assertRaisesRegex(CommercialGateError, "event_id_invalid"):
                         ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
