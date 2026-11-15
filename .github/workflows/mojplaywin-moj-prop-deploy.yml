@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py
           python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
+          python3 -m unittest discover -s tests -p test_mojprop_commercial_samples_release.py -q
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
