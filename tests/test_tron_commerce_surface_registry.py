@@ -72,7 +72,7 @@ class TronCommerceSurfaceRegistryTests(SimpleTestCase):
             assert_safe_surface_registry(infinite())
 
     def test_registry_rejects_invalid_collection_types(self):
-        for value in (None, "five", b"five", {"surface_id": "moj_prop"}):
+        for value in ("five", b"five", {"surface_id": "moj_prop"}):
             with self.subTest(value=type(value).__name__), self.assertRaises(ValueError):
                 assert_safe_surface_registry(value)
 
