@@ -218,7 +218,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
             self.assertIn("TRX", page)
             self.assertIn("starter-30-trx#request", page)
             self.assertNotIn("two-page risk-readiness", page.lower())
-        self.assertIn("10-session", catalog)
+        self.assertIn("10 self-reported simulated sessions", catalog)
         self.assertIn("ten-session", home)
         self.assertIn("MOJPROP-STARTER30", detail)
 
