@@ -20,6 +20,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_protect
 
 from .models import MojPropRequest
 
@@ -135,9 +136,12 @@ def _rate_limited(email: str, ip_hash: str) -> bool:
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
     response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 
+@csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
