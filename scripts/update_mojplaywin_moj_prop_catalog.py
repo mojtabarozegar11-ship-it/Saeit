@@ -273,7 +273,7 @@ def verified_manifest(path: Path) -> dict:
 def restore(backup: Path, *, automated: bool = False) -> None:
     verify_private_backup_root(create=False)
     if backup.parent != BACKUPS or backup.is_symlink():
-        raise RuntimeError("Moj Prop rollback path must stay within private backup root")
+        raise RuntimeError("Symlinked or out-of-scope Moj Prop rollback path refused")
     manifest = verified_manifest(backup / "manifest.json")
     if manifest.get("rolled_back") is True:
         print("MOJ_PROP_ALREADY_ROLLED_BACK")
