@@ -31,6 +31,7 @@ class FarmEnterpriseInputs:
 
 @dataclass(frozen=True)
 class FarmEnterpriseReport:
+    currency_code: str
     gross_revenue: str
     variable_cost_total: str
     total_cost: str
@@ -41,7 +42,7 @@ class FarmEnterpriseReport:
     price_down_10pct_surplus: str
     yield_down_10pct_surplus: str
     combined_price_and_yield_down_10pct_surplus: str
-    gross_margin_ratio_pct: str | None
+    operating_margin_pct: str | None
     inputs_provenance: str = "customer_supplied_not_independently_verified"
     buyer_payment_collected: bool = False
     forecast_or_profit_guaranteed: bool = False
@@ -78,6 +79,8 @@ def assess_farm_enterprise(v: FarmEnterpriseInputs) -> FarmEnterpriseReport:
     water_rate = _number(v.irrigation_m3_per_hectare, "irrigation", positive=True)
     if area > Decimal("100000000") or yield_rate > Decimal("10000000"):
         raise FarmEconomicsInputError("farm_physical_scale_invalid")
+    if any(v > Decimal("1000000000000") for v in (price, unit_cost, fixed)):
+        raise FarmEconomicsInputError("farm_currency_scale_invalid")
     revenue = area * yield_rate * price
     variable = area * unit_cost
     total = variable + fixed
@@ -97,6 +100,7 @@ def assess_farm_enterprise(v: FarmEnterpriseInputs) -> FarmEnterpriseReport:
     both_down = revenue * Decimal("0.81") - total
     ratio = surplus / revenue * HUNDRED if revenue > 0 else None
     return FarmEnterpriseReport(
+        currency_code=v.currency_code,
         gross_revenue=_money(revenue),
         variable_cost_total=_money(variable),
         total_cost=_money(total),
@@ -112,5 +116,5 @@ def assess_farm_enterprise(v: FarmEnterpriseInputs) -> FarmEnterpriseReport:
         price_down_10pct_surplus=_money(price_down),
         yield_down_10pct_surplus=_money(yield_down),
         combined_price_and_yield_down_10pct_surplus=_money(both_down),
-        gross_margin_ratio_pct=(_money(ratio) if ratio is not None else None),
+        operating_margin_pct=(_money(ratio) if ratio is not None else None),
     )
