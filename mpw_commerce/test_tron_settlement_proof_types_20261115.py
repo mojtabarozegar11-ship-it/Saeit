@@ -129,7 +129,7 @@ class TronFinalityProofBoundaryTests(TestCase):
             ("quote_source", "untrusted-webhook"),
             ("quote_source", None),
             ("sender_challenge_id", "short"),
-            ("sender_challenge_id", "bad\\nnonce"),
+            ("sender_challenge_id", "bad\nnonce"),
             ("sender_challenge_id", None),
         ):
             with self.subTest(field=field, value=repr(value)):
