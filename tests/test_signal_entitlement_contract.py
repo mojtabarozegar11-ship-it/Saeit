@@ -32,6 +32,21 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         values.update(kwargs)
         return issue_signal_lease(**values)
 
+    def paid_invoice_record(self, lease=None, **changes):
+        lease = lease or self.lease()
+        record = {
+            "network": "tron-mainnet", "asset": "TRX",
+            "merchant_tenant_id": lease.merchant_tenant_id,
+            "sku": lease.sku,
+            "buyer_digest": lease.buyer_digest,
+            "settled_sun": 12000000,
+            "finality_verified": True,
+            "refund_pending": False,
+            "charge_disputed": False,
+        }
+        record.update(changes)
+        return {lease.invoice_id: record}
+
     def access(self, *, lease=None, **kwargs):
         x = self.lease() if lease is None else lease
         fields = {
@@ -41,7 +56,7 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "mirror_brand": "saman",
             "now_utc": NOW,
             "signing_key": KEY,
-            "independently_reconciled_invoices": {"mpw:trx:invoice:10001"},
+            "independently_reconciled_invoices": self.paid_invoice_record(x),
         }
         fields.update(kwargs)
         return verify_signal_access(**fields)
@@ -112,6 +127,26 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         self.assertFalse(self.access(independently_reconciled_invoices=["mpw:trx:invoice:10001"]))
         self.assertFalse(self.access(independently_reconciled_invoices={"proof": True}))
 
+    def test_paid_invoice_must_match_exact_tenant_sku_buyer_and_finality(self):
+        variations = (
+            {"merchant_tenant_id": "signal_other"},
+            {"sku": "moj-signals-professional"},
+            {"buyer_digest": "0" * 64},
+            {"settled_sun": 0}, {"settled_sun": True},
+            {"asset": "USDT"}, {"network": "tron-testnet"},
+            {"finality_verified": "yes"}, {"finality_verified": False},
+            {"refund_pending": True}, {"charge_disputed": True},
+        )
+        for corrupted in variations:
+            with self.subTest(corrupted=corrupted):
+                self.assertFalse(self.access(
+                    independently_reconciled_invoices=self.paid_invoice_record(**corrupted)
+                ))
+
+    def test_invoice_id_set_alone_no_longer_grants_signal_access(self):
+        self.assertFalse(self.access(independently_reconciled_invoices={"mpw:trx:invoice:10001"}))
+        self.assertTrue(self.access(independently_reconciled_invoices=self.paid_invoice_record()))
+
     def test_untrusted_boolean_identity_is_never_a_buyer_email(self):
         self.assertFalse(self.access(buyer_email=True))
         self.assertFalse(self.access(buyer_email=None))
@@ -138,7 +173,7 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "lease": self.lease(), "buyer_email": "buyer@realcompany.net",
             "requested_sku": "moj-signals-standard", "mirror_brand": "saman",
             "now_utc": NOW, "signing_key": KEY,
-            "independently_reconciled_invoices": {"mpw:trx:invoice:10001"},
+            "independently_reconciled_invoices": self.paid_invoice_record(),
             "revoked_invoice_ids": set(),
             "signal_record": event, "source_id": "broker_verified_1",
             "source_signature": sig,
