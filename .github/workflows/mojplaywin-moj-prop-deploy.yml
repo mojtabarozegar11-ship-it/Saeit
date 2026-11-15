@@ -139,6 +139,14 @@ jobs:
           scp -F "$WORK/config" "$RUNNER_TEMP/moj-prop-catalog.tar" "saeit-host:/home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
           timeout 30s ssh -F "$WORK/config" saeit-host \
             "tar -xf /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
+      - name: Fail closed on unknown live Signal Desk BEFORE any writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 50s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py preflight $GITHUB_RUN_ID"
+          echo "MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY"
       - name: Verify live Django intake is ready BEFORE publishing form
         id: api_preflight
         shell: bash
