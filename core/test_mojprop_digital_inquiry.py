@@ -123,8 +123,10 @@ class DigitalBuyerRequestTests(TestCase):
             with self.subTest(secret_present=bool(secret)):
                 lookup = self.client.get("/moj-prop-status/", {"receipt_token": secret})
                 self.assertEqual(lookup.status_code, 404)
-                self.assertNotIn("email", lookup.content.decode("utf-8"))
-                self.assertNotIn("notes", lookup.content.decode("utf-8"))
+                # Generic manual recovery instructions may legitimately
+                # mention "email"; only the actual buyer contact/notes are secret.
+                self.assertNotIn(self.payload["email"], lookup.content.decode("utf-8"))
+                self.assertNotIn(self.payload["notes"], lookup.content.decode("utf-8"))
 
 
     def test_duplicate_private_receipts_are_rejected_regardless_of_parameter_order(self):
