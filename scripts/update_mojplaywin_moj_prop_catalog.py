@@ -78,14 +78,23 @@ def deploy(run_id: str, commit_sha: str) -> None:
     catalog = ROUTE / "catalog/index.html"
     if old_index.is_symlink() or not old_index.is_file():
         raise RuntimeError("Existing Moj Prop index is missing or unsafe")
-    if catalog.exists() or catalog.is_symlink():
-        raise RuntimeError("Moj Prop catalog already exists; refusing to replace it")
     previous = old_index.read_bytes()
     if '<title>Moj Prop | Risk-first prop trading and market intelligence</title>' not in previous.decode("utf-8"):
         raise RuntimeError("Existing Moj Prop index identity changed; update refused")
     source = staged_root(run_id)
     new_index = (source / "index.html").read_bytes()
     new_catalog = (source / "catalog/index.html").read_bytes()
+    if catalog.exists() or catalog.is_symlink():
+        if catalog.is_symlink() or not catalog.is_file():
+            raise RuntimeError("Moj Prop catalog exists but is unsafe")
+        current_catalog = catalog.read_bytes()
+        marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\\n"
+        index_matches = previous == new_index or previous == new_index.replace(marker, b"", 1)
+        if index_matches and current_catalog == new_catalog:
+            print("MOJ_PROP_CATALOG_ALREADY_LIVE")
+            print("MOJ_PROP_CATALOG_ROUTE=https://mojplaywin.com/moj-prop/catalog/")
+            return
+        raise RuntimeError("Moj Prop catalog exists but differs from the approved payload; refusing to replace it")
     backup = BACKUPS / f"moj-prop-catalog-{run_id}"
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Moj Prop catalog backup already exists")
