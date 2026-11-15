@@ -16,7 +16,7 @@ ISSUE_MARKER = "MPW-FACTORY-CPANEL-READONLY-20261115"
 
 def _blob_sha(path):
     payload = path.read_bytes()
-    return hashlib.sha1(b"blob " + str(len(payload)).encode("ascii") + b"\\0" + payload).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(payload)).encode("ascii") + bytes([0]) + payload).hexdigest()
 
 
 def test_owner_only_existing_issue_dispatch_no_push_or_pr():
