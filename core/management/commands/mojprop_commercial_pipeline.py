@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count
 from django.utils import timezone
 
-from core.models import MojPropOffer, MojPropRequest
+from core.models import MojPropOffer, MojPropRequest, MojPropDeliveryEvidence
 
 
 def pipeline_snapshot():
@@ -27,6 +27,11 @@ def pipeline_snapshot():
     unique_issued_leads = issued.values("lead_id").distinct().count()
     accepted = offers.filter(status="accepted", accepted_at__isnull=False)
     accepted_leads = accepted.values("lead_id").distinct().count()
+    handoffs = MojPropDeliveryEvidence.objects.all()
+    handed_off = handoffs.filter(status__in=("sent", "acknowledged"),
+                                 handed_off_at__isnull=False)
+    acknowledged = handoffs.filter(status="acknowledged",
+                                   acknowledged_at__isnull=False)
     unquoted = MojPropRequest.objects.exclude(pk__in=issued.values("lead_id"))
     stale_threshold = now - timedelta(hours=24)
     # This data is not a payment ledger. No sum of quotes is a revenue KPI.
@@ -45,6 +50,13 @@ def pipeline_snapshot():
         "distinct_accepted_leads": accepted_leads,
         "quotes_by_status": offer_status,
         "distinct_accepted_quotes": accepted_leads,
+        "private_artifacts_prepared": handoffs.filter(status="prepared").count(),
+        "handoffs_recorded": handed_off.count(),
+        "customer_acknowledgments_recorded": acknowledged.count(),
+        "handoff_coverage_percent": (
+            round(100 * handed_off.count() / accepted.count(), 2)
+            if accepted.exists() else None
+        ),
         "drafts_not_issued": offers.filter(status="draft", issued_at__isnull=True).count(),
         "new_leads_without_issued_quote": unquoted.filter(status="new").count(),
         "new_unquoted_leads_older_than_24h": unquoted.filter(
@@ -69,7 +81,7 @@ def pipeline_snapshot():
         "payments_independently_verified": None,
         "commercial_delivery_verified": None,
         "collected_revenue": None,
-        "scope_note": "Quote issuance, acceptance, payment and delivery are separate evidence stages.",
+        "scope_note": "Drafts, issued quotes, accepted terms, handoff records and independent payment are separate evidence stages.",
     }
 
 
