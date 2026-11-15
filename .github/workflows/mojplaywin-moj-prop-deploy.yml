@@ -7,6 +7,13 @@ on:
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
+      - "config/urls.py"
+      - "core/admin.py"
+      - "core/models.py"
+      - "core/mojprop_views.py"
+      - "core/migrations/0041_mojprop_request.py"
+      - "core/migrations/0042_alter_mojproprequest_source.py"
+      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   push:
     branches: [main]
     paths:
@@ -14,6 +21,13 @@ on:
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
+      - "config/urls.py"
+      - "core/admin.py"
+      - "core/models.py"
+      - "core/mojprop_views.py"
+      - "core/migrations/0041_mojprop_request.py"
+      - "core/migrations/0042_alter_mojproprequest_source.py"
+      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
 
 permissions:
@@ -31,7 +45,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Moj Prop catalog update payload and installer
         run: |
-          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py
+          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py
+          python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
@@ -104,12 +119,31 @@ jobs:
           timeout 45s ssh -F "$WORK/config" saeit-host \
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
+      - name: Package only Moj Prop installer and page
+        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_alter_mojproprequest_source.py
+      - name: Upload isolated Moj Prop package
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          scp -F "$WORK/config" "$RUNNER_TEMP/moj-prop-catalog.tar" "saeit-host:/home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
+          timeout 30s ssh -F "$WORK/config" saeit-host \
+            "tar -xf /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
+      - name: Deploy Moj Prop intake backend with backup and migration
+        id: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 240s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Confirm live Django request API before touching static sales page
+        id: api_preflight
         shell: bash
         run: |
           set -euo pipefail
           url="https://mojplaywin.com/api/moj-prop/intake/"
-          curl --fail --silent --show-error --location --max-redirs 0 \
+          curl --fail --silent --show-error --max-redirs 0 \
             --connect-timeout 10 --max-time 20 \
             -H 'Accept: application/json' -H 'Cache-Control: no-cache' \
             "$url" -o "$RUNNER_TEMP/moj-prop-api-preflight.json"
@@ -121,20 +155,10 @@ jobs:
                   or response.get("service") != "moj-prop-intake"
                   or not isinstance(response.get("csrf_token"), str)
                   or len(response["csrf_token"]) < 32):
-              raise SystemExit("MOJ_PROP_API_NOT_READY: source-only landing must not replace live sales page")
+              raise SystemExit("MOJ_PROP_API_NOT_READY: do not publish static sales page")
           print("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS")
           PY
 
-      - name: Package only Moj Prop installer and page
-        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py templates/moj-prop-v4
-      - name: Upload isolated Moj Prop package
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          scp -F "$WORK/config" "$RUNNER_TEMP/moj-prop-catalog.tar" "saeit-host:/home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
-          timeout 30s ssh -F "$WORK/config" saeit-host \
-            "tar -xf /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
       - name: Update only /moj-prop/ commercial catalog
         id: deploy
         shell: bash
@@ -160,6 +184,25 @@ jobs:
           [[ "$status" == "200" ]]
           catalog_status="$(curl -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-catalog-page.html" -w '%{http_code}' "https://mojplaywin.com/moj-prop/catalog/?_moj-prop_catalog_deploy=$GITHUB_RUN_ID" || true)"
           [[ "$catalog_status" == "200" ]]
+          intake_status="000"
+          for intake_attempt in {1..10}; do
+            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/api/moj-prop/intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
+            [[ "$intake_status" == "200" ]] && break
+            echo "Moj Prop intake not ready (HTTP $intake_status, attempt $intake_attempt)."
+            sleep 3
+          done
+          echo "MOJ_PROP_INTAKE_STATUS=$intake_status"
+          if [[ "$intake_status" != "200" ]]; then
+            echo "MOJ_PROP_INTAKE_BODY=$(head -c 300 "$RUNNER_TEMP/moj-prop-intake.json" | tr '\n' ' ')"
+          fi
+          [[ "$intake_status" == "200" ]]
+          python3 - "$RUNNER_TEMP/moj-prop-intake.json" <<'PY'
+          import json, sys
+          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          if payload.get("ok") is not True or not payload.get("csrf_token") or payload.get("service") != "moj-prop-intake":
+            raise SystemExit("unexpected intake response shape: " + ",".join(sorted(payload.keys())))
+          print("Moj Prop intake backend is live and returned a CSRF token without creating a request.")
+          PY
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
           python3 - "$RUNNER_TEMP/moj-prop-catalog-live.html" "$RUNNER_TEMP/moj-prop-catalog-page.html" <<'PY'
@@ -171,12 +214,64 @@ jobs:
           assert 'href="/moj-prop/catalog/"' in home
           assert "See service prices" in home
           assert "/api/moj-prop/intake/" in home
+          assert 'option value="urgent"' in home
+          assert 'option value="week"' in home
+          assert 'option value="month"' in home
+          assert 'option value="review"' in home
           assert "Send request for review" in home
           assert "<title>Moj Prop Catalog" in catalog
           assert "From US$149" in catalog
           assert "From US$249" in catalog
           print("Moj Prop catalog is live; MojPlayWin home and admin login still return HTTP 200.")
           PY
+      - name: Diagnose Moj Prop intake before rollback
+        if: failure() && steps.backend.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 120s ssh -F "$WORK/config" saeit-host /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os, sys, traceback
+          from pathlib import Path
+          root = Path('/home/zomorod2/Saeit-staging')
+          htaccess = Path('/home/zomorod2/mojplaywin.com/.htaccess')
+          if htaccess.is_file() and not htaccess.is_symlink():
+              for line in htaccess.read_text(encoding='utf-8', errors='replace').splitlines():
+                  if any(token in line.lower() for token in ('passenger', 'rewrite', 'moj-prop', 'directoryindex')):
+                      print('MOJ_PROP_HTACCESS=' + line[:300])
+          sys.path.insert(0, str(root))
+          os.chdir(root)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+          try:
+              import django
+              django.setup()
+              from django.test import RequestFactory, Client
+              from django.urls import resolve
+              from core.mojprop_views import mojprop_intake
+              request = RequestFactory().get('/api/moj-prop/intake/', HTTP_HOST='mojplaywin.com')
+              direct = mojprop_intake(request)
+              print('MOJ_PROP_DIRECT_STATUS=' + str(direct.status_code))
+              print('MOJ_PROP_DIRECT_BODY=' + direct.content[:300].decode('utf-8', 'replace'))
+              print('MOJ_PROP_RESOLVED=' + repr(resolve('/api/moj-prop/intake/').func))
+              client = Client(HTTP_HOST='mojplaywin.com', secure=True)
+              client.raise_request_exception = False
+              response = client.get('/api/moj-prop/intake/', follow=True)
+              print('MOJ_PROP_CLIENT_STATUS=' + str(response.status_code))
+              print('MOJ_PROP_CLIENT_LOCATION=' + str(response.headers.get('Location', '')))
+              print('MOJ_PROP_CLIENT_BODY=' + response.content[:300].decode('utf-8', 'replace'))
+              if getattr(response, 'exc_info', None):
+                  traceback.print_exception(*response.exc_info)
+          except Exception:
+              traceback.print_exc()
+          PY
+      - name: Roll back Moj Prop backend if verification fails
+        if: failure() && steps.backend.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 90s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py rollback $GITHUB_RUN_ID"
       - name: Roll back only Moj Prop route if deployment verification fails
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash

@@ -87,9 +87,14 @@ class MojPropIntakeTests(TestCase):
     def test_catalog_release_requires_public_api_before_static_changes(self):
         workflow = (Path(settings.BASE_DIR) /
                     ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
-        preflight = workflow.index("Confirm live Django request API")
         upload = workflow.index("Upload isolated Moj Prop package")
-        self.assertLess(preflight, upload)
+        backend = workflow.index("Deploy Moj Prop intake backend with backup and migration")
+        preflight = workflow.index("Confirm live Django request API")
+        static = workflow.index("Update only /moj-prop/ commercial catalog")
+        self.assertLess(upload, backend)
+        self.assertLess(backend, preflight)
+        self.assertLess(preflight, static)
+        self.assertIn("core/migrations/0042_alter_mojproprequest_source.py", workflow)
         self.assertIn("https://mojplaywin.com/api/moj-prop/intake/", workflow)
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
         self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
@@ -110,6 +115,13 @@ class MojPropIntakeTests(TestCase):
                        ("0041_mojprop_request",), ("0042_alter_mojproprequest_source",)):
             with self.subTest(leaves=leaves), self.assertRaises(RuntimeError):
                 format_core_migration_dependencies(leaves)
+
+    def test_release_rollback_covers_preflight_and_static_errors(self):
+        workflow = (Path(settings.BASE_DIR) /
+                    ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        self.assertIn("Roll back Moj Prop backend if verification fails", workflow)
+        self.assertIn("if: failure() && steps.backend.outcome == 'success'", workflow)
+        self.assertIn("if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'", workflow)
 
     def test_real_public_form_horizon_options_match_backend_contract(self):
         html = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
