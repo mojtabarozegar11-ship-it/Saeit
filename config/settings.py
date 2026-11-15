@@ -130,3 +130,9 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+
+# Moj Prop intake uses REMOTE_ADDR unless the owner explicitly enumerates
+# reverse-proxy source IPs known to overwrite X-Real-IP. Never trust that
+# header merely because a client sent it; an empty list is intentionally safe.
+MOJ_PROP_TRUSTED_PROXY_IPS = env.list("MOJ_PROP_TRUSTED_PROXY_IPS", default=[])
