@@ -73,6 +73,7 @@ class MojPropReceiptBackendReleaseTests(unittest.TestCase):
             "from django.urls import path\nurlpatterns = []\n"
             'urlpatterns += [path("moj-prop-intake/", intake)]\n'
             'urlpatterns += [path("moj-prop-status/", receipt)]\n'
+            'urlpatterns += [path("moj-prop-quote/<str:token>/", quote)]\n'
         )
         url = self.make_urlconf(original)
         self.assertEqual(self.patch(url), original)
