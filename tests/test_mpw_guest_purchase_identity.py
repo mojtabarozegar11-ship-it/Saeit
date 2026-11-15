@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from services.mpw_guest_purchase_identity import (
     GuestBuyerIdentityError, GuestInvoiceIdentity,
     issue_guest_order_identity, verify_guest_order_identity, valid_guest_email,
+    paid_guest_delivery_preflight,
 )
 
 NOW = datetime(2026, 11, 15, 12, tzinfo=timezone.utc)
@@ -89,6 +90,78 @@ class GuestPurchaseIdentityTests(SimpleTestCase):
                         {"product_id": True}):
             with self.subTest(changes=changes), self.assertRaises(GuestBuyerIdentityError):
                 self.proof(**changes)
+
+    def paid_record(self, proof=None, **changes):
+        x = proof or self.proof()
+        record = dict(
+            invoice_id=x.invoice_id, principal_id=x.principal_id,
+            product_id=x.product_id, buyer_email_digest=x.buyer_email_digest,
+            status="paid", network="tron-mainnet", asset="TRX",
+            chain_finality_verified=True, provider_tx_id="a" * 64,
+            settled_sun=2500000, delivery_rights_verified=True,
+            refund_pending=False, charge_disputed=False,
+        )
+        record.update(changes)
+        return record
+
+    def delivery(self, *, proof=None, **changes):
+        x = proof or self.proof()
+        args = dict(
+            proof=x, buyer_email="buyer@farmco.org",
+            invoice_id="mpw:inv:123456", principal_id=52, product_id=72,
+            now_utc=NOW + timedelta(days=1), signing_key=KEY,
+            trusted_paid_invoice=self.paid_record(proof=x),
+        )
+        args.update(changes)
+        return paid_guest_delivery_preflight(**args)
+
+    def test_paid_guest_receipt_only_allows_readonly_delivery_decision(self):
+        decision = self.delivery()
+        self.assertTrue(decision["eligible_for_private_delivery"])
+        self.assertFalse(decision["file_delivered"])
+        self.assertFalse(decision["email_sent"])
+        self.assertFalse(decision["payment_changed"])
+
+    def test_valid_guest_hmac_without_paid_ledger_never_unblocks_file(self):
+        for invoice in (None, {}, True, "paid"):
+            with self.subTest(invoice=invoice):
+                self.assertFalse(self.delivery(trusted_paid_invoice=invoice)["eligible_for_private_delivery"])
+
+    def test_paid_ledger_customer_invoice_product_binding_is_exact(self):
+        for wrong in (
+            {"invoice_id": "mpw:inv:123457"}, {"principal_id": 53},
+            {"product_id": 225}, {"buyer_email_digest": "f" * 64},
+        ):
+            with self.subTest(wrong=wrong):
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=self.paid_record(**wrong))["reason"],
+                    "invoice_owner_product_mismatch",
+                )
+
+    def test_fake_transaction_or_no_independent_finality_does_not_deliver(self):
+        for wrong in (
+            {"status": "pending"}, {"network": "tron-testnet"},
+            {"asset": "USDT"}, {"chain_finality_verified": "yes"},
+            {"chain_finality_verified": False}, {"provider_tx_id": "x" * 64},
+            {"provider_tx_id": "A" * 64}, {"settled_sun": 0},
+            {"settled_sun": True},
+        ):
+            with self.subTest(wrong=wrong):
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=self.paid_record(**wrong))["reason"],
+                    "independent_tron_payment_unverified",
+                )
+
+    def test_refund_dispute_or_rights_change_stops_delivery(self):
+        for wrong in (
+            {"refund_pending": True}, {"charge_disputed": True},
+            {"delivery_rights_verified": False},
+        ):
+            with self.subTest(wrong=wrong):
+                self.assertEqual(
+                    self.delivery(trusted_paid_invoice=self.paid_record(**wrong))["reason"],
+                    "rights_or_dispute_hold",
+                )
 
     def test_email_and_invoice_identity_do_not_approve_payment(self):
         proof = self.proof()
