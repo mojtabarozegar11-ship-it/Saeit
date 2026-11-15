@@ -47,7 +47,7 @@ class FreeSignalPageContracts(SimpleTestCase):
                 self.assertIn("const endpoint='/moj-prop-intake/';", source)
                 self.assertIn(".get('tier')==='free'", source)
                 self.assertIn("freeTierRequested", source)
-                self.assertIn("response.status!==201", source)
+                self.assertIn("response.status===201", source)
                 self.assertIn("X-CSRFToken", source)
                 self.assertIn("mojtaba.bot.ai", source)
 
