@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Moj Prop catalog update payload and installer
         run: |
-          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py
+          python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py core/signal_free_views.py core/signal_free_models.py
           python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
           python3 - <<'PY'
           from html.parser import HTMLParser
@@ -123,7 +123,7 @@ jobs:
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Package only Moj Prop installer and page
-        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/mojprop_receipts.py core/mojprop_catalog_contract.py core/mojprop_workflow.py core/mojprop_offer_draft.py core/mojprop_quote_contract.py core/mojprop_quote_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_mojprop_offer.py core/migrations/0043_mojprop_digital_inquiry.py core/migrations/0044_mojprop_acceptance_evidence.py core/migrations/0045_mojprop_delivery_evidence.py
+        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/mojprop_receipts.py core/mojprop_catalog_contract.py core/mojprop_workflow.py core/mojprop_offer_draft.py core/mojprop_quote_contract.py core/mojprop_quote_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_mojprop_offer.py core/migrations/0043_mojprop_digital_inquiry.py core/migrations/0044_mojprop_acceptance_evidence.py core/migrations/0045_mojprop_delivery_evidence.py core/signal_free_models.py core/signal_free_views.py core/migrations/0046_signal_free_subscription.py config/settings.py
       - name: Upload isolated Moj Prop package
         shell: bash
         run: |
@@ -132,14 +132,6 @@ jobs:
           scp -F "$WORK/config" "$RUNNER_TEMP/moj-prop-catalog.tar" "saeit-host:/home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
           timeout 30s ssh -F "$WORK/config" saeit-host \
             "tar -xf /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
-      - name: Update only /moj-prop/ commercial catalog
-        id: deploy
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          timeout 60s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
       - name: Deploy Moj Prop intake backend with backup and migration
         id: backend
         shell: bash
@@ -148,6 +140,14 @@ jobs:
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 240s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
+      - name: Update only /moj-prop/ commercial catalog
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
       - name: Verify Moj Prop catalog and preserve root and admin
         id: smoke
         shell: bash
@@ -173,6 +173,28 @@ jobs:
             sleep 3
           done
           echo "MOJ_PROP_INTAKE_STATUS=$intake_status"
+          signal_code="$(curl --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 \
+            -H 'Accept: application/json' -o "$RUNNER_TEMP/signal-opt-in-check.json" \
+            -w '%{http_code}' 'https://mojplaywin.com/moj-signal-free-subscribe/')"
+          [[ "$signal_code" == "200" ]]
+          python3 - "$RUNNER_TEMP/signal-opt-in-check.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          result=json.loads(Path(sys.argv[1]).read_text("utf-8"))
+          assert result.get("ok") is True
+          assert result.get("agent") == "mojtaba.bot.ai"
+          assert result.get("product") == "free-historical-research-updates"
+          assert result.get("paid_entitlement") is False
+          assert isinstance(result.get("enabled"), bool)
+          assert result.get("csrf_token")
+          print("SIGNAL_FREE_OPTIN_BACKEND_GET=PASS; SMTP_APPROVAL_SEPARATE")
+          PY
+          signal_page_status="$(curl --silent --show-error --max-time 20 \
+            -o "$RUNNER_TEMP/signal-free-page.html" -w '%{http_code}' \
+            'https://mojplaywin.com/moj-prop/signals/')"
+          [[ "$signal_page_status" == "200" ]]
+          grep -Fq 'id="free-education-membership"' "$RUNNER_TEMP/signal-free-page.html"
+          echo "SIGNAL_FREE_PUBLIC_PAGE=PASS"
           if [[ "$intake_status" != "200" ]]; then
             echo "MOJ_PROP_INTAKE_BODY=$(head -c 300 "$RUNNER_TEMP/moj-prop-intake.json" | tr '\n' ' ')"
           fi
@@ -242,7 +264,7 @@ jobs:
               traceback.print_exc()
           PY
       - name: Roll back Moj Prop backend on failed install or failed smoke
-        if: failure() && (steps.backend.outcome == 'failure' || (steps.backend.outcome == 'success' && steps.smoke.outcome == 'failure'))
+        if: failure() && (steps.backend.outcome == 'failure' || (steps.backend.outcome == 'success' && (steps.deploy.outcome == 'failure' || steps.smoke.outcome == 'failure')))
         shell: bash
         run: |
           set -euo pipefail
