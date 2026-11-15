@@ -81,34 +81,48 @@
       }
       serviceSelector.addEventListener('change',syncDigitalProduct);
       syncDigitalProduct();
-      // URL plan is a nonbinding research inquiry, never a paid subscription.
+      // Signal links are educational requests only; free and paid routes share the real intake API.
       const signalPlans=Object.freeze({
         'education-weekly':Object.freeze({label:'weekly',usd:'9.90'}),
         'education-monthly':Object.freeze({label:'monthly',usd:'29.90'}),
         'education-quarterly':Object.freeze({label:'quarterly',usd:'79.90'})
       });
-      const requestedPlan=new URLSearchParams(window.location.search).get('plan');
+      const params=new URLSearchParams(window.location.search);
+      const requestedPlan=params.get('plan');
+      const freeTierRequested=requestedService==='signals' && params.get('tier')==='free';
       const selectedPlan=Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)
         ? requestedPlan : '';
       const planSummary=document.getElementById('selected-signal-plan');
       const notesField=document.getElementById('notes');
-      const planPrefix=selectedPlan
-        ? 'Requested educational plan: '+selectedPlan+
-          ' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\n'
-        : '';
-      if(requestedService==='signals' && selectedPlan && !notesField.value.trim()){
-        notesField.value='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief. A recurring subscription and payment have not been authorized.';
+      let signalPrefill='';
+      if(freeTierRequested){
+        signalPrefill='One-off FREE educational market-brief example request through mojtaba.bot.ai. This is manual review only, not a live signal, a mailing-list subscription, a payment, or a delivery guarantee.';
+      }else if(requestedService==='signals' && selectedPlan){
+        signalPrefill='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief (exact plan ID: '+selectedPlan+'). A recurring subscription and payment have not been authorized.';
       }
+      if(signalPrefill && !notesField.value.trim()) notesField.value=signalPrefill;
+      const planPrefix=selectedPlan
+        ? 'Requested educational plan: '+selectedPlan+' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\\n'
+        : '';
       function syncSignalPlan(){
-        const show=Boolean(selectedPlan && serviceSelector.value==='signals');
+        const show=Boolean((selectedPlan || freeTierRequested) && serviceSelector.value==='signals');
         planSummary.hidden=!show;
         planSummary.textContent=show
-          ? 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+
-            signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.'
+          ? (freeTierRequested
+              ? 'Selected: one-off free educational example. No live signal, subscription or payment is active.'
+              : 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.')
           : '';
         notesField.maxLength=5000-(show ? planPrefix.length : 0);
       }
-      serviceSelector.addEventListener('change',syncSignalPlan);
+      serviceSelector.addEventListener('change',function(){
+        const currentNotes=document.getElementById('notes');
+        if(serviceSelector.value!=='signals' && currentNotes.value===signalPrefill){
+          currentNotes.value='';
+          signalPrefill='';
+        }
+        syncDigitalProduct();
+        syncSignalPlan();
+      });
       syncSignalPlan();
 
       async function csrf(signal){
