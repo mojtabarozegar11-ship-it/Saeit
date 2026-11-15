@@ -55,15 +55,15 @@ validation **executed on the complete author-held archive**. These are NOT
 | # | Gate | Evidence / remaining condition |
 | --- | --- | --- |
 | 01 | Controlled source provenance | Original workbook title, tab names and URL sampled directly |
-| 02 | Cohort C denominator | 1,620 workbook grid data rows; full replay pending |
-| 03 | Regime R1 denominator | 2,160 workbook grid data rows; full replay pending |
+| 02 | Cohort C denominator | 1,620 full workbook data rows read; independent descriptive postprocessing completed; generator replay pending |
+| 03 | Regime R1 denominator | 2,160 full workbook data rows read; independent descriptive postprocessing completed; generator replay pending |
 | 04 | Avoid forensic trace double count | 480 diagnostic rows excluded from 4,260 in workbook Overview |
 | 05 | Exact source column names | 12 header fields matched by live read |
 | 06 | Real R1 cohort prefix | `R-` observed and corrected in code and test fixture |
 | 07 | Family policy cardinality | 3 C / 4 R policy names enforced in parser |
 | 08 | Repeated-key identity | Cohort, seed, climate, bias, ET and forecast case paired |
 | 09 | Duplicate policy-key prevention | Rejects duplicate rows in analyzer |
-| 10 | Factorial-grid completeness | 5×3×3 combinations required for every of 12 paths |
+| 10 | Factorial-grid completeness | 5×3×3 combinations for each path, 4 dry/4 medium/4 wet per family now enforced; full live data passed |
 | 11 | CSV header uniqueness | Rejects duplicate source header names |
 | 12 | CSV record width | Now rejects overlong records rather than ignoring surplus values |
 | 13 | Finite values and ranges | Numerical and water-cap checks in source loader |
@@ -75,13 +75,13 @@ validation **executed on the complete author-held archive**. These are NOT
 | 19 | Dependence across climate paths | Twelve path-level mean paired effects now emitted separately |
 | 20 | Decision-weight sensitivity | Eight weights enumerated; sample λ=0/10/100 crosschecked |
 | 21 | Source SHA-256 | Hashing implemented for ingested exact CSV bytes; hashes not recovered from original Sheet here |
-| 22 | Manuscript checkpoint comparison | Numeric checkpoints implemented; **full-input rerun pending** |
+| 22 | Manuscript checkpoint comparison | Full-sheet independent JavaScript postprocessing of 3,780 rows agrees with all 64 decision-weight table checkpoints; Python CLI replay pending |
 | 23 | Generator replay | Recovered C and R generators exist in **private Karegar**; no fresh complete C/R replay was executed in this PR review |
 | 24 | Weather and soil calibration | NOT FIELD VALIDATED |
 | 25 | Crop yield / causal benefit | NOT ESTABLISHED |
 | 26 | Independent cluster uncertainty | NOT ESTABLISHED; 12 paths, not 540 independent farms |
 | 27 | External scientific source | FAO-56 and Cameron–Miller references verified at publisher/author-linked pages |
-| 28 | Software regression suite | 38 test methods now authored in PR; execution status requires specific job logs |
+| 28 | Software regression suite | 40 test methods now authored in PR; execution status requires specific job logs |
 | 29 | Manuscript/editorial review | NOT COMPLETED |
 | 30 | External publication and licensing | NOT AUTHORIZED; requires owner-specific approval |
 
@@ -101,7 +101,7 @@ validation **executed on the complete author-held archive**. These are NOT
 
 ## Gated next verification, no cost or distribution
 1. Obtain exact frozen CSV snapshots from author-controlled bundle without publishing them.
-2. Run all 38 regression test methods against this PR head and capture command, Python version, stdout and exit code.
+2. Run all 40 regression test methods against this PR head and capture command, Python version, stdout and exit code.
 3. Retrieve the recovered generator and offline verifier from the **private** Karegar records below; replay the two synthetic families on a controlled computer; compare against frozen CSV/TSV snapshots and all declared checkpoints.
 4. Audit path-level deviations/outliers without incorrectly treating factorial keys as independent trials.
 5. Verify the weather/controller generator source or explicitly publish the replay limitation (only with final owner approval).
@@ -132,3 +132,49 @@ not proof that a real farm would know rainfall in advance. This must be
 made explicit in manuscript methods and commercial claims, even if every
 synthetic archive check passes. Independent field and economic evidence
 remain absent.
+
+## Full live-source arithmetic audit completed this review (not model replay)
+
+A separate read-only JavaScript analysis over bounded native Sheets ranges
+`CohortC1620!A1:L1621` and `RegimeR2160!A1:L2161`
+processed **all 3,780 synthetic outcome rows** in the original workbook
+directly through the connected Google Sheets interface (unformatted numeric
+cells). It did not rely on the archived static `EXPECTED` constants, and did
+not run or modify the weather/controller model.
+
+| Source-derived result | C | Regime R1 |
+| --- | ---: | ---: |
+| Rows read | 1,620 | 2,160 |
+| Unique matched 3/4-policy keys | 540 | 540 |
+| Climate paths | 12 | 12 |
+| Factorial settings per climate path | 45 | 45 |
+| Paths by class dry/medium/wet | 4/4/4 | 4/4/4 |
+| Duplicate/invalid records in the implemented structural scan | 0 | 0 |
+| Mean paired Δwater (m³), v3−v2 | 36.068955967 | 30.575281425 |
+| Mean paired ΔQ, v3−v2 | -6.892592593 | -7.470370370 |
+| Pareto categories summed | 540 | 540 |
+| Median finite crossover λ (m³/Q-day) | 2.841907237 | 1.372369279 |
+
+The independent scan checked allowed climate, bias, ET and forecast categories;
+finite quantitative values and threshold bounds; unique paired keys; complete
+policy families; complete per-path factorials; all paired differences and all
+five disjoint Pareto categories. Zero structural anomalies were observed
+**under these specific checks**. This does not exclude untested model-design
+problems or validate source archive generation.
+
+The `DecisionWeights!H1:P9` cells were independently read and compared for
+all eight λ values in each of two families: **64 scalar comparisons** (v3
+preferred count, v2 preferred count, tie count, mean ΔL), **zero mismatches**
+at 10⁻⁶ precision; maximum absolute difference in mean ΔL was
+9.095×10⁻¹³ (R) and 5.684×10⁻¹³ (C) from floating-point arithmetic.
+These are self-consistency calculations on the native workbook, **not**
+independent field measurements, causal estimates, or a controller replay.
+
+**Additional structural correction after full-sheet inspection:** enforce
+the observed 4/4/4 dry/medium/wet balance per family. Earlier code only
+required twelve paths and could have accepted an inadmissible 5/4/3 split.
+A regression method was added.
+
+No raw workbook values or export bytes were posted in this document. The
+source remains author-controlled and the entire numeric comparison is
+restricted to descriptive synthetic outcomes.
