@@ -72,7 +72,9 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             installer(namespace)
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertTrue(namespace["_mpw_guest_checkout_installed"])
-            self.assertEqual(record.call_count, 1)
+            # An arbitrary success object is not a committed invoice redirect.
+            # Telemetry must not count it as a paid funnel step.
+            self.assertEqual(record.call_count, 0)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
