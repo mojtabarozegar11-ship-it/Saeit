@@ -458,8 +458,10 @@ class SQLiteCommercialLedger:
                 raise CommercialGateError("ledger_symlink_prohibited")
             if not target.parent.is_dir() or target.parent.is_symlink():
                 raise CommercialGateError("ledger_parent_missing_or_symlink")
-            if target.parent.stat().st_mode & 0o002:
-                raise CommercialGateError("ledger_parent_world_writable")
+            if target.parent.stat().st_mode & 0o022:
+                # A group member can replace the file between secure creation
+                # and sqlite3.connect, even when the directory is not world writable.
+                raise CommercialGateError("ledger_parent_writable_by_others")
             if target.exists():
                 metadata = target.stat()
                 if (not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077
