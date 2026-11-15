@@ -103,6 +103,11 @@ def _consume_quota(email: str, ip_hash: str, now) -> None:
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
     response["Cache-Control"] = "no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    if status == 429:
+        # Browsers and upstream edge controls can honor the quota response
+        # without parsing free-form messages or personal customer data.
+        response["Retry-After"] = str(data.get("retry_after", 600))
     return response
 
 
