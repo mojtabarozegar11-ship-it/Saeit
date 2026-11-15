@@ -137,6 +137,67 @@ class ApprovedCatalogueTests(SimpleTestCase):
             rows, cursor = approved_cards(self.request())
         self.assertEqual((rows, cursor), ((), None))
 
+    def test_256_rejected_private_skus_do_not_hide_later_approved_items(self):
+        class BoundedPrivatePage(list):
+            def __init__(self, *items, last_scanned_id):
+                super().__init__(items)
+                self.last_scanned_id = last_scanned_id
+
+        page = BoundedPrivatePage(last_scanned_id=256)
+        accepted = []
+        def catalog(after_id):
+            accepted.append(after_id)
+            if after_id == 0:
+                return page, True
+            if after_id == 256:
+                return BoundedPrivatePage(self.product, last_scanned_id=901), False
+            raise AssertionError("Unexpected cursor")
+        with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
+                   return_value=(catalog, lambda pk: self.product)), self.approved_route():
+            first, next_cursor = approved_cards(self.request(), cursor=0)
+            second, done = approved_cards(self.request(), cursor=next_cursor)
+        self.assertEqual(first, ())
+        self.assertEqual(next_cursor, 256)
+        self.assertEqual([c.product_id for c in second], [901])
+        self.assertIsNone(done)
+        self.assertEqual(accepted, [0, 256])
+
+    def test_page_cursor_uses_scanned_id_not_last_approved(self):
+        class BoundedPrivatePage(list):
+            last_scanned_id = 500
+        with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
+                   return_value=(lambda after_id: (BoundedPrivatePage([self.product]), True),
+                                 lambda pk: self.product)), self.approved_route():
+            rows, next_cursor = approved_cards(self.request())
+        self.assertEqual([r.product_id for r in rows], [901])
+        self.assertIsNone(next_cursor)  # 500 < 901: stale cursor rejected
+
+    def test_invalid_scanned_cursor_type_fails_closed(self):
+        class BoundedPrivatePage(list):
+            last_scanned_id = "901"
+        with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
+                   return_value=(lambda after_id: (BoundedPrivatePage([self.product]), True),
+                                 lambda pk: self.product)), self.approved_route():
+            self.assertEqual(approved_cards(self.request()), ((), None))
+
+    def test_nonprogressing_empty_private_page_fails_closed(self):
+        class BoundedPrivatePage(list):
+            last_scanned_id = 0
+        with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
+                   return_value=(lambda after_id: (BoundedPrivatePage(), True),
+                                 lambda pk: None)):
+            self.assertEqual(approved_cards(self.request()), ((), None))
+
+    def test_corrupt_decimal_price_does_not_crash_storefront(self):
+        candidate = SimpleNamespace(pk=901, title="Corrupt legacy record",
+                                    currency="USD", price="not-a-decimal")
+        self.assertIsNone(_linked_product(candidate))
+
+    def test_big_63_bit_cursor_is_valid_but_overflow_rejected(self):
+        self.assertEqual(parse_cursor(str((1 << 63) - 1)), (1 << 63) - 1)
+        with self.assertRaises(Http404):
+            parse_cursor(str(1 << 63))
+
     def test_unapproved_product_lookup_fails_closed(self):
         with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
                    return_value=(lambda after_id: ([], False), lambda pk: None)):
