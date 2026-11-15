@@ -177,6 +177,12 @@ def validate_offer(
                 "moj_prop_release_gates_incomplete" if offer.offer_type is OfferType.MOJ_PROP
                 else "offer_release_gates_incomplete"
             )
+        # Draft offers may be inspected offline; active offers require a
+        # separately supplied tenant-to-domain ownership registry.
+        if tenant_registry is None:
+            raise CommercialGateError("tenant_registry_required_for_activation")
+        if tenant_registry.get(tenant_id) != host:
+            raise CommercialGateError("tenant_scope_mismatch")
     if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
         raise CommercialGateError("delivery_manifest_hash_invalid")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
