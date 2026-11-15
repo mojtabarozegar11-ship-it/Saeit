@@ -423,7 +423,8 @@ class SQLiteCommercialLedger:
     def __init__(self, path: str, *,
                  settlement_verifier: Optional[Callable[[PaymentEvidence], bool]] = None,
                  delivery_verifier: Optional[Callable[[str, str], bool]] = None,
-                 refund_verifier: Optional[Callable[[ConfirmedRefund], bool]] = None):
+                 refund_verifier: Optional[Callable[[ConfirmedRefund], bool]] = None,
+                 accepted_scope_verifier: Optional[Callable[[str], bool]] = None):
         # No independent verification adapter means no financial completion.
         if settlement_verifier is not None and not callable(settlement_verifier):
             raise CommercialGateError("settlement_verifier_invalid")
@@ -434,6 +435,9 @@ class SQLiteCommercialLedger:
         if refund_verifier is not None and not callable(refund_verifier):
             raise CommercialGateError("refund_verifier_invalid")
         self._refund_verifier = refund_verifier
+        if accepted_scope_verifier is not None and not callable(accepted_scope_verifier):
+            raise CommercialGateError("accepted_scope_verifier_invalid")
+        self._accepted_scope_verifier = accepted_scope_verifier
         # This ledger contains private customer/order references and MUST NOT
         # silently become a world-readable file or follow a symlink.
         if not isinstance(path, str) or not path:
@@ -708,6 +712,15 @@ class SQLiteCommercialLedger:
                         raise CommercialGateError("independent_delivery_verifier_failed") from None
                     if delivered_confirmed is not True:
                         raise CommercialGateError("independent_delivery_unverified")
+                if target is CommercialState.VERIFIED_REVENUE:
+                    if self._accepted_scope_verifier is None:
+                        raise CommercialGateError("independent_scope_acceptance_required")
+                    try:
+                        accepted = self._accepted_scope_verifier(order_id)
+                    except Exception:
+                        raise CommercialGateError("scope_acceptance_verifier_failed") from None
+                    if accepted is not True:
+                        raise CommercialGateError("scope_acceptance_unverified")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
             if target is CommercialState.FULFILLED and payload_digest != fulfillment_manifest_sha256:
@@ -777,6 +790,17 @@ class SQLiteCommercialLedger:
                     raise CommercialGateError("independent_settlement_verifier_failed") from None
                 if confirmed is not True:
                     raise CommercialGateError("independent_settlement_unverified")
+            # An invoice and a file hash do not prove the buyer accepted
+            # the actual contracted service scope.
+            if target is CommercialState.VERIFIED_REVENUE:
+                if self._accepted_scope_verifier is None:
+                    raise CommercialGateError("independent_scope_acceptance_required")
+                try:
+                    accepted = self._accepted_scope_verifier(order_id)
+                except Exception:
+                    raise CommercialGateError("scope_acceptance_verifier_failed") from None
+                if accepted is not True:
+                    raise CommercialGateError("scope_acceptance_unverified")
             # Chain transfers are single-use across orders; uniqueness is durable.
             if target is CommercialState.SETTLED:
                 try:
