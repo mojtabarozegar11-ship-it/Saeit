@@ -789,3 +789,7 @@ class MojPropDeliveryEvidence(T):
                         errors["status"] = "Dispatched deliverable evidence is immutable."
         if errors:
             raise ValidationError(errors)
+
+
+# Independent consent/confirmation domain; distinct from MojPropRequest leads.
+from .signal_free_models import MojSignalFreeSubscription  # noqa: E402,F401
