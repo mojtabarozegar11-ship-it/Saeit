@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - "feature/prop-firm-policy-v11-20261114"
+      - "cycle59-moj-prop-level10-decision-lock-20261115"
   pull_request:
     branches:
       - "main"
+      - "feature/prop-firm-policy-v11-20261114"
     paths:
       - "prop_firm/**"
       - "core/commercialization_readiness.py"
