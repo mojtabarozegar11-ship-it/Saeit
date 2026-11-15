@@ -57,3 +57,17 @@ jobs:
           print("MOJ_CPANEL_SECRETS_READ="+str(report.get("secrets_read")))
           print("MOJ_CPANEL_RELEASE_PERMITTED=false")
           '
+
+      - name: Bounded read-only checkout/support intake metrics (aggregate only)
+        env:
+          FACTORY_VPS_RUNNER: '1'
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo 'MOJ_SALES_INTAKE=UNKNOWN_NO_AUTHORIZED_SSH_KEY'
+            exit 0
+          fi
+          test "$(git hash-object -- scripts/mpw_sales_intake_readonly_20261024.py)" = "c4d84ca71a5162bc72aa7fd7d7bf6986e53941a0"
+          bash deploy/cpanel_direct_command.sh mpw_sales_intake_readonly
