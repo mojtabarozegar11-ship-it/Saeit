@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import MojPropRequest
+from .mojprop_catalog_contract import public_service_catalog
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -126,7 +127,8 @@ def mojprop_intake(request):
             or request.get_host().split(":")[0].lower() not in PUBLIC_HOSTS):
         return _json({"ok": False, "detail": "Not available."}, status=404)
     if request.method == "GET":
-        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake"})
+        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
+                      "service_catalog": public_service_catalog()})
     try:
         content_length = int(request.META.get("CONTENT_LENGTH", "0"))
     except (ValueError, TypeError):
