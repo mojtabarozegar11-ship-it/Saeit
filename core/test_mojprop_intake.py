@@ -84,6 +84,16 @@ class MojPropIntakeTests(TestCase):
         installer = (Path(settings.BASE_DIR) / "scripts/deploy_mojplaywin_moj_prop.py").read_text("utf-8")
         self.assertIn('PUBLIC_HTACCESS = "PassengerEnabled off', installer)
 
+    def test_catalog_release_requires_public_api_before_static_changes(self):
+        workflow = (Path(settings.BASE_DIR) /
+                    ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        preflight = workflow.index("Confirm live Django request API")
+        upload = workflow.index("Upload isolated Moj Prop package")
+        self.assertLess(preflight, upload)
+        self.assertIn("https://mojplaywin.com/api/moj-prop/intake/", workflow)
+        self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
+        self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
+
     def test_real_public_form_horizon_options_match_backend_contract(self):
         html = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
         fragment = re.search(r'<select id="horizon">(.*?)</select>', html)
