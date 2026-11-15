@@ -94,6 +94,23 @@ class MojPropIntakeTests(TestCase):
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
         self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
 
+    def test_live_graph_dependency_joiner_preserves_every_leaf(self):
+        from scripts.deploy_mojplaywin_moj_prop_backend import format_core_migration_dependencies
+        value = format_core_migration_dependencies((
+            "0049_mpw_guest_email_recovery", "0040_commercefunnelevent",
+        ))
+        self.assertIn('("core", "0049_mpw_guest_email_recovery")', value)
+        self.assertIn('("core", "0040_commercefunnelevent")', value)
+        self.assertEqual(value.count('("core", '), 2)
+
+    def test_live_graph_dependency_joiner_refuses_untrusted_graph(self):
+        from scripts.deploy_mojplaywin_moj_prop_backend import format_core_migration_dependencies
+        for leaves in ((), ("bad",),
+                       ("0049_mpw_guest_email_recovery", "0049_mpw_guest_email_recovery"),
+                       ("0041_mojprop_request",), ("0042_alter_mojproprequest_source",)):
+            with self.subTest(leaves=leaves), self.assertRaises(RuntimeError):
+                format_core_migration_dependencies(leaves)
+
     def test_real_public_form_horizon_options_match_backend_contract(self):
         html = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
         fragment = re.search(r'<select id="horizon">(.*?)</select>', html)
