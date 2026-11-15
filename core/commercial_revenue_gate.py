@@ -253,6 +253,16 @@ class PaymentEvidence:
     human_reviewed: bool
 
 
+@dataclass(frozen=True)
+class ConfirmedRefund:
+    """Externally evidenced native-TRX reversal, never a transfer instruction."""
+    order_id: str
+    original_transaction_id: str
+    refund_transaction_id: str
+    amount: Decimal
+    source_id: str
+
+
 def validate_payment_evidence(
     evidence: PaymentEvidence,
     *,
@@ -366,7 +376,8 @@ class SQLiteCommercialLedger:
 
     def __init__(self, path: str, *,
                  settlement_verifier: Optional[Callable[[PaymentEvidence], bool]] = None,
-                 delivery_verifier: Optional[Callable[[str, str], bool]] = None):
+                 delivery_verifier: Optional[Callable[[str, str], bool]] = None,
+                 refund_verifier: Optional[Callable[[ConfirmedRefund], bool]] = None):
         # No independent verification adapter means no financial completion.
         if settlement_verifier is not None and not callable(settlement_verifier):
             raise CommercialGateError("settlement_verifier_invalid")
@@ -374,6 +385,9 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("delivery_verifier_invalid")
         self._settlement_verifier = settlement_verifier
         self._delivery_verifier = delivery_verifier
+        if refund_verifier is not None and not callable(refund_verifier):
+            raise CommercialGateError("refund_verifier_invalid")
+        self._refund_verifier = refund_verifier
         # This ledger contains private customer/order references and MUST NOT
         # silently become a world-readable file or follow a symlink.
         if not isinstance(path, str) or not path:
@@ -441,6 +455,15 @@ class SQLiteCommercialLedger:
                 order_id TEXT NOT NULL REFERENCES orders(order_id),
                 PRIMARY KEY (network, transaction_id)
             );
+            CREATE TABLE IF NOT EXISTS independently_confirmed_refunds (
+                refund_tx TEXT PRIMARY KEY,
+                order_id TEXT NOT NULL REFERENCES orders(order_id),
+                amount_sun INTEGER NOT NULL CHECK (amount_sun > 0),
+                source_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS refund_order_idx
+                ON independently_confirmed_refunds(order_id);
             -- This is append-only at the API/SQL connection layer. It does
             -- not claim cryptographic protection from database administrators.
             CREATE TRIGGER IF NOT EXISTS no_order_event_update BEFORE UPDATE ON order_events
@@ -455,6 +478,10 @@ class SQLiteCommercialLedger:
                 BEGIN SELECT RAISE(ABORT, 'immutable_settlement'); END;
             CREATE TRIGGER IF NOT EXISTS no_settlement_delete BEFORE DELETE ON settled_transactions
                 BEGIN SELECT RAISE(ABORT, 'immutable_settlement'); END;
+            CREATE TRIGGER IF NOT EXISTS no_refund_update BEFORE UPDATE ON independently_confirmed_refunds
+                BEGIN SELECT RAISE(ABORT, 'immutable_confirmed_refund'); END;
+            CREATE TRIGGER IF NOT EXISTS no_refund_delete BEFORE DELETE ON independently_confirmed_refunds
+                BEGIN SELECT RAISE(ABORT, 'immutable_confirmed_refund'); END;
             """
         )
         self.connection.commit()
@@ -695,6 +722,88 @@ class SQLiteCommercialLedger:
                 (next_value.value, now, order_id),
             )
             return next_value
+
+    def record_confirmed_refund(self, evidence: ConfirmedRefund) -> None:
+        """Record a completed, independently checked TRX refund; never send it."""
+        if not isinstance(evidence, ConfirmedRefund):
+            raise CommercialGateError("refund_evidence_invalid")
+        order_id = _slug(evidence.order_id, "order_id")
+        _slug(evidence.source_id, "source_id")
+        original_tx = _text(evidence.original_transaction_id, "original_transaction_id").lower()
+        refund_tx = _text(evidence.refund_transaction_id, "refund_transaction_id").lower()
+        if any(not _TRON_TX.fullmatch(tx) or set(tx) == {"0"} for tx in (original_tx, refund_tx)):
+            raise CommercialGateError("refund_transaction_id_invalid")
+        if original_tx == refund_tx:
+            raise CommercialGateError("refund_reuses_original_transaction")
+        amount = _amount(evidence.amount)
+        _validate_trx_sun_precision(amount, "TRX")
+        sun = int(amount * Decimal("1000000"))
+        if sun > 9223372036854775807:
+            raise CommercialGateError("refund_overflow")
+        if self._refund_verifier is None:
+            raise CommercialGateError("independent_refund_verifier_required")
+        try:
+            confirmed = self._refund_verifier(evidence)
+        except Exception:
+            raise CommercialGateError("independent_refund_verifier_failed") from None
+        if confirmed is not True:
+            raise CommercialGateError("independent_refund_unverified")
+        with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
+            row = self.connection.execute(
+                "SELECT amount, currency, state FROM orders WHERE order_id = ?", (order_id,)
+            ).fetchone()
+            if row is None:
+                raise CommercialGateError("order_not_found")
+            if row["currency"] != "TRX" or row["state"] not in (
+                CommercialState.SETTLED.value, CommercialState.FULFILLMENT_PENDING.value,
+                CommercialState.FULFILLED.value, CommercialState.VERIFIED_REVENUE.value,
+            ):
+                raise CommercialGateError("refund_requires_settled_trx_order")
+            paid = self.connection.execute(
+                "SELECT 1 FROM settled_transactions WHERE network = ? AND transaction_id = ? AND order_id = ?",
+                ("TRON", original_tx, order_id),
+            ).fetchone()
+            if paid is None:
+                raise CommercialGateError("refund_original_transfer_not_matched")
+            if self.connection.execute(
+                "SELECT 1 FROM settled_transactions WHERE network = ? AND transaction_id = ?",
+                ("TRON", refund_tx),
+            ).fetchone():
+                raise CommercialGateError("refund_transaction_collides_with_payment")
+            original_sun = int(Decimal(row["amount"]) * Decimal("1000000"))
+            previous = self.connection.execute(
+                "SELECT COALESCE(SUM(amount_sun), 0) AS total FROM independently_confirmed_refunds WHERE order_id = ?",
+                (order_id,),
+            ).fetchone()["total"]
+            if previous + sun > original_sun:
+                raise CommercialGateError("refund_exceeds_original_payment")
+            try:
+                self.connection.execute(
+                    "INSERT INTO independently_confirmed_refunds VALUES (?, ?, ?, ?, ?)",
+                    (refund_tx, order_id, sun, evidence.source_id, datetime.now(timezone.utc).isoformat()),
+                )
+            except sqlite3.IntegrityError:
+                raise CommercialGateError("refund_transfer_already_recorded") from None
+
+    def outstanding_settled_trx(self, order_id: str) -> Decimal:
+        """Net native TRX after recorded refunds; NOT profit or fiat revenue."""
+        order_id = _slug(order_id, "order_id")
+        row = self.connection.execute(
+            "SELECT amount, currency, state FROM orders WHERE order_id = ?", (order_id,)
+        ).fetchone()
+        if row is None:
+            raise CommercialGateError("order_not_found")
+        if row["currency"] != "TRX" or row["state"] not in (
+            CommercialState.SETTLED.value, CommercialState.FULFILLMENT_PENDING.value,
+            CommercialState.FULFILLED.value, CommercialState.VERIFIED_REVENUE.value,
+        ):
+            raise CommercialGateError("outstanding_amount_unavailable")
+        refunded = self.connection.execute(
+            "SELECT COALESCE(SUM(amount_sun), 0) AS total FROM independently_confirmed_refunds WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()["total"]
+        return Decimal(row["amount"]) - (Decimal(refunded) / Decimal("1000000"))
 
     def snapshot(self, order_id: str) -> Mapping[str, str]:
         order_id = _slug(order_id, "order_id")
