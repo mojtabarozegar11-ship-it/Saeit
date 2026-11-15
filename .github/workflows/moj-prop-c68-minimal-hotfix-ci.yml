@@ -1,0 +1,25 @@
+name: C68 Moj Prop minimal public revenue form release gate
+on:
+  push:
+    branches: ["cycle68-prop-form-revenue-hotfix-20261115"]
+  pull_request:
+    paths:
+      - "templates/moj-prop-v4/index.html"
+      - "scripts/update_mojplaywin_moj_prop_catalog.py"
+      - "tests/test_moj_prop_c68_*.py"
+      - ".github/workflows/moj-prop-c68-minimal-hotfix-ci.yml"
+permissions:
+  contents: read
+jobs:
+  source-only-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify canonical buyer form values and explicit consent
+        run: python -m unittest discover -s tests -p "test_moj_prop_c68_revenue_form.py" -v
+      - name: Test real atomic cPanel updater in temp directory only
+        run: python -m unittest discover -s tests -p "test_moj_prop_c68_release_safety.py" -v
