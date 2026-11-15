@@ -16,10 +16,10 @@ MAX_TOKEN_CHARS = 256
 PUBLIC_STATUSES = {
     "new": "Received for manual review; no payment collected",
     "reviewing": "Being reviewed; no payment collected",
-    "offer_sent": "Written offer stage recorded; no payment confirmed",
-    "approved": "Request approved for manual scoping; payment not confirmed",
+    "offer_sent": "Written offer recorded; settlement requires separate verification",
+    "approved": "Manual scoping approved; settlement requires separate verification",
     "delivered": "Delivery stage recorded; independently verify customer receipt",
-    "closed": "Request closed; no payment confirmation implied",
+    "closed": "Request closed; financial status is not assessed by this receipt",
     "spam": "Request closed",
 }
 
