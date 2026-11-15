@@ -48,13 +48,14 @@ class IndependentRestoreReleaseGateTests(unittest.TestCase):
     def test_missing_independent_key_and_proof_path_denied_before_connection(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch.object(backend, "choose_python") as python:
-                with self.assertRaisesRegex(RuntimeError, "independent DB restore"):
+                with self.assertRaisesRegex(RuntimeError, "restore case ID"):
                     self.check()
                 python.assert_not_called()
 
     def test_wrong_private_evidence_root_fails_before_connection(self):
         with patch.dict(os.environ, {
             "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": RUN,
             "MOJPROP_PRIVATE_DB_RESTORE_ROOT": "/tmp/unauthorized",
         }):
             with patch.object(backend, "choose_python") as python:
@@ -65,6 +66,7 @@ class IndependentRestoreReleaseGateTests(unittest.TestCase):
     def test_signed_proof_requires_actual_read_only_connected_db_identity(self):
         with patch.dict(os.environ, {
             "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": RUN,
             "MOJPROP_PRIVATE_DB_RESTORE_ROOT": str(self.private),
         }):
             with patch.object(backend, "choose_python", return_value=Path("/fake/venv/python")):
@@ -83,9 +85,39 @@ class IndependentRestoreReleaseGateTests(unittest.TestCase):
                         self.assertEqual(proof.call_args.kwargs["run_id"], RUN)
                         self.assertEqual(proof.call_args.kwargs["root"], self.private)
 
+    def test_preapproved_case_is_independent_of_unknown_workflow_run_id(self):
+        independently_signed_case = "850002"
+        with patch.dict(os.environ, {
+            "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": independently_signed_case,
+            "MOJPROP_PRIVATE_DB_RESTORE_ROOT": str(self.private),
+        }):
+            with patch.object(backend, "choose_python", return_value=Path("/fake/runtime")):
+                with patch.object(backend.subprocess, "run", return_value=types.SimpleNamespace(
+                    returncode=0, stdout=IDENTITY
+                )):
+                    with patch.object(backend, "verify_database_restore_evidence",
+                                      return_value={"rehearsal_receipt_verified": True}) as proof:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            self.check()
+                        self.assertEqual(proof.call_args.kwargs["run_id"], independently_signed_case)
+                        self.assertNotEqual(independently_signed_case, RUN)
+
+    def test_shell_metacharacters_in_evidence_case_are_denied_before_any_run(self):
+        with patch.dict(os.environ, {
+            "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": "850002;echo UNSAFE",
+            "MOJPROP_PRIVATE_DB_RESTORE_ROOT": str(self.private),
+        }):
+            with patch.object(backend, "choose_python") as python:
+                with self.assertRaises(ValueError):
+                    self.check()
+                python.assert_not_called()
+
     def test_connection_failure_prevents_claiming_signed_evidence(self):
         with patch.dict(os.environ, {
             "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": RUN,
             "MOJPROP_PRIVATE_DB_RESTORE_ROOT": str(self.private),
         }):
             with patch.object(backend, "choose_python", return_value=Path("/fake/runtime")):
@@ -100,6 +132,7 @@ class IndependentRestoreReleaseGateTests(unittest.TestCase):
     def test_valid_identity_without_independent_signature_is_not_approval(self):
         with patch.dict(os.environ, {
             "MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY": KEY,
+            "MOJPROP_APPROVED_RESTORE_CASE_ID": RUN,
             "MOJPROP_PRIVATE_DB_RESTORE_ROOT": str(self.private),
         }):
             with patch.object(backend, "choose_python", return_value=Path("/fake/runtime")):
@@ -131,6 +164,9 @@ class IndependentRestoreReleaseGateTests(unittest.TestCase):
         self.assertIn("  workflow_dispatch:\n", text)
         self.assertNotIn("  push:\n", text)
         self.assertIn("MOJPROP_BACKUP_RESTORE_VERIFIED", text)
+        self.assertIn("restore_case_id:", text)
+        self.assertIn("APPROVED_RESTORE_CASE_ID", text)
+        self.assertIn("MOJPROP_APPROVED_RESTORE_CASE_ID=$APPROVED_RESTORE_CASE_ID", text)
         self.assertLess(
             text.index("- name: Require private independently signed MariaDB restore proof"),
             text.index("- name: Update only /moj-prop/ commercial catalog"),
