@@ -23,15 +23,27 @@ def pipeline_snapshot():
     )
     # An unissued draft is NOT a quote delivered to a potential buyer.
     unique_draft_or_quoted = offers.values("lead_id").distinct().count()
-    issued = offers.filter(issued_at__isnull=False)
+    # A timestamp alone on a draft is not evidence that an offer was issued.
+    issued = offers.filter(
+        status__in=("issued", "accepted", "cancelled", "expired"),
+        reviewed_at__isnull=False, issued_at__isnull=False,
+    )
     unique_issued_leads = issued.values("lead_id").distinct().count()
-    accepted = offers.filter(status="accepted", accepted_at__isnull=False)
+    # Ignore inconsistent rows created outside model.full_clean/admin review.
+    accepted = issued.filter(status="accepted", accepted_at__isnull=False).exclude(
+        acceptance_reference=""
+    )
     accepted_leads = accepted.values("lead_id").distinct().count()
     handoffs = MojPropDeliveryEvidence.objects.all()
-    handed_off = handoffs.filter(status__in=("sent", "acknowledged"),
-                                 handed_off_at__isnull=False)
-    acknowledged = handoffs.filter(status="acknowledged",
-                                   acknowledged_at__isnull=False)
+    handed_off = handoffs.filter(
+        status__in=("sent", "acknowledged"), handed_off_at__isnull=False,
+        offer__status="accepted", offer__accepted_at__isnull=False,
+        clearance_reference__gt="", handoff_reference__gt="",
+    )
+    acknowledged = handed_off.filter(
+        status="acknowledged", acknowledged_at__isnull=False,
+        acknowledgment_reference__gt="",
+    )
     unquoted = MojPropRequest.objects.exclude(pk__in=issued.values("lead_id"))
     stale_threshold = now - timedelta(hours=24)
     # This data is not a payment ledger. No sum of quotes is a revenue KPI.
