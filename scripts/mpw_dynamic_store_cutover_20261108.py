@@ -463,8 +463,10 @@ def check_actual_staging_store() -> None:
     # email-FREE behavior. This is SOURCE ONLY and cannot authorize release.
     if str(APP) not in sys.path:
         sys.path.insert(0, str(APP))
-    from scripts.mpw_email_required_preflight_20261114 import require_source
-    require_source(APP)
+    from scripts.mpw_email_required_preflight_20261114 import (
+        require_commercial_source_closure,
+    )
+    require_commercial_source_closure(APP)
     # Actual migration, effective template and customer money remain unknown.
     # Public cutover still requires owner policy gate and does not run here.
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
