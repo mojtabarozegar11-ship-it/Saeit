@@ -19,6 +19,7 @@ class PropFirmSiteTests(unittest.TestCase):
                           'sendtransaction','<iframe'):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden,page)
-        self.assertIn('ثبت‌نام پولی، دریافت trx',page)
-        self.assertIn('پیش از راه‌اندازی',page)
+        self.assertIn('این صفحه اطلاع‌رسانی قابلیت ثبت سفارش، دریافت وجه',page)
+        self.assertIn('فعال و تأمین سرمایه‌شده طبق اعلام مالک',page)
+        self.assertIn('موقتاً غیرفعال',page)
         self.assertIn('aria-labelledby',page)
