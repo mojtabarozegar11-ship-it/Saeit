@@ -3,7 +3,7 @@ import json
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count
+from django.db.models import Count, F
 from django.utils import timezone
 
 from core.models import MojPropOffer, MojPropRequest, MojPropDeliveryEvidence
@@ -25,20 +25,29 @@ def pipeline_snapshot():
     unique_draft_or_quoted = offers.values("lead_id").distinct().count()
     # A timestamp alone on a draft is not evidence that an offer was issued.
     issued = offers.filter(
+        lead__consent=True,
         status__in=("issued", "accepted", "cancelled", "expired"),
         reviewed_at__isnull=False, issued_at__isnull=False,
+        expires_at__isnull=False,
+        reviewed_at__lte=F("issued_at"), issued_at__lte=now,
+        expires_at__gt=F("issued_at"),
     )
     unique_issued_leads = issued.values("lead_id").distinct().count()
     # Ignore inconsistent rows created outside model.full_clean/admin review.
-    accepted = issued.filter(status="accepted", accepted_at__isnull=False).exclude(
-        acceptance_reference=""
-    )
+    accepted = issued.filter(
+        status="accepted", accepted_at__isnull=False,
+        accepted_at__gte=F("issued_at"),
+        accepted_at__lt=F("expires_at"),
+        accepted_at__lte=now,
+    ).exclude(acceptance_reference="")
     accepted_leads = accepted.values("lead_id").distinct().count()
     handoffs = MojPropDeliveryEvidence.objects.all()
     handed_off = handoffs.filter(
         status__in=("sent", "acknowledged"), handed_off_at__isnull=False,
         offer_id__in=accepted.values("pk"),
         clearance_reference__gt="", handoff_reference__gt="",
+        handed_off_at__gte=F("offer__accepted_at"),
+        handed_off_at__lte=now,
     )
     acknowledged = handed_off.filter(
         status="acknowledged", acknowledged_at__isnull=False,
@@ -62,7 +71,9 @@ def pipeline_snapshot():
         "distinct_accepted_leads": accepted_leads,
         "quotes_by_status": offer_status,
         "distinct_accepted_quotes": accepted.count(),
-        "private_artifacts_prepared": handoffs.filter(status="prepared").count(),
+        "private_artifacts_prepared": handoffs.filter(
+            status="prepared", offer_id__in=accepted.values("pk")
+        ).count(),
         "handoffs_recorded": handed_off.count(),
         "customer_acknowledgments_recorded": acknowledged.count(),
         "handoff_coverage_percent": (
