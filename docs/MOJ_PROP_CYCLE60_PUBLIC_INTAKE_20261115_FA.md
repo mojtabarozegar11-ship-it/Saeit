@@ -70,3 +70,13 @@ PR Draft این شاخه ایجاد و CI دقیق آن اجرا شود؛ سپس
 - شش آزمون Django endpoint به workflow اضافه شد.
 
 وضعیت این قسمت: سورس و تست ثبت‌شده؛ اجرای Django/MariaDB/HTTP واقعی و انتشار دامنه هنوز UNKNOWN.
+
+
+## تصحیح پس از اجرای CI — ۱۵ نوامبر ۲۰۲۶
+
+- migration graph ابتدا با دو leaf متعارض متوقف شد: `0002_prop_applicant` و `0007_equity_broker_source`.
+- merge migration استاندارد `0008_merge_applicant_and_equity_broker_source.py` اضافه شد.
+- اجرای release gate با run `43679427141`: **PASS**.
+- بررسی migration: **PASS**.
+- مجموعهٔ canonical شامل Moj Prop و TRX: **109 tests — OK**.
+- این موفقیت فقط گیت سورس/CI است؛ endpoint روی دامنه، MariaDB عملیاتی، خرید، پرداخت، معامله، استقرار و درآمد هنوز اثبات نشده‌اند.
