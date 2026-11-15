@@ -84,7 +84,8 @@ def deploy(run_id: str, commit_sha: str) -> None:
     source = staged_root(run_id)
     new_index = (source / "index.html").read_bytes()
     new_catalog = (source / "catalog/index.html").read_bytes()
-    if catalog.exists() or catalog.is_symlink():
+    catalog_exists = catalog.exists() or catalog.is_symlink()
+    if catalog_exists:
         if catalog.is_symlink() or not catalog.is_file():
             raise RuntimeError("Moj Prop catalog exists but is unsafe")
         current_catalog = catalog.read_bytes()
@@ -94,7 +95,9 @@ def deploy(run_id: str, commit_sha: str) -> None:
             print("MOJ_PROP_CATALOG_ALREADY_LIVE")
             print("MOJ_PROP_CATALOG_ROUTE=https://mojplaywin.com/moj-prop/catalog/")
             return
-        raise RuntimeError("Moj Prop catalog exists but differs from the approved payload; refusing to replace it")
+        if current_catalog != new_catalog:
+            raise RuntimeError("Moj Prop catalog exists but differs from the approved payload; refusing to replace it")
+    catalog_created = not catalog_exists
     backup = BACKUPS / f"moj-prop-catalog-{run_id}"
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Moj Prop catalog backup already exists")
@@ -106,7 +109,8 @@ def deploy(run_id: str, commit_sha: str) -> None:
         "index_before": digest(previous),
         "index_after": digest(new_index),
         "catalog_after": digest(new_catalog),
-        "catalog_created": True,
+        "catalog_created": catalog_created,
+        "index_updated": True,
         "root_files_modified": False,
     }
     (backup / "index.before").write_bytes(previous)
@@ -114,22 +118,23 @@ def deploy(run_id: str, commit_sha: str) -> None:
     changed = False
     try:
         atomic_write(old_index, new_index)
-        atomic_write(catalog, new_catalog)
+        if catalog_created:
+            atomic_write(catalog, new_catalog)
         changed = True
         if digest(old_index.read_bytes()) != manifest["index_after"]:
             raise RuntimeError("Moj Prop index verification failed")
         if digest(catalog.read_bytes()) != manifest["catalog_after"]:
             raise RuntimeError("Moj Prop catalog verification failed")
     except Exception:
-        if changed and catalog.is_file() and not catalog.is_symlink():
+        if changed and catalog_created and catalog.is_file() and not catalog.is_symlink():
             catalog.unlink()
         if digest(old_index.read_bytes()) == manifest["index_after"]:
             atomic_write(old_index, previous)
         raise
-    print(f"MOJ_PROP_CATALOG_UPDATED commit={commit_sha}")
+    mode = "catalog_created" if catalog_created else "index_refreshed"
+    print(f"MOJ_PROP_CATALOG_UPDATED commit={commit_sha} mode={mode}")
     print("MOJ_PROP_CATALOG_ROUTE=https://mojplaywin.com/moj-prop/catalog/")
     print(f"MOJ_PROP_CATALOG_BACKUP={backup}")
-
 
 def rollback(run_id: str) -> None:
     run_id = safe_id(run_id)
@@ -139,8 +144,9 @@ def rollback(run_id: str) -> None:
     if not manifest_path.is_file() or not previous_path.is_file():
         raise RuntimeError("Moj Prop catalog rollback backup is missing")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("catalog_created") is not True:
-        raise RuntimeError("Rollback manifest is not a Moj Prop catalog update")
+    if manifest.get("index_updated") is not True:
+        raise RuntimeError("Rollback manifest is not a Moj Prop update")
+    catalog_created = manifest.get("catalog_created") is True
     index = ROUTE / "index.html"
     catalog = ROUTE / "catalog/index.html"
     if index.is_symlink() or catalog.is_symlink() or not index.is_file() or not catalog.is_file():
@@ -150,14 +156,15 @@ def rollback(run_id: str) -> None:
     previous = previous_path.read_bytes()
     if digest(previous) != manifest["index_before"]:
         raise RuntimeError("Moj Prop backup checksum mismatch")
-    catalog.unlink()
+    if catalog_created:
+        catalog.unlink()
     atomic_write(index, previous)
-    if digest(index.read_bytes()) != manifest["index_before"] or catalog.exists():
+    catalog_ok = (not catalog_created and catalog.is_file()) or (catalog_created and not catalog.exists())
+    if digest(index.read_bytes()) != manifest["index_before"] or not catalog_ok:
         raise RuntimeError("Moj Prop catalog rollback verification failed")
     manifest["rolled_back"] = True
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print("MOJ_PROP_CATALOG_ROLLBACK_COMPLETE")
-
 
 def main() -> None:
     if len(sys.argv) == 4 and sys.argv[1] == "deploy":
