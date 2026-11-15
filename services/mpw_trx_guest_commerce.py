@@ -290,13 +290,22 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
+            from services.mpw_trx_email_recovery import ROOT, _recovery_enabled
+            # Recovery is advertised only when both release and outbound-mail
+            # approvals are enabled. Never ask a paid buyer to purchase twice.
+            recovery_link = (
+                '<p><a href="' + ROOT +
+                '">Recover your paid purchase using checkout email</a></p>'
+                if _recovery_enabled() else ''
+            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>Purchase recovery | MojPlayWin</title></head><body>'
                 '<main><h1>TRX purchase recovery</h1>'
                 '<p>No active purchase session was found in this browser. '
-                'Your orders are private and require the original browser session.</p>'
+                'Your orders are private and require verified buyer identity.</p>'
+                + recovery_link +
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
