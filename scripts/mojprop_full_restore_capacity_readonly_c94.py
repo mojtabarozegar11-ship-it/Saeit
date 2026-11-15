@@ -76,13 +76,44 @@ def _select_db_estimate():
 
 
 def _quota_checked(needed_bytes):
-    # OS-level statvfs is not enough when shared-host account quotas apply.
-    from scripts.mojprop_starter30_file_restore_c28 import _quota_evidence
+    """Exact quota(1) read, independent of uninstalled app helper modules."""
+    import subprocess
+    # The filesystem check must also pass. Host account quota can be tighter.
     fd = os.open(HOME, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        return _quota_evidence(fd, ACCOUNT, needed_bytes)
+        stats = os.fstatvfs(fd)
+        if (stats.f_bavail * stats.f_frsize < needed_bytes + 64 * 1024 * 1024
+                or stats.f_favail < 32):
+            return False
     finally:
         os.close(fd)
+    try:
+        proc = subprocess.run(
+            ["quota", "-wvu", ACCOUNT], timeout=6, check=True,
+            capture_output=True, text=True,
+            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    saw_volume = False
+    for line in proc.stdout.splitlines():
+        fields = line.split()
+        if not fields or not fields[0].startswith("/dev/"):
+            continue
+        if len(fields) != 7 or any(not x.isdecimal() for x in fields[1:]):
+            return False
+        used_kib, soft_kib, hard_kib, inode_used, inode_soft, inode_hard = (
+            int(x) for x in fields[1:]
+        )
+        used, soft, hard = used_kib * 1024, soft_kib * 1024, hard_kib * 1024
+        if any(limit and limit - used < needed_bytes + 64 * 1024 * 1024
+               for limit in (soft, hard)):
+            return False
+        if any(limit and limit - inode_used < 32
+               for limit in (inode_soft, inode_hard)):
+            return False
+        saw_volume = True
+    return saw_volume
 
 
 def main():
