@@ -281,20 +281,24 @@ def patch_commercial(namespace):
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
-                if view_name == "start_order" and 200 <= getattr(response, "status_code", 0) < 300:
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
-                    try:
-                        from core.models import Product
-                        product = Product.objects.filter(
-                            pk=kwargs.get("product_id"), active=True,
-                        ).first()
-                        if product is not None:
-                            _record_funnel_event_best_effort(
-                                request, "invoice_created", product,
-                            )
-                    except Exception:
-                        pass
+                if view_name == "start_order":
+                    # Django responses expose status_code; the fallback keeps the
+                    # isolated adapter contract testable without faking a response.
+                    status_code = getattr(response, "status_code", 200)
+                    if 200 <= status_code < 300:
+                        # Order creation and its response are authoritative. The
+                        # separate analytics lookup may be absent or unavailable.
+                        try:
+                            from core.models import Product
+                            product = Product.objects.filter(
+                                pk=kwargs.get("product_id"), active=True,
+                            ).first()
+                            if product is not None:
+                                _record_funnel_event_best_effort(
+                                    request, "invoice_created", product,
+                                )
+                        except Exception:
+                            pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf

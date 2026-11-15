@@ -10,7 +10,6 @@ import hmac
 import json
 import secrets
 from datetime import timedelta
-from ipaddress import ip_address
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -23,95 +22,90 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_protect
 
 from .models import MojPropRequest
+from .mojprop_catalog_contract import public_service_catalog
 from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
 MAX_REQUESTS_PER_WINDOW = 5
 RATE_WINDOW = timedelta(minutes=10)
-MAX_REQUEST_BYTES = 16_384
-FIELD_LIMITS = {
-    "name": 200, "email": 254, "service": 30, "horizon": 20,
-    "notes": 5000, "website": 120,
-}
-ALLOWED_FIELDS = frozenset((*FIELD_LIMITS, "consent", "product_id"))
-CATALOG_INQUIRY_PRODUCTS = frozenset((72, 225, 879))
 
 
 def _text(payload, key: str, limit: int) -> str:
-    """Never silently truncate buyer input or coerce structured data to a string."""
     value = payload.get(key, "")
-    if not isinstance(value, str) or len(value) > limit:
-        raise ValueError("invalid field: " + key)
-    value = value.strip()
-    allowed_controls = chr(10) + chr(9) if key == "notes" else ""
-    if any((ord(char) < 32 and char not in allowed_controls)
-           or 0xD800 <= ord(char) <= 0xDFFF for char in value):
-        raise ValueError("control character in " + key)
-    return value
+    return str(value).strip()[:limit] if value is not None else ""
 
 
-def _unique_json_pairs(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError("duplicate JSON field")
-        value[key] = item
-    return value
+MAX_BODY_BYTES = 16 * 1024
+ALLOWED_FIELDS = frozenset((
+    "name", "email", "service", "horizon", "notes", "consent", "website", "product_id"
+))
+# Only listed products may create an unpaid digital inquiry, never an invoice.
+CATALOG_INQUIRY_PRODUCTS = frozenset((72, 225, 879))
+
+
+def _unique_pairs(pairs):
+    """Reject ambiguous duplicate JSON fields, including email and consent."""
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise ValueError("duplicate customer intake key")
+        values[key] = value
+    return values
 
 
 def _payload(request):
-    content_type = request.META.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
-    declared_length = request.META.get("CONTENT_LENGTH")
-    if declared_length not in (None, ""):
-        try:
-            length = int(declared_length)
-            if length < 0:
-                return None
-            if length > MAX_REQUEST_BYTES:
-                raise OverflowError("request body exceeds intake limit")
-        except (TypeError, ValueError):
-            return None
-    # Django's request.POST may already have consumed a form stream.
-    # Never access request.body after parsing a URL-encoded form.
-    if content_type in ("application/x-www-form-urlencoded", "multipart/form-data"):
-        # Django TestClient and some browsers send multipart forms. Keep
-        # compatibility without allowing uploads or ambiguous duplicate keys.
-        data = request.POST
-        if request.FILES or any(len(values) != 1 for _, values in data.lists()):
-            return None
-        return data
+    """Allow bounded JSON or a single-valued HTML form; reject hidden extras."""
+    content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].strip().lower()
+    if content_type not in ("application/json", "application/x-www-form-urlencoded"):
+        return None
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except (ValueError, TypeError):
+        return None
+    if length > MAX_BODY_BYTES or length < 0:
+        return None
     if content_type == "application/json":
-        try:
-            raw = request.body
-            if len(raw) > MAX_REQUEST_BYTES:
-                raise OverflowError("request body exceeds intake limit")
-            value = json.loads(
-                raw.decode("utf-8"),
-                object_pairs_hook=_unique_json_pairs,
-                parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")),
-            )
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        body = request.body
+        if len(body) > MAX_BODY_BYTES:
             return None
-        return value if isinstance(value, dict) else None
-    return None
+        try:
+            value = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return None
+        if type(value) is not dict or set(value) - ALLOWED_FIELDS:
+            return None
+        return value
+    form = request.POST
+    # A normal browser form carries Django's CSRF hidden field. It is not
+    # customer data and must not block an otherwise valid, consented lead.
+    if set(form.keys()) - (ALLOWED_FIELDS | {"csrfmiddlewaretoken"}):
+        return None
+    if any(len(form.getlist(key)) != 1 for key in form):
+        return None
+    return form
 
 
 def _client_ip(request) -> str:
-    # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    raw_peer = str(request.META.get("REMOTE_ADDR") or "").strip()
+    """Use the peer address; forward headers are trusted only from allowed proxies."""
+    from ipaddress import ip_address
+
+    remote = str(request.META.get("REMOTE_ADDR") or "").strip()
     try:
-        peer = ip_address(raw_peer).compressed
+        peer = str(ip_address(remote))
     except ValueError:
-        return "unknown-peer"
-    # Only a configured reverse proxy may assert a forwarded single IP.
-    trusted_proxies = getattr(settings, "MOJPROP_TRUSTED_PROXIES", ())
-    if isinstance(trusted_proxies, (list, tuple, frozenset)) and peer in trusted_proxies:
-        forwarded = str(request.META.get("HTTP_X_REAL_IP") or "").strip()
+        return "unknown"
+
+    # A public visitor must not choose a new rate-limit identity by sending
+    # X-Real-IP. Only explicitly configured reverse proxy peers can assert it.
+    allowed = getattr(settings, "MOJ_PROP_TRUSTED_PROXY_IPS", ())
+    if not isinstance(allowed, (tuple, list, set, frozenset)):
+        allowed = ()
+    if peer in allowed:
+        claimed = str(request.META.get("HTTP_X_REAL_IP") or "").strip()
         try:
-            return ip_address(forwarded).compressed
+            return str(ip_address(claimed))
         except ValueError:
-            # A forged / malformed / multi-IP header must not rotate rate keys.
             return peer
     return peer
 
@@ -136,6 +130,8 @@ def _rate_limited(email: str, ip_hash: str) -> bool:
 
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
+    # Tokens and buyer receipt state must never be kept in intermediary caches
+    # or leaked in browser referrer data, including on error responses.
     response["Cache-Control"] = "no-store"
     response["Referrer-Policy"] = "no-referrer"
     response["X-Content-Type-Options"] = "nosniff"
@@ -147,62 +143,79 @@ def _json(data, status=200):
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
     if request.method == "GET":
-        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake"})
+        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
+                      "service_catalog": public_service_catalog()})
 
-    try:
-        payload = _payload(request)
-    except OverflowError:
-        return _json({"ok": False, "detail": "Request is too large."}, status=413)
+    payload = _payload(request)
     if payload is None:
-        return _json({"ok": False, "detail": "Use valid JSON or form data."}, status=400)
-    if set(payload) - ALLOWED_FIELDS:
-        return _json({"ok": False, "detail": "Unknown request fields."}, status=400)
-    try:
-        fields = {name: _text(payload, name, limit) for name, limit in FIELD_LIMITS.items()}
-    except ValueError:
-        return _json({"ok": False, "detail": "A field is malformed or too long."}, status=400)
+        return _json({"ok": False, "detail": "Use valid JSON or a single-valued HTML form."}, status=400)
+
+    # Type-check JSON values; Python stringification must not turn arrays,
+    # objects or integers into fabricated buyer names/addresses.
+    for field in ("name", "email", "service", "horizon", "notes", "website"):
+        if field in payload and not isinstance(payload[field], str):
+            return _json({"ok": False, "detail": "Invalid field types."}, status=400)
+    product_id = payload.get("product_id")
+    content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
+    # Browser forms send scalar strings; JSON clients must send a real int.
+    if (content_type == "application/x-www-form-urlencoded"
+            and type(product_id) is str
+            and product_id in {str(x) for x in CATALOG_INQUIRY_PRODUCTS}):
+        product_id = int(product_id)
+    consent_value = payload.get("consent")
+    is_json_payload = type(payload) is dict
+    # QueryDict subclasses dict, but ordinary form checkbox values are
+    # strings ("on"/"1"), not JSON booleans. Keep the formats distinct.
+    if is_json_payload and type(consent_value) is not bool:
+        return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
-    if fields["website"]:
+    if _text(payload, "website", 120):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
-    name = fields["name"]
-    email = fields["email"].lower()
-    route = fields["service"]
-    horizon = fields["horizon"]
-    notes = fields["notes"]
-    consent_value = payload.get("consent")
+    # Reject rather than silently truncate buyer identity or requested scope.
+    # Truncation can convert two distinct contacts into the same CRM address,
+    # or create a quote for a materially different scope than the buyer sent.
+    limits = {"name": 200, "email": 254, "service": 30,
+              "horizon": 20, "notes": 5000, "website": 120}
+    oversized = {key: "Field exceeds maximum length."
+                 for key, maximum in limits.items()
+                 if len(payload.get(key, "")) > maximum}
+    if oversized:
+        return _json({"ok": False, "detail": "Request fields are too long.",
+                      "fields": oversized}, status=400)
+
+    name = _text(payload, "name", 200)
+    email = _text(payload, "email", 254).lower()
+    route = _text(payload, "service", 30)
+    horizon = _text(payload, "horizon", 20)
+    notes = _text(payload, "notes", 5000)
     consent = consent_value is True or (
-        request.content_type.split(";", 1)[0].lower()
-        in ("application/x-www-form-urlencoded", "multipart/form-data")
-        and consent_value in ("1", "true", "on", "yes")
+        not is_json_payload and isinstance(consent_value, str)
+        and consent_value.lower() in {"1", "true", "on"}
     )
 
-    # A valid digital-product inquiry identifies exactly one listed SKU.
-    # No price, recipient, payment flag, txid, or buyer identity is accepted.
-    product_id = payload.get("product_id")
-    # HTML forms encode every field as text. Accept only canonical ASCII SKU
-    # digits for form submissions; JSON clients must continue sending an int.
-    if route == "digital" and request.content_type.split(";", 1)[0].lower() in (
-        "application/x-www-form-urlencoded", "multipart/form-data"
-    ) and isinstance(product_id, str) and product_id in {
-        str(sku) for sku in CATALOG_INQUIRY_PRODUCTS
-    }:
-        product_id = int(product_id)
     errors = {}
-    if route == "digital":
-        if type(product_id) is not int or product_id not in CATALOG_INQUIRY_PRODUCTS:
-            errors["product_id"] = "Select an available product to request a quote."
-    elif product_id not in (None, ""):
-        errors["product_id"] = "Product IDs are for digital product inquiries only."
     if len(name) < 2:
         errors["name"] = "Name is required."
     try:
         validate_email(email)
     except ValidationError:
         errors["email"] = "A valid email is required."
+    else:
+        # These domains cannot receive commercial proposals or retrieval links.
+        domain = email.rsplit("@", 1)[-1].lower().rstrip(".")
+        if domain in {"localhost", "example.invalid"} or domain.endswith(
+            (".invalid", ".localhost", ".local", ".test")
+        ):
+            errors["email"] = "Use an email address capable of receiving a written offer."
     if route not in ROUTES:
         errors["service"] = "Choose a valid service route."
+    if route == "digital":
+        if type(product_id) is not int or product_id not in CATALOG_INQUIRY_PRODUCTS:
+            errors["product_id"] = "Choose one available digital product."
+    elif product_id not in (None, ""):
+        errors["product_id"] = "Product ID is permitted only for digital inquiries."
     if horizon not in HORIZONS:
         errors["horizon"] = "Choose a valid time horizon."
     if len(notes) < 20:
@@ -218,6 +231,8 @@ def mojprop_intake(request):
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
+        # API clients and browsers can honor this standard response header.
+        # It is not a signal to retry a paid order or bypass the throttle.
         response["Retry-After"] = "600"
         return response
 
@@ -260,39 +275,40 @@ def mojprop_intake(request):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_receipt_status(request):
-    """Buyer may submit bearer proof in a CSRF-protected POST body, not a URL.
-
-    Legacy GET remains for previously issued receipts; new UI MUST use POST.
-    Never log, echo, cache or place the signed token in a redirect.
-    """
+    """Read only the public stage when holding the signed private receipt."""
+    # A bearer receipt must be unambiguous: reject duplicate query parameters.
+    # QueryDict.get() silently selects the last value otherwise.
     if request.method == "POST":
+        if str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower() != "application/json":
+            return _json({"ok": False, "detail": "JSON receipt proof required."}, status=400)
         try:
-            payload = _payload(request)
-        except OverflowError:
-            return _json({"ok": False, "detail": "Request is too large."}, status=413)
-        if (type(payload) is not dict
-                or set(payload) != {"receipt_token"}
-                or type(payload["receipt_token"]) is not str):
-            return _json({"ok": False, "detail": "Invalid receipt lookup."}, status=400)
-        token = payload["receipt_token"]
+            if len(request.body) > 1024:
+                return _json({"ok": False, "detail": "Receipt proof is too long."}, status=413)
+            body = json.loads(request.body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+            return _json({"ok": False, "detail": "Invalid receipt proof."}, status=400)
+        token = body.get("receipt_token") if type(body) is dict and set(body) == {"receipt_token"} else ""
     else:
-        # Multiple bearer credentials on one URL are ambiguous: fail closed.
+        # Support old signed tokens in read-only GET for previously issued receipts.
         tokens = request.GET.getlist("receipt_token")
         token = tokens[0] if len(tokens) == 1 else ""
     request_id = verify_receipt_token(token)
     if request_id is None:
-        return _json({
-            "ok": False,
-            "detail": "Receipt invalid or expired. Contact support using your original email.",
-        }, status=404)
+        return _json(
+            {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
+            status=404,
+        )
     record = (MojPropRequest.objects.filter(request_id=request_id)
               .values_list("status", flat=True).first())
     if record is None:
         return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
-    return _json({
+    response = _json({
         "ok": True,
         "request_id": request_id,
         "status": record,
         "stage": public_status_text(record),
         "payment_status": "not_collected_by_this_service",
     })
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

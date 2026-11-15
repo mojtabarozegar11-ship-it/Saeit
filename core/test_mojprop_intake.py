@@ -60,3 +60,15 @@ class MojPropIntakeTests(TestCase):
         response = self.post(self.payload(email="not-an-email"))
         self.assertEqual(response.status_code, 400)
         self.assertIn("email", response.json()["fields"])
+
+    def test_rate_limit_returns_retry_after_header_and_does_not_create_sixth_lead(self):
+        for index in range(5):
+            response = self.post(self.payload(name=f"Manual Review Buyer {index}"))
+            self.assertEqual(response.status_code, 201)
+        rejected = self.post(self.payload(name="Manual Review Buyer Six"))
+        self.assertEqual(rejected.status_code, 429)
+        self.assertEqual(rejected.headers["Retry-After"], "600")
+        self.assertEqual(rejected.json()["retry_after"], 600)
+        self.assertEqual(rejected.headers["Cache-Control"], "no-store")
+        self.assertEqual(MojPropRequest.objects.count(), 5)
+

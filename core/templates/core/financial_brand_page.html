@@ -16,8 +16,8 @@ a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{displ
 @media(max-width:700px){.shell{padding:15px}.hero{padding:32px 25px;min-height:350px;margin:22px 0;border-radius:21px}.cards{grid-template-columns:1fr}.nav{align-items:flex-start;gap:12px}.hero h1{font-size:2.8rem}}
 </style>
 </head><body><main class="shell">
-<nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
+<nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ destination_url }}">{{ destination_label }} ↗</a></nav>
 <section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% elif page_type == "game" %}Game world{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
-<section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
+<section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ destination_url }}">{{ destination_label }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
 <footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
 </main></body></html>
