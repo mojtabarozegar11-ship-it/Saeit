@@ -15,6 +15,7 @@ from .service import persist_pending_order
 from .quote_service import (
     DurableSignalQuoteError, issue_pending_trx_quote, read_pending_trx_quote,
 )
+from .approved_catalog import approved_offer_fingerprint
 
 NOW = datetime(2026, 11, 15, 12, tzinfo=timezone.utc)
 KEY_HEX = "d1" * 32
@@ -64,6 +65,13 @@ class DurableTronQuoteTests(TestCase):
             requested_at="2026-11-15T11:59:00Z",
         )
         self.persist()
+        self.approved_catalog = override_settings(
+            MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS=[
+                approved_offer_fingerprint(self.route, self.offer),
+            ],
+        )
+        self.approved_catalog.enable()
+        self.addCleanup(self.approved_catalog.disable)
 
     def persist(self, intent=None):
         return persist_pending_order(
@@ -256,7 +264,7 @@ class DurableTronQuoteTests(TestCase):
     def test_changed_offer_price_does_not_validate_existing_invoice(self):
         self.issue()
         altered = replace(self.offer, price=Decimal("99.99"))
-        with self.assertRaisesRegex(DurableSignalQuoteError, "verification_failed"):
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
             self.read(trusted_offer=altered)
 
     def test_paid_flag_added_to_pending_order_detected(self):
@@ -278,3 +286,48 @@ class DurableTronQuoteTests(TestCase):
     def test_trx_only_no_implicit_usd_fx(self):
         self.assertEqual(self.offer.currency, "TRX")
         self.assertEqual(self.issue().state, "pending_external_settlement")
+    def test_missing_approved_service_catalog_denies_quote(self):
+        with override_settings(MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS=[]):
+            with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+                self.issue()
+        self.assertEqual(PendingSignalTrxQuote.objects.count(), 0)
+
+    def test_wrong_approved_service_fingerprint_denies_quote(self):
+        with override_settings(MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS=["a" * 64]):
+            with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+                self.issue()
+
+    def test_invalid_allowlist_type_denies_quote(self):
+        for invalid in (None, "", "a" * 64, [1], ["x"], ["A" * 64]):
+            with self.subTest(invalid=repr(invalid)[:20]):
+                with override_settings(MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS=invalid):
+                    with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+                        self.issue()
+
+    def test_unapproved_offer_language_denies_quote(self):
+        altered = replace(self.offer, language="fa")
+        with self.assertRaises(DurableSignalQuoteError):
+            self.issue(trusted_offer=altered)
+
+    def test_unapproved_offer_price_change_denies_quote(self):
+        altered = replace(self.offer, price=Decimal("12.0"))
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+            self.issue(trusted_offer=altered)
+
+    def test_unapproved_route_path_change_denies_quote(self):
+        altered = replace(self.route, path_prefix="/different/")
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+            self.issue(trusted_route=altered)
+
+    def test_unapproved_route_host_change_denies_quote(self):
+        altered = replace(self.route, canonical_host="different.example")
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_approved_catalog"):
+            self.issue(trusted_route=altered)
+
+    def test_missing_route_object_is_domain_error(self):
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_service_contract"):
+            self.issue(trusted_route=None)
+
+    def test_missing_offer_object_is_domain_error(self):
+        with self.assertRaisesRegex(DurableSignalQuoteError, "protected_service_contract"):
+            self.issue(trusted_offer=None)
