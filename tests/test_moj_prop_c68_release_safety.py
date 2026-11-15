@@ -107,3 +107,21 @@ class OneFileHotfixReleaseTests(TestCase):
         with self.assertRaisesRegex(RuntimeError,"differs from the approved payload"):
             release.deploy("123","a"*40)
         self.assertEqual((self.route/"index.html").read_bytes(),self.previous)
+
+    def test_symlinked_backup_root_refuses_deploy_without_touching_live_index(self):
+        target=self.home/"unrelated-private-dir"
+        target.mkdir()
+        self.backups.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError,"backup root is a symlink"):
+            release.deploy("123","a"*40)
+        self.assertEqual((self.route/"index.html").read_bytes(),self.previous)
+        self.assertEqual(list(target.iterdir()),[])
+
+    def test_symlinked_backup_root_refuses_rollback_without_touching_target(self):
+        target=self.home/"unrelated-private-dir"
+        target.mkdir()
+        self.backups.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError,"rollback backup path is a symlink"):
+            release.rollback("123")
+        self.assertEqual((self.route/"index.html").read_bytes(),self.previous)
+        self.assertEqual(list(target.iterdir()),[])
