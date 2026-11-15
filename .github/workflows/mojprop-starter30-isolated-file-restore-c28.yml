@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
-      - name: Offline 24-case security regression (no cPanel)
+      - name: Offline 26-case security regression (no cPanel)
         run: |
           set -euo pipefail
           python3 -B -m unittest tests.test_mojprop_starter30_file_restore_c28 -v
@@ -98,7 +98,7 @@ jobs:
       - name: Pin exact approved source without environment leaks
         run: |
           set -euo pipefail
-          test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "f122f8cb01b6364c4853bb07c1a74d68f8abf5a2"
+          test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "942c0ed1a7cbd52ccdf56c685de891e9beb12e97"
           test -n "$HOST_KEY"
           [[ "$APPROVED_COMMENT_ID" =~ ^[1-9][0-9]{5,18}$ ]]
           python3 -B -m unittest tests.test_mojprop_starter30_file_restore_c28 -q
