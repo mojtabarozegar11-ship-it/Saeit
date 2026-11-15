@@ -10,7 +10,7 @@ from decimal import Decimal
 import logging
 
 from django.http import Http404
-from django.urls import NoReverseMatch, Resolver404, resolve, reverse
+from .mojplaywin_checkout_route import verified_guest_checkout_url
 
 TRUSTED_HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
 MAX_CURSOR = 9999999999999999
@@ -47,7 +47,11 @@ def _verified_private_gateway(request):
         if checkout_flags(request).get("mpw_trx_easy_enabled") is not True:
             return None
         return public_trx_catalog, public_trx_product
-    except (ImportError, AttributeError, LookupError, RuntimeError):
+    except Exception as exc:
+        # A broken release flag provider or migration must not turn the
+        # informational storefront into HTTP 500. Still fail closed.
+        LOGGER.warning("Private gateway release verification failed: %s",
+                       type(exc).__name__)
         return None
 
 
@@ -62,10 +66,9 @@ def _linked_product(product):
         if (not amount.is_finite() or not Decimal("0") < amount <= Decimal("1000")
                 or amount != amount.quantize(Decimal("0.01"))):
             return None
-        checkout_path = reverse("mpw_commerce:book", args=[product.pk])
-        match = resolve(checkout_path)
-        if (match.url_name != "book" or "mpw_commerce" not in match.namespaces
-                or checkout_path != f"/commerce/book/{product.pk}/"):
+        # Do not reverse the legacy namespaced URL: private config places the
+        # guest-ownership checkout ahead of it at this identical path.
+        if verified_guest_checkout_url(product.pk) is None:
             return None
         return ApprovedCard(
             product_id=product.pk, title=product.title.strip(),
