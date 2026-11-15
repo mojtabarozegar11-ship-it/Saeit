@@ -5,11 +5,11 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|mpw_runtime_readonly|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
+  relay_preflight|cpanel_version|passenger_inventory|mpw_runtime_readonly|mpw_backup_readiness_readonly|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
-if [[ "$operation" == "mpw_runtime_readonly" && "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
+if [[ ( "$operation" == "mpw_runtime_readonly" || "$operation" == "mpw_backup_readiness_readonly" ) && "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
   echo "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" >&2
   exit 65
 fi
@@ -60,6 +60,15 @@ mpw_runtime_readonly() {
     'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - inspect' < "$script"
 }
 
+# Inventory only file metadata/capacity, no SQL, secrets, upload or host writes.
+mpw_backup_readiness_readonly() {
+  local script=scripts/mojplaywin_backup_restore_readiness_readonly.py
+  test -f "$script" && test ! -L "$script"
+  test "$(git hash-object -- "$script")" = "9fe37626a0d58ae7f2ab8fb4a9206342e997a6be"
+  timeout 80s ssh -T -F "$work/config" saeit-cpanel \
+    'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < "$script"
+}
+
 normalize_key() {
   local value="$1" destination="$2"
   printf '%s' "$value" | python3 -c 'import sys; s=sys.stdin.read(); s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n"; sys.stdout.write(s)' > "$destination"
@@ -108,6 +117,9 @@ EOF
       ;;
     mpw_runtime_readonly)
       mpw_runtime_readonly
+      ;;
+    mpw_backup_readiness_readonly)
+      mpw_backup_readiness_readonly
       ;;
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'
