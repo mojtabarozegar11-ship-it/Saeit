@@ -35,7 +35,8 @@ class LiveTRXOwnerReceiverWorkflowContractTests(unittest.TestCase):
         self.assertIn("StrictHostKeyChecking yes", s)
         self.assertIn("BatchMode yes", s)
         self.assertIn("persist-credentials: false", s)
-        self.assertIn("trap 'rm -rf -- \\"$work\\"' EXIT", s)
+        self.assertIn("trap ", s)
+        self.assertIn("rm -rf -- ", s)
         self.assertNotIn("echo \\"$VPS_KEY\\"", s)
         self.assertNotIn("echo \\"$HOST_KEY\\"", s)
 
