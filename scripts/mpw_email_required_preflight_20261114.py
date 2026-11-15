@@ -155,8 +155,15 @@ def _migration_names(tree):
 def _has_raise_string(node, value):
     if node is None:
         return False
-    return any(isinstance(item, ast.Constant) and item.value == value
-               for item in ast.walk(node))
+    # A message in a comment, assignment or dead string is not a denial.
+    # Only count the expected diagnostic when attached to a raise statement.
+    return any(
+        isinstance(item, ast.Raise)
+        and item.exc is not None
+        and any(isinstance(part, ast.Constant) and part.value == value
+                for part in ast.walk(item.exc))
+        for item in ast.walk(node)
+    )
 
 
 def inspect(root: Path = ROOT) -> dict:
