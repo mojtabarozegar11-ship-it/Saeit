@@ -55,9 +55,7 @@ completion requires 10 consecutive sessions.</p>
 (not owned, funded or withdrawable).</p>
 <p>Risk-rule observations: {escape(by_rule)}</p></div>
 <h2>Individual learning recommendations</h2><ul>{bullets}</ul>
-<p><strong>Limitations:</strong> Scores assess self-reported simulation notes only. This report does
-not verify brokerage trades, authorise a funded account, certify profitability,
-offer investment advice or indicate any payment was received.</p>
+<p><strong>Limitations:</strong> Scores assess self-reported simulation notes only. This report does not verify brokerage trades, authorise a funded account, certify profitability, offer investment advice or indicate any payment was received.</p>
 <p>Operator identity: mojtaba.bot.ai · Product: MOJPROP-STARTER30</p>
 </body></html>"""
 
