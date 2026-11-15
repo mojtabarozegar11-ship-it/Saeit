@@ -52,7 +52,7 @@ def catalog():
             raise ValueError(f"Missing localized ten-plan selection disclosure: {code}")
         status = item.get("plan_status")
         if (not isinstance(status, dict)
-                or set(status) != {"owner_active", "funding_hold", "owner_disclosure"}
+                or set(status) != {"owner_active", "funding_hold", "owner_disclosure", "owner_fee"}
                 or any(type(v) is not str or not v.strip() for v in status.values())):
             raise ValueError(f"Missing verified plan status disclosure: {code}")
         social = item.get("social")
