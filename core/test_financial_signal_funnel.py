@@ -3,6 +3,8 @@ from django.test import SimpleTestCase
 
 from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
 
+
+class FinancialBrandSignalFunnelTests(SimpleTestCase):
     def test_catalog_and_signal_page_use_the_same_prefilled_route(self):
         catalog = self.client.get("/moj-prop/catalog/")
         self.assertEqual(catalog.status_code, 200)
@@ -16,15 +18,13 @@ from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
             signal_page.content.decode("utf-8").count(SIGNAL_INTAKE_PATH), 2
         )
 
-
-class FinancialBrandSignalFunnelTests(SimpleTestCase):
     def test_all_host_signal_subsites_use_the_canonical_signal_intake(self):
         for slug, *_ in BRANDS:
             with self.subTest(slug=slug):
                 response = self.client.get(f"/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count("/moj-prop/?service=signals#request"), 2)
+                self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
                 self.assertIn("mojtaba.bot.ai", html)
                 self.assertNotIn('href="/store/"', html)
                 self.assertNotIn('href="/commerce/"', html)
@@ -35,7 +35,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 response = self.client.get(f"/ar/{slug}/market-signals/")
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
-                self.assertEqual(html.count("/moj-prop/?service=signals#request"), 2)
+                self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
                 self.assertIn("mojtaba.bot.ai", html)
 
     def test_store_subsite_keeps_its_store_destination(self):
@@ -43,4 +43,4 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
         self.assertIn('href="/commerce/"', html)
-        self.assertNotIn("/moj-prop/?service=signals#request", html)
+        self.assertNotIn(SIGNAL_INTAKE_PATH, html)
