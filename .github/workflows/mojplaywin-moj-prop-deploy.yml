@@ -11,6 +11,8 @@ on:
       - "core/admin.py"
       - "core/models.py"
       - "core/mojprop_views.py"
+      - "core/mojprop_receipts.py"
+      - "tests/test_mojprop_backend_receipts_release_20261115.py"
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   push:
@@ -24,6 +26,8 @@ on:
       - "core/admin.py"
       - "core/models.py"
       - "core/mojprop_views.py"
+      - "core/mojprop_receipts.py"
+      - "tests/test_mojprop_backend_receipts_release_20261115.py"
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
@@ -51,6 +55,8 @@ jobs:
         run: |
           python3 -m py_compile scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py
           python3 -m unittest discover -s tests -p test_mojprop_commercial_samples_release.py -q
+          python3 -m unittest discover -s tests -p test_mojprop_backend_receipts_release_20261115.py -v
+          python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest .
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
