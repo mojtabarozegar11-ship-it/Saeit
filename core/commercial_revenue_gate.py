@@ -148,6 +148,8 @@ def validate_offer(
     tenant_registry: Optional[Mapping[str, str]] = None,
 ) -> None:
     """Validate an offer without making it public or payable."""
+    if not isinstance(offer, OfferContract):
+        raise CommercialGateError("offer_contract_required")
     offer_id = _slug(offer.offer_id, "offer_id")
     tenant_id = _slug(offer.tenant_id, "tenant_id")
     host = _text(offer.canonical_host, "canonical_host").lower()
@@ -169,6 +171,8 @@ def validate_offer(
     _currency(offer.currency)
     _amount(offer.price, "price")
     _validate_trx_sun_precision(offer.price, offer.currency)
+    if offer.offer_type is OfferType.TRX_GATEWAY and offer.currency != "TRX":
+        raise CommercialGateError("native_trx_gateway_currency_required")
     if not isinstance(offer.offer_type, OfferType):
         raise CommercialGateError("offer_type_invalid")
     if tenant_registry is not None and tenant_registry.get(tenant_id) != host:
@@ -200,7 +204,9 @@ def validate_offer(
             raise CommercialGateError("tenant_registry_required_for_activation")
         if tenant_registry.get(tenant_id) != host:
             raise CommercialGateError("tenant_scope_mismatch")
-    if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
+    if not isinstance(offer.delivery_manifest_sha256, str) or (
+        offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256)
+    ):
         raise CommercialGateError("delivery_manifest_hash_invalid")
     if offer.active and offer.offer_type in (OfferType.DIGITAL_PRODUCT, OfferType.GAME):
         # Customer-facing digital items must resolve to an immutable,
@@ -270,7 +276,7 @@ def validate_payment_evidence(
     _validate_trx_sun_precision(amount, currency)
     _validate_trx_sun_precision(expected_amount, currency)
     transaction_id = _text(evidence.transaction_id, "transaction_id")
-    if not _TRON_TX.fullmatch(transaction_id):
+    if not _TRON_TX.fullmatch(transaction_id) or set(transaction_id) == {"0"}:
         raise CommercialGateError("transaction_id_invalid")
     transaction_id = transaction_id.lower()
     flags = (
