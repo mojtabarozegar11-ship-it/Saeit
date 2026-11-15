@@ -59,7 +59,7 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         text = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
         for forbidden in ("objects.create(", ".save(", "requests.post(",
                           "broadcasttransaction", "sendrawtransaction",
-                          "subprocess.run(", "shutil.copy", "open(\"wb\")",
+                          "shell=True", "shutil.copy", "open(\"wb\")",
                           "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=True"):
             self.assertNotIn(forbidden, text)
         self.assertIn("FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()", text)
@@ -72,6 +72,32 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         self.assertFalse(r["isolated_database_restore_executed"])
         self.assertFalse(r["passenger_tenant_isolation_proven"])
         self.assertFalse(r["production_deployment_authorized"])
+
+    def test_quota_is_fixed_read_only_cli_not_shell(self):
+        text = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
+        self.assertIn('["quota", "-wvu", ACCOUNT]', text)
+        self.assertIn("timeout=6, check=True", text)
+        self.assertNotIn("shell=True", text)
+
+    def test_exact_quota_result_and_invalid_report_fail_closed(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        goodfs = SimpleNamespace(f_bavail=2_000_000,
+                                 f_frsize=4096, f_favail=1000)
+        good = SimpleNamespace(stdout="/dev/device 100 900000 1000000 1 1000 1500\\n")
+        bad = SimpleNamespace(stdout="/dev/device 100* 900000 1000000 1 1000 1500\\n")
+        with patch.object(mod.os, "open", return_value=10), \\
+             patch.object(mod.os, "fstatvfs", return_value=goodfs), \\
+             patch.object(mod.os, "close"), \\
+             patch("subprocess.run", return_value=good) as run:
+            self.assertTrue(mod._quota_checked(1024 * 1024))
+            self.assertEqual(run.call_args.args[0], ["quota", "-wvu", mod.ACCOUNT])
+        with patch.object(mod.os, "open", return_value=10), \\
+             patch.object(mod.os, "fstatvfs", return_value=goodfs), \\
+             patch.object(mod.os, "close"), \\
+             patch("subprocess.run", return_value=bad):
+            self.assertFalse(mod._quota_checked(1024 * 1024))
 
 
 if __name__ == "__main__":
