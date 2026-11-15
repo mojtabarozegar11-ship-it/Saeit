@@ -95,7 +95,13 @@ EOF
       ;;
     django_check)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python=""; for candidate in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do if test -x "$candidate" && "$candidate" -c "import django" >/dev/null 2>&1; then python="$candidate"; break; fi; done; if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; exit 1; fi; printf "DJANGO_ROOT=%s\\n" "$root"; printf "DJANGO_PYTHON=%s\\n" "$python"; cd "$root"; "$python" manage.py check'
-      ;;  esac
+      ;;
+    django_migrations)
+      # This operation was accepted but never executed in factory-vps mode.
+      # Only show the planned migrations, do not apply, fake success or alter DB.
+      timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -f "$root/manage.py"; python=""; for candidate in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do if test -x "$candidate" && "$candidate" -c "import django" >/dev/null 2>&1; then python="$candidate"; break; fi; done; if test -z "$python"; then echo DJANGO_PYTHON_NOT_FOUND; exit 1; fi; cd "$root"; echo CPANEL_DJANGO_MIGRATIONS=READ_ONLY_PLAN; "$python" manage.py showmigrations --plan'
+      ;;
+  esac
   exit 0
 fi
 
