@@ -49,7 +49,7 @@ TIER_LADDER_USD = (
     Decimal("20000"),
 )
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
-_TX = re.compile(r"^[A-Za-z0-9:_-]{8,256}$")
+_TX = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _decimal(value: object, field: str, *, positive: bool = False, nonnegative: bool = False) -> Decimal:
@@ -103,21 +103,27 @@ def validate_rules(rules: PropRules) -> None:
     drawdown = _decimal(rules.max_drawdown_pct, "max_drawdown_pct", positive=True)
     if daily >= drawdown:
         raise PropContractError("daily_loss_must_be_below_max_drawdown")
+    if drawdown > Decimal("100"):
+        raise PropContractError("drawdown_above_total_capital")
     if target >= Decimal("100"):
         raise PropContractError("profit_target_unreasonable")
     if not isinstance(rules.minimum_trading_days, int) or isinstance(rules.minimum_trading_days, bool):
         raise PropContractError("minimum_trading_days_invalid")
     if not isinstance(rules.maximum_trading_days, int) or isinstance(rules.maximum_trading_days, bool):
         raise PropContractError("maximum_trading_days_invalid")
-    if rules.minimum_trading_days < 1 or rules.maximum_trading_days < rules.minimum_trading_days:
+    if (rules.minimum_trading_days < 1
+            or rules.maximum_trading_days < rules.minimum_trading_days
+            or rules.maximum_trading_days > 366):
         raise PropContractError("trading_day_window_invalid")
     if not isinstance(rules.max_open_positions, int) or isinstance(rules.max_open_positions, bool):
         raise PropContractError("max_open_positions_invalid")
-    if rules.max_open_positions < 1:
+    if not 1 <= rules.max_open_positions <= 100:
         raise PropContractError("max_open_positions_invalid")
     risk = _decimal(rules.max_risk_per_trade_pct, "max_risk_per_trade_pct", positive=True)
     if risk > daily:
         raise PropContractError("risk_per_trade_exceeds_daily_loss")
+    if risk > Decimal("100"):
+        raise PropContractError("risk_per_trade_exceeds_capital")
     # Keep the named values consumed above explicit for reviewers and linters.
     _ = (account, target, daily, drawdown, risk)
 
@@ -150,6 +156,8 @@ class PropEnrollment:
 
 
 def validate_enrollment(enrollment: PropEnrollment) -> None:
+    if not isinstance(enrollment, PropEnrollment) or type(enrollment.state) is not ChallengeState:
+        raise PropContractError("enrollment_state_invalid")
     _slug(enrollment.challenge_id, "challenge_id")
     _slug(enrollment.customer_id, "customer_id")
     validate_rules(enrollment.rules)
@@ -226,27 +234,34 @@ def evaluate_challenge(rules: PropRules, snapshot: ChallengeSnapshot) -> Challen
     start_day = _decimal(snapshot.start_of_day_equity_usd, "start_of_day_equity_usd", positive=True)
     current = _decimal(snapshot.current_equity_usd, "current_equity_usd", nonnegative=True)
     peak = _decimal(snapshot.peak_equity_usd, "peak_equity_usd", positive=True)
-    if peak < current or peak < initial:
+    if peak < current or peak < initial or peak < start_day:
         raise PropContractError("peak_equity_inconsistent")
     if not isinstance(snapshot.trading_days, int) or isinstance(snapshot.trading_days, bool) or snapshot.trading_days < 0:
         raise PropContractError("trading_days_invalid")
-    profit_pct = ((current - initial) / initial * Decimal("100")).quantize(Decimal("0.01"))
-    daily_loss_pct = max(Decimal("0"), ((start_day - current) / start_day * Decimal("100"))).quantize(Decimal("0.01"))
-    drawdown_pct = max(Decimal("0"), ((peak - current) / peak * Decimal("100"))).quantize(Decimal("0.01"))
+    # Use unrounded percentages for risk decisions: 4.995% may display
+    # as 5.00%, but rounding must never change pass/fail at the boundary.
+    exact_profit_pct = (current - initial) / initial * Decimal("100")
+    exact_daily_loss_pct = max(Decimal("0"), (start_day - current) / start_day * Decimal("100"))
+    exact_drawdown_pct = max(Decimal("0"), (peak - current) / peak * Decimal("100"))
+    profit_pct = exact_profit_pct.quantize(Decimal("0.01"))
+    daily_loss_pct = exact_daily_loss_pct.quantize(Decimal("0.01"))
+    drawdown_pct = exact_drawdown_pct.quantize(Decimal("0.01"))
     if current == Decimal("0"):
         return ChallengeResult(ChallengeDecision.FAILED, "equity_zero", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
-    if daily_loss_pct >= rules.daily_loss_limit_pct:
+    if exact_daily_loss_pct >= rules.daily_loss_limit_pct:
         return ChallengeResult(ChallengeDecision.FAILED, "daily_loss_limit_breached", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
-    if drawdown_pct >= rules.max_drawdown_pct:
+    if exact_drawdown_pct >= rules.max_drawdown_pct:
         return ChallengeResult(ChallengeDecision.FAILED, "max_drawdown_breached", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
     if snapshot.trading_days > rules.maximum_trading_days:
         return ChallengeResult(ChallengeDecision.FAILED, "maximum_trading_days_exceeded", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
-    if profit_pct >= rules.profit_target_pct and snapshot.trading_days >= rules.minimum_trading_days:
+    if exact_profit_pct >= rules.profit_target_pct and snapshot.trading_days >= rules.minimum_trading_days:
         return ChallengeResult(ChallengeDecision.PASSED, "profit_target_reached", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
     return ChallengeResult(ChallengeDecision.ACTIVE, "challenge_in_progress", profit_pct, daily_loss_pct, drawdown_pct, rules.funded_account_usd)
 
 
 def advance_state(current: ChallengeState, target: ChallengeState) -> ChallengeState:
+    if type(current) is not ChallengeState or type(target) is not ChallengeState:
+        raise PropContractError("invalid_challenge_state_type")
     allowed = {
         ChallengeState.CREATED: {ChallengeState.PAYMENT_PENDING, ChallengeState.SUSPENDED},
         ChallengeState.PAYMENT_PENDING: {ChallengeState.KYC_PENDING, ChallengeState.SUSPENDED},
