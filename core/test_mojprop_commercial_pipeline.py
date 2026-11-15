@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from core.management.commands.mojprop_commercial_pipeline import pipeline_snapshot
-from core.models import MojPropOffer, MojPropRequest
+from core.models import MojPropOffer, MojPropRequest, MojPropDeliveryEvidence
 
 
 class PipelineReportingTests(TestCase):
@@ -62,7 +62,7 @@ class PipelineReportingTests(TestCase):
         self.assertNotIn(lead.request_id, content)
         self.assertNotIn(lead.email, content)
         self.assertEqual(report["scope_note"],
-                         "Quote issuance, acceptance, payment and delivery are separate evidence stages.")
+                         "Drafts, issued quotes, accepted terms, handoff records and independent payment are separate evidence stages.")
 
 
     def test_issued_quote_counts_only_after_manual_issuance_evidence(self):
@@ -130,3 +130,36 @@ class PipelineReportingTests(TestCase):
         self.assertEqual(data["issued_quotes_expired_without_acceptance"], 1)
         self.assertEqual(data["issued_quotes_awaiting_decision"], 0)
 
+
+    def test_document_handoff_does_not_misreport_payment(self):
+        lead = self.make_lead("P-REPORT-DELIVERY", "brief")
+        now = timezone.now()
+        offer = MojPropOffer.objects.create(
+            lead=lead, title="Documented analysis handoff",
+            scope="A written research document with cited sources and explicit limitations and scenarios.",
+            amount=Decimal("110.00"), delivery_days=4,
+            status="accepted", reviewed_at=now-timedelta(days=3),
+            issued_at=now-timedelta(days=2),
+            accepted_at=now-timedelta(days=1),
+            expires_at=now+timedelta(days=4),
+            acceptance_reference="signed-acceptance-001",
+        )
+        proof = MojPropDeliveryEvidence.objects.create(
+            offer=offer, artifact_sha256="a"*64,
+            artifact_name="private-report.pdf",
+            clearance_reference="approved-service-credit",
+            status="sent", handoff_reference="secure-log-123",
+            handed_off_at=now-timedelta(hours=2),
+        )
+        p = pipeline_snapshot()
+        self.assertEqual(p["handoffs_recorded"], 1)
+        self.assertEqual(p["customer_acknowledgments_recorded"], 0)
+        self.assertEqual(p["handoff_coverage_percent"], 100.0)
+        self.assertIsNone(p["collected_revenue"])
+        self.assertIsNone(p["commercial_delivery_verified"])
+        proof.status="acknowledged"
+        proof.acknowledged_at=now-timedelta(hours=1)
+        proof.acknowledgment_reference="client-confirmation-123"
+        proof.full_clean()
+        proof.save()
+        self.assertEqual(pipeline_snapshot()["customer_acknowledgments_recorded"], 1)
