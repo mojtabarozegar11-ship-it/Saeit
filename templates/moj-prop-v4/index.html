@@ -171,6 +171,26 @@
       serviceSelector.addEventListener('change',syncStarter30);
       syncStarter30();
 
+      function secureRequestUUID(){
+        // randomUUID is unavailable in some older mobile browsers. Do not
+        // fall back to Math.random, timestamps, localStorage or URL secrets.
+        const crypto=window.crypto;
+        if(!crypto) throw new Error('A secure browser is required for duplicate-safe submission.');
+        if(typeof crypto.randomUUID==='function') return crypto.randomUUID();
+        if(typeof crypto.getRandomValues!=='function'){
+          throw new Error('A secure browser is required for duplicate-safe submission.');
+        }
+        const bytes=crypto.getRandomValues(new Uint8Array(16));
+        if(!(bytes instanceof Uint8Array) || bytes.length!==16){
+          throw new Error('Secure random source unavailable.');
+        }
+        bytes[6]=(bytes[6]&15)|64; // UUIDv4
+        bytes[8]=(bytes[8]&63)|128; // RFC 4122 variant
+        const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+        return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),
+                hex.slice(16,20),hex.slice(20)].join('-');
+      }
+
       async function csrf(signal){
         if(csrfToken) return csrfToken;
         const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store',signal});
@@ -234,10 +254,7 @@
           }
           const token=await csrf(abortController.signal);
           if(!pendingSubmission || pendingSubmission.fingerprint!==fingerprint){
-            if(!window.crypto || typeof window.crypto.randomUUID!=='function'){
-              throw new Error('A secure browser is required for duplicate-safe submission.');
-            }
-            pendingSubmission={fingerprint, key:window.crypto.randomUUID(), uncertain:false};
+            pendingSubmission={fingerprint, key:secureRequestUUID(), uncertain:false};
           }
           postAttempted=true;
           const response=await fetch(endpoint,{
