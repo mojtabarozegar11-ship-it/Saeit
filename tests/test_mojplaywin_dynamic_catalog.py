@@ -13,7 +13,6 @@ from core.mojplaywin_dynamic_catalog import (
     ApprovedCard, _linked_product, _verified_private_gateway,
     approved_cards, approved_product, parse_cursor,
 )
-from django.urls import NoReverseMatch
 
 
 @override_settings(ALLOWED_HOSTS=[
@@ -31,13 +30,8 @@ class ApprovedCatalogueTests(SimpleTestCase):
         return self.factory.get(path, secure=secure, HTTP_HOST=host)
 
     def approved_route(self):
-        return (
-            patch("core.mojplaywin_dynamic_catalog.reverse",
-                  return_value="/commerce/book/901/"),
-            patch("core.mojplaywin_dynamic_catalog.resolve",
-                  return_value=SimpleNamespace(
-                      url_name="book", namespaces=["mpw_commerce"])),
-        )
+        return patch("core.mojplaywin_dynamic_catalog.verified_guest_checkout_url",
+                     return_value="/commerce/book/901/")
 
     def test_cursor_validates_ascii_only(self):
         self.assertEqual(parse_cursor("0"), 0)
@@ -58,24 +52,20 @@ class ApprovedCatalogueTests(SimpleTestCase):
         self.assertIsNone(_verified_private_gateway(self.request()))
 
     def test_valid_licenced_item_renders_exact_detail_path(self):
-        reverse_patch, resolve_patch = self.approved_route()
-        with reverse_patch, resolve_patch:
+        with self.approved_route():
             card = _linked_product(self.product)
         self.assertEqual(card.product_id, 901)
         self.assertEqual(card.price_usd, "14.00")
         self.assertEqual(card.detail_url, "/store/product/901/")
 
     def test_wrong_checkout_namespace_is_refused(self):
-        with patch("core.mojplaywin_dynamic_catalog.reverse",
-                   return_value="/commerce/book/901/"), patch(
-            "core.mojplaywin_dynamic_catalog.resolve",
-            return_value=SimpleNamespace(url_name="book", namespaces=[]),
-        ):
+        with patch("core.mojplaywin_dynamic_catalog.verified_guest_checkout_url",
+                   return_value=None):
             self.assertIsNone(_linked_product(self.product))
 
     def test_missing_checkout_route_is_refused(self):
-        with patch("core.mojplaywin_dynamic_catalog.reverse",
-                   side_effect=NoReverseMatch("not installed")):
+        with patch("core.mojplaywin_dynamic_catalog.verified_guest_checkout_url",
+                   return_value=None):
             self.assertIsNone(_linked_product(self.product))
 
     def test_price_and_currency_validation_rejects_unapproved_quote(self):
@@ -97,10 +87,9 @@ class ApprovedCatalogueTests(SimpleTestCase):
                 self.assertIsNone(_linked_product(candidate))
 
     def test_approved_listing_rechecks_each_sku(self):
-        reverse_patch, resolve_patch = self.approved_route()
         with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
                    return_value=(lambda after_id: ([self.product], False),
-                                 lambda pk: self.product)), reverse_patch, resolve_patch:
+                                 lambda pk: self.product)), self.approved_route():
             rows, next_cursor = approved_cards(self.request())
         self.assertEqual([row.product_id for row in rows], [901])
         self.assertIsNone(next_cursor)
@@ -132,11 +121,9 @@ class ApprovedCatalogueTests(SimpleTestCase):
     def test_curated_ids_are_not_duplicated_in_new_arrivals(self):
         original = SimpleNamespace(
             pk=72, title="Original chess", currency="USD", price="7.50")
-        reverse_patch, resolve_patch = self.approved_route()
-        # Route mismatch for 72 is itself an independent reason not to list.
         with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
                    return_value=(lambda after_id: ([original], True),
-                                 lambda pk: original)), reverse_patch, resolve_patch:
+                                 lambda pk: original)), self.approved_route():
             rows, next_cursor = approved_cards(
                 self.request(), excluded_ids=frozenset({72}))
         self.assertEqual(rows, ())
