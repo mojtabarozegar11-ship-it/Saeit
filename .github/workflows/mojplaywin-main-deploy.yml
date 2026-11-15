@@ -23,6 +23,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy-main:
+    # Shared Passenger runtime isolation and rollback safety not independently proven.
+    # A main push MUST NEVER deploy this shared application until proof is reviewed.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -31,14 +31,13 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
                     header, r"(?m)^    if: (?!\$\{\{ false \}\}).+$"
                 )
 
-    def test_main_release_requires_pinned_guarded_path(self):
+    def test_main_release_hard_stopped_until_isolation_proven(self):
         src = MAIN.read_text(encoding="utf-8")
         self.assertIn("jobs:\n  deploy-main:\n", src)
         header = src.split("jobs:\n  deploy-main:\n", 1)[1]
         header = header.split("\n    steps:", 1)[0]
-        self.assertNotRegex(
-            header, r"(?m)^    if: \$\{\{ false \}\}$"
-        )
+        self.assertIn("    if: ${{ false }}", header)
+        self.assertEqual(header.count("    if: "), 1)
         for marker in (
             "branches: [main]",
             "permissions:\n  contents: read",
