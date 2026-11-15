@@ -40,6 +40,7 @@ class MojPropIntakeTests(TestCase):
             content_type="application/json",
             HTTP_X_CSRFTOKEN=self.csrf_token,
             HTTP_HOST="mojplaywin.com",
+            HTTP_ORIGIN="https://mojplaywin.com",
             REMOTE_ADDR="198.51.100.40",
             secure=True,
         )
@@ -103,13 +104,14 @@ class MojPropIntakeTests(TestCase):
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
     def test_api_requires_owned_https_host_for_get_and_post(self):
+        unguarded = Client(enforce_csrf_checks=False)
         for host, secure in (("evil.example", True), ("zomorodmelal.ir", True),
                              ("mojplaywin.com", False)):
             with self.subTest(host=host, secure=secure):
                 self.assertEqual(self.client.get(
                     "/moj-prop/intake/", HTTP_HOST=host, secure=secure,
                 ).status_code, 404)
-                self.assertEqual(self.client.post(
+                self.assertEqual(unguarded.post(
                     "/moj-prop/intake/", data=json.dumps(self.payload()),
                     content_type="application/json", HTTP_HOST=host,
                     HTTP_X_CSRFTOKEN=self.csrf_token, secure=secure,
@@ -124,6 +126,7 @@ class MojPropIntakeTests(TestCase):
                 )),
                 content_type="application/json",
                 HTTP_X_CSRFTOKEN=self.csrf_token, HTTP_HOST="mojplaywin.com",
+                HTTP_ORIGIN="https://mojplaywin.com",
                 REMOTE_ADDR="203.0.113.48", HTTP_X_REAL_IP=f"198.51.100.{i + 1}",
                 secure=True,
             )
@@ -131,8 +134,9 @@ class MojPropIntakeTests(TestCase):
         blocked = self.client.post(
             "/moj-prop/intake/", data=json.dumps(self.payload(email="new@farmco.org")),
             content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf_token,
-            HTTP_HOST="mojplaywin.com", REMOTE_ADDR="203.0.113.48",
-            HTTP_X_REAL_IP="198.51.100.200", secure=True,
+            HTTP_HOST="mojplaywin.com", HTTP_ORIGIN="https://mojplaywin.com",
+            REMOTE_ADDR="203.0.113.48", HTTP_X_REAL_IP="198.51.100.200",
+            secure=True,
         )
         self.assertEqual(blocked.status_code, 429)
         self.assertEqual(blocked["Retry-After"], "600")
@@ -169,8 +173,8 @@ class MojPropIntakeTests(TestCase):
         answer = self.client.post(
             "/moj-prop/intake/", data=document,
             content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf_token,
-            HTTP_HOST="mojplaywin.com", REMOTE_ADDR="198.51.100.40",
-            secure=True,
+            HTTP_HOST="mojplaywin.com", HTTP_ORIGIN="https://mojplaywin.com",
+            REMOTE_ADDR="198.51.100.40", secure=True,
         )
         self.assertEqual(answer.status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
