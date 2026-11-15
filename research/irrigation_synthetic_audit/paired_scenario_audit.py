@@ -134,6 +134,10 @@ def analyze_family(records: list[dict], family: str) -> dict:
         policy_values[policy].append(row)
     require(len(matched) == 540, f"{family}: expected 540 unique matched keys")
     require(len(paths) == 12, f"{family}: expected 12 distinct climate paths")
+    climate_path_counts = {climate: sum(path[2] == climate for path in paths)
+                           for climate in ("dry", "medium", "wet")}
+    require(all(count == 4 for count in climate_path_counts.values()),
+            f"{family}: unbalanced climate paths: {climate_path_counts}; expected 4 per class")
     expected_grid = {(b, e, forecast) for b in (-.02, -.01, 0., .01, .02)
                      for e in (.85, 1., 1.15)
                      for forecast in ("perfect", "missing", "falsePositive")}
