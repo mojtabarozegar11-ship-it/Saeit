@@ -47,6 +47,7 @@ class ChallengePlan:
     facebook_posts_per_challenge: int
     trader_bots_allowed: bool
     business_status: str
+    entry_fee_owner_confirmed: bool
     capital_funded_owner_declared: bool
     business_active_owner_declared: bool
     temporary_owner_hold: bool
@@ -89,6 +90,7 @@ def _make_plan(number, starting_tier_index, fee):
         facebook_posts_per_challenge=1,
         trader_bots_allowed=POLICY.trader_bots_allowed,
         business_status=(OWNER_ACTIVE_STATUS if number == 1 else FUNDING_HOLD_STATUS),
+        entry_fee_owner_confirmed=(number == 1),
         capital_funded_owner_declared=(number == 1),
         business_active_owner_declared=(number == 1),
         temporary_owner_hold=(number > 1),
@@ -132,6 +134,7 @@ def plan_public_summary(plan):
         "starting_tier_index": plan.starting_tier_index,
         "maximum_capital_usd": str(plan.maximum_capital_usd),
         "fee_trx_proposed": str(plan.entry_fee_trx),
+        "entry_fee_owner_confirmed": plan.entry_fee_owner_confirmed,
         "fee_is_final_for_sale": False,
         "business_status": plan.business_status,
         "capital_funded_owner_declared": plan.capital_funded_owner_declared,
