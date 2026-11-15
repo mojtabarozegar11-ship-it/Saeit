@@ -2,6 +2,7 @@
 from urllib.parse import urlencode
 
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.contrib.admin.sites import site
 from django.test import Client, TestCase, override_settings
@@ -136,3 +137,45 @@ class MojPropPublicIntakeTests(TestCase):
         self.assertFalse(a.has_view_permission(None))
         self.assertFalse(a.has_change_permission(None))
         self.assertIn("offer_family",a.readonly_fields)
+
+    def test_prop_terminal_consent_receipt(self):
+        self.assertEqual(self.post().status_code, 202)
+        lead = CommercialInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertIsNotNone(lead.withdrawn_at)
+        lead.status = "contacted"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_prop_email_and_plan_provenance_unchangeable(self):
+        self.post()
+        for field, value in {
+            "email": "elsewhere@example.org",
+            "plan_code": "MOJ-PROP-02",
+            "source_host": "www.mojplaywin.com",
+            "source_language": "fa",
+            "consent_version": "changed",
+        }.items():
+            with self.subTest(field=field):
+                lead = CommercialInterest.objects.get()
+                setattr(lead, field, value)
+                with self.assertRaises(ValidationError):
+                    lead.save()
+        self.assertEqual(CommercialInterest.objects.get().plan_code, "MOJ-PROP-01")
+
+    def test_prop_followup_status_then_withdrawn_has_no_money_side_effect(self):
+        self.post()
+        lead = CommercialInterest.objects.get()
+        lead.status = "contacted"
+        lead.save(update_fields=["status"])
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.refresh_from_db()
+        self.assertIsNotNone(lead.withdrawn_at)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(PaymentIntent.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
