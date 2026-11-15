@@ -23,7 +23,7 @@ import tempfile
 
 # SSH executes this file by absolute path: insert the bundle root explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.mojprop_schema_preflight_c83 import check_schema_closure
+from scripts.mojprop_schema_preflight_c83 import check_schema_closure, migration_operations_signature
 
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
@@ -186,6 +186,16 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
 
 def install_migration(source: Path, target: Path) -> None:
     assert_regular(source, "staged migration")
+    if target.is_symlink():
+        raise RuntimeError("unsafe pre-existing Moj Prop migration symlink")
+    if target.exists():
+        assert_regular(target, "live intake migration")
+        if migration_operations_signature(target) != migration_operations_signature(source):
+            raise RuntimeError("refusing to overwrite a different previously applied migration")
+        # A potentially applied migration must not have its dependency
+        # graph silently rewritten on another release attempt.
+        print("MOJ_PROP_INTAKE_MIGRATION_PRESERVED")
+        return
     migration_dir = ROOT / "core/migrations"
     candidates = []
     for item in migration_dir.glob("*.py"):
