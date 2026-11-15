@@ -162,7 +162,7 @@ jobs:
           [[ "$catalog_status" == "200" ]]
           intake_status="000"
           for intake_attempt in {1..10}; do
-            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
+            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID&attempt=$intake_attempt&ts=$(date +%s%N)" || true)"
             [[ "$intake_status" == "200" ]] && break
             echo "Moj Prop intake not ready (HTTP $intake_status, attempt $intake_attempt)."
             sleep 3
