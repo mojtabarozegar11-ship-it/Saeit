@@ -64,12 +64,3 @@ class AuthorSiteManualReleaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
- + key + '" == "true" ]]', self.deploy)
-        self.assertLess(
-            self.deploy.index('[[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]'),
-            self.deploy.index("- name: Establish pinned SSH relay"),
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
