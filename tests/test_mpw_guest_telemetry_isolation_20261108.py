@@ -52,7 +52,7 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        response = types.SimpleNamespace(status_code=201)
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -76,6 +76,32 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
+
+
+    def test_checkout_does_not_claim_invoice_event_for_failed_or_malformed_response(self):
+        product = object()
+        model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(return_value=types.SimpleNamespace(first=lambda: product))))
+        events = Mock()
+        modules = stub_modules(events, model)
+        request = object()
+        with patch.dict(sys.modules, modules):
+            helper = source_function("_record_funnel_event_best_effort")
+            for status in (400, 403, 500, None, "201", True):
+                with self.subTest(status=status):
+                    response = types.SimpleNamespace(status_code=status)
+                    dispatch = Mock(return_value=response)
+                    install = source_function("patch_commercial", {
+                        "_dispatch": dispatch, "_record_funnel_event_best_effort": helper,
+                    })
+                    namespace = {"_" + name: (lambda *args, **kwargs: response) for name in (
+                        "start_order", "show_invoice", "invoice_status",
+                        "reconcile_invoice", "download_paid",
+                    )}
+                    install(namespace)
+                    self.assertIs(namespace["start_order"](request, product_id=72), response)
+        events.assert_not_called()
+        model.objects.filter.assert_not_called()
 
 
 if __name__ == "__main__":
