@@ -7,6 +7,7 @@ import hashlib
 import html
 import json
 import os
+import stat
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -454,6 +455,25 @@ def master_self_improvement(payload):
 
 
 
+def _private_service_read_bytes(path):
+    """Require one owner-only regular artifact, read with symlink refusal."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise ValueError("SERVICE_PACKAGE_SAFE_READ_UNAVAILABLE")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or (info.st_mode & 0o077)
+                    or info.st_nlink != 1 or info.st_size > 262144):
+                raise ValueError("SERVICE_PACKAGE_UNSAFE_EXISTING_FILE")
+            content = stream.read(262145)
+    except OSError:
+        raise ValueError("SERVICE_PACKAGE_UNSAFE_EXISTING_FILE") from None
+    if len(content) > 262144:
+        raise ValueError("SERVICE_PACKAGE_UNSAFE_EXISTING_FILE")
+    return content
+
+
 def service_package(payload):
     """Produce one private, source-verified deliverable for an authorized task.
 
@@ -482,7 +502,7 @@ def service_package(payload):
     if target.is_symlink():
         raise ValueError("SERVICE_PACKAGE_OUTPUT_SYMLINK")
     if target.exists():
-        if not target.is_file() or target.read_text(encoding="utf-8") != document:
+        if _private_service_read_bytes(target) != document.encode("utf-8"):
             raise ValueError("SERVICE_PACKAGE_OUTPUT_COLLISION")
         return {
             "action_performed": "Verified existing private service package; no new deliverable produced.",
@@ -504,8 +524,7 @@ def service_package(payload):
             # overwrite the same output and both claim a new verified effect.
             os.link(tmp, target, follow_symlinks=False)
         except FileExistsError:
-            if (target.is_symlink() or not target.is_file()
-                    or target.read_bytes() != document.encode("utf-8")):
+            if _private_service_read_bytes(target) != document.encode("utf-8"):
                 raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION")
             return {
                 "action_performed": "Reused independently verified private service package.",
@@ -519,7 +538,7 @@ def service_package(payload):
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
-    written = target.read_bytes()
+    written = _private_service_read_bytes(target)
     if hashlib.sha256(written).hexdigest() != hashlib.sha256(
             document.encode("utf-8")).hexdigest():
         raise ValueError("SERVICE_PACKAGE_POSTWRITE_INTEGRITY_FAILED")
