@@ -35,6 +35,16 @@ on:
       - "public/agriculture/**"
       - "core/static/site/heroes/**"
   workflow_dispatch:
+    inputs:
+      owner_approved_live_deploy:
+        description: 'Manually approved Zomorod live app release after independent backup, rollback and tenant isolation'
+        required: true
+        type: boolean
+        default: false
+      approved_release_sha:
+        description: 'Reviewed 40-character main-branch commit; no other commit may be deployed'
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -42,12 +52,29 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    # Do not publish Zomorod production pages on an unrelated main merge.
-    if: github.event_name == 'workflow_dispatch'
+    # Source CI may run on a main push; production SSH must never run
+    # just because a PR was merged. Preserve owner-controlled rollback.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approved_live_deploy == true &&
+      vars.ZOMOROD_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.ZOMOROD_ROLLBACK_VERIFIED == 'true' &&
+      vars.ZOMOROD_TENANT_ISOLATION_VERIFIED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Reject unreviewed or unpinned Zomorod production release
+        shell: bash
+        env:
+          OWNER_APPROVED_SHA: ${{ inputs.approved_release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$OWNER_APPROVED_SHA" == "$GITHUB_SHA" ]]
+          echo 'ZOMOROD_DEPLOY=PINNED_OWNER_APPROVED'
       - name: Validate managed agriculture pages and app source
         run: |
           set -euo pipefail
