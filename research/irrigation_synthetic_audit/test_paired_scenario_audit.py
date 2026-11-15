@@ -1,5 +1,6 @@
 """Negative-path checks for the strict synthetic scenario postprocessor."""
 
+import copy
 import csv
 import hashlib
 import math
@@ -7,7 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from research.irrigation_synthetic_audit.paired_scenario_audit import (AuditError, FIELDS, analyze_family, file_sha256, load_records, verify_paper)
+from research.irrigation_synthetic_audit.paired_scenario_audit import (
+    AuditError, EXPECTED, EXPECTED_WEIGHT_GRID, FIELDS, SOURCE_PATHS,
+    analyze_family, file_sha256, load_records, verify_paper, verify_source_paths,
+)
 
 
 def rows_for_family(family):
@@ -316,6 +320,179 @@ class AuditTests(unittest.TestCase):
                     row["cohort"] = row["cohort"].replace("wet", "dry")
         with self.assertRaisesRegex(AuditError, "unbalanced climate paths"):
             analyze_family(self.make_records("C", skew_one_path), "C")
+
+    def source_like_records(self, family):
+        """Convert synthetic unit fixtures to the live source key identities."""
+        records = self.make_records(family)
+        index = {(cohort, climate): seed
+                 for cohort, seed, climate in SOURCE_PATHS[family]}
+        for row in records:
+            cohort, _, climate, bias, et, forecast = row["key"]
+            ordinal = int(cohort.rsplit("-", 1)[1]) % 4 + 1
+            prefix = "C" if family == "C" else "R"
+            authentic = f"{prefix}-{climate}-{ordinal}"
+            row["key"] = (authentic, index[(authentic, climate)],
+                          climate, bias, et, forecast)
+        return records
+
+    def paper_checkpoint_report(self, family):
+        """Checkpoint *contract* only, never substitute for actual source replay."""
+        e = EXPECTED[family]
+        return {
+            "family": family,
+            "comparisons": {
+                "q_lower": e["q_lower_tied_higher"][0],
+                "q_tied": e["q_lower_tied_higher"][1],
+                "q_higher": e["q_lower_tied_higher"][2],
+                **{k: e[k] for k in ("higher_water", "v3_dominates",
+                                     "v2_dominates", "both_tied",
+                                     "q_better_water_worse")},
+            },
+            "mean_delta_water_m3": e["mean_delta_water"],
+            "mean_delta_q100": e["mean_delta_q"],
+            "case_crossing_lambda_median": e["crossing_median"],
+            "weights": {str(w): {
+                "v3": vals[0], "v2": vals[1], "tied": vals[2],
+                "mean_delta_loss": vals[3],
+            } for w, vals in EXPECTED_WEIGHT_GRID[family].items()},
+        }
+
+    def test_source_catalog_c_authentic_twelve_paths(self):
+        records = self.source_like_records("C")
+        verify_source_paths(records, "C")
+        self.assertEqual(len(analyze_family(records, "C")["climate_path_effects"]), 12)
+
+    def test_source_catalog_r_authentic_twelve_paths(self):
+        records = self.source_like_records("R1")
+        verify_source_paths(records, "R1")
+        self.assertEqual(len(analyze_family(records, "R1")["climate_path_effects"]), 12)
+
+    def test_source_catalog_rejects_modified_c_seed(self):
+        records = self.source_like_records("C")
+        key = records[0]["key"]
+        records[0]["key"] = (key[0], key[1] + 1, *key[2:])
+        with self.assertRaisesRegex(AuditError, "catalog mismatch"):
+            verify_source_paths(records, "C")
+
+    def test_source_catalog_rejects_modified_r_seed(self):
+        records = self.source_like_records("R1")
+        key = records[0]["key"]
+        records[0]["key"] = (key[0], key[1] + 1, *key[2:])
+        with self.assertRaisesRegex(AuditError, "catalog mismatch"):
+            verify_source_paths(records, "R1")
+
+    def test_source_catalog_rejects_renumbered_cohort(self):
+        records = self.source_like_records("C")
+        key = records[0]["key"]
+        records[0]["key"] = ("C-dry-99", *key[1:])
+        with self.assertRaisesRegex(AuditError, "catalog mismatch"):
+            verify_source_paths(records, "C")
+
+    def test_source_catalog_rejects_mislabeled_climate(self):
+        records = self.source_like_records("R1")
+        key = records[0]["key"]
+        records[0]["key"] = (key[0], key[1], "wet", *key[3:])
+        with self.assertRaisesRegex(AuditError, "catalog mismatch"):
+            verify_source_paths(records, "R1")
+
+    def test_source_catalog_rejects_unknown_family(self):
+        with self.assertRaisesRegex(AuditError, "Unknown family"):
+            verify_source_paths([], "unknown")
+
+    def test_cohort_climate_conflict_rejected_c(self):
+        def distort(rows):
+            for row in rows:
+                if row["cohort"] == "C-dry-0":
+                    row["climate_class"] = "wet"
+        with self.assertRaisesRegex(AuditError, "cohort climate class"):
+            analyze_family(self.make_records("C", distort), "C")
+
+    def test_cohort_climate_conflict_rejected_r(self):
+        def distort(rows):
+            for row in rows:
+                if row["cohort"] == "R-medium-4":
+                    row["climate_class"] = "dry"
+        with self.assertRaisesRegex(AuditError, "cohort climate class"):
+            analyze_family(self.make_records("R1", distort), "R1")
+
+    def test_negative_prng_seed_rejected(self):
+        def distort(rows):
+            rows[0]["seed"] = -3
+        with self.assertRaisesRegex(AuditError, "Negative synthetic weather seed"):
+            self.make_records("C", distort)
+
+    def test_three_classes_equal_key_denominators_c(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(set(result["climate_class_effects"]), {"dry", "medium", "wet"})
+        self.assertTrue(all(r["matched_keys"] == 180 and r["climate_paths"] == 4
+                            for r in result["climate_class_effects"].values()))
+        self.assertTrue(all(r["mean_delta_q100"] == -2
+                            for r in result["climate_class_effects"].values()))
+
+    def test_three_classes_equal_key_denominators_r(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        self.assertEqual(sum(c["matched_keys"] for c in
+                             result["climate_class_effects"].values()), 540)
+        self.assertTrue(all(c["mean_delta_water_m3"] == 10 for c in
+                            result["climate_class_effects"].values()))
+
+    def test_single_path_heterogeneity_changes_only_its_class(self):
+        def distort(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["gross_water_m3"] = 130
+        result = analyze_family(self.make_records("C", distort), "C")
+        self.assertAlmostEqual(result["climate_class_effects"]["dry"]["mean_delta_water_m3"], 15)
+        for climate in ("medium", "wet"):
+            self.assertAlmostEqual(result["climate_class_effects"][climate]["mean_delta_water_m3"], 10)
+
+    def test_reference_checkpoint_contract_c_passes(self):
+        verify_paper(self.paper_checkpoint_report("C"))
+
+    def test_reference_checkpoint_contract_r_passes(self):
+        verify_paper(self.paper_checkpoint_report("R1"))
+
+    def test_all_eight_c_weight_counts_fail_closed_when_corrupted(self):
+        for weight in EXPECTED_WEIGHT_GRID["C"]:
+            with self.subTest(weight=weight):
+                result = self.paper_checkpoint_report("C")
+                result["weights"][str(weight)]["v2"] += 1
+                with self.assertRaisesRegex(AuditError, f"lambda={weight} preference mismatch"):
+                    verify_paper(result)
+
+    def test_all_eight_r_weight_counts_fail_closed_when_corrupted(self):
+        for weight in EXPECTED_WEIGHT_GRID["R1"]:
+            with self.subTest(weight=weight):
+                result = self.paper_checkpoint_report("R1")
+                result["weights"][str(weight)]["tied"] += 1
+                with self.assertRaisesRegex(AuditError, f"lambda={weight} preference mismatch"):
+                    verify_paper(result)
+
+    def test_all_eight_c_weight_means_fail_closed_when_corrupted(self):
+        for weight in EXPECTED_WEIGHT_GRID["C"]:
+            with self.subTest(weight=weight):
+                result = self.paper_checkpoint_report("C")
+                result["weights"][str(weight)]["mean_delta_loss"] += 1e-4
+                with self.assertRaisesRegex(AuditError, f"lambda={weight} mean difference mismatch"):
+                    verify_paper(result)
+
+    def test_all_eight_r_weight_means_fail_closed_when_corrupted(self):
+        for weight in EXPECTED_WEIGHT_GRID["R1"]:
+            with self.subTest(weight=weight):
+                result = self.paper_checkpoint_report("R1")
+                result["weights"][str(weight)]["mean_delta_loss"] += 1e-4
+                with self.assertRaisesRegex(AuditError, f"lambda={weight} mean difference mismatch"):
+                    verify_paper(result)
+
+    def test_nonfinite_manuscript_weight_is_rejected(self):
+        result = self.paper_checkpoint_report("R1")
+        result["weights"]["50"]["mean_delta_loss"] = math.nan
+        with self.assertRaisesRegex(AuditError, "lambda=50 mean difference mismatch"):
+            verify_paper(result)
+
+    def test_source_catalog_cannot_be_inferred_from_toy_fixture(self):
+        with self.assertRaisesRegex(AuditError, "catalog mismatch"):
+            verify_source_paths(self.make_records("C"), "C")
 
     def test_r1_reports_twelve_climate_paths(self):
         report = analyze_family(self.make_records("R1"), "R1")
