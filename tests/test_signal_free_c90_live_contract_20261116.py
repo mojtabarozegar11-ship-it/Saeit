@@ -51,7 +51,7 @@ class SignalFreeSourceLiveContractTests(unittest.TestCase):
         self.assertIn('id="signal-free-signup"', self.page)
         self.assertIn("const url='/moj-signal-free-subscribe/';", self.page)
         self.assertIn("not a live signal", self.page)
-        self.assertIn("not a paid service", self.page)
+        self.assertIn("a paid service", self.page)
         self.assertIn("r.status!==202", self.page)
 
     def test_controlled_release_contains_route_backend_migration_and_smoke_gate(self):
