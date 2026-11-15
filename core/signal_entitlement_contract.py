@@ -160,20 +160,48 @@ def issue_signal_lease(*, trusted_gateway_invoice, verified_buyer_email,
     return SignedSignalLease(**{**lease.__dict__, "hmac_sha256": digest})
 
 
+def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
+    """Require a complete server-owned settlement record, not invoice-ID presence.
+
+    A mere string set of invoice IDs can accidentally grant a different
+    subscriber's SKU or tenant access. The invoice's finality, chain, amount,
+    refund status and buyer binding must all be independently reconciled.
+    """
+    if type(independently_reconciled_invoices) is not dict:
+        return False
+    record = independently_reconciled_invoices.get(lease.invoice_id)
+    if type(record) is not dict:
+        return False
+    return (
+        record.get("asset") == "TRX"
+        and record.get("network") == "tron-mainnet"
+        and record.get("merchant_tenant_id") == lease.merchant_tenant_id
+        and record.get("sku") == lease.sku
+        and record.get("buyer_digest") == lease.buyer_digest
+        and type(record.get("settled_sun")) is int
+        and record["settled_sun"] > 0
+        and record.get("finality_verified") is True
+        and record.get("refund_pending") is False
+        and record.get("charge_disputed") is False
+    )
+
+
 def verify_signal_access(*, lease, buyer_email, requested_sku, mirror_brand,
                          now_utc, signing_key, independently_reconciled_invoices,
                          revoked_invoice_ids=()):
     """One SKU is recognized by all mirrors; never charges or renews an invoice.
 
-    The reconciled-invoice set must come from an independently audited,
-    server-only gateway ledger, not a request body. A valid source HMAC
+    The reconciled-invoice mapping must come from an independently audited,
+    server-only gateway ledger. Each entry must match the exact tenant, SKU,
+    keyed buyer digest, confirmed SUN, chain and undisputed paid status.
+    A valid source HMAC
     without that independent record NEVER authorizes content access.
     """
     if type(mirror_brand) is not str or mirror_brand not in SIGNAL_BRANDS:
         return False
     if type(requested_sku) is not str or requested_sku not in SKU_BY_NAME:
         return False
-    if (not isinstance(independently_reconciled_invoices, (frozenset, set))
+    if (type(independently_reconciled_invoices) is not dict
             or not isinstance(revoked_invoice_ids, (frozenset, set, tuple))):
         return False
     try:
@@ -184,7 +212,7 @@ def verify_signal_access(*, lease, buyer_email, requested_sku, mirror_brand,
         return False
     if (not _verify_shape(lease, now_utc)
             or lease.sku != requested_sku
-            or lease.invoice_id not in independently_reconciled_invoices
+            or not _reconciled_invoice_matches(lease, independently_reconciled_invoices)
             or lease.invoice_id in revoked_invoice_ids
             or not hmac.compare_digest(lease.buyer_digest,
                                        _buyer_digest(email, signing_key))):
