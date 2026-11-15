@@ -73,3 +73,44 @@ class ExactQuotePolicyTests(TestCase):
         with self.assertRaises(InvoiceRejected):
             self._issue(self.orders[0], "TRX", sender, "0.2")
         self.assertEqual(CommerceInvoice.objects.count(), 1)
+
+    def test_bad_server_clock_never_reaches_order_mutation(self):
+        from datetime import datetime
+        from mpw_commerce.invoicing import InvoiceRejected
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "valid-challenge-101", self.now)
+        quote = TrustedRate(Decimal("0.2"), "coinbase", self.now)
+        for invalid in (0, "2026-11-15T10:00:00Z", datetime(2026, 11, 15, 10, 0)):
+            with self.subTest(clock=repr(invalid)), self.assertRaises(InvoiceRejected):
+                reserve_order_invoice(self.orders[0].pk, "TRX", buyer=buyer,
+                                      quote=quote, now=invalid)
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_invalid_wallet_challenge_and_timestamp_cannot_lock_invoice(self):
+        from datetime import datetime
+        from mpw_commerce.invoicing import InvoiceRejected
+        valid_quote = TrustedRate(Decimal("0.2"), "coinbase", self.now)
+        for challenge in ("hello world", "bad\nchallenge", "bad" + chr(0xD800),
+                          "x" * 129, None, [], "short"):
+            with self.subTest(challenge=repr(challenge)), self.assertRaises(InvoiceRejected):
+                buyer = VerifiedBuyer(RECEIVERS["TRX"][1], challenge, self.now)
+                reserve_order_invoice(self.orders[0].pk, "TRX", buyer=buyer,
+                                      quote=valid_quote, now=self.now)
+        for invalid_time in (None, 42, "2026-11-15T10:00:00Z",
+                             datetime(2026, 11, 15, 10, 0)):
+            with self.subTest(time=repr(invalid_time)), self.assertRaises(InvoiceRejected):
+                buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "valid-challenge-101", invalid_time)
+                reserve_order_invoice(self.orders[0].pk, "TRX", buyer=buyer,
+                                      quote=valid_quote, now=self.now)
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_invalid_rate_observation_time_rejected_without_server_error(self):
+        from datetime import datetime
+        from mpw_commerce.invoicing import InvoiceRejected
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "valid-challenge-101", self.now)
+        for invalid in (None, False, "2026-11-15T10:00:00Z",
+                        datetime(2026, 11, 15, 10, 0)):
+            with self.subTest(time=repr(invalid)), self.assertRaises(InvoiceRejected):
+                quote = TrustedRate(Decimal("0.2"), "coinbase", invalid)
+                reserve_order_invoice(self.orders[0].pk, "TRX", buyer=buyer,
+                                      quote=quote, now=self.now)
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
