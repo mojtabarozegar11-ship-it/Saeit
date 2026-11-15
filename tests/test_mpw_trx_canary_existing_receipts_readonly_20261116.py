@@ -75,6 +75,9 @@ class InvoiceGateReadOnlyTests(unittest.TestCase):
         ):
             with self.subTest(token=banned):
                 self.assertNotIn(banned, script)
+        self.assertNotIn('Path(".env")', script)
+        self.assertNotIn("Path('.env')", script)
+        self.assertNotIn("dotenv", script.lower())
         self.assertIn('MAX_REVIEW = 25', script)
         self.assertIn('from core.crown_tron_receipts import verified_walletless_credit', script)
         self.assertIn('paid.select_related("order").order_by("pk")[:MAX_REVIEW]', script)
