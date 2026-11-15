@@ -1,0 +1,100 @@
+name: Revenue36 production origin readonly evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/moj_prop_public.py"
+      - "core/signal_interest_views.py"
+      - "core/signal_interest_models.py"
+      - "core/templates/core/moj_prop_public.html"
+      - ".github/workflows/revenue36-origin-readonly.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  origin-proof:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Configure pinned VPS-to-cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$WORK/config"
+          ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$WORK/host.candidate" "$WORK/host.known"
+      - name: Read-only cPanel runtime and disk evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG="$RUNNER_TEMP/mojplaywin-farnaz-ssh/config"
+          ssh -F "$CONFIG" saeit-host '
+            set -eu
+            BASE=/home/zomorod2/Saeit-staging
+            APP=/home/zomorod2/mojplaywin.com
+            echo "ORIGIN_APP_DIRECTORY=$(test -d "$APP" && echo yes || echo no)"
+            echo "STAGING_DIRECTORY=$(test -d "$BASE" && echo yes || echo no)"
+            echo "PYTHON_VENV=$(test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && echo yes || echo no)"
+            echo "WSGI_CONFIGURED=$(test -f "$APP/passenger_wsgi.py" && grep -Fq Saeit-staging "$APP/passenger_wsgi.py" && echo yes || echo no)"
+            echo "PROP_ROUTE_IN_RUNTIME=$(test -f "$BASE/config/urls.py" && grep -Fq moj-prop/ "$BASE/config/urls.py" && echo yes || echo no)"
+            echo "SIGNAL_CONTACT_ROUTE_IN_RUNTIME=$(test -f "$BASE/config/urls.py" && grep -Fq market-signals/interest/ "$BASE/config/urls.py" && echo yes || echo no)"
+            echo "PROP_PUBLIC_MODULE_IN_RUNTIME=$(test -f "$BASE/core/moj_prop_public.py" && echo yes || echo no)"
+            echo "SIGNAL_CONTACT_MODULE_IN_RUNTIME=$(test -f "$BASE/core/signal_interest_views.py" && echo yes || echo no)"
+            echo "CORE_MIGRATION_IN_RUNTIME=$(test -f "$BASE/core/migrations/0041_signalinterest.py" && echo yes || echo no)"
+            echo "DISK_USAGE_KBLOCKS"
+            df -Pk /home/zomorod2
+            echo "STAGING_GIT_HEAD=$(test -d "$BASE/.git" && git -C "$BASE" rev-parse --short HEAD || echo unavailable)"
+          '
+      - name: Read-only public HTTP status
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://mojplaywin.com/ https://mojplaywin.com/moj-prop/ https://mojplaywin.com/saman/market-signals/; do
+            code="$(curl --connect-timeout 6 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            printf 'PUBLIC_URL=%s STATUS=%s\n' "$url" "$code"
+          done
+      - name: Remove temporary credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-farnaz-ssh"
