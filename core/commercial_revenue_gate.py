@@ -986,12 +986,17 @@ class SQLiteCommercialLedger:
                 (source_id,),
             ).fetchone():
                 raise CommercialGateError("refund_source_already_used")
-            # Only plausible, authorized local order/transfer identities may
-            # reach the external settlement reviewer.
+            # Reviewer and durable record must see the SAME canonical
+            # identifiers. Never verify the untrimmed / mixed-case input and
+            # then store different evidence attributes.
+            canonical_evidence = ConfirmedRefund(
+                order_id=order_id, original_transaction_id=original_tx,
+                refund_transaction_id=refund_tx, amount=amount, source_id=source_id,
+            )
             if self._refund_verifier is None:
                 raise CommercialGateError("independent_refund_verifier_required")
             try:
-                confirmed = self._refund_verifier(evidence)
+                confirmed = self._refund_verifier(canonical_evidence)
             except Exception:
                 raise CommercialGateError("independent_refund_verifier_failed") from None
             if confirmed is not True:
