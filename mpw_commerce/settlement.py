@@ -20,6 +20,8 @@ from .invoicing import RECEIVERS
 from .models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
 from .policy import CommercePolicyError, order_snapshot
 
+# Compatibility export used by the walletless producer.
+
 
 class SettlementRejected(ValueError):
     pass
