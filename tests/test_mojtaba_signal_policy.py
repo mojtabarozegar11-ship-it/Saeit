@@ -131,3 +131,43 @@ class SingleBotSignalPolicyTests(TestCase):
         self.assertFalse(result["publication_allowed"])
         self.assertEqual(result["record"]["evidence_url"],
                          "https://example.org/market/source?session=123")
+
+
+    def test_private_ip_source_addresses_cannot_attest_market_data(self):
+        for source in (
+            "https://127.0.0.1/research",
+            "https://10.10.0.1/research",
+            "https://169.254.169.254/latest/meta-data/",
+            "https://192.168.1.4/market",
+        ):
+            with self.subTest(source=source), self.assertRaises(SignalRecordError):
+                self.verify(evidence_url=source)
+
+    def test_private_and_self_owned_hostnames_are_not_independent_research(self):
+        for host in (
+            "mojtaba.bot.ai", "research.mojtaba.bot.ai",
+            "mojplaywin.com", "data.mojplaywin.com",
+            "zomorodmelal.ir", "news.zomorodmelal.ir",
+            "server.local", "data.internal", "metadata.localhost",
+        ):
+            with self.subTest(host=host), self.assertRaises(SignalRecordError):
+                self.verify(evidence_url="https://" + host + "/research")
+
+    def test_trailing_dot_hosts_fail_closed(self):
+        with self.assertRaises(SignalRecordError):
+            self.verify(evidence_url="https://example.org./research")
+
+    def test_unicode_idn_hosts_need_explicit_dns_provenance(self):
+        with self.assertRaises(SignalRecordError):
+            self.verify(evidence_url="https://exämple.org/research")
+
+    def test_valid_independent_https_domain_remains_evidence_only(self):
+        report = self.verify(evidence_url="https://research.example.org/market-data")
+        self.assertEqual(report["record"]["evidence_url"], "https://research.example.org/market-data")
+        self.assertFalse(report["independent_source_verified"])
+        self.assertFalse(report["publication_allowed"])
+
+    def test_rejected_research_url_does_not_emit_source_fingerprint(self):
+        with self.assertRaises(SignalRecordError):
+            self.verify(evidence_url="https://169.254.169.254/market")
+
