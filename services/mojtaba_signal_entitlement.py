@@ -11,7 +11,7 @@ import re
 class SignalEntitlementError(ValueError):
     pass
 
-_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{5,159}\\Z")
+_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{5,159}\Z")
 _STATES = frozenset(("requested", "offered", "paid", "delivered", "closed"))
 
 
