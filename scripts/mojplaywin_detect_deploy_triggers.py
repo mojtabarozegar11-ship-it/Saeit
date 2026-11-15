@@ -22,6 +22,7 @@ MANUAL_RELEASE_JOBS = {
     "mojplaywin-main-deploy.yml": "deploy-main",
     "mojplaywin-moj-prop-deploy.yml": "deploy",
     "mojplaywin-farnaz-deploy.yml": "deploy",
+    "mojplaywin-saman-deploy.yml": "deploy-saman",
     "zomorod-app-pages-deploy.yml": "publish",
 }
 MAIN_MANUAL_JOB = ("mojplaywin-main-deploy.yml", "deploy-main")
@@ -31,6 +32,11 @@ CANDIDATE_MAIN_FILES = (
     "core/templates/brands/mojplaywin/base.html",
     "core/templates/brands/mojplaywin/home.html",
     "core/templates/brands/mojplaywin/page.html",
+    # Signal funnel merges must not silently publish sibling sites.
+    "core/financial_brand_pages.py",
+    "core/templates/core/financial_brand_page.html",
+    "templates/moj-prop-v4/catalog/index.html",
+    "templates/moj-prop/signals/index.html",
 )
 CANDIDATE_SAFETY_FILES = tuple(
     ".github/workflows/" + file for file in LEGACY_LOCKS
@@ -196,7 +202,11 @@ def main() -> None:
         "workflows_scanned": len(inspected),
         "legacy_jobs_hard_stopped": not unlocked_legacy,
         "main_site_deploy_manual_only": main_site_manual_only,
+        # Keep old field for existing dashboards; include the newly audited
+        # SAMAN publisher and expose a correctly labelled aggregate.
         "four_release_jobs_manual_only": not blocked_manual_releases,
+        "release_jobs_manual_only_count": len(MANUAL_RELEASE_JOBS),
+        "five_release_jobs_manual_only": not blocked_manual_releases,
         "unguarded_release_jobs": blocked_manual_releases,
         "unlocked_legacy": unlocked_legacy,
         "other_trigger_paths_require_manual_review": review,
