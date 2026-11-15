@@ -1,4 +1,5 @@
 import tempfile
+import sqlite3
 import unittest
 from decimal import Decimal
 from pathlib import Path
@@ -697,6 +698,60 @@ class CommercialGateTests(unittest.TestCase):
         self.assertNotEqual(digest, invoice_commitment(
             order_id="order-52", invoice_id="invoice-52", amount=Decimal("31"), currency="TRX"))
 
+
+
+    def test_private_sqlite_ledger_is_owner_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            ledger = SQLiteCommercialLedger(str(path))
+            self.assertEqual(path.stat().st_mode & 0o077, 0)
+            ledger.close()
+            reopened = SQLiteCommercialLedger(str(path))
+            reopened.close()
+
+    def test_ledger_refuses_symlink_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "actual.sqlite3"
+            led = SQLiteCommercialLedger(str(original))
+            led.close()
+            alias = Path(directory) / "alias.sqlite3"
+            alias.symlink_to(original)
+            with self.assertRaisesRegex(CommercialGateError, "ledger_symlink_prohibited"):
+                SQLiteCommercialLedger(str(alias))
+
+    def test_ledger_refuses_world_readable_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            led = SQLiteCommercialLedger(str(path))
+            led.close()
+            path.chmod(0o644)
+            with self.assertRaisesRegex(CommercialGateError, "ledger_file_permissions_unsafe"):
+                SQLiteCommercialLedger(str(path))
+
+    def test_staged_event_history_is_immutable_to_accidental_update(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "immutable_order_event"):
+                ledger.connection.execute(
+                    "UPDATE order_events SET payload_digest = ? WHERE order_id = ?",
+                    ("b" * 64, "order-52"))
+            self.assertEqual(ledger.connection.execute(
+                "SELECT payload_digest FROM order_events WHERE order_id = ?", ("order-52",)
+            ).fetchone()[0], ledger.connection.execute(
+                "SELECT payload_digest FROM order_events WHERE event_id = ?", ("create:order-52",)
+            ).fetchone()[0])
+            ledger.close()
+
+    def test_staged_order_history_cannot_be_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "immutable_order_event"):
+                ledger.connection.execute("DELETE FROM order_events WHERE order_id = ?", ("order-52",))
+            ledger.close()
 
 
 if __name__ == "__main__":
