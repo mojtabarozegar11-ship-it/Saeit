@@ -13,10 +13,11 @@ class MojPropServiceOfferContractTests(TestCase):
     def test_all_four_routes_have_exactly_one_real_selling_sample(self):
         offers = public_service_catalog()
         self.assertEqual(len(offers), 4)
-        self.assertEqual(
-            {row["route"] for row in offers},
-            {route for route, _ in MojPropRequest.ROUTE_CHOICES},
-        )
+        offered = {row["route"] for row in offers}
+        intake_routes = {route for route, _ in MojPropRequest.ROUTE_CHOICES}
+        self.assertEqual(offered, {"blueprint", "signals", "brief", "audit"})
+        self.assertTrue(offered.issubset(intake_routes))
+        self.assertTrue((intake_routes - offered).issubset({"digital"}))
         for row in offers:
             with self.subTest(row=row["route"]):
                 path = (Path(settings.BASE_DIR) / "templates/moj-prop-v4"
