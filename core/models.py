@@ -631,14 +631,25 @@ class MojPropOffer(T):
             errors["lead"] = "Unsupported commercial request."
         if self.pk:
             prior = type(self).objects.filter(pk=self.pk).first()
-            if prior and prior.status in ("issued", "accepted"):
-                protected = ("lead_id", "version", "title", "scope",
-                             "exclusions", "amount", "currency",
-                             "delivery_days", "issued_at", "reviewed_at", "expires_at")
-                if any(getattr(prior, field) != getattr(self, field) for field in protected):
-                    errors["status"] = "Issued proposal terms cannot be rewritten; create a new revision."
-                if self.status not in (prior.status, "cancelled", "expired", "accepted"):
-                    errors["status"] = "An issued offer cannot revert to draft or review."
+            if prior:
+                # An issued/accepted/terminal quote is an immutable commercial
+                # snapshot. Price negotiation must create a higher version.
+                if prior.status in ("issued", "accepted", "cancelled", "expired"):
+                    protected = ("lead_id", "version", "title", "scope",
+                                 "exclusions", "amount", "currency",
+                                 "delivery_days", "issued_at", "reviewed_at", "expires_at")
+                    if any(getattr(prior, field) != getattr(self, field) for field in protected):
+                        errors["status"] = "Frozen quote terms cannot be rewritten; issue a new version."
+                transitions = {
+                    "draft": ("draft", "approved", "cancelled"),
+                    "approved": ("approved", "draft", "issued", "cancelled"),
+                    "issued": ("issued", "accepted", "cancelled", "expired"),
+                    "accepted": ("accepted", "cancelled"),
+                    "cancelled": ("cancelled",),
+                    "expired": ("expired",),
+                }
+                if self.status not in transitions.get(prior.status, ()):
+                    errors["status"] = "Quote status transition is not permitted."
 
         if self.status in ("approved", "issued", "accepted") and self.reviewed_at is None:
             errors["reviewed_at"] = "A manual review timestamp is required."
@@ -666,6 +677,8 @@ class MojPropOffer(T):
             errors["accepted_at"] = "Unaccepted offers must not include acceptance evidence."
         if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
             errors["expires_at"] = "Expiry must follow issuance."
+        if self.status == "issued" and self.expires_at and self.expires_at <= now:
+            errors["expires_at"] = "Do not issue an already-expired commercial proposal."
         if self.status == "accepted":
             if not self.accepted_at or not has_acceptance_reference:
                 errors["acceptance_reference"] = "Record verifiable customer acceptance before calling a quote accepted."
