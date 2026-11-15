@@ -1,0 +1,69 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block title %}{{ catalog.title }} | MojPlayWin Digital Store{% endblock %}
+{% block meta_description %}{{ catalog.description }}{% endblock %}
+{% block og_title %}{{ catalog.title }} | MojPlayWin{% endblock %}
+{% block og_description %}{{ catalog.description }}{% endblock %}
+{% block page_head %}
+<link rel="canonical" href="{{ canonical }}">
+<meta name="robots" content="{% if is_preview %}noindex,nofollow{% else %}index,follow{% endif %}">
+<style>
+.mp-item{--i-gold:#e8c589;--i-line:#66553a;max-width:1180px;margin:12px auto 40px;padding:0 15px;color:#f6f0e6}
+.mp-item a{color:inherit;text-decoration:none}
+.mp-item .crumb{padding:17px 0 24px;color:#b1aa9e;font-size:.86rem}
+.mp-item .crumb a{color:#e8c589;text-decoration:underline;text-underline-offset:4px}
+.mp-item .shell{display:grid;grid-template-columns:minmax(270px,.85fr) minmax(0,1.15fr);gap:clamp(20px,4vw,62px);padding:clamp(24px,5vw,60px);border:1px solid #65553d;border-radius:16px;background:radial-gradient(ellipse at 20% 15%,#49391b35,transparent 55%),linear-gradient(140deg,#16191d,#0c0f11);box-shadow:0 32px 85px #0008}
+.mp-item .art{position:relative;min-height:390px;display:grid;place-items:center;border:1px solid #6c583d;border-radius:12px;background:radial-gradient(ellipse at 50% 35%,#4c4533,#171b21 70%)}
+.mp-item .art:before{content:"";position:absolute;inset:17px;border:1px solid #d3aa613b;border-radius:8px}
+.mp-item .art-token{width:185px;height:240px;display:grid;place-items:center;transform:perspective(500px) rotateY(-9deg);background:linear-gradient(130deg,#403322,#1a2630 50%,#091217);border:2px solid #b69a62;border-radius:7px 19px 19px 7px;box-shadow:17px 16px 36px #0009}
+.mp-item .art-token span{font-family:Georgia,serif;font-size:3.9rem;font-weight:400;color:#f0d49e;letter-spacing:-.08em}
+.mp-item .eyebrow{margin:0 0 16px;font-size:.75rem;letter-spacing:.2em;color:var(--i-gold);font-weight:700;text-transform:uppercase}
+.mp-item h1{font:normal clamp(2.3rem,4.2vw,4.1rem)/1.13 Georgia,serif;letter-spacing:-.045em;margin:0 0 20px}
+.mp-item .lead{font-size:1.05rem;line-height:1.9;color:#c1bcb4}
+.mp-item ul{margin:22px 0;padding-inline-start:22px;color:#ddd5c7;line-height:2.2}
+.mp-item li::marker{color:#c99e59}
+.mp-item .price{display:grid;gap:4px;border-top:1px solid #5b4b35;padding:24px 0}
+.mp-item .price strong{font:normal 2.15rem Georgia,serif;color:#f3d49c}
+.mp-item .price small{color:#aba59b}
+.mp-item .unavailable{padding:15px 19px;background:#292317;border:1px solid #8f7344;border-radius:9px;font-size:.91rem;line-height:1.9;color:#ffdfad}
+.mp-item .back{display:inline-flex;margin-top:22px;align-items:center;gap:12px;border:1px solid #b99a61;padding:12px 21px;border-radius:8px;color:#f5d09a;font-size:.88rem}
+.mp-item .back:hover{background:#5b492c}
+@media(max-width:760px){.mp-item .shell{grid-template-columns:1fr}.mp-item .art{min-height:270px}.mp-item .art-token{width:140px;height:185px}}
+@media(prefers-reduced-motion:reduce){.mp-item *{transition:none!important;animation:none!important}}
+</style>
+{% endblock %}
+{% block content %}
+<article class="mp-item" aria-labelledby="mp-item-title">
+<nav class="crumb" aria-label="Breadcrumb">
+<a href="{{ return_path }}">MojPlayWin · Digital Store</a>
+<span aria-hidden="true"> / </span><span>{{ catalog.category }}</span>
+</nav>
+<div class="shell">
+  <div class="art" aria-hidden="true"><div class="art-token"><span>MOJ</span></div></div>
+  <div>
+    <p class="eyebrow">MOJPLAYWIN / SELECTED DIGITAL WORK</p>
+    <h1 id="mp-item-title">{{ catalog.title }}</h1>
+    <p class="lead">{{ catalog.description }}</p>
+    <h2 style="font-size:1.1rem;color:#f1d5a3;margin-top:29px">What's included</h2>
+    <ul>{% for feature in catalog.details %}<li>{{ feature }}</li>{% endfor %}</ul>
+    <div class="price"><strong>{% if database_price_usd %}US &#36;{{ database_price_usd }}{% else %}{{ catalog.listed_price }}{% endif %}</strong>
+      <small>{% if database_price_usd %}Current product catalog USD price; the secure checkout will quote native TRX separately.{% else %}Reference catalog price only; this is not a payment invoice.{% endif %}</small></div>
+    {% if purchase_available and approved_purchase_url %}
+    <div class="unavailable" role="status">
+      The existing private gateway has verified this product for the current site.
+      Your email-only order and native TRX amount will be confirmed on its secure page.
+      Never send funds to an address found outside your verified order invoice.
+    </div>
+    <a class="back" href="{{ approved_purchase_url }}">Continue to verified TRX checkout</a>
+    {% else %}
+    <div class="unavailable" role="status">
+      {% if is_preview %}Catalog preview. Product database availability is not confirmed.
+      {% else %}Product details are listed. Mainnet payment and private delivery are not verified in this release.
+      {% endif %}
+      Do not transfer TRX to an unverified address. Purchasing on this page is not enabled.
+    </div>
+    {% endif %}
+    <a class="back" href="{{ return_path }}">Browse the digital store <span aria-hidden="true">↗</span></a>
+  </div>
+</div>
+</article>
+{% endblock %}
