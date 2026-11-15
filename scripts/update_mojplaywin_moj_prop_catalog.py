@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed Moj Prop catalog and two sample pages release.
+"""Fail-closed Moj Prop catalog, samples and Starter30 free education release.
 
 Source changes never directly modify the live site. A separately approved
 manual workflow must install the secured backend before this static release.
@@ -7,7 +7,9 @@ All existing files are compared with the source-controlled approved baseline.
 """
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 import os
 import pwd
@@ -20,7 +22,7 @@ HOME = Path("/home/zomorod2")
 DOCROOT = HOME / "mojplaywin.com"
 ROUTE = DOCROOT / "moj-prop"
 BACKUPS = HOME / ".mojplaywin-backups"
-FILES = (
+HTML_FILES = (
     Path("index.html"),
     Path("samples/prop-blueprint/index.html"),
     Path("samples/gold-market-brief/index.html"),
@@ -28,7 +30,15 @@ FILES = (
     Path("samples/commercial-gate-audit/index.html"),
     Path("catalog/index.html"),
     Path("signals/index.html"),
+    Path("starter-30-trx/index.html"),
 )
+# These two FREE educational files are part of the same reversible static
+# release. A sales link must never be published without its actual content.
+STARTER30_FILES = (
+    Path("starter-30-trx/journal-template.csv"),
+    Path("starter-30-trx/journal-guide.txt"),
+)
+FILES = HTML_FILES + STARTER30_FILES
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
@@ -85,7 +95,7 @@ def source_root(run_id: str) -> Path:
         raise RuntimeError("Invalid staged Moj Prop source")
     for relative in FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL):
         assert_file(path / relative)
-    html = {str(relative): (path / relative).read_text("utf-8") for relative in FILES}
+    html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
             or '<option value="week">This week</option>' not in html["index.html"]
             or "href=\"/moj-prop/catalog/\"" not in html["index.html"]):
@@ -102,10 +112,38 @@ def source_root(run_id: str) -> Path:
             or 'id="free-preview"' not in signal_page
             or "no paid" in signal_page.lower() and "no payment" not in signal_page.lower()):
         raise RuntimeError("Signal Desk free educational opt-in contract is missing")
-    for sample in FILES[1:5]:
+    for sample in HTML_FILES[1:5]:
         doc = html[str(sample)]
         if "<title>" not in doc or "Sample" not in doc:
             raise RuntimeError("Staged commercial sample invalid: " + str(sample))
+    # Product content is deliberately open and FREE to inspect. This is
+    # NOT a checkout, invoice, broker account or guarantee of paid delivery.
+    starter = html["starter-30-trx/index.html"]
+    if (not all(mark in starter for mark in (
+            "MOJPROP-STARTER30", "Payment not enabled",
+            "./journal-template.csv", "./journal-guide.txt",
+            "30 TRX", "not a funded account"))):
+        raise RuntimeError("Starter30 page is missing its ethical sales and delivery boundary")
+    guide = (path / STARTER30_FILES[1]).read_text(encoding="utf-8")
+    if not all(mark in guide for mark in (
+            "Ten-session educational journal", "Exactly 10 valid sessions",
+            "not funded and not withdrawable", "Payment is not available")):
+        raise RuntimeError("Starter30 journal guide is incomplete or unsafe")
+    raw_csv = (path / STARTER30_FILES[0]).read_bytes()
+    if len(raw_csv) > 2048 or b"\x00" in raw_csv:
+        raise RuntimeError("Starter30 template exceeds safe public journal boundary")
+    try:
+        rows = list(csv.reader(io.StringIO(raw_csv.decode("utf-8"))))
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise RuntimeError("Starter30 CSV is not a readable educational template") from exc
+    if (len(rows) != 11
+            or rows[0] != ["session", "closing_equity_usd",
+                           "risk_plan_recorded", "reflection_recorded"]
+            or any(row != [str(i), "", "", ""] for i, row in enumerate(rows[1:], 1))):
+        raise RuntimeError("Starter30 CSV must contain exactly 10 EMPTY simulated sessions")
+    if ("/moj-prop/starter-30-trx/" not in html["index.html"]
+            or "/moj-prop/starter-30-trx/" not in catalog):
+        raise RuntimeError("Starter30 package is not discoverable from the live catalog and home")
     return path
 
 
@@ -143,7 +181,7 @@ def plan(root: Path) -> list[dict]:
             if before not in (after, old_signal):
                 raise RuntimeError("Live Signal Desk differs from approved baseline; refusing replacement")
         elif exists and before != after:
-            raise RuntimeError("A sample page exists with unexpected content; refusing replacement")
+            raise RuntimeError("A public Moj Prop asset exists with unexpected content; refusing replacement")
         intended.append({
             "path": str(relative), "existed": exists,
             "before_sha": digest(before) if exists else None,
