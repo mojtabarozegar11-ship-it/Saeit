@@ -2,7 +2,7 @@
 from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
-    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
+    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,\n    PropApplicant,
 )
 
 
@@ -86,3 +86,13 @@ class PropChallengeEnrollmentAdmin(LockedAuditAdmin):
         "settlement_verified", "terms_version",
     )
     list_filter = ("settlement_verified", "terms_version")
+
+
+@admin.register(PropApplicant)
+class PropApplicantAdmin(LockedAuditAdmin):
+    """Read-only lead review; no invoice, checkout, KYC, or trading actions."""
+    list_display = (
+        "id", "email", "preferred_language", "jurisdiction",
+        "source", "status", "created_at",
+    )
+    list_filter = ("status", "preferred_language", "jurisdiction")
