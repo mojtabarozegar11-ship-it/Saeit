@@ -464,6 +464,8 @@ class SQLiteCommercialLedger:
             );
             CREATE INDEX IF NOT EXISTS refund_order_idx
                 ON independently_confirmed_refunds(order_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS refund_source_idx
+                ON independently_confirmed_refunds(source_id);
             -- This is append-only at the API/SQL connection layer. It does
             -- not claim cryptographic protection from database administrators.
             CREATE TRIGGER IF NOT EXISTS no_order_event_update BEFORE UPDATE ON order_events
@@ -772,10 +774,12 @@ class SQLiteCommercialLedger:
             ).fetchone():
                 raise CommercialGateError("refund_transaction_collides_with_payment")
             original_sun = int(Decimal(row["amount"]) * Decimal("1000000"))
-            previous = self.connection.execute(
-                "SELECT COALESCE(SUM(amount_sun), 0) AS total FROM independently_confirmed_refunds WHERE order_id = ?",
-                (order_id,),
-            ).fetchone()["total"]
+            previous = sum(
+                int(item["amount_sun"]) for item in self.connection.execute(
+                    "SELECT amount_sun FROM independently_confirmed_refunds WHERE order_id = ?",
+                    (order_id,),
+                )
+            )
             if previous + sun > original_sun:
                 raise CommercialGateError("refund_exceeds_original_payment")
             try:
@@ -784,7 +788,12 @@ class SQLiteCommercialLedger:
                     (refund_tx, order_id, sun, evidence.source_id, datetime.now(timezone.utc).isoformat()),
                 )
             except sqlite3.IntegrityError:
-                raise CommercialGateError("refund_transfer_already_recorded") from None
+                present = self.connection.execute(
+                    "SELECT 1 FROM independently_confirmed_refunds WHERE refund_tx = ?", (refund_tx,),
+                ).fetchone()
+                raise CommercialGateError(
+                    "refund_transfer_already_recorded" if present else "refund_source_already_used"
+                ) from None
 
     def outstanding_settled_trx(self, order_id: str) -> Decimal:
         """Net native TRX after recorded refunds; NOT profit or fiat revenue."""
@@ -799,10 +808,12 @@ class SQLiteCommercialLedger:
             CommercialState.FULFILLED.value, CommercialState.VERIFIED_REVENUE.value,
         ):
             raise CommercialGateError("outstanding_amount_unavailable")
-        refunded = self.connection.execute(
-            "SELECT COALESCE(SUM(amount_sun), 0) AS total FROM independently_confirmed_refunds WHERE order_id = ?",
-            (order_id,),
-        ).fetchone()["total"]
+        refunded = sum(
+            int(item["amount_sun"]) for item in self.connection.execute(
+                "SELECT amount_sun FROM independently_confirmed_refunds WHERE order_id = ?",
+                (order_id,),
+            )
+        )
         return Decimal(row["amount"]) - (Decimal(refunded) / Decimal("1000000"))
 
     def snapshot(self, order_id: str) -> Mapping[str, str]:
