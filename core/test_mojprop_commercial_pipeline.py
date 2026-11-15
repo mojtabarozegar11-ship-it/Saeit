@@ -163,3 +163,60 @@ class PipelineReportingTests(TestCase):
         proof.full_clean()
         proof.save()
         self.assertEqual(pipeline_snapshot()["customer_acknowledgments_recorded"], 1)
+
+
+    def test_forged_draft_issuance_timestamp_does_not_inflate_funnel(self):
+        lead = self.make_lead("P-DRAFT-FAKE", "brief")
+        now = timezone.now()
+        MojPropOffer.objects.create(
+            lead=lead, title="Unissued draft", scope="Private documentation pending review " * 4,
+            amount=Decimal("100.00"), status="draft",
+            issued_at=now, reviewed_at=now,
+        )
+        snapshot = pipeline_snapshot()
+        self.assertEqual(snapshot["distinct_leads_with_issued_quotes"], 0)
+        self.assertEqual(snapshot["quote_coverage_percent"], 0.0)
+
+    def test_accepted_row_without_customer_reference_is_not_conversion(self):
+        lead = self.make_lead("P-ACCEPT-FAKE", "signals")
+        now = timezone.now()
+        MojPropOffer.objects.create(
+            lead=lead, title="Not verified", scope="Dated research evidence " * 4,
+            amount=Decimal("120.00"), status="accepted",
+            reviewed_at=now - timedelta(days=3),
+            issued_at=now - timedelta(days=2),
+            accepted_at=now - timedelta(days=1),
+            expires_at=now + timedelta(days=2),
+            acceptance_reference="",
+        )
+        snapshot = pipeline_snapshot()
+        self.assertEqual(snapshot["distinct_leads_with_issued_quotes"], 1)
+        self.assertEqual(snapshot["distinct_accepted_leads"], 0)
+        self.assertEqual(snapshot["acceptance_rate_percent"], 0.0)
+
+    def test_handoff_without_clearance_or_reference_never_counts_as_delivery(self):
+        lead = self.make_lead("P-HANDOFF-FAKE", "brief")
+        now = timezone.now()
+        offer = MojPropOffer.objects.create(
+            lead=lead, title="Accepted scope", scope="Dated documented research " * 4,
+            amount=Decimal("100.00"), status="accepted",
+            reviewed_at=now - timedelta(days=3),
+            issued_at=now - timedelta(days=2),
+            accepted_at=now - timedelta(days=1),
+            acceptance_reference="buyer-signed-111",
+            expires_at=now + timedelta(days=2),
+        )
+        MojPropDeliveryEvidence.objects.create(
+            offer=offer, artifact_sha256="a" * 64,
+            artifact_name="ready.pdf", status="acknowledged",
+            handoff_reference="", clearance_reference="",
+            handed_off_at=now - timedelta(hours=2),
+            acknowledged_at=now - timedelta(hours=1),
+            acknowledgment_reference="buyer-claims-it-111",
+        )
+        snapshot = pipeline_snapshot()
+        self.assertEqual(snapshot["distinct_accepted_leads"], 1)
+        self.assertEqual(snapshot["handoffs_recorded"], 0)
+        self.assertEqual(snapshot["customer_acknowledgments_recorded"], 0)
+        self.assertEqual(snapshot["handoff_coverage_percent"], 0.0)
+
