@@ -1171,6 +1171,68 @@ class CommercialGateTests(unittest.TestCase):
             self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("0"))
             ledger.close()
 
+    def test_confirmed_refund_tx_cannot_be_used_for_second_order_payment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.record_confirmed_refund(self._refund_proof(refund_transaction_id="B" * 64))
+            self._prepare_private_invoice(ledger, "order-53")
+            proof = self.payment(
+                order_id="order-53", invoice_id="invoice-53",
+                transaction_id="b" * 64,
+            )
+            digest = validate_payment_evidence(
+                proof, expected_order_id="order-53",
+                expected_invoice_id="invoice-53", expected_amount=Decimal("30"),
+                expected_currency="TRX",
+            )
+            external_calls = []
+            ledger._settlement_verifier = lambda evidence: external_calls.append(evidence) or True
+            with self.assertRaisesRegex(
+                CommercialGateError, "refund_transaction_cannot_settle_order"
+            ):
+                ledger.advance(
+                    order_id="order-53", target=CommercialState.SETTLED,
+                    event_id="settled-53", payload_digest=digest,
+                    payment_evidence=proof,
+                )
+            self.assertEqual(external_calls, [])
+            self.assertEqual(ledger.snapshot("order-53")["state"], "payment_pending")
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("18.5"))
+            ledger.close()
+
+    def test_direct_sql_cannot_recredit_refund_tx_as_new_settlement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.record_confirmed_refund(self._refund_proof(refund_transaction_id="b" * 64))
+            self._prepare_private_invoice(ledger, "order-53")
+            with self.assertRaisesRegex(
+                sqlite3.DatabaseError, "refund_transaction_cannot_settle_order"
+            ):
+                ledger.connection.execute(
+                    "INSERT INTO settled_transactions (network, transaction_id, order_id) "
+                    "VALUES (?, ?, ?)", ("TRON", "B" * 64, "order-53"),
+                )
+            ledger.connection.rollback()
+            self.assertEqual(ledger.snapshot("order-53")["state"], "payment_pending")
+            ledger.close()
+
+    def test_direct_sql_cannot_claim_prior_payment_as_new_refund(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            with self.assertRaisesRegex(
+                sqlite3.DatabaseError, "settlement_transaction_cannot_be_refund"
+            ):
+                ledger.connection.execute(
+                    "INSERT INTO independently_confirmed_refunds "
+                    "(refund_tx, order_id, amount_sun, source_id, recorded_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    ("A" * 64, "order-52", 1, "independent-source-new",
+                     "2026-11-15T00:00:00+00:00"),
+                )
+            ledger.connection.rollback()
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("30"))
+            ledger.close()
+
     def test_confirmed_refund_fails_if_total_exceeds_original_transfer(self):
         with tempfile.TemporaryDirectory() as directory:
             ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)

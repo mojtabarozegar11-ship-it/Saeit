@@ -466,6 +466,22 @@ class SQLiteCommercialLedger:
                 ON independently_confirmed_refunds(order_id);
             CREATE UNIQUE INDEX IF NOT EXISTS refund_source_idx
                 ON independently_confirmed_refunds(source_id);
+            -- A single TRON transaction is either a receipt or a refund,
+            -- never both, even when another caller writes directly to SQL.
+            CREATE TRIGGER IF NOT EXISTS no_refund_tx_as_settlement
+                BEFORE INSERT ON settled_transactions
+                WHEN NEW.network = 'TRON' AND EXISTS (
+                    SELECT 1 FROM independently_confirmed_refunds
+                    WHERE refund_tx = LOWER(NEW.transaction_id)
+                )
+                BEGIN SELECT RAISE(ABORT, 'refund_transaction_cannot_settle_order'); END;
+            CREATE TRIGGER IF NOT EXISTS no_settlement_tx_as_refund
+                BEFORE INSERT ON independently_confirmed_refunds
+                WHEN EXISTS (
+                    SELECT 1 FROM settled_transactions
+                    WHERE network = 'TRON' AND transaction_id = LOWER(NEW.refund_tx)
+                )
+                BEGIN SELECT RAISE(ABORT, 'settlement_transaction_cannot_be_refund'); END;
             -- This is append-only at the API/SQL connection layer. It does
             -- not claim cryptographic protection from database administrators.
             CREATE TRIGGER IF NOT EXISTS no_order_event_update BEFORE UPDATE ON order_events
@@ -692,6 +708,11 @@ class SQLiteCommercialLedger:
                     ).fetchone()
                     if settled is None or settled["transaction_id"] != payment_evidence.transaction_id.lower():
                         raise CommercialGateError("verified_revenue_settlement_mismatch")
+                if target is CommercialState.SETTLED and self.connection.execute(
+                    "SELECT 1 FROM independently_confirmed_refunds WHERE refund_tx = ?",
+                    (payment_evidence.transaction_id.lower(),),
+                ).fetchone():
+                    raise CommercialGateError("refund_transaction_cannot_settle_order")
                 # Check inexpensive local invoice/settlement identities before
                 # calling any trusted external verifier. No unregistered
                 # invoice should trigger a provider lookup or expense.
