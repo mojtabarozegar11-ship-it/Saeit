@@ -97,6 +97,26 @@ class CommercialBackendClosureTests(unittest.TestCase):
             check_schema_closure(self.live, SOURCE)
         self.assertEqual(target.read_bytes(), before)
 
+    def test_unknown_live_schema_revision_is_denied_before_migration(self):
+        path = self.live / "core/migrations/0046_unreviewed_feature.py"
+        path.write_text("class Migration: pass\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "unreviewed later"):
+            check_schema_closure(self.live, SOURCE)
+        path.rename(self.live / "core/migrations/0041_conflicting_branch.py")
+        with self.assertRaisesRegex(RuntimeError, "conflicting core migration"):
+            check_schema_closure(self.live, SOURCE)
+
+    def test_production_migration_targets_only_mojprop_core_0045(self):
+        body = (SOURCE / "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"core", "0045_mojprop_delivery_evidence", "--noinput"', body)
+        self.assertNotIn('["manage.py", "migrate", "--noinput"]', body)
+        self.assertLess(
+            body.index("check_schema_closure(ROOT, staged_root)"),
+            body.index('"0045_mojprop_delivery_evidence", "--noinput"'),
+        )
+
     def test_missing_staged_migration_causes_preflight_failure(self):
         stage = Path(self.sandbox.name) / "stage"
         for relative in (
