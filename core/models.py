@@ -497,3 +497,6 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+# Single canonical non-billing CRM for all 17 signal brands.
+from .signal_interest_models import SignalInterest

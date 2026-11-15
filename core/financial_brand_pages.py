@@ -79,10 +79,11 @@ COPY = {
 
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
+    # Only the host Django validated is trustworthy. Never use a client-provided
+    # X-Forwarded-Host substring to infer legal merchant identity or language.
+    host = request.get_host().split(":")[0].lower()
     if locale == "host":
-        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
-        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
-        locale = "fa" if "zomorodmelal.ir" in host else "en"
+        locale = "fa" if host in {"zomorodmelal.ir", "www.zomorodmelal.ir"} else "en"
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
@@ -103,10 +104,26 @@ def financial_brand_page(request, brand, locale, page_type):
     if page_type == "signals":
         from .signal_commercial_catalog import offer
         signal_offer = offer(slug, locale)
-    return render(request, "core/financial_brand_page.html", {
+    from .signal_interest_views import ALLOWED_HOSTS
+    from .signal_product_plans import SIGNAL_PLANS
+    from .signal_commercial_catalog import CANONICAL_AGENT
+    interest_enabled = bool(page_type == "signals" and host in ALLOWED_HOSTS
+                            and request.is_secure())
+    context = {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "signal_offer": signal_offer,
+        "signal_interest_enabled": interest_enabled,
+        "signal_interest_plans": SIGNAL_PLANS if interest_enabled else (),
+        "signal_bot": CANONICAL_AGENT,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
-    })
+    }
+    response = render(request, "core/financial_brand_page.html", context)
+    if interest_enabled:
+        from django.utils.cache import patch_vary_headers
+        patch_vary_headers(response, ("Cookie",))
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["Referrer-Policy"] = "same-origin"
+    return response

@@ -7,8 +7,12 @@ on:
   pull_request:
     branches:
       - "main"
+      - "feature/prop-firm-policy-v11-20261114"
     paths:
       - "prop_firm/**"
+      - "core/moj_prop_views.py"
+      - "core/templates/mojplaywin/moj_prop.html"
+      - "config/urls.py"
       - "core/commercialization_readiness.py"
       - "core/tron_tenant_policy.py"
       - "core/tron_rollout_inventory.py"
@@ -53,4 +57,5 @@ jobs:
           tests.test_tron_rollout_inventory
           tests.test_moj_prop_independent_attestation
           tests.test_tron_manual_reconciliation
+          tests.test_moj_prop_interest_intake
           --verbosity 2

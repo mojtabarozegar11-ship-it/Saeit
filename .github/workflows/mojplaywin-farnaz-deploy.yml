@@ -48,6 +48,7 @@ jobs:
           python manage.py check --deploy
           python manage.py makemigrations --check --dry-run
           pytest -q tests/test_farnaz_site.py
+          python manage.py test tests.test_moj_prop_interest_intake tests.test_signal_interest_intake --verbosity 2
           python manage.py migrate --noinput
       - name: Validate isolated deploy helper
         run: python -m py_compile scripts/deploy_farnaz_django.py

@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
     PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
+    PropInterest,
 )
 
 
@@ -86,3 +87,40 @@ class PropChallengeEnrollmentAdmin(LockedAuditAdmin):
         "settlement_verified", "terms_version",
     )
     list_filter = ("settlement_verified", "terms_version")
+
+@admin.register(PropInterest)
+class PropInterestAdmin(admin.ModelAdmin):
+    """Operator inbox; edits only non-financial follow-up status."""
+    actions = None
+    list_per_page = 30
+    list_display = ("id", "email", "plan_code", "status", "source_language",
+                    "created_at", "updated_at")
+    list_filter = ("status", "plan_code", "source_language")
+    search_fields = ("email",)
+    readonly_fields = ("email", "plan_code", "source_language",
+                       "consent_version", "created_at", "updated_at")
+    fields = ("email", "plan_code", "status", "source_language",
+              "consent_version", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        # Lead emails are owner-private: ordinary site staff must not see them.
+        user = getattr(request, "user", None)
+        return bool(
+            user is not None and getattr(user, "is_active", False)
+            and getattr(user, "is_superuser", False)
+            and super().has_view_permission(request, obj)
+        )
+
+    def has_change_permission(self, request, obj=None):
+        user = getattr(request, "user", None)
+        return bool(
+            user is not None and getattr(user, "is_active", False)
+            and getattr(user, "is_superuser", False)
+            and super().has_change_permission(request, obj)
+        )
