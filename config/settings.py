@@ -131,3 +131,19 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Signed TRON invoice proposals for NON-FINANCIAL Mojtaba.bot.ai services only.
+# Disabled by default, including after the migration. Never embed secrets in Git.
+# A proposal is neither a paid invoice nor proof of confirmed blockchain settlement.
+MOJTABA_SIGNAL_TRON_QUOTE_ENABLED = env.bool(
+    "MOJTABA_SIGNAL_TRON_QUOTE_ENABLED", default=False,
+)
+MOJTABA_SIGNAL_CANONICAL_HOST = env(
+    "MOJTABA_SIGNAL_CANONICAL_HOST", default="",
+)
+MOJTABA_SIGNAL_TRON_RECEIVER = env(
+    "MOJTABA_SIGNAL_TRON_RECEIVER", default="",
+)
+MOJTABA_SIGNAL_TRON_QUOTE_HMAC_KEY_HEX = env(
+    "MOJTABA_SIGNAL_TRON_QUOTE_HMAC_KEY_HEX", default="",
+)
