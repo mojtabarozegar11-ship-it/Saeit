@@ -1459,6 +1459,68 @@ class CommercialGateTests(unittest.TestCase):
             validate_offer(self.offer(), independent_release_verifier="yes")
 
 
+    def test_partial_refund_prevents_gross_invoice_as_verified_revenue(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="delivery-pending-52", payload_digest="a" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                           event_id="delivered-52", payload_digest="b" * 64,
+                           fulfillment_manifest_sha256="b" * 64)
+            ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("1")))
+            with self.assertRaisesRegex(CommercialGateError, "refund_reconciliation_required_before_revenue"):
+                ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                    event_id="revenue-52", payload_digest="c" * 64,
+                    payment_evidence=self.payment(), verified_revenue=True)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfilled")
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("29"))
+            ledger.close()
+
+    def test_refunded_verified_event_replay_does_not_reassert_original_gross(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="delivery-pending-52", payload_digest="a" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                           event_id="delivered-52", payload_digest="b" * 64,
+                           fulfillment_manifest_sha256="b" * 64)
+            ev = self.payment()
+            ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                           event_id="revenue-52", payload_digest="c" * 64,
+                           payment_evidence=ev, verified_revenue=True)
+            ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("30")))
+            with self.assertRaisesRegex(CommercialGateError, "refund_reconciliation_required_before_revenue"):
+                ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                               event_id="revenue-52", payload_digest="c" * 64,
+                               payment_evidence=ev, verified_revenue=True)
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("0"))
+            ledger.close()
+
+    def test_invalid_refund_never_calls_external_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def verified(evidence):
+                calls.append(evidence)
+                return True
+            ledger = self._refundable_ledger(directory, refund_verifier=verified)
+            with self.assertRaisesRegex(CommercialGateError, "refund_original_transfer_not_matched"):
+                ledger.record_confirmed_refund(self._refund_proof(original_transaction_id="d" * 64))
+            with self.assertRaisesRegex(CommercialGateError, "refund_exceeds_original_payment"):
+                ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("31")))
+            self.assertEqual(calls, [])
+            ledger.close()
+
+    def test_unknown_order_refund_does_not_call_external_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                refund_verifier=lambda evidence: calls.append(evidence) or True)
+            with self.assertRaisesRegex(CommercialGateError, "order_not_found"):
+                ledger.record_confirmed_refund(self._refund_proof())
+            self.assertEqual(calls, [])
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
