@@ -170,22 +170,32 @@ def _cpanel_quota_data_adequate(document, needed_bytes):
 
 
 def _cpanel_uapi_quota_result(needed_bytes):
-    """Only the official, account-scoped GET-like read-only Quota UAPI method."""
+    """Official owner-only read-only UAPI: explicit user, then same-user CLI."""
     import subprocess
     binary = "/usr/local/cpanel/bin/uapi"
-    try:
-        proc = subprocess.run(
-            [binary, "--output=json", "--user=" + ACCOUNT,
-             "Quota", "get_quota_info"],
-            check=True, timeout=12, capture_output=True, text=True,
-            env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin"},
-        )
-    except FileNotFoundError:
-        return False, "cpanel_uapi_program_unavailable"
-    except subprocess.TimeoutExpired:
-        return False, "cpanel_uapi_timeout"
-    except (OSError, subprocess.SubprocessError):
-        return False, "cpanel_uapi_failed"
+    variants = (
+        [binary, "--output=json", "--user=" + ACCOUNT,
+         "Quota", "get_quota_info"],
+        [binary, "--output=json", "Quota", "get_quota_info"],
+    )
+    proc = None
+    for fixed_args in variants:
+        try:
+            proc = subprocess.run(
+                fixed_args, check=True, timeout=12, capture_output=True,
+                text=True, env={"LC_ALL": "C",
+                                "PATH": "/usr/bin:/bin:/usr/local/bin"},
+            )
+            break
+        except FileNotFoundError:
+            return False, "cpanel_uapi_program_unavailable"
+        except subprocess.TimeoutExpired:
+            return False, "cpanel_uapi_timeout"
+        except (OSError, subprocess.SubprocessError):
+            proc = None
+            continue
+    if proc is None:
+        return False, "cpanel_uapi_both_owner_modes_failed"
     if len(proc.stdout) > 16384:
         return False, "cpanel_uapi_response_oversize"
     try:
