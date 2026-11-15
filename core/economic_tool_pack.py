@@ -525,7 +525,11 @@ def service_package(payload):
             # overwrite the same output and both claim a new verified effect.
             os.link(tmp, target, follow_symlinks=False)
         except FileExistsError:
-            if _private_service_read_bytes(target, allow_publish_race=True) != document.encode("utf-8"):
+            try:
+                existing = _private_service_read_bytes(target, allow_publish_race=True)
+            except ValueError:
+                raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION") from None
+            if existing != document.encode("utf-8"):
                 raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION")
             return {
                 "action_performed": "Reused independently verified private service package.",
