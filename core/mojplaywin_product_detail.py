@@ -66,6 +66,11 @@ def _approved_purchase_url(request, product):
     No optimistic purchase URL is rendered if components are missing or
     live rights, verified delivery, HTTPS, host or URL registration disagree.
     """
+    # A verified private gateway on HTTPS may be linked to only from HTTPS
+    # under the owned MojPlayWin host. Otherwise an HTTP page could direct
+    # buyers to a charge-bearing route with weakened session transport.
+    if not request.is_secure() or request.get_host().split(":")[0].lower() not in MPW_HOSTS:
+        return None
     try:
         from django.urls import reverse, resolve
         from services.mpw_trx_commercial_context import checkout_flags
