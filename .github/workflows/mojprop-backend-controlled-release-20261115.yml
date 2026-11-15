@@ -241,14 +241,14 @@ jobs:
           except Exception:
               traceback.print_exc()
           PY
-      - name: Roll back Moj Prop backend if verification fails
-        if: failure() && steps.backend.outcome == 'success' && steps.smoke.outcome == 'failure'
+      - name: Roll back Moj Prop backend on failed install or failed smoke
+        if: failure() && (steps.backend.outcome == 'failure' || (steps.backend.outcome == 'success' && steps.smoke.outcome == 'failure'))
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 90s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py rollback $GITHUB_RUN_ID"
+            "if test -f /home/zomorod2/.mojplaywin-moj-prop-backups/$GITHUB_RUN_ID/manifest.json; then python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py rollback $GITHUB_RUN_ID; else echo NO_BACKEND_BACKUP_MANIFEST_TO_RESTORE; fi"
       - name: Roll back only Moj Prop route if deployment verification fails
         if: failure() && steps.deploy.outcome == 'success' && (steps.backend.outcome == 'failure' || steps.smoke.outcome == 'failure')
         shell: bash
