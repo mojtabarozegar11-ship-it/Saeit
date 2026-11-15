@@ -67,7 +67,9 @@ jobs:
           PY
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # An approved PR merge is NOT release authorization. Only a separately
+    # initiated manual dispatch may connect to production cPanel.
+    if: github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
