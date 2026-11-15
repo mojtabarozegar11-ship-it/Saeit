@@ -8,14 +8,14 @@ class CommercialInterestAdmin(admin.ModelAdmin):
     list_per_page = 30
     actions = None
     list_display = ("id", "email", "offer_family", "brand", "plan_code", "status",
-                    "source_language", "created_at")
+                    "source_language", "created_at", "withdrawn_at")
     list_filter = ("status", "offer_family", "brand", "plan_code", "source_language")
     search_fields = ("email",)
     fields = ("email", "offer_family", "brand", "plan_code", "consent_version",
               "source_language", "source_host", "status",
-              "created_at", "updated_at")
+              "created_at", "updated_at", "withdrawn_at")
     readonly_fields = ("email", "offer_family", "brand", "plan_code", "consent_version",
-                       "source_language", "source_host", "created_at", "updated_at")
+                       "source_language", "source_host", "created_at", "updated_at", "withdrawn_at")
 
     def has_add_permission(self, request):
         return False
