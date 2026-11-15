@@ -73,7 +73,7 @@
       const notesField=document.getElementById('notes');
       const planPrefix=selectedPlan
         ? 'Requested educational plan: '+selectedPlan+
-          ' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\\n'
+          ' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\n'
         : '';
       function syncSignalPlan(){
         const show=Boolean(selectedPlan && serviceSelect.value==='signals');
