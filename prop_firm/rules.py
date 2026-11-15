@@ -13,6 +13,13 @@ LEVELS = tuple(map(D, (
     "20000", "35000", "50000", "70000", "85000", "100000",
 )))
 
+# The owner decision gate is explicit: promotion into level 10 is blocked
+# until the contract and release evidence are confirmed. This is a policy
+# gate only; it performs no payment, broker or account operation.
+LEVEL_10_INDEX = 9
+LEVEL_10_LOCKED = True
+LEVEL_10_CAPACITY_USD = LEVELS[LEVEL_10_INDEX]
+
 def dec(value):
     """Explicitly reject imprecise floats, bools and non-finite inputs."""
     if isinstance(value, (bool, float)):
@@ -147,6 +154,8 @@ def assess_challenge(*, phase, account_capital, realized_net_profit,
     rate = POLICY.phase_one_goal_pct if phase == 1 else POLICY.phase_two_goal_pct
     goal = percent(capital, rate)
     reasons = list(risk.reasons)
+    if LEVEL_10_LOCKED and level_index + 1 == LEVEL_10_INDEX:
+        reasons.append("level10_owner_decision_required")
     if risk.allowed is not True:
         reasons.append("risk_assessment_not_allowed")
     if phase == 2 and prior_phase_passed is not True:
