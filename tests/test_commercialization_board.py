@@ -315,9 +315,14 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(prop["duration_days"], 28)
         self.assertFalse(prop["live_challenge_checkout_verified"])
         self.assertFalse(prop["real_broker_funding_verified"])
-        self.assertEqual(payload["owner_priority_order"][:4], [
+        self.assertEqual(payload["owner_priority_order"][:5], [
             "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
+            "moj_coin",
         ])
+        self.assertEqual(payload["moj_coin"]["owner_priority"], 5)
+        self.assertEqual(len(payload["moj_coin"]["game_release_gates"]), 6)
+        self.assertFalse(payload["moj_coin"]["independently_verified_paid_launch"])
+        self.assertFalse(payload["moj_coin"]["live_token_or_player_funding_verified"])
         self.assertEqual(payload["signals"]["known_financial_brands"], 17)
         self.assertEqual(payload["signals"]["localization_contexts"], 51)
         self.assertEqual(payload["signals"]["live_subscriptions_verified"], 0)
