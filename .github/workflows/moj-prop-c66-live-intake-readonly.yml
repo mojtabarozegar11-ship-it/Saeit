@@ -68,3 +68,39 @@ jobs:
             printf 'PUBLIC_NETWORK_DIAGNOSTIC mode=%s outcome=%s\n' "$mode" "$code"
           done
           echo "NO_CUSTOMER_POST_NO_LOGIN_NO_DEPLOY_NO_PAYMENT"
+
+      - name: Verify deployed inquiry form actually emits accepted horizon enum
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          html="$(mktemp)"
+          trap 'rm -f -- "$html"' EXIT
+          curl -fsS --connect-timeout 4 --max-time 12 --retry 0             'https://mojplaywin.com/moj-prop/' -o "$html"
+          python3 - "$html" <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import sys
+          class Fields(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.horizon=False
+                  self.values=[]
+              def handle_starttag(self,tag,attrs):
+                  data=dict(attrs)
+                  if tag=="select":
+                      self.horizon=data.get("id")=="horizon"
+                  elif tag=="option" and self.horizon:
+                      self.values.append(data.get("value"))
+              def handle_endtag(self,tag):
+                  if tag=="select":
+                      self.horizon=False
+          p=Fields()
+          p.feed(Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace"))
+          expected={"urgent","week","month","review"}
+          if set(p.values)!=expected:
+              print("BLOCKED: deployed Moj Prop form sends invalid backend horizon codes")
+              print("LIVE_MOJPROP_HORIZON_PARITY=FAIL; UNAPPROVED_LABELS="+str(len(p.values)-len(set(p.values)&expected)))
+              raise SystemExit(2)
+          print("LIVE_MOJPROP_HORIZON_PARITY=PASS; NO_REQUEST_POSTED")
+          PY
