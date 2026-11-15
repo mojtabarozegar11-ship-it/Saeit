@@ -33,10 +33,58 @@ FALLBACK_BLOCK = (
 )
 MARKER = b"MPW_STATIC_STORE_FALLBACK_V1"
 PRODUCT_ROUTES = (
-    b"/store/product/72/checkout/",
-    b"/store/product/225/checkout/",
-    b"/store/product/879/",
+    b'href="/store/product/72/"',
+    b'href="/store/product/225/"',
+    b'href="/store/product/879/"',
 )
+# These were false purchase CTAs in a previous public source revision.
+# A catalog cutover may not reinstate them; real TRX checkout requires its
+# separate merchant/rights/settlement/delivery release decision.
+DEAD_CHECKOUT_ROUTES = (
+    b'href="/store/product/72/checkout/"',
+    b'href="/store/product/225/checkout/"',
+    b"Buy securely with TRX",
+)
+
+# The live cPanel audit (2026-11-15) proved an older staging view and store
+# template were still installed, and commerce_funnel.py was missing. Pin the
+# exact independently reviewed public source files before removing the public
+# fallback. These are git blob SHA-1 IDs, not hashes of buyer/private data.
+REVIEWED_STAGING_BLOBS = {
+    "core/mojplaywin_views.py": "eb97b2b7a38c6a99842a1d49c15bf657acf3abf5",
+    "core/templates/mojplaywin/store.html": "0a41d31299da2b0884412d2adc1700d57c588341",
+    "core/mojplaywin_product_detail.py": "1e11ad90e5f1c1202079ea71bc9435e160caf4e4",
+    "core/templates/mojplaywin/product_detail.html": "21678160b12bb2f73727c624ab5237e6b0272fd9",
+    "core/commerce_funnel.py": "b2b0b0ccfc632652e32ce40cc4bd879b2cd4b9b9",
+}
+
+
+def git_blob_sha(payload: bytes) -> str:
+    return hashlib.sha1(
+        b"blob " + str(len(payload)).encode("ascii") + b"\0" + payload
+    ).hexdigest()
+
+
+def assert_reviewed_staging_sources(app: Path) -> None:
+    """No remote file writes/DB calls. Reject missing/old checkout source."""
+    if app.is_symlink() or not app.is_dir():
+        raise RuntimeError("STAGING_DIRECTORY_NOT_SAFE")
+    for name, expected in REVIEWED_STAGING_BLOBS.items():
+        path = app / name
+        parent = path.parent
+        while parent != app:
+            if parent.is_symlink():
+                raise RuntimeError("STAGING_PARENT_SYMLINK_REFUSED")
+            parent = parent.parent
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 800_000:
+            raise RuntimeError("STAGING_REQUIRED_SOURCE_MISSING_OR_UNSAFE")
+        if git_blob_sha(path.read_bytes()) != expected:
+            raise RuntimeError("STAGING_SOURCE_VERSION_MISMATCH")
+    model = app / "core/models.py"
+    if model.is_symlink() or not model.is_file() or model.stat().st_size > 800_000:
+        raise RuntimeError("STAGING_FUNNEL_MODEL_MISSING")
+    if b"class CommerceFunnelEvent(" not in model.read_bytes():
+        raise RuntimeError("STAGING_FUNNEL_MODEL_MISSING")
 
 
 def atomic_replace(target: Path, content: bytes, mode: int) -> None:
@@ -83,17 +131,11 @@ def inspect_owned_fallback(public: Path) -> tuple[bytes, bytes, int]:
 
 
 def check_actual_staging_store() -> None:
-    """Import and render the real store view; never supply a metrics stub."""
-    target = APP / "core/mojplaywin_views.py"
-    if (APP.is_symlink() or not APP.is_dir() or target.is_symlink() or
-            not target.is_file() or (APP / "core/commerce_funnel.py").exists()):
-        raise RuntimeError("STAGING_SOURCE_DRIFT")
-    source = target.read_bytes()
-    guard = b"def store(request):\n # Analytics must never make the public storefront unavailable."
-    if (len(source) != 16371 or source.count(guard) != 1 or
-            source.count(b"def store(request):") != 1 or
-            b"except Exception as exc:" not in source[source.index(guard):source.index(guard) + 800]):
-        raise RuntimeError("STAGING_GUARDED_VIEW_NOT_PROVEN")
+    """Require reviewed, coherent Django source before any public rewrite."""
+    assert_reviewed_staging_sources(APP)
+    # URL resolution imports the live Django app without rendering a view.
+    # Rendering the store would emit a funnel database event on current main,
+    # so the cutover preflight deliberately avoids the old write-prone GET.
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -101,13 +143,22 @@ def check_actual_staging_store() -> None:
     sys.path.insert(0, str(APP))
     import django
     django.setup()
-    from django.test import RequestFactory
+    from django.urls import resolve
+    from django.template.loader import get_template
     from core.mojplaywin_views import store
-    page = store(RequestFactory().get("/store/", secure=True, HTTP_HOST="mojplaywin.com"))
-    if page.status_code != 200 or len(page.content) < 2000 or any(
-            route not in page.content for route in PRODUCT_ROUTES):
-        raise RuntimeError("REAL_STAGING_STORE_RENDER_FAILED")
-    print("MPW_DYNAMIC_STAGING_GUARDED_RENDER=PASS;PRODUCTS=3")
+    from core.mojplaywin_product_detail import brand_product_detail
+
+    main_route = resolve("/store/")
+    if main_route.url_name != "store" or main_route.func is not store:
+        raise RuntimeError("STAGING_STORE_ROUTE_DRIFT")
+    for product_id in (72, 225, 879):
+        route = resolve(f"/store/product/{product_id}/")
+        if (route.url_name != "store_product_detail" or
+                route.func is not brand_product_detail):
+            raise RuntimeError("STAGING_DETAIL_ROUTE_DRIFT")
+    get_template("mojplaywin/store.html")
+    get_template("mojplaywin/product_detail.html")
+    print("MPW_DYNAMIC_STAGING_SOURCE_AND_ROUTES=PASS;PRODUCTS=3;DB_WRITES=NO")
 
 
 def public_response(run_id: str) -> bytes:
@@ -140,7 +191,8 @@ def verify_dynamic_public(run_id: str) -> bool:
             data = public_response(run_id + "-" + str(attempt))
             if (MARKER not in data and b"mpw-shop-kicker" in data and
                     b"mpw-store-catalog-20261026" in data and
-                    all(route in data for route in PRODUCT_ROUTES)):
+                    all(route in data for route in PRODUCT_ROUTES) and
+                    not any(route in data for route in DEAD_CHECKOUT_ROUTES)):
                 print("MPW_PUBLIC_SWITCH_PROBE=" + json.dumps({
                     "dynamic_confirmed": True,
                     "observations": observations,
