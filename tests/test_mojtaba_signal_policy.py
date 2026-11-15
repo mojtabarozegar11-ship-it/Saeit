@@ -30,12 +30,22 @@ class SingleBotSignalPolicyTests(TestCase):
     def test_valid_record_has_stable_fingerprint_without_false_delivery(self):
         result = self.verify()
         self.assertEqual(result["record"]["author_agent"], "mojtaba.bot.ai")
-        self.assertTrue(result["publication_allowed"])
+        self.assertTrue(result["content_policy_passed"])
+        self.assertFalse(result["independent_source_verified"])
+        self.assertFalse(result["publication_allowed"])
         self.assertFalse(result["delivery_confirmed"])
         self.assertFalse(result["payment_received"])
         self.assertEqual(len(result["evidence_fingerprint"]), 64)
         self.assertEqual(self.verify()["evidence_fingerprint"],
                          result["evidence_fingerprint"])
+
+    def test_ordinary_url_is_not_independent_live_market_verification(self):
+        result = self.verify(evidence_url="https://example.org/market/source")
+        self.assertFalse(result["publication_allowed"])
+        self.assertFalse(result["delivery_confirmed"])
+        self.assertFalse(result["payment_received"])
+        self.assertFalse(result["independent_source_verified"])
+        self.assertEqual(result["record"]["reviewer_id"], "market_review_01")
 
     def test_only_one_bot_owns_signal_identity(self):
         for value in ("another.bot", "", None):
