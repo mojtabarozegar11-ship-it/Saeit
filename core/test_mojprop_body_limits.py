@@ -106,3 +106,48 @@ class MojPropBodyBoundaryTests(TestCase):
         self.assertEqual(response.status_code, 201)
         lead = MojPropRequest.objects.get(request_id=response.json()["request_id"])
         self.assertEqual(lead.notes, notes)
+
+    def test_standard_csrf_html_form_creates_one_consent_record(self):
+        from urllib.parse import urlencode
+        form = dict(self.valid, consent="on", csrfmiddlewaretoken=self.token)
+        response = self.client.post(
+            "/moj-prop-intake/", data=urlencode(form),
+            content_type="application/x-www-form-urlencoded",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        lead = MojPropRequest.objects.get(request_id=response.json()["request_id"])
+        self.assertEqual(lead.email, self.valid["email"])
+        self.assertTrue(lead.consent)
+        self.assertEqual(lead.route, self.valid["service"])
+
+    def test_html_form_with_csrf_header_and_no_hidden_field_is_valid(self):
+        from urllib.parse import urlencode
+        form = dict(self.valid, consent="1")
+        response = self.post(urlencode(form), ctype="application/x-www-form-urlencoded")
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_html_form_rejects_missing_or_false_consent(self):
+        from urllib.parse import urlencode
+        for consent in ("false", "0", ""):
+            with self.subTest(consent=consent):
+                form = dict(self.valid, consent=consent)
+                response = self.post(urlencode(form), ctype="application/x-www-form-urlencoded")
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("consent", response.json()["fields"])
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_html_form_rejects_duplicate_csrf_hidden_fields(self):
+        from urllib.parse import urlencode
+        form = dict(self.valid, consent="on", csrfmiddlewaretoken=self.token)
+        body = urlencode(form) + "&csrfmiddlewaretoken=" + self.token
+        response = self.post(body, ctype="application/x-www-form-urlencoded")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_html_form_rejects_unrecognized_payment_fields(self):
+        from urllib.parse import urlencode
+        form = dict(self.valid, consent="on", payment_receiver="attacker")
+        response = self.post(urlencode(form), ctype="application/x-www-form-urlencoded")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
