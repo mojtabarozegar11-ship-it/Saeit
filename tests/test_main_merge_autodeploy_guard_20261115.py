@@ -17,13 +17,17 @@ class MainMergeCannotPublishTests(unittest.TestCase):
         self.assertIn("jobs:\n  publish:\n    #", text)
         publish = text.split("jobs:\n  publish:", 1)[1]
         for clause in (
-            "github.event_name == 'workflow_dispatch'",
-            "github.ref == 'refs/heads/main'",
-            "inputs.owner_approved_live_deploy == true",
-            "vars.ZOMOROD_BACKUP_RESTORE_VERIFIED == 'true'",
-            "vars.ZOMOROD_ROLLBACK_VERIFIED == 'true'",
-            "vars.ZOMOROD_TENANT_ISOLATION_VERIFIED == 'true'",
+            "if: github.event_name == 'workflow_dispatch'",
+            '[[ "$GITHUB_REF" == "refs/heads/main" ]]',
+            "OWNER_APPROVED: ${{ inputs.owner_approved_live_deploy }}",
+            "BACKUP_RESTORE_VERIFIED: ${{ vars.ZOMOROD_BACKUP_RESTORE_VERIFIED }}",
+            "ROLLBACK_VERIFIED: ${{ vars.ZOMOROD_ROLLBACK_VERIFIED }}",
+            "TENANT_ISOLATION_VERIFIED: ${{ vars.ZOMOROD_TENANT_ISOLATION_VERIFIED }}",
             '[[ "$OWNER_APPROVED_SHA" == "$GITHUB_SHA" ]]',
+            '[[ "$OWNER_APPROVED" == "true" ]]',
+            '[[ "$BACKUP_RESTORE_VERIFIED" == "true" ]]',
+            '[[ "$ROLLBACK_VERIFIED" == "true" ]]',
+            '[[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]',
         ):
             with self.subTest(clause=clause):
                 self.assertIn(clause, publish)
