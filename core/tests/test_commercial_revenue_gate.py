@@ -141,7 +141,8 @@ class CommercialGateTests(unittest.TestCase):
             owner_approved=True, legal_reviewed=True,
             kyc_ready=True, rights_cleared=True,
             delivery_manifest_sha256="a" * 64,
-        ), tenant_registry={"moj_prop": "mojplaywin.com"})
+        ), tenant_registry={"moj_prop": "mojplaywin.com"},
+           independent_release_verifier=lambda offer: True)
 
     def test_active_digital_or_game_offer_requires_file_manifest(self):
         for service in (OfferType.DIGITAL_PRODUCT, OfferType.GAME):
@@ -1420,6 +1421,42 @@ class CommercialGateTests(unittest.TestCase):
         with self.assertRaisesRegex(CommercialGateError, "amount_precision_exceeds_safe_limit"):
             invoice_commitment(order_id="order-52", invoice_id="invoice-52",
                                amount=Decimal("0." + "1" * 140), currency="USD")
+
+
+    def test_full_internal_release_booleans_are_not_authorization(self):
+        with self.assertRaisesRegex(CommercialGateError, "independent_release_verifier_required"):
+            validate_offer(self.offer(
+                active=True, owner_approved=True, legal_reviewed=True,
+                kyc_ready=True, rights_cleared=True),
+                tenant_registry={"moj_prop": "mojplaywin.com"})
+
+    def test_release_verifier_requires_literal_boolean_true(self):
+        for value in (False, "true", 1, None):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(CommercialGateError, "independent_release_unverified"):
+                    validate_offer(self.offer(
+                        active=True, owner_approved=True, legal_reviewed=True,
+                        kyc_ready=True, rights_cleared=True),
+                        tenant_registry={"moj_prop": "mojplaywin.com"},
+                        independent_release_verifier=lambda offer: value)
+
+    def test_release_verifier_unavailable_fails_closed(self):
+        def unavailable(_):
+            raise OSError("release authorization unavailable")
+        with self.assertRaisesRegex(CommercialGateError, "independent_release_verifier_failed"):
+            validate_offer(self.offer(
+                active=True, owner_approved=True, legal_reviewed=True,
+                kyc_ready=True, rights_cleared=True),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=unavailable)
+
+    def test_tenant_registry_type_errors_are_fail_closed(self):
+        with self.assertRaisesRegex(CommercialGateError, "tenant_registry_invalid"):
+            validate_offer(self.offer(), tenant_registry=["moj_prop"])
+
+    def test_release_verifier_must_be_callable(self):
+        with self.assertRaisesRegex(CommercialGateError, "release_verifier_invalid"):
+            validate_offer(self.offer(), independent_release_verifier="yes")
 
 
 if __name__ == "__main__":
