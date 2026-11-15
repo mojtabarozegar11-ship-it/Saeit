@@ -79,9 +79,28 @@ def _message(quote):
     }, sort_keys=True, separators=(",", ":")).encode("ascii")
 
 
+def _order_is_authoritative(order_id, tenant_id, sku, amount_usd, order_registry):
+    """Quote prices must match an unpaid order from the protected DB snapshot."""
+    if type(order_registry) is not dict:
+        return False
+    record = order_registry.get(order_id)
+    if type(record) is not dict:
+        return False
+    if (record.get("tenant_id") != tenant_id
+            or record.get("sku") != sku
+            or record.get("payment_state") != "pending"
+            or record.get("cancelled") is not False):
+        return False
+    try:
+        return _amount(record.get("usd_price"), "order_price") == _amount(amount_usd, "quote_price")
+    except NativeTrxQuoteError:
+        return False
+
+
 def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
                           usd_price, trx_usd_rate, observed_at_utc,
-                          expires_at_utc, signing_key, now_utc):
+                          expires_at_utc, signing_key, now_utc,
+                          trusted_order_registry):
     """Authenticated pricing, not an invoice. Called only after a durable order ID.
 
     A protected server clock MUST be passed at issuance. Rates older than
@@ -112,6 +131,8 @@ def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
             and timedelta(0) < expires_at_utc - observed_at_utc <= MAX_RATE_AGE):
         raise NativeTrxQuoteError("exchange_rate_expired")
     usd, rate = _amount(usd_price, "usd_price"), _amount(trx_usd_rate, "trx_rate")
+    if not _order_is_authoritative(order_id, tenant.tenant_id, sku, usd, trusted_order_registry):
+        raise NativeTrxQuoteError("trusted_order_missing_or_mismatched")
     if rate < Decimal("0.000001") or rate > Decimal("10000"):
         raise NativeTrxQuoteError("exchange_rate_out_of_bounds")
     # Integral-SUN ceiling never quotes a transfer smaller than 1 SUN.
@@ -129,8 +150,9 @@ def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
     return NativeTrxQuote(**{**q.__dict__, "signature": mac})
 
 
-def verify_native_trx_quote(*, quote, merchant_registry, now_utc, signing_key):
-    """Read-only verifier. A verified quote still cannot credit any payment."""
+def verify_native_trx_quote(*, quote, merchant_registry, now_utc, signing_key,
+                            trusted_order_registry):
+    """Read-only verifier. An accurate order quote still cannot credit a payment."""
     if not isinstance(quote, NativeTrxQuote) or type(merchant_registry) is not dict:
         return False
     try:
@@ -162,6 +184,9 @@ def verify_native_trx_quote(*, quote, merchant_registry, now_utc, signing_key):
             return False
         usd = _amount(quote.usd_price, "usd_price")
         rate = _amount(quote.trx_usd_rate, "trx_rate")
+        if not _order_is_authoritative(quote.order_id, quote.tenant_id, quote.sku,
+                                       usd, trusted_order_registry):
+            return False
         if not Decimal("0.000001") <= rate <= Decimal("10000"):
             return False
         expected_sun = int((usd / rate * SUN).to_integral_value(rounding=ROUND_CEILING))
