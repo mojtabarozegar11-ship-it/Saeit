@@ -145,7 +145,10 @@ def brand_product_detail(request, product_id):
         "is_preview": not matched,
     }
     response = render(request, "mojplaywin/product_detail.html", context)
-    response["Cache-Control"] = "public, max-age=300"
+    # A buy button depends on mutable merchant, rights and gateway gates.
+    # Never cache a stale CTA after the checkout is revoked or put on hold.
+    response["Cache-Control"] = "private, no-store, max-age=0, must-revalidate"
+    response["Pragma"] = "no-cache"
     if not matched:
         response["X-Robots-Tag"] = "noindex, nofollow"
     return response

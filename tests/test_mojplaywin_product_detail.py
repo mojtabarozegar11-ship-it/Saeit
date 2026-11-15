@@ -201,3 +201,28 @@ class MojPlayWinProductDetailsTests(TestCase):
             response = self.get(72)
         self.assertFalse(response.context["purchase_available"])
         approved.assert_not_called()
+
+    def test_payment_button_revocation_is_not_served_from_public_cache(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        with patch("core.mojplaywin_product_detail._approved_purchase_url",
+                   side_effect=["/commerce/book/72/", None]) as gateway:
+            initially_available = self.get(72)
+            subsequently_held = self.get(72)
+        self.assertEqual(gateway.call_count, 2)
+        for response in (initially_available, subsequently_held):
+            self.assertIn("private", response["Cache-Control"])
+            self.assertIn("no-store", response["Cache-Control"])
+            self.assertIn("must-revalidate", response["Cache-Control"])
+            self.assertEqual(response["Pragma"], "no-cache")
+        self.assertContains(initially_available, 'href="/commerce/book/72/"')
+        self.assertNotContains(subsequently_held, 'href="/commerce/book/72/"')
+        self.assertFalse(subsequently_held.context["purchase_available"])
+
+    def test_unmatched_preview_is_not_publicly_cached(self):
+        response = self.get(72)
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertEqual(response["Pragma"], "no-cache")
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
