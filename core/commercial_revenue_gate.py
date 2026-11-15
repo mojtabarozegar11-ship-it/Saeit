@@ -140,7 +140,11 @@ def validate_offer(
     offer_id = _slug(offer.offer_id, "offer_id")
     tenant_id = _slug(offer.tenant_id, "tenant_id")
     host = _text(offer.canonical_host, "canonical_host").lower()
-    if host != offer.canonical_host or "://" in host or "/" in host or not _HOST.fullmatch(host):
+    if (host != offer.canonical_host or "://" in host or "/" in host
+            or not _HOST.fullmatch(host)
+            or len(host) > 253
+            or any(not label or len(label) > 63 or label.startswith("-")
+                   or label.endswith("-") for label in host.split("."))):
         raise CommercialGateError("canonical_host_invalid")
     currency = _currency(offer.currency)
     (_sun_amount if currency == "TRX" else _amount)(offer.price, "price")
