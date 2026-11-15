@@ -285,6 +285,6 @@ class IndependentAttestationTests(SimpleTestCase):
         ).encode("utf-8")
         secret = key if key is not None else KEYS[packet["key_id"]]
         packet["signature"] = hmac.new(
-            secret.encode("utf-8"), b"MOJPROP-ATTESTATION-v1\\n" + body,
+            secret.encode("utf-8"), b"MOJPROP-ATTESTATION-v1\n" + body,
             hashlib.sha256,
         ).hexdigest()
