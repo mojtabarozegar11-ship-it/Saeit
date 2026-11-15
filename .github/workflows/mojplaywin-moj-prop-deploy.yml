@@ -36,8 +36,8 @@ on:
         description: "Owner-approved release only after independently verified restore and tenant isolation"
         required: true
         type: choice
-        options: [NO, OWNER_APPROVED]
-        default: NO
+        options: ['NO', 'OWNER_APPROVED']
+        default: 'NO'
 
 permissions:
   contents: read
