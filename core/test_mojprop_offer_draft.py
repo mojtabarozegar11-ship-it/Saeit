@@ -38,6 +38,43 @@ class MojPropOfferDraftTests(TestCase):
         self.assertIn("NO", draft)
         self.assertEqual(self.lead.status, "reviewing")
 
+    def test_canonical_starter30_draft_never_substitutes_usd149_blueprint_price(self):
+        self.lead.notes = (
+            "Requested canonical product: MOJPROP-STARTER30 (one-time "
+            "indicative 30 native TRX; written terms and verified lawful invoice "
+            "required; NOT paid)\n"
+            "Please send the individual educational ten-session journal and scorecard."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Moj Prop Starter 30", draft)
+        self.assertIn("30 native TRX INDICATIVE", draft)
+        self.assertIn("price WITHHELD", draft)
+        self.assertIn("Payment: DISABLED", draft)
+        self.assertNotIn("Indicative starting amount: USD 149", draft)
+        self.assertNotIn("/moj-prop/samples/prop-blueprint/", draft)
+        self.assertNotIn("payable quote", draft.split("Requested Starter30 reference: ", 1)[0])
+
+    def test_unanchored_starter30_reference_blocks_generic_blueprint_quote(self):
+        self.lead.notes = (
+            "The buyer mentions MOJPROP-STARTER30 as a possible option but "
+            "also wants a funded challenge and a separately quoted rulebook."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Price WITHHELD: ambiguous Starter30", draft)
+        self.assertNotIn("Indicative starting amount: USD 149", draft)
+        self.assertNotIn("/moj-prop/samples/prop-blueprint/", draft)
+
+    def test_other_service_cannot_smuggle_starter30_into_a_dollar_quote(self):
+        self.lead.route = "brief"
+        self.lead.notes = (
+            "Requested canonical product: MOJPROP-STARTER30 (30 TRX). "
+            "Please issue a market brief instead."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Requested service: ", draft)
+        self.assertNotIn("Requested Starter30 reference: 30 native TRX", draft)
+        self.assertIn("Payment: DISABLED", draft)
+
     def test_new_unreviewed_consentless_or_closed_cannot_generate_offer(self):
         for status, consent in (("new", True), ("closed", True), ("reviewing", False)):
             with self.subTest(status=status, consent=consent):
