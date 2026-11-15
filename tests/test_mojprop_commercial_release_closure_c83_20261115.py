@@ -87,6 +87,25 @@ class CommercialBackendClosureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "partial Moj Prop admin"):
             check_schema_closure(self.live, SOURCE)
 
+    def test_existing_complete_live_model_and_admin_match_is_accepted(self):
+        for name in ("models.py", "admin.py"):
+            shutil.copyfile(SOURCE / "core" / name, self.live / "core" / name)
+        self.assertFalse(check_schema_closure(self.live, SOURCE)["manual_deploy_authorized"])
+
+    def test_existing_live_offer_model_drift_requires_independent_reconciliation(self):
+        for name in ("models.py", "admin.py"):
+            shutil.copyfile(SOURCE / "core" / name, self.live / "core" / name)
+        model = self.live / "core/models.py"
+        original = model.read_text(encoding="utf-8")
+        self.assertIn("class MojPropOffer(T):", original)
+        model.write_text(
+            original.replace("class MojPropOffer(T):",
+                             "class MojPropOffer(T):\n    forged_column = True", 1),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "differs from reviewed source"):
+            check_schema_closure(self.live, SOURCE)
+
     def test_unknown_migration_operations_not_overwritten(self):
         target = self.live / "core/migrations/0042_mojprop_offer.py"
         original = (SOURCE / "core/migrations/0042_mojprop_offer.py").read_text()
