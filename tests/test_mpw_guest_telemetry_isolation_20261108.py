@@ -52,7 +52,8 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        # Match the actual invoice handler contract: a committed HTTP 201.
+        response = types.SimpleNamespace(status_code=201)
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
@@ -76,6 +77,13 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
             self.assertEqual(dispatch.call_count, 2)
+            # A rejected invoice is not a completed checkout; never report it
+            # as an invoice_created event.
+            rejected = types.SimpleNamespace(status_code=400)
+            dispatch.return_value = rejected
+            self.assertIs(namespace["start_order"](request, product_id=72), rejected)
+            self.assertEqual(record.call_count, 1)
+            self.assertEqual(dispatch.call_count, 3)
 
 
 if __name__ == "__main__":
