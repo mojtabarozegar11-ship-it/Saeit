@@ -506,6 +506,7 @@ class MojPropRequest(T):
         ("signals", "Educational signals and market brief"),
         ("brief", "Private market brief"),
         ("audit", "mojtaba.bot.ai commercial-gate audit"),
+        ("digital", "Digital product purchase inquiry"),
     )
     HORIZON_CHOICES = (
         ("urgent", "Today / urgent"),
@@ -528,6 +529,8 @@ class MojPropRequest(T):
     route = models.CharField(max_length=30, choices=ROUTE_CHOICES)
     horizon = models.CharField(max_length=20, choices=HORIZON_CHOICES)
     notes = models.TextField()
+    # Product inquiry is a lead only, never a paid order.
+    product_id = models.PositiveBigIntegerField(null=True, blank=True)
     consent = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
     source = models.CharField(max_length=80, default="moj-prop")
@@ -622,7 +625,7 @@ class MojPropOffer(T):
             errors["delivery_days"] = "Delivery must be between 1 and 90 days."
         if type(self.version) is not int or not 1 <= self.version <= 999:
             errors["version"] = "Proposal version must be 1-999."
-        if self.lead_id and self.lead.route not in ("blueprint", "signals", "brief", "audit"):
+        if self.lead_id and self.lead.route not in ("blueprint", "signals", "brief", "audit", "digital"):
             errors["lead"] = "Unsupported commercial request."
         if self.pk:
             prior = type(self).objects.filter(pk=self.pk).first()
