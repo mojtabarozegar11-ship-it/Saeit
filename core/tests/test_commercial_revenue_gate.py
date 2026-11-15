@@ -2119,6 +2119,78 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def _bound_trx_merchant_ledger(self, directory):
+        ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+        self._prepare_private_invoice(ledger, "order-52")
+        offer = self._approved_merchant_offer_for_binding(offer_type=OfferType.TRX_GATEWAY)
+        ledger.bind_approved_merchant_order(
+            order_id="order-52", offer=offer,
+            tenant_registry={"moj_prop": "mojplaywin.com"},
+            independent_release_verifier=lambda offer: True,
+            release_evidence_sha256="d" * 64)
+        return ledger, offer
+
+    def test_merchant_trx_review_requires_durable_merchant_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            with self.assertRaisesRegex(CommercialGateError, "merchant_order_binding_required"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=self._approved_merchant_offer_for_binding(
+                        offer_type=OfferType.TRX_GATEWAY),
+                    evidence=self.payment(), invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: True)
+            ledger.close()
+
+    def test_merchant_trx_review_denies_cross_tenant_bound_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, offer = self._bound_trx_merchant_ledger(directory)
+            wrong = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.TRX_GATEWAY, canonical_host="another.example")
+            with self.assertRaisesRegex(CommercialGateError, "merchant_order_binding_mismatch"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=wrong, evidence=self.payment(),
+                    invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "another.example"},
+                    independent_release_verifier=lambda offer: True)
+            ledger.close()
+
+    def test_merchant_trx_review_rejects_nonissued_invoice_before_external_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            offer = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.TRX_GATEWAY)
+            ledger.bind_approved_merchant_order(
+                order_id="order-52", offer=offer,
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                release_evidence_sha256="d" * 64)
+            calls = []
+            with self.assertRaisesRegex(CommercialGateError, "bound_merchant_invoice_required"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=offer,
+                    evidence=self.payment(), invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: calls.append(offer) or True)
+            self.assertEqual(calls, [])
+            ledger.close()
+
+    def test_valid_durable_merchant_trx_receipt_preflight_returns_only_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, offer = self._bound_trx_merchant_ledger(directory)
+            digest = ledger.verify_bound_merchant_receipt(
+                order_id="order-52", offer=offer,
+                evidence=self.payment(), invoice_id="invoice-52",
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True)
+            self.assertEqual(len(digest), 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
