@@ -67,18 +67,36 @@ def _verify_evidence(invoice,normalized,proof):
         or type(invoice.quote_usd_per_asset) is not Decimal
         or not invoice.quote_usd_per_asset.is_finite()
         or invoice.quote_usd_per_asset<=0
-        or not invoice.sender_challenge_id
-        or invoice.sender_signature_verified_at is None):
+        or type(invoice.quote_source) is not str
+        or invoice.quote_source not in ("coingecko","coinbase")
+        or type(invoice.sender_challenge_id) is not str
+        or not 8<=len(invoice.sender_challenge_id)<=128
+        or any(not 33<=ord(ch)<=126 for ch in invoice.sender_challenge_id)):
         raise SettlementRejected("Unsupported or altered payment invoice")
+    # A compromised or legacy persisted invoice cannot bypass the *original*
+    # fresh independent rate and verified sender challenge at settlement time.
+    # Guard types first so malformed DB rows fail closed as domain errors.
+    stamps = (
+        invoice.issued_at, invoice.expires_at,
+        invoice.quote_observed_at, invoice.sender_signature_verified_at,
+    )
+    if any(type(stamp) is not datetime or timezone.is_naive(stamp)
+           for stamp in stamps):
+        raise SettlementRejected("Invoice timestamps are not independently trustworthy")
     if not (invoice.issued_at<invoice.expires_at
-            <=invoice.issued_at+timedelta(minutes=10)):
-        raise SettlementRejected("Invalid locked payment window")
+            <=invoice.issued_at+timedelta(minutes=10)
+            and timedelta(0)<=invoice.issued_at-invoice.quote_observed_at
+            <=timedelta(seconds=90)
+            and timedelta(0)<=invoice.issued_at-invoice.sender_signature_verified_at
+            <=timedelta(minutes=5)):
+        raise SettlementRejected("Locked payment window or issuance evidence is invalid")
     block_time=proof.get("block_timestamp")
     if (type(block_time) is not datetime or timezone.is_naive(block_time)
         or not invoice.issued_at<=block_time<=invoice.expires_at):
         raise SettlementRejected("Transfer was not mined within the quote window")
     if (
         proof.get("finalized") is not True
+        or type(proof.get("order_id")) is not int
         or proof.get("order_id")!=invoice.order_id
         or proof.get("network")!=invoice.network
         or proof.get("tx_hash")!=normalized
