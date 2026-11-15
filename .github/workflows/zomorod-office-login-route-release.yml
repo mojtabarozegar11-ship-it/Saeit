@@ -28,7 +28,9 @@ jobs:
           echo "OFFICE_LOGIN_ROUTE_SOURCE=verified"
   release:
     needs: validate
-    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # RETIRED: an unrelated MojPlayWin URL merge must never publish Zomorod hosting files.
+    # No workflow_dispatch is declared. Only the new manual release pipeline may deploy.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
