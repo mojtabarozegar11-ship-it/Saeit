@@ -18,7 +18,7 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 
 
 class CommercialGateError(ValueError):
@@ -354,7 +354,16 @@ def transition_state(
 class SQLiteCommercialLedger:
     """Small durable, append-only order ledger for private governed staging."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, *,
+                 settlement_verifier: Optional[Callable[[PaymentEvidence], bool]] = None,
+                 delivery_verifier: Optional[Callable[[str, str], bool]] = None):
+        # No independent verification adapter means no financial completion.
+        if settlement_verifier is not None and not callable(settlement_verifier):
+            raise CommercialGateError("settlement_verifier_invalid")
+        if delivery_verifier is not None and not callable(delivery_verifier):
+            raise CommercialGateError("delivery_verifier_invalid")
+        self._settlement_verifier = settlement_verifier
+        self._delivery_verifier = delivery_verifier
         # This ledger contains private customer/order references and MUST NOT
         # silently become a world-readable file or follow a symlink.
         if not isinstance(path, str) or not path:
@@ -529,6 +538,24 @@ class SQLiteCommercialLedger:
             current = CommercialState(row["state"])
             if target is CommercialState.FULFILLED and payload_digest != fulfillment_manifest_sha256:
                 raise CommercialGateError("fulfillment_payload_mismatch")
+            if target in (CommercialState.FULFILLED, CommercialState.VERIFIED_REVENUE):
+                if self._delivery_verifier is None:
+                    raise CommercialGateError("independent_delivery_verifier_required")
+                manifest = fulfillment_manifest_sha256
+                if target is CommercialState.VERIFIED_REVENUE:
+                    delivered = self.connection.execute(
+                        "SELECT payload_digest FROM order_events WHERE order_id = ? AND state = ?",
+                        (order_id, CommercialState.FULFILLED.value),
+                    ).fetchone()
+                    if delivered is None:
+                        raise CommercialGateError("fulfillment_evidence_missing")
+                    manifest = delivered["payload_digest"]
+                try:
+                    confirmed = self._delivery_verifier(order_id, manifest)
+                except Exception:
+                    raise CommercialGateError("independent_delivery_verifier_failed") from None
+                if confirmed is not True:
+                    raise CommercialGateError("independent_delivery_unverified")
             evidence_digest = None
             if target in (CommercialState.SETTLED, CommercialState.VERIFIED_REVENUE):
                 if not isinstance(payment_evidence, PaymentEvidence):
@@ -541,6 +568,14 @@ class SQLiteCommercialLedger:
                 )
                 if target is CommercialState.SETTLED and payload_digest != evidence_digest:
                     raise CommercialGateError("settlement_payload_mismatch")
+                if self._settlement_verifier is None:
+                    raise CommercialGateError("independent_settlement_verifier_required")
+                try:
+                    confirmed = self._settlement_verifier(payment_evidence)
+                except Exception:
+                    raise CommercialGateError("independent_settlement_verifier_failed") from None
+                if confirmed is not True:
+                    raise CommercialGateError("independent_settlement_unverified")
                 issued = self.connection.execute(
                     "SELECT invoice_id, payload_digest FROM issued_invoices WHERE order_id = ?", (order_id,),
                 ).fetchone()
