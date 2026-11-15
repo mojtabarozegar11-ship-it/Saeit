@@ -284,8 +284,48 @@ from .models import MojPropRequest
 
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
-    list_display = ("request_id", "name", "email", "route", "status", "created_at")
+    """Manual customer-request desk, never an automatic funded-account issuer."""
+    list_display = ("request_id", "route", "horizon", "status", "created_at", "reviewed_at")
     list_filter = ("status", "route", "horizon", "created_at")
-    search_fields = ("request_id", "name", "email", "notes")
-    readonly_fields = ("request_id", "created_at", "updated_at", "ip_hash", "user_agent")
+    search_fields = ("request_id", "name", "email")
     ordering = ("-created_at",)
+    list_per_page = 50
+    # Customer-submitted facts and consent are immutable in admin. Only manual
+    # commercial review state/notes can change; no silent rewrite of a lead.
+    readonly_fields = (
+        "request_id", "name", "email", "route", "horizon", "notes",
+        "consent", "source", "ip_hash", "user_agent",
+        "created_at", "updated_at", "reviewed_at",
+    )
+    fields = readonly_fields + ("status", "internal_note")
+
+    def _owner_only(self, request):
+        user = getattr(request, "user", None)
+        return bool(user is not None and user.is_authenticated and user.is_superuser)
+
+    def has_module_permission(self, request):
+        return self._owner_only(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._owner_only(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._owner_only(request)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        if not self._owner_only(request):
+            raise PermissionError("owner_only_moj_prop_review")
+        if not change:
+            raise PermissionError("public_leads_must_use_consent_intake")
+        # Set first-review timestamp on the first explicit owner action, not
+        # when a customer merely submits a request or when CI makes a fixture.
+        if obj.reviewed_at is None and obj.status != "new":
+            from django.utils import timezone
+            obj.reviewed_at = timezone.now()
+        return super().save_model(request, obj, form, change)
