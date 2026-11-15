@@ -89,7 +89,7 @@ def signal_interest(request):
 
     with transaction.atomic():
         SignalInterest.objects.get_or_create(
-            email=email, brand=brand, plan_code=sku,
+            email=email, offer_family="signals", brand=brand, plan_code=sku,
             defaults={
                 "source_host": host,
                 "source_language": language,

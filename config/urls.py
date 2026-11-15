@@ -120,7 +120,13 @@ for _brand_slug, _fa, _en, _ar in BRANDS:
         path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
         path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
     ])
-urlpatterns = [path("market-signals/interest/", signal_interest, name="canonical_signal_interest")] + _finance_routes + urlpatterns
+from core.moj_prop_public import moj_prop_public, moj_prop_public_interest
+urlpatterns = [
+    path("moj-prop/interest/", moj_prop_public_interest, name="public_moj_prop_interest"),
+    path("moj-prop/", moj_prop_public, name="public_moj_prop"),
+    path("moj-prop/<str:lang>/", moj_prop_public, name="public_moj_prop_language"),
+    path("market-signals/interest/", signal_interest, name="canonical_signal_interest"),
+] + _finance_routes + urlpatterns
 
 from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]

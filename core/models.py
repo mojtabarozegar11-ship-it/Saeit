@@ -499,4 +499,4 @@ class EducationCertificate(T):
     issued_at = models.DateTimeField(auto_now_add=True)
 
 # Central consent-only signal customer-interest queue.
-from .signal_interest_models import SignalInterest
+from .signal_interest_models import CommercialInterest, SignalInterest
