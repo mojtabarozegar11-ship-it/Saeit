@@ -52,5 +52,7 @@ jobs:
           tests.test_moj_prop_release_gate
           tests.test_tron_rollout_inventory
           tests.test_moj_prop_independent_attestation
+          tests.test_moj_prop_allocation_service
+          tests.test_moj_prop_signed_evidence
           tests.test_tron_manual_reconciliation
           --verbosity 2
