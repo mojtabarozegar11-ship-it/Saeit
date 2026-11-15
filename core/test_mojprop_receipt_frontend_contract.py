@@ -71,3 +71,18 @@ class MojPropReceiptFrontendContract(SimpleTestCase):
         self.assertIn("not submitted; local draft only", html)
         self.assertIn("download.disabled=false;", html)
         self.assertIn("Copy unavailable — use Save private receipt", html)
+
+    def test_financial_brand_signal_link_prefills_the_actual_service_code(self):
+        html = self.html()
+        self.assertIn("new URLSearchParams(window.location.search).get('service')", html)
+        self.assertIn("Object.prototype.hasOwnProperty.call(labels,selectedRoute)", html)
+        self.assertIn("document.getElementById('service').value=selectedRoute", html)
+        self.assertIn("<option value=\"signals\">Educational signals", html)
+        self.assertIn("const labels={", html)
+
+    def test_referral_query_is_not_interpolated_into_html_or_executed(self):
+        html = self.html()
+        self.assertNotIn("innerHTML=selectedRoute", html)
+        self.assertNotIn("eval(selectedRoute)", html)
+        self.assertNotIn("document.write(selectedRoute)", html)
+        self.assertNotIn("window.location.href=selectedRoute", html)
