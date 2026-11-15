@@ -29,6 +29,9 @@ URLCONF = Path("config/urls.py")
 FILES = (
     Path("core/models.py"),
     Path("core/admin.py"),
+    Path("core/mojprop_catalog_contract.py"),
+    Path("core/mojprop_offer_draft.py"),
+    Path("core/mojprop_workflow.py"),
     Path("core/mojprop_views.py"),
     Path("core/mojprop_receipts.py"),
     Path("core/migrations/0041_mojprop_request.py"),
