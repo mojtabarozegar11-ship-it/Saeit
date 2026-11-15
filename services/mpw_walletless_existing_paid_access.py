@@ -92,6 +92,17 @@ def verified_existing_walletless_item_access(user, item_id, *, asset_is_releasab
     try:
         if verified_walletless_credit(order, intent) is not True:
             return False
+        # A contemporary CommerceInvoice must use the normal commerce access
+        # contract. Never let this historical fallback bypass a revoked or
+        # incomplete invoice / CommerceReceipt on the SAME core Order.
+        invoice_model = apps.get_model("mpw_commerce", "CommerceInvoice")
+        invoice_relation = invoice_model._meta.get_field("order")
+        invoice_parent = getattr(invoice_relation, "related_model", None)
+        if getattr(getattr(invoice_parent, "_meta", None), "label_lower", "") != "core.order":
+            return False
+        if invoice_model.objects.filter(order_id=order.pk).exists():
+            return False
+
         grant = apps.get_model("mpw_commerce", "CommerceFulfillment")
         field = grant._meta.get_field("item")
         related = getattr(field, "related_model", None)
