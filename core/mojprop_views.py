@@ -257,12 +257,28 @@ def mojprop_intake(request):
     )
 
 
-@require_http_methods(["GET"])
+@csrf_protect
+@require_http_methods(["GET", "POST"])
 def mojprop_receipt_status(request):
-    """Signed private bearer receipt returns only public stage, never buyer PII."""
-    # Multiple bearer credentials on one URL are ambiguous: fail closed.
-    tokens = request.GET.getlist("receipt_token")
-    token = tokens[0] if len(tokens) == 1 else ""
+    """Buyer may submit bearer proof in a CSRF-protected POST body, not a URL.
+
+    Legacy GET remains for previously issued receipts; new UI MUST use POST.
+    Never log, echo, cache or place the signed token in a redirect.
+    """
+    if request.method == "POST":
+        try:
+            payload = _payload(request)
+        except OverflowError:
+            return _json({"ok": False, "detail": "Request is too large."}, status=413)
+        if (type(payload) is not dict
+                or set(payload) != {"receipt_token"}
+                or type(payload["receipt_token"]) is not str):
+            return _json({"ok": False, "detail": "Invalid receipt lookup."}, status=400)
+        token = payload["receipt_token"]
+    else:
+        # Multiple bearer credentials on one URL are ambiguous: fail closed.
+        tokens = request.GET.getlist("receipt_token")
+        token = tokens[0] if len(tokens) == 1 else ""
     request_id = verify_receipt_token(token)
     if request_id is None:
         return _json({
