@@ -97,3 +97,30 @@ def test_quote_zero_or_negative_margin_remains_private_and_unsellable(tmp_path):
     assert result["unit_economics_viable"] is False
     assert result["quote_approved"] is False
     assert result["external_settlement"] is None
+
+
+def test_quote_does_not_reuse_world_readable_artifact(tmp_path):
+    request = {"service_code": "AGR-01", "scenario": SCENARIO}
+    with patch("core.mojtaba_commercial_services.Path.home", return_value=tmp_path):
+        assert prepare_private_quote(request)["created"] is True
+        result = next(tmp_path.rglob("QUOTE-*.md"))
+        result.chmod(0o644)
+        with pytest.raises(QuoteScenarioError, match="QUOTE_UNSAFE_EXISTING"):
+            prepare_private_quote(request)
+        assert result.exists()
+
+
+def test_quote_concurrent_writer_cannot_be_overwritten(tmp_path):
+    request = {"service_code": "AGR-01", "scenario": SCENARIO}
+
+    def conflicting_writer(src, dst, **kwargs):
+        Path(dst).write_text("trusted older document", encoding="utf-8")
+        raise FileExistsError("another writer")
+
+    with patch("core.mojtaba_commercial_services.Path.home", return_value=tmp_path):
+        with patch("core.mojtaba_private_quote.os.link", side_effect=conflicting_writer):
+            with pytest.raises(QuoteScenarioError, match="QUOTE_CONCURRENT_COLLISION"):
+                prepare_private_quote(request)
+    reports = list(tmp_path.rglob("QUOTE-*.md"))
+    assert len(reports) == 1
+    assert reports[0].read_text(encoding="utf-8") == "trusted older document"
