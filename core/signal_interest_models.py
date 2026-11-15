@@ -26,8 +26,10 @@ class CommercialInterest(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("email", "offer_family", "brand", "plan_code"),
-                                    name="core_commercial_interest_key"),
+            models.UniqueConstraint(
+                fields=("email", "offer_family", "brand", "plan_code", "source_host"),
+                name="core_comint_host_key",
+            ),
         ]
         indexes = [
             models.Index(fields=("status", "-created_at"),

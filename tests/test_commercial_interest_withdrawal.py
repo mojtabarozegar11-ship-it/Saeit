@@ -144,3 +144,34 @@ class WithdrawalTests(TestCase):
         self.assertEqual(second.status_code, 202)
         self.assertNotIn("commercial-interest/withdraw/", second.content.decode())
         self.assertEqual(CommercialInterest.objects.count(), 1)
+
+
+    def test_same_email_on_two_hosts_has_independent_optout_tokens(self):
+        body = {"email": "buyer@example.org", "brand": "saman",
+                "plan_code": "moj-signals-standard", "source_language": "en",
+                "contact_consent": "yes", "consent_version": "mojtaba-signals-interest-v1",
+                "csrfmiddlewaretoken": "browser-managed"}
+        first = self.post_interest("/market-signals/interest/", body)
+        second = self.client.post(
+            "/market-signals/interest/", urlencode({**body, "source_language": "fa"}),
+            content_type="application/x-www-form-urlencoded",
+            secure=True, HTTP_HOST="zomorodmelal.ir",
+        )
+        self.assertEqual((first.status_code, second.status_code), (202, 202))
+        self.assertEqual(CommercialInterest.objects.count(), 2)
+        apex = CommercialInterest.objects.get(source_host="mojplaywin.com")
+        other = CommercialInterest.objects.get(source_host="zomorodmelal.ir")
+        self.assertNotEqual(self.path(apex), self.path(other))
+        self.assertEqual(
+            self.client.post(self.path(apex),
+                {"csrfmiddlewaretoken": "browser-managed"},
+                secure=True, HTTP_HOST="zomorodmelal.ir").status_code,
+            404,
+        )
+        result = self.client.post(self.path(other),
+            {"csrfmiddlewaretoken": "browser-managed"},
+            secure=True, HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(result.status_code, 200)
+        apex.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((apex.status, other.status), ("new", "withdrawn"))

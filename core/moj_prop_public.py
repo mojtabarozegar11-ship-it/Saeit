@@ -127,7 +127,8 @@ def moj_prop_public_interest(request):
     with transaction.atomic():
         lead, created = CommercialInterest.objects.get_or_create(
             email=email, offer_family="moj_prop", brand="moj_prop", plan_code=SKU,
-            defaults={"source_host": host, "source_language": language,
+            source_host=host,
+            defaults={"source_language": language,
                       "consent_version": CONSENT},
         )
     label = {"en": "Withdraw contact consent", "fa": "لغو رضایت تماس",

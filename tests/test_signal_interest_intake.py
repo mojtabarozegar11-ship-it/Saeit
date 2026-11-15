@@ -240,3 +240,43 @@ class SignalInterestIntakeTests(TestCase):
         for u in (SimpleNamespace(is_active=True, is_superuser=False),
                   SimpleNamespace(is_active=False, is_superuser=True)):
             self.assertEqual(a.lead_counts(SimpleNamespace(user=u)), {})
+
+
+    def test_one_email_in_two_approved_sites_creates_two_host_bound_consents(self):
+        first = self.post()
+        second = self.post({**self.BASE, "source_language": "fa"},
+                           host="zomorodmelal.ir")
+        self.assertEqual((first.status_code, second.status_code), (202, 202))
+        leads = list(SignalInterest.objects.order_by("source_host"))
+        self.assertEqual(len(leads), 2)
+        self.assertEqual({lead.source_host for lead in leads},
+                         {"mojplaywin.com", "zomorodmelal.ir"})
+        self.assertEqual(len({lead.pk for lead in leads}), 2)
+        self.assertEqual(SignalInterest.objects.filter(status="new").count(), 2)
+        self.assertIn("commercial-interest/withdraw/", first.content.decode())
+        self.assertIn("commercial-interest/withdraw/", second.content.decode())
+
+    def test_repeating_an_intake_on_either_host_does_not_resurrect_or_duplicate(self):
+        self.assertEqual(self.post().status_code, 202)
+        self.assertEqual(self.post(host="zomorodmelal.ir").status_code, 202)
+        original = SignalInterest.objects.get(source_host="mojplaywin.com")
+        original.status = "withdrawn"
+        original.save(update_fields=["status"])
+        repeat_a = self.post()
+        repeat_b = self.post(host="zomorodmelal.ir")
+        self.assertEqual((repeat_a.status_code, repeat_b.status_code), (202, 202))
+        self.assertNotIn("commercial-interest/withdraw/", repeat_a.content.decode())
+        self.assertNotIn("commercial-interest/withdraw/", repeat_b.content.decode())
+        self.assertEqual(SignalInterest.objects.count(), 2)
+        self.assertEqual(SignalInterest.objects.get(source_host="mojplaywin.com").status,
+                         "withdrawn")
+        self.assertEqual(SignalInterest.objects.get(source_host="zomorodmelal.ir").status,
+                         "new")
+
+    def test_source_host_is_immutable_even_with_host_bound_identity(self):
+        self.post()
+        lead = SignalInterest.objects.get()
+        lead.source_host = "zomorodmelal.ir"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["source_host"])
+        self.assertEqual(SignalInterest.objects.get().source_host, "mojplaywin.com")

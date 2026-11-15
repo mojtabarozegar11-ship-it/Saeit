@@ -92,8 +92,8 @@ def signal_interest(request):
     with transaction.atomic():
         lead, created = SignalInterest.objects.get_or_create(
             email=email, offer_family="signals", brand=brand, plan_code=sku,
+            source_host=host,
             defaults={
-                "source_host": host,
                 "source_language": language,
                 "consent_version": "mojtaba-signals-interest-v1",
             },

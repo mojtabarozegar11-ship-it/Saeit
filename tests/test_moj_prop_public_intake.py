@@ -179,3 +179,26 @@ class MojPropPublicIntakeTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(PaymentIntent.objects.count(), 0)
         self.assertEqual(len(mail.outbox), 0)
+
+
+    def test_apex_and_www_prop_host_consents_are_separate_rows(self):
+        self.assertEqual(self.post(host="mojplaywin.com").status_code, 202)
+        self.assertEqual(self.post(host="www.mojplaywin.com").status_code, 202)
+        leads = CommercialInterest.objects.filter(offer_family="moj_prop")
+        self.assertEqual(leads.count(), 2)
+        self.assertEqual(set(leads.values_list("source_host", flat=True)),
+                         {"mojplaywin.com", "www.mojplaywin.com"})
+
+    def test_withdrawn_apex_prop_does_not_invalidate_separate_www_consent(self):
+        self.post(host="mojplaywin.com")
+        self.post(host="www.mojplaywin.com")
+        apex = CommercialInterest.objects.get(source_host="mojplaywin.com")
+        apex.status = "withdrawn"
+        apex.save(update_fields=["status"])
+        self.assertEqual(self.post(host="mojplaywin.com").status_code, 202)
+        self.assertEqual(self.post(host="www.mojplaywin.com").status_code, 202)
+        self.assertEqual(CommercialInterest.objects.count(), 2)
+        self.assertEqual(CommercialInterest.objects.get(
+            source_host="mojplaywin.com").status, "withdrawn")
+        self.assertEqual(CommercialInterest.objects.get(
+            source_host="www.mojplaywin.com").status, "new")
