@@ -51,4 +51,4 @@ jobs:
       - name: Confirm durable model migrations are complete
         run: python manage.py makemigrations --check --dry-run signal_orders
       - name: Run transactional pending-order integration suite
-        run: python manage.py test signal_orders.tests --verbosity 2
+        run: python manage.py test signal_orders --verbosity 2
