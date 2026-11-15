@@ -90,6 +90,20 @@ def can_match(pattern: str, path: str) -> bool:
     )
 
 
+def manual_main_deployment_guarded(source: str, header: str) -> bool:
+    """Require a single exact manual-only job condition, not just a dispatch event."""
+    if event_block(header, "workflow_dispatch") is None:
+        return False
+    anchor = re.search(r"(?m)^  deploy-main:\s*$", source)
+    if anchor is None:
+        return False
+    tail = source[anchor.end():]
+    tail = re.split(r"(?m)^  [a-zA-Z][\w-]+:\s*$", tail, maxsplit=1)[0]
+    head = tail.split("\n    steps:", 1)[0]
+    conditions = re.findall(r"(?m)^    if:\s*(.+)$", head)
+    return conditions == ["github.event_name == 'workflow_dispatch'"]
+
+
 def inspect(filename: Path) -> dict:
     source = filename.read_text(encoding="utf-8")
     match = re.search(r"(?m)^jobs:\s*$", source)
@@ -105,6 +119,8 @@ def inspect(filename: Path) -> dict:
     ]
     name = filename.name
     job = LEGACY_LOCKS.get(name)
+    main_guarded = (manual_main_deployment_guarded(source, header)
+                    if name == MAIN_MANUAL_JOB[0] else None)
     locked = bool(
         job and re.search(
             r"(?m)^  " + re.escape(job) + r":\s*\n"
@@ -121,6 +137,7 @@ def inspect(filename: Path) -> dict:
         "deployer_indicators": [x for x in DEPLOY_MARKERS if x.lower() in source.lower()],
         "guarded_job": job,
         "guarded_job_locked": locked if job else None,
+        "manual_main_deployment_guarded": main_guarded,
     }
 
 
@@ -130,6 +147,10 @@ def main() -> None:
     unlocked_legacy = [
         v["workflow"] for v in inspected if v["guarded_job"] and not v["guarded_job_locked"]
     ]
+    main_site_manual_only = any(
+        v["workflow"] == MAIN_MANUAL_JOB[0] and v["manual_main_deployment_guarded"]
+        for v in inspected
+    )
     review = [
         v for v in inspected
         if v["runs_after_workflow"] or (v["triggered_by_candidate_paths"] and not v["guarded_job_locked"])
@@ -138,6 +159,7 @@ def main() -> None:
         "scope": "SOURCE ONLY; NEVER AUTHORIZES DEPLOYMENT",
         "workflows_scanned": len(inspected),
         "legacy_jobs_hard_stopped": not unlocked_legacy,
+        "main_site_deploy_manual_only": main_site_manual_only,
         "unlocked_legacy": unlocked_legacy,
         "other_trigger_paths_require_manual_review": review,
         "unrestricted_push_to_main": [
@@ -148,7 +170,7 @@ def main() -> None:
         "release_authorized": False,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if unlocked_legacy:
+    if unlocked_legacy or not main_site_manual_only:
         raise SystemExit(2)
 
 
