@@ -104,6 +104,34 @@ class SignalSubscriptionCommercialTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             self.full_review(tenant=self.tenant(brand="moj_prop"))
 
+    def test_each_mirror_identifies_only_mojtaba_bot_ai(self):
+        for brand in ("saman", "zahra", "taniya"):
+            record = canonical_signal_product("moj-signals-plus", brand)
+            self.assertEqual(record["only_organizational_bot"], "mojtaba.bot.ai")
+            self.assertFalse(record["checkout_enabled"])
+
+    def test_forged_approved_tenant_on_foreign_host_is_not_reviewable(self):
+        from dataclasses import replace
+        forged = replace(self.tenant(), host="evil.example.org")
+        result = self.full_review(tenant=forged)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_host_not_within_owned_domain", result["missing"])
+
+    def test_fake_approved_tenant_with_empty_accounting_identity_rejected(self):
+        from dataclasses import replace
+        forged = replace(self.tenant(), tenant_id="")
+        result = self.full_review(tenant=forged)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_identity_or_attestations_inconsistent", result["missing"])
+
+    def test_missing_attestations_still_block_even_if_dto_approved(self):
+        from dataclasses import replace
+        forged = replace(self.tenant(), eligible_for_checkout_review=True,
+                         missing=("refund_and_delivery_verified",))
+        result = self.full_review(tenant=forged)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_identity_or_attestations_inconsistent", result["missing"])
+
     def test_malformed_proof_rejected(self):
         with self.assertRaises(ValueError):
             self.full_review(proofs="approved")
