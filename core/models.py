@@ -543,3 +543,103 @@ class MojPropRequest(T):
             models.Index(fields=("email", "created_at"), name="mojprop_email_created_idx"),
             models.Index(fields=("ip_hash", "created_at"), name="mojprop_ip_created_idx"),
         ]
+
+class MojPropOffer(T):
+    """A priced manual-service proposal, never a paid order or delivered signal.
+
+    This record cannot charge a buyer, send an email or mark an order paid.
+    Buyers receive a quote only through an explicitly authorised channel.
+    """
+    STATUS_CHOICES = (
+        ("draft", "Draft - not issued"),
+        ("approved", "Reviewed for manual issuance"),
+        ("issued", "Manually issued - delivery not promised"),
+        ("accepted", "Acceptance recorded - not paid"),
+        ("cancelled", "Cancelled"),
+        ("expired", "Expired"),
+    )
+    CURRENCIES = (("USD", "US dollar"), ("IRR", "Iranian rial"))
+    lead = models.OneToOneField(
+        MojPropRequest, on_delete=models.PROTECT, related_name="commercial_offer"
+    )
+    title = models.CharField(max_length=180)
+    scope = models.TextField()
+    exclusions = models.TextField(
+        default="No live funded account, live trading, guaranteed returns or subscriptions."
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, choices=CURRENCIES, default="USD")
+    delivery_days = models.PositiveSmallIntegerField(default=7)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="mojprop_offers", null=True, blank=True,
+    )
+    internal_note = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="mojprop_offer_positive_amount",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(delivery_days__gte=1) & models.Q(delivery_days__lte=90),
+                name="mojprop_offer_delivery_days_range",
+            ),
+        ]
+
+    def clean(self):
+        from decimal import Decimal, InvalidOperation
+        from django.utils import timezone
+        super().clean()
+        errors = {}
+        if not self.title or not self.title.strip():
+            errors["title"] = "A concrete deliverable title is required."
+        if not self.scope or len(self.scope.strip()) < 50:
+            errors["scope"] = "Specify at least 50 characters of real scope."
+        try:
+            value = self.amount
+            if (type(value) is not Decimal or not value.is_finite()
+                    or value <= 0 or value != value.quantize(Decimal("0.01"))):
+                errors["amount"] = "A finite, positive, two-decimal quote is required."
+        except (InvalidOperation, TypeError, ValueError):
+            errors["amount"] = "Invalid quote."
+        if (type(self.delivery_days) is not int
+                or not 1 <= self.delivery_days <= 90):
+            errors["delivery_days"] = "Delivery must be between 1 and 90 days."
+        if self.lead_id and self.lead.route not in ("blueprint", "signals", "brief", "audit"):
+            errors["lead"] = "Unsupported commercial request."
+        if self.status in ("approved", "issued", "accepted") and self.reviewed_at is None:
+            errors["reviewed_at"] = "A manual review timestamp is required."
+        if self.status in ("issued", "accepted"):
+            if self.issued_at is None:
+                errors["issued_at"] = "Only manually issued written offers can be tracked."
+            if self.expires_at is None:
+                errors["expires_at"] = "A written offer must have an expiry date."
+        if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
+            errors["expires_at"] = "Expiry must follow issuance."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def manual_quote_text(self):
+        """Copyable draft text; intentionally not an invoice or a payment request."""
+        return (
+            f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\\n"
+            f"Reference: {self.lead.request_id}\\n"
+            f"Service: {self.get_lead_route_display()}\\n"
+            f"Deliverable: {self.title}\\n"
+            f"Scope: {self.scope}\\n"
+            f"Exclusions: {self.exclusions}\\n"
+            f"Quoted amount: {self.amount} {self.currency}\\n"
+            f"Target delivery: {self.delivery_days} day(s) after a separate agreement.\\n"
+            "No payment has been collected; a lawful payment route and written agreement are required."
+        )
+
+    def get_lead_route_display(self):
+        return dict(MojPropRequest.ROUTE_CHOICES).get(self.lead.route, "Unknown")
