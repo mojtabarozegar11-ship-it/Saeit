@@ -72,7 +72,9 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn(".get('plan')", self.html)
         self.assertIn("Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)", self.html)
         self.assertIn("A recurring subscription and payment have not been authorized.", self.html)
-        self.assertIn("body:JSON.stringify({name,email,service,horizon,notes,website,", self.html)
+        self.assertIn("body:JSON.stringify({name,email,service,horizon,notes:submittedNotes,website,", self.html)
+        self.assertIn("Requested educational plan: ", self.html)
+        self.assertIn("selected-signal-plan", self.html)
 
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
