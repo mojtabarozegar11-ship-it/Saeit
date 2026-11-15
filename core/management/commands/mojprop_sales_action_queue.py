@@ -8,7 +8,7 @@ import json
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from core.models import MojPropDeliveryEvidence, MojPropOffer, MojPropRequest
@@ -26,8 +26,9 @@ ACTION_LABELS = {
     "prepared_not_dispatched": "Verify legal clearance and payment/credit before handoff",
     "sent_unacknowledged": "Check the independent delivery acknowledgement evidence",
     "digital_without_issued_quote": "Check catalog rights and stock/delivery before offering",
-    "signals_without_issued_quote": "Route educational service via mojtaba.bot.ai only",
-    "terminal_offer_internal_review": "Internal-only review of cancelled or expired latest offer; never automatically recontact buyer",
+    "free_signals_awaiting_review": "Review one-off FREE educational example; never quote or send marketing without separate permission",
+    "signals_without_issued_quote": "Route paid educational service via mojtaba.bot.ai only",
+    "terminal_offer_internal_review": "Internal-only review of latest cancelled or expired offer; do not contact buyer without independent reauthorization",
 }
 
 
@@ -59,9 +60,8 @@ def action_queue_snapshot(*, detail_limit=0):
         status="accepted", reviewed_at__isnull=False,
         issued_at__isnull=False, accepted_at__isnull=False,
     ).exclude(acceptance_reference="")
-    # A latest cancelled/expired offer can otherwise vanish from every commercial
-    # follow-up bucket. This is INTERNAL REVIEW, not renewed contact permission.
-    # Revisions are ordered by immutable offer version, not their timestamps.
+    # Terminal latest offers remain internally actionable; cancellation does
+    # not authorize new outreach, even when the original lead once consented.
     newer_offer = MojPropOffer.objects.filter(
         lead_id=OuterRef("lead_id"), version__gt=OuterRef("version")
     )
@@ -76,6 +76,13 @@ def action_queue_snapshot(*, detail_limit=0):
     lead_needing_issued = active.annotate(
         has_issued=Exists(valid_issued)
     ).filter(has_issued=False)
+    # These prefixes describe a buyer's *claimed* free research request.
+    # This is only CRM triage, never a free paid entitlement or email opt-in.
+    free_signals = active.filter(route="signals").filter(
+        Q(notes__startswith="Requested free educational example:")
+        | Q(notes__startswith="One-off FREE educational market-brief example request")
+        | Q(notes__startswith="Please provide a FREE historical educational example")
+    ).filter(status__in=("new", "reviewing"))
     lists = (
         ("urgent_unreviewed", active.filter(
             status="new", horizon="urgent"
@@ -85,9 +92,9 @@ def action_queue_snapshot(*, detail_limit=0):
         ), "request_id"),
         ("reviewing_without_draft", active.filter(
             status="reviewing"
-        ).annotate(has_draft=Exists(any_draft)).filter(
-            has_draft=False
-        ), "request_id"),
+        ).exclude(pk__in=free_signals.values("pk")).annotate(
+            has_draft=Exists(any_draft)
+        ).filter(has_draft=False), "request_id"),
         ("draft_over_24h", MojPropOffer.objects.filter(
             status="draft", created_at__lte=now - timedelta(days=1)
         ).exclude(lead__status__in=("spam", "closed", "delivered")).filter(
@@ -133,9 +140,10 @@ def action_queue_snapshot(*, detail_limit=0):
         ("digital_without_issued_quote", lead_needing_issued.filter(
             route="digital", product_id__isnull=False,
         ), "request_id"),
+        ("free_signals_awaiting_review", free_signals, "request_id"),
         ("signals_without_issued_quote", lead_needing_issued.filter(
             route="signals",
-        ), "request_id"),
+        ).exclude(pk__in=free_signals.values("pk")), "request_id"),
     )
     categories = []
     for name, query, ref_field in lists:

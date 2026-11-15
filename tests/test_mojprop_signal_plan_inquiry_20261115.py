@@ -172,5 +172,35 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertIn("Request NOT submitted", state["receipt"])
 
 
+    def test_free_educational_request_preserves_free_scope_not_paid_sku(self):
+        state = self._browser("?service=signals&tier=free")
+        self.assertEqual(len(state["posted"]), 1)
+        notes = state["posted"][0]["body"]["notes"]
+        self.assertEqual(state["posted"][0]["body"]["service"], "signals")
+        self.assertIn("Requested free educational example", notes)
+        self.assertIn("FREE", state["summary"])
+        self.assertIn("free educational example", state["receipt"].lower())
+        self.assertNotIn("Requested educational plan:", notes)
+        self.assertTrue(state["downloadEnabled"])
+        self.assertFalse(state["hidden"])
+
+    def test_free_tier_wins_over_buyer_supplied_paid_plan_parameter(self):
+        state = self._browser("?service=signals&tier=free&plan=education-quarterly")
+        self.assertIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("education-quarterly", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("79.90", state["summary"])
+
+    def test_switching_away_removes_free_entitlement_claim(self):
+        state = self._browser("?service=signals&tier=free", "audit")
+        self.assertTrue(state["hidden"])
+        self.assertNotIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertEqual(state["posted"][0]["body"]["service"], "audit")
+
+    def test_unknown_free_tier_is_not_a_free_request(self):
+        state = self._browser("?service=signals&tier=bogus")
+        self.assertNotIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertTrue(state["hidden"])
+
+
 if __name__ == "__main__":
     unittest.main()

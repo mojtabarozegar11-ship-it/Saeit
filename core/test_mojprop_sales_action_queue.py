@@ -66,7 +66,7 @@ class MojPropSalesQueueTests(TestCase):
 
     def test_empty_production_snapshot_never_claims_sales(self):
         data = action_queue_snapshot()
-        self.assertEqual(data["category_count"], 13)
+        self.assertEqual(data["category_count"], 14)
         self.assertEqual(data["total_queue_entries"], 0)
         self.assertIsNone(data["independent_customer_count"])
         self.assertIsNone(data["collected_revenue"])
@@ -180,6 +180,44 @@ class MojPropSalesQueueTests(TestCase):
         self._lead("SIGNALS", route="signals")
         self.assertEqual(self.categories()["digital_without_issued_quote"]["count"], 1)
         self.assertEqual(self.categories()["signals_without_issued_quote"]["count"], 1)
+
+
+    def test_one_off_free_request_is_not_a_paid_quote_lead(self):
+        free = self._lead("FREE-SAMPLE", route="signals")
+        MojPropRequest.objects.filter(pk=free.pk).update(notes=(
+            "Requested free educational example: one-off manual review; "
+            "no subscription, payment or market trade."
+        ))
+        self._lead("PAID-INQUIRY", route="signals")
+        categories = self.categories()
+        self.assertEqual(categories["free_signals_awaiting_review"]["count"], 1)
+        self.assertEqual(categories["signals_without_issued_quote"]["count"], 1)
+        snapshot = action_queue_snapshot(detail_limit=10)
+        free_refs = {x["category"]: x.get("request_refs", []) for x in snapshot["categories"]}
+        self.assertEqual(free_refs["free_signals_awaiting_review"], ["FREE-SAMPLE"])
+        self.assertEqual(free_refs["signals_without_issued_quote"], ["PAID-INQUIRY"])
+        self.assertIsNone(snapshot["collected_revenue"])
+
+    def test_reviewing_free_request_does_not_generate_commercial_draft_task(self):
+        free = self._lead("FREE-REVIEW", route="signals", status="reviewing")
+        MojPropRequest.objects.filter(pk=free.pk).update(notes=(
+            "One-off FREE educational market-brief example request. "
+            "Please review the gold-market methodology without trading."
+        ))
+        categories = self.categories()
+        self.assertEqual(categories["free_signals_awaiting_review"]["count"], 1)
+        self.assertEqual(categories["reviewing_without_draft"]["count"], 0)
+        self.assertEqual(categories["signals_without_issued_quote"]["count"], 0)
+
+    def test_unconsented_free_request_is_not_contactable(self):
+        free = self._lead("FREE-NOCONSENT", route="signals")
+        MojPropRequest.objects.filter(pk=free.pk).update(
+            notes="Requested free educational example: one-off manual review; no payment.",
+            consent=False,
+        )
+        categories = self.categories()
+        self.assertEqual(categories["free_signals_awaiting_review"]["count"], 0)
+        self.assertEqual(categories["signals_without_issued_quote"]["count"], 0)
 
     def test_spam_and_closed_leads_never_trigger_followup(self):
         self._lead("SPAM", route="signals", status="spam", age_hours=50)
