@@ -82,14 +82,7 @@ jobs:
     # New public sales pages need FULL independent DB+app+media restoration,
     # tenant separation, rollback evidence and owner approval of this exact main.
     # All repository vars default missing => DENY; source merge cannot deploy.
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.owner_approved_static_release == true &&
-      vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true' &&
-      vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true' &&
-      vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true' &&
-      vars.MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true && github.ref == 'refs/heads/main' && vars.MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED == 'true' && vars.MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED == 'true' && vars.MOJPROP_STATIC_ROLLBACK_VERIFIED == 'true' && vars.MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha
     needs: validate
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
