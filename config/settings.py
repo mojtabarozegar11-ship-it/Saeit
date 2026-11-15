@@ -137,3 +137,6 @@ SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 MOJ_PROP_INTEREST_ENABLED = env.bool("MOJ_PROP_INTEREST_ENABLED", default=False)
 MOJ_PROP_INTEREST_HMAC_KEY_HEX = env("MOJ_PROP_INTEREST_HMAC_KEY_HEX", default="")
 MOJ_PROP_PRIVACY_URL = env("MOJ_PROP_PRIVACY_URL", default="")
+
+# A tested, authorized retention cleanup must exist before intake is released.
+MOJ_PROP_RETENTION_JOB_VERIFIED = env.bool("MOJ_PROP_RETENTION_JOB_VERIFIED", default=False)
