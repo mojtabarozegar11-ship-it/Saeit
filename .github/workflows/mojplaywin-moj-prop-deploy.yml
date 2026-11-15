@@ -139,13 +139,18 @@ jobs:
           scp -F "$WORK/config" "$RUNNER_TEMP/moj-prop-catalog.tar" "saeit-host:/home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
           timeout 30s ssh -F "$WORK/config" saeit-host \
             "tar -xf /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/bundle.tar"
-      - name: Fail closed on unknown live Signal Desk BEFORE any writes
+      - name: Pin live Signal Desk before any separate Starter30 release writes
+        id: signal_before
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 50s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py preflight $GITHUB_RUN_ID"
+          digest="$(timeout 25s ssh -F "$WORK/config" saeit-host \
+            'test -f /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && test ! -L /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && sha256sum /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html' | awk '{print $1}')"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || { echo 'SIGNAL_DESK_PRESERVE_BEFORE_HASH_UNAVAILABLE'; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY"
       - name: Verify live Django intake is ready BEFORE publishing form
         id: api_preflight
@@ -179,24 +184,16 @@ jobs:
               raise SystemExit("Receipt API contract missing; abort static publication")
           print("MOJ_PROP_STATUS_API_PREFLIGHT=PASS")
           PY
-      - name: Prove free education signup backend exists BEFORE updating Signal Desk
-        shell: bash
+      - name: Ensure Starter30 file release is isolated from unrelated Signal Desk signup
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-redirs 0 --connect-timeout 10 --max-time 20 \
-            -H 'Accept: application/json' 'https://mojplaywin.com/moj-signal-free-subscribe/' \
-            -o "$RUNNER_TEMP/moj-signal-free-preflight.json"
-          python3 - "$RUNNER_TEMP/moj-signal-free-preflight.json" <<'PY'
-          import json, sys
+          python3 - <<'PY'
           from pathlib import Path
-          data=json.loads(Path(sys.argv[1]).read_text("utf-8"))
-          if (data.get("ok") is not True or data.get("agent") != "mojtaba.bot.ai"
-                  or data.get("product") != "free-historical-research-updates"
-                  or not isinstance(data.get("enabled"), bool)
-                  or not isinstance(data.get("csrf_token"), str) or not data["csrf_token"]
-                  or data.get("paid_entitlement") is not False):
-              raise SystemExit("SIGNAL_FREE_ROOT_BACKEND_MISSING: BLOCK_STATIC_RELEASE")
-          print("MOJTABA_FREE_SIGNUP_API_PREFLIGHT=PASS")
+          from scripts.update_mojplaywin_moj_prop_catalog import FILES, PRESERVED_LIVE_FILES, STARTER30_FILES
+          assert PRESERVED_LIVE_FILES == (Path("signals/index.html"),)
+          assert not any(path in FILES for path in PRESERVED_LIVE_FILES)
+          assert all(path in FILES for path in STARTER30_FILES)
+          print("STARTER30_WITHOUT_SIGNAL_DESK_WRITE=PASS")
           PY
       - name: Update only /moj-prop/ commercial catalog
         id: deploy
@@ -235,10 +232,21 @@ jobs:
             -o "$RUNNER_TEMP/mojprop-signal-desk.html" -w '%{http_code}' \
             "https://mojplaywin.com/moj-prop/signals/?v=$GITHUB_SHA")"
           [[ "$signal_status" == '200' ]]
-          grep -Fq 'id="free-preview"' "$RUNNER_TEMP/mojprop-signal-desk.html"
-          grep -Fq 'id="free-education-membership"' "$RUNNER_TEMP/mojprop-signal-desk.html"
-          grep -Fq '/moj-signal-free-subscribe/' "$RUNNER_TEMP/mojprop-signal-desk.html"
-          echo 'MOJ_PROP_FREE_SIGNAL_PUBLICATION_LIVE=PASS'
+          # This release must NOT overwrite Signal Desk, regardless of its
+          # independent email-signup state or owner-customized live content.
+          digest_after="$(timeout 25s ssh -F "$WORK/config" saeit-host \
+            'test -f /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && test ! -L /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html && sha256sum /home/zomorod2/mojplaywin.com/moj-prop/signals/index.html' | awk '{print $1}')"
+          [[ "$digest_after" =~ ^[a-f0-9]{64}$ ]] || exit 1
+          [[ "$digest_after" == "${{ steps.signal_before.outputs.digest }}" ]] || {
+            echo 'SIGNAL_DESK_CHANGED_DURING_SEPARATE_STARTER30_RELEASE'; exit 1;
+          }
+          echo 'SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS'
+          for path in index.html journal-template.csv journal-guide.txt; do
+            code="$(curl --silent --show-error --max-time 25 -o /dev/null -w '%{http_code}' \
+              "https://mojplaywin.com/moj-prop/starter-30-trx/$path?v=$GITHUB_SHA")"
+            [[ "$code" == 200 ]] || { echo "STARTER30_DELIVERABLE_NOT_PUBLIC=$path HTTP=$code"; exit 1; }
+          done
+          echo 'STARTER30_THREE_FILES_PUBLIC_HTTP=PASS'
           intake_status="000"
           for intake_attempt in {1..10}; do
             intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID&attempt=$intake_attempt&ts=$(date +%s%N)" || true)"
