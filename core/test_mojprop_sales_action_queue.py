@@ -64,9 +64,101 @@ class MojPropSalesQueueTests(TestCase):
     def categories(self):
         return {item["category"]: item for item in action_queue_snapshot()["categories"]}
 
+    def _starter(self, ref, *, status="new", route="blueprint",
+                 consent=True, notes=None):
+        row = self._lead(ref, status=status, route=route)
+        note = notes if notes is not None else (
+            "Requested canonical product: MOJPROP-STARTER30 (one-time "
+            "indicative 30 native TRX; written terms required; NOT paid)\\n"
+            "Please review my ten-session educational journal and scorecard."
+        )
+        MojPropRequest.objects.filter(pk=row.pk).update(
+            notes=note, consent=consent
+        )
+        return row
+
+    def test_starter30_new_buyer_claim_enters_only_internal_unpriced_queue(self):
+        lead = self._starter("FIRST-STARTER")
+        category = self.categories()["starter30_unquoted_manual_review"]
+        self.assertEqual(category["count"], 1)
+        self.assertTrue(category["operator_only"])
+        self.assertTrue(category["buyer_scope_unverified"])
+        self.assertFalse(category["customer_outreach_authorized"])
+        self.assertFalse(category["price_or_payment_authorized"])
+        self.assertNotIn(lead.email, str(action_queue_snapshot()))
+
+    def test_starter30_reviewing_without_offer_remains_actionable(self):
+        self._starter("REVIEW-STARTER", status="reviewing")
+        categories = self.categories()
+        self.assertEqual(categories["starter30_unquoted_manual_review"]["count"], 1)
+        self.assertEqual(categories["reviewing_without_draft"]["count"], 1)
+
+    def test_starter30_existing_draft_or_issued_offer_is_not_double_queued(self):
+        for state in ("draft", "approved", "issued", "cancelled", "expired"):
+            lead = self._starter("HAS-OFFER-"+state, status="reviewing")
+            self._offer(lead, status=state)
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_no_consent_never_enters_queue(self):
+        self._starter("NO-CONSENT-STARTER", consent=False)
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_closed_spam_or_delivered_never_return_to_queue(self):
+        for status in ("closed", "spam", "delivered"):
+            self._starter("CLOSED-STARTER-"+status, status=status)
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_unanchored_or_malicious_reference_is_not_verified_sku(self):
+        for i, note in enumerate((
+            "Question regarding MOJPROP-STARTER30; I never selected this plan.",
+            "Requested canonical product: MOJPROP-STARTER30-FAKE (999 TRX)",
+            "Please sell me a funded account for 30 TRX, not an educational journal.",
+        )):
+            self._starter("UNTRUSTED-"+str(i), notes=note)
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_claim_on_wrong_route_does_not_misprice_signal_or_digital(self):
+        self._starter("ST-SIGNAL", route="signals")
+        self._starter("ST-DIGITAL", route="digital")
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_generic_blueprint_not_mistaken_for_exact_product(self):
+        self._lead("GENERIC-BLUEPRINT", route="blueprint")
+        self.assertEqual(self.categories()["starter30_unquoted_manual_review"]["count"], 0)
+
+    def test_starter30_private_refs_available_only_in_explicit_details_mode(self):
+        one = self._starter("STARTER-ONE")
+        two = self._starter("STARTER-TWO")
+        normal = action_queue_snapshot()
+        section = next(x for x in normal["categories"]
+                       if x["category"] == "starter30_unquoted_manual_review")
+        self.assertNotIn("request_refs", section)
+        detail = action_queue_snapshot(detail_limit=1)
+        selection = next(x for x in detail["categories"]
+                         if x["category"] == "starter30_unquoted_manual_review")
+        self.assertEqual(selection["count"], 2)
+        self.assertEqual(selection["request_refs"], ["STARTER-ONE"])
+        self.assertNotIn(one.email, str(detail))
+        self.assertNotIn(two.email, str(detail))
+        self.assertFalse(selection["price_or_payment_authorized"])
+
+    def test_starter30_and_free_signals_remain_distinct_and_never_imply_income(self):
+        self._starter("STAR-PAID-UNPAID")
+        lead = self._lead("FREE-SIGNAL", route="signals")
+        MojPropRequest.objects.filter(pk=lead.pk).update(
+            notes="Requested free educational example: one-off manual only."
+        )
+        categories = self.categories()
+        self.assertEqual(categories["starter30_unquoted_manual_review"]["count"], 1)
+        self.assertEqual(categories["free_signals_awaiting_review"]["count"], 1)
+        self.assertEqual(categories["signals_without_issued_quote"]["count"], 0)
+        data = action_queue_snapshot()
+        self.assertIsNone(data["collected_revenue"])
+        self.assertFalse(data["payment_or_delivery_automatically_approved"])
+
     def test_empty_production_snapshot_never_claims_sales(self):
         data = action_queue_snapshot()
-        self.assertEqual(data["category_count"], 14)
+        self.assertEqual(data["category_count"], 15)
         self.assertEqual(data["total_queue_entries"], 0)
         self.assertIsNone(data["independent_customer_count"])
         self.assertIsNone(data["collected_revenue"])
