@@ -134,8 +134,15 @@ def main() -> None:
         # Enforce SELECT-only on the connection during ORM execution, even if
         # the current main source or a helper were to regress unexpectedly.
         def select_only(execute, sql, params, many, context):
-            if type(sql) is not str or not sql.lstrip().upper().startswith("SELECT "):
-                raise PermissionError("read-only SQL guard")
+            # Output never includes the SQL itself; its first word is an
+            # allowlisted, fixed label for P0 troubleshooting only.
+            words = sql.lstrip().upper().split(None, 1) if type(sql) is str else []
+            verb = words[0] if words else ""
+            if verb != "SELECT":
+                safe = verb if verb in {"SET", "BEGIN", "SHOW", "PRAGMA",
+                                       "START", "SAVEPOINT", "COMMIT", "ROLLBACK",
+                                       "INSERT", "UPDATE", "DELETE"} else "OTHER"
+                raise PermissionError("SQL_VERB_" + safe)
             return execute(sql, params, many, context)
         with connection.execute_wrapper(select_only):
             if command_deployed:
@@ -146,6 +153,10 @@ def main() -> None:
                 summary = sanitize_action_queue(action_queue_snapshot(detail_limit=0))
             else:
                 summary = inspect_minimal_intake_presence(connection)
+    except PermissionError as exc:
+        # The exception is created only by our fixed enum above; never print
+        # raw SQL, DB parameters or arbitrary exception messages.
+        raise SystemExit("MOJPROP_QUEUE_NONSELECT_BLOCKED_" + str(exc))
     except Exception as exc:
         # Only the class is logged, never exception messages or customer data.
         raise SystemExit("MOJPROP_QUEUE_INSPECTION_BLOCKED_" + type(exc).__name__)
