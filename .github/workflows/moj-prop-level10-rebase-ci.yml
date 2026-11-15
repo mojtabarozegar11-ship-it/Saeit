@@ -1,0 +1,27 @@
+name: MOJ PROP level 10 owner hold — current policy
+
+on:
+  push:
+    branches: ["cycle62-prop-level10-rebase-20261115"]
+  pull_request:
+    branches: ["feature/prop-firm-policy-v11-20261114"]
+    paths:
+      - "prop_firm/rules.py"
+      - "tests/test_moj_prop_level10_lock.py"
+      - ".github/workflows/moj-prop-level10-rebase-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  level10-owner-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run source-level promotion regression
+        run: |
+          python -m pip install pytest
+          python -m pytest --confcutdir=tests tests/test_moj_prop_level10_lock.py -q
