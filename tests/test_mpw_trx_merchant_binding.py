@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from services.mpw_trx_merchant_binding import (
     MerchantBindingRejected,
+    validate_tron_recipient,
     binding_for_request,
     validate_persisted_binding,
     require_same_invoice_host,
@@ -14,7 +15,8 @@ from services.mpw_trx_merchant_binding import (
 
 
 HOST = "mojplaywin.com"
-RECEIVER = "T" + "A" * 33
+RECEIVER = "TA4Wt1DUCqz6YegbnsmqsWC5uUfbdBqPxm"  # checksummed test-only fixture
+SECOND_RECEIVER = "TA9pkx4DFxrEw8JZzUtyDrh2uAat1LDuJL"
 REGISTRY = {
     HOST: {
         "domain": HOST,
@@ -134,6 +136,85 @@ class MerchantBindingTests(unittest.TestCase):
             }
             with self.subTest(changes=changes), self.assertRaises(MerchantBindingRejected):
                 require_same_invoice_host(SimpleNamespace(**(original | changes)), HOST)
+
+
+    def test_base58check_accepts_two_valid_test_only_fixtures(self):
+        self.assertEqual(validate_tron_recipient(RECEIVER), RECEIVER)
+        self.assertEqual(validate_tron_recipient(SECOND_RECEIVER), SECOND_RECEIVER)
+
+    def test_checksum_error_rejected_even_with_valid_t_prefix_and_length(self):
+        corrupted = RECEIVER[:-1] + ("A" if RECEIVER[-1] != "A" else "B")
+        self.assertEqual(len(corrupted), 34)
+        with self.assertRaises(MerchantBindingRejected):
+            validate_tron_recipient(corrupted)
+
+    def test_empty_bogus_and_wrong_type_receivers_rejected(self):
+        candidates = (
+            None, False, True, 123, {}, [], b"TRON", "",
+            "T" + "A" * 33, "T" + "B" * 33,
+        )
+        for candidate in candidates:
+            with self.subTest(candidate=repr(candidate)), self.assertRaises(MerchantBindingRejected):
+                validate_tron_recipient(candidate)
+
+    def test_base58_alphabet_enforced(self):
+        for symbol in ("0", "O", "I", "l", "!", "\\"):
+            corrupted = RECEIVER[:5] + symbol + RECEIVER[6:]
+            with self.subTest(symbol=symbol), self.assertRaises(MerchantBindingRejected):
+                validate_tron_recipient(corrupted)
+
+    def test_noncanonical_whitespace_and_length_rejected(self):
+        for candidate in (
+            " " + RECEIVER, RECEIVER + " ", RECEIVER + "\\n",
+            RECEIVER[:-1], RECEIVER + "A", RECEIVER.lower(),
+            RECEIVER[0:3] + "\\u200b" + RECEIVER[4:],
+        ):
+            with self.subTest(candidate=repr(candidate)), self.assertRaises(MerchantBindingRejected):
+                validate_tron_recipient(candidate)
+
+    def test_known_bad_network_prefix_rejected(self):
+        # Valid Base58-looking non-TRON address cannot become a TRON receiver.
+        for candidate in ("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "0" * 34):
+            with self.subTest(candidate=candidate), self.assertRaises(MerchantBindingRejected):
+                validate_tron_recipient(candidate)
+
+    def test_registry_with_matching_but_checksum_invalid_receiver_rejected(self):
+        bogus = "T" + "A" * 33
+        config = SimpleNamespace(MPW_TRX_MERCHANT_BINDINGS={
+            HOST: {**REGISTRY[HOST], "recipient": bogus},
+        })
+        with self.assertRaises(MerchantBindingRejected):
+            binding_for_request(config, HOST, bogus)
+
+    def test_registry_with_matching_blank_receiver_rejected(self):
+        config = SimpleNamespace(MPW_TRX_MERCHANT_BINDINGS={
+            HOST: {**REGISTRY[HOST], "recipient": ""},
+        })
+        with self.assertRaises(MerchantBindingRejected):
+            binding_for_request(config, HOST, "")
+
+    def test_other_valid_tron_receiver_cannot_reuse_merchants_registry(self):
+        with self.assertRaises(MerchantBindingRejected):
+            binding_for_request(self.settings, HOST, SECOND_RECEIVER)
+
+    def test_invoice_with_corrupted_receiver_is_not_recoverable_as_valid(self):
+        for recipient in (None, "", "T" + "A" * 33, RECEIVER + "A"):
+            invoice = SimpleNamespace(
+                network="tron-mainnet", recipient=recipient,
+                merchant_domain=HOST, merchant_id="mojplaywin-store",
+            )
+            with self.subTest(recipient=recipient), self.assertRaises(MerchantBindingRejected):
+                require_same_invoice_host(invoice, HOST)
+
+    def test_valid_historical_invoice_remains_visible_after_registry_disabled(self):
+        invoice = SimpleNamespace(
+            network="tron-mainnet", recipient=RECEIVER,
+            merchant_domain=HOST, merchant_id="mojplaywin-store",
+        )
+        disabled = SimpleNamespace(MPW_TRX_MERCHANT_BINDINGS={})
+        self.assertEqual(require_same_invoice_host(invoice, HOST), HOST)
+        with self.assertRaises(MerchantBindingRejected):
+            require_current_merchant_for_invoice(disabled, HOST, invoice)
 
 
 if __name__ == "__main__":
