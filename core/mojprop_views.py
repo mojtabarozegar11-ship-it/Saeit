@@ -179,7 +179,7 @@ def mojprop_intake(request):
     product_id = payload.get("product_id")
     content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].lower()
     # Browser forms send scalar strings; JSON clients must send a real int.
-    if (content_type == "application/x-www-form-urlencoded"
+    if (content_type in ("application/x-www-form-urlencoded", "multipart/form-data")
             and type(product_id) is str
             and product_id in {str(x) for x in CATALOG_INQUIRY_PRODUCTS}):
         product_id = int(product_id)
@@ -189,14 +189,6 @@ def mojprop_intake(request):
     # strings ("on"/"1"), not JSON booleans. Keep the formats distinct.
     if is_json_payload and type(consent_value) is not bool:
         return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
-
-    # Honeypot field: real forms never display or populate this value.
-    try:
-        honeypot = _text(payload, "website", 120)
-    except ValueError:
-        return _json({"ok": False, "detail": "Malformed request fields."}, status=400)
-    if honeypot:
-        return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
     # Reject rather than silently truncate buyer identity or requested scope.
     # Truncation can convert two distinct contacts into the same CRM address,
@@ -209,6 +201,14 @@ def mojprop_intake(request):
     if oversized:
         return _json({"ok": False, "detail": "Request fields are too long.",
                       "fields": oversized}, status=400)
+
+    # Honeypot field: real forms never display or populate this value.
+    try:
+        honeypot = _text(payload, "website", 120)
+    except ValueError:
+        return _json({"ok": False, "detail": "Malformed request fields."}, status=400)
+    if honeypot:
+        return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
     try:
         name = _text(payload, "name", 200)
