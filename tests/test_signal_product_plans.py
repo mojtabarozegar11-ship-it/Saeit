@@ -23,6 +23,13 @@ class SignalSubscriptionCommercialTests(SimpleTestCase):
         kw = {
             "tenant": self.tenant(),
             "proofs": {k: True for k in PROOF_REQUIRED},
+            "trusted_merchant_registry": {
+                ("mojplaywin.com", "saman"): {
+                    "tenant_id": "signal_saman",
+                    "network": "tron-mainnet", "asset": "TRX",
+                    **{k: True for k in REQUIRED_ATTESTATIONS},
+                },
+            },
         }
         kw.update(changes)
         return subscription_review(**kw)
@@ -131,6 +138,44 @@ class SignalSubscriptionCommercialTests(SimpleTestCase):
         result = self.full_review(tenant=forged)
         self.assertFalse(result["eligible_for_external_review"])
         self.assertIn("merchant_identity_or_attestations_inconsistent", result["missing"])
+
+    def test_missing_protected_registry_never_returns_approved_review(self):
+        for reg in (None, "yes", [], True):
+            with self.subTest(value=str(reg)):
+                result = self.full_review(trusted_merchant_registry=reg)
+                self.assertFalse(result["eligible_for_external_review"])
+                self.assertIn("protected_merchant_registry_missing", result["missing"])
+
+    def test_forged_tenant_approval_refused_against_registry(self):
+        from dataclasses import replace
+        forged = replace(self.tenant(), tenant_id="merchant_stolen_from_other_site")
+        result = self.full_review(tenant=forged)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_registration_changed_or_forged", result["missing"])
+
+    def test_merchant_revocation_refused_against_fresh_registry(self):
+        revoked = {
+            ("mojplaywin.com", "saman"): {
+                "tenant_id": "signal_saman",
+                "network": "tron-mainnet", "asset": "TRX",
+                **{k: False for k in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = self.full_review(trusted_merchant_registry=revoked)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_registration_changed_or_forged", result["missing"])
+
+    def test_other_brands_registry_cannot_authorize_current_brand(self):
+        foreign = {
+            ("mojplaywin.com", "zahra"): {
+                "tenant_id": "signal_zahra",
+                "network": "tron-mainnet", "asset": "TRX",
+                **{k: True for k in REQUIRED_ATTESTATIONS},
+            },
+        }
+        result = self.full_review(trusted_merchant_registry=foreign)
+        self.assertFalse(result["eligible_for_external_review"])
+        self.assertIn("merchant_registration_changed_or_forged", result["missing"])
 
     def test_malformed_proof_rejected(self):
         with self.assertRaises(ValueError):
