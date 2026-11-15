@@ -39,6 +39,71 @@ class Starter30LiveReadOnlyTests(unittest.TestCase):
         external.write_bytes(b"never read unrelated directory")
         self.assertIsNone(probe._safe_content(self.root, external))
 
+    def test_public_static_inventory_has_exact_seven_known_names(self):
+        found = set(self.report()["public_page_digests"])
+        self.assertEqual(found, {
+            "home", "catalog", "signal_desk", "sample_prop_blueprint",
+            "sample_gold_market_brief", "sample_educational_signal",
+            "sample_commercial_gate_audit"
+        })
+
+    def test_missing_public_files_never_get_hashes(self):
+        inventory = self.report()["public_page_digests"]
+        self.assertTrue(all(not data["readable"] and data["sha256"] is None
+                            for data in inventory.values()))
+
+    def test_known_home_file_yields_exact_full_sha256(self):
+        from hashlib import sha256
+        payload = b"Reviewed Moj Prop public home"
+        (self.route / "index.html").write_bytes(payload)
+        evidence = self.report()["public_page_digests"]["home"]
+        self.assertTrue(evidence["readable"])
+        self.assertEqual(evidence["sha256"], sha256(payload).hexdigest())
+
+    def test_catalog_hash_does_not_leak_raw_contents(self):
+        file = self.route / "catalog/index.html"
+        file.parent.mkdir(parents=True)
+        file.write_text("an internal-looking string not for logs")
+        report = self.report()
+        self.assertTrue(report["public_page_digests"]["catalog"]["readable"])
+        self.assertNotIn("an internal-looking string", json.dumps(report))
+
+    def test_signal_desk_hash_is_independently_classified(self):
+        file = self.route / "signals/index.html"
+        file.parent.mkdir(parents=True)
+        file.write_bytes(b"signal desk")
+        inventory = self.report()["public_page_digests"]
+        self.assertTrue(inventory["signal_desk"]["readable"])
+        self.assertFalse(inventory["catalog"]["readable"])
+
+    def test_sample_symlink_is_refused(self):
+        file = self.route / "samples/prop-blueprint/index.html"
+        file.parent.mkdir(parents=True)
+        foreign = self.home / "foreign-secret"
+        foreign.write_text("secret")
+        file.symlink_to(foreign)
+        self.assertFalse(self.report()["public_page_digests"]["sample_prop_blueprint"]["readable"])
+
+    def test_world_writable_sample_parent_is_refused(self):
+        file = self.route / "samples/prop-blueprint/index.html"
+        file.parent.mkdir(parents=True)
+        file.write_text("sample")
+        file.parent.chmod(0o777)
+        self.addCleanup(file.parent.chmod, 0o755)
+        self.assertFalse(self.report()["public_page_digests"]["sample_prop_blueprint"]["readable"])
+
+    def test_public_file_content_is_bounded(self):
+        file = self.route / "index.html"
+        file.write_bytes(b"x" * (probe.MAX_FILE_BYTES + 1))
+        self.assertFalse(self.report()["public_page_digests"]["home"]["readable"])
+
+    def test_public_file_evidence_cannot_authorise_release(self):
+        (self.route / "index.html").write_text("a valid page")
+        report = self.report()
+        self.assertTrue(report["public_page_digests"]["home"]["readable"])
+        self.assertIs(report["release_permitted"], False)
+        self.assertIs(report["independent_backup_restored_in_isolation"], False)
+
     def test_json_serialisable(self):
         json.dumps(self.report())
 
