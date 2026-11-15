@@ -58,9 +58,11 @@
       // Financial-brand signal pages link here with ?service=signals.
       // Honor only actual service codes; never write a URL string into the form.
       const serviceSelect=document.getElementById('service');
+      const serviceSelector=serviceSelect;
       const requestedService=new URLSearchParams(window.location.search).get('service');
       if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
         serviceSelect.value=requestedService;
+        document.getElementById('service').value=requestedService;
       }
       const productSelector=document.getElementById('digital-product');
       const productField=document.getElementById('digital-product-field');
@@ -68,37 +70,37 @@
       const productFromURL=new URLSearchParams(window.location.search).get('product')||'';
       if(permittedProducts.has(productFromURL)) productSelector.value=productFromURL;
       function syncDigitalProduct(){
-        const active=serviceSelect.value==='digital';
-        productField.hidden=!active;
-        productField.style.display=active?'':'none';
-        productSelector.disabled=!active;
-        productSelector.required=active;
-        if(active && !document.getElementById('notes').value.trim()){
+        const isDigital=serviceSelector.value==='digital';
+        productField.hidden=!isDigital;
+        productField.style.display=isDigital?'':'none';
+        productSelector.disabled=!isDigital;
+        productSelector.required=isDigital;
+        if(isDigital && !document.getElementById('notes').value.trim()){
           document.getElementById('notes').value='Please confirm the product license, exact price, delivery method and lawful payment route before invoicing.';
         }
       }
-      serviceSelect.addEventListener('change',syncDigitalProduct);
+      serviceSelector.addEventListener('change',syncDigitalProduct);
       syncDigitalProduct();
-      const validSignalPlans={
+      const signalPlans={
         'education-weekly':'weekly',
         'education-monthly':'monthly',
         'education-quarterly':'quarterly'
       };
-      const planFromURL=new URLSearchParams(window.location.search).get('plan');
-      if(requestedService==='signals' && Object.prototype.hasOwnProperty.call(validSignalPlans,planFromURL)){
-        document.getElementById('notes').value='Please provide a risk-disclosed educational '+validSignalPlans[planFromURL]+' market brief; no payment or subscription is authorized.';
+      const requestedPlan=new URLSearchParams(window.location.search).get('plan');
+      if(requestedService==='signals' && Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)){
+        document.getElementById('notes').value='Please provide a risk-disclosed educational '+signalPlans[requestedPlan]+' market brief. A recurring subscription and payment have not been authorized.';
       }
 
-      async function csrf(){
+      async function csrf(signal){
         if(csrfToken) return csrfToken;
-        const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store'});
+        const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store',signal});
         const data=await response.json();
         if(!response.ok || !data.csrf_token) throw new Error(data.detail||'Intake service is unavailable.');
         csrfToken=data.csrf_token;
         return csrfToken;
       }
 
-      function draft(name,email,service,horizon,notes,status,requestId,receiptToken){
+      function draft(name,email,service,horizon,notes,status,requestId,receiptToken,selectedProduct){
         return [
           'Moj Prop / mojtaba.bot.ai request',
           '',
@@ -108,6 +110,7 @@
           'Email: '+email,
           'Route: '+labels[service],
           'Time horizon: '+horizon,
+          'Catalog product ID: '+(selectedProduct||'n/a'),
           'Notes: '+notes,
           '',
           'Status: '+status,
@@ -123,7 +126,7 @@
         const horizon=document.getElementById('horizon').value;
         const notes=document.getElementById('notes').value.trim();
         const website=document.getElementById('website').value.trim();
-        const productId=service==='digital'&&permittedProducts.has(productSelector.value)?Number(productSelector.value):null;
+        const selectedProduct=service==='digital'&&permittedProducts.has(productSelector.value)?Number(productSelector.value):null;
         submit.disabled=true;
         form.setAttribute('aria-busy','true');
         copy.disabled=true;
@@ -132,14 +135,19 @@
         if(receiptTokenInput.value.trim()) statusResult.textContent='The token shown belongs to a previous saved request until a new one is accepted.';
         submit.textContent='Sending securely…';
         result.textContent='Connecting to the Moj Prop intake desk…';
+        const abortController=new AbortController();
+        const timeout=setTimeout(()=>abortController.abort(),15000);
         try{
-          const token=await csrf();
+          const token=await csrf(abortController.signal);
           const response=await fetch(endpoint,{
             method:'POST',
             credentials:'same-origin',
+            signal:abortController.signal,
             headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRFToken':token},
-            body:JSON.stringify({name,email,service,horizon,notes,website,product_id:productId,consent:document.getElementById('consent').checked})
+            body:JSON.stringify({name,email,service,horizon,notes,website,
+              product_id:selectedProduct,consent:document.getElementById('consent').checked})
           });
+          if(response.status===403) csrfToken='';
           const data=await response.json().catch(()=>({}));
           // A successful HTTP 200, or an unrelated HTML proxy response, is
           // not a persistent commercial lead. The server must issue HTTP 201
@@ -153,7 +161,7 @@
              const retry=response.status===429 ? ' Wait before resubmitting; no new request was recorded.' : '';
              throw new Error((data.detail||'The request could not be received.')+(problems?' '+problems:'')+retry);
            }
-          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,data.receipt_token||'');
+          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,data.receipt_token||'',selectedProduct);
           receiptTokenInput.value=data.receipt_token||'';
           if(data.receipt_token!==undefined && typeof data.receipt_token==='string' && data.receipt_token.length<=256){
             statusInput.value=data.receipt_token;
@@ -166,10 +174,11 @@
           // A failed request is NOT a buyer receipt and must never enable
           // copy/download controls suggesting a customer was registered.
           receipt='';
-          result.textContent='Request NOT submitted. '+error.message+' No ID or payment was created.';
+          result.textContent='Request NOT submitted. '+(error.name==='AbortError'?'The service timed out. Verify with support before resubmitting.':error.message)+' No ID or payment was created.';
           copy.disabled=true;
           download.disabled=true;
         }finally{
+          clearTimeout(timeout);
           submit.disabled=false;
           form.removeAttribute('aria-busy');
           submit.textContent='Send request for review';
