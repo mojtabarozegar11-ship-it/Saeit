@@ -128,6 +128,42 @@ class CommercialBackendClosureTests(unittest.TestCase):
         self.assertIn('("core", "0040_commercefunnelevent")', installed)
         self.assertNotIn('("core", "0045_mojprop_delivery_evidence")', installed)
 
+    def test_existing_applied_intake_migration_is_not_reparented(self):
+        live_migrations = self.live / "core/migrations"
+        target = live_migrations / "0041_mojprop_request.py"
+        original = (SOURCE / "core/migrations/0041_mojprop_request.py").read_text(
+            encoding="utf-8"
+        ).replace(
+            '("core", "0040_commercefunnelevent")',
+            '("core", "0039_educationassessment_educationattempt_and_more")',
+        )
+        target.write_text(original, encoding="utf-8")
+        (live_migrations / "0040_commercefunnelevent.py").write_text(
+            "class Migration: pass\n", encoding="utf-8"
+        )
+        with patch.object(installer, "ROOT", self.live):
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.install_migration(
+                    SOURCE / "core/migrations/0041_mojprop_request.py", target
+                )
+        self.assertEqual(target.read_text(encoding="utf-8"), original)
+
+    def test_existing_intake_migration_with_different_operations_refused(self):
+        target = self.live / "core/migrations/0041_mojprop_request.py"
+        target.write_text(
+            (SOURCE / "core/migrations/0041_mojprop_request.py")
+            .read_text(encoding="utf-8")
+            .replace("migrations.CreateModel(", "migrations.RunPython("),
+            encoding="utf-8",
+        )
+        before = target.read_bytes()
+        with patch.object(installer, "ROOT", self.live):
+            with self.assertRaisesRegex(RuntimeError, "different previously applied"):
+                installer.install_migration(
+                    SOURCE / "core/migrations/0041_mojprop_request.py", target
+                )
+        self.assertEqual(target.read_bytes(), before)
+
     def test_fresh_admin_installer_uses_current_main_import(self):
         target = self.live / "core/admin.py"
         target.write_text(
