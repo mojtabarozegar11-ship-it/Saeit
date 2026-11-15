@@ -68,6 +68,7 @@ def _digest(value, secret):
 def intake_enabled():
     return (
         getattr(settings, "MOJ_PROP_INTEREST_ENABLED", False) is True
+        and getattr(settings, "MOJ_PROP_RETENTION_JOB_VERIFIED", False) is True
         and getattr(settings, "MOJ_PROP_PRIVACY_URL", "") == "/moj-prop/privacy/"
         and len(getattr(settings, "MOJ_PROP_INTEREST_HMAC_KEY_HEX", "")) == 64
     )
