@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
     PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
+    PropInformationInquiry,
 )
 
 
@@ -86,3 +87,17 @@ class PropChallengeEnrollmentAdmin(LockedAuditAdmin):
         "settlement_verified", "terms_version",
     )
     list_filter = ("settlement_verified", "terms_version")
+
+@admin.register(PropInformationInquiry)
+class PropInformationInquiryAdmin(LockedAuditAdmin):
+    """Owner-only read; no sending, export action, mutation or deletion."""
+    list_display = ("id", "email", "status", "consent_version", "created_at", "expires_at")
+    list_filter = ("status", "consent_version")
+    search_fields = ("email",)
+    readonly_fields = ("email", "email_digest", "status", "consent_version", "created_at", "expires_at")
+
+    def has_view_permission(self, request, obj=None):
+        return bool(request.user.is_authenticated and request.user.is_superuser)
+
+    def has_module_permission(self, request):
+        return bool(request.user.is_authenticated and request.user.is_superuser)

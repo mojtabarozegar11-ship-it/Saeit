@@ -1,0 +1,25 @@
+{% extends "mojplaywin/site_base.html" %}
+{% block html_lang %}en{% endblock %}
+{% block title %}Request information | Moj Prop{% endblock %}
+{% block meta_description %}Request factual information about the MojPlayWin Moj Prop assessment program. No purchase or funded account is created.{% endblock %}
+{% block content %}
+<main style="max-width:740px;margin:4rem auto;padding:2rem;background:#122238;color:#fff;border-radius:18px">
+  <p><a href="/moj-prop/" style="color:#f5d49b">Moj Prop by MojPlayWin</a></p>
+  <h1>Request information about Moj Prop</h1>
+  <p>This is a non-binding information inquiry only. It is not a challenge application, payment, broker account, allocation of capital, or guarantee of funding or profits. Availability depends on independent legal, broker, and funding verification.</p>
+  {% if success %}
+    <p role="status">Your information request was recorded. No payment is due or required. No email has been sent. Contact support through the official website if you need further assistance.</p>
+  {% else %}
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/moj-prop/interest/">
+      {% csrf_token %}
+      <label for="email">Email address for this inquiry</label>
+      <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" style="display:block;width:100%;padding:.7rem;margin:1rem 0;color:#111">
+      <label><input name="privacy_consent" type="checkbox" value="yes" required>
+      I voluntarily request information and agree to the storage of my email solely for handling this inquiry for up to 30 days. I understand this is not consent to financial marketing or trading advice. Read the <a href="/moj-prop/privacy/" style="color:#f5d49b">privacy notice</a>.</label>
+      <button type="submit" style="display:block;padding:.8rem 1.4rem;margin-top:1.5rem;cursor:pointer">Submit information request</button>
+    </form>
+  {% endif %}
+  <p>Use the official support contact for privacy access or deletion requests. An inquiry does not grant any financial or payment entitlement.</p>
+</main>
+{% endblock %}

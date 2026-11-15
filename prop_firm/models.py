@@ -481,3 +481,26 @@ class PropSocialEvidence(models.Model):
 
     def __str__(self):
         return f"social-review:{self.enrollment_id}:{self.platform}"
+
+
+class PropInformationInquiry(models.Model):
+    """Non-financial request for information; NOT KYC/enrollment/fee/funding.
+
+    Contact data is visible only to authorized operators, never public pages.
+    No email is sent by accepting an inquiry. Explicit consent is mandatory.
+    """
+    email = models.EmailField(max_length=254, editable=False)
+    email_digest = models.CharField(max_length=64, unique=True, editable=False)
+    consent_version = models.CharField(max_length=40, editable=False)
+    status = models.CharField(max_length=16, default="unreviewed", editable=False,
+                              choices=(("unreviewed", "Unreviewed"), ("handled", "Handled")))
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+    expires_at = models.DateTimeField(editable=False)
+
+    class Meta:
+        db_table = "moj_prop_information_inquiries"
+        default_permissions = ("view",)
+        indexes = [models.Index(fields=("status", "created_at"), name="mp_inquiry_status_time")]
+
+    def __str__(self):
+        return f"MOJ PROP inquiry #{self.pk}"
