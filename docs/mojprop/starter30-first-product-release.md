@@ -96,3 +96,32 @@ publisher release with exact SHA, proven host baseline and all above controls.
 
 **Accounting:** Recognised received revenue = zero until a real,
 independently confirmed settled order is reconciled and delivered.
+
+## Actual single-SKU delivery assets (added in current cycle)
+
+- `templates/moj-prop-v4/starter-30-trx/index.html`: English standalone information page with two free download CTAs; it is not currently live and remains `noindex`.
+- `templates/moj-prop-v4/starter-30-trx/journal-template.csv`: ten-session completely blank customer journal. The template intentionally has **no invented profitable entries**.
+- `templates/moj-prop-v4/starter-30-trx/journal-guide.txt`: explicit fields, legal boundaries, risk and submission instructions.
+- `scripts/mojprop_starter30_journal_csv.py`: bounded UTF-8 CSV import; strict 10-session identifier order, monetary decimal validation, yes/no flags and injection rejection.
+- `scripts/mojprop_starter30_scorecard.py`: user-independent printable individual feedback. Case ownership must be authenticated by the actual operator before any private delivery.
+- `scripts/mojprop_starter30_static_release.py`: **manual and static-only** three-asset release with tenant identity checks, explicit one-time approval, no overwrite, digest manifest, private permissions and strict rollback. No automatic workflow, migration, wallet or payment integration. Source-only until actual host access and verification.
+
+### Precise static release procedure (NOT authorisation to run)
+
+1. Obtain current GitHub HEAD SHA and separately verify each asset's SHA-256 against the approved source; stage all three exact assets into the dedicated per-run private cPanel staging directory. Staging source integrity is an **external prerequisite**; an untrusted staged tar is not approved by a matching CLI commit string alone.
+2. Verify in a read-only cPanel session the current `/home/zomorod2/mojplaywin.com` effective docroot, expected Passenger/`.htaccess` tenant, existing `/moj-prop/` directory and sufficient space; separately record a successful independent site backup and isolated restoration rehearsal.
+3. On the correctly authenticated account, execute **preflight only**: `python3 scripts/mojprop_starter30_static_release.py preflight RUN_ID REVIEWED_COMMIT`; compare every reported asset digest with the verified source record.
+4. Complete legal seller, jurisdiction, customer terms, delivery owner, lawful TRX merchant and no-conflicting-automation checks. Without these, do not publish a pay-enabled page or collect funds.
+5. A specific release approval must be recorded. Only then may an operator run `MOJPROP_STARTER30_OWNER_APPROVED=static-only-approved python3 scripts/mojprop_starter30_static_release.py deploy RUN_ID REVIEWED_COMMIT`. This adds three files at one exact, owner-controlled path. It never creates a payment method or changes Django.
+6. Verify live HTTP 200 + exact bytes at the three expected paths and customer content; if verification fails, run `rollback RUN_ID REVIEWED_COMMIT`. Never delete user-modified files to force a rollback.
+7. Leave public page `noindex` and avoid linking from the commercial catalog until all legal/merchant gates are complete, and then perform a separately reviewed SEO/public link release.
+
+**Important:** this publisher is a one-time **new path only** installer. Subsequent revisions must use a reviewed new update protocol; do not overwrite existing customer-facing files with the initial installer.
+
+### Added regression suites
+
+- `python3 -m unittest tests.test_mojprop_starter30_journal_csv -v`
+- `python3 -m unittest tests.test_mojprop_starter30_static_release -v`
+- `python3 -m unittest tests.test_mojprop_starter30_public_offer -v`
+
+**Not production evidence:** script and test success alone do not prove public site release or received revenue. A manual inquiry is not a completed sale.
