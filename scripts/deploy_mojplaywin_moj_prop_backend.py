@@ -166,14 +166,14 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
             temporary.unlink()
 
 
-def format_core_migration_dependencies(leaves) -> str:
-    """Join actual core graph leaves; fail closed for missing or unsafe names."""
+def format_core_migration_dependencies(leaves, *, allow_moj_prop_parent=False) -> str:
+    """Join verified core graph leaves, optionally allowing the freshly staged 0041."""
     if (type(leaves) not in (tuple, list) or not 1 <= len(leaves) <= 8
             or len(set(leaves)) != len(leaves)
             or any(type(name) is not str
                    or not re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", name)
                    for name in leaves)
-            or "0041_mojprop_request" in leaves
+            or ("0041_mojprop_request" in leaves and not allow_moj_prop_parent)
             or "0042_alter_mojproprequest_source" in leaves):
         raise RuntimeError("Unverified or conflicting core migration graph")
     return "dependencies = [\n" + "".join(
@@ -181,7 +181,7 @@ def format_core_migration_dependencies(leaves) -> str:
     ) + "    ]"
 
 
-def live_core_migration_leaves():
+def live_core_migration_leaves(*, allow_moj_prop_parent=False):
     """Query Django's real disk graph, not an unreliable shell filename glob."""
     python = choose_python()
     probe = """
@@ -203,7 +203,9 @@ print("MOJ_PROP_CORE_LEAVES=" + json.dumps(nodes))
     if len(matches) != 1:
         raise RuntimeError("Cannot verify Django core migration leaf nodes")
     leaves = json.loads(matches[0])
-    format_core_migration_dependencies(leaves)
+    format_core_migration_dependencies(
+        leaves, allow_moj_prop_parent=allow_moj_prop_parent,
+    )
     return tuple(leaves)
 
 
@@ -219,6 +221,37 @@ def install_migration(source: Path, target: Path) -> None:
     content = staged[:match.start()] + format_core_migration_dependencies(leaves) + staged[match.end():]
     atomic_write_text(target, content, 0o640)
     print("MOJ_PROP_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
+
+
+def install_join_migration(source: Path, target: Path) -> None:
+    """Join actual live Django migration leaves after installing Moj Prop 0041.
+
+    Public GitHub 0042 joins 0040+0041. Private cPanel may instead have a
+    previously applied 0049 branch, and its 0040 filename may not match.
+    Never assume either topology: use actual validated DAG leaf nodes.
+    """
+    assert_regular(source, "staged join migration")
+    if target.exists() or target.is_symlink():
+        raise RuntimeError("Moj Prop join migration exists; inspect instead of overwriting")
+    leaves = live_core_migration_leaves(allow_moj_prop_parent=True)
+    if "0041_mojprop_request" not in leaves:
+        raise RuntimeError("Moj Prop intake must be a live migration leaf before join")
+    staged = source.read_text(encoding="utf-8")
+    if ('name="mojproprequest"' not in staged
+            or 'migrations.AlterField(' not in staged):
+        raise RuntimeError("Unrecognized Moj Prop join migration payload")
+    match = re.search(r"dependencies\\s*=\\s*\\[.*?\\]", staged, flags=re.S)
+    if match is None:
+        raise RuntimeError("Moj Prop join migration has no dependency list")
+    content = (
+        staged[:match.start()]
+        + format_core_migration_dependencies(
+            leaves, allow_moj_prop_parent=True,
+        )
+        + staged[match.end():]
+    )
+    atomic_write_text(target, content, 0o640)
+    print("MOJ_PROP_JOIN_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
 
 
 def patch_models(target: Path, source: Path) -> None:
@@ -350,6 +383,8 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
             target = ROOT / relative
             if relative == Path("core/migrations/0041_mojprop_request.py"):
                 install_migration(staged_root / relative, target)
+            elif relative == Path("core/migrations/0042_alter_mojproprequest_source.py"):
+                install_join_migration(staged_root / relative, target)
             else:
                 current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
                 atomic_replace(staged_root / relative, target, current_mode)
