@@ -28,7 +28,6 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/mpw-trx-gates-ssh"
           install -d -m 700 "$d"
-          trap 'rm -f "$d/host.key" "$d/known" "$d/config"; rmdir "$d"' EXIT
           test -n "$HOST_KEY"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10); sys.stdout.write(s)' > "$d/host.key"
           chmod 600 "$d/host.key"
