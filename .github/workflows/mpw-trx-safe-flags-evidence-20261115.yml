@@ -30,7 +30,7 @@ jobs:
           python3 -B -m unittest tests.test_mpw_trx_canary_existing_receipts_readonly_20261116 -q
           test -f scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
           test ! -L scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
-          test "$(git hash-object -- scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py)" = "24e6504947690a8389f8570ddd2d4c803a6e2931"
+          test "$(git hash-object -- scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py)" = "ce8f4c559240f4c43c56d0a29a20ab93adfc6599"
 
       - name: Connect to cPanel with pinned host key
         id: link
