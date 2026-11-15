@@ -127,7 +127,19 @@ def validate_offer(
     offer_id = _slug(offer.offer_id, "offer_id")
     tenant_id = _slug(offer.tenant_id, "tenant_id")
     host = _text(offer.canonical_host, "canonical_host").lower()
-    if host != offer.canonical_host or "://" in host or "/" in host or not _HOST.fullmatch(host):
+    # Host isolation must use a real canonical DNS hostname, not a string
+    # such as "shop..example" that loosely matches a broad character regex.
+    parts = host.split(".")
+    valid_host = (
+        host == offer.canonical_host
+        and 4 <= len(host) <= 253
+        and len(parts) >= 2
+        and all(1 <= len(part) <= 63 and
+                re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", part)
+                for part in parts)
+        and host != "dr.mojtaba.rozegar"
+    )
+    if not valid_host:
         raise CommercialGateError("canonical_host_invalid")
     _currency(offer.currency)
     _amount(offer.price, "price")
