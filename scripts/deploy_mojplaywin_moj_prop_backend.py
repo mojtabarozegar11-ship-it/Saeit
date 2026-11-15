@@ -278,9 +278,25 @@ def _passenger_config() -> str | None:
 
 
 def _print_passenger_diagnostics() -> None:
-    for command in ("uapi", "whmapi1", "apachectl", "httpd"):
+    for command in ("uapi", "whmapi1", "apachectl", "httpd", "cloudlinux-selector", "selectorctl"):
         resolved = shutil.which(command)
         print(f"MOJ_PROP_{command.upper()}=" + (resolved or "NOT_FOUND"))
+    selector = shutil.which("cloudlinux-selector")
+    if selector:
+        try:
+            result = subprocess.run(
+                [selector, "get", "--json", "--interpreter", "python", "--user", "zomorod2"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            print("MOJ_PROP_SELECTOR_GET_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_SELECTOR_GET=" + result.stdout[:4000].replace("\n", " "))
+            if result.stderr:
+                print("MOJ_PROP_SELECTOR_GET_ERR=" + result.stderr[:1000].replace("\n", " "))
+        except Exception as exc:
+            print("MOJ_PROP_SELECTOR_GET_ERROR=" + type(exc).__name__)
     uapi = shutil.which("uapi")
     if uapi:
         try:
@@ -331,8 +347,23 @@ def restart_passenger() -> None:
         if result.returncode != 0:
             raise RuntimeError(f"Passenger restart failed with exit code {result.returncode}")
         print("MOJ_PROP_PASSENGER_RESTART=PASS")
-    else:
-        print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
+        return
+    selector = shutil.which("cloudlinux-selector")
+    if selector:
+        app_root = "mojplaywin.com"
+        attempts = (
+            [selector, "restart", "--json", "--interpreter", "python", "--user", "zomorod2", "--app-root", app_root],
+            [selector, "restart", "--json", "--interpreter", "python", "--app-root", app_root],
+        )
+        for command in attempts:
+            result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60)
+            print("MOJ_PROP_SELECTOR_RESTART_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_SELECTOR_RESTART=" + result.stdout[:2000].replace("\n", " "))
+            if result.returncode == 0:
+                print("MOJ_PROP_PASSENGER_RESTART=CLOUDLINUX_SELECTOR")
+                return
+        raise RuntimeError("CloudLinux Python Selector could not restart mojplaywin.com")
+    print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
 def restore(backup: Path) -> None:
