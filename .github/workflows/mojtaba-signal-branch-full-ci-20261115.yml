@@ -61,7 +61,7 @@ jobs:
           from pathlib import Path
           s=Path(".github/workflows/mojtaba-signal-branch-full-ci-20261115.yml").read_text()
           assert "permissions:" in s and "contents: read" in s
-          assert "runs-on: ubuntu-latest" in s and "self-hosted" not in s
-          assert "HOST_SSH_PRIVATE_KEY" not in s
+          assert "runs-on: ubuntu-latest" in s and ("self-"+"hosted") not in s
+          assert ("HOST_SSH_"+"PRIVATE_KEY") not in s
           print("FULL_SIGNAL_TEST_ONLY=true; RELEASE=false")
           PY
