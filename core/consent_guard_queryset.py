@@ -17,3 +17,15 @@ class ConsentStatusQuerySet(models.QuerySet):
                     "status": "Bulk status promotion is prohibited; use a validated model save"
                 })
         return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        # Django implements bulk_update with update(CASE...) inside an atomic
+        # block. Reject before entering that block so a denied operation
+        # cannot leave an ambient TestCase/request transaction rollback-only.
+        # An operator may batch-withdraw via update(status="withdrawn"), but
+        # any promotion requires per-record model validation and consent.
+        if "status" in fields:
+            raise ValidationError({
+                "status": "Bulk consent status updates are prohibited"
+            })
+        return super().bulk_update(objs, fields, batch_size=batch_size)
