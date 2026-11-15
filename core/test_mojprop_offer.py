@@ -164,3 +164,47 @@ class MojPropOfferTests(TestCase):
         self.assertEqual(self.lead.status, "new")
         self.assertFalse(hasattr(offer, "receipt_id"))
         self.assertFalse(hasattr(offer, "payment_hash"))
+
+
+    def test_review_and_issuance_timestamps_cannot_be_in_future(self):
+        now = timezone.now()
+        cases = [
+            dict(status="approved", reviewed_at=now + timedelta(hours=1)),
+            dict(status="issued", reviewed_at=now - timedelta(minutes=2),
+                 issued_at=now + timedelta(hours=1),
+                 expires_at=now + timedelta(days=3)),
+            dict(status="issued", reviewed_at=now + timedelta(hours=1),
+                 issued_at=now, expires_at=now + timedelta(days=3)),
+        ]
+        for params in cases:
+            with self.subTest(params=params), self.assertRaises(ValidationError):
+                self.offer(**params).full_clean()
+
+    def test_offer_may_not_be_issued_before_manual_review(self):
+        now = timezone.now()
+        with self.assertRaises(ValidationError):
+            self.offer(status="issued", reviewed_at=now - timedelta(minutes=5),
+                       issued_at=now - timedelta(minutes=10),
+                       expires_at=now + timedelta(days=4)).full_clean()
+
+    def test_unissued_quote_cannot_claim_an_issuance_timestamp(self):
+        now = timezone.now()
+        for state in ("draft", "approved"):
+            with self.subTest(state=state), self.assertRaises(ValidationError):
+                self.offer(status=state, reviewed_at=now,
+                           issued_at=now).full_clean()
+
+    def test_unaccepted_quote_cannot_hold_customer_acceptance_evidence(self):
+        now = timezone.now()
+        for state in ("draft", "approved", "issued"):
+            params = dict(
+                status=state, reviewed_at=now - timedelta(minutes=20),
+                acceptance_reference="signed-by-customer",
+                accepted_at=now - timedelta(minutes=1),
+            )
+            if state == "issued":
+                params.update(issued_at=now - timedelta(minutes=10),
+                              expires_at=now + timedelta(days=7))
+            with self.subTest(state=state), self.assertRaises(ValidationError):
+                self.offer(**params).full_clean()
+
