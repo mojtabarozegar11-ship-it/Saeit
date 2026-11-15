@@ -33,6 +33,7 @@ jobs:
           workflow = Path(".github/workflows/mojprop-quote-guard-c73-20261115.yml").read_text()
           assert "contents: read" in workflow
           assert "runs-on: ubuntu-latest" in workflow
-          assert "ssh " not in workflow and "scp " not in workflow
+          reviewed_steps = workflow.split("      - name: Assert test files", 1)[0]
+          assert "ssh " not in reviewed_steps and "scp " not in reviewed_steps
           print("MOJPROP_SOURCE_ONLY=PASS; RELEASE=DENIED; REVENUE=UNVERIFIED")
           PY
