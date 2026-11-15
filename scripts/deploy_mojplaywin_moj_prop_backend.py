@@ -99,6 +99,12 @@ def selftest(repo_root: Path) -> None:
     missing = [marker for marker, text in required if marker not in text]
     if missing:
         raise RuntimeError(f"backend selftest missing markers: {missing}")
+    merge = (repo_root / "core/migrations/0042_merge_commercefunnel_mojprop.py").read_text("utf-8")
+    aligned = (repo_root / "core/migrations/0043_alter_mojproprequest_source.py").read_text("utf-8")
+    if ("operations = []" not in merge
+            or '("core", "0042_merge_commercefunnel_mojprop")' not in aligned
+            or "migrations.AlterField(" not in aligned):
+        raise RuntimeError("Moj Prop migration contract does not match reviewed schema")
     print("MOJ_PROP_BACKEND_SELFTEST=PASS")
 
 
@@ -387,6 +393,13 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
                 install_migration(staged_root / relative, target)
             elif relative == Path("core/migrations/0042_merge_commercefunnel_mojprop.py"):
                 install_join_migration(staged_root / relative, target)
+            elif relative == Path("core/migrations/0043_alter_mojproprequest_source.py"):
+                # Migration history is append-only, including field-alignment fixes.
+                if target.exists() or target.is_symlink():
+                    raise RuntimeError("Moj Prop field migration exists; inspect, do not overwrite")
+                atomic_replace(staged_root / relative, target, 0o640)
+                if digest(target) != digest(staged_root / relative):
+                    raise RuntimeError("Moj Prop 0043 field migration checksum mismatch")
             else:
                 current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
                 atomic_replace(staged_root / relative, target, current_mode)
