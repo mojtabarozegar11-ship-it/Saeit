@@ -163,6 +163,34 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
             temporary.unlink()
 
 
+def install_migration(source: Path, target: Path) -> None:
+    assert_regular(source, "staged migration")
+    candidates = (
+        "0040_commercefunnelevent",
+        "0039_educationassessment_educationattempt_and_more",
+        "0001_initial",
+    )
+    parent = next(
+        (
+            name
+            for name in candidates
+            if (ROOT / "core/migrations" / (name + ".py")).is_file()
+            and not (ROOT / "core/migrations" / (name + ".py")).is_symlink()
+        ),
+        None,
+    )
+    if parent is None:
+        raise RuntimeError("no verified core migration baseline exists on the live app")
+    text = source.read_text(encoding="utf-8")
+    marker = '("core", "0039_educationassessment_educationattempt_and_more")'
+    if marker not in text:
+        raise RuntimeError("staged Moj Prop migration baseline marker is missing")
+    text = text.replace(marker, f'("core", "{parent}")', 1)
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
+    atomic_write_text(target, text, mode)
+    print("MOJ_PROP_MIGRATION_PARENT=" + parent)
+
+
 def patch_models(target: Path, source: Path) -> None:
     assert_regular(target, "live models")
     assert_regular(source, "staged models")
@@ -287,10 +315,13 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     try:
         for relative in REPLACE_FILES:
             target = ROOT / relative
-            current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
-            atomic_replace(staged_root / relative, target, current_mode)
-            if digest(target) != digest(staged_root / relative):
-                raise RuntimeError(f"post-copy hash mismatch: {relative}")
+            if relative == Path("core/migrations/0041_mojprop_request.py"):
+                install_migration(staged_root / relative, target)
+            else:
+                current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
+                atomic_replace(staged_root / relative, target, current_mode)
+                if digest(target) != digest(staged_root / relative):
+                    raise RuntimeError(f"post-copy hash mismatch: {relative}")
         patch_models(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
         patch_admin(ROOT / Path("core/admin.py"), staged_root / Path("core/admin.py"))
         patch_urlconf(ROOT / URLCONF)
