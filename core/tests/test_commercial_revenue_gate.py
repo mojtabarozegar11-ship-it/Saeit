@@ -17,6 +17,7 @@ from core.commercial_revenue_gate import (
     validate_offer,
     validate_payment_evidence,
     validate_signal_request,
+    authorize_nonfinancial_signal_dispatch,
     invoice_commitment,
 )
 
@@ -1774,6 +1775,64 @@ class CommercialGateTests(unittest.TestCase):
             (root / "alias").symlink_to(actual, target_is_directory=True)
             with self.assertRaisesRegex(CommercialGateError, "ledger_parent_missing_or_symlink"):
                 SQLiteCommercialLedger(str(root / "alias" / "child" / "ledger.sqlite3"))
+
+
+    def test_only_single_bot_identity_can_dispatch_nonfinancial_service(self):
+        approved = self.offer(offer_type=OfferType.SIGNAL,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "single_bot_identity_required"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="research_summary", bot_identity="legacy-worker",
+                offer=approved, tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True)
+
+    def test_draft_signal_offer_cannot_dispatch_even_with_registered_host(self):
+        with self.assertRaisesRegex(CommercialGateError, "signal_offer_not_authorized_for_dispatch"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+                offer=self.offer(offer_type=OfferType.SIGNAL),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True)
+
+    def test_nonfinancial_signal_dispatch_rejects_unapproved_hostname(self):
+        approved = self.offer(offer_type=OfferType.SIGNAL,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+                offer=approved, tenant_registry={"moj_prop": "other.example"},
+                independent_release_verifier=lambda offer: True)
+
+    def test_nonfinancial_signal_dispatch_denies_trading_instruction(self):
+        approved = self.offer(offer_type=OfferType.SIGNAL,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="buy_gold_now", bot_identity="mojtaba-bot-ai",
+                offer=approved, tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True)
+
+    def test_nonfinancial_signal_dispatch_requires_independent_release(self):
+        approved = self.offer(offer_type=OfferType.SIGNAL,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True)
+        with self.assertRaisesRegex(CommercialGateError, "independent_release_unverified"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+                offer=approved, tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: False)
+
+    def test_valid_single_bot_signal_dispatch_guard_is_source_only(self):
+        approved = self.offer(offer_type=OfferType.SIGNAL,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True)
+        self.assertIsNone(authorize_nonfinancial_signal_dispatch(
+            requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+            offer=approved, tenant_registry={"moj_prop": "mojplaywin.com"},
+            independent_release_verifier=lambda offer: True))
 
 
 if __name__ == "__main__":
