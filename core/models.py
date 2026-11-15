@@ -753,6 +753,12 @@ class MojPropDeliveryEvidence(T):
                     or not self.handoff_reference.strip()
                     or self.handed_off_at is None):
                 errors["handoff_reference"] = "Handoff requires a clearance, timestamp and delivery reference."
+            if (self.offer_id and self.offer.accepted_at
+                    and self.handed_off_at and self.handed_off_at < self.offer.accepted_at):
+                errors["handed_off_at"] = "A service cannot be handed off before customer acceptance."
+        elif (self.handed_off_at is not None or self.handoff_reference.strip()
+              or self.clearance_reference.strip()):
+            errors["handoff_reference"] = "Prepared-only artifacts cannot claim dispatch or payment clearance."
         if self.status == "acknowledged":
             if not self.acknowledgment_reference.strip() or self.acknowledged_at is None:
                 errors["acknowledgment_reference"] = "The customer acknowledgment must be independently recorded."
