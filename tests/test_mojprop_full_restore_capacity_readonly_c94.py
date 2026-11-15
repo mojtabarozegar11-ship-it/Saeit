@@ -85,8 +85,8 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
         goodfs = SimpleNamespace(f_bavail=2_000_000,
                                  f_frsize=4096, f_favail=1000)
-        good = SimpleNamespace(stdout="/dev/device 100 900000 1000000 1 1000 1500\\n")
-        bad = SimpleNamespace(stdout="/dev/device 100* 900000 1000000 1 1000 1500\\n")
+        good = SimpleNamespace(stdout="/dev/device 100 900000 1000000 1 1000 1500\n")
+        bad = SimpleNamespace(stdout="/dev/device 100* 900000 1000000 1 1000 1500\n")
         with patch.object(mod.os, "open", return_value=10), \
              patch.object(mod.os, "fstatvfs", return_value=goodfs), \
              patch.object(mod.os, "close"), \
