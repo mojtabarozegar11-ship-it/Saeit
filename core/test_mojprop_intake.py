@@ -185,7 +185,11 @@ class MojPropIntakeFrontendRecoveryContract(SimpleTestCase):
     def test_form_sends_secret_key_in_body_never_url(self):
         html = (Path(__file__).resolve().parents[1] /
                 "templates/moj-prop-v4/index.html").read_text(encoding="utf-8")
-        self.assertIn("window.crypto.randomUUID()", html)
+        self.assertIn("function secureRequestUUID()", html)
+        self.assertIn("crypto.getRandomValues(new Uint8Array(16))", html)
+        self.assertIn("bytes[6]=(bytes[6]&15)|64", html)
+        self.assertIn("bytes[8]=(bytes[8]&63)|128", html)
+        self.assertNotIn("Math.random()", html)
         self.assertIn("idempotency_key:pendingSubmission.key", html)
         self.assertIn("pendingSubmission.fingerprint!==fingerprint", html)
         self.assertIn("pendingSubmission.uncertain=true", html)
