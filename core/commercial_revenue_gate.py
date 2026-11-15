@@ -370,21 +370,34 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("ledger_path_invalid")
         memory = path == ":memory:"
         target = None if memory else Path(path)
-        created = bool(target is not None and not target.exists())
         if target is not None:
             if target.is_symlink():
                 raise CommercialGateError("ledger_symlink_prohibited")
+            if not target.parent.is_dir() or target.parent.is_symlink():
+                raise CommercialGateError("ledger_parent_missing_or_symlink")
+            if target.parent.stat().st_mode & 0o002:
+                raise CommercialGateError("ledger_parent_world_writable")
             if target.exists():
                 metadata = target.stat()
-                if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077:
+                if (not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077
+                        or metadata.st_nlink != 1
+                        or (hasattr(os, "getuid") and metadata.st_uid != os.getuid())):
                     raise CommercialGateError("ledger_file_permissions_unsafe")
-            elif not target.parent.is_dir():
-                raise CommercialGateError("ledger_parent_missing")
-            elif target.parent.stat().st_mode & 0o002:
-                raise CommercialGateError("ledger_parent_world_writable")
+            else:
+                # sqlite3.connect normally creates the file before chmod,
+                # exposing private order identifiers while umask is permissive.
+                if not hasattr(os, "O_NOFOLLOW"):
+                    raise CommercialGateError("ledger_secure_open_unavailable")
+                try:
+                    fd = os.open(
+                        str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                        0o600,
+                    )
+                except FileExistsError:
+                    raise CommercialGateError("ledger_creation_race") from None
+                else:
+                    os.close(fd)
         self.connection = sqlite3.connect(path)
-        if created:
-            os.chmod(path, 0o600)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.executescript(
