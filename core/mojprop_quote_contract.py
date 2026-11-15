@@ -25,6 +25,14 @@ def _text(value, name, minimum, maximum):
         raise QuoteContractError("invalid " + name)
     return value.strip()
 
+def validate_acceptance_reference(value):
+    """Return normalized buyer acceptance evidence or fail closed."""
+    reference = _text(value, "acceptance reference", 6, 180)
+    if any(ord(ch) < 32 for ch in reference):
+        raise QuoteContractError("invalid acceptance reference")
+    return reference
+
+
 def make_quote_snapshot(offer, *, now=None):
     """Return a deterministic quote snapshot; payment remains explicitly absent."""
     if offer is None:
@@ -72,14 +80,9 @@ def make_quote_snapshot(offer, *, now=None):
         accepted_at = _aware(accepted_at, "accepted_at")
         if accepted_at < issued_at or accepted_at >= expires_at:
             raise QuoteContractError("acceptance is outside the quote window")
-        acceptance_reference = _text(
-            getattr(offer, "acceptance_reference", None),
-            "acceptance reference",
-            6,
-            180,
+        validate_acceptance_reference(
+            getattr(offer, "acceptance_reference", None)
         )
-        if any(ord(ch) < 32 for ch in acceptance_reference):
-            raise QuoteContractError("invalid acceptance reference")
     elif accepted_at is not None:
         raise QuoteContractError("issued quote cannot carry acceptance evidence")
     return {
