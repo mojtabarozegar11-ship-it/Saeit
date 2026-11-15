@@ -7,6 +7,9 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch as mock_patch
+
+from scripts import deploy_mojplaywin_moj_prop_backend as backend
 
 from scripts.deploy_mojplaywin_moj_prop_backend import (
     ALL_FILES, REPLACE_FILES, patch_urlconf, selftest,
@@ -22,8 +25,11 @@ class MojPropReceiptBackendReleaseTests(unittest.TestCase):
         return target
 
     def patch(self, target):
-        with contextlib.redirect_stdout(io.StringIO()):
-            patch_urlconf(target)
+        # Only the test ROOT is overridden: preserve the real installer's
+        # strict refusal to write outside its pinned application tree.
+        with mock_patch.object(backend, "ROOT", target.parent):
+            with contextlib.redirect_stdout(io.StringIO()):
+                patch_urlconf(target)
         return target.read_text(encoding="utf-8")
 
     def test_signer_is_both_installed_and_backed_up_for_rollback(self):
