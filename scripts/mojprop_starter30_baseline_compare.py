@@ -59,6 +59,9 @@ def classify(evidence: dict, source_dir: Path) -> dict:
             or evidence.get("release_permitted") is not False
             or evidence.get("revenue_proven") is not False):
         raise ValueError("unsafe cPanel evidence flags")
+    if (evidence.get("owner_account_verified") is not True
+            or evidence.get("docroot_and_route_ownership_verified") is not True):
+        raise ValueError("unverified live owner or document-root provenance")
     if not source_dir.is_dir() or source_dir.is_symlink():
         raise ValueError("untrusted source directory")
     real_root = source_dir.resolve(strict=True)
