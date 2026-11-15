@@ -47,6 +47,11 @@
         brief:'Private market brief',
         audit:'mojtaba.bot.ai commercial-gate audit'
       };
+      const serviceSelect=document.getElementById('service');
+      const requestedService=new URLSearchParams(window.location.search).get('service');
+      if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
+        serviceSelect.value=requestedService;
+      }
 
       async function csrf(){
         if(csrfToken) return csrfToken;
