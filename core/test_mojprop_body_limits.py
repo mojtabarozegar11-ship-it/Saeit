@@ -53,6 +53,21 @@ class MojPropBodyBoundaryTests(TestCase):
                 self.assertEqual(self.post(duplicated).status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_malformed_json_customer_types_are_rejected_without_crm_write(self):
+        for key, value in (
+            ("name", {"admin": True}),
+            ("email", ["a@example.org", "b@example.org"]),
+            ("service", 5),
+            ("notes", None),
+            ("website", False),
+            ("consent", "yes"),
+            ("consent", 1),
+        ):
+            with self.subTest(key=key, value=value):
+                response = self.post(json.dumps(dict(self.valid, **{key: value})))
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_valid_bounded_json_still_creates_actual_manual_review_lead(self):
         response = self.post(json.dumps(self.valid))
         self.assertEqual(response.status_code, 201)
