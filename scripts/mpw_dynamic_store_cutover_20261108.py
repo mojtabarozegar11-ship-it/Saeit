@@ -459,8 +459,16 @@ def check_actual_staging_store() -> None:
             guest_adapter.is_symlink() or not guest_adapter.is_file()):
         raise RuntimeError("STAGING_SOURCE_DRIFT")
     verify_guarded_store_source(target.read_bytes())
-    verify_email_free_guest_source(guest_adapter.read_bytes())
-    verify_email_free_invoice_sources(APP)
+    # The real guest adapter validates buyer email; do not demand obsolete
+    # email-FREE behavior. This is SOURCE ONLY and cannot authorize release.
+    if str(APP) not in sys.path:
+        sys.path.insert(0, str(APP))
+    from scripts.mpw_email_required_preflight_20261114 import (
+        require_commercial_source_closure,
+    )
+    require_commercial_source_closure(APP)
+    # Actual migration, effective template and customer money remain unknown.
+    # Public cutover still requires owner policy gate and does not run here.
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
     os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.dont_write_bytecode = True
@@ -584,6 +592,11 @@ def verify_public_buyer_routes(run_id: str) -> bool:
     These probes never submit forms, create invoices, transfer funds or send mail.
     Only coarse failure categories are emitted, without customer information.
     """
+    # Safe public GET contract for email-owned invoices. Keep the obsolete
+    # email-free production cutover disabled until rollback and schema checks.
+    from scripts.mpw_email_bound_checkout_contract_20261115 import (
+        has_email_bound_guest_invoice_form,
+    )
     checked = 0
     deadline = time.monotonic() + BUYER_ROUTE_TOTAL_SECONDS
     for route, title, action in BUYER_ROUTE_PROBES:
@@ -604,7 +617,7 @@ def verify_public_buyer_routes(run_id: str) -> bool:
                         body = reply.read(250_000)
                         if title in body and action in body:
                             checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
-                            if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
+                            if not checkout or has_email_bound_guest_invoice_form(body, int(route.split("/")[3])):
                                 checked += 1
                                 continue
                             category = "checkout_form_invalid"

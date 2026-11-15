@@ -6,6 +6,8 @@ from .guest_database import connect
 from .guest_pricing import receive_wallet
 
 def confirm(order,transaction_id):
+ # Never accept an arbitrary object (or self-reported transaction details).
+ if type(transaction_id) is not str:raise ValueError("Invalid TRX transaction hash")
  tx=transaction_id.lower()
  if not re.fullmatch("[a-f0-9]{64}",tx):raise ValueError("Invalid TRX transaction hash")
  if order["status"]!="pending":raise ValueError("Invoice already finalized")
@@ -21,9 +23,18 @@ def confirm(order,transaction_id):
  db=connect()
  try:
   db.execute("BEGIN IMMEDIATE")
-  updated=db.execute("UPDATE guest_orders SET status='paid',txid=? WHERE id=? AND status='pending' AND claim_sha=?",
-   (tx,order["id"],order["claim_sha"]))
-  if updated.rowcount!=1:raise RuntimeError("Concurrent invoice change")
+  # Blockchain proof was made against an immutable invoice snapshot. Bind the
+  # final database write to EVERY quote field to prevent a stale order from
+  # being marked paid after receiver, amount, time window or SKU drifted.
+  updated=db.execute(
+   "UPDATE guest_orders SET status='paid',txid=? "
+   "WHERE id=? AND status='pending' AND claim_sha=? AND product_id=? "
+   "AND usd=? AND rate=? AND amount_sun=? AND sender=? AND receiver=? "
+   "AND issued_ms=? AND expires_ms=?",
+   (tx,order["id"],order["claim_sha"],order["product_id"],order["usd"],
+    order["rate"],order["amount_sun"],order["sender"],order["receiver"],
+    order["issued_ms"],order["expires_ms"]))
+  if updated.rowcount!=1:raise RuntimeError("Concurrent invoice or locked quote changed")
   db.commit()
  except sqlite3.IntegrityError as exc:
   raise ValueError("Transaction already attributed to another order") from exc

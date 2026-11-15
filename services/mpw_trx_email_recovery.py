@@ -105,6 +105,39 @@ def _posted_email(request):
     return _email(values[0])
 
 
+_RECOVERY_EMAIL_ALIASES = (
+    "buyer_email", "customer_email", "purchase_email", "purchaser_email",
+)
+
+
+def _exact_recovery_post_value(request, field, max_length):
+    """Use one canonical POST value, never QueryDict.get()'s last-value fallback.
+
+    Duplicate or alternative buyer identifiers must not silently select a
+    recipient. Code verification must not consume an attacker-chosen token
+    from an ambiguous POST. This is input validation, not permission to mail.
+    """
+    if getattr(request, "method", None) != "POST":
+        raise ValueError("Recovery requires POST")
+    submitted = getattr(request, "POST", None)
+    getlist = getattr(submitted, "getlist", None)
+    if not callable(getlist):
+        raise ValueError("Recovery form unavailable")
+    values = getlist(field)
+    if type(values) not in (list, tuple) or len(values) != 1:
+        raise ValueError("Ambiguous recovery form")
+    value = values[0]
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        raise ValueError("Invalid recovery field")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("Invalid recovery field")
+    if field == "email":
+        for alias in _RECOVERY_EMAIL_ALIASES:
+            if getlist(alias):
+                raise ValueError("Ambiguous recovery email")
+    return value
+
+
 def _digest(value, purpose="email"):
     return hmac.new(
         str(settings.SECRET_KEY).encode("utf-8"),
@@ -170,16 +203,18 @@ def _ready(order):
     item = fields.get("item")
     if (item is None or getattr(getattr(item, "related_model", None), "_meta", None)
             is None or item.related_model._meta.label_lower != "core.orderitem"
-            or "status" not in fields):
+            or "status" not in fields or "kind" not in fields):
         return False
     count = OrderItem.objects.filter(order_id=order.pk).count()
     if count < 1:
         return False
-    # Count alone is insufficient: two ready rows for one item could mask
-    # another order item with no fulfillment. Require one distinct ready
-    # item per purchased item before granting any recovery download.
+    # A previously downloaded digital file can be marked complete: a buyer's
+    # purchased right to recover it must not be silently revoked. Physical
+    # shipments or service grants, even if complete, are NEVER digital files.
+    # Require one unique eligible grant for every purchased order item.
     ready = Fulfillment.objects.filter(
-        item__order_id=order.pk, status__iexact="ready"
+        item__order_id=order.pk, kind="digital",
+        status__in=("ready", "complete"),
     )
     return (
         ready.count() == count
@@ -277,7 +312,7 @@ def recovery_request(request):
         return _page("Recover a TRX purchase", '<p>Use the email entered at checkout.</p>' +
                      _form(request, ROOT, [("Purchase email", "email", "email")], "Request code"), request)
     try:
-        address = _email(request.POST.get("email", ""))
+        address = _email(_exact_recovery_post_value(request, "email", 254))
     except ValueError:
         address = None
     if address and _allowed(request, address):
@@ -322,7 +357,11 @@ def recovery_verify(request):
                      [("Code from email", "code", "text")], "Verify"), request)
     if not _allowed(request, verify=True):
         return _page("Recovery unavailable", "<p>Please try again later.</p>", status=429)
-    digest = _consume(request.POST.get("code", ""))
+    try:
+        code = _exact_recovery_post_value(request, "code", CODE_LENGTH)
+    except ValueError:
+        code = ""
+    digest = _consume(code)
     if digest is None:
         LOG.info("mpw_recovery_code_rejected")
         return _page("Recovery unavailable", "<p>Invalid or expired code.</p>", status=400)

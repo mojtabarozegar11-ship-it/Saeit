@@ -290,13 +290,22 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
+            from services.mpw_trx_email_recovery import ROOT, _recovery_enabled
+            # Recovery is advertised only when both release and outbound-mail
+            # approvals are enabled. Never ask a paid buyer to purchase twice.
+            recovery_link = (
+                '<p><a href="' + ROOT +
+                '">Recover your paid purchase using checkout email</a></p>'
+                if _recovery_enabled() else ''
+            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
                 '<title>Purchase recovery | MojPlayWin</title></head><body>'
                 '<main><h1>TRX purchase recovery</h1>'
                 '<p>No active purchase session was found in this browser. '
-                'Your orders are private and require the original browser session.</p>'
+                'Your orders are private and require verified buyer identity.</p>'
+                + recovery_link +
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
@@ -345,27 +354,20 @@ def patch_commercial(namespace):
                     # redirect to a positive-ID local TRX invoice. Validation
                     # errors, 200 pages and unrelated redirects are NOT sales
                     # funnel successes; analytics may never break checkout.
+                    # An optional analytics dependency must never turn a
+                    # successfully-created invoice into a buyer-facing 500.
                     try:
-                        import re
-                        from urllib.parse import urlsplit
-                        location = response.get("Location", "")
-                        redirect = urlsplit(location) if type(location) is str else None
-                        invoice_created = (
-                            getattr(response, "status_code", None) in (302, 303)
-                            and redirect is not None
-                            and not redirect.scheme and not redirect.netloc
-                            and re.fullmatch(
-                                r"/commerce/trx-easy/invoice/[1-9][0-9]*/",
-                                redirect.path,
-                            ) is not None
+                        from services.mpw_invoice_funnel_identity import (
+                            created_invoice_product_id,
                         )
-                    except (AttributeError, TypeError, ValueError):
-                        invoice_created = False
-                    if invoice_created:
+                        product_id = created_invoice_product_id(response, args, kwargs)
+                    except Exception:
+                        product_id = None
+                    if product_id is not None:
                         try:
                             from core.models import Product
                             product = Product.objects.filter(
-                                pk=kwargs.get("product_id"), active=True,
+                                pk=product_id, active=True,
                             ).first()
                             if product is not None:
                                 _record_funnel_event_best_effort(
