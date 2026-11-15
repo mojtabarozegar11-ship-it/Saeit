@@ -115,6 +115,12 @@
         if(signalPrefill) notesField.value=signalPrefill;
       }
       function syncSignalPlan(){
+        // Remove only unchanged system prefill when switching away from signals.
+        if(serviceSelector.value!=='signals' && signalPrefill && notesField.value===signalPrefill){
+          notesField.value='';
+          signalPrefill='';
+          syncDigitalProduct();
+        }
         const show=serviceSelector.value==='signals' && Boolean(selectedPlan || freeTierRequested);
         planSummary.hidden=!show;
         planSummary.textContent=!show ? ''
@@ -125,14 +131,6 @@
         notesField.maxLength=5000-(show ? (freeTierRequested ? freePrefix.length : planPrefix.length) : 0);
       }
       serviceSelector.addEventListener('change',syncSignalPlan);
-      serviceSelector.addEventListener('change',function(){
-        // Remove only system-authored text; preserve customer changes.
-        if(serviceSelector.value!=='signals' && signalPrefill && notesField.value===signalPrefill){
-          notesField.value='';
-          signalPrefill='';
-          syncDigitalProduct();
-        }
-      });
       syncSignalPlan();
 
       async function csrf(signal){
