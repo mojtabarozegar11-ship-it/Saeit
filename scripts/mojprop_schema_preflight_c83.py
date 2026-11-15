@@ -28,9 +28,16 @@ MODULES = (
 )
 
 
-def _classes(path):
+def _class_signatures(path):
     root = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    return {node.name for node in root.body if isinstance(node, ast.ClassDef)}
+    return {
+        node.name: ast.dump(node, include_attributes=False)
+        for node in root.body if isinstance(node, ast.ClassDef)
+    }
+
+
+def _classes(path):
+    return set(_class_signatures(path))
 
 
 def migration_operations_signature(path):
@@ -101,6 +108,18 @@ def check_schema_closure(live_root, staged_root):
     ):
         if selected and selected != set(required):
             raise RuntimeError("partial Moj Prop " + label + " tree needs reviewed upgrade")
+
+    for relative, required, label in (
+        ("core/models.py", MODELS, "model"),
+        ("core/admin.py", ADMINS, "admin"),
+    ):
+        live = _class_signatures(live_root / relative)
+        staged = _class_signatures(staged_root / relative)
+        if all(name in live for name in required):
+            for name in required:
+                if live[name] != staged[name]:
+                    raise RuntimeError("existing Moj Prop " + label +
+                                       " differs from reviewed source: " + name)
 
     # Never let a targeted 'migrate core 0045' silently unapply or rewrite
     # unrelated newer migrations in an owner-preserved application tree.
