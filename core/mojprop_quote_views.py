@@ -27,7 +27,13 @@ def quote_read_token(offer):
             or offer.pk is None or offer.status not in ("issued", "accepted")
             or offer.issued_at is None or offer.expires_at is None
             or offer.reviewed_at is None or offer.reviewed_at > offer.issued_at
-            or offer.expires_at <= timezone.now()):
+            or offer.expires_at <= timezone.now()
+            or (offer.status == "accepted"
+                and (offer.accepted_at is None
+                     or offer.accepted_at < offer.issued_at
+                     or offer.accepted_at >= offer.expires_at
+                     or not isinstance(offer.acceptance_reference, str)
+                     or not offer.acceptance_reference.strip()))):
         raise ValueError("quote is not available for buyer review")
     if MojPropOffer.objects.filter(
         lead_id=offer.lead_id, version__gt=offer.version,
@@ -64,6 +70,12 @@ def customer_quote(request, token):
         ).first()
         if (offer is None or offer.reviewed_at is None
                 or offer.reviewed_at > offer.issued_at
+                or (offer.status == "accepted"
+                    and (offer.accepted_at is None
+                         or offer.accepted_at < offer.issued_at
+                         or offer.accepted_at >= offer.expires_at
+                         or not isinstance(offer.acceptance_reference, str)
+                         or not offer.acceptance_reference.strip()))
                 or MojPropOffer.objects.filter(
                     lead_id=offer.lead_id, version__gt=offer.version,
                     status__in=("issued", "accepted"),
