@@ -673,14 +673,6 @@ class SQLiteCommercialLedger:
                 )
                 if target is CommercialState.SETTLED and payload_digest != evidence_digest:
                     raise CommercialGateError("settlement_payload_mismatch")
-                if self._settlement_verifier is None:
-                    raise CommercialGateError("independent_settlement_verifier_required")
-                try:
-                    confirmed = self._settlement_verifier(payment_evidence)
-                except Exception:
-                    raise CommercialGateError("independent_settlement_verifier_failed") from None
-                if confirmed is not True:
-                    raise CommercialGateError("independent_settlement_unverified")
                 issued = self.connection.execute(
                     "SELECT invoice_id, payload_digest FROM issued_invoices WHERE order_id = ?", (order_id,),
                 ).fetchone()
@@ -700,6 +692,17 @@ class SQLiteCommercialLedger:
                     ).fetchone()
                     if settled is None or settled["transaction_id"] != payment_evidence.transaction_id.lower():
                         raise CommercialGateError("verified_revenue_settlement_mismatch")
+                # Check inexpensive local invoice/settlement identities before
+                # calling any trusted external verifier. No unregistered
+                # invoice should trigger a provider lookup or expense.
+                if self._settlement_verifier is None:
+                    raise CommercialGateError("independent_settlement_verifier_required")
+                try:
+                    confirmed = self._settlement_verifier(payment_evidence)
+                except Exception:
+                    raise CommercialGateError("independent_settlement_verifier_failed") from None
+                if confirmed is not True:
+                    raise CommercialGateError("independent_settlement_unverified")
             # Chain transfers are single-use across orders; uniqueness is durable.
             if target is CommercialState.SETTLED:
                 try:
