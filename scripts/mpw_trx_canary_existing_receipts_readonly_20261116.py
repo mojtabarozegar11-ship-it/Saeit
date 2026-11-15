@@ -97,7 +97,8 @@ def main():
 
     source = inspect.getsource(_commercial_db)
     try:
-        current_gate_passed = _commercial_db(settings, connection) is None
+        _commercial_db(settings, connection)
+        current_gate_passed = True
     except Exception:
         current_gate_passed = False
     try:
