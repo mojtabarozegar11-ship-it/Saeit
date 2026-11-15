@@ -26,17 +26,30 @@ farm trials**.
 ## Run
 
 ```bash
-python3 paired_scenario_audit.py \
-  --cohort-c CohortC1620.csv \
-  --regime-r1 RegimeR2160.csv \
+# Run from the Saeit repository root with locally supplied, author-held CSVs.
+python3 research/irrigation_synthetic_audit/paired_scenario_audit.py \
+  --cohort-c /secure/path/CohortC1620.csv \
+  --regime-r1 /secure/path/RegimeR2160.csv \
   --verify-paper > audit_results.json
-python3 -m unittest -v test_paired_scenario_audit.py
+python3 -m unittest -v research.irrigation_synthetic_audit.test_paired_scenario_audit
 ```
+
+**Live workbook nomenclature:** Python family `R1` corresponds to actual
+`RegimeR2160` scenario identifiers beginning with `R-`, not `R1-`.
+See [SOURCE_CROSSWALK_20261115.md](SOURCE_CROSSWALK_20261115.md) for the
+2026-11-15 direct live-data read and the limitations of its checks.
+The `--verify-paper` switch compares numeric postprocessing checkpoints; it
+must not be described as weather/controller replay, field calibration, or
+peer-review verification.
 
 The checker requires no dependencies outside Python's standard library.
 It rejects malformed numeric fields, duplicate policy/scenario rows, missing
-policies, invalid climate-factor settings, cap violations, incomplete climate
-factorials and disagreement with manuscript numeric checkpoints. It computes
+policies, overlong CSV rows, invalid climate-factor settings, cap violations,
+incomplete climate factorials and disagreement with manuscript numeric
+checkpoints. If no crossing scenario exists, its median switching threshold is
+`null` instead of an invented number or an uncaught exception. The JSON also
+includes paired differences summarized for each of the twelve climate paths
+in each family, without treating those paths as 540 independent farm samples. It computes
 means, water/Q Pareto comparisons, eight illustrative post hoc decision weights,
 break-even weights, and climate-stratified preferences. Output includes SHA-256
 digests for the **exact snapshot CSV bytes**; these digests do not constitute
