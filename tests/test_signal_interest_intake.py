@@ -1,6 +1,7 @@
 """Genuine DB writes and tamper-proof contact-only signal funnel tests."""
 from urllib.parse import urlencode
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.cache import cache
 from django.contrib.admin.sites import site
 from django.test import Client, TestCase, override_settings
@@ -137,3 +138,82 @@ class SignalInterestIntakeTests(TestCase):
         self.assertFalse(a.has_add_permission(None))
         self.assertFalse(a.has_delete_permission(None))
         self.assertIn("email",a.readonly_fields)
+
+    def test_withdrawn_timestamp_cannot_be_reactivated(self):
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        self.assertIsNone(lead.withdrawn_at)
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertIsNotNone(lead.withdrawn_at)
+        original_stamp = lead.withdrawn_at
+        lead.status = "new"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+        self.assertEqual(lead.withdrawn_at, original_stamp)
+
+    def test_contacted_can_transition_to_withdrawn_but_never_back(self):
+        self.post()
+        lead = SignalInterest.objects.get()
+        lead.status = "contacted"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "contacted")
+        self.assertIsNone(lead.withdrawn_at)
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertIsNotNone(lead.withdrawn_at)
+        lead.status = "contacted"
+        with self.assertRaises(ValidationError):
+            lead.save()
+
+    def test_source_consent_fields_are_immutable_after_intake(self):
+        self.post()
+        changes = {
+            "email": "other@example.org", "brand": "zahra",
+            "plan_code": "moj-signals-plus", "consent_version": "unverified",
+            "source_language": "ar", "source_host": "zomorodmelal.ir",
+            "offer_family": "moj_prop",
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                lead = SignalInterest.objects.get()
+                setattr(lead, field, value)
+                with self.assertRaises(ValidationError):
+                    lead.save()
+        lead = SignalInterest.objects.get()
+        self.assertEqual(lead.offer_family, "signals")
+        self.assertEqual(lead.source_host, "mojplaywin.com")
+
+    def test_partial_save_cannot_hide_status_transition(self):
+        self.post()
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "new")
+        self.assertIsNone(lead.withdrawn_at)
+
+    def test_withdrawn_lead_remains_withdrawn_on_new_form_and_other_brands_work(self):
+        self.post()
+        self.post({**self.BASE, "brand": "zahra"})
+        lead = SignalInterest.objects.get(brand="saman")
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        self.assertEqual(self.post().status_code, 202)
+        self.assertEqual(SignalInterest.objects.get(brand="saman").status, "withdrawn")
+        other = SignalInterest.objects.get(brand="zahra")
+        self.assertEqual(other.status, "new")
+        self.assertIsNone(other.withdrawn_at)
+        self.assertEqual(SignalInterest.objects.count(), 2)
+
+    def test_owner_admin_displays_withdrawal_receipt_read_only(self):
+        a = site._registry[SignalInterest]
+        self.assertIn("withdrawn_at", a.list_display)
+        self.assertIn("withdrawn_at", a.readonly_fields)
+        self.assertIn("withdrawn_at", a.fields)
