@@ -87,15 +87,15 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
                                  f_frsize=4096, f_favail=1000)
         good = SimpleNamespace(stdout="/dev/device 100 900000 1000000 1 1000 1500\\n")
         bad = SimpleNamespace(stdout="/dev/device 100* 900000 1000000 1 1000 1500\\n")
-        with patch.object(mod.os, "open", return_value=10), \\
-             patch.object(mod.os, "fstatvfs", return_value=goodfs), \\
-             patch.object(mod.os, "close"), \\
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=goodfs), \
+             patch.object(mod.os, "close"), \
              patch("subprocess.run", return_value=good) as run:
             self.assertTrue(mod._quota_checked(1024 * 1024))
             self.assertEqual(run.call_args.args[0], ["quota", "-wvu", mod.ACCOUNT])
-        with patch.object(mod.os, "open", return_value=10), \\
-             patch.object(mod.os, "fstatvfs", return_value=goodfs), \\
-             patch.object(mod.os, "close"), \\
+        with patch.object(mod.os, "open", return_value=10), \
+             patch.object(mod.os, "fstatvfs", return_value=goodfs), \
+             patch.object(mod.os, "close"), \
              patch("subprocess.run", return_value=bad):
             self.assertFalse(mod._quota_checked(1024 * 1024))
 
