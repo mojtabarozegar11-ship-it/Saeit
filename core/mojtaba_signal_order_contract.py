@@ -77,7 +77,16 @@ def validate_order_intent(
 ) -> None:
     if not isinstance(intent, SignalOrderIntent):
         raise SignalOrderContractError("order_intent_required")
-    validate_route_offer_alignment(route, offer)
+    try:
+        validate_route_offer_alignment(route, offer)
+    except SignalContractError as exc:
+        # The catalog and order boundary must agree on one stable contract
+        # error type even when the offer is refused before order checks.
+        mapped = {
+            "offer_price_out_of_bounds": "order_price_out_of_bounds",
+            "offer_price_precision_exceeded": "order_price_precision_exceeded",
+        }.get(str(exc), "route_or_offer_contract_invalid")
+        raise SignalOrderContractError(mapped) from exc
     if not route.active:
         raise SignalOrderContractError("route_not_active")
     if not offer.active:
