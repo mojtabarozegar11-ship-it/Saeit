@@ -39,13 +39,13 @@ class SignalCommercialBoundariesTests(TestCase):
         self.assertEqual(PaymentIntent.objects.count(),0)
 
     def test_signal_cta_points_to_live_consent_form_in_each_locale(self):
-        for path, language in (
-            ("/saman/market-signals/", "en"),
-            ("/fa/saman/market-signals/", "fa"),
-            ("/ar/saman/market-signals/", "ar"),
+        for path, language, host in (
+            ("/saman/market-signals/", "en", "mojplaywin.com"),
+            ("/saman/market-signals/", "fa", "zomorodmelal.ir"),
+            ("/ar/saman/market-signals/", "ar", "mojplaywin.com"),
         ):
-            with self.subTest(path=path):
-                response = self.client.get(path, secure=True, HTTP_HOST="mojplaywin.com")
+            with self.subTest(path=path, host=host):
+                response = self.client.get(path, secure=True, HTTP_HOST=host)
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, 'href="#signal-interest"', count=2)
                 self.assertContains(response, 'id="signal-interest"')
