@@ -399,6 +399,25 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_ledger_rejects_unsafe_event_identifiers_without_writing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            for event_id in ("quote\\nspoof", "quote\\tspoof", "x" * 129, "évent-52"):
+                with self.subTest(event_id=event_id):
+                    with self.assertRaisesRegex(CommercialGateError, "event_id_invalid"):
+                        ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
+                                       event_id=event_id, payload_digest="a" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "ordered")
+            self.assertEqual(ledger.connection.execute(
+                "SELECT COUNT(*) FROM order_events WHERE order_id = ?", ("order-52",)
+            ).fetchone()[0], 1)
+            ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
+                           event_id="quote-52", payload_digest="a" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "quoted")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
