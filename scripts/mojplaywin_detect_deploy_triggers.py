@@ -14,10 +14,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 LEGACY_LOCKS = {
-    "mojplaywin-main-deploy.yml": "deploy-main",
+    # Legacy shared-content jobs must stay hard-stopped.
     "mojplaywin-active-home-editorials.yml": "deploy-active-home",
     "mojplaywin-legacy-content-deploy.yml": "deploy-content",
 }
+MAIN_MANUAL_JOB = ("mojplaywin-main-deploy.yml", "deploy-main")
 CANDIDATE_MAIN_FILES = (
     "core/mojplaywin_views.py",
     "core/templates/mojplaywin/home.html",
@@ -28,6 +29,7 @@ CANDIDATE_MAIN_FILES = (
 CANDIDATE_SAFETY_FILES = tuple(
     ".github/workflows/" + file for file in LEGACY_LOCKS
 ) + (
+    ".github/workflows/mojplaywin-main-deploy.yml",
     ".github/workflows/mojplaywin-deploy-trigger-readonly-audit.yml",
     "scripts/mojplaywin_detect_deploy_triggers.py",
     "tests/test_mojplaywin_shared_deploy_hard_stop.py",
