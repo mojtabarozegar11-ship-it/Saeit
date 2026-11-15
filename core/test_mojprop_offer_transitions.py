@@ -60,7 +60,10 @@ class OfferStatusTransitionTests(TestCase):
                           acceptance_reference="manually verified consent")
 
     def test_issued_quote_requires_expiry_after_issuance(self):
+        self.move("approved", reviewed_at=self.past)
         with self.assertRaises(ValidationError):
-            self.move("issued", reviewed_at=self.past,
-                      issued_at=self.past + timedelta(minutes=2),
+            self.move("issued", issued_at=self.past + timedelta(minutes=2),
                       expires_at=self.past + timedelta(minutes=1))
+        # The previous failure was due to expiry, not a bypassed review step.
+        self.offer.refresh_from_db()
+        self.assertEqual(self.offer.status, "approved")
