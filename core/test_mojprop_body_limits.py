@@ -28,7 +28,8 @@ class MojPropBodyBoundaryTests(TestCase):
     def test_oversized_notes_do_not_consume_database_or_accept_lead(self):
         payload = dict(self.valid, notes="a" * 18000)
         response = self.post(json.dumps(payload))
-        self.assertEqual(response.status_code, 400)
+        # A >16KiB request is rejected before field processing with HTTP 413.
+        self.assertEqual(response.status_code, 413)
         self.assertFalse(MojPropRequest.objects.exists())
 
     def test_unsupported_content_type_is_rejected(self):
