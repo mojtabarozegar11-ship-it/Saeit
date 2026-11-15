@@ -16,6 +16,7 @@ class TronFinalityProofBoundaryTests(TestCase):
         self.invoice = SimpleNamespace(
             asset="TRX", network="tron-mainnet", recipient=self.receiver,
             total_usd=Decimal("29.00"), quote_usd_per_asset=Decimal("0.2"),
+            quote_source="coinbase", quote_observed_at=now,
             sender_challenge_id="challenge-101",
             sender_signature_verified_at=now, issued_at=now,
             expires_at=now + timedelta(minutes=10), order_id=101,
@@ -98,3 +99,55 @@ class TronFinalityProofBoundaryTests(TestCase):
             pass
         with self.assertRaises(SettlementRejected):
             _verify_evidence(self.invoice, self.tx, SyntheticProof(self.proof))
+
+    def test_no_settlement_with_invalid_issuance_clock(self):
+        now = self.invoice.issued_at
+        invalid = (
+            ("quote_observed_at", now + timedelta(seconds=1)),
+            ("quote_observed_at", now - timedelta(seconds=91)),
+            ("sender_signature_verified_at", now + timedelta(seconds=1)),
+            ("sender_signature_verified_at", now - timedelta(minutes=6)),
+            ("issued_at", None),
+            ("issued_at", "2026-11-15T10:00:00Z"),
+            ("quote_observed_at", now.replace(tzinfo=None)),
+            ("sender_signature_verified_at", False),
+            ("expires_at", now.replace(tzinfo=None)),
+            ("expires_at", now + timedelta(minutes=11)),
+        )
+        for field, value in invalid:
+            with self.subTest(field=field, value=repr(value)):
+                original = getattr(self.invoice, field)
+                try:
+                    setattr(self.invoice, field, value)
+                    with self.assertRaises(SettlementRejected):
+                        _verify_evidence(self.invoice, self.tx, self.proof)
+                finally:
+                    setattr(self.invoice, field, original)
+
+    def test_quote_origin_and_sender_signature_identity_are_immutable(self):
+        for field, value in (
+            ("quote_source", "untrusted-webhook"),
+            ("quote_source", None),
+            ("sender_challenge_id", "short"),
+            ("sender_challenge_id", "bad\\nnonce"),
+            ("sender_challenge_id", None),
+        ):
+            with self.subTest(field=field, value=repr(value)):
+                original = getattr(self.invoice, field)
+                try:
+                    setattr(self.invoice, field, value)
+                    with self.assertRaises(SettlementRejected):
+                        _verify_evidence(self.invoice, self.tx, self.proof)
+                finally:
+                    setattr(self.invoice, field, original)
+
+    def test_boolean_order_id_cannot_impersonate_first_buyer_order(self):
+        original = self.invoice.order_id
+        try:
+            self.invoice.order_id = 1
+            with self.assertRaises(SettlementRejected):
+                _verify_evidence(self.invoice, self.tx, {
+                    **self.proof, "order_id": True,
+                })
+        finally:
+            self.invoice.order_id = original
