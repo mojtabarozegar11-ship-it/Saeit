@@ -165,8 +165,9 @@ class DynamicStoreIntegrationTests(TestCase):
 
     def test_noncurated_approved_sku_gets_existing_licensed_detail_page(self):
         from core.models import Product
-        p = Product(pk=901, title="Verified downloadable journal",
-                    product_type="digital", currency="USD", price=Decimal("14.00"), active=True)
+        p = Product.objects.create(pk=901, title="Verified downloadable journal",
+                                   product_type="digital", currency="USD",
+                                   price=Decimal("14.00"), active=True)
         with patch("core.mojplaywin_dynamic_catalog.approved_product",
                    return_value=p), patch(
             "core.mojplaywin_product_detail._approved_purchase_url",
