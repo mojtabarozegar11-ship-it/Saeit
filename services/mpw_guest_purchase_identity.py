@@ -127,3 +127,50 @@ def verify_guest_order_identity(*, proof, buyer_email, invoice_id, principal_id,
         )
     except (TypeError, ValueError, GuestBuyerIdentityError):
         return False
+
+
+def paid_guest_delivery_preflight(*, proof, buyer_email, invoice_id,
+                                  principal_id, product_id, now_utc, signing_key,
+                                  trusted_paid_invoice):
+    """A valid email HMAC alone NEVER unlocks a purchased download.
+
+    trusted_paid_invoice must come from the server's durable order/payment
+    ledger after independent TRON finality; never accept it from POST JSON.
+    Return a decision only: no file read, email, network or payment mutation.
+    """
+    deny = lambda reason: {"eligible_for_private_delivery": False, "reason": reason}
+    if not verify_guest_order_identity(
+            proof=proof, buyer_email=buyer_email, invoice_id=invoice_id,
+            principal_id=principal_id, product_id=product_id,
+            now_utc=now_utc, signing_key=signing_key):
+        return deny("invalid_or_expired_guest_identity")
+    if type(trusted_paid_invoice) is not dict:
+        return deny("independent_paid_invoice_missing")
+    if (trusted_paid_invoice.get("invoice_id") != invoice_id
+            or trusted_paid_invoice.get("principal_id") != principal_id
+            or trusted_paid_invoice.get("product_id") != product_id
+            or trusted_paid_invoice.get("buyer_email_digest") != proof.buyer_email_digest):
+        return deny("invoice_owner_product_mismatch")
+    txid = trusted_paid_invoice.get("provider_tx_id")
+    if (trusted_paid_invoice.get("status") != "paid"
+            or trusted_paid_invoice.get("asset") != "TRX"
+            or trusted_paid_invoice.get("network") != "tron-mainnet"
+            or trusted_paid_invoice.get("chain_finality_verified") is not True
+            or type(txid) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", txid) is None
+            or type(trusted_paid_invoice.get("settled_sun")) is not int
+            or trusted_paid_invoice["settled_sun"] <= 0):
+        return deny("independent_tron_payment_unverified")
+    if (trusted_paid_invoice.get("delivery_rights_verified") is not True
+            or trusted_paid_invoice.get("refund_pending") is not False
+            or trusted_paid_invoice.get("charge_disputed") is not False):
+        return deny("rights_or_dispute_hold")
+    return {
+        "eligible_for_private_delivery": True,
+        "invoice_id": invoice_id,
+        "product_id": product_id,
+        "principal_id": principal_id,
+        "email_sent": False,
+        "file_delivered": False,
+        "payment_changed": False,
+    }
