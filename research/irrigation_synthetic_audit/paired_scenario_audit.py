@@ -181,7 +181,7 @@ def analyze_family(records: list[dict], family: str) -> dict:
         "climate_paths": len(paths), "means": means, "comparisons": counts,
         "mean_delta_water_m3": mean_dv, "mean_delta_q100": mean_dq,
         "mean_loss_crossing_lambda": mean_dv / -mean_dq if mean_dq < 0 else None,
-        "case_crossing_lambda_median": statistics.median(crossed),
+        "case_crossing_lambda_median": statistics.median(crossed) if crossed else None,
         "weights": {str(w): {**weights[w], "mean_delta_loss": mean_dv+w*mean_dq}
                     for w in WEIGHTS},
         "lambda_10_by_climate_class": dict(sorted(by_class.items())),
