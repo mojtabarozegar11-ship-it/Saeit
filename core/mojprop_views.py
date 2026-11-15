@@ -260,7 +260,9 @@ def mojprop_intake(request):
 @require_http_methods(["GET"])
 def mojprop_receipt_status(request):
     """Signed private bearer receipt returns only public stage, never buyer PII."""
-    token = str(request.GET.get("receipt_token", ""))
+    # Multiple bearer credentials on one URL are ambiguous: fail closed.
+    tokens = request.GET.getlist("receipt_token")
+    token = tokens[0] if len(tokens) == 1 else ""
     request_id = verify_receipt_token(token)
     if request_id is None:
         return _json({
