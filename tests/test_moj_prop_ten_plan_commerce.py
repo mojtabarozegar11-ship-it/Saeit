@@ -2,12 +2,19 @@
 from decimal import Decimal
 from django.test import SimpleTestCase
 
-from core.tron_tenant_policy import TenantDecision
+from core.tron_tenant_policy import TenantDecision, REQUIRED_ATTESTATIONS
 from prop_firm.challenge_commerce import REQUIRED, assess_challenge_checkout
 from prop_firm.economics import estimate_cohort
 from prop_firm.plans import CHALLENGE_PLANS, DEFAULT_PLAN_CODE
 
 TENANT=TenantDecision("moj-prop-merchant","mojplaywin.com","moj_prop",True,())
+TRUSTED_PROP_REGISTRY = {
+    ("mojplaywin.com", "moj_prop"): {
+        "tenant_id": "moj-prop-merchant",
+        "network": "tron-mainnet", "asset": "TRX",
+        **{key: True for key in REQUIRED_ATTESTATIONS},
+    },
+}
 
 
 class TenPlanFundingReadinessTests(SimpleTestCase):
@@ -23,6 +30,7 @@ class TenPlanFundingReadinessTests(SimpleTestCase):
             required_first_tier_accounts=requested,
             plan_code=code,
             attestations=evidence,
+            trusted_merchant_registry=TRUSTED_PROP_REGISTRY,
         )
 
     def test_owner_first_plan_still_exact_30_trx_and_100_usd(self):
