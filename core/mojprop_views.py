@@ -166,6 +166,13 @@ def mojprop_intake(request):
         validate_email(email)
     except ValidationError:
         errors["email"] = "A valid email is required."
+    else:
+        # These domains cannot receive commercial proposals or retrieval links.
+        domain = email.rsplit("@", 1)[-1].lower().rstrip(".")
+        if domain in {"localhost", "example.invalid"} or domain.endswith(
+            (".invalid", ".localhost", ".local", ".test")
+        ):
+            errors["email"] = "Use an email address capable of receiving a written offer."
     if route not in ROUTES:
         errors["service"] = "Choose a valid service route."
     if horizon not in HORIZONS:
