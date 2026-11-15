@@ -45,6 +45,27 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
         self.assertIn("/moj-signal-free-subscribe/", html)
         self.assertNotIn("/moj-signal-free-subscribe/", baseline.read_text("utf-8"))
 
+    def test_starter30_all_three_public_assets_are_atomic_release_members(self):
+        expected = (
+            Path("starter-30-trx/index.html"),
+            Path("starter-30-trx/journal-template.csv"),
+            Path("starter-30-trx/journal-guide.txt"),
+        )
+        for item in expected:
+            with self.subTest(item=str(item)):
+                self.assertIn(item, release.FILES)
+                self.assertTrue((SITE_SOURCE / item).is_file())
+        self.assertEqual(len(release.FILES), len(set(release.FILES)))
+        home = (SITE_SOURCE / "index.html").read_text("utf-8")
+        catalog = (SITE_SOURCE / "catalog/index.html").read_text("utf-8")
+        self.assertIn('href="/moj-prop/starter-30-trx/"', home)
+        self.assertIn('href="/moj-prop/starter-30-trx/"', catalog)
+        starter = (SITE_SOURCE / expected[0]).read_text("utf-8")
+        self.assertIn("./journal-template.csv", starter)
+        self.assertIn("./journal-guide.txt", starter)
+        self.assertIn("Payment not enabled", starter)
+        self.assertIn("not a funded account", starter)
+
     def test_market_brief_uses_named_sources_and_no_unverified_quote(self):
         page = (SITE_SOURCE / "samples/gold-market-brief/index.html").read_text("utf-8")
         for expected in ("cmegroup.com", "gold.org", "elibrary.imf.org",
@@ -157,6 +178,55 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertFalse((self.route / "samples/commercial-gate-audit/index.html").exists())
         self.assertFalse((self.route / "signals/index.html").exists())
 
+    def test_missing_starter30_artifact_rejects_all_release_before_backup(self):
+        missing = self.stage / "starter-30-trx/journal-guide.txt"
+        missing.unlink()
+        with self.assertRaisesRegex(RuntimeError, "Expected a regular file"):
+            release.deploy("123", "a" * 40)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_starter30_csv_cannot_carry_trading_positions_or_formulas(self):
+        page = self.stage / "starter-30-trx/journal-template.csv"
+        page.write_text(
+            "session,closing_equity_usd,risk_plan_recorded,reflection_recorded\n"
+            + "1,=WEBSERVICE(\"https://invalid.example\"),yes,yes\n"
+            + "".join(f"{i},,,\n" for i in range(2, 11)),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(RuntimeError, "exactly 10 EMPTY simulated sessions"):
+            release.deploy("123", "a" * 40)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_live_starter30_owner_edit_blocks_release_and_preserves_source(self):
+        file = self.route / "starter-30-trx/journal-guide.txt"
+        file.parent.mkdir(parents=True)
+        file.write_text("Operator-authored private teaching notes; do not overwrite", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "unexpected content"):
+            release.deploy("123", "a" * 40)
+        self.assertIn("Operator-authored", file.read_text("utf-8"))
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_starter30_assets_are_removed_on_clean_rollback(self):
+        release.deploy("123", "a" * 40)
+        backup = self.backups / "moj-prop-catalog-123"
+        entries = json.loads((backup / "manifest.json").read_text("utf-8"))["files"]
+        indexed = {entry["path"] for entry in entries}
+        for path in release.STARTER30_FILES + (Path("starter-30-trx/index.html"),):
+            self.assertIn(str(path), indexed)
+            self.assertEqual((self.route / path).read_bytes(), (self.stage / path).read_bytes())
+        release.restore(backup)
+        for path in release.STARTER30_FILES + (Path("starter-30-trx/index.html"),):
+            self.assertFalse((self.route / path).exists(), str(path))
+
+    def test_mismatched_live_starter30_digest_prevents_incorrect_rollback(self):
+        release.deploy("123", "a" * 40)
+        buyer_access = self.route / "starter-30-trx/journal-guide.txt"
+        buyer_access.write_bytes(buyer_access.read_bytes() + b"\noperator revision\n")
+        with self.assertRaisesRegex(RuntimeError, "subsequently modified"):
+            release.restore(self.backups / "moj-prop-catalog-123")
+        self.assertTrue((self.route / "starter-30-trx/index.html").is_file())
+
     def test_signal_desk_existing_approved_baseline_is_upgradable_and_reversible(self):
         path = self.route / "signals/index.html"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -236,6 +306,24 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
                 self.assertEqual((self.route / "index.html").read_bytes(), delivered_home)
         path.write_text(json.dumps(pristine), "utf-8")
         release.restore(directory)
+
+    def test_new_manifest_cannot_be_downgraded_to_legacy_seven_file_rollback(self):
+        release.deploy("123", "a" * 40)
+        path = self.backups / "moj-prop-catalog-123/manifest.json"
+        full = json.loads(path.read_text("utf-8"))
+        self.assertEqual(full["schema"], release.MANIFEST_SCHEMA)
+        self.assertEqual(len(full["files"]), len(release.FILES))
+        # An untrusted manifest edited to look like the 7-file legacy version
+        # may otherwise leave the newly deployed Starter30 assets untouched.
+        forged = dict(full)
+        forged.pop("schema")
+        forged["files"] = full["files"][:7]
+        path.write_text(json.dumps(forged), "utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Legacy or unrecognized"):
+            release.restore(path.parent)
+        self.assertTrue((self.route / "starter-30-trx/index.html").is_file())
+        path.write_text(json.dumps(full), "utf-8")
+        release.restore(path.parent)
 
     def test_symlinked_backup_directory_cannot_be_used_for_rollback(self):
         release.deploy("123", "a" * 40)
