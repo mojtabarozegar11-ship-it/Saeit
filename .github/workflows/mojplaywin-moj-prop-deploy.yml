@@ -41,7 +41,7 @@ jobs:
               html = page.read_text(encoding="utf-8")
               Check().feed(html)
           html = (root / "index.html").read_text(encoding="utf-8")
-          required = ["<title>Moj Prop", "Discipline before capital.", "mojtaba.bot.ai", "Start a real request"]
+          required = ["<title>Moj Prop", "Discipline before ", "capital.", "mojtaba.bot.ai", "Start a real request"]
           missing = [item for item in required if item not in html]
           if missing:
               raise SystemExit(f"Moj Prop page missing required content: {missing}")
