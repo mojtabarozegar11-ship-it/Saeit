@@ -93,6 +93,32 @@ class CustomerQuoteTokenTests(TestCase):
         with patch("django.core.signing.time.time", return_value=moment+86401):
             self.assertEqual(self.view().status_code, 404)
 
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_new_issued_revision_invalidates_previous_customer_link(self):
+        new = MojPropOffer.objects.create(
+            lead=self.lead, version=2,
+            title="Updated production economics service",
+            scope="A re-scoped evidence-backed economics report with dated sources, scenario analyses and explicit limitations.",
+            amount=Decimal("135.00"), currency="USD", delivery_days=10,
+            status="issued", reviewed_at=timezone.now()-timedelta(hours=1),
+            issued_at=timezone.now()-timedelta(minutes=30),
+            expires_at=timezone.now()+timedelta(days=5),
+        )
+        self.assertEqual(self.view().status_code, 404)
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+        self.assertIn("135.00 USD", self.view(
+            token=quote_read_token(new),
+        ).content.decode("utf-8"))
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_unreviewed_record_cannot_leak_quote_without_proof(self):
+        self.quote.reviewed_at = None
+        self.quote.save(update_fields=["reviewed_at"])
+        self.assertEqual(self.view().status_code, 404)
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+
     def test_draft_offer_never_generates_shareable_buyer_token(self):
         self.quote.status = "draft"
         self.quote.save(update_fields=["status"])
