@@ -12,8 +12,10 @@ on:
       - "core/commercialization_readiness.py"
       - "core/tron_tenant_policy.py"
       - "core/tron_rollout_inventory.py"
+      - "core/tron_commerce_surface_registry.py"
       - "tests/test_moj_prop_*.py"
       - "tests/test_tron_rollout_inventory.py"
+      - "tests/test_tron_commerce_surface_registry.py"
       - "prop_firm/independent_attestation.py"
       - "tests/test_moj_prop_independent_attestation.py"
       - ".github/workflows/moj-prop-release-gate-ci.yml"
@@ -49,5 +51,6 @@ jobs:
           tests.test_moj_prop_challenge_commerce
           tests.test_moj_prop_release_gate
           tests.test_tron_rollout_inventory
+          tests.test_tron_commerce_surface_registry
           tests.test_moj_prop_independent_attestation
           --verbosity 2

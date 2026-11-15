@@ -5,6 +5,7 @@ checkout installations. Additional independently owned subdomains need an
 explicit verified registration before anyone can issue an invoice.
 """
 from .signal_commercial_catalog import SIGNAL_BRANDS
+from .tron_commerce_surface_registry import commercial_surface_summary
 from .tron_tenant_policy import canonical_host, registered_scope
 
 DISCOVERED_DOMAIN_ANCHORS = ("mojplaywin.com", "zomorodmelal.ir")
@@ -63,6 +64,7 @@ def inspect_rollout(registry=None, extra_owned_domains=None):
         "trading_bot": "mojtaba.bot.ai",
         "one_gateway_architecture": True,
         "live_gateway_connected": False,
+        "requested_commerce_surfaces": commercial_surface_summary(),
         "excluded_instagram_profile": "Dr.mojtaba.rozegar",
         "entries": entries,
     }
@@ -104,7 +106,7 @@ def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts,
             and all(proof[key] is True for key in proof)
         )
         # The root and each brand are different payment tenants, even on the
-        # exact same host. Neither an owned DNS name nor 200 OK enables billing.
+        # exact same host. Neither an owned DNS name nor a 200 OK enables billing.
         candidates = [("", "main_digital_store", "/store/", 4)]
         candidates.extend(
             (brand, "market_signal_subscription",
