@@ -43,6 +43,9 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "finality_verified": True,
             "refund_pending": False,
             "charge_disputed": False,
+            "refunded": False,
+            "settlement_reversed": False,
+            "entitlement_revoked": False,
         }
         record.update(changes)
         return {lease.invoice_id: record}
@@ -127,6 +130,25 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         self.assertFalse(self.access(independently_reconciled_invoices=["mpw:trx:invoice:10001"]))
         self.assertFalse(self.access(independently_reconciled_invoices={"proof": True}))
 
+    def test_legacy_ledger_without_explicit_refund_states_cannot_grant_access(self):
+        lease = self.lease()
+        ledger = self.paid_invoice_record(lease)
+        for omitted in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(omitted=omitted):
+                record = dict(ledger[lease.invoice_id])
+                record.pop(omitted)
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: record},
+                ))
+
+    def test_full_unreversed_real_settlement_record_retains_paid_access(self):
+        lease = self.lease()
+        self.assertTrue(self.access(
+            lease=lease,
+            independently_reconciled_invoices=self.paid_invoice_record(lease),
+        ))
+
     def test_paid_invoice_must_match_exact_tenant_sku_buyer_and_finality(self):
         variations = (
             {"merchant_tenant_id": "signal_other"},
@@ -136,6 +158,10 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             {"asset": "USDT"}, {"network": "tron-testnet"},
             {"finality_verified": "yes"}, {"finality_verified": False},
             {"refund_pending": True}, {"charge_disputed": True},
+            {"refunded": True}, {"settlement_reversed": True},
+            {"entitlement_revoked": True},
+            {"refunded": "false"}, {"settlement_reversed": 0},
+            {"entitlement_revoked": None},
         )
         for corrupted in variations:
             with self.subTest(corrupted=corrupted):
