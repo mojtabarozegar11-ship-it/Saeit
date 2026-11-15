@@ -865,6 +865,25 @@ class CommercialGateTests(unittest.TestCase):
             second.close()
 
 
+    def test_offer_contract_must_be_exact_type(self):
+        with self.assertRaisesRegex(CommercialGateError, "offer_contract_required"):
+            validate_offer(None)
+
+    def test_digital_manifest_wrong_type_fails_before_any_public_release(self):
+        with self.assertRaisesRegex(CommercialGateError, "delivery_manifest_hash_invalid"):
+            validate_offer(self.offer(delivery_manifest_sha256=None))
+
+    def test_manual_trx_gateway_cannot_offer_usd_as_native_trx(self):
+        with self.assertRaisesRegex(CommercialGateError, "native_trx_gateway_currency_required"):
+            validate_offer(self.offer(offer_type=OfferType.TRX_GATEWAY, currency="USD"))
+
+    def test_zero_transaction_hash_is_not_a_receipt(self):
+        with self.assertRaisesRegex(CommercialGateError, "transaction_id_invalid"):
+            validate_payment_evidence(self.payment(transaction_id="0" * 64),
+                expected_order_id="order-52", expected_invoice_id="invoice-52",
+                expected_amount=Decimal("30"), expected_currency="TRX")
+
+
 if __name__ == "__main__":
     unittest.main()
 
