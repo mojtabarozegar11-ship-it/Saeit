@@ -124,3 +124,32 @@ class CustomerQuoteTokenTests(TestCase):
         self.quote.save(update_fields=["status"])
         with self.assertRaises(ValueError):
             quote_read_token(self.quote)
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_accepted_quote_requires_independent_acceptance_proof(self):
+        self.quote.status = "accepted"
+        self.quote.accepted_at = timezone.now()
+        self.quote.acceptance_reference = ""
+        self.quote.save(update_fields=[
+            "status", "accepted_at", "acceptance_reference",
+        ])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+        self.assertEqual(self.view().status_code, 404)
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_accepted_quote_proof_must_follow_issuance_and_precede_expiry(self):
+        self.quote.status = "accepted"
+        self.quote.acceptance_reference = "buyer-consent:verified-2026"
+        for when in (
+            self.quote.issued_at - timedelta(seconds=1),
+            self.quote.expires_at,
+        ):
+            with self.subTest(when=when.isoformat()):
+                self.quote.accepted_at = when
+                self.quote.save(update_fields=[
+                    "status", "acceptance_reference", "accepted_at",
+                ])
+                with self.assertRaises(ValueError):
+                    quote_read_token(self.quote)
+                self.assertEqual(self.view().status_code, 404)
