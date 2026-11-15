@@ -24,7 +24,8 @@ class MojPropOfferDraftTests(TestCase):
             username="mojprop_operator", password="only-a-test-password", is_staff=True,
         )
         self.user.user_permissions.add(
-            Permission.objects.get(codename="view_mojproprequest", content_type__app_label="core")
+            Permission.objects.get(codename="view_mojproprequest", content_type__app_label="core"),
+            Permission.objects.get(codename="change_mojproprequest", content_type__app_label="core"),
         )
         self.request.user = self.user
 
@@ -92,6 +93,20 @@ class MojPropOfferDraftTests(TestCase):
         self.assertNotIn("\nStatus: APPROVED", draft)
         self.assertNotIn("\nPayment: CAPTURED", draft)
         self.assertIn("Payment: DISABLED", draft)
+
+    def test_view_only_staff_cannot_download_customer_contact_details(self):
+        viewer = get_user_model().objects.create_user(
+            username="view_only_mojprop", password="not-a-real-password", is_staff=True,
+        )
+        viewer.user_permissions.add(
+            Permission.objects.get(codename="view_mojproprequest", content_type__app_label="core")
+        )
+        self.request.user = viewer
+        response = self.admin.download_offer_drafts(
+            self.request, MojPropRequest.objects.filter(pk=self.lead.pk)
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(self.lead.email.encode(), response.content)
 
     def test_draft_has_no_wallet_invoice_or_automatic_trade_instruction(self):
         draft = build_offer_draft(self.lead)
