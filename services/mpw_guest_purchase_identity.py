@@ -60,7 +60,7 @@ class GuestInvoiceIdentity:
 
 def _email_digest(canonical_email, signing_key):
     """Keyed pseudonym: unlike plain SHA256, email guessing needs a private key."""
-    return hmac.new(signing_key, b"mpw.guest.buyer.v2\\x00" + canonical_email.encode("ascii"), sha256).hexdigest()
+    return hmac.new(signing_key, b"mpw.guest.buyer.v2\x00" + canonical_email.encode("ascii"), sha256).hexdigest()
 
 
 def _message(item):
