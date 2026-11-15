@@ -89,6 +89,10 @@ MAX_SUN = (1 << 63) - 1
 def _sun_amount(value: object, field: str = "amount") -> Decimal:
     """Native TRX supports exactly six decimal places, never eight."""
     amount = _amount(value, field)
+    # Bounds first: huge Decimal exponents must not overflow or silently
+    # underflow to zero inside the process-wide decimal context.
+    if amount < Decimal("0.000001") or amount > Decimal("9223372036854.775807"):
+        raise CommercialGateError(f"{field}_invalid_native_sun")
     sun = amount * SUN_PER_TRX
     if sun != sun.to_integral_value() or sun > MAX_SUN:
         raise CommercialGateError(f"{field}_invalid_native_sun")
