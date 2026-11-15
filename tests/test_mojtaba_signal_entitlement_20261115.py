@@ -11,7 +11,6 @@ class SignalEntitlementTests(unittest.TestCase):
         state = advance_signal_entitlement(
             state, "payment_verified",
             evidence={"verified": True, "receipt_id": "receipt:2026:0001"},
-                    payment_verifier=lambda _: True,
             payment_verifier=lambda stored: stored["receipt_id"] == "receipt:2026:0001",
         )
         state = advance_signal_entitlement(
