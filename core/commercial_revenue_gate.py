@@ -340,6 +340,8 @@ class SQLiteCommercialLedger:
     ) -> CommercialState:
         order_id = _slug(order_id, "order_id")
         event_id = _text(event_id, "event_id")
+        if len(event_id) > 128 or any(ord(char) < 33 or ord(char) > 126 for char in event_id):
+            raise CommercialGateError("event_id_invalid")
         if not _HEX64.fullmatch(payload_digest):
             raise CommercialGateError("payload_digest_invalid")
         with self.connection:
