@@ -34,13 +34,15 @@ class MojPropAcceptanceReferenceTests(TestCase):
 
     def test_non_text_overlong_and_control_references_fail(self):
         for value in (True, 123, "short", "x" * 181,
-                      "buyer\\napproval", "buyer\\tapproval", "buyer" + chr(0)):
+                      "buyer" + chr(10) + "approval", "buyer" + chr(9) + "approval", "buyer" + chr(0)):
             with self.subTest(value=repr(value)), self.assertRaises(QuoteContractError):
                 validate_acceptance_reference(value)
 
     def test_snapshot_cannot_bypass_reference_boundary(self):
-        for value in ("buyer\\napproval", "x" * 181, None):
-            bad = SimpleNamespace(**vars(self.offer), acceptance_reference=value)
+        for value in ("buyer" + chr(10) + "approval", "x" * 181, None):
+            payload = dict(vars(self.offer))
+            payload["acceptance_reference"] = value
+            bad = SimpleNamespace(**payload)
             with self.subTest(value=repr(value)), self.assertRaises(QuoteContractError):
                 make_quote_snapshot(bad, now=self.issued + timedelta(hours=2))
 
