@@ -1,7 +1,7 @@
 import tempfile
 import sqlite3
 import unittest
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1608,6 +1608,35 @@ class CommercialGateTests(unittest.TestCase):
                                 amount=Decimal("30"), currency="TRX")
             self.assertEqual(ledger.snapshot("order-52")["effective_revenue_status"],
                              "not_verified")
+            ledger.close()
+
+
+    def test_fractional_sun_cannot_hide_behind_decimal_rounding(self):
+        amount = Decimal("1.0000000000000000000000000000000001")
+        with localcontext() as context:
+            context.prec = 8
+            with self.assertRaisesRegex(CommercialGateError, "trx_fractional_sun_forbidden"):
+                invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                                   amount=amount, currency="TRX")
+
+    def test_valid_trx_with_superfluous_trailing_zeros_is_not_rejected(self):
+        amount = Decimal("2.0000010000000000000000")
+        with localcontext() as context:
+            context.prec = 8
+            self.assertIsInstance(invoice_commitment(order_id="order-52",
+                invoice_id="invoice-52", amount=amount, currency="TRX"), str)
+
+    def test_trx_order_cannot_persist_rounded_fractional_sun(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            with localcontext() as context:
+                context.prec = 8
+                with self.assertRaisesRegex(CommercialGateError, "trx_fractional_sun_forbidden"):
+                    ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                        amount=Decimal("1.0000000000000000000000000000000001"),
+                        currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "order_not_found"):
+                ledger.snapshot("order-52")
             ledger.close()
 
 
