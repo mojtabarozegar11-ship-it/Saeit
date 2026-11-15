@@ -268,3 +268,67 @@ class PipelineReportingTests(TestCase):
         self.assertEqual(report["handoffs_recorded"], 0)
         self.assertEqual(report["customer_acknowledgments_recorded"], 0)
         self.assertIsNone(report["collected_revenue"])
+
+    def test_spoofed_acceptance_timestamps_do_not_count_as_conversion(self):
+        now = timezone.now()
+        for number, accepted_at in enumerate((
+            now - timedelta(days=4), now + timedelta(days=1),
+            now + timedelta(days=8),
+        )):
+            lead = self.make_lead(f"FAKE-ACCEPT-{number}", "signals")
+            MojPropOffer.objects.create(
+                lead=lead, title="Recorded research proposal",
+                scope="A well-scoped educational market report with provenance and limitations.",
+                amount=Decimal("90.00"), currency="USD", delivery_days=5,
+                status="accepted", reviewed_at=now - timedelta(days=3),
+                issued_at=now - timedelta(days=2),
+                expires_at=now + timedelta(days=5),
+                accepted_at=accepted_at,
+                acceptance_reference="unverified-user-acceptance",
+            )
+        report = pipeline_snapshot()
+        self.assertEqual(report["distinct_leads_with_issued_quotes"], 3)
+        self.assertEqual(report["distinct_accepted_leads"], 0)
+        self.assertEqual(report["acceptance_rate_percent"], 0.0)
+
+    def test_unconsented_persisted_offer_is_excluded_from_conversion_kpis(self):
+        now = timezone.now()
+        lead = self.make_lead("UNCONSENTED-ISSUED", "brief")
+        MojPropOffer.objects.create(
+            lead=lead, title="Unconsented quote",
+            scope="A dated independent research report with scope and limitations.",
+            amount=Decimal("99.00"), currency="USD", delivery_days=7,
+            status="issued", reviewed_at=now - timedelta(hours=2),
+            issued_at=now - timedelta(hours=1),
+            expires_at=now + timedelta(days=2),
+        )
+        MojPropRequest.objects.filter(pk=lead.pk).update(consent=False)
+        report = pipeline_snapshot()
+        self.assertEqual(report["total_inquiries"], 1)
+        self.assertEqual(report["distinct_leads_with_issued_quotes"], 0)
+        self.assertIsNone(report["acceptance_rate_percent"])
+
+    def test_handoff_record_before_acceptance_does_not_inflate_delivery(self):
+        now = timezone.now()
+        lead = self.make_lead("BAD-HANDOFF-TIME", "brief")
+        offer = MojPropOffer.objects.create(
+            lead=lead, title="Validated quotation",
+            scope="A properly reviewed report with verifiable source evidence and limits.",
+            amount=Decimal("80.00"), currency="USD", delivery_days=7,
+            status="accepted", reviewed_at=now-timedelta(days=4),
+            issued_at=now-timedelta(days=3),
+            accepted_at=now-timedelta(days=2),
+            expires_at=now+timedelta(days=3),
+            acceptance_reference="independent-acceptance-01",
+        )
+        MojPropDeliveryEvidence.objects.create(
+            offer=offer, artifact_sha256="f"*64,
+            artifact_name="research.pdf", status="sent",
+            clearance_reference="owner-approved-credit",
+            handoff_reference="receipt-old-evidence",
+            handed_off_at=now-timedelta(days=5),
+        )
+        report = pipeline_snapshot()
+        self.assertEqual(report["distinct_accepted_leads"], 1)
+        self.assertEqual(report["handoffs_recorded"], 0)
+        self.assertEqual(report["handoff_coverage_percent"], 0.0)
