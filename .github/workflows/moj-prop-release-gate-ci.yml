@@ -11,7 +11,9 @@ on:
       - "prop_firm/**"
       - "core/commercialization_readiness.py"
       - "core/tron_tenant_policy.py"
+      - "core/tron_rollout_inventory.py"
       - "tests/test_moj_prop_*.py"
+      - "tests/test_tron_rollout_inventory.py"
       - ".github/workflows/moj-prop-release-gate-ci.yml"
 
 permissions:
@@ -38,10 +40,11 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Check migrations
         run: python manage.py makemigrations --check --dry-run prop_firm
-      - name: Run canonical Moj Prop regression tests
+      - name: Run canonical Moj Prop and TRX inventory regression tests
         run: >
           python manage.py test
           tests.test_moj_prop_policy_integrity
           tests.test_moj_prop_challenge_commerce
           tests.test_moj_prop_release_gate
+          tests.test_tron_rollout_inventory
           --verbosity 2
