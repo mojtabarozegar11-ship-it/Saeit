@@ -257,3 +257,27 @@ def test_research_ids_reject_markup_and_directional_spoofing(unsafe):
         generate({"service_code": "RS-01", "data": {"claims": [
             {"claim_id": unsafe, "source_id": "DATA-2026", "unit": "kg_per_ha", "reproducible": True},
         ]}}, "0" * 64)
+
+
+def test_existing_worker_output_must_remain_private(tmp_path):
+    payload = {"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}
+    with patch("core.mojtaba_commercial_services.Path.home", return_value=tmp_path):
+        first = service_package(payload)
+        assert first["verified_effect"] is True
+        artifact = next(tmp_path.rglob("*.md"))
+        artifact.chmod(0o644)
+        with pytest.raises(ValueError, match="SERVICE_PACKAGE_UNSAFE_EXISTING_FILE"):
+            service_package(payload)
+        assert artifact.stat().st_mode & 0o077
+
+
+def test_worker_refuses_hardlinked_alternate_artifact(tmp_path):
+    payload = {"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}
+    with patch("core.mojtaba_commercial_services.Path.home", return_value=tmp_path):
+        service_package(payload)
+        artifact = next(tmp_path.rglob("*.md"))
+        alias = artifact.with_name("hardlink-alias.md")
+        os.link(artifact, alias)
+        with pytest.raises(ValueError, match="SERVICE_PACKAGE_UNSAFE_EXISTING_FILE"):
+            service_package(payload)
+        assert artifact.read_bytes() == alias.read_bytes()
