@@ -126,3 +126,8 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
+
+
+# Moj Prop public request intake is deliberately separate from payment and order APIs.
+from core.mojprop_views import mojprop_intake
+urlpatterns += [path("moj-prop/intake/", mojprop_intake, name="mojprop_intake")]
