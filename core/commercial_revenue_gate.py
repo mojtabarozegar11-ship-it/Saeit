@@ -122,7 +122,7 @@ def _canonical_amount(value: Decimal, currency: str) -> str:
     # Retain exactly the fractional precision of the actual amount; the
     # canonical formatter below never uses Decimal.normalize (context-rounding).
     raw = str(amount)
-    if len(raw) > 160:
+    if len(raw) > 160 or amount.adjusted() < -24:
         raise CommercialGateError("amount_precision_exceeds_safe_limit")
     canonical = format(amount, "f")
     if "." in canonical:
