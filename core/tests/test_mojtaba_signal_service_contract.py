@@ -174,5 +174,93 @@ class MojtabaSignalContractTests(unittest.TestCase):
         validate_route_offer_alignment(self.route(), self.offer())
 
 
+    def test_one_tenant_can_serve_three_languages_on_same_host(self):
+        routes = validate_route_registry((
+            self.route(language="en", path_prefix="/signals/"),
+            self.route(language="fa", path_prefix="/fa/signals/"),
+            self.route(language="ar", path_prefix="/ar/signals/"),
+        ))
+        self.assertEqual({route.language for route in routes}, {"en", "fa", "ar"})
+        self.assertEqual({route.tenant_id for route in routes}, {"mojplaywin"})
+
+    def test_same_tenant_id_cannot_span_unrelated_hosts(self):
+        with self.assertRaisesRegex(SignalContractError, "tenant_host_reuse"):
+            validate_route_registry((
+                self.route(language="en"),
+                self.route(language="fa", canonical_host="other.example"),
+            ))
+
+    def test_duplicate_locale_with_different_route_is_rejected(self):
+        with self.assertRaisesRegex(SignalContractError, "duplicate_tenant_route"):
+            validate_route_registry((
+                self.route(language="fa", path_prefix="/fa/"),
+                self.route(language="fa", path_prefix="/other/"),
+            ))
+
+    def test_bad_dns_labels_and_non_dns_host_are_rejected(self):
+        for host in ("a..example", "-host.example", "host-.example",
+                     "localhost", "127.0.0.1", "example.com.", "a" * 64 + ".com"):
+            with self.subTest(host=host), self.assertRaisesRegex(
+                SignalContractError, "canonical_host_invalid"
+            ):
+                validate_route(self.route(canonical_host=host))
+
+    def test_valid_merchant_subdomain_host(self):
+        validate_route(self.route(canonical_host="research.mojplaywin.com"))
+
+    def test_ambiguous_double_slash_path_rejected(self):
+        with self.assertRaisesRegex(SignalContractError, "path_prefix_invalid"):
+            validate_route(self.route(path_prefix="/signal//premium/"))
+
+    def test_unhashable_route_language_fails_as_contract_error(self):
+        with self.assertRaisesRegex(SignalContractError, "language_not_supported"):
+            validate_route(self.route(language=["en"]))
+
+    def test_unhashable_offer_currency_fails_as_contract_error(self):
+        with self.assertRaisesRegex(SignalContractError, "currency_not_supported"):
+            validate_offer(self.offer(currency=["TRX"]))
+
+    def test_unhashable_offer_language_fails_as_contract_error(self):
+        with self.assertRaisesRegex(SignalContractError, "language_not_supported"):
+            validate_offer(self.offer(language=["en"]))
+
+    def test_offer_extreme_price_is_rejected(self):
+        with self.assertRaisesRegex(SignalContractError, "offer_price_out_of_bounds"):
+            validate_offer(self.offer(price=Decimal("1000000000")))
+
+    def test_offer_trx_micro_precision_is_enforced(self):
+        with self.assertRaisesRegex(SignalContractError, "offer_price_precision_exceeded"):
+            validate_offer(self.offer(price=Decimal("0.0000001")))
+        validate_offer(self.offer(price=Decimal("0.000001")))
+
+    def test_offer_usd_cents_are_enforced(self):
+        with self.assertRaisesRegex(SignalContractError, "offer_price_precision_exceeded"):
+            validate_offer(self.offer(price=Decimal("1.001"), currency="USD"))
+        validate_offer(self.offer(price=Decimal("1.01"), currency="USD"))
+
+    def test_arabic_direct_buy_and_sell_calls_are_blocked(self):
+        for phrase in ("اشتر الآن", "توصية بيع", "الربح مضمون", "دخول الصفقة"):
+            with self.subTest(phrase=phrase), self.assertRaisesRegex(
+                SignalContractError, "financial_signal_disabled"
+            ):
+                validate_request(request_text=phrase)
+
+    def test_arabic_research_summary_remains_allowed(self):
+        validate_request(request_text="ملخص بحث عن اقتصاد الري وتكاليف الزراعة")
+
+    def test_fullwidth_financial_prompt_is_blocked(self):
+        with self.assertRaisesRegex(SignalContractError, "financial_signal_disabled"):
+            validate_request(request_text="ＢＵＹ GOLD")
+
+    def test_zero_width_financial_prompt_is_blocked(self):
+        with self.assertRaisesRegex(SignalContractError, "financial_signal_disabled"):
+            validate_request(request_text="b\\u200bu\\u200by gold")
+
+    def test_overlong_request_denied_before_token_scan(self):
+        with self.assertRaisesRegex(SignalContractError, "request_text_too_long"):
+            validate_request(request_text="a" * 8193)
+
+
+
 if __name__ == "__main__":
     unittest.main()
