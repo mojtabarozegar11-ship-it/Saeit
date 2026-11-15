@@ -16,7 +16,8 @@ To return True, it requires ALL of these actual database and client-session fact
 3. Existing core Order.status=paid, same USD buyer item and exact paid PaymentIntent provider=`mpw_walletless_trx_v1`; positive units, correct owner-verified TRON recipient and sun amount from persisted invoice reference.
 4. Existing independent `core.crown_tron_receipts.verified_walletless_credit` matching ledger and processed finalized event; no refund, reversal or chargeback entry.
 5. The real CommerceFulfillment FK must target **core.orderitem** exactly and that same item's fulfillment status must be READY or COMPLETE.
-6. The existing trusted server private-file resolver must independently verify real legally available digital asset, inside the correct private tenant. It MUST be a hardcoded trusted function in the authenticated download handler, NEVER browser text, caller-provided URL, or an unreviewed positive assertion. A missing asset denies access.
+6. The bridge explicitly verifies `CommerceInvoice.order` is a FK to **core.Order** and refuses the historical fallback if any CommerceInvoice already belongs to this order; such orders must use the normal commerce invoice/receipt authorization, including refunds. Never allow a fallback to bypass a pending, revoked, or failed invoice.
+7. The existing trusted server private-file resolver must independently verify real legally available digital asset, inside the correct private tenant. It MUST be a hardcoded trusted function in the authenticated download handler, NEVER browser text, caller-provided URL, or an unreviewed positive assertion. A missing asset denies access.
 
 *Neither* a user's submitted TXID, PDF URL, screenshot, commerce receipt from another order, arbitrary product ID nor a paid checkbox grants access. A live owner blockchain payment is only supporting evidence; the specific buyer, order and asset must match.
 
