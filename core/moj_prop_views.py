@@ -104,7 +104,7 @@ def moj_prop_interest(request):
                 reason = str(exc)
                 if reason == "interest_rate_limited":
                     status, error = 429, "Too many requests. Try again later."
-                elif reason in ("interest_rate_check_unavailable", "interest_intake_not_released"):
+                elif reason in ("interest_rate_check_unavailable", "interest_intake_unavailable", "interest_intake_not_released"):
                     status, error = 503, "Contact requests are temporarily unavailable."
                 else:
                     status, error = 400, "Valid email and explicit consent are required."
