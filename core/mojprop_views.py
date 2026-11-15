@@ -117,8 +117,18 @@ def mojprop_intake(request):
     if payload is None:
         return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
 
+    # A malicious JSON sender must not turn object/list/number values into
+    # seemingly valid CRM strings. Reject data loss rather than truncate it.
+    bounds = {"name": 200, "email": 254, "service": 30, "horizon": 20,
+              "notes": 5000, "website": 120}
+    for key, maximum in bounds.items():
+        candidate = payload.get(key, "")
+        if type(candidate) is not str or len(candidate) > maximum:
+            return _json({"ok": False, "detail": "Invalid request field.",
+                          "fields": {key: "A bounded text value is required."}},
+                         status=400)
     # Honeypot field: real forms never display or populate this value.
-    if _text(payload, "website", 120):
+    if payload.get("website"):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
     name = _text(payload, "name", 200)
