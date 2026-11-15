@@ -30,14 +30,12 @@ FILES = (
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
     Path("core/migrations/0042_merge_commercefunnel_mojprop.py"),
-    Path("core/migrations/0043_alter_mojproprequest_source.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = (
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
     Path("core/migrations/0042_merge_commercefunnel_mojprop.py"),
-    Path("core/migrations/0043_alter_mojproprequest_source.py"),
 )
 
 
@@ -100,10 +98,7 @@ def selftest(repo_root: Path) -> None:
     if missing:
         raise RuntimeError(f"backend selftest missing markers: {missing}")
     merge = (repo_root / "core/migrations/0042_merge_commercefunnel_mojprop.py").read_text("utf-8")
-    aligned = (repo_root / "core/migrations/0043_alter_mojproprequest_source.py").read_text("utf-8")
-    if ("operations = []" not in merge
-            or '("core", "0042_merge_commercefunnel_mojprop")' not in aligned
-            or "migrations.AlterField(" not in aligned):
+    if ("operations = []" not in merge):
         raise RuntimeError("Moj Prop migration contract does not match reviewed schema")
     print("MOJ_PROP_BACKEND_SELFTEST=PASS")
 
@@ -182,8 +177,7 @@ def format_core_migration_dependencies(leaves, *, allow_moj_prop_parent=False) -
                    or not re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", name)
                    for name in leaves)
             or ("0041_mojprop_request" in leaves and not allow_moj_prop_parent)
-            or "0042_merge_commercefunnel_mojprop" in leaves
-            or "0043_alter_mojproprequest_source" in leaves):
+            or "0042_merge_commercefunnel_mojprop" in leaves):
         raise RuntimeError("Unverified or conflicting core migration graph")
     return "dependencies = [\n" + "".join(
         f'        ("core", "{name}"),\n' for name in sorted(leaves)
@@ -393,13 +387,6 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
                 install_migration(staged_root / relative, target)
             elif relative == Path("core/migrations/0042_merge_commercefunnel_mojprop.py"):
                 install_join_migration(staged_root / relative, target)
-            elif relative == Path("core/migrations/0043_alter_mojproprequest_source.py"):
-                # Migration history is append-only, including field-alignment fixes.
-                if target.exists() or target.is_symlink():
-                    raise RuntimeError("Moj Prop field migration exists; inspect, do not overwrite")
-                atomic_replace(staged_root / relative, target, 0o640)
-                if digest(target) != digest(staged_root / relative):
-                    raise RuntimeError("Moj Prop 0043 field migration checksum mismatch")
             else:
                 current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
                 atomic_replace(staged_root / relative, target, current_mode)
