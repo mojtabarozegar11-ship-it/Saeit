@@ -9,6 +9,7 @@ on:
     branches:
       - "main"
       - "feature/prop-firm-policy-v11-20261114"
+      - "cycle59-moj-prop-level10-decision-lock-20261115"
     paths:
       - "prop_firm/**"
       - "core/commercialization_readiness.py"
