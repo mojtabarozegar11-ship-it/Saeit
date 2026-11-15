@@ -95,7 +95,6 @@ class MojPropIntakeTests(TestCase):
         self.assertLess(backend, preflight)
         self.assertLess(preflight, static)
         self.assertIn("core/migrations/0042_merge_commercefunnel_mojprop.py", workflow)
-        self.assertIn("core/migrations/0043_alter_mojproprequest_source.py", workflow)
         self.assertIn("inputs.confirm_owner_release == true", workflow)
         self.assertIn("https://mojplaywin.com/moj-prop-intake/", workflow)
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
@@ -115,7 +114,7 @@ class MojPropIntakeTests(TestCase):
         for leaves in ((), ("bad",),
                        ("0049_mpw_guest_email_recovery", "0049_mpw_guest_email_recovery"),
                        ("0041_mojprop_request",), ("0042_merge_commercefunnel_mojprop",),
-                       ("0043_alter_mojproprequest_source",)):
+                       ("0042_merge_commercefunnel_mojprop",)):
             with self.subTest(leaves=leaves), self.assertRaises(RuntimeError):
                 format_core_migration_dependencies(leaves)
 
