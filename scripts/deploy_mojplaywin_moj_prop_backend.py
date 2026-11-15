@@ -174,16 +174,8 @@ def install_migration(source: Path, target: Path) -> None:
         match = re.match(r"^(\\d+)_([a-zA-Z0-9_]+)\\.py$", item.name)
         if not match or item.name == "0041_mojprop_request.py":
             continue
-        candidates.append((int(match.group(1)), match.group(2)))
-    if not candidates:
-        parent = "0001_initial"
-    else:
-        _, suffix = max(candidates, key=lambda value: (value[0], value[1]))
-        parent = next(
-            item.stem
-            for item in migration_dir.glob("*.py")
-            if item.is_file() and not item.is_symlink() and item.stem.endswith("_" + suffix)
-        )
+        candidates.append((int(match.group(1)), item.stem))
+    parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
     text = source.read_text(encoding="utf-8")
     marker = '("core", "0039_educationassessment_educationattempt_and_more")'
     if marker not in text:
