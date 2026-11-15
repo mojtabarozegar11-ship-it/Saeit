@@ -99,7 +99,11 @@ def can_match(pattern: str, path: str) -> bool:
 
 def manual_release_job_guarded(source: str, header: str, job: str,
                                *, require_static_owner_approval: bool = False) -> bool:
-    """Only an explicit manual dispatch may execute a release job."""
+    """Only an explicit manual dispatch may execute a release job.
+
+    GitHub Actions permits a folded YAML condition, so normalize both one-line
+    and folded forms before comparing the safety predicate.
+    """
     if event_block(header, "workflow_dispatch") is None:
         return False
     anchor = re.search(r"(?m)^  " + re.escape(job) + r":\s*$", source)
@@ -108,15 +112,21 @@ def manual_release_job_guarded(source: str, header: str, job: str,
     tail = source[anchor.end():]
     tail = re.split(r"(?m)^  [a-zA-Z][\w-]+:\s*$", tail, maxsplit=1)[0]
     head = tail.split("\n    steps:", 1)[0]
-    conditions = re.findall(r"(?m)^    if:\s*(.+)$", head)
+    condition_match = re.search(
+        r"(?ms)^    if:\s*(.*?)(?=\n    (?:runs-on|timeout-minutes|needs|strategy|environment):|\Z)",
+        head,
+    )
+    if condition_match is None:
+        return False
+    condition = " ".join(line.strip() for line in condition_match.group(1).splitlines())
+    condition = condition.replace(">-", " ").replace(">", " ").strip()
+    condition = " ".join(condition.split())
     allowed = "github.event_name == 'workflow_dispatch'"
     if require_static_owner_approval:
         if "owner_approved_static_release:" not in header:
             return False
         allowed += " && inputs.owner_approved_static_release == true"
-    return conditions == [allowed]
-
-
+    return condition == allowed or condition.startswith(allowed + " && ")
 def manual_main_deployment_guarded(source: str, header: str) -> bool:
     return manual_release_job_guarded(source, header, MAIN_MANUAL_JOB[1])
 
