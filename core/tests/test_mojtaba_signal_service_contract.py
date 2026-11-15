@@ -262,5 +262,28 @@ class MojtabaSignalContractTests(unittest.TestCase):
 
 
 
+    def test_missing_route_contract_does_not_raise_attribute_error(self):
+        with self.assertRaisesRegex(SignalContractError, "route_contract_required"):
+            validate_route(None)
+
+    def test_missing_offer_contract_does_not_raise_attribute_error(self):
+        with self.assertRaisesRegex(SignalContractError, "offer_contract_required"):
+            validate_offer(None)
+
+    def test_invalid_route_registry_type_has_domain_error(self):
+        for bad in (None, "mojplaywin", {"en": self.route()}):
+            with self.subTest(value=type(bad).__name__), self.assertRaisesRegex(
+                SignalContractError, "route_registry_required"
+            ):
+                validate_route_registry(bad)
+
+    def test_bounded_route_registry_rejects_overflow(self):
+        def stream():
+            while True:
+                yield self.route()
+        with self.assertRaisesRegex(SignalContractError, "route_registry_too_large"):
+            validate_route_registry(stream())
+
+
 if __name__ == "__main__":
     unittest.main()
