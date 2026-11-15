@@ -1,3 +1,11 @@
+# ⚠️ ARCHIVED NONCANONICAL DESIGN — NOT FOR BUYER OFFER OR FULFILMENT
+
+This 2-page independent prop-rule review was an exploratory alternative concept, **not** the unique sellable 30 TRX Starter30. DO NOT quote, invoice, issue a refund policy for, deploy, or promise this document under `MOJPROP-STARTER30` or `starter-30-trx`. It is preserved solely as historical research; its descriptions and price are **superseded** and must not be used in public copy or operator proposals.
+
+**Authoritative single SKU:** `MOJPROP-STARTER30` = **10-session simulated trading journal + deterministic risk scorecard + individual written educational feedback**, as specified by `docs/mojprop/starter30-first-product-release.md`, and represented by `templates/moj-prop-v4/starter-30-trx/index.html`. Payments, legal contract and on-chain settlement remain blocked until separately evidenced. Any two-page rules review must have a distinct independently approved product identifier and terms, without reuse of this 30 TRX price.
+
+---
+
 # Moj Prop Starter | one-time prop readiness and risk review
 
 **Package code:** `starter-30-trx`  
