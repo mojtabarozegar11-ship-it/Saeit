@@ -7,8 +7,9 @@ No order placement, recurring billing, live alerts, or trade execution here.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from .signal_commercial_catalog import SIGNAL_BRANDS
-from .tron_tenant_policy import TenantDecision
+from .signal_commercial_catalog import CANONICAL_AGENT, SIGNAL_BRANDS
+from .tron_tenant_policy import (TenantDecision, canonical_host,
+                                 DEFAULT_ALLOWED_ANCHORS)
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ def canonical_signal_product(sku, brand):
         "entitlement_sku": match.sku,
         "plan_price_usd_proposed": str(match.monthly_usd_proposed),
         "host_brand": brand,
+        "only_organizational_bot": CANONICAL_AGENT,
         "one_global_entitlement": True,
         "checkout_enabled": False,
         "renewal_enabled": False,
@@ -65,6 +67,19 @@ def subscription_review(*, tenant, proofs):
     # explicit verified registry decision, never an HTTP-supplied "yes"/1.
     if tenant.eligible_for_checkout_review is not True:
         blockers.append("merchant_approval_missing")
+    # A forged or stale affirmative tenant DTO must not green-light a
+    # checkout review on an unrelated domain or an unresolved tenant ID.
+    try:
+        host = canonical_host(tenant.host)
+    except ValueError:
+        host = None
+    if (host is None or host != tenant.host
+            or not any(host == anchor or host.endswith("." + anchor)
+                       for anchor in DEFAULT_ALLOWED_ANCHORS)):
+        blockers.append("merchant_host_not_within_owned_domain")
+    if (type(tenant.tenant_id) is not str or not tenant.tenant_id
+            or type(tenant.missing) is not tuple or tenant.missing):
+        blockers.append("merchant_identity_or_attestations_inconsistent")
     if tenant.payment_enabled is not False or tenant.invoice_created is not False:
         blockers.append("unexpected_active_payment_or_invoice_claim")
     return {
