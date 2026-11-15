@@ -1,0 +1,34 @@
+name: TRON Merchant Boundary Contract (read-only)
+
+on:
+  pull_request:
+    paths:
+      - "services/mpw_trx_merchant_binding.py"
+      - "tests/test_mpw_trx_merchant_binding.py"
+      - ".github/workflows/mpw-tron-merchant-boundary-20261115.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-tron-merchant-boundary-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merchant-boundary:
+    name: Test cross-domain attribution without chain access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile pure policy
+        run: python -m py_compile services/mpw_trx_merchant_binding.py
+      - name: Run pure merchant-boundary contract
+        run: python -m unittest discover -s tests -p 'test_mpw_trx_merchant_binding.py' -v
