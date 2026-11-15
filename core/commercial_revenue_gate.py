@@ -95,8 +95,12 @@ def _currency(value: object) -> str:
 
 
 def _validate_trx_sun_precision(value: Decimal, currency: str) -> None:
-    """TRON native TRX settles in integer SUN, never fractional SUN."""
+    """Native TRX is 1,000,000 SUN; amount must fit signed 64-bit SUN."""
     if currency == "TRX":
+        # Check the exact range before any multiplication: extreme Decimal
+        # exponents can overflow/underflow the ambient arithmetic context.
+        if value < Decimal("0.000001") or value > Decimal("9223372036854.775807"):
+            raise CommercialGateError("trx_native_amount_out_of_range")
         sun = value * Decimal("1000000")
         if sun != sun.to_integral_value():
             raise CommercialGateError("trx_fractional_sun_forbidden")
@@ -168,6 +172,10 @@ def validate_offer(
             raise CommercialGateError("moj_prop_release_gates_incomplete")
     if offer.active and not offer.owner_approved:
         raise CommercialGateError("owner_approval_required")
+    if offer.active and tenant_registry is None:
+        # Active offers must be tied to an operator-controlled merchant/host
+        # mapping. A caller-selected hostname alone proves no ownership.
+        raise CommercialGateError("tenant_registry_required")
     if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
         raise CommercialGateError("delivery_manifest_hash_invalid")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
