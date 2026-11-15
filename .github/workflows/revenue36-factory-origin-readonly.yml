@@ -60,4 +60,20 @@ jobs:
               echo "CORE_0041_MIGRATION_FILE=$(test -f "$BASE/core/migrations/0041_signalinterest.py" && echo yes || echo no)"
               echo "DISK_KILOBYTES"
               df -Pk /home/zomorod2
+              echo "STAGING_GIT_REPOSITORY=$(test -d "$BASE/.git" && echo yes || echo no)"
+              if test -d "$BASE/.git"; then
+                printf "STAGING_GIT_SHA="
+                git -C "$BASE" rev-parse --short HEAD || true
+                printf "STAGING_WORKTREE_CHANGE_COUNT="
+                git -C "$BASE" status --porcelain --untracked-files=no | wc -l
+              fi
+              for f in config/urls.py core/models.py core/admin.py core/financial_brand_pages.py core/templates/core/financial_brand_page.html; do
+                if test -f "$BASE/$f"; then
+                  printf "STAGING_FILE_SHA256 %s " "$f"
+                  sha256sum "$BASE/$f" | awk "{print \\$1}"
+                else
+                  printf "STAGING_FILE_MISSING %s\n" "$f"
+                fi
+              done
+              echo "DJANGO_RUNTIME_PYTHON=$(test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && echo yes || echo no)"
             '
