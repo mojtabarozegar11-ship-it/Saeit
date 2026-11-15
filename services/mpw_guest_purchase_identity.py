@@ -58,9 +58,14 @@ class GuestInvoiceIdentity:
     hmac_sha256: str
 
 
+def _email_digest(canonical_email, signing_key):
+    """Keyed pseudonym: unlike plain SHA256, email guessing needs a private key."""
+    return hmac.new(signing_key, b"mpw.guest.buyer.v2\\x00" + canonical_email.encode("ascii"), sha256).hexdigest()
+
+
 def _message(item):
     return "|".join((
-        "mojplaywin.guest.invoice.identity.v1",
+        "mojplaywin.guest.invoice.identity.v2",
         item.invoice_id, str(item.principal_id), str(item.product_id),
         item.buyer_email_digest, item.bound_at_utc, item.expires_at_utc,
     )).encode("ascii")
@@ -79,7 +84,7 @@ def issue_guest_order_identity(*, buyer_email, invoice_id, principal_id,
     expiry = bound_at_utc + MAX_AGE
     item = GuestInvoiceIdentity(
         invoice_id, principal_id, product_id,
-        sha256(canonical.encode("ascii")).hexdigest(),
+        _email_digest(canonical, signing_key),
         bound_at_utc.isoformat(), expiry.isoformat(), "",
     )
     return GuestInvoiceIdentity(**{
@@ -113,7 +118,7 @@ def verify_guest_order_identity(*, proof, buyer_email, invoice_id, principal_id,
                 or (invoice_id, principal_id, product_id)
                 != (proof.invoice_id, proof.principal_id, proof.product_id)
                 or not hmac.compare_digest(
-                    proof.buyer_email_digest, sha256(email.encode("ascii")).hexdigest()
+                    proof.buyer_email_digest, _email_digest(email, signing_key)
                 )):
             return False
         return hmac.compare_digest(
