@@ -1234,6 +1234,35 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_independent_refund_source_cannot_prove_two_distinct_transfers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("10")))
+            with self.assertRaisesRegex(CommercialGateError, "refund_source_already_used"):
+                ledger.record_confirmed_refund(self._refund_proof(
+                    amount=Decimal("10"), refund_transaction_id="c" * 64))
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("20"))
+            ledger.close()
+
+    def test_large_refund_sums_use_python_precision_not_sqlite_64bit_sum(self):
+        # Test fixture injects two already-confirmed records; no live payment
+        # or refund is attempted. Each is valid int64 but the sum exceeds int64.
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("9000000000000"), currency="TRX")
+            ledger.connection.execute(
+                "UPDATE orders SET state = ? WHERE order_id = ?",
+                (CommercialState.SETTLED.value, "order-52"))
+            for tx, source in (("b" * 64, "ext-source-1"), ("c" * 64, "ext-source-2")):
+                ledger.connection.execute(
+                    "INSERT INTO independently_confirmed_refunds VALUES (?, ?, ?, ?, ?)",
+                    (tx, "order-52", 4500000000000000000, source, "2026-11-15T00:00:00+00:00"))
+            ledger.connection.commit()
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("0"))
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
