@@ -281,6 +281,22 @@ def _print_passenger_diagnostics() -> None:
     for command in ("uapi", "whmapi1", "apachectl", "httpd"):
         resolved = shutil.which(command)
         print(f"MOJ_PROP_{command.upper()}=" + (resolved or "NOT_FOUND"))
+    uapi = shutil.which("uapi")
+    if uapi:
+        try:
+            result = subprocess.run(
+                [uapi, "--output=json", "PassengerApps", "list_applications"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            print("MOJ_PROP_UAPI_LIST_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_UAPI_LIST=" + result.stdout[:4000].replace("\n", " "))
+            if result.stderr:
+                print("MOJ_PROP_UAPI_LIST_ERR=" + result.stderr[:1000].replace("\n", " "))
+        except Exception as exc:
+            print("MOJ_PROP_UAPI_LIST_ERROR=" + type(exc).__name__)
     try:
         result = subprocess.run(
             ["ps", "-eo", "pid,user,comm,args"],
