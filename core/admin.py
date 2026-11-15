@@ -280,12 +280,50 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
 
 
 from .models import MojPropRequest
+from django import forms
+from django.utils import timezone
+from .mojprop_workflow import validate_status_change
+
+
+class MojPropRequestStatusForm(forms.ModelForm):
+    class Meta:
+        model = MojPropRequest
+        fields = ("status", "internal_note")
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and "status" in cleaned and "internal_note" in cleaned:
+            previous = (MojPropRequest.objects.filter(pk=self.instance.pk)
+                        .values_list("status", flat=True).first())
+            if previous is None:
+                raise forms.ValidationError("Original customer request no longer exists")
+            try:
+                validate_status_change(previous, cleaned["status"], cleaned["internal_note"])
+            except forms.ValidationError as exc:
+                self.add_error("status", exc)
+        return cleaned
 
 
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
+    form = MojPropRequestStatusForm
     list_display = ("request_id", "name", "email", "route", "status", "created_at")
     list_filter = ("status", "route", "horizon", "created_at")
     search_fields = ("request_id", "name", "email", "notes")
-    readonly_fields = ("request_id", "created_at", "updated_at", "ip_hash", "user_agent")
+    readonly_fields = (
+        "request_id", "name", "email", "route", "horizon", "notes",
+        "consent", "source", "created_at", "updated_at", "ip_hash",
+        "user_agent", "reviewed_at",
+    )
     ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        # Customer lead existence must be backed by a consented public intake.
+        return False
+
+    def save_model(self, request, obj, form, change):
+        old = (MojPropRequest.objects.filter(pk=obj.pk)
+               .values_list("status", flat=True).first()) if change else None
+        if old == "new" and obj.status == "reviewing" and obj.reviewed_at is None:
+            obj.reviewed_at = timezone.now()
+        super().save_model(request, obj, form, change)
