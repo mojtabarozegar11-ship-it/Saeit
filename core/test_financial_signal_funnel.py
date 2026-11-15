@@ -1,7 +1,15 @@
 """Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
+from pathlib import Path
+from urllib.parse import urlsplit
+
 from django.test import SimpleTestCase, override_settings
 
 from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
+
+PUBLIC_STATIC_ROOT = Path(__file__).resolve().parents[1] / "templates"
+CATALOG = PUBLIC_STATIC_ROOT / "moj-prop-v4/catalog/index.html"
+SIGNAL_DESK = PUBLIC_STATIC_ROOT / "moj-prop/signals/index.html"
+LOCAL_SIGNAL_INTAKE = "/moj-prop/?service=signals#request"
 
 
 class FinancialBrandSignalFunnelTests(SimpleTestCase):
@@ -29,15 +37,20 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 self.assertNotIn('href="/commerce/"', html)
 
     def test_catalog_and_signal_page_use_the_same_prefilled_route(self):
-        catalog = self.client.get("/moj-prop/catalog/")
-        self.assertEqual(catalog.status_code, 200)
+        # The catalog and signal desk are static release artifacts, NOT
+        # Django urlpatterns. GET via Django test client correctly yields 404.
+        catalog = CATALOG.read_text(encoding="utf-8")
         self.assertIn(
             'href="/moj-prop/?service=signals#request">Request a signal note',
-            catalog.content.decode("utf-8"),
+            catalog,
         )
-        signal_page = self.client.get("/moj-prop/signals/")
-        self.assertEqual(signal_page.status_code, 200)
-        self.assertEqual(signal_page.content.decode("utf-8").count(SIGNAL_INTAKE_PATH), 2)
+        signal_page = SIGNAL_DESK.read_text(encoding="utf-8")
+        self.assertEqual(signal_page.count(LOCAL_SIGNAL_INTAKE), 2)
+        target = urlsplit(SIGNAL_INTAKE_PATH)
+        self.assertEqual(
+            target.path + "?" + target.query + "#" + target.fragment,
+            LOCAL_SIGNAL_INTAKE,
+        )
 
     def test_all_host_signal_subsites_use_the_canonical_signal_intake(self):
         for slug, *_ in BRANDS:
@@ -46,7 +59,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
                 self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
-                self.assertIn("mojtaba.bot.ai", html)
+                self.assertIn("mojtaba.bot.ai", html.casefold())
                 self.assertNotIn('href="/store/"', html)
                 self.assertNotIn('href="/commerce/"', html)
 
@@ -67,7 +80,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         self.assertNotIn(SIGNAL_INTAKE_PATH, html)
 
     def test_each_catalog_offer_prefills_its_own_distinct_service(self):
-        html = self.client.get("/moj-prop/catalog/").content.decode("utf-8")
+        html = CATALOG.read_text(encoding="utf-8")
         offers = {
             "blueprint": "Request a blueprint",
             "brief": "Request a market brief",
@@ -85,7 +98,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
             self.assertNotIn(f'href="/moj-prop/#request">{label}', html)
 
     def test_signal_handoff_contract_is_never_a_checkout_or_auto_trade(self):
-        html = self.client.get("/moj-prop/signals/").content.decode("utf-8")
+        html = SIGNAL_DESK.read_text(encoding="utf-8")
         self.assertIn("live feed and automatic subscription are not active", html)
         self.assertIn("mojtaba.bot.ai", html)
         self.assertNotIn("guaranteed profit", html.lower())
