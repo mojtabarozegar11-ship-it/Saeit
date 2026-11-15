@@ -93,13 +93,37 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
             with self.subTest(filename=filename, job=job):
                 source = (ROOT / ".github/workflows" / filename).read_text("utf-8")
                 header = source.split("\njobs:", 1)[0]
-                self.assertTrue(manual_release_job_guarded(source, header, job))
+                self.assertTrue(manual_release_job_guarded(
+                    source, header, job,
+                    require_static_owner_approval=(
+                        filename == "mojplaywin-moj-prop-deploy.yml"
+                    ),
+                ))
                 unsafe = source.replace(
                     "if: github.event_name == 'workflow_dispatch'",
                     "if: github.event_name == 'push'",
                     1,
                 )
-                self.assertFalse(manual_release_job_guarded(unsafe, header, job))
+                self.assertFalse(manual_release_job_guarded(
+                    unsafe, header, job,
+                    require_static_owner_approval=(
+                        filename == "mojplaywin-moj-prop-deploy.yml"
+                    ),
+                ))
+
+    def test_mojprop_cannot_publish_without_owner_release_input(self):
+        from scripts.mojplaywin_detect_deploy_triggers import manual_release_job_guarded
+        source = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        header = source.split("\njobs:", 1)[0]
+        self.assertTrue(manual_release_job_guarded(
+            source, header, "deploy", require_static_owner_approval=True,
+        ))
+        downgraded = source.replace(
+            " && inputs.owner_approved_static_release == true", ""
+        )
+        self.assertFalse(manual_release_job_guarded(
+            downgraded, header, "deploy", require_static_owner_approval=True,
+        ))
 
     def test_only_two_legacy_workflows_are_locked(self):
         self.assertEqual(len(WORKFLOWS), 2)
