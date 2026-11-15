@@ -116,14 +116,25 @@ def submit_inquiry(*, email, consent, remote_addr, now=None):
         raise PropInterestError("timezone_aware_clock_required")
     _rate_limit(remote_addr, secret, timestamp)
     digest = _digest(canonical, secret)
-    row, created = PropInformationInquiry.objects.get_or_create(
-        email_digest=digest,
-        defaults={
-            "email": canonical,
-            "consent_version": CONSENT_VERSION,
-            "expires_at": timestamp + timedelta(days=RETENTION_DAYS),
-        },
-    )
-    # A repeat is a benign, non-disclosing operation. It does not reset
-    # expiry or confer enrollment/eligibility. Deletion requires owner approval.
+    try:
+        row, created = PropInformationInquiry.objects.select_for_update().get_or_create(
+            email_digest=digest,
+            defaults={
+                "email": canonical,
+                "consent_version": CONSENT_VERSION,
+                "expires_at": timestamp + timedelta(days=RETENTION_DAYS),
+            },
+        )
+    except DatabaseError as exc:
+        raise PropInterestError("interest_intake_unavailable") from exc
+    # A renewed, explicitly consented request may update its 30-day retention
+    # deadline. Without renewed consent there is NO read/write path here.
+    if not created and row.expires_at <= timestamp:
+        row.email = canonical
+        row.consent_version = CONSENT_VERSION
+        row.expires_at = timestamp + timedelta(days=RETENTION_DAYS)
+        row.status = "unreviewed"
+        row.save(update_fields=[
+            "email", "consent_version", "expires_at", "status",
+        ])
     return created
