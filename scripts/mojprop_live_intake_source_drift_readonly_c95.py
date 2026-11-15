@@ -31,14 +31,18 @@ MAX_SOURCE = 128 * 1024
 def exact_git_blob(data):
     if type(data) is not bytes or len(data) > MAX_SOURCE:
         raise ValueError("unexpected source")
-    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\x00" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
 
 def safe_source_state(root, rel, reference):
     """Only path identity/boolean returned; no byte content or arbitrary path."""
     target = root / rel
-    if (not root.is_dir() or root.is_symlink()
-            or any(p.is_symlink() for p in (target, target.parent, target.parent.parent))):
+    if not root.is_dir() or root.is_symlink():
         return "unavailable"
+    cursor = target
+    while cursor != root:
+        if cursor.is_symlink() or root not in cursor.parents:
+            return "unavailable"
+        cursor = cursor.parent
     try:
         meta = target.lstat()
         if (not stat.S_ISREG(meta.st_mode) or meta.st_uid != os.geteuid()
