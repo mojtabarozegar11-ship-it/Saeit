@@ -237,6 +237,29 @@ class C28ScopedRealRestore(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 mod.audit_and_restore(**self.params)
 
+    def test_foreign_file_inserted_before_exclusive_creation_is_not_deleted(self):
+        original = mod._mkdir
+        vault_name = self.vault
+        inserted = {"done": False}
+
+        def competing_writer(fd, name, uid, *, unique=False):
+            descriptor = original(fd, name, uid, unique=unique)
+            if name == "backup" and not inserted["done"]:
+                inserted["done"] = True
+                handle = os.open("file-0.bin", os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                                 0o600, dir_fd=descriptor)
+                with os.fdopen(handle, "wb") as output:
+                    output.write(b"FOREIGN PRIVATE CONTENT")
+            return descriptor
+
+        with patch.object(mod, "_mkdir", side_effect=competing_writer):
+            with self.assertRaises(OSError):
+                mod.audit_and_restore(**self.params)
+        foreign = vault_name / "172900101" / "backup" / "file-0.bin"
+        self.assertEqual(foreign.read_bytes(), b"FOREIGN PRIVATE CONTENT")
+        self.assertTrue((self.home / ".mojprop-c28-approval-9873211.used").exists())
+        self.assertFalse((self.root / "moj-prop" / "backup").exists())
+
     def test_quota_exception_cleans_only_this_private_run_and_consumes_nonce(self):
         originals = [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES]
         real_write = mod._write
