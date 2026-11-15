@@ -186,7 +186,14 @@ def install_migration(source: Path, target: Path) -> None:
         if item.is_symlink() or not item.is_file():
             continue
         match = re.match(r"^([0-9]+)_([a-zA-Z0-9_]+)[.]py$", item.name)
-        if not match or item.name == "0041_mojprop_request.py":
+        # The full commercial chain 0041..0045 depends on 0041. Taking
+        # 0045 as 0041's parent would create a cyclic migration graph.
+        if not match or item.name in {
+            "0041_mojprop_request.py", "0042_mojprop_offer.py",
+            "0043_mojprop_digital_inquiry.py",
+            "0044_mojprop_acceptance_evidence.py",
+            "0045_mojprop_delivery_evidence.py",
+        }:
             continue
         candidates.append((int(match.group(1)), item.stem))
     parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
@@ -232,10 +239,12 @@ def patch_admin(target: Path, source: Path) -> None:
         print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
         return
     staged = source.read_text(encoding="utf-8")
-    marker = "\nfrom .models import MojPropRequest\n"
+    # Source main includes the complete commercial model import; a strict
+    # equality test for the old one-model import prevented every fresh setup.
+    marker = "\nfrom .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence\n"
     start = staged.find(marker)
     if start < 0:
-        raise RuntimeError("staged MojPropRequest admin block is missing")
+        raise RuntimeError("staged Moj Prop admin import contract is missing")
     block = staged[start + 1 :].rstrip() + "\n"
     if "from django.contrib import admin" not in live or "ModelAdmin" not in live:
         raise RuntimeError("live admin file has no safe additive-admin anchors")
