@@ -1955,6 +1955,26 @@ class CommercialGateTests(unittest.TestCase):
             independent_domain_delegation_verifier=lambda host: True))
 
 
+    def test_refund_provider_reviews_same_normalized_fields_as_persisted_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reviewed = []
+            ledger = self._refundable_ledger(directory,
+                refund_verifier=lambda proof: reviewed.append(proof) or True)
+            ledger.record_confirmed_refund(self._refund_proof(
+                source_id=" source-52 ", original_transaction_id="A" * 64,
+                refund_transaction_id="B" * 64))
+            self.assertEqual(len(reviewed), 1)
+            self.assertEqual(reviewed[0].source_id, "source-52")
+            self.assertEqual(reviewed[0].original_transaction_id, "a" * 64)
+            self.assertEqual(reviewed[0].refund_transaction_id, "b" * 64)
+            db = ledger.connection.execute(
+                "SELECT refund_tx, source_id FROM independently_confirmed_refunds WHERE order_id = ?",
+                ("order-52",)).fetchone()
+            self.assertEqual(db["refund_tx"], reviewed[0].refund_transaction_id)
+            self.assertEqual(db["source_id"], reviewed[0].source_id)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
