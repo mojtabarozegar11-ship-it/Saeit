@@ -158,12 +158,14 @@ def verified_manifest(path: Path) -> dict:
     if not isinstance(value.get("run_id"), str):
         raise RuntimeError("Missing rollback run ID")
     safe_id(value["run_id"])
+    if path.parent.name != "moj-prop-catalog-" + value["run_id"]:
+        raise RuntimeError("Rollback run ID and backup directory disagree")
     if not re.fullmatch(r"[0-9a-f]{40}", str(value.get("commit_sha", ""))):
         raise RuntimeError("Rollback commit identity is invalid")
     for item in entries:
         if type(item.get("existed")) is not bool or type(item.get("changed")) is not bool:
             raise RuntimeError("Invalid before/after backup flags")
-        if type(item.get("mode")) is not int or not 0 <= item["mode"] <= 0o777:
+        if type(item.get("mode")) is not int or not 0 <= item["mode"] <= 0o777 or item["mode"] & (0o111 | 0o002):
             raise RuntimeError("Unsafe rollback file mode")
         before = item.get("before_sha")
         if (item["existed"] and not isinstance(before, str)) or (not item["existed"] and before is not None):
