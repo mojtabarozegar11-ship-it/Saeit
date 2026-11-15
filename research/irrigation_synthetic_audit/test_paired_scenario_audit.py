@@ -538,5 +538,167 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(sum(p["matched_keys"] for p in report["climate_path_effects"]), 540)
 
 
+    def test_supplementary_q98_mean_matches_fixture(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(report["supplementary_paired_outcomes"]["below_98_plot_days"]["mean_delta"], -2)
+
+    def test_supplementary_q98_median_matches_fixture(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(result["supplementary_paired_outcomes"]["below_98_plot_days"]["median_delta"], -2)
+
+    def test_supplementary_q98_range_matches_fixture(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(result["supplementary_paired_outcomes"]["below_98_plot_days"]["range_delta"], [-2, -2])
+
+    def test_supplementary_event_mean_is_not_water_mean(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(report["supplementary_paired_outcomes"]["irrigation_events"]["mean_delta"], 0)
+        self.assertEqual(report["mean_delta_water_m3"], 10)
+
+    def test_supplementary_drainage_mean_zero_fixture(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(report["supplementary_paired_outcomes"]["drainage_sum_mm"]["mean_delta"], 0)
+
+    def test_supplementary_drainage_is_depth_not_volume(self):
+        result = analyze_family(self.make_records("C"), "C")
+        info = result["supplementary_paired_outcomes"]["drainage_sum_mm"]
+        self.assertIn("mm", info["unit"])
+        self.assertNotIn("m3", info["unit"])
+
+    def test_supplementary_event_unit_is_event_count(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertIn("events", report["supplementary_paired_outcomes"]["irrigation_events"]["unit"])
+
+    def test_supplementary_q98_is_not_crop_yield(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertIn("simulated", result["supplementary_paired_outcomes"]["below_98_plot_days"]["unit"])
+        self.assertNotIn("yield", result["supplementary_paired_outcomes"]["below_98_plot_days"]["unit"])
+
+    def test_supplementary_comparison_direction_explicit(self):
+        result = analyze_family(self.make_records("C"), "C")
+        for info in result["supplementary_paired_outcomes"].values():
+            self.assertEqual(info["direction"], "v3 minus v2")
+
+    def test_supplementary_denominators_are_540(self):
+        result = analyze_family(self.make_records("C"), "C")
+        for info in result["supplementary_paired_outcomes"].values():
+            self.assertEqual(info["matched_keys"], 540)
+
+    def test_supplementary_by_path_has_12_groups(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        for info in result["supplementary_paired_outcomes"].values():
+            self.assertEqual(len(info["by_climate_path"]), 12)
+
+    def test_supplementary_by_path_has_45_keys_each(self):
+        result = analyze_family(self.make_records("C"), "C")
+        for info in result["supplementary_paired_outcomes"].values():
+            self.assertTrue(all(p["matched_keys"] == 45 for p in info["by_climate_path"]))
+
+    def test_supplementary_by_class_has_180_keys(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        for info in result["supplementary_paired_outcomes"].values():
+            self.assertEqual(set(info["by_climate_class"]), {"dry", "medium", "wet"})
+            self.assertTrue(all(g["matched_keys"] == 180 for g in info["by_climate_class"].values()))
+
+    def test_event_change_in_one_path_affects_global_mean(self):
+        def perturb(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["irrigation_events"] = 10
+        result = analyze_family(self.make_records("C", perturb), "C")
+        info = result["supplementary_paired_outcomes"]["irrigation_events"]
+        self.assertAlmostEqual(info["mean_delta"], 4 / 12)
+        self.assertEqual(info["range_delta"], [0, 4])
+
+    def test_event_change_in_one_path_is_visible_by_class(self):
+        def perturb(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["irrigation_events"] = 10
+        info = analyze_family(self.make_records("C", perturb), "C")["supplementary_paired_outcomes"]["irrigation_events"]
+        self.assertEqual(info["by_climate_class"]["dry"]["mean_delta"], 1)
+        self.assertEqual(info["by_climate_class"]["medium"]["mean_delta"], 0)
+        self.assertEqual(info["by_climate_class"]["wet"]["mean_delta"], 0)
+
+    def test_drainage_perturbation_preserves_mm_units(self):
+        def perturb(rows):
+            for row in rows:
+                if row["climate_class"] == "wet" and row["policy"] == "v3":
+                    row["drainage_sum_mm"] = 12.5
+        info = analyze_family(self.make_records("C", perturb), "C")["supplementary_paired_outcomes"]["drainage_sum_mm"]
+        self.assertAlmostEqual(info["mean_delta"], 12.5 / 3)
+        self.assertEqual(info["by_climate_class"]["wet"]["mean_delta"], 12.5)
+        self.assertEqual(info["by_climate_class"]["dry"]["mean_delta"], 0)
+
+    def test_q98_strict_threshold_perturbation_remains_separate_from_q100(self):
+        def perturb(rows):
+            for row in rows:
+                if row["policy"] == "v3":
+                    row["below_98_plot_days"] = 8
+        result = analyze_family(self.make_records("C", perturb), "C")
+        self.assertEqual(result["supplementary_paired_outcomes"]["below_98_plot_days"]["mean_delta"], -1)
+        self.assertEqual(result["mean_delta_q100"], -2)
+
+    def test_leave_one_path_out_has_exactly_twelve_cases(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(len(result["leave_one_climate_path_out"]), 12)
+
+    def test_leave_one_path_out_denominator_is_495(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        self.assertTrue(all(v["remaining_matched_keys"] == 495 for v in
+                            result["leave_one_climate_path_out"]))
+
+    def test_leave_one_path_out_is_homogeneous_for_constant_fixture(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertTrue(all(v["mean_delta_water_m3"] == 10 for v in
+                            result["leave_one_climate_path_out"]))
+
+    def test_leave_one_path_out_q100_is_homogeneous_for_constant_fixture(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        self.assertTrue(all(v["mean_delta_q100"] == -2 for v in
+                            result["leave_one_climate_path_out"]))
+
+    def test_leave_one_out_removes_high_water_path(self):
+        def perturb(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["gross_water_m3"] = 130
+        result = analyze_family(self.make_records("C", perturb), "C")
+        excluded = next(v for v in result["leave_one_climate_path_out"]
+                        if v["excluded_seed"] == 1000)
+        self.assertAlmostEqual(excluded["mean_delta_water_m3"], 10)
+
+    def test_leave_one_out_retains_effect_of_other_path_outlier(self):
+        def perturb(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["gross_water_m3"] = 130
+        result = analyze_family(self.make_records("C", perturb), "C")
+        excluded = next(v for v in result["leave_one_climate_path_out"]
+                        if v["excluded_seed"] == 1001)
+        self.assertAlmostEqual(excluded["mean_delta_water_m3"], 10 + 20 / 11)
+
+    def test_leave_one_out_removes_q100_path_outlier(self):
+        def perturb(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["q_positive_plot_days"] = 4
+                    row["below_98_plot_days"] = 4
+        result = analyze_family(self.make_records("C", perturb), "C")
+        excluded = next(v for v in result["leave_one_climate_path_out"]
+                        if v["excluded_seed"] == 1000)
+        self.assertAlmostEqual(excluded["mean_delta_q100"], -2)
+
+    def test_leave_one_out_tracks_unique_path_ids(self):
+        result = analyze_family(self.make_records("C"), "C")
+        paths = {v["excluded_path"] for v in result["leave_one_climate_path_out"]}
+        self.assertEqual(len(paths), 12)
+
+    def test_supplementary_r1_four_policy_family_still_paired(self):
+        result = analyze_family(self.make_records("R1"), "R1")
+        self.assertEqual(result["record_count"], 2160)
+        self.assertEqual(result["supplementary_paired_outcomes"]["irrigation_events"]["matched_keys"], 540)
+
+
 if __name__ == "__main__":
     unittest.main()
