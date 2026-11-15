@@ -1,5 +1,5 @@
 """Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
 
@@ -66,3 +66,36 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
         self.assertIn("live feed and automatic subscription are not active", html)
         self.assertIn("mojtaba.bot.ai", html)
         self.assertNotIn("guaranteed profit", html.lower())
+
+    @override_settings(
+        ALLOWED_HOSTS=("testserver", "mojplaywin.com", "zomorodmelal.ir", "reports.zomorodmelal.ir"),
+        USE_X_FORWARDED_HOST=False,
+    )
+    def test_untrusted_forwarded_host_does_not_switch_mojplaywin_language(self):
+        response = self.client.get(
+            "/saman/market-signals/",
+            HTTP_HOST="mojplaywin.com",
+            HTTP_X_FORWARDED_HOST="zomorodmelal.ir",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('lang="en"', response.content.decode("utf-8"))
+
+    @override_settings(
+        ALLOWED_HOSTS=("testserver", "zomorodmelal.ir", "reports.zomorodmelal.ir"),
+        USE_X_FORWARDED_HOST=False,
+    )
+    def test_exact_zomorod_host_and_subdomain_receive_persian_language(self):
+        for host in ("zomorodmelal.ir", "reports.zomorodmelal.ir"):
+            with self.subTest(host=host):
+                response = self.client.get("/saman/market-signals/", HTTP_HOST=host)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('lang="fa"', response.content.decode("utf-8"))
+
+    @override_settings(
+        ALLOWED_HOSTS=("testserver", "fake-zomorodmelal.ir"),
+        USE_X_FORWARDED_HOST=False,
+    )
+    def test_lookalike_host_cannot_force_persian_or_spoof_a_financial_brand(self):
+        response = self.client.get("/saman/market-signals/", HTTP_HOST="fake-zomorodmelal.ir")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('lang="en"', response.content.decode("utf-8"))
