@@ -1371,6 +1371,57 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_all_paid_offer_types_forbid_financial_order_execution(self):
+        for category in (OfferType.MOJ_PROP, OfferType.TRX_GATEWAY,
+                         OfferType.DIGITAL_PRODUCT, OfferType.GAME):
+            with self.subTest(category=category):
+                with self.assertRaisesRegex(CommercialGateError, "financial_execution_disabled"):
+                    validate_offer(self.offer(offer_type=category, financial_call_enabled=True))
+
+    def test_external_social_platforms_can_never_be_company_checkout_hosts(self):
+        for host in ("facebook.com", "www.facebook.com", "m.facebook.com",
+                     "instagram.com", "www.instagram.com", "metricool.com",
+                     "app.metricool.com", "fb.com"):
+            with self.subTest(host=host):
+                with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
+                    validate_offer(self.offer(
+                        canonical_host=host, active=True, owner_approved=True,
+                        legal_reviewed=True, kyc_ready=True, rights_cleared=True),
+                        tenant_registry={"moj_prop": host})
+
+    def test_ip_addresses_cannot_be_merchant_host_identifiers(self):
+        for host in ("127.0.0.1", "8.8.8.8", "0.0.0.0", "192.168.1.12",
+                     "198.51.100.1", "shop.123"):
+            with self.subTest(host=host):
+                with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
+                    validate_offer(self.offer(canonical_host=host))
+
+    def test_approved_company_subdomains_remain_valid(self):
+        validate_offer(self.offer(canonical_host="trade.zomorodmelal.ir"),
+                       tenant_registry={"moj_prop": "trade.zomorodmelal.ir"})
+
+    def test_long_decimal_invoice_commitment_never_rounds_to_context(self):
+        common = dict(order_id="order-52", invoice_id="invoice-52", currency="USD")
+        amount_a = Decimal("0.123456789012345678901234567890123456789")
+        amount_b = Decimal("0.123456789012345678901234567890123456788")
+        self.assertNotEqual(invoice_commitment(amount=amount_a, **common),
+                            invoice_commitment(amount=amount_b, **common))
+
+    def test_offer_rejects_deep_fractional_price_before_sale(self):
+        with self.assertRaisesRegex(CommercialGateError, "amount_precision_exceeds_safe_limit"):
+            validate_offer(self.offer(price=Decimal("1e-30"), currency="USD"))
+
+    def test_invoice_rejects_pathological_tiny_decimal_without_expansion(self):
+        with self.assertRaisesRegex(CommercialGateError, "amount_precision_exceeds_safe_limit"):
+            invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                               amount=Decimal("1e-999999"), currency="USD")
+
+    def test_invoice_rejects_unbounded_decimal_digits_without_oom(self):
+        with self.assertRaisesRegex(CommercialGateError, "amount_precision_exceeds_safe_limit"):
+            invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                               amount=Decimal("0." + "1" * 140), currency="USD")
+
+
 if __name__ == "__main__":
     unittest.main()
 
