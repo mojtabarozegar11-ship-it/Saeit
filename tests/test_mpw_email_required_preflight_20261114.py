@@ -292,3 +292,63 @@ class SourcePathContainmentRegression(unittest.TestCase):
             self.assertIsInstance(tree, ast.Module)
             self.assertEqual(len(tree.body), 1)
             self.assertIsInstance(tree.body[0], ast.Assign)
+
+
+class CheckoutCommerceSourceClosureTests(unittest.TestCase):
+    def test_email_only_staging_fails_missing_commercial_backend_sources(self):
+        tmp, root = fixture()
+        with tmp:
+            report = m.inspect(root)
+            self.assertTrue(report["source_candidate_complete"])
+            self.assertFalse(report["commercial_backend_source_complete"])
+            self.assertFalse(report["full_checkout_source_candidate"])
+            self.assertFalse(report["release_authorized"])
+            with self.assertRaisesRegex(
+                RuntimeError, "COMMERCIAL_BACKEND_STAGING_DEPS_MISSING"
+            ):
+                m.require_commercial_source_closure(root)
+
+    def test_commercial_source_requires_exact_bounded_regular_paths(self):
+        tmp, root = fixture()
+        with tmp:
+            self.assertEqual(
+                set(m.COMMERCIAL_BACKEND_SOURCES),
+                set(m.inspect(root)["commercial_backend_source_checks"]),
+            )
+            target = root / m.COMMERCIAL_BACKEND_SOURCES["commercial_buyer_routes"]
+            target.symlink_to(root / m.SOURCES["guest"])
+            self.assertFalse(
+                m.inspect(root)["commercial_backend_source_checks"]["commercial_buyer_routes"]
+            )
+
+    def test_cutover_staging_calls_full_closure_not_only_email_source(self):
+        source = (
+            ROOT / "scripts/mpw_dynamic_store_cutover_20261108.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        func = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef)
+            and node.name == "check_actual_staging_store"
+        )
+        methods = [
+            node.func.id for node in ast.walk(func)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        ]
+        self.assertIn("require_commercial_source_closure", methods)
+        self.assertNotIn("require_source", methods)
+
+    def test_commercial_source_closure_never_proves_host_or_payment(self):
+        tmp, root = fixture()
+        with tmp:
+            report = m.inspect(root)
+            for field in (
+                "effective_passenger_root_verified",
+                "public_store_dynamic_verified",
+                "checkout_security_headers_verified",
+                "settled_payment_verified",
+                "paid_delivery_verified",
+                "release_authorized",
+            ):
+                with self.subTest(field=field):
+                    self.assertFalse(report[field])
+            self.assertIsNone(report["actual_collected_revenue"])
