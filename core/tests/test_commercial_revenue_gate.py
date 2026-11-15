@@ -1093,6 +1093,41 @@ class CommercialGateTests(unittest.TestCase):
                 parent.chmod(0o700)
 
 
+    def test_equal_trx_values_use_identical_invoice_commitment(self):
+        digests = [invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+            amount=Decimal(value), currency="TRX") for value in ("30", "30.00", "3E+1")]
+        self.assertEqual(len(set(digests)), 1)
+
+    def test_payment_digest_normalizes_equivalent_decimal_spellings(self):
+        first = validate_payment_evidence(self.payment(amount=Decimal("30.0")),
+            expected_order_id="order-52", expected_invoice_id="invoice-52",
+            expected_amount=Decimal("30"), expected_currency="TRX")
+        second = validate_payment_evidence(self.payment(amount=Decimal("30.000000")),
+            expected_order_id="order-52", expected_invoice_id="invoice-52",
+            expected_amount=Decimal("30"), expected_currency="TRX")
+        self.assertEqual(first, second)
+
+    def test_canonical_order_amount_survives_private_ledger_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "ledger.sqlite3")
+            ledger = SQLiteCommercialLedger(path)
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30.0000"), currency="TRX")
+            self.assertEqual(ledger.snapshot("order-52")["amount"], "30")
+            ledger.close()
+            restored = SQLiteCommercialLedger(path)
+            self.assertEqual(restored.snapshot("order-52")["amount"], "30")
+            restored.close()
+
+    def test_other_currency_rejects_unbounded_tiny_precision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "amount_precision_exceeds_safe_limit"):
+                ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                    amount=Decimal("0.00000000000000000000000001"), currency="USD")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
