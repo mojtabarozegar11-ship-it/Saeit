@@ -2146,7 +2146,8 @@ class CommercialGateTests(unittest.TestCase):
                         offer_type=OfferType.TRX_GATEWAY),
                     evidence=self.payment(), invoice_id="invoice-52",
                     tenant_registry={"moj_prop": "mojplaywin.com"},
-                    independent_release_verifier=lambda offer: True)
+                    independent_release_verifier=lambda offer: True,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.close()
 
     def test_merchant_trx_review_denies_cross_tenant_bound_order(self):
@@ -2159,7 +2160,8 @@ class CommercialGateTests(unittest.TestCase):
                     order_id="order-52", offer=wrong, evidence=self.payment(),
                     invoice_id="invoice-52",
                     tenant_registry={"moj_prop": "another.example"},
-                    independent_release_verifier=lambda offer: True)
+                    independent_release_verifier=lambda offer: True,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.close()
 
     def test_merchant_trx_review_rejects_nonissued_invoice_before_external_release(self):
@@ -2181,7 +2183,8 @@ class CommercialGateTests(unittest.TestCase):
                     order_id="order-52", offer=offer,
                     evidence=self.payment(), invoice_id="invoice-52",
                     tenant_registry={"moj_prop": "mojplaywin.com"},
-                    independent_release_verifier=lambda offer: calls.append(offer) or True)
+                    independent_release_verifier=lambda offer: calls.append(offer) or True,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             self.assertEqual(calls, [])
             ledger.close()
 
@@ -2192,7 +2195,8 @@ class CommercialGateTests(unittest.TestCase):
                 order_id="order-52", offer=offer,
                 evidence=self.payment(), invoice_id="invoice-52",
                 tenant_registry={"moj_prop": "mojplaywin.com"},
-                independent_release_verifier=lambda offer: True)
+                independent_release_verifier=lambda offer: True,
+                independent_release_evidence_verifier=lambda offer, digest: True)
             self.assertEqual(len(digest), 64)
             self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
             ledger.close()
@@ -2227,6 +2231,20 @@ class CommercialGateTests(unittest.TestCase):
                     independent_release_verifier=lambda offer: True,
                     release_evidence_sha256="d" * 64,
                     independent_release_evidence_verifier="yes")
+            ledger.close()
+
+
+    def test_bound_receipt_rechecks_merchant_release_evidence_not_revoked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, offer = self._bound_trx_merchant_ledger(directory)
+            with self.assertRaisesRegex(CommercialGateError, "merchant_release_evidence_unverified"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=offer, evidence=self.payment(),
+                    invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: True,
+                    independent_release_evidence_verifier=lambda offer, digest: False)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
             ledger.close()
 
 
