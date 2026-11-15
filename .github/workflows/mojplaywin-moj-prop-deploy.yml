@@ -58,7 +58,7 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           root = Path("templates/moj-prop-v4")
-          pages = [root / "index.html", root / "catalog/index.html"]
+          pages = [root / "index.html", root / "catalog/index.html", root / "samples/prop-blueprint/index.html", root / "samples/gold-market-brief/index.html", root / "samples/educational-signal/index.html", root / "samples/commercial-gate-audit/index.html"]
           class Check(HTMLParser):
               pass
           for page in pages:
@@ -67,7 +67,7 @@ jobs:
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
           home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
-          catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"]
+          catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249", "/moj-prop/samples/prop-blueprint/", "/moj-prop/samples/gold-market-brief/", "/moj-prop/samples/educational-signal/", "/moj-prop/samples/commercial-gate-audit/"]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:
               raise SystemExit(f"Moj Prop catalog content missing: {missing}")
