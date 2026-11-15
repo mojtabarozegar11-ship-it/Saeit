@@ -29,6 +29,7 @@ ACTION_LABELS = {
     "free_signals_awaiting_review": "Review one-off FREE educational example; never quote or send marketing without separate permission",
     "signals_without_issued_quote": "Route paid educational service via mojtaba.bot.ai only",
     "terminal_offer_internal_review": "Internal-only review of latest cancelled or expired offer; do not contact buyer without independent reauthorization",
+    "starter30_unquoted_manual_review": "Review buyer-claimed ten-session Starter30 scope; unsent educational quote only after seller, buyer and law checks; never demand TRX",
 }
 
 
@@ -83,6 +84,18 @@ def action_queue_snapshot(*, detail_limit=0):
         | Q(notes__startswith="One-off FREE educational market-brief example request")
         | Q(notes__startswith="Please provide a FREE historical educational example")
     ).filter(status__in=("new", "reviewing"))
+    # High-priority first-sale review queue: exactly the existing canonical
+    # ten-session educational SKU, inferred only as a *buyer claim* from
+    # notes the browser/lead controls, never a trustworthy payment/product ID.
+    # Do not issue a second 30 TRX price or treat an already-offered request as
+    # a new sale. SQL existence predicate avoids loading any private notes.
+    starter30_unquoted = active.filter(
+        route="blueprint", status__in=("new", "reviewing"),
+        notes__startswith="Requested canonical product: MOJPROP-STARTER30 (",
+    ).annotate(
+        has_any_offer=Exists(MojPropOffer.objects.filter(lead_id=OuterRef("pk")))
+    ).filter(has_any_offer=False)
+
     lists = (
         ("urgent_unreviewed", active.filter(
             status="new", horizon="urgent"
@@ -137,6 +150,7 @@ def action_queue_snapshot(*, detail_limit=0):
             offer__lead__status__in=("spam", "closed", "delivered")
         ), "offer__lead__request_id"),
         ("terminal_offer_internal_review", terminal_offer_review, "lead__request_id"),
+        ("starter30_unquoted_manual_review", starter30_unquoted, "request_id"),
         ("digital_without_issued_quote", lead_needing_issued.filter(
             route="digital", product_id__isnull=False,
         ), "request_id"),
@@ -152,9 +166,12 @@ def action_queue_snapshot(*, detail_limit=0):
             "count": query.count(),
             "next_action": ACTION_LABELS[name],
         }
-        if name == "terminal_offer_internal_review":
+        if name in ("terminal_offer_internal_review", "starter30_unquoted_manual_review"):
             entry["operator_only"] = True
             entry["customer_outreach_authorized"] = False
+        if name == "starter30_unquoted_manual_review":
+            entry["buyer_scope_unverified"] = True
+            entry["price_or_payment_authorized"] = False
         if detail_limit:
             entry["request_refs"] = list(
                 query.order_by(ref_field).values_list(ref_field, flat=True)
