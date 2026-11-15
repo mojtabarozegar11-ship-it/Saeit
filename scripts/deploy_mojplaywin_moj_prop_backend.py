@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -165,22 +166,24 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
 
 def install_migration(source: Path, target: Path) -> None:
     assert_regular(source, "staged migration")
-    candidates = (
-        "0040_commercefunnelevent",
-        "0039_educationassessment_educationattempt_and_more",
-        "0001_initial",
-    )
-    parent = next(
-        (
-            name
-            for name in candidates
-            if (ROOT / "core/migrations" / (name + ".py")).is_file()
-            and not (ROOT / "core/migrations" / (name + ".py")).is_symlink()
-        ),
-        None,
-    )
-    if parent is None:
-        raise RuntimeError("no verified core migration baseline exists on the live app")
+    migration_dir = ROOT / "core/migrations"
+    candidates = []
+    for item in migration_dir.glob("*.py"):
+        if item.is_symlink() or not item.is_file():
+            continue
+        match = re.match(r"^(\\d+)_([a-zA-Z0-9_]+)\\.py$", item.name)
+        if not match or item.name == "0041_mojprop_request.py":
+            continue
+        candidates.append((int(match.group(1)), match.group(2)))
+    if not candidates:
+        parent = "0001_initial"
+    else:
+        _, suffix = max(candidates, key=lambda value: (value[0], value[1]))
+        parent = next(
+            item.stem
+            for item in migration_dir.glob("*.py")
+            if item.is_file() and not item.is_symlink() and item.stem.endswith("_" + suffix)
+        )
     text = source.read_text(encoding="utf-8")
     marker = '("core", "0039_educationassessment_educationattempt_and_more")'
     if marker not in text:
