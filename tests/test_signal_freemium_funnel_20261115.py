@@ -71,3 +71,31 @@ class FreemiumSignalFunnelContractTests(SimpleTestCase):
         offer = build_manual_signal_offer("education-weekly")
         self.assertIs(offer["payment_enabled"], False)
         self.assertIs(offer["delivery_confirmed"], False)
+
+
+class BrandFreeEducationReferralTests(SimpleTestCase):
+    def test_all_brands_offer_free_preview_without_changing_paid_referral(self):
+        from core.financial_brand_pages import BRANDS, SIGNAL_FREE_PREVIEW_PATH, SIGNAL_INTAKE_PATH
+        from django.test import override_settings
+        self.assertEqual(
+            SIGNAL_FREE_PREVIEW_PATH,
+            "https://mojplaywin.com/moj-prop/signals/#free-preview",
+        )
+        with override_settings(ALLOWED_HOSTS=("testserver", "zomorodmelal.ir", "mojplaywin.com")):
+            for slug, *_ in BRANDS:
+                for path in (f"/{slug}/market-signals/", f"/ar/{slug}/market-signals/"):
+                    with self.subTest(path=path):
+                        result = self.client.get(path)
+                        self.assertEqual(result.status_code, 200)
+                        page = result.content.decode("utf-8")
+                        self.assertEqual(page.count('href="'+SIGNAL_INTAKE_PATH+'"'), 2)
+                        self.assertEqual(page.count('href="'+SIGNAL_FREE_PREVIEW_PATH+'"'), 1)
+                        self.assertIn("mojtaba.bot.ai", page.casefold())
+
+    def test_store_and_game_brands_do_not_receive_free_signal_links(self):
+        from core.financial_brand_pages import SIGNAL_FREE_PREVIEW_PATH
+        for route in ("/saman/digital-products/", "/saman/game/"):
+            with self.subTest(route=route):
+                response = self.client.get(route)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn(SIGNAL_FREE_PREVIEW_PATH, response.content.decode("utf-8"))
