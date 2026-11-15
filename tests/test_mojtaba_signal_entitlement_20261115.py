@@ -56,8 +56,6 @@ class SignalEntitlementTests(unittest.TestCase):
             with self.subTest(state=state, event=event), self.assertRaises(SignalEntitlementError):
                 advance_signal_entitlement(state, event)
 
-if __name__ == "__main__":
-    unittest.main()
 
     def test_typed_receipt_evidence_rejects_coercion_and_faulty_payloads(self):
         for value in (True, 123456, ["receipt:2026:0001"],
@@ -87,3 +85,6 @@ if __name__ == "__main__":
         for value in ([], "", False, 0):
             with self.subTest(evidence=repr(value)), self.assertRaises(SignalEntitlementError):
                 advance_signal_entitlement("offered", "payment_verified", evidence=value)
+
+if __name__ == "__main__":
+    unittest.main()
