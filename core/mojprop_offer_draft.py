@@ -17,13 +17,13 @@ def _normalise_line_breaks(value: object) -> str:
 def _one_line(value: object) -> str:
     """Keep user-supplied contact fields from injecting forged proposal headers."""
     text = _normalise_line_breaks(value)
-    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069]+", " ", text).strip()[:240]
+    return re.sub(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060\u2066-\u2069\ufeff]+", " ", text).strip()[:240]
 
 
 def _quoted_scope(text: str) -> str:
     """Show the customer's exact scope as quoted content, not operator instructions."""
     normalised = _normalise_line_breaks(text)
-    normalised = re.sub(r"[\x00-\x08\x0b-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069]", " ", normalised)
+    normalised = re.sub(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060\u2066-\u2069\ufeff]", " ", normalised)
     return "\n".join(
         "> " + line.strip() for line in normalised.splitlines() if line.strip()
     )
