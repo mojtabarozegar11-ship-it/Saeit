@@ -471,7 +471,10 @@ class SQLiteCommercialLedger:
         if target is not None:
             if target.is_symlink():
                 raise CommercialGateError("ledger_symlink_prohibited")
-            if not target.parent.is_dir() or target.parent.is_symlink():
+            # The immediate parent may be a real directory reached through
+            # an earlier symlink component; reject the entire symlink chain.
+            if (not target.parent.is_dir()
+                    or any(parent.is_symlink() for parent in target.parents)):
                 raise CommercialGateError("ledger_parent_missing_or_symlink")
             if target.parent.stat().st_mode & 0o022:
                 # A group member can replace the file between secure creation
