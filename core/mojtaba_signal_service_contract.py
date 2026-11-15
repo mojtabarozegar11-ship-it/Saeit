@@ -34,7 +34,7 @@ class SignalServiceKind(str, Enum):
 
 
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
-_HOST = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
+_HOST = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 _PATH = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$|^/$")
 _ENGLISH_BLOCKED = frozenset({
     "buy", "sell", "hold", "long", "short", "entry", "exit", "trade", "order",
