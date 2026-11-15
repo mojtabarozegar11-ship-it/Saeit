@@ -186,3 +186,74 @@ def test_concurrent_different_bytes_never_clobber_prior_private_work(tmp_path):
 def test_monetary_and_irrigation_calculations_reject_binary_floats(code, data):
     with pytest.raises(InvalidService, match="exact numeric"):
         generate({"service_code": code, "data": data}, "0" * 64)
+
+
+def test_cli_atomic_promotion_is_private_and_idempotent(tmp_path, monkeypatch):
+    import json
+    import sys
+    from core import mojtaba_commercial_services as engine
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps({"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}), encoding="utf-8")
+    monkeypatch.setattr(engine.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["mojtaba-service", str(source)])
+    assert engine.main() == 0
+    artifacts = list(tmp_path.rglob("*.md"))
+    assert len(artifacts) == 1
+    assert artifacts[0].stat().st_mode & 0o077 == 0
+    assert engine.main() == 0
+    assert len(list(tmp_path.rglob("*.md"))) == 1
+
+
+def test_cli_concurrent_write_cannot_overwrite_existing_artifact(tmp_path, monkeypatch):
+    import json
+    import sys
+    from core import mojtaba_commercial_services as engine
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps({"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}), encoding="utf-8")
+    monkeypatch.setattr(engine.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["mojtaba-service", str(source)])
+
+    def competing_writer(src, dest):
+        Path(dest).write_text("previous private deliverable", encoding="utf-8")
+        raise FileExistsError("another worker won")
+    monkeypatch.setattr(engine.os, "link", competing_writer)
+    assert engine.main() == 2
+    files = list(tmp_path.rglob("*.md"))
+    assert len(files) == 1
+    assert files[0].read_text(encoding="utf-8") == "previous private deliverable"
+
+
+def test_cli_refuses_symlink_input_without_creating_artifact(tmp_path, monkeypatch):
+    import json
+    import sys
+    from core import mojtaba_commercial_services as engine
+    actual = tmp_path / "actual.json"
+    actual.write_text(json.dumps({"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}), encoding="utf-8")
+    alias = tmp_path / "alias.json"
+    alias.symlink_to(actual)
+    monkeypatch.setattr(engine.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["mojtaba-service", str(alias)])
+    assert engine.main() == 2
+    assert not list(tmp_path.rglob("*.md"))
+
+
+def test_cli_rejects_world_readable_existing_artifact(tmp_path, monkeypatch):
+    import json
+    import sys
+    from core import mojtaba_commercial_services as engine
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps({"service_code": "AGR-01", "data": EXAMPLES["AGR-01"]}), encoding="utf-8")
+    monkeypatch.setattr(engine.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["mojtaba-service", str(source)])
+    assert engine.main() == 0
+    artifact = next(tmp_path.rglob("*.md"))
+    artifact.chmod(0o644)
+    assert engine.main() == 2
+
+
+@pytest.mark.parametrize("unsafe", ["[link](javascript:alert)", "R\\\\bad", "audit\\u202eTXT"])
+def test_research_ids_reject_markup_and_directional_spoofing(unsafe):
+    with pytest.raises(InvalidService):
+        generate({"service_code": "RS-01", "data": {"claims": [
+            {"claim_id": unsafe, "source_id": "DATA-2026", "unit": "kg_per_ha", "reproducible": True},
+        ]}}, "0" * 64)
