@@ -14,6 +14,7 @@ TOUCHED = (
     "templates/moj-prop-v4/index.html",
     "templates/moj-prop-v4/catalog/index.html",
     "tests/test_mojprop_commercial_samples_release.py",
+    "tests/test_mojprop_starter30_public_offer.py",
     "tests/test_mojprop_starter30_atomic_release_no_autodeploy_c86.py",
 )
 
