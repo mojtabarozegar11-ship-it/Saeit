@@ -45,6 +45,14 @@ class MojPropBodyBoundaryTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_duplicate_json_email_or_consent_key_is_rejected(self):
+        for field in ("email", "consent", "service"):
+            with self.subTest(field=field):
+                body = json.dumps(self.valid)
+                duplicated = body[:-1] + f', "{field}": "false"}}'
+                self.assertEqual(self.post(duplicated).status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_valid_bounded_json_still_creates_actual_manual_review_lead(self):
         response = self.post(json.dumps(self.valid))
         self.assertEqual(response.status_code, 201)
