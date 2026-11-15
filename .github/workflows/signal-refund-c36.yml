@@ -1,0 +1,29 @@
+name: Signal paid-entitlement refund safety C36
+on:
+  push:
+    branches:
+      - fix/signal-refund-status-c36-20261115
+permissions:
+  contents: read
+jobs:
+  entitlement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SECRET_KEY: ci-only-signal-refund-safety
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Static compilation and Django checks
+        run: |
+          python -m py_compile core/signal_entitlement_contract.py tests/test_signal_entitlement_contract.py
+          python manage.py check
+      - name: Run entitlement and signal source regressions
+        run: pytest -q tests/test_signal_entitlement_contract.py tests/test_signal_source_evidence.py
