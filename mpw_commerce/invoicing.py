@@ -5,7 +5,7 @@ challenge and trusted price quote. This module is never exposed as an HTTP
 endpoint. No merchant-wallet signature or per-sale approval is necessary.
 """
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_CEILING
 import re
 
@@ -48,10 +48,14 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
         raise InvoiceRejected("Invalid order/asset")
     if not isinstance(buyer,VerifiedBuyer) or not isinstance(quote,TrustedRate):
         raise InvoiceRejected("Verified buyer and server-side quote are mandatory")
-    now=now or timezone.now()
+    now=now if now is not None else timezone.now()
+    if type(now) is not datetime or timezone.is_naive(now):
+        raise InvoiceRejected("Trusted quote clock must be timezone aware")
     network,recipient,decimals=RECEIVERS[asset]
     address=buyer.sender
-    if not isinstance(address,str) or not isinstance(buyer.challenge_id,str) or not 8<=len(buyer.challenge_id)<=128:
+    if (type(address) is not str or type(buyer.challenge_id) is not str
+            or not 8 <= len(buyer.challenge_id) <= 128
+            or any(not 33 <= ord(ch) <= 126 for ch in buyer.challenge_id)):
         raise InvoiceRejected("Buyer wallet identity missing")
     if asset=="ETH":
         if re.fullmatch(r"0x[0-9a-fA-F]{40}",address) is None:
@@ -62,11 +66,13 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
             tron_address_to_hex(address)
         except (VerificationError,TypeError) as exc:
             raise InvoiceRejected("Invalid TRX sender") from exc
-    if (not buyer.verified_at or timezone.is_naive(buyer.verified_at)
+    if (type(buyer.verified_at) is not datetime
+        or timezone.is_naive(buyer.verified_at)
         or not timedelta(0)<=now-buyer.verified_at<=timedelta(minutes=5)):
         raise InvoiceRejected("Expired buyer-sender challenge")
     if (quote.source not in ("coingecko","coinbase")
-        or not quote.observed_at or timezone.is_naive(quote.observed_at)
+        or type(quote.observed_at) is not datetime
+        or timezone.is_naive(quote.observed_at)
         or not timedelta(0)<=now-quote.observed_at<=timedelta(seconds=90)):
         raise InvoiceRejected("Invalid server price source or stale quote")
     try:
