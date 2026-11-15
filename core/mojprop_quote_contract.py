@@ -3,7 +3,7 @@
 This module turns an already reviewed/issued Django offer into a stable
 commercial snapshot. It never charges, sends, delivers, or marks revenue.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import re
 
@@ -20,13 +20,14 @@ def _aware(value, name):
 
 def _text(value, name, minimum, maximum):
     if (type(value) is not str or not minimum <= len(value.strip()) <= maximum
-            or any(ord(ch) < 32 and ch not in "\n\t" for ch in value)):
+            or any((ord(ch) < 32 and ch not in "\n\t")
+                   or 0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
         raise QuoteContractError("invalid " + name)
     return value.strip()
 
 def make_quote_snapshot(offer, *, now=None):
     """Return a deterministic quote snapshot; payment remains explicitly absent."""
-    if type(offer) is None or offer is None:
+    if offer is None:
         raise QuoteContractError("offer is required")
     status = getattr(offer, "status", None)
     if status not in ("issued", "accepted"):
@@ -53,12 +54,15 @@ def make_quote_snapshot(offer, *, now=None):
     delivery_days = getattr(offer, "delivery_days", None)
     if type(delivery_days) is not int or not 1 <= delivery_days <= 90:
         raise QuoteContractError("invalid delivery days")
-    moment = _aware(now or datetime.now(timezone.utc), "now")
+    version = getattr(offer, "version", None)
+    if type(version) is not int or not 1 <= version <= 999:
+        raise QuoteContractError("invalid immutable quote version")
+    moment = _aware(now if now is not None else datetime.now(timezone.utc), "now")
     issued_at = _aware(getattr(offer, "issued_at", None), "issued_at")
     expires_at = _aware(getattr(offer, "expires_at", None), "expires_at")
     if not issued_at <= moment < expires_at:
         raise QuoteContractError("quote is not currently active")
-    if expires_at - issued_at > __import__("datetime").timedelta(days=90):
+    if expires_at - issued_at > timedelta(days=90):
         raise QuoteContractError("quote validity window is too long")
     reviewed_at = _aware(getattr(offer, "reviewed_at", None), "reviewed_at")
     if issued_at < reviewed_at:
@@ -75,7 +79,7 @@ def make_quote_snapshot(offer, *, now=None):
     return {
         "schema": "mojprop.quote.v1",
         "reference": reference,
-        "version": getattr(offer, "version", None),
+        "version": version,
         "title": title,
         "scope": scope,
         "exclusions": exclusions,
