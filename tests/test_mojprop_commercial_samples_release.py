@@ -34,6 +34,17 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
                 self.assertNotIn('type="submit"', page)
                 self.assertNotIn("wallet address", page.lower())
 
+    def test_signal_desk_releases_public_example_and_separate_opt_in(self):
+        source = SITE_SOURCE / "signals/index.html"
+        baseline = SITE_SOURCE / "baselines/signals-index-before-free.html"
+        self.assertTrue(source.is_file())
+        self.assertTrue(baseline.is_file())
+        html = source.read_text("utf-8")
+        self.assertIn('id="free-preview"', html)
+        self.assertIn('id="free-education-membership"', html)
+        self.assertIn("/moj-signal-free-subscribe/", html)
+        self.assertNotIn("/moj-signal-free-subscribe/", baseline.read_text("utf-8"))
+
     def test_market_brief_uses_named_sources_and_no_unverified_quote(self):
         page = (SITE_SOURCE / "samples/gold-market-brief/index.html").read_text("utf-8")
         for expected in ("cmegroup.com", "gold.org", "elibrary.imf.org",
@@ -105,7 +116,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.route = self.docroot / "moj-prop"
         self.route.mkdir(parents=True)
         stage = self.home / ".mojplaywin-moj-prop-catalog-123" / "templates/moj-prop-v4"
-        for path in release.FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME):
+        for path in release.FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL):
             source = SITE_SOURCE / path
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +155,28 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertFalse((self.route / "samples/gold-market-brief/index.html").exists())
         self.assertFalse((self.route / "samples/educational-signal/index.html").exists())
         self.assertFalse((self.route / "samples/commercial-gate-audit/index.html").exists())
+        self.assertFalse((self.route / "signals/index.html").exists())
+
+    def test_signal_desk_existing_approved_baseline_is_upgradable_and_reversible(self):
+        path = self.route / "signals/index.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prior = (SITE_SOURCE / release.BASELINE_SIGNAL).read_bytes()
+        path.write_bytes(prior)
+        release.deploy("123", "a" * 40)
+        self.assertIn(b'id="free-education-membership"', path.read_bytes())
+        backup = self.backups / "moj-prop-catalog-123"
+        self.assertTrue((backup / "manifest.json").exists())
+        release.restore(backup)
+        self.assertEqual(path.read_bytes(), prior)
+
+    def test_unknown_live_signal_desk_blocks_deployment_and_preserves_customer_changes(self):
+        path = self.route / "signals/index.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Operator customised and unpublished content", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            release.deploy("123", "a" * 40)
+        self.assertIn("Operator customised", path.read_text("utf-8"))
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
     def test_idempotent_deploy_never_makes_second_backup(self):
         release.deploy("123", "a" * 40)

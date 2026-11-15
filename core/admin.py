@@ -497,3 +497,28 @@ class MojPropDeliveryEvidenceAdmin(ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.full_clean()
         super().save_model(request, obj, form, change)
+
+
+# Separate opt-in lifecycle: read-only staff inspection, never a marketing mail action.
+from .signal_free_models import MojSignalFreeSubscription
+
+
+@admin.register(MojSignalFreeSubscription)
+class MojSignalFreeSubscriptionAdmin(ModelAdmin):
+    list_display = ("id", "status", "source", "consent_at", "confirmed_at", "unsubscribed_at")
+    list_filter = ("status", "source", "consent_version")
+    readonly_fields = (
+        "email", "status", "nonce", "consent_at", "consent_version",
+        "confirmation_sent_at", "confirmed_at", "unsubscribed_at",
+        "source", "ip_hash", "created_at", "updated_at",
+    )
+    actions = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

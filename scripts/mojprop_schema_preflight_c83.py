@@ -14,6 +14,7 @@ MIGRATIONS = (
     "0043_mojprop_digital_inquiry",
     "0044_mojprop_acceptance_evidence",
     "0045_mojprop_delivery_evidence",
+    "0046_signal_free_subscription",
 )
 MODELS = ("MojPropRequest", "MojPropOffer", "MojPropDeliveryEvidence")
 ADMINS = ("MojPropRequestAdmin", "MojPropOfferAdmin", "MojPropDeliveryEvidenceAdmin")
@@ -25,6 +26,8 @@ MODULES = (
     "core/mojprop_offer_draft.py",
     "core/mojprop_quote_contract.py",
     "core/mojprop_quote_views.py",
+    "core/signal_free_models.py",
+    "core/signal_free_views.py",
 )
 
 
@@ -78,7 +81,7 @@ def check_schema_closure(live_root, staged_root):
     """
     live_root, staged_root = Path(live_root), Path(staged_root)
     for path in (
-        "core/models.py", "core/admin.py", "config/urls.py", *MODULES,
+        "core/models.py", "core/admin.py", "config/urls.py", "config/settings.py", *MODULES,
         *(f"core/migrations/{name}.py" for name in MIGRATIONS),
     ):
         src = staged_root / path
@@ -90,6 +93,14 @@ def check_schema_closure(live_root, staged_root):
     for name in MODELS:
         if name not in _classes(staged_root / "core/models.py"):
             raise RuntimeError("commercial source model is missing: " + name)
+    if "MojSignalFreeSubscription" not in _classes(staged_root / "core/signal_free_models.py"):
+        raise RuntimeError("free educational subscriber source model is missing")
+    if "MojSignalFreeSubscriptionAdmin" not in _classes(staged_root / "core/admin.py"):
+        raise RuntimeError("free educational membership admin contract missing")
+    if "MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED" not in (
+        staged_root / "config/settings.py"
+    ).read_text(encoding="utf-8"):
+        raise RuntimeError("free email delivery permission flag is missing")
     for name in ADMINS:
         if name not in _classes(staged_root / "core/admin.py"):
             raise RuntimeError("commercial source admin is missing: " + name)
@@ -121,7 +132,7 @@ def check_schema_closure(live_root, staged_root):
                     raise RuntimeError("existing Moj Prop " + label +
                                        " differs from reviewed source: " + name)
 
-    # Never let a targeted 'migrate core 0045' silently unapply or rewrite
+    # Never let a targeted 'migrate core 0046' silently unapply or rewrite
     # unrelated newer migrations in an owner-preserved application tree.
     known = set(MIGRATIONS)
     directory = live_root / "core/migrations"
@@ -131,6 +142,16 @@ def check_schema_closure(live_root, staged_root):
         head = path.stem.split("_", 1)[0]
         if head.isdigit() and int(head) >= 41 and path.stem not in known:
             raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
+
+    # Owner-preserved signal modules cannot be silently replaced with an
+    # incompatible file merely because the filename matches.
+    for module in ("core/signal_free_models.py", "core/signal_free_views.py"):
+        dst = live_root / module
+        src = staged_root / module
+        if dst.is_symlink():
+            raise RuntimeError("unsafe live signal-free module symlink: " + module)
+        if dst.exists() and (not dst.is_file() or dst.read_bytes() != src.read_bytes()):
+            raise RuntimeError("unreviewed live signal-free module drift: " + module)
 
     for name in MIGRATIONS:
         dst = live_root / f"core/migrations/{name}.py"
