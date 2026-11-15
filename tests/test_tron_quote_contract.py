@@ -41,6 +41,15 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
             "expires_at_utc": NOW + timedelta(minutes=3),
             "signing_key": KEY,
             "now_utc": NOW,
+            "trusted_order_registry": {
+                "order-10001": {
+                    "tenant_id": "signal_saman",
+                    "sku": "moj-signals-standard",
+                    "usd_price": "12",
+                    "payment_state": "pending",
+                    "cancelled": False,
+                },
+            },
         }
         args.update(changes)
         return make_native_trx_quote(**args)
@@ -51,6 +60,15 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
             "merchant_registry": REGISTRY,
             "now_utc": NOW + timedelta(minutes=1),
             "signing_key": KEY,
+            "trusted_order_registry": {
+                "order-10001": {
+                    "tenant_id": "signal_saman",
+                    "sku": "moj-signals-standard",
+                    "usd_price": "12",
+                    "payment_state": "pending",
+                    "cancelled": False,
+                },
+            },
         }
         data.update(changes)
         return verify_native_trx_quote(**data)
@@ -62,9 +80,19 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
         self.assertTrue(self.valid(quote=q))
 
     def test_round_ceiling_prevents_sub_sun_price_and_truncation(self):
-        q = self.quote(usd_price="0.0000001", trx_usd_rate="1")
+        q = self.quote(
+            usd_price="0.0000001", trx_usd_rate="1",
+            trusted_order_registry={"order-10001": {
+                "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+                "usd_price": "0.0000001", "payment_state": "pending",
+                "cancelled": False,
+            }},
+        )
         self.assertEqual(q.exact_amount_sun, 1)
-        self.assertTrue(self.valid(quote=q))
+        self.assertTrue(self.valid(quote=q, trusted_order_registry={"order-10001": {
+            "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+            "usd_price": "0.0000001", "payment_state": "pending", "cancelled": False,
+        }}))
 
     def test_quote_cannot_be_reused_for_different_sku_or_order(self):
         q = self.quote()
@@ -146,6 +174,34 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
             self.quote(now_utc=datetime(2026, 11, 15))
         with self.assertRaisesRegex(NativeTrxQuoteError, "exchange_rate_expired"):
             self.quote(now_utc=NOW + timedelta(minutes=3))
+
+    def test_missing_or_forged_server_order_refuses_quote(self):
+        for record in (None, "approved", True, {}, {"order-10001": "fake"}):
+            with self.subTest(record=repr(record)), self.assertRaisesRegex(
+                NativeTrxQuoteError, "trusted_order_missing_or_mismatched"
+            ):
+                self.quote(trusted_order_registry=record)
+
+    def test_quote_must_match_server_order_price_tenant_sku_and_unpaid_state(self):
+        changes = (
+            {"tenant_id": "other_tenant"}, {"sku": "other_sku"},
+            {"usd_price": "0.01"}, {"payment_state": "paid"},
+            {"payment_state": "cancelled"}, {"cancelled": True},
+        )
+        for corrupted in changes:
+            with self.subTest(corrupted=corrupted), self.assertRaisesRegex(
+                NativeTrxQuoteError, "trusted_order_missing_or_mismatched"
+            ):
+                self.quote(trusted_order_registry={"order-10001": {
+                    "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+                    "usd_price": "12", "payment_state": "pending",
+                    "cancelled": False, **corrupted
+                }})
+
+    def test_cancellation_in_live_order_registry_invalidates_old_quote(self):
+        record = {"tenant_id": "signal_saman", "sku": "moj-signals-standard",
+                  "usd_price": "12", "payment_state": "pending", "cancelled": True}
+        self.assertFalse(self.valid(trusted_order_registry={"order-10001": record}))
 
     def test_invoice_or_receipt_never_created_by_quote_function(self):
         q = self.quote()
