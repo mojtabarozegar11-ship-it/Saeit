@@ -19,8 +19,11 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_protect
 
 from .models import MojPropRequest
+from .mojprop_catalog_contract import public_service_catalog
+from .mojprop_receipts import make_receipt_token, verify_receipt_token, public_status_text
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -33,24 +36,76 @@ def _text(payload, key: str, limit: int) -> str:
     return str(value).strip()[:limit] if value is not None else ""
 
 
+MAX_BODY_BYTES = 16 * 1024
+ALLOWED_FIELDS = frozenset((
+    "name", "email", "service", "horizon", "notes", "consent", "website"
+))
+
+
+def _unique_pairs(pairs):
+    """Reject ambiguous duplicate JSON fields, including email and consent."""
+    values = {}
+    for key, value in pairs:
+        if key in values:
+            raise ValueError("duplicate customer intake key")
+        values[key] = value
+    return values
+
+
 def _payload(request):
-    content_type = request.META.get("CONTENT_TYPE", "")
-    if content_type.startswith("application/json"):
-        try:
-            value = json.loads(request.body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+    """Allow bounded JSON or a single-valued HTML form; reject hidden extras."""
+    content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].strip().lower()
+    if content_type not in ("application/json", "application/x-www-form-urlencoded"):
+        return None
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except (ValueError, TypeError):
+        return None
+    if length > MAX_BODY_BYTES or length < 0:
+        return None
+    if content_type == "application/json":
+        body = request.body
+        if len(body) > MAX_BODY_BYTES:
             return None
-        return value if isinstance(value, dict) else None
-    return request.POST
+        try:
+            value = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_pairs)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return None
+        if type(value) is not dict or set(value) - ALLOWED_FIELDS:
+            return None
+        return value
+    form = request.POST
+    # A normal browser form carries Django's CSRF hidden field. It is not
+    # customer data and must not block an otherwise valid, consented lead.
+    if set(form.keys()) - (ALLOWED_FIELDS | {"csrfmiddlewaretoken"}):
+        return None
+    if any(len(form.getlist(key)) != 1 for key in form):
+        return None
+    return form
 
 
 def _client_ip(request) -> str:
-    # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    return str(
-        request.META.get("HTTP_X_REAL_IP")
-        or request.META.get("REMOTE_ADDR")
-        or "unknown"
-    ).strip()[:128]
+    """Use the peer address; forward headers are trusted only from allowed proxies."""
+    from ipaddress import ip_address
+
+    remote = str(request.META.get("REMOTE_ADDR") or "").strip()
+    try:
+        peer = str(ip_address(remote))
+    except ValueError:
+        return "unknown"
+
+    # A public visitor must not choose a new rate-limit identity by sending
+    # X-Real-IP. Only explicitly configured reverse proxy peers can assert it.
+    allowed = getattr(settings, "MOJ_PROP_TRUSTED_PROXY_IPS", ())
+    if not isinstance(allowed, (tuple, list, set, frozenset)):
+        allowed = ()
+    if peer in allowed:
+        claimed = str(request.META.get("HTTP_X_REAL_IP") or "").strip()
+        try:
+            return str(ip_address(claimed))
+        except ValueError:
+            return peer
+    return peer
 
 
 def _ip_hash(request) -> str:
@@ -73,31 +128,63 @@ def _rate_limited(email: str, ip_hash: str) -> bool:
 
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
+    # Tokens and buyer receipt state must never be kept in intermediary caches
+    # or leaked in browser referrer data, including on error responses.
     response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 
+@csrf_protect
 @require_http_methods(["GET", "POST"])
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
     if request.method == "GET":
-        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake"})
+        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
+                      "service_catalog": public_service_catalog()})
 
     payload = _payload(request)
     if payload is None:
-        return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
+        return _json({"ok": False, "detail": "Use valid JSON or a single-valued HTML form."}, status=400)
+
+    # Type-check JSON values; Python stringification must not turn arrays,
+    # objects or integers into fabricated buyer names/addresses.
+    for field in ("name", "email", "service", "horizon", "notes", "website"):
+        if field in payload and not isinstance(payload[field], str):
+            return _json({"ok": False, "detail": "Invalid field types."}, status=400)
+    consent_value = payload.get("consent")
+    is_json_payload = type(payload) is dict
+    # QueryDict subclasses dict, but ordinary form checkbox values are
+    # strings ("on"/"1"), not JSON booleans. Keep the formats distinct.
+    if is_json_payload and type(consent_value) is not bool:
+        return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
     if _text(payload, "website", 120):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
+
+    # Reject rather than silently truncate buyer identity or requested scope.
+    # Truncation can convert two distinct contacts into the same CRM address,
+    # or create a quote for a materially different scope than the buyer sent.
+    limits = {"name": 200, "email": 254, "service": 30,
+              "horizon": 20, "notes": 5000, "website": 120}
+    oversized = {key: "Field exceeds maximum length."
+                 for key, maximum in limits.items()
+                 if len(payload.get(key, "")) > maximum}
+    if oversized:
+        return _json({"ok": False, "detail": "Request fields are too long.",
+                      "fields": oversized}, status=400)
 
     name = _text(payload, "name", 200)
     email = _text(payload, "email", 254).lower()
     route = _text(payload, "service", 30)
     horizon = _text(payload, "horizon", 20)
     notes = _text(payload, "notes", 5000)
-    consent_value = payload.get("consent")
-    consent = consent_value is True or str(consent_value).lower() in {"1", "true", "on", "yes"}
+    consent = consent_value is True or (
+        not is_json_payload and isinstance(consent_value, str)
+        and consent_value.lower() in {"1", "true", "on"}
+    )
 
     errors = {}
     if len(name) < 2:
@@ -106,6 +193,13 @@ def mojprop_intake(request):
         validate_email(email)
     except ValidationError:
         errors["email"] = "A valid email is required."
+    else:
+        # These domains cannot receive commercial proposals or retrieval links.
+        domain = email.rsplit("@", 1)[-1].lower().rstrip(".")
+        if domain in {"localhost", "example.invalid"} or domain.endswith(
+            (".invalid", ".localhost", ".local", ".test")
+        ):
+            errors["email"] = "Use an email address capable of receiving a written offer."
     if route not in ROUTES:
         errors["service"] = "Choose a valid service route."
     if horizon not in HORIZONS:
@@ -119,10 +213,14 @@ def mojprop_intake(request):
 
     ip_hash = _ip_hash(request)
     if _rate_limited(email, ip_hash):
-        return _json(
+        response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
+        # API clients and browsers can honor this standard response header.
+        # It is not a signal to retry a paid order or bypass the throttle.
+        response["Retry-After"] = "600"
+        return response
 
     request_obj = None
     for _ in range(3):
@@ -150,9 +248,39 @@ def mojprop_intake(request):
         {
             "ok": True,
             "request_id": request_obj.request_id,
+            "receipt_token": make_receipt_token(request_obj.request_id),
             "status": request_obj.status,
             "next_step": "manual_review",
             "message": "Your request draft was received for manual review. No payment was taken.",
         },
         status=201,
     )
+
+
+@require_http_methods(["GET"])
+def mojprop_receipt_status(request):
+    """Read only the public stage when holding the signed private receipt."""
+    # A bearer receipt must be unambiguous: reject duplicate query parameters.
+    # QueryDict.get() silently selects the last value otherwise.
+    tokens = request.GET.getlist("receipt_token")
+    token = tokens[0] if len(tokens) == 1 else ""
+    request_id = verify_receipt_token(token)
+    if request_id is None:
+        return _json(
+            {"ok": False, "detail": "Receipt invalid or expired. Contact support using your original email."},
+            status=404,
+        )
+    record = (MojPropRequest.objects.filter(request_id=request_id)
+              .values_list("status", flat=True).first())
+    if record is None:
+        return _json({"ok": False, "detail": "Receipt unavailable."}, status=404)
+    response = _json({
+        "ok": True,
+        "request_id": request_id,
+        "status": record,
+        "stage": public_status_text(record),
+        "payment_status": "not_collected_by_this_service",
+    })
+    response["Referrer-Policy"] = "no-referrer"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
