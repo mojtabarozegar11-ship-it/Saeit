@@ -5,7 +5,7 @@ import unittest
 
 class CatalogRollbackGateTests(unittest.TestCase):
     def test_backend_failure_triggers_catalog_rollback(self):
-        workflow = Path(".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text(encoding="utf-8")
+        workflow = Path(".github/workflows/mojprop-backend-controlled-release-20261115.yml").read_text(encoding="utf-8")
         rollback = workflow.split("- name: Roll back only Moj Prop route if deployment verification fails", 1)[1]
         gate = rollback.split("\n    needs:", 1)[0].split("\n      - name:", 1)[0]
         self.assertIn("steps.deploy.outcome == 'success'", gate)
