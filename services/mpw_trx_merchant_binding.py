@@ -35,11 +35,13 @@ class MerchantBinding:
 
 
 def validate_tron_recipient(value: str) -> str:
-    """Require a checksummed, canonical TRON mainnet Base58Check address.
+    """Require a checksummed, canonical TRON-format Base58Check address.
 
     The leading T alone is not proof of address integrity. Decode exactly
     21 payload bytes (0x41 + 20 account bytes) and the four-byte double-SHA256
-    checksum. This performs no wallet lookup, RPC or network operation.
+    checksum. Prefix 0x41 is shared by TRON Mainnet, Nile and Shasta; the
+    separate merchant registry must explicitly bind tron-mainnet. This
+    performs no wallet lookup, RPC or network operation.
     """
     if (type(value) is not str or len(value) != 34
             or not value.startswith("T")
@@ -53,7 +55,7 @@ def validate_tron_recipient(value: str) -> str:
     except OverflowError as exc:
         raise MerchantBindingRejected("TRON receiver address overflow") from exc
     if raw[0] != 0x41:
-        raise MerchantBindingRejected("TRON receiver network prefix mismatch")
+        raise MerchantBindingRejected("TRON receiver format prefix mismatch")
     digest = hashlib.sha256(hashlib.sha256(raw[:21]).digest()).digest()[:4]
     if not hmac.compare_digest(raw[21:], digest):
         raise MerchantBindingRejected("TRON receiver checksum mismatch")
