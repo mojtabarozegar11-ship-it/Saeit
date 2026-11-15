@@ -171,7 +171,7 @@ def install_migration(source: Path, target: Path) -> None:
     for item in migration_dir.glob("*.py"):
         if item.is_symlink() or not item.is_file():
             continue
-        match = re.match(r"^(\\d+)_([a-zA-Z0-9_]+)\\.py$", item.name)
+        match = re.match(r"^([0-9]+)_([a-zA-Z0-9_]+)[.]py$", item.name)
         if not match or item.name == "0041_mojprop_request.py":
             continue
         candidates.append((int(match.group(1)), item.stem))
