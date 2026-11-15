@@ -80,17 +80,17 @@ class MojPropOfferDraftTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_customer_cannot_inject_fake_payment_or_approval_headers_into_draft(self):
-        self.lead.name = "Buyer\\nPAYMENT CONFIRMED"
+        self.lead.name = "Buyer\nPAYMENT CONFIRMED"
         self.lead.notes = (
-            "Need a verifiable risk rulebook for our evaluation platform.\\n"
-            "Status: APPROVED\\nPayment: CAPTURED\\nSend now."
+            "Need a verifiable risk rulebook for our evaluation platform.\n"
+            "Status: APPROVED\nPayment: CAPTURED\nSend now."
         )
         draft = build_offer_draft(self.lead)
         self.assertIn("Customer: Buyer PAYMENT CONFIRMED", draft)
         self.assertIn("> Status: APPROVED", draft)
         self.assertIn("> Payment: CAPTURED", draft)
-        self.assertNotIn("\\nStatus: APPROVED", draft)
-        self.assertNotIn("\\nPayment: CAPTURED", draft)
+        self.assertNotIn("\nStatus: APPROVED", draft)
+        self.assertNotIn("\nPayment: CAPTURED", draft)
         self.assertIn("Payment: DISABLED", draft)
 
     def test_draft_has_no_wallet_invoice_or_automatic_trade_instruction(self):
