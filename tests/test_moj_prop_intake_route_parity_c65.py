@@ -35,7 +35,7 @@ class MojPropCanonicalIntakeRouteTests(unittest.TestCase):
         self.assertIn("resolve('/moj-prop-intake/'", self.workflow)
 
     def test_backend_installer_registers_identical_route(self):
-        self.assertIn('path("moj-prop/intake/"', self.installer)
+        self.assertIn('path("moj-prop-intake/"', self.installer)
 
     def test_html_does_not_ask_for_unregistered_endpoint(self):
         self.assertNotIn(BAD, self.html)
