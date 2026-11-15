@@ -1,0 +1,49 @@
+name: TRON Merchant Isolation Contract (read-only)
+
+on:
+  pull_request:
+    paths:
+      - "services/mpw_trx_merchant_binding.py"
+      - "services/mpw_trx_commercial_web.py"
+      - "tests/test_mpw_trx_merchant_binding.py"
+      - "tests/test_mpw_trx_merchant_web_guard_source.py"
+      - ".github/workflows/mpw-tron-merchant-isolation-20261115.yml"
+  push:
+    branches: [cycle72-mpw-merchant-boundary-20261115]
+    paths:
+      - "services/mpw_trx_merchant_binding.py"
+      - "services/mpw_trx_commercial_web.py"
+      - "tests/test_mpw_trx_merchant_binding.py"
+      - "tests/test_mpw_trx_merchant_web_guard_source.py"
+      - ".github/workflows/mpw-tron-merchant-isolation-20261115.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpw-tron-merchant-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merchant-isolation:
+    name: Test cross-domain payment attribution without chain access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify source integrity
+        run: |
+          set -euo pipefail
+          python -m py_compile services/mpw_trx_merchant_binding.py services/mpw_trx_commercial_web.py
+      - name: Run pure merchant isolation and live-callsite contracts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_mpw_trx_merchant_binding.py' -v
+          python -m unittest discover -s tests -p 'test_mpw_trx_merchant_web_guard_source.py' -v
