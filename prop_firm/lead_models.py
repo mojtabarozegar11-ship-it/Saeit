@@ -1,4 +1,5 @@
 """Plan 1 prospective customer contact records, NOT paid challenge enrollments."""
+from django.core.exceptions import ValidationError
 from django.db import models
 
 class PropInterest(models.Model):
@@ -18,5 +19,21 @@ class PropInterest(models.Model):
     class Meta:
         indexes = [models.Index(fields=("status", "-created_at"), name="mp_interest_status")]
     
+    def _check_withdrawal_lock(self):
+        # A withdrawn lead must never become contactable again through
+        # ordinary admin edits or model.save(). A new opt-in needs a separate
+        # verified consent lifecycle, not an undocumented status reset.
+        if (self.pk is not None and self.status != "withdrawn"
+                and type(self).objects.filter(pk=self.pk, status="withdrawn").exists()):
+            raise ValidationError({"status": "Withdrawn consent cannot be reactivated"})
+
+    def clean(self):
+        super().clean()
+        self._check_withdrawal_lock()
+
+    def save(self, *args, **kwargs):
+        self._check_withdrawal_lock()
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return f"moj-prop-interest:{self.pk}"

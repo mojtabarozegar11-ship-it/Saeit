@@ -56,6 +56,40 @@ class PropInterestIntakeTests(TestCase):
         self.assertEqual(lead.status, "withdrawn")
         self.assertEqual(PropInterest.objects.count(), 1)
 
+    def test_withdrawn_lead_cannot_be_reactivated_with_model_save(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.status = "contacted"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_withdrawn_lead_admin_model_form_validation_blocks_reset(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.status = "new"
+        with self.assertRaises(ValidationError):
+            lead.full_clean()
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_plan_one_followup_status_can_be_withdrawn(self):
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "contacted"
+        lead.save(update_fields=["status"])
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
     def test_refuse_missing_consent_and_wrong_plan(self):
         for name,value in (("contact_consent", "no"), ("plan_code", "MOJ-PROP-02"),
                            ("plan_code","MOJ-PROP-10"), ("consent_version", "bad"),

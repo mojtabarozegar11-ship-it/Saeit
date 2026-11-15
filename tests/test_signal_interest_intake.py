@@ -56,6 +56,40 @@ class SignalInterestIntakeTests(TestCase):
         self.assertEqual(lead.status,"withdrawn")
         self.assertEqual(SignalInterest.objects.count(),1)
 
+    def test_withdrawn_signal_lead_cannot_be_reactivated_via_save(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status", "updated_at"])
+        lead.status = "contacted"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["status", "updated_at"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_withdrawn_signal_lead_admin_form_validation_blocks_reset(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.status = "new"
+        with self.assertRaises(ValidationError):
+            lead.full_clean()
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_signal_lead_can_withdraw_after_contacted_state(self):
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "contacted"
+        lead.save(update_fields=["status"])
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
     def test_different_brand_and_package_produce_distinct_provenance(self):
         self.assertEqual(self.post().status_code,202)
         self.assertEqual(self.post({**self.BASE,"brand":"zahra"}).status_code,202)
