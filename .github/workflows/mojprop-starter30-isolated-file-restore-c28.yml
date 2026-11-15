@@ -1,0 +1,185 @@
+name: C28 Moj Prop owner-gated private two-file restore (NO SITE RELEASE)
+on:
+  pull_request:
+    paths:
+      - "scripts/mojprop_starter30_file_restore_c28.py"
+      - "tests/test_mojprop_starter30_file_restore_c28.py"
+      - ".github/workflows/mojprop-starter30-isolated-file-restore-c28.yml"
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: mojprop-c28-private-restore
+  cancel-in-progress: false
+jobs:
+  source-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Offline 28-case security regression (no cPanel)
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_mojprop_starter30_file_restore_c28 -v
+          python3 -B -m py_compile scripts/mojprop_starter30_file_restore_c28.py
+
+  approved-preflight:
+    # No server access, secrets or privileged runner before every gate passes.
+    # These owner-managed repository variables default to absent = DENY.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MOJPROP-C28-PRIVATE-RESTORE-20261115' &&
+      vars.MOJPROP_C28_REHEARSAL_ALLOWED == 'true' &&
+      vars.MOJPROP_C28_PINNED_MAIN_SHA == github.sha &&
+      vars.MOJPROP_C28_SECURITY_APPROVED_SHA == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      OWNER_COMMENT_ID: ${{ vars.MOJPROP_C28_APPROVED_COMMENT_ID }}
+      PINNED_MAIN_SHA: ${{ vars.MOJPROP_C28_PINNED_MAIN_SHA }}
+      SECURITY_APPROVED_SHA: ${{ vars.MOJPROP_C28_SECURITY_APPROVED_SHA }}
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          GH_APPROVED_COMMENT_ID: ${{ vars.MOJPROP_C28_APPROVED_COMMENT_ID }}
+          GH_MAIN_SHA: ${{ github.sha }}
+          GH_REVIEWED_PR_HEAD: ${{ vars.MOJPROP_C28_REVIEWED_PR_HEAD_SHA }}
+        with:
+          script: |
+            const {owner,repo}=context.repo;
+            const sha=process.env.GH_MAIN_SHA;
+            const id=String(context.payload.comment.id);
+            if (!/^[1-9][0-9]{5,18}$/.test(id) ||
+                id !== process.env.GH_APPROVED_COMMENT_ID) {
+              throw Error("exact owner comment ID has not been approved");
+            }
+            if (!/^[0-9a-f]{40}$/.test(sha)) throw Error("invalid pinned commit");
+            const main=await github.rest.repos.getBranch({owner,repo,branch:"main"});
+            if (main.data.commit.sha!==sha) throw Error("main moved; re-approve exact commit");
+            const prHead=process.env.GH_REVIEWED_PR_HEAD;
+            if (!/^[0-9a-f]{40}$/.test(prHead)) {
+              throw Error("reviewed PR head not independently approved");
+            }
+            const approved=await github.rest.pulls.get({owner,repo,pull_number:2437});
+            if (!approved.data.merged || approved.data.head.sha!==prHead ||
+                approved.data.base.ref!=="main") {
+              throw Error("original reviewed PR not merged into main");
+            }
+            const ancestry=await github.rest.repos.compareCommits({
+              owner,repo,base:prHead,head:sha
+            });
+            if (ancestry.data.behind_by!==0) {
+              throw Error("reviewed exact PR code is not ancestor of current main");
+            }
+            // Require specific workflow identity, event and exact commit.
+            // Merely counting generic test/check JOB NAMES is unsafe: many
+            // unrelated dispatch workflows use those same job names.
+            async function requiredCheck(commit,path,job,event) {
+              const checks=await github.paginate(github.rest.checks.listForRef,{
+                owner,repo,ref:commit,per_page:100
+              });
+              const candidates=checks.filter(x=>x.name===job &&
+                x.status==="completed" && x.conclusion==="success");
+              for (const c of candidates) {
+                const match=(c.details_url||"").match(/\/actions\/runs\/([0-9]+)\/job\/[0-9]+/);
+                if (!match) continue;
+                const run=await github.rest.actions.getWorkflowRun({
+                  owner,repo,run_id:Number(match[1])
+                });
+                if (run.data.path===path && run.data.head_sha===commit &&
+                    run.data.event===event && run.data.status==="completed" &&
+                    run.data.conclusion==="success") return true;
+              }
+              return false;
+            }
+            const requirements=[
+              [sha,".github/workflows/ci.yml","test","push"],
+              [sha,".github/workflows/django-ci.yml","test","push"],
+              [prHead,".github/workflows/factory-evidence-quality-tests.yml","check","pull_request"],
+              [prHead,".github/workflows/mojprop-starter30-isolated-file-restore-c28.yml","source-only","pull_request"],
+            ];
+            for (const [commit,path,job,event] of requirements) {
+              if (!await requiredCheck(commit,path,job,event)) {
+                throw Error("missing exact-commit verified workflow: "+path);
+              }
+            }
+            // Separate owner-controlled security approval remains required
+            // for this exact main SHA; absence of ANY variable denies access.
+            core.info("C28_EXACT_WORKFLOW_CI_AND_OWNER_SECURITY_GATE_PASSED");
+
+  isolated-private-copy:
+    needs: [approved-preflight]
+    if: >-
+      needs.approved-preflight.result == 'success' &&
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment'
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 5
+    env:
+      APPROVED_COMMENT_ID: ${{ github.event.comment.id }}
+      HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Pin exact approved source without environment leaks
+        run: |
+          set -euo pipefail
+          test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "46ca90b95dfd5259138850dfdec05e8f5b263303"
+          test -n "$HOST_KEY"
+          [[ "$APPROVED_COMMENT_ID" =~ ^[1-9][0-9]{5,18}$ ]]
+          python3 -B -m unittest tests.test_mojprop_starter30_file_restore_c28 -q
+      - name: Tenant-owned, quota-verified, one-use private rehearsal ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${{ github.run_id }}"
+          [[ "$run_id" =~ ^[1-9][0-9]{0,18}$ ]]
+          work="$RUNNER_TEMP/mojprop-c28-secret"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n";sys.stdout.write(s)' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P "" -f "$work/host.key" >/dev/null
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$work/config" <<EOF
+          Host owner-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $work/host.key
+            UserKnownHostsFile $work/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$work/config"
+          # Only a completed exact-SHA CI+security-approved owner comment can
+          # ever reach this step; independent on-host quota and atomic one-use
+          # authorization are rechecked before the FIRST private write.
+          timeout 115s ssh -T -F "$work/config" owner-cpanel \
+            'for p in /home/zomorod2/virtualenv/Saeit/3.11/bin/python /opt/alt/python311/bin/python3.11 python3.11 python3; do if command -v "$p" >/dev/null 2>&1 && "$p" -c "import sys;sys.exit(0 if sys.version_info >= (3,9) else 1)" >/dev/null 2>&1; then exec "$p" -B - "'"$run_id"'" "'"$APPROVED_COMMENT_ID"'"; fi; done; exit 72' \
+            < scripts/mojprop_starter30_file_restore_c28.py \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"]=="mojprop.static.restore.evidence.v2" and d["private_file_backup_count"]==2 and d["isolated_two_file_restore"] is True and d["live_files_modified"] is False and d["database_backup_or_restore"] is False and d["subsite_isolation_proven"] is False and d["release_permitted"] is False and d["payment_permitted"] is False;print(json.dumps(d,sort_keys=True))'
+          echo "C28_TWO_PUBLIC_FILES_ISOLATED_RESTORE_VERIFIED=true"
+          echo "C28_FULL_SITE_BACKUP_PROVEN=false"
+          echo "C28_SITE_RELEASE_AUTHORIZED=false"
+          echo "C28_TRX_COLLECTION_AUTHORIZED=false"
