@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Safely deploy the Moj Prop public-intake backend to the pinned Passenger app."""
+"""Safely deploy the Moj Prop public-intake backend to the pinned Passenger app.
+
+The live Saeit staging tree contains owner-preserved modules that are not present
+in the current public repository snapshot. Models, admin, and URL configuration
+are therefore patched additively; they are never replaced wholesale.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +30,10 @@ FILES = (
     Path("core/migrations/0041_mojprop_request.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
+REPLACE_FILES = (
+    Path("core/mojprop_views.py"),
+    Path("core/migrations/0041_mojprop_request.py"),
+)
 
 
 def digest(path: Path) -> str:
@@ -154,6 +163,46 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
             temporary.unlink()
 
 
+def patch_models(target: Path, source: Path) -> None:
+    assert_regular(target, "live models")
+    assert_regular(source, "staged models")
+    live = target.read_text(encoding="utf-8")
+    if "class MojPropRequest(" in live:
+        print("MOJ_PROP_MODEL_ALREADY_PATCHED")
+        return
+    staged = source.read_text(encoding="utf-8")
+    marker = "\nclass MojPropRequest("
+    start = staged.find(marker)
+    if start < 0:
+        raise RuntimeError("staged MojPropRequest class is missing")
+    block = staged[start + 1 :].rstrip() + "\n"
+    if "class T(" not in live or "from django.db import models" not in live:
+        raise RuntimeError("live models file has no safe additive-model anchors")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+    print("MOJ_PROP_MODEL_PATCH=PASS")
+
+
+def patch_admin(target: Path, source: Path) -> None:
+    assert_regular(target, "live admin")
+    assert_regular(source, "staged admin")
+    live = target.read_text(encoding="utf-8")
+    if "class MojPropRequestAdmin(" in live:
+        print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
+        return
+    staged = source.read_text(encoding="utf-8")
+    marker = "\nfrom .models import MojPropRequest\n"
+    start = staged.find(marker)
+    if start < 0:
+        raise RuntimeError("staged MojPropRequest admin block is missing")
+    block = staged[start + 1 :].rstrip() + "\n"
+    if "from django.contrib import admin" not in live or "ModelAdmin" not in live:
+        raise RuntimeError("live admin file has no safe additive-admin anchors")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + block, mode)
+    print("MOJ_PROP_ADMIN_PATCH=PASS")
+
+
 def patch_urlconf(target: Path) -> None:
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
@@ -162,7 +211,11 @@ def patch_urlconf(target: Path) -> None:
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
         raise RuntimeError("live URL configuration has no safe Django path anchor")
-    if "path" not in source.split("from django.urls import", 1)[1].split("\n", 1)[0]:
+    import_line = next(
+        (line for line in source.splitlines() if line.startswith("from django.urls import ")),
+        "",
+    )
+    if "path" not in import_line:
         raise RuntimeError("live URL configuration does not import path")
     block = (
         "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
@@ -232,12 +285,14 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     )
 
     try:
-        for relative in FILES:
+        for relative in REPLACE_FILES:
             target = ROOT / relative
             current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
             atomic_replace(staged_root / relative, target, current_mode)
             if digest(target) != digest(staged_root / relative):
                 raise RuntimeError(f"post-copy hash mismatch: {relative}")
+        patch_models(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
+        patch_admin(ROOT / Path("core/admin.py"), staged_root / Path("core/admin.py"))
         patch_urlconf(ROOT / URLCONF)
 
         python = choose_python()
