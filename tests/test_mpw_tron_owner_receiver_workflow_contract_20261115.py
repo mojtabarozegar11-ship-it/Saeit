@@ -8,26 +8,37 @@ READER = ROOT / "scripts/mpw_tron_owner_wallet_live_readonly_20261115.py"
 
 
 class LiveTRXOwnerReceiverWorkflowContractTests(unittest.TestCase):
-    def test_merge_main_only_and_no_pull_request_secret_execution(self):
+    def test_owner_issue_only_and_no_pr_secret_execution(self):
         s = WF.read_text("utf-8")
-        self.assertIn("  push:", s)
-        self.assertIn("    branches: [main]", s)
-        self.assertIn("  workflow_dispatch:", s)
-        self.assertNotIn("  pull_request:", s)
-        self.assertIn("github.ref == 'refs/heads/main'", s)
-        self.assertIn("permissions: {contents: read}", s)
+        self.assertNotIn("\n  push:", s)
+        self.assertNotIn("\n  schedule:", s)
+        self.assertNotIn("\n  workflow_dispatch:", s)
+        self.assertIn("  pull_request:", s)
+        self.assertIn("if: github.event_name == 'pull_request'", s)
+        protected = s.split("  inspect-receiver:", 1)[1]
+        self.assertIn("github.event_name == 'issue_comment'", protected)
+        self.assertIn("github.ref == 'refs/heads/main'", protected)
+        self.assertIn("github.event.comment.author_association == 'OWNER'", protected)
+        self.assertIn("github.event.comment.body == 'MPW-TRON-OWNER-CURRENT-READONLY-20261115'", protected)
+        self.assertIn("runs-on: [self-hosted, factory-vps]", protected)
+        self.assertIn("permissions:\n  contents: read", s)
 
-    def test_pinned_relay_no_forwarding_or_shell_key_output(self):
+    def test_direct_cpanel_host_pin_no_vps_secret_or_forwarding(self):
         s = WF.read_text("utf-8")
-        self.assertIn("SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs", s)
+        self.assertNotIn("SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs", s)
         self.assertIn("SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04", s)
+        self.assertIn("HostName 178.239.147.125", s)
+        self.assertIn("Port 1396", s)
+        self.assertNotIn("ProxyJump", s)
+        self.assertNotIn("VPS_SSH_PRIVATE_KEY", s)
         self.assertIn("ForwardAgent no", s)
         self.assertIn("StrictHostKeyChecking yes", s)
         self.assertIn("BatchMode yes", s)
         self.assertIn("persist-credentials: false", s)
-        self.assertIn("rm -rf -- \"$RUNNER_TEMP/mpw-tron-owner-readonly\"", s)
-        self.assertNotIn("echo \"$VPS_KEY\"", s)
-        self.assertNotIn("echo \"$HOST_KEY\"", s)
+        self.assertIn("trap ", s)
+        self.assertIn("rm -rf -- ", s)
+        self.assertNotIn('echo "$VPS_KEY"', s)
+        self.assertNotIn('echo "$HOST_KEY"', s)
 
     def test_script_not_allowed_to_send_chain_or_mutate_records(self):
         s = READER.read_text("utf-8")
