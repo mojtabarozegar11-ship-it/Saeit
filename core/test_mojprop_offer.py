@@ -101,7 +101,7 @@ class MojPropOfferTests(TestCase):
         self.assertIn("version 2", second.manual_quote_text)
 
     def test_issued_offer_is_immutable_and_can_only_be_superseded(self):
-        issued = timezone.now()
+        issued = timezone.now() - timedelta(hours=1)
         offer = self.offer(
             status="issued", reviewed_at=issued,
             issued_at=issued, expires_at=issued + timedelta(days=7),
