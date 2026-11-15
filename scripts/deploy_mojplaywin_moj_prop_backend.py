@@ -77,7 +77,7 @@ def selftest(repo_root: Path) -> None:
     required = (
         ("mojprop_intake", view),
         ("MojPropRequest", model),
-        ('path("moj-prop/intake/"', urls),
+        ('path("api/moj-prop/intake/"', urls),
         ("get_token", view),
         ("_ip_hash", view),
     )
