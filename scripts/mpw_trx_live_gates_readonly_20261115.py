@@ -37,6 +37,26 @@ FLAGS = (
     "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",
 )
 
+SAFE_BOOL_FLAGS = (
+    "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+    "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+    "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+    "MPW_COMMERCE_DOWNLOADS_ENABLED",
+    "MPW_COMMERCE_INVOICING_ENABLED",
+    "MPW_COMMERCE_REAL_RPC_ENABLED",
+    "MPW_COMMERCE_RELEASE_READY",
+    "MPW_COMMERCE_SETTLEMENT_ENABLED",
+    "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED",
+    "MPW_GUEST_EMAIL_SEND_APPROVED",
+    "MPW_GUEST_RECOVERY_EMAIL_APPROVED",
+    "MPW_GUEST_RECOVERY_ENABLED",
+    "MPW_MERCHANT_WALLET_PROOF_ENABLED",
+    "MPW_PRIVATE_FUNNEL_COUNTERS_ENABLED",
+    "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",
+    "MPW_WALLETLESS_TRX_PUBLIC_ENABLED",
+    "MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED",
+)
+
 def is_true(name: str) -> bool:
     return getattr(settings, name, False) is True
 
@@ -53,6 +73,10 @@ commercial = check(lambda: _commercial_db(settings, connection))
 def safe_module_file(module):
     return str(getattr(module, "__file__", "")) if module is not None else ""
 settings_module = sys.modules.get("config.settings")
+settings_file_path = Path(safe_module_file(settings_module)) if settings_module is not None else None
+settings_file_sha256 = None
+if settings_file_path is not None and settings_file_path.is_file():
+    settings_file_sha256 = hashlib.sha256(settings_file_path.read_bytes()).hexdigest()
 flag_names = ("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED")
 defined_by = []
 for module_name, module in sorted(sys.modules.items()):
@@ -83,6 +107,11 @@ report = {
     "settings_defined": {name: hasattr(settings, name) for name in FLAGS},
     "settings_true": {name: is_true(name) for name in FLAGS},
     "settings_meta": {name: flag_meta(name) for name in FLAGS},
+    "safe_boolean_settings": {
+        name: flag_meta(name)
+        for name in SAFE_BOOL_FLAGS
+        if isinstance(getattr(settings, name, None), bool)
+    },
     "environment_presence": {name: name in os.environ for name in ("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED")},
     "commercial_db_source": {
         "sha256": hashlib.sha256(commercial_source.encode()).hexdigest(),
@@ -90,7 +119,15 @@ report = {
         "dummy_public_true_canary_false": dummy_contract,
     },
     "database": {"vendor": connection.vendor, "alias": connection.alias},
-    "settings_source": {"module_file": safe_module_file(settings_module), "defined_names": sorted(name for name in getattr(settings_module, "__dict__", {}) if name.startswith("MPW_") and "SECRET" not in name and "KEY" not in name)},
+    "settings_source": {
+        "module_file": safe_module_file(settings_module),
+        "file_sha256": settings_file_sha256,
+        "defined_names": sorted(
+            name
+            for name in getattr(settings_module, "__dict__", {})
+            if name.startswith("MPW_") and "SECRET" not in name and "KEY" not in name
+        ),
+    },
     "flag_defined_by_modules": defined_by,
     "paid_read_backend": backend,
     "commercial_gate": commercial,
