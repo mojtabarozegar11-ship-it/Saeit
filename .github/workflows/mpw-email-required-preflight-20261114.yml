@@ -26,6 +26,8 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_mpw_tron_locked_invoice_settlement_20261115.py' -v
       - name: Reject ambiguous recovery email and OTP POST values (43 offline tests)
         run: python3 -m unittest discover -s tests -p 'test_mpw_recovery_post_ambiguity_20261115.py' -v
+      - name: TRON per-domain receiver checksum and owner-activation denial
+        run: python3 -m unittest discover -s tests -p 'test_mpw_tron_domain_receiver_gate_20261115.py' -v
       - name: Verify no commercial permissions
         run: |
           python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/mpw_guest_email_source.json
