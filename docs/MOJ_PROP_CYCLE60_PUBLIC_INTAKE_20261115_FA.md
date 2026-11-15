@@ -57,3 +57,16 @@ PR Draft این شاخه ایجاد و CI دقیق آن اجرا شود؛ سپس
 - `py_compile` برای مدل، admin، migration، intake و آزمون‌ها: PASS.
 - آزمون مستقل قرارداد intake: **11/11 PASS**.
 - این نتیجه فقط صحت نحوی و قرارداد pure-Python را ثابت می‌کند؛ اجرای Django، MariaDB، endpoint، مرورگر، CI GitHub و دامنهٔ عمومی هنوز UNKNOWN است.
+
+
+## ادامهٔ چرخهٔ ۶۱ — اتصال endpoint سورسی
+
+- مسیر جدید: `POST /api/moj-prop/applicants/`
+- ورودی JSON و form با سقف ۸ کیلوبایت پذیرفته می‌شود.
+- CSRF، اعتبارسنجی نسخهٔ رضایت/افشای ریسک و جلوگیری از مقدارهای truthy برقرار است.
+- ایمیل نرمال‌شده با `get_or_create` ذخیره می‌شود و ارسال پاسخ، ایمیل را echo نمی‌کند.
+- تکرار همان ایمیل idempotent است؛ پاسخ دوم ایجاد رکورد جدید نمی‌کند.
+- پاسخ همیشه checkout، trading و payout را false نگه می‌دارد.
+- شش آزمون Django endpoint به workflow اضافه شد.
+
+وضعیت این قسمت: سورس و تست ثبت‌شده؛ اجرای Django/MariaDB/HTTP واقعی و انتشار دامنه هنوز UNKNOWN.
