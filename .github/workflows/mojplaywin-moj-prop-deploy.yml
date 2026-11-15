@@ -64,10 +64,18 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os, re
+          import json, os, re
           from pathlib import Path
           html = Path("templates/moj-prop-v4/index.html").read_text("utf-8")
-          blocks = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S)
+          structured = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+          if len(structured) != 1:
+              raise SystemExit("Missing unique Moj Prop public structured-data record")
+          ld = json.loads(structured[0])
+          if ld.get("@context") != "https://schema.org" or ld.get("name") != "Moj Prop":
+              raise SystemExit("Invalid public Moj Prop structured-data identity")
+          # Only executable JavaScript is passed to node --check. The legitimate
+          # JSON-LD schema.org script is data, not JavaScript code.
+          blocks = re.findall(r"<script\s*>(.*?)</script>", html, re.S)
           if len(blocks) != 1:
               raise SystemExit("Expected one auditable inline sales-form script")
           for token in (
