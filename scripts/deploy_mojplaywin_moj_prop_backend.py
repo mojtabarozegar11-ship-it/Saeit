@@ -253,13 +253,38 @@ def patch_urlconf(target: Path) -> None:
     print("MOJ_PROP_URLCONF_PATCH=PASS")
 
 
+def _passenger_config() -> str | None:
+    candidates = []
+    on_path = shutil.which("passenger-config")
+    if on_path:
+        candidates.append(Path(on_path))
+    for pattern in (
+        "/opt/cpanel/ea-*/root/usr/bin/passenger-config",
+        "/opt/cpanel/ea-*/root/usr/local/bin/passenger-config",
+        "/usr/local/cpanel/3rdparty/**/passenger-config",
+        "/usr/local/bin/passenger-config",
+        "/usr/bin/passenger-config",
+    ):
+        candidates.extend(Path("/").glob(pattern.lstrip("/")))
+    seen = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return key
+    return None
+
+
 def restart_passenger() -> None:
     restart = DOCROOT / "tmp" / "restart.txt"
     if restart.is_symlink():
         raise RuntimeError("Passenger restart path is a symlink")
     restart.parent.mkdir(parents=True, exist_ok=True)
     restart.touch()
-    passenger_config = shutil.which("passenger-config")
+    passenger_config = _passenger_config()
+    print("MOJ_PROP_PASSENGER_CONFIG=" + (passenger_config or "NOT_FOUND"))
     if passenger_config:
         result = subprocess.run(
             [passenger_config, "restart-app", str(DOCROOT), "--ignore-app-not-running"],
