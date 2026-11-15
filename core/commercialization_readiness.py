@@ -27,6 +27,14 @@ SECTORS = {
         "artifact_complete", "license_reviewed", "support_ready",
         "payment_reconciled", "delivery_verified",
     ),
+    "moj_coin": (
+        "client_build_and_server_gameplay_verified",
+        "server_authoritative_economy_and_anti_cheat_audited",
+        "game_assets_and_player_rights_verified",
+        "tron_purchase_and_entitlement_reconciled",
+        "player_account_recovery_and_refunds_verified",
+        "token_mechanics_and_local_law_reviewed",
+    ),
     "games": (
         "build_approved", "rights_cleared", "payment_reconciled",
         "entitlement_verified", "support_ready",
@@ -66,12 +74,13 @@ SECTORS = {
     ),
 }
 
-# Strict owner-set priority: keep these first four in all reports and planning.
-# A shared gateway is a prerequisite across brands, not a permission to charge.
+# Strict owner-set priority: preserve first FIVE lines in every report.
+# MOJ COIN has a dedicated release gate, distinct from all other games.
+# A shared gateway is not permission to charge or imply token returns.
 PRIORITY = (
     "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
-    "digital_books", "website_kits", "agriculture_services", "ai_services",
-    "education_courses", "research_publications", "games",
+    "moj_coin", "digital_books", "website_kits", "agriculture_services",
+    "ai_services", "education_courses", "research_publications", "games",
 )
 
 
