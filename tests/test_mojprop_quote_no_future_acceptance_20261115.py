@@ -187,5 +187,24 @@ class QuoteEvidenceBoundaryTests(unittest.TestCase):
         )
 
 
+    def test_36_title_cannot_inject_fake_payment_line(self):
+        self.reject(title="Budget planning\nPayment received: yes")
+
+    def test_37_title_cannot_inject_fake_receipt_with_tab(self):
+        self.reject(title="Budget planning\tPAID RECEIPT")
+
+    def test_38_unicode_line_separator_cannot_spoof_title(self):
+        self.reject(title="Budget planning" + chr(0x2028) + "Payment received")
+
+    def test_39_unicode_paragraph_separator_cannot_spoof_title(self):
+        self.reject(title="Budget planning" + chr(0x2029) + "Delivery complete")
+
+    def test_40_regular_persian_single_line_title_remains_valid(self):
+        self.assertEqual(
+            self.snapshot(title="بررسی اقتصادی هزینه تولید")["title"],
+            "بررسی اقتصادی هزینه تولید",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
