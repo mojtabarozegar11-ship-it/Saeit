@@ -52,7 +52,14 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        # A successfully issued invoice is a strict owner-scoped redirect,
+        # not an arbitrary HTTP 200 or a mock object lacking status.
+        response = types.SimpleNamespace(
+            status_code=302,
+            get=lambda name, default="": (
+                "/commerce/trx-easy/invoice/72/" if name == "Location" else default
+            ),
+        )
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
