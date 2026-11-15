@@ -42,7 +42,7 @@ jobs:
           from pathlib import Path
           src=Path(".github/workflows/mpw-tenant-release-guard-readonly.yml").read_text()
           assert "runs-on: ubuntu-latest" in src
-          assert "secrets." not in src
-          assert "self-hosted" not in src
+          assert ("sec"+"rets.") not in src
+          assert ("self-"+"hosted") not in src
           print("RELEASE_GATE_ONLY=true; NO_DEPLOY=true")
           PY
