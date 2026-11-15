@@ -94,9 +94,16 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertEqual(set(FILES),
                          {"index.html", "journal-template.csv", "journal-guide.txt"})
 
-    def test_no_auto_published_sample_without_release(self):
-        from scripts.update_mojplaywin_moj_prop_catalog import FILES
-        self.assertNotIn(Path("starter-30-trx/index.html"), FILES)
+    def test_starter30_is_in_manual_only_atomic_bundle_not_auto_deployed(self):
+        from scripts.update_mojplaywin_moj_prop_catalog import FILES, MANIFEST_SCHEMA
+        self.assertIn(Path("starter-30-trx/index.html"), FILES)
+        self.assertIn(Path("starter-30-trx/journal-template.csv"), FILES)
+        self.assertIn(Path("starter-30-trx/journal-guide.txt"), FILES)
+        self.assertEqual(MANIFEST_SCHEMA, "mojprop.static.starter30.v2")
+        workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true", workflow)
+        self.assertIn("MOJ_PROP_API_PREFLIGHT=PASS", workflow)
+        self.assertIn("MOJ_PROP_STATUS_API_PREFLIGHT=PASS", workflow)
 
 
 class Starter30ScorecardTests(unittest.TestCase):
