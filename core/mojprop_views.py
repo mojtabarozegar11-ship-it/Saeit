@@ -56,21 +56,31 @@ def _unique_json_pairs(pairs):
 
 
 def _payload(request):
-    if len(request.body) > MAX_REQUEST_BYTES:
-        raise OverflowError("request body exceeds intake limit")
     content_type = request.META.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
+    declared_length = request.META.get("CONTENT_LENGTH")
+    if declared_length not in (None, ""):
+        try:
+            if int(declared_length) > MAX_REQUEST_BYTES:
+                raise OverflowError("request body exceeds intake limit")
+        except (TypeError, ValueError):
+            return None
+    # Django's request.POST may already have consumed a form stream.
+    # Never access request.body after parsing a URL-encoded form.
+    if content_type == "application/x-www-form-urlencoded":
+        return request.POST
     if content_type == "application/json":
         try:
+            raw = request.body
+            if len(raw) > MAX_REQUEST_BYTES:
+                raise OverflowError("request body exceeds intake limit")
             value = json.loads(
-                request.body.decode("utf-8"),
+                raw.decode("utf-8"),
                 object_pairs_hook=_unique_json_pairs,
                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")),
             )
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             return None
         return value if isinstance(value, dict) else None
-    if content_type == "application/x-www-form-urlencoded":
-        return request.POST
     return None
 
 
