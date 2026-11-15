@@ -20,6 +20,8 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_mpw_dynamic_store_cutover_20261108.py' -v
       - name: Offline regression for truthful invoice-created events
         run: python3 -m unittest discover -s tests -p 'test_mpw_invoice_funnel_identity_20261115.py' -v
+      - name: Verify TRON settlement cannot credit a changed or stale invoice
+        run: python3 -m unittest discover -s tests -p 'test_mpw_tron_locked_invoice_settlement_20261115.py' -v
       - name: Verify no commercial permissions
         run: |
           python3 scripts/mpw_email_required_preflight_20261114.py > /tmp/mpw_guest_email_source.json
