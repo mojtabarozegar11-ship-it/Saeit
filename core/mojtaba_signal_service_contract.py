@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
 import re
+import unicodedata
 from typing import Iterable, Tuple
 
 
@@ -33,7 +34,7 @@ class SignalServiceKind(str, Enum):
 
 
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
-_HOST = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
+_HOST = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
 _PATH = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$|^/$")
 _ENGLISH_BLOCKED = frozenset({
     "buy", "sell", "hold", "long", "short", "entry", "exit", "trade", "order",
@@ -42,6 +43,9 @@ _ENGLISH_BLOCKED = frozenset({
 _NON_ENGLISH_BLOCKED = frozenset({
     "خرید", "فروش", "بخر", "بفروش", "نگهداری", "لانگ", "شورت", "ورود", "خروج",
     "معامله", "سرمایه گذاری", "سرمایه‌گذاری", "سود تضمینی", "بازده تضمینی",
+    "اشتر", "شراء", "بيع", "توصية شراء", "توصية بيع",
+    "ربح مضمون", "أرباح مضمونة", "عائد مضمون", "دخول الصفقة",
+    "خروج الصفقة", "احتفظ بالسهم",
 })
 
 
@@ -52,13 +56,15 @@ def _slug(value: object, field: str) -> str:
 
 
 def _host(value: object, field: str = "canonical_host") -> str:
-    if not isinstance(value, str) or value != value.lower() or "://" in value or "/" in value or not _HOST.fullmatch(value):
+    if (type(value) is not str or value != value.lower()
+            or len(value) > 253 or not value.isascii()
+            or "://" in value or "/" in value or not _HOST.fullmatch(value)):
         raise SignalContractError(f"{field}_invalid")
     return value
 
 
 def _path(value: object) -> str:
-    if not isinstance(value, str) or ".." in value or not _PATH.fullmatch(value):
+    if type(value) is not str or ".." in value or "//" in value or not _PATH.fullmatch(value):
         raise SignalContractError("path_prefix_invalid")
     return value
 
@@ -91,7 +97,7 @@ def validate_route(route: SignalTenantRoute) -> None:
     _slug(route.tenant_id, "tenant_id")
     _host(route.canonical_host)
     _path(route.path_prefix)
-    if route.language not in ALLOWED_LANGUAGES:
+    if type(route.language) is not str or route.language not in ALLOWED_LANGUAGES:
         raise SignalContractError("language_not_supported")
     if route.bot_identity != BOT_IDENTITY:
         raise SignalContractError("independent_bot_identity_prohibited")
@@ -103,16 +109,21 @@ def validate_route(route: SignalTenantRoute) -> None:
 
 def validate_route_registry(routes: Iterable[SignalTenantRoute]) -> Tuple[SignalTenantRoute, ...]:
     normalized = tuple(routes)
-    seen_tenants = set()
+    seen_tenant_locales = set()
+    tenant_hosts = {}
     seen_endpoints = set()
     for route in normalized:
         validate_route(route)
         endpoint = (route.canonical_host, route.path_prefix, route.language)
-        if route.tenant_id in seen_tenants:
+        tenant_locale = (route.tenant_id, route.language)
+        if tenant_locale in seen_tenant_locales:
             raise SignalContractError("duplicate_tenant_route")
+        if route.tenant_id in tenant_hosts and tenant_hosts[route.tenant_id] != route.canonical_host:
+            raise SignalContractError("tenant_host_reuse_prohibited")
         if endpoint in seen_endpoints:
             raise SignalContractError("duplicate_signal_endpoint")
-        seen_tenants.add(route.tenant_id)
+        seen_tenant_locales.add(tenant_locale)
+        tenant_hosts[route.tenant_id] = route.canonical_host
         seen_endpoints.add(endpoint)
     return tuple(sorted(normalized, key=lambda item: (item.canonical_host, item.path_prefix, item.language)))
 
@@ -139,13 +150,18 @@ def validate_offer(offer: SignalOffer) -> None:
     _slug(offer.tenant_id, "tenant_id")
     if offer.bot_identity != BOT_IDENTITY:
         raise SignalContractError("independent_bot_identity_prohibited")
-    if offer.language not in ALLOWED_LANGUAGES:
+    if type(offer.language) is not str or offer.language not in ALLOWED_LANGUAGES:
         raise SignalContractError("language_not_supported")
     if not isinstance(offer.service_kind, SignalServiceKind):
         raise SignalContractError("service_kind_invalid")
-    _price(offer.price)
-    if offer.currency not in ALLOWED_CURRENCIES:
+    amount = _price(offer.price)
+    if type(offer.currency) is not str or offer.currency not in ALLOWED_CURRENCIES:
         raise SignalContractError("currency_not_supported")
+    if amount >= Decimal("1000000000"):
+        raise SignalContractError("offer_price_out_of_bounds")
+    places = 6 if offer.currency == "TRX" else 2
+    if amount.normalize().as_tuple().exponent < -places:
+        raise SignalContractError("offer_price_precision_exceeded")
     for field in (
         "owner_approved", "legal_reviewed", "rights_cleared",
         "financial_calls_enabled", "guaranteed_profit_promised", "active",
@@ -161,7 +177,11 @@ def validate_offer(offer: SignalOffer) -> None:
 
 
 def _blocked_tokens(text: str) -> tuple[str, ...]:
-    normalized = " ".join(text.lower().split())
+    # Normalize compatibility glyphs and invisible format characters so
+    # zero-width or full-width financial prompts cannot bypass the gate.
+    clean = unicodedata.normalize("NFKC", text)
+    clean = "".join(ch for ch in clean if unicodedata.category(ch) not in ("Cf", "Mn"))
+    normalized = " ".join(clean.lower().split())
     found = set()
     for token in _ENGLISH_BLOCKED:
         if re.search(r"(?<![a-z])" + re.escape(token) + r"(?![a-z])", normalized):
@@ -173,8 +193,10 @@ def _blocked_tokens(text: str) -> tuple[str, ...]:
 
 
 def validate_request(*, request_text: str, financial_authorized: bool = False) -> None:
-    if not isinstance(request_text, str) or not request_text.strip():
+    if type(request_text) is not str or not request_text.strip():
         raise SignalContractError("request_text_required")
+    if len(request_text) > 8192:
+        raise SignalContractError("request_text_too_long")
     if type(financial_authorized) is not bool:
         raise SignalContractError("financial_authorized_must_be_boolean")
     blocked = _blocked_tokens(request_text)
