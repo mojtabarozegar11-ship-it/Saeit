@@ -107,6 +107,7 @@ urlpatterns = [
 
 from functools import partial
 from core.financial_brand_pages import BRANDS, financial_brand_page
+from core.signal_interest_views import signal_interest
 
 # Prepend these distinct service routes so existing brand roots and app includes
 # continue to resolve normally while the new finance subpages take precedence.
@@ -119,7 +120,7 @@ for _brand_slug, _fa, _en, _ar in BRANDS:
         path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
         path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
     ])
-urlpatterns = _finance_routes + urlpatterns
+urlpatterns = [path("market-signals/interest/", signal_interest, name="canonical_signal_interest")] + _finance_routes + urlpatterns
 
 from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]
@@ -128,8 +129,9 @@ from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
 
 # Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
-from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard
+from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard, moj_prop_interest
 urlpatterns += [
+    path("moj-prop/interest/", moj_prop_interest, name="moj_prop_interest"),
     path("moj-prop/", moj_prop_landing, name="moj_prop_landing"),
     path("moj-prop/dashboard/", moj_prop_dashboard, name="moj_prop_dashboard"),
     path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
