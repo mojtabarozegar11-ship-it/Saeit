@@ -76,7 +76,7 @@ validation **executed on the complete author-held archive**. These are NOT
 | 20 | Decision-weight sensitivity | Eight weights enumerated; sample λ=0/10/100 crosschecked |
 | 21 | Source SHA-256 | Hashing implemented for ingested exact CSV bytes; hashes not recovered from original Sheet here |
 | 22 | Manuscript checkpoint comparison | Numeric checkpoints implemented; **full-input rerun pending** |
-| 23 | Generator replay | NOT PROVIDED — archived output postprocessing only |
+| 23 | Generator replay | Recovered C and R generators exist in **private Karegar**; no fresh complete C/R replay was executed in this PR review |
 | 24 | Weather and soil calibration | NOT FIELD VALIDATED |
 | 25 | Crop yield / causal benefit | NOT ESTABLISHED |
 | 26 | Independent cluster uncertainty | NOT ESTABLISHED; 12 paths, not 540 independent farms |
@@ -102,7 +102,33 @@ validation **executed on the complete author-held archive**. These are NOT
 ## Gated next verification, no cost or distribution
 1. Obtain exact frozen CSV snapshots from author-controlled bundle without publishing them.
 2. Run all 38 regression test methods against this PR head and capture command, Python version, stdout and exit code.
-3. Postprocess both frozen CSVs and compare output digests and all declared checkpoints.
+3. Retrieve the recovered generator and offline verifier from the **private** Karegar records below; replay the two synthetic families on a controlled computer; compare against frozen CSV/TSV snapshots and all declared checkpoints.
 4. Audit path-level deviations/outliers without incorrectly treating factorial keys as independent trials.
 5. Verify the weather/controller generator source or explicitly publish the replay limitation (only with final owner approval).
 6. Freeze manuscript, source references, disclosures, byline and editor-facing package; **do not submit** without explicit approval.
+
+## Private generator recovery discovered during this review
+
+The user's **private** `Karegar` repository already stores the recovered original-model
+implementations and an offline archival comparator:
+
+- `research/irrigation/B29_recovered_C_original_generator_2026-11-14.mjs`
+- `research/irrigation/B29_recovered_R1_original_generator_2026-11-14.mjs`
+- `research/irrigation/B29_archive_reproduction_verifier.mjs`
+- `research/irrigation/B25_generator_reproduction_2026-11-14.md`
+
+These are *not* published here. Their private source comments explicitly say
+that modeled rain and ET are synthetic. The B25 report documents earlier
+successful baseline comparison (480 rows, 6,240 field checks), **not** a
+verified execution of the full C/R experiment in this review. The B29
+offline comparator requires authenticated original TSV export files and
+Node.js. Possession of a verifier is not a record of its successful execution.
+
+**Critical fairness limitation:** the recovered C/R forecast construction
+uses realized `w.rain` for the `perfect` and `falsePositive`
+information cases at the decision step. Without historical forecast
+issue-time records, that is a modeled perfect-information comparator,
+not proof that a real farm would know rainfall in advance. This must be
+made explicit in manuscript methods and commercial claims, even if every
+synthetic archive check passes. Independent field and economic evidence
+remain absent.
