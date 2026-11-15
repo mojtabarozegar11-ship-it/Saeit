@@ -8,8 +8,19 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+# An opt-out is bound to the exact originally consented email and offer.
+IMMUTABLE_ORIGIN_FIELDS = frozenset((
+    "email", "plan_code", "brand", "source_host",
+    "source_language", "consent_version",
+))
+
+
 class ConsentStatusQuerySet(models.QuerySet):
     def update(self, **kwargs):
+        if IMMUTABLE_ORIGIN_FIELDS.intersection(kwargs):
+            raise ValidationError({
+                "email": "Bulk changes to consent identity or origin are prohibited"
+            })
         if "status" in kwargs:
             if (kwargs["status"] != "withdrawn"
                     or set(kwargs) - {"status", "updated_at"}):
@@ -24,8 +35,8 @@ class ConsentStatusQuerySet(models.QuerySet):
         # cannot leave an ambient TestCase/request transaction rollback-only.
         # An operator may batch-withdraw via update(status="withdrawn"), but
         # any promotion requires per-record model validation and consent.
-        if "status" in fields:
+        if "status" in fields or IMMUTABLE_ORIGIN_FIELDS.intersection(fields):
             raise ValidationError({
-                "status": "Bulk consent status updates are prohibited"
+                "status": "Bulk changes to consent or lead identity are prohibited"
             })
         return super().bulk_update(objs, fields, batch_size=batch_size)

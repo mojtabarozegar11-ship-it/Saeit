@@ -22,12 +22,19 @@ class PropInterest(models.Model):
         indexes = [models.Index(fields=("status", "-created_at"), name="mp_interest_status")]
     
     def _check_withdrawal_lock(self):
-        # A withdrawn lead must never become contactable again through
-        # ordinary admin edits or model.save(). A new opt-in needs a separate
-        # verified consent lifecycle, not an undocumented status reset.
-        if (self.pk is not None and self.status != "withdrawn"
-                and type(self).objects.filter(pk=self.pk, status="withdrawn").exists()):
+        # Never rewrite the email/provenance that an original consent covers:
+        # otherwise withdrawal could be hidden by changing the old identity.
+        if self.pk is None:
+            return
+        identity = ("email", "plan_code", "consent_version", "source_language")
+        original = type(self).objects.filter(pk=self.pk).values("status", *identity).first()
+        if original is None:
+            return
+        if original["status"] == "withdrawn" and self.status != "withdrawn":
             raise ValidationError({"status": "Withdrawn consent cannot be reactivated"})
+        for field in identity:
+            if getattr(self, field) != original[field]:
+                raise ValidationError({field: "Consent identity and origin cannot be rewritten"})
 
     def clean(self):
         super().clean()

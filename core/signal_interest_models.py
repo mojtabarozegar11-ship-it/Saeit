@@ -48,11 +48,21 @@ class SignalInterest(models.Model):
             raise ValidationError({"consent_version": "Unapproved consent"})
         from django.core.validators import validate_email
         validate_email(self.email)
-        # Prevent superuser admin edits or ordinary ORM saves from reviving
-        # an opt-out. The initial new/contacted -> withdrawn move is allowed.
-        if (self.pk is not None and self.status != "withdrawn"
-                and type(self).objects.filter(pk=self.pk, status="withdrawn").exists()):
-            raise ValidationError({"status": "Withdrawn signal consent cannot be reactivated"})
+        # Contact consent is bound to its original buyer, brand, SKU and
+        # provenance; status changes may be reviewed individually, but a
+        # withdrawn row cannot be repurposed for a fresh email or new offer.
+        if self.pk is not None:
+            identity = ("email", "brand", "plan_code", "consent_version",
+                        "source_language", "source_host")
+            original = type(self).objects.filter(pk=self.pk).values("status", *identity).first()
+            if original is not None:
+                if original["status"] == "withdrawn" and self.status != "withdrawn":
+                    raise ValidationError({"status": "Withdrawn signal consent cannot be reactivated"})
+                for field in identity:
+                    if getattr(self, field) != original[field]:
+                        raise ValidationError({
+                            field: "Consent identity and origin cannot be rewritten"
+                        })
         if self.email != self.email.strip().lower():
             raise ValidationError({"email": "Canonical lower-case email required"})
 

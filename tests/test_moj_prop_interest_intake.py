@@ -159,6 +159,36 @@ class PropInterestIntakeTests(TestCase):
             )
         self.assertEqual(PropInterest.objects.get().email, "buyer@farmco.org")
 
+    def test_prop_query_set_cannot_rewrite_withdrawn_email(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        with self.assertRaises(ValidationError):
+            PropInterest.objects.filter(pk=lead.pk).update(email="replacement@farmco.org")
+        self.assertEqual(PropInterest.objects.get().email, "buyer@farmco.org")
+
+    def test_prop_save_cannot_reassign_opted_out_identity(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.email = "replacement@farmco.org"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["email"])
+        self.assertEqual(PropInterest.objects.get().email, "buyer@farmco.org")
+
+    def test_prop_bulk_update_email_fails_before_transaction_starts(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.email = "replacement@farmco.org"
+        with self.assertRaises(ValidationError):
+            PropInterest.objects.bulk_update([lead], ["email"])
+        self.assertEqual(PropInterest.objects.get().email, "buyer@farmco.org")
+
     def test_reserved_email_domains_never_enter_prop_lead_inbox(self):
         for value in ("Buyer@Example.com", "buyer@example.org", "a@example.net",
                       "a@guest.mojplaywin.com", "a@host.invalid",

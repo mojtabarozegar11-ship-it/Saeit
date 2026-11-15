@@ -172,6 +172,42 @@ class SignalInterestIntakeTests(TestCase):
             SignalInterest.objects.all().update(status="withdrawn", brand="zahra")
         self.assertEqual(SignalInterest.objects.get().brand, "saman")
 
+    def test_signal_orm_cannot_rewrite_opted_out_email_brand_or_sku(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        for field, value in (("email", "replacement@farmco.org"),
+                             ("brand", "zahra"),
+                             ("plan_code", "moj-signals-plus")):
+            with self.subTest(field=field):
+                with self.assertRaises(ValidationError):
+                    SignalInterest.objects.filter(pk=lead.pk).update(**{field: value})
+        lead.refresh_from_db()
+        self.assertEqual((lead.email, lead.brand, lead.plan_code),
+                         ("client@farmco.org", "saman", "moj-signals-standard"))
+
+    def test_signal_save_cannot_rewrite_original_lead_brand_or_identity(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.brand = "zahra"
+        with self.assertRaises(ValidationError):
+            lead.save(update_fields=["brand"])
+        self.assertEqual(SignalInterest.objects.get().brand, "saman")
+
+    def test_signal_bulk_update_email_fails_without_poisoning_outer_transaction(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.email = "replacement@farmco.org"
+        with self.assertRaises(ValidationError):
+            SignalInterest.objects.bulk_update([lead], ["email"])
+        self.assertEqual(SignalInterest.objects.get().email, "client@farmco.org")
+
     def test_reserved_addresses_cannot_create_salable_signal_leads(self):
         for email in ("a@example.com", "a@example.org", "a@example.net",
                       "a@guest.mojplaywin.com", "a@somewhere.test",
