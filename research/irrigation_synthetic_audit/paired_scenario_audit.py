@@ -139,6 +139,7 @@ def load_records(path: Path) -> list[dict]:
                 q98 = int(raw["below_98_plot_days"])
             except (ValueError, TypeError) as exc:
                 raise AuditError(f"Invalid count/seed at {path}:{line}") from exc
+            require(seed >= 0, f"Negative synthetic weather seed at {path}:{line}")
             water = numeric(raw["gross_water_m3"], f"{path}:{line}:water")
             drainage = numeric(raw["drainage_sum_mm"], f"{path}:{line}:drainage")
             bias = numeric(raw["bias_vwc"], f"{path}:{line}:bias")
@@ -177,6 +178,8 @@ def analyze_family(records: list[dict], family: str) -> dict:
         key, policy = row["key"], row["policy"]
         require(key[0].startswith(FAMILY_COHORT_PREFIX[family]),
                 f"{family}: cross-family or malformed cohort identifier: {key[0]!r}")
+        require(key[0].startswith(f"{FAMILY_COHORT_PREFIX[family]}{key[2]}-"),
+                f"{family}: cohort climate class disagrees with climate_class: {key[0]!r}, {key[2]!r}")
         require(policy in policies, f"{family}: unexpected policy {policy!r}")
         require(policy not in matched[key], f"{family}: duplicate (key,policy): {key,policy}")
         matched[key][policy] = row
@@ -239,6 +242,18 @@ def analyze_family(records: list[dict], family: str) -> dict:
                          "q_better_water_worse", "water_better_q_worse")
     require(sum(counts[name] for name in pareto_categories) == len(matched),
             f"{family}: incomplete Pareto outcome partition")
+    climate_class_effects = {}
+    for climate in ("dry", "medium", "wet"):
+        deltas = [delta for path, values in path_deltas.items()
+                  if path[2] == climate for delta in values]
+        require(len(deltas) == 180,
+                f"{family}: {climate} has {len(deltas)} matched settings, expected 180")
+        climate_class_effects[climate] = {
+            "matched_keys": len(deltas),
+            "climate_paths": 4,
+            "mean_delta_water_m3": statistics.fmean(delta[0] for delta in deltas),
+            "mean_delta_q100": statistics.fmean(delta[1] for delta in deltas),
+        }
     climate_path_effects = [{
         "cohort": path[0], "seed": path[1], "climate_class": path[2],
         "matched_keys": len(deltas),
@@ -250,6 +265,7 @@ def analyze_family(records: list[dict], family: str) -> dict:
     return {
         "family": family, "record_count": len(records), "matched_keys": len(matched),
         "climate_paths": len(paths), "climate_path_effects": climate_path_effects,
+        "climate_class_effects": climate_class_effects,
         "means": means, "comparisons": counts,
         "mean_delta_water_m3": mean_dv, "mean_delta_q100": mean_dq,
         "mean_loss_crossing_lambda": mean_dv / -mean_dq if mean_dq < 0 else None,
