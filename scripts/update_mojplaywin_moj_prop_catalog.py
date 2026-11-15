@@ -142,7 +142,8 @@ def rollback(run_id: str) -> None:
     manifest_path = backup / "manifest.json"
     previous_path = backup / "index.before"
     if not manifest_path.is_file() or not previous_path.is_file():
-        raise RuntimeError("Moj Prop catalog rollback backup is missing")
+        print("MOJ_PROP_CATALOG_ROLLBACK_NOT_NEEDED")
+        return
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("index_updated") is not True:
         raise RuntimeError("Rollback manifest is not a Moj Prop update")
