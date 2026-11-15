@@ -28,6 +28,9 @@ def _load(root, relative):
     """Bounded, regular, non-symlink app file. Never leaks its contents."""
     if not isinstance(root, Path) or root.is_symlink() or not root.is_dir():
         return None
+    # Never let an absolute path override the approved source root.
+    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+        return None
     path = root
     for element in Path(relative).parts:
         if element in (".", "..", ""):
