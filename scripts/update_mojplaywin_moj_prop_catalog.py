@@ -27,6 +27,7 @@ FILES = (
     Path("catalog/index.html"),
 )
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
+BASELINE_HOME = Path("baselines/index-v4.html")
 
 
 def digest(data: bytes) -> str:
@@ -78,7 +79,7 @@ def source_root(run_id: str) -> Path:
     path = HOME / (".mojplaywin-moj-prop-catalog-" + safe_id(run_id)) / "templates/moj-prop-v4"
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Invalid staged Moj Prop source")
-    for relative in FILES + (BASELINE_CATALOG,):
+    for relative in FILES + (BASELINE_CATALOG, BASELINE_HOME):
         assert_file(path / relative)
     html = {str(relative): (path / relative).read_text("utf-8") for relative in FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
@@ -107,6 +108,9 @@ def validate_host() -> None:
 
 def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
+    old_home = (root / BASELINE_HOME).read_bytes()
+    marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\n"
+    old_home_without_marker = old_home.replace(marker, b"", 1)
     intended = []
     for relative in FILES:
         target = ROUTE / relative
@@ -117,8 +121,8 @@ def plan(root: Path) -> list[dict]:
         before = target.read_bytes() if exists else None
         after = (root / relative).read_bytes()
         if relative == Path("index.html"):
-            if not exists or b"<title>Moj Prop | Risk-first prop trading and market intelligence</title>" not in before:
-                raise RuntimeError("Unrecognized or missing live Moj Prop home")
+            if not exists or before not in (after, old_home, old_home_without_marker):
+                raise RuntimeError("Live home differs from approved baseline; refusing replacement")
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
