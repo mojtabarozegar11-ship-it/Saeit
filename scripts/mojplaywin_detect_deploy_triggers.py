@@ -97,7 +97,8 @@ def can_match(pattern: str, path: str) -> bool:
     )
 
 
-def manual_release_job_guarded(source: str, header: str, job: str) -> bool:
+def manual_release_job_guarded(source: str, header: str, job: str,
+                               *, require_static_owner_approval: bool = False) -> bool:
     """Only an explicit manual dispatch may execute a release job."""
     if event_block(header, "workflow_dispatch") is None:
         return False
@@ -108,7 +109,12 @@ def manual_release_job_guarded(source: str, header: str, job: str) -> bool:
     tail = re.split(r"(?m)^  [a-zA-Z][\w-]+:\s*$", tail, maxsplit=1)[0]
     head = tail.split("\n    steps:", 1)[0]
     conditions = re.findall(r"(?m)^    if:\s*(.+)$", head)
-    return conditions == ["github.event_name == 'workflow_dispatch'"]
+    allowed = "github.event_name == 'workflow_dispatch'"
+    if require_static_owner_approval:
+        if "owner_approved_static_release:" not in header:
+            return False
+        allowed += " && inputs.owner_approved_static_release == true"
+    return conditions == [allowed]
 
 
 def manual_main_deployment_guarded(source: str, header: str) -> bool:
@@ -131,7 +137,8 @@ def inspect(filename: Path) -> dict:
     name = filename.name
     job = LEGACY_LOCKS.get(name)
     manual_guarded = (manual_release_job_guarded(
-        source, header, MANUAL_RELEASE_JOBS[name])
+        source, header, MANUAL_RELEASE_JOBS[name],
+        require_static_owner_approval=name == "mojplaywin-moj-prop-deploy.yml")
         if name in MANUAL_RELEASE_JOBS else None)
     main_guarded = manual_guarded if name == MAIN_MANUAL_JOB[0] else None
     locked = bool(
