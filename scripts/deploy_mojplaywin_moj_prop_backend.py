@@ -572,6 +572,12 @@ def require_independent_db_restore(run_id: str, commit: str, staged_root: Path) 
     are necessary, but not sufficient for production launch authorization.
     """
     run_id, commit = validate_run_id(run_id), validate_commit(commit)
+    # The independent reviewer must sign before GitHub Actions starts. Its
+    # case ID cannot be the GitHub run ID, which is unknown until dispatch.
+    evidence_case = os.environ.get("MOJPROP_APPROVED_RESTORE_CASE_ID", "")
+    if not evidence_case:
+        raise RuntimeError("pre-approved independent restore case ID is required")
+    evidence_case = validate_run_id(evidence_case)
     key = os.environ.get("MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY", "")
     evidence_root = os.environ.get("MOJPROP_PRIVATE_DB_RESTORE_ROOT", "")
     if len(key.encode("utf-8")) < 32 or evidence_root != str(INDEPENDENT_DB_EVIDENCE_ROOT):
@@ -592,7 +598,7 @@ def require_independent_db_restore(run_id: str, commit: str, staged_root: Path) 
         raise RuntimeError("actual connected MariaDB identity is unverified")
     verified = verify_database_restore_evidence(
         root=INDEPENDENT_DB_EVIDENCE_ROOT,
-        run_id=run_id, source_commit=commit,
+        run_id=evidence_case, source_commit=commit,
         database_identity_sha256=actual_identity,
         verifier_key=key.encode("utf-8"),
     )
