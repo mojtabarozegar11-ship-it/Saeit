@@ -153,3 +153,9 @@ MOJTABA_SIGNAL_TRON_QUOTE_HMAC_KEY_HEX = env(
 MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS = env.list(
     "MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS", default=[],
 )
+
+# Independent HMAC key for pseudonymous buyer email references (not quote key).
+# Default empty => guest purchase intent issuance fails closed.
+MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX = env(
+    "MOJTABA_SIGNAL_BUYER_HMAC_KEY_HEX", default="",
+)
