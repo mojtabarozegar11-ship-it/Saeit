@@ -8,6 +8,7 @@ are therefore patched additively; they are never replaced wholesale.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -208,17 +209,60 @@ print("MOJ_PROP_CORE_LEAVES=" + json.dumps(leaves))
     return tuple(leaves)
 
 
+def mojprop_migration_operations_signature(source: str) -> str:
+    """Compare the entire declared schema, ignoring ONLY its live core parent.
+
+    The private cPanel deployment legitimately rewrites 0041's dependency from
+    public 0040 to its own existing 0049 leaf. Never overwrite a migration that
+    differs in model, operations, indexes, fields, imports, or other semantics.
+    """
+    tree = ast.parse(source)
+    migrations = [node for node in tree.body
+                  if isinstance(node, ast.ClassDef) and node.name == "Migration"]
+    if len(migrations) != 1:
+        raise RuntimeError("Unrecognized Moj Prop migration module")
+    declared = [item for item in migrations[0].body
+                if isinstance(item, ast.Assign)
+                and len(item.targets) == 1
+                and isinstance(item.targets[0], ast.Name)
+                and item.targets[0].id == "dependencies"]
+    if len(declared) != 1 or not isinstance(declared[0].value, (ast.List, ast.Tuple)):
+        raise RuntimeError("Unrecognized migration dependency declaration")
+    dependencies = declared[0].value.elts
+    if len(dependencies) != 1 or not isinstance(dependencies[0], ast.Tuple):
+        raise RuntimeError("Unexpected Moj Prop migration dependency count")
+    if len(dependencies[0].elts) != 2:
+        raise RuntimeError("Malformed Moj Prop migration parent")
+    parent_app, parent_name = dependencies[0].elts
+    if (not isinstance(parent_app, ast.Constant)
+            or parent_app.value != "core"
+            or not isinstance(parent_name, ast.Constant)
+            or type(parent_name.value) is not str
+            or re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", parent_name.value) is None):
+        raise RuntimeError("Unexpected or missing private Django parent")
+    declared[0].value = ast.List(elts=[], ctx=ast.Load())
+    return ast.dump(tree, include_attributes=False)
+
+
 def install_migration(source: Path, target: Path) -> None:
     assert_regular(source, "staged Moj Prop migration")
-    if target.exists() or target.is_symlink():
-        raise RuntimeError("Migration exists; inspect before overwriting")
-    leaves = live_core_migration_leaves()
     staged = source.read_text(encoding="utf-8")
     if (not any(marker in staged for marker in (
             '("core", "0040_commercefunnelevent")',
             '("core", "0039_educationassessment_educationattempt_and_more")'
         )) or 'name="MojPropRequest"' not in staged):
         raise RuntimeError("Unexpected staged Moj Prop schema")
+    if target.is_symlink():
+        raise RuntimeError("Refuse symlink private migration")
+    if target.exists():
+        assert_regular(target, "existing private Moj Prop migration")
+        current = target.read_text(encoding="utf-8")
+        if (mojprop_migration_operations_signature(current)
+                != mojprop_migration_operations_signature(staged)):
+            raise RuntimeError("Existing Moj Prop migration differs; do not overwrite")
+        print("MOJ_PROP_MIGRATION_ALREADY_INSTALLED=PASS")
+        return
+    leaves = live_core_migration_leaves()
     match = re.search(
         r"dependencies\s*=\s*\[\s*\(\s*['\"]core['\"],\s*['\"][0-9]{4}_[A-Za-z0-9_]+['\"]\s*\),?\s*\]",
         staged,
