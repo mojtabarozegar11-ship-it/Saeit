@@ -37,7 +37,7 @@ class ApprovedCatalogueTests(SimpleTestCase):
         self.assertEqual(parse_cursor("0"), 0)
         self.assertEqual(parse_cursor("901"), 901)
         for item in ("", " 1", "+1", "-1", "١", "１２", "3.1", "1e4",
-                     "99999999999999999", 3, None):
+                     "99999999999999999999", 3, None):
             with self.subTest(item=item), self.assertRaises(Http404):
                 parse_cursor(item)
 
@@ -162,15 +162,15 @@ class ApprovedCatalogueTests(SimpleTestCase):
         self.assertIsNone(done)
         self.assertEqual(accepted, [0, 256])
 
-    def test_page_cursor_uses_scanned_id_not_last_approved(self):
+    def test_stale_scanned_id_older_than_approved_item_is_rejected(self):
         class BoundedPrivatePage(list):
             last_scanned_id = 500
         with patch("core.mojplaywin_dynamic_catalog._verified_private_gateway",
                    return_value=(lambda after_id: (BoundedPrivatePage([self.product]), True),
                                  lambda pk: self.product)), self.approved_route():
             rows, next_cursor = approved_cards(self.request())
-        self.assertEqual([r.product_id for r in rows], [901])
-        self.assertIsNone(next_cursor)  # 500 < 901: stale cursor rejected
+        self.assertEqual(rows, ())  # 500 < 901 is a forged/stale cursor
+        self.assertIsNone(next_cursor)
 
     def test_invalid_scanned_cursor_type_fails_closed(self):
         class BoundedPrivatePage(list):
