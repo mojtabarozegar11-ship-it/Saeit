@@ -84,8 +84,8 @@
           const body=await response.json();
           if(response.status!==201 || body.ok!==true ||
              typeof body.request_id!=='string' ||
-             !body.request_id.startsWith('MOJPROP-')){
-            throw new Error(body.detail||'Request not accepted by the service.');
+             !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(body.request_id)){
+            throw new Error(body.detail||'The request was not confirmed by the intake service.');
           }
           receipt=draft(data,'received for manual review',body.request_id);
           result.textContent=receipt;
