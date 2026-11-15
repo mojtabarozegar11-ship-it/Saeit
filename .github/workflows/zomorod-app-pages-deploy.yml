@@ -52,15 +52,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    # Source CI may run on a main push; production SSH must never run
-    # just because a PR was merged. Preserve owner-controlled rollback.
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
-      inputs.owner_approved_live_deploy == true &&
-      vars.ZOMOROD_BACKUP_RESTORE_VERIFIED == 'true' &&
-      vars.ZOMOROD_ROLLBACK_VERIFIED == 'true' &&
-      vars.ZOMOROD_TENANT_ISOLATION_VERIFIED == 'true'
+    # Source CI may run on main push; only manual dispatch starts SSH work.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -69,11 +62,19 @@ jobs:
         shell: bash
         env:
           OWNER_APPROVED_SHA: ${{ inputs.approved_release_sha }}
+          OWNER_APPROVED: ${{ inputs.owner_approved_live_deploy }}
+          BACKUP_RESTORE_VERIFIED: ${{ vars.ZOMOROD_BACKUP_RESTORE_VERIFIED }}
+          ROLLBACK_VERIFIED: ${{ vars.ZOMOROD_ROLLBACK_VERIFIED }}
+          TENANT_ISOLATION_VERIFIED: ${{ vars.ZOMOROD_TENANT_ISOLATION_VERIFIED }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$OWNER_APPROVED_SHA" == "$GITHUB_SHA" ]]
+          [[ "$OWNER_APPROVED" == "true" ]]
+          [[ "$BACKUP_RESTORE_VERIFIED" == "true" ]]
+          [[ "$ROLLBACK_VERIFIED" == "true" ]]
+          [[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]
           echo 'ZOMOROD_DEPLOY=PINNED_OWNER_APPROVED'
       - name: Validate managed agriculture pages and app source
         run: |
