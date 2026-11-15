@@ -309,10 +309,8 @@ class MojPropRequestAdmin(ModelAdmin):
     @admin.display(description="Written quote status")
     def offer_stage(self, obj):
         # Missing quotes are unresolved work, not hidden paid sales.
-        try:
-            return obj.commercial_offer.status
-        except MojPropOffer.DoesNotExist:
-            return "NO OFFER"
+        latest = obj.commercial_offers.order_by("-version").first()
+        return latest.status if latest else "NO OFFER"
 
 
 @admin.register(MojPropOffer)
@@ -320,7 +318,7 @@ class MojPropOfferAdmin(ModelAdmin):
     """Real commercial quote pipeline; no automatic mail or fake settlement."""
 
     list_display = (
-        "lead", "title", "amount", "currency", "status",
+        "lead", "version", "title", "amount", "currency", "status",
         "delivery_days", "expires_at", "created_at",
     )
     list_filter = ("status", "currency", "delivery_days", "created_at")
@@ -332,13 +330,23 @@ class MojPropOfferAdmin(ModelAdmin):
         "created_at", "updated_at", "created_by", "manual_proposal",
     )
     fields = (
-        "lead", "title", "scope", "exclusions",
+        "lead", "version", "title", "scope", "exclusions",
         "amount", "currency", "delivery_days",
         "status", "reviewed_at", "issued_at", "expires_at",
         "created_by", "internal_note", "manual_proposal",
         "created_at", "updated_at",
     )
     ordering = ("-created_at",)
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        if obj and obj.status in ("issued", "accepted"):
+            return tuple(fields) + (
+                "lead", "version", "title", "scope", "exclusions",
+                "amount", "currency", "delivery_days",
+                "issued_at", "reviewed_at", "expires_at",
+            )
+        return fields
 
     @admin.display(description="Unsent written proposal (not an invoice)")
     def manual_proposal(self, obj):
