@@ -37,8 +37,8 @@ class LiveTRXOwnerReceiverWorkflowContractTests(unittest.TestCase):
         self.assertIn("persist-credentials: false", s)
         self.assertIn("trap ", s)
         self.assertIn("rm -rf -- ", s)
-        self.assertNotIn("echo \\"$VPS_KEY\\"", s)
-        self.assertNotIn("echo \\"$HOST_KEY\\"", s)
+        self.assertNotIn('echo "$VPS_KEY"', s)
+        self.assertNotIn('echo "$HOST_KEY"', s)
 
     def test_script_not_allowed_to_send_chain_or_mutate_records(self):
         s = READER.read_text("utf-8")
