@@ -40,6 +40,7 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
             "observed_at_utc": NOW,
             "expires_at_utc": NOW + timedelta(minutes=3),
             "signing_key": KEY,
+            "now_utc": NOW,
         }
         args.update(changes)
         return make_native_trx_quote(**args)
@@ -129,6 +130,22 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
         with self.assertRaises(NativeTrxQuoteError):
             self.quote(observed_at_utc=datetime(2026, 11, 15))
         self.assertFalse(self.valid(now_utc=datetime(2026, 11, 15)))
+
+    def test_future_dated_exchange_rate_rejected_at_quote_creation(self):
+        with self.assertRaisesRegex(NativeTrxQuoteError, "exchange_rate_expired"):
+            self.quote(observed_at_utc=NOW + timedelta(seconds=1),
+                       expires_at_utc=NOW + timedelta(minutes=3))
+
+    def test_stale_oracle_rate_rejected_even_if_quote_expiry_is_future(self):
+        with self.assertRaisesRegex(NativeTrxQuoteError, "exchange_rate_expired"):
+            self.quote(observed_at_utc=NOW - timedelta(minutes=5, seconds=1),
+                       expires_at_utc=NOW + timedelta(minutes=1))
+
+    def test_server_issuance_time_is_required_and_utc(self):
+        with self.assertRaises(NativeTrxQuoteError):
+            self.quote(now_utc=datetime(2026, 11, 15))
+        with self.assertRaisesRegex(NativeTrxQuoteError, "exchange_rate_expired"):
+            self.quote(now_utc=NOW + timedelta(minutes=3))
 
     def test_invoice_or_receipt_never_created_by_quote_function(self):
         q = self.quote()
