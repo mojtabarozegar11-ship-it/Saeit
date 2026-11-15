@@ -51,6 +51,33 @@ EXPECTED = {
 }
 
 
+# Values independently cross-checked against the author-held native
+# DecisionWeights!H1:P9 worksheet (eight illustrative weights per family).
+# This is a SYNTHETIC output-consistency gate, not evidence of field benefit.
+EXPECTED_WEIGHT_GRID = {
+    "C": {
+        0: (20, 383, 137, 36.068955967),
+        1: (117, 334, 89, 29.176363375),
+        2: (136, 315, 89, 22.283770782),
+        5: (161, 290, 89, 1.605993004),
+        10: (196, 255, 89, -32.856969959),
+        20: (213, 238, 89, -101.782895885),
+        50: (217, 234, 89, -308.560673662),
+        100: (222, 229, 89, -653.190303292),
+    },
+    "R1": {
+        0: (13, 401, 126, 30.575281425),
+        1: (115, 331, 94, 23.104911054),
+        2: (144, 302, 94, 15.634540684),
+        5: (185, 261, 94, -6.776570427),
+        10: (193, 253, 94, -44.128422279),
+        20: (204, 242, 94, -118.832125983),
+        50: (214, 232, 94, -342.943237094),
+        100: (214, 232, 94, -716.461755612),
+    },
+}
+
+
 class AuditError(ValueError):
     """Input or published-checkpoint discrepancy."""
 
@@ -225,12 +252,14 @@ def verify_paper(report: dict) -> None:
         require(value is not None and math.isfinite(value)
                 and abs(value-expected) <= 0.0000005,
                 f"{report['family']}: manuscript checkpoint mismatch: {output}")
-    row = report["weights"]["10"]
-    expected = e["lambda_10"]
-    require([row["v3"], row["v2"], row["tied"]] == expected[:3],
-            f"{report['family']}: lambda=10 preference mismatch")
-    require(abs(row["mean_delta_loss"]-expected[3]) <= 0.0000005,
-            f"{report['family']}: lambda=10 mean difference mismatch")
+    # Fail closed for EVERY displayed manuscript decision weight, not only λ=10.
+    for weight, expected in EXPECTED_WEIGHT_GRID[report["family"]].items():
+        row = report["weights"][str(weight)]
+        require((row["v3"], row["v2"], row["tied"]) == expected[:3],
+                f"{report['family']}: lambda={weight} preference mismatch")
+        value = row["mean_delta_loss"]
+        require(math.isfinite(value) and abs(value - expected[3]) <= 0.0000005,
+                f"{report['family']}: lambda={weight} mean difference mismatch")
 
 
 def file_sha256(path: Path) -> str:
