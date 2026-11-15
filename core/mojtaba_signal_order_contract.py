@@ -11,10 +11,18 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import re
 
-from .mojtaba_signal_service_contract import (
-    BOT_IDENTITY, SignalContractError, SignalOffer, SignalTenantRoute,
-    validate_route_offer_alignment,
-)
+try:
+    from .mojtaba_signal_service_contract import (
+        BOT_IDENTITY, SignalContractError, SignalOffer, SignalTenantRoute,
+        validate_route_offer_alignment,
+    )
+except ImportError as exc:
+    if __package__:
+        raise
+    from mojtaba_signal_service_contract import (
+        BOT_IDENTITY, SignalContractError, SignalOffer, SignalTenantRoute,
+        validate_route_offer_alignment,
+    )
 
 
 class SignalOrderContractError(ValueError):
