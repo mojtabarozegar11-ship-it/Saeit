@@ -85,6 +85,7 @@ def assess_moj_prop_release(
         independent_attestations,
         trusted_attestation_keys,
         now=attestation_now,
+        plan_code=plan.code,
     )
 
     blockers: list[str] = []
@@ -97,8 +98,10 @@ def assess_moj_prop_release(
     for error in independent.errors:
         _add_unique(blockers, f"independent_attestation:{error}")
 
-    capital_proof = plan.funding_independently_verified or independent.capital is not None
-    broker_proof = plan.broker_live_account_independently_verified or independent.broker is not None
+    # A mutable plan registry flag is never independent external proof.
+    # Only verified, unexpired, plan-bound signed attestations count.
+    capital_proof = independent.capital is not None
+    broker_proof = independent.broker is not None
 
     if not plan.business_active_owner_declared:
         _add_unique(blockers, "plan_not_owner_active")
