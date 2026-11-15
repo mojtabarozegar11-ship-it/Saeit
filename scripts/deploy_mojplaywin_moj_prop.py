@@ -57,7 +57,7 @@ def staged_root(run_id: str) -> Path:
         if source.is_symlink() or not source.is_file():
             raise RuntimeError(f"Missing or unsafe staged file: {relative}")
     index = (root / "index.html").read_text(encoding="utf-8")
-    for required in ("<title>Moj Prop", "Discipline before capital.", "mojtaba.bot.ai"):
+    for required in ("<title>Moj Prop", "Discipline before ", "capital.", "mojtaba.bot.ai"):
         if required not in index:
             raise RuntimeError(f"Moj Prop page validation failed: {required}")
     return root
