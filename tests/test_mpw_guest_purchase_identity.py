@@ -35,6 +35,15 @@ class GuestPurchaseIdentityTests(SimpleTestCase):
         self.assertTrue(self.verify())
         self.assertEqual(valid_guest_email("OWNER@FARMCO.ORG"), "owner@farmco.org")
 
+    def test_guest_email_digest_is_keyed_not_guessable_sha256(self):
+        from hashlib import sha256
+        canonical_email = "buyer@farmco.org"
+        proof = self.proof()
+        self.assertNotEqual(proof.buyer_email_digest, sha256(canonical_email.encode("ascii")).hexdigest())
+        rotated = self.proof(signing_key=b"independently-rotated-signing-key-over-thirtytwo-bytes")
+        self.assertNotEqual(proof.buyer_email_digest, rotated.buyer_email_digest)
+        self.assertFalse(self.verify(proof=rotated))
+
     def test_no_raw_customer_email_in_signed_invoice_record(self):
         proof = self.proof()
         self.assertNotIn("buyer@", repr(proof))
