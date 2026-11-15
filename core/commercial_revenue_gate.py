@@ -354,6 +354,8 @@ class SQLiteCommercialLedger:
                     raise CommercialGateError("event_replay_order_mismatch")
                 if prior["payload_digest"] != payload_digest:
                     raise CommercialGateError("event_replay_mismatch")
+                if prior["state"] != row["state"] or prior["state"] != target.value:
+                    raise CommercialGateError("stale_event_replay")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
             evidence_digest = None
