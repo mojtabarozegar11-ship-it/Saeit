@@ -68,6 +68,12 @@ class MojPropCommercialStageTests(TestCase):
         self.assertIn("notes", admin.readonly_fields)
         self.assertIn("email", admin.readonly_fields)
 
+    def test_operator_cannot_delete_customer_evidence_or_consented_request(self):
+        admin = MojPropRequestAdmin(MojPropRequest, AdminSite())
+        self.assertFalse(admin.has_delete_permission(None))
+        self.assertFalse(admin.has_delete_permission(None, self.customer))
+        self.assertTrue(MojPropRequest.objects.filter(pk=self.customer.pk).exists())
+
     def test_review_transition_records_operator_review_time(self):
         admin = MojPropRequestAdmin(MojPropRequest, AdminSite())
         lead = MojPropRequest.objects.get(pk=self.customer.pk)
