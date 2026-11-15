@@ -184,6 +184,18 @@ class InertControlCases(unittest.TestCase):
     def test_42_password_field_cannot_satisfy_email_rule(self):
         self.assertNotEqual(self.verdict(page().replace('type="email"','type="password"')), VISIBLE)
 
+    def test_44_prefilled_buyer_email_is_rejected_to_prevent_identity_leak(self):
+        html = page().replace(EMAIL, EMAIL[:-1] + ' value="prior.customer@example.com">')
+        self.assertEqual(self.verdict(html), BLOCKED)
+
+    def test_45_empty_email_value_remains_usable(self):
+        html = page().replace(EMAIL, EMAIL[:-1] + ' value="">')
+        self.assertEqual(self.verdict(html), VISIBLE)
+
+    def test_46_whitespace_prefilled_email_is_rejected(self):
+        html = page().replace(EMAIL, EMAIL[:-1] + ' value="   ">')
+        self.assertEqual(self.verdict(html), BLOCKED)
+
     def test_43_no_customer_data_or_payment_in_contract_module(self):
         text = MODULE_PATH.read_text(encoding="utf-8")
         for banned in ("requests.get(", "urllib.request", "send_mail(", "send_transaction("):
