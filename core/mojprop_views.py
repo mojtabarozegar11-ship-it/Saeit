@@ -40,7 +40,7 @@ def _text(payload, key: str, limit: int) -> str:
     if not isinstance(value, str) or len(value) > limit:
         raise ValueError("invalid field: " + key)
     value = value.strip()
-    allowed_controls = "\\n\\t" if key == "notes" else ""
+    allowed_controls = chr(10) + chr(9) if key == "notes" else ""
     if any(ord(char) < 32 and char not in allowed_controls for char in value):
         raise ValueError("control character in " + key)
     return value
