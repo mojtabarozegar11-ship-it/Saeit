@@ -171,3 +171,22 @@ class SingleBotSignalPolicyTests(TestCase):
         with self.assertRaises(SignalRecordError):
             self.verify(evidence_url="https://169.254.169.254/market")
 
+    def test_bad_explicit_review_clock_never_falls_back_to_system_time(self):
+        for invalid in (False, 0, "", [], {}, datetime(2026, 11, 15, 10, 0)):
+            with self.subTest(now=repr(invalid)), self.assertRaises(SignalRecordError):
+                review_signal(self.s, now=invalid)
+
+    def test_agent_impersonation_object_does_not_pass_equality_check(self):
+        class Impersonator:
+            def __eq__(self, other):
+                return other == "mojtaba.bot.ai"
+        with self.assertRaises(SignalRecordError):
+            self.verify(author_agent=Impersonator())
+
+    def test_bidirectional_and_invisible_unicode_cannot_hide_risk_terms(self):
+        for field in ("scenario", "invalidation", "risk_statement"):
+            for invisible in (chr(0x202E), chr(0x202A), chr(0x2067), chr(0x2069),
+                              chr(0x200B), chr(0x200F)):
+                with self.subTest(field=field, char=hex(ord(invisible))):
+                    with self.assertRaises(SignalRecordError):
+                        self.verify(**{field: getattr(self.s, field) + invisible})
