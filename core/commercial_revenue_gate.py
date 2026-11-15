@@ -934,6 +934,20 @@ class SQLiteCommercialLedger:
         row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
         if row is None:
             raise CommercialGateError("order_not_found")
-        return dict(row)
+        result = dict(row)
+        if result["state"] == CommercialState.VERIFIED_REVENUE.value:
+            # Stored milestones are historical; refunds may arrive later.
+            # Never expose a stale verified revenue label as current money.
+            was_refunded = self.connection.execute(
+                "SELECT 1 FROM independently_confirmed_refunds WHERE order_id = ? LIMIT 1",
+                (order_id,),
+            ).fetchone() is not None
+            result["effective_revenue_status"] = (
+                "refund_reconciliation_required" if was_refunded
+                else "historical_attestation_only"
+            )
+        else:
+            result["effective_revenue_status"] = "not_verified"
+        return result
 
 
