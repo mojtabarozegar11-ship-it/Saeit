@@ -81,6 +81,11 @@ class InvoiceGateReadOnlyTests(unittest.TestCase):
         self.assertIn('MAX_REVIEW = 25', script)
         self.assertIn('from core.crown_tron_receipts import verified_walletless_credit', script)
         self.assertIn('paid.select_related("order").order_by("pk")[:MAX_REVIEW]', script)
+        self.assertIn("from mpw_commerce.entitlements import can_access_purchased_digital_item", script)
+        self.assertIn('intent.order.items.values_list("id", flat=True)[:5]', script)
+        self.assertIn('record["stored_verified_paid_order_download_entitlement_present"]', script)
+        self.assertIn('record["customer_download_actually_performed"] = False', script)
+        self.assertNotIn("download_paid_item(", script)
         self.assertIn('no_host_changes_or_financial_writes', script)
 
     def test_host_missing_verifier_does_not_hide_paid_intent_query(self):
