@@ -13,7 +13,7 @@ from django.http import Http404
 from .mojplaywin_checkout_route import verified_guest_checkout_url
 
 TRUSTED_HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
-MAX_CURSOR = 9999999999999999
+MAX_CURSOR = (1 << 63) - 1
 LOGGER = logging.getLogger(__name__)
 
 
@@ -27,7 +27,7 @@ class ApprovedCard:
 
 def parse_cursor(value):
     """Allow only bounded ASCII decimal cursors; never interpret Unicode digits."""
-    if (type(value) is not str or not value or len(value) > 16
+    if (type(value) is not str or not value or len(value) > 19
             or not value.isascii() or not value.isdecimal()):
         raise Http404("Invalid catalogue cursor")
     cursor = int(value)
@@ -75,7 +75,9 @@ def _linked_product(product):
             price_usd=format(amount, ".2f"),
             detail_url=f"/store/product/{product.pk}/",
         )
-    except (NoReverseMatch, Resolver404, ValueError, TypeError, ArithmeticError, LookupError):
+    except (ValueError, TypeError, ArithmeticError, AttributeError, LookupError):
+        # A corrupt price row must be skipped, not turn the entire /store/
+        # request into a 500 while the private gateway is otherwise healthy.
         return None
 
 
@@ -108,9 +110,18 @@ def approved_cards(request, *, cursor=0, excluded_ids=frozenset()):
             card = _linked_product(current)
             if card is not None and pk not in excluded_ids:
                 cards.append(card)
-        if more and not items:
+        # The private bounded catalogue may scan 256 *rejected* rows and
+        # return no approved products for this window. Its cursor tracks the
+        # last DB row scanned, NOT necessarily the last approved product.
+        # Without this cursor, valid stock beyond rejected legacy SKUs was
+        # invisible to customers. A stale/untrusted cursor is never used.
+        scanned = getattr(items, "last_scanned_id", latest)
+        if (type(scanned) is not int or not latest <= scanned <= MAX_CURSOR
+                or (more and scanned <= cursor)):
             return (), None
-        return tuple(cards), latest if more and latest > cursor else None
+        if more and scanned > cursor:
+            return tuple(cards), scanned
+        return tuple(cards), None
     except Exception as exc:
         LOGGER.warning("Private approved catalogue unavailable: %s", type(exc).__name__)
         return (), None
