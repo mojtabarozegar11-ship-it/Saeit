@@ -103,7 +103,7 @@ def verify_attestation(packet, trusted_keys, *, now=None):
 
     attestation_id = _identifier(packet["attestation_id"], "attestation_id")
     kind = packet["kind"]
-    if kind not in ATTESTATION_KINDS:
+    if type(kind) is not str or kind not in ATTESTATION_KINDS:
         raise AttestationRejected("Unsupported attestation kind")
     subject_id = _identifier(packet["subject_id"], "subject_id")
     source = _identifier(packet["source"], "source")
@@ -123,10 +123,11 @@ def verify_attestation(packet, trusted_keys, *, now=None):
     if expires_at - issued_at > MAX_ATTESTATION_LIFETIME:
         raise AttestationRejected("Attestation lifetime exceeds 30 days")
     digest = packet["evidence_digest"]
-    if type(digest) is not str or not _HEX_DIGEST_PATTERN.fullmatch(digest):
+    if (type(digest) is not str or not _HEX_DIGEST_PATTERN.fullmatch(digest)
+            or digest == "0" * 64):
         raise AttestationRejected("Evidence digest must be lowercase SHA-256")
     moment = datetime.now(timezone.utc) if now is None else now
-    if moment.tzinfo is None:
+    if not isinstance(moment, datetime) or moment.tzinfo is None:
         raise AttestationRejected("Attestation clock must be timezone-aware")
     moment = moment.astimezone(timezone.utc)
     if moment < issued_at or moment > expires_at:
@@ -152,7 +153,8 @@ def verify_attestation(packet, trusted_keys, *, now=None):
     )
 
 
-def assess_independent_attestations(packets=None, trusted_keys=None, *, now=None):
+def assess_independent_attestations(packets=None, trusted_keys=None, *,
+                                    now=None, plan_code=None):
     """Collect at most one valid attestation per kind; fail closed on errors."""
     if packets is None:
         return AttestationAssessment(capital=None, broker=None, errors=())
@@ -160,14 +162,29 @@ def assess_independent_attestations(packets=None, trusted_keys=None, *, now=None
         return AttestationAssessment(
             capital=None, broker=None, errors=("packet_list_required",)
         )
+    if len(packets) > 8:
+        return AttestationAssessment(
+            capital=None, broker=None, errors=("too_many_attestations",)
+        )
+    if plan_code is not None:
+        _identifier(plan_code, "plan_code")
     capital = None
     broker = None
     errors = []
+    seen_ids = set()
     for packet in packets:
         try:
             verified = verify_attestation(packet, trusted_keys, now=now)
         except AttestationRejected as exc:
             errors.append(str(exc))
+            continue
+        if verified.attestation_id in seen_ids:
+            errors.append("duplicate_attestation_id")
+            continue
+        seen_ids.add(verified.attestation_id)
+        if (plan_code is not None
+                and verified.subject_id != f"moj-prop:{plan_code}:{verified.kind}"):
+            errors.append("attestation_plan_subject_mismatch")
             continue
         if verified.kind == KIND_CAPITAL:
             if capital is not None:
@@ -178,6 +195,20 @@ def assess_independent_attestations(packets=None, trusted_keys=None, *, now=None
             errors.append("duplicate_broker_attestation")
         else:
             broker = verified
+    if capital is not None and broker is not None:
+        if capital.key_id == broker.key_id:
+            errors.append("capital_broker_must_have_distinct_keys")
+        if capital.source == broker.source:
+            errors.append("capital_broker_must_have_distinct_sources")
+        if capital.evidence_digest == broker.evidence_digest:
+            errors.append("capital_broker_must_have_distinct_evidence")
+        if (type(trusted_keys) is dict
+                and trusted_keys.get(capital.key_id) == trusted_keys.get(broker.key_id)):
+            errors.append("capital_broker_share_key_material")
+    if errors:
+        # Invalid or conflicting upstream evidence must not remain available
+        # as a partially valid certificate for downstream release gates.
+        return AttestationAssessment(capital=None, broker=None, errors=tuple(errors))
     return AttestationAssessment(
-        capital=capital, broker=broker, errors=tuple(errors)
+        capital=capital, broker=broker, errors=()
     )
