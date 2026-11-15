@@ -749,6 +749,13 @@ class SQLiteCommercialLedger:
                         raise CommercialGateError("scope_acceptance_unverified")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
+            # No external verifier must be called for an impossible state hop.
+            # Validate state/evidence synchronously before any provider access.
+            transition_state(
+                current, target, payment_evidence=payment_evidence,
+                fulfillment_manifest_sha256=fulfillment_manifest_sha256,
+                verified_revenue=verified_revenue,
+            )
             if target is CommercialState.FULFILLED and payload_digest != fulfillment_manifest_sha256:
                 raise CommercialGateError("fulfillment_payload_mismatch")
             if target in (CommercialState.FULFILLED, CommercialState.VERIFIED_REVENUE):
