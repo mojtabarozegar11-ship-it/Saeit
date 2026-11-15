@@ -162,5 +162,25 @@ class MojPropInformationIntakeTests(TestCase):
         from prop_firm.models import PropChallengeEnrollment, PropAccount
         self.assertEqual(PropChallengeEnrollment.objects.count(), 0)
         self.assertEqual(PropAccount.objects.count(), 0)
-
-
+    def test_admin_lead_list_is_superuser_only_and_read_only(self):
+        from django.contrib.admin.sites import site
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+        model_admin = site._registry[PropInformationInquiry]
+        request = RequestFactory().get("/admin/prop_firm/propinformationinquiry/")
+        request.user = AnonymousUser()
+        self.assertFalse(model_admin.has_view_permission(request))
+        self.assertFalse(model_admin.has_add_permission(request))
+        self.assertFalse(model_admin.has_change_permission(request))
+        self.assertFalse(model_admin.has_delete_permission(request))
+        class Operator:
+            is_authenticated = True
+            is_superuser = False
+        request.user = Operator()
+        self.assertFalse(model_admin.has_view_permission(request))
+        class Owner:
+            is_authenticated = True
+            is_superuser = True
+        request.user = Owner()
+        self.assertTrue(model_admin.has_view_permission(request))
+        self.assertTrue(model_admin.has_module_permission(request))
