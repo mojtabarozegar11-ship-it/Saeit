@@ -145,7 +145,14 @@ def brand_product_detail(request, product_id):
         "is_preview": not matched,
     }
     response = render(request, "mojplaywin/product_detail.html", context)
-    response["Cache-Control"] = "public, max-age=300"
+    # Checkout exposure depends on live merchant rights and the private
+    # gateway's current authorization. CDN/browser public caching could
+    # keep an obsolete purchase link after a product or merchant is held.
+    # Never cache a response that may embed a payment entry route.
+    from django.utils.cache import patch_vary_headers
+    patch_vary_headers(response, ("Cookie",))
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["Referrer-Policy"] = "same-origin"
     if not matched:
         response["X-Robots-Tag"] = "noindex, nofollow"
     return response
