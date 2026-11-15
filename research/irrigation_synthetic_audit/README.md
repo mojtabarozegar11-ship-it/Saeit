@@ -107,3 +107,36 @@ A report may be offered as educational modeling **only after** legal rights,
 input provenance, quotation terms, supported delivery and payment permissions
 are separately approved. Its `payment_collected` and
 `source_inputs_verified` fields are always false.
+
+
+## Trusted frozen CSV hashes — reproducible source gate
+
+The optional `--expected-c-sha256` and `--expected-r1-sha256` arguments
+must be supplied **together** and must each be an independently preserved
+64-character hexadecimal SHA-256 digest of the **exact source CSV bytes**.
+The checker validates both inputs **before parsing and reporting**; any
+mismatch exits nonzero without a JSON result. The tool does not manufacture
+or endorse a trusted manifest.
+
+```bash
+python3 research/irrigation_synthetic_audit/paired_scenario_audit.py \
+  --cohort-c /secure/path/CohortC1620.csv \
+  --regime-r1 /secure/path/RegimeR2160.csv \
+  --expected-c-sha256 "$AUTHOR_SIGNED_C_SHA256" \
+  --expected-r1-sha256 "$AUTHOR_SIGNED_R1_SHA256" \
+  --verify-paper > /secure/path/audit_results.json
+```
+
+**Important:** merely running `sha256sum` on a potentially altered file
+and then supplying that result back to the same checker proves only
+self-consistency, **not independent source provenance**. Freeze original
+author-held exports, separately preserve the trusted digests and provenance,
+and avoid committing private CSV contents or the author manifest to a public
+repository. The hash check does **not** validate simulation code, rainfall
+information timing, agronomic effects, or field outcomes. It is a
+byte-integrity precondition only.
+
+Twenty negative/positive byte-integrity regression methods cover exact
+digest acceptance, wrong and malformed digests, byte mutations, BOM/newline
+changes, file absence, and provenance labeling. A successful CI run on
+the **current commit SHA** is required before calling these tests passing.
