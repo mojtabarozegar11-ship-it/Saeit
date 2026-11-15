@@ -1,5 +1,4 @@
 """Integration contract for the canonical, non-live MOJ PROP release gate."""
-from dataclasses import replace
 from decimal import Decimal
 from unittest.mock import patch
 
