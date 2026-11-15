@@ -51,10 +51,15 @@ const ctx = {
   AbortController,
   setTimeout: () => 1,
   clearTimeout: () => {},
-  // Deterministic test UUID replaces browser WebCrypto only in this sealed Node VM.
-  // The production page must still fail closed when WebCrypto is absent.
+  // Both modern and older secure WebCrypto are simulated in this sealed VM.
+  // Never simulate an insecure Math.random fallback.
   window: { location: { search: process.argv[2] || "" },
     crypto: process.argv[5] === "crypto-missing" ? undefined
+      : process.argv[5] === "crypto-legacy"
+      ? { getRandomValues: bytes => {
+          for(let i=0;i<bytes.length;i++) bytes[i]=i;
+          return bytes;
+        }}
       : { randomUUID: () => "12345678-1234-4234-8234-123456789abc" } },
   document: { getElementById(id) {
     if (!elements[id]) throw Error("Missing test DOM node: " + id);
@@ -311,6 +316,15 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertIn("Request ID: MOJPROP-20261115-A1B2C3D4", state["receipt"])
         self.assertTrue(state["downloadEnabled"])
         self.assertNotIn("Submission status unconfirmed", state["receipt"])
+
+    def test_older_browser_secure_getrandomvalues_generates_valid_uuidv4(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx",
+                              mode="crypto-legacy")
+        self.assertEqual(len(state["posted"]), 1)
+        key = state["posted"][0]["body"]["idempotency_key"]
+        self.assertRegex(key, r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        self.assertEqual(key, "00010203-0405-4607-8809-0a0b0c0d0e0f")
+        self.assertTrue(state["downloadEnabled"])
 
     def test_missing_secure_crypto_fails_closed_and_never_posts_customer_data(self):
         state = self._browser("?service=blueprint&package=starter-30-trx",
