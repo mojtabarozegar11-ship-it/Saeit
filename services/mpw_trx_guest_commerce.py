@@ -290,6 +290,16 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
+            from django.conf import settings
+            # The recovery routes already exist. Offer a useful, self-service
+            # path only when the separately approved email recovery is active.
+            recovery_link = (
+                '<p><a href="/commerce/trx-easy/recover/">'
+                'Recover paid purchases using your email</a></p>'
+                if (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+                    and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
+                else ''
+            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -300,6 +310,7 @@ def patch_public(namespace):
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
+                recovery_link +
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
