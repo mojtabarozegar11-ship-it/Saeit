@@ -2,7 +2,8 @@
 
 The preceding CI generated this state-alignment migration after the merge
 repair. Keep the historical migrations immutable and record the exact model
-field state used by this branch.
+field state used by this branch. `source` is intentionally free-form and has
+no choices in the model.
 """
 from django.db import migrations, models
 
