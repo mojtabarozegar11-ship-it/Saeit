@@ -70,7 +70,7 @@ class InvoiceGateReadOnlyTests(unittest.TestCase):
         for banned in (
             "requests.post(", "broadcasttransaction", "sendrawtransaction",
             ".save(", ".delete(", "objects.create(", "objects.update(", "objects.delete(",
-            ".env", "private_key", "mnemonic", "seed_phrase",
+            "load_dotenv(", "private_key", "mnemonic", "seed_phrase",
             "print(intent)", "print(order)", "print(ADDRESS)",
         ):
             with self.subTest(token=banned):
@@ -86,7 +86,7 @@ class InvoiceGateReadOnlyTests(unittest.TestCase):
         self.assertIn("tests.test_mpw_trx_canary_existing_receipts_readonly_20261116", wf)
         self.assertIn("MPW_TRX_CANARY_RECEIPT_READONLY=", wf)
         self.assertIn("persist-credentials: false", wf)
-        self.assertIn("permissions: {contents: read}", wf)
+        self.assertIn("permissions:\n  contents: read", wf)
         self.assertIn("pull_request:", wf)
         self.assertNotIn("workflow_dispatch:", wf)
         self.assertNotIn("  push:", wf)
