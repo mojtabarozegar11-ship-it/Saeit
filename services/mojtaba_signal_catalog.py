@@ -41,12 +41,12 @@ PLANS = MappingProxyType({
     "education-monthly": SignalPlan(
         "education-monthly", "Monthly educational market brief", "monthly",
         Decimal("29.90"),
-        "Four weekly educational briefs with dated provenance and explicit limitations.",
+        "Four weekly educational briefs with dated provenance, explicit market risk and limitations; no personalized advice.",
     ),
     "education-quarterly": SignalPlan(
         "education-quarterly", "Quarterly educational market brief", "quarterly",
         Decimal("79.90"),
-        "A twelve-week educational archive with source fingerprints and review status.",
+        "A twelve-week educational archive with source fingerprints, review status and explicit capital-loss risk; without promises of profit.",
     ),
 })
 
