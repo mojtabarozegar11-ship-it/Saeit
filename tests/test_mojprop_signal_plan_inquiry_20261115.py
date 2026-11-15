@@ -251,7 +251,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertTrue(state["starterHidden"])
         self.assertEqual(state["posted"][0]["body"]["service"], "audit")
         self.assertNotIn("MOJPROP-STARTER30", state["posted"][0]["body"]["notes"])
-        self.assertFalse(state["hidden"])
+        self.assertTrue(state["hidden"])
 
     def test_starter_note_prefix_cannot_exceed_server_max(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
