@@ -144,8 +144,10 @@
         ? 'Requested canonical product: '+starterCode+
           ' (one-time indicative 30 native TRX; written terms and verified lawful invoice required; NOT paid)\n'
         : '';
+      let starterPrefill='';
       if(starterRequested && !notesField.value.trim()){
-        notesField.value='Please send written terms for the ten-session simulated journal assessment, deterministic risk scorecard and individual educational feedback. No funded account or live trading is requested.';
+        starterPrefill='Please send written terms for the ten-session simulated journal assessment, deterministic risk scorecard and individual educational feedback. No funded account or live trading is requested.';
+        notesField.value=starterPrefill;
       }
       function syncStarter30(){
         const show=starterRequested && serviceSelector.value==='blueprint';
@@ -153,8 +155,12 @@
         starterSummary.textContent=show
           ? 'Starter 30: simulated ten-session risk journal / scorecard, indicative 30 native TRX. No invoice, payment or funded account.'
           : '';
-        if(!show && notesField.value.startsWith('Please send written terms for the ten-session simulated journal assessment')){
+        // Clear *only* the untouched automatic prefill. A customer-edited
+        // scope belongs to the customer and must not be erased on switching.
+        if(!show && starterPrefill && notesField.value===starterPrefill){
           notesField.value='';
+          starterPrefill='';
+          syncDigitalProduct();
         }
         notesField.maxLength=5000-(show ? starterPrefix.length
           : serviceSelector.value==='signals' ? (freeTierRequested ? freePrefix.length : planPrefix.length) : 0);
