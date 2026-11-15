@@ -32,6 +32,8 @@ FILES = (
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
+# Exact #2407 one-off public research preview (before double opt-in #2428).
+BASELINE_SIGNAL_FREE_PREVIEW = Path("baselines/signals-index-after-free-preview.html")
 
 
 def digest(data: bytes) -> str:
@@ -83,7 +85,7 @@ def source_root(run_id: str) -> Path:
     path = HOME / (".mojplaywin-moj-prop-catalog-" + safe_id(run_id)) / "templates/moj-prop-v4"
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Invalid staged Moj Prop source")
-    for relative in FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL):
+    for relative in FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
         assert_file(path / relative)
     html = {str(relative): (path / relative).read_text("utf-8") for relative in FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
@@ -122,6 +124,7 @@ def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
     old_home = (root / BASELINE_HOME).read_bytes()
     old_signal = (root / BASELINE_SIGNAL).read_bytes()
+    free_preview_signal = (root / BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
     marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\n"
     old_home_without_marker = old_home.replace(marker, b"", 1)
     intended = []
@@ -140,8 +143,8 @@ def plan(root: Path) -> list[dict]:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
         elif relative == Path("signals/index.html") and exists:
-            if before not in (after, old_signal):
-                raise RuntimeError("Live Signal Desk differs from approved baseline; refusing replacement")
+            if before not in (after, old_signal, free_preview_signal):
+                raise RuntimeError("Live Signal Desk differs from all exact reviewed baselines; refusing replacement")
         elif exists and before != after:
             raise RuntimeError("A sample page exists with unexpected content; refusing replacement")
         intended.append({
@@ -224,6 +227,24 @@ def restore(backup: Path, *, automated: bool = False) -> None:
     print("MOJ_PROP_CATALOG_ROLLBACK_COMPLETE")
 
 
+def preflight(run_id: str) -> None:
+    """Host-only, read-only exact release compatibility check.
+
+    Must run before backend schema migrations; a successful source CI is
+    insufficient proof of a compatible live Signal Desk or restorable DB.
+    """
+    safe_id(run_id)
+    validate_host()
+    root = source_root(run_id)
+    proposed = plan(root)  # refuses unknown customer-edited live content
+    print("MOJ_PROP_STATIC_PREFLIGHT=PASS")
+    print("MOJ_PROP_STATIC_PREFLIGHT_PATHS=" + str(len(proposed)))
+    print("MOJ_PROP_STATIC_PREFLIGHT_CHANGES=" + str(
+        sum(1 for item in proposed if item["changed"])
+    ))
+    print("MOJ_PROP_STATIC_PREFLIGHT_NO_WRITES=true")
+
+
 def deploy(run_id: str, commit: str) -> None:
     safe_id(run_id)
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
@@ -280,11 +301,13 @@ def deploy(run_id: str, commit: str) -> None:
 def main() -> None:
     if len(sys.argv) == 4 and sys.argv[1] == "deploy":
         deploy(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 3 and sys.argv[1] == "preflight":
+        preflight(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "rollback":
         validate_host()
         restore(BACKUPS / ("moj-prop-catalog-" + safe_id(sys.argv[2])))
     else:
-        raise SystemExit("Usage: catalog.py deploy RUN_ID SHA | rollback RUN_ID")
+        raise SystemExit("Usage: catalog.py preflight RUN_ID | deploy RUN_ID SHA | rollback RUN_ID")
 
 
 if __name__ == "__main__":

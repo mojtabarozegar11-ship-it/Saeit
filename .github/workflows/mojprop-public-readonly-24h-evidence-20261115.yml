@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Probe public HTTPS GET routes only — no secrets, POST or customer data
         shell: bash
         run: |
@@ -31,9 +34,13 @@ jobs:
             "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
             "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
             "signal_desk|https://mojplaywin.com/moj-prop/signals/"
+            "signal_free_signup_api|https://mojplaywin.com/moj-signal-free-subscribe/"
+            "saman_brand_signals|https://mojplaywin.com/saman/market-signals/"
+            "saman_ar_signals|https://mojplaywin.com/ar/saman/market-signals/"
             "single_bot_root|https://mojtaba.bot.ai/"
           )
           unhealthy=0
+          mojplaywin_unhealthy=0
           for item in "${targets[@]}"; do
             name="${item%%|*}"
             url="${item#*|}"
@@ -61,6 +68,7 @@ jobs:
             esac
             if [[ "$code" != "200" || "$curl_exit" != "0" ]]; then
               unhealthy=$((unhealthy+1))
+              [[ "$name" == "single_bot_root" ]] || mojplaywin_unhealthy=$((mojplaywin_unhealthy+1))
             fi
             echo "GET_ONLY_${name}_HTTP=$code"
             echo "GET_ONLY_${name}_CURL_EXIT=$curl_exit"
@@ -98,6 +106,119 @@ jobs:
           PY
             fi
           done
+          # Compare the public page byte-for-byte with only reviewed source
+          # releases. No content is printed; "unknown" prevents unsafe overwrite.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import sys
+          from pathlib import Path
+          root=Path("templates/moj-prop-v4")
+          target=Path(sys.argv[1])
+          known={
+              "original":root/"baselines/signals-index-before-free.html",
+              "free-preview":root/"baselines/signals-index-after-free-preview.html",
+              "double-opt-in":root/"signals/index.html",
+          }
+          outcome="unknown"
+          try:
+              live=target.read_bytes()
+              outcome=next((name for name, source in known.items()
+                            if source.is_file() and live == source.read_bytes()), "unknown")
+          except OSError:
+              pass
+          print("PUBLIC_SIGNAL_DESK_EXACT_RELEASE=" + outcome)
+          print("PUBLIC_SIGNAL_DESK_SAFE_UPGRADE=" +
+                ("yes" if outcome in ("original", "free-preview", "double-opt-in") else "unverified"))
+          PY
+          # The live file is unrecognized. Classify its *shape* without
+          # exposing HTML, tokens, public personal text, cookies or IPs.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import hashlib,sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Shape(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title_mode=False
+                  self.title=[]
+                  self.forms=0
+                  self.scripts=0
+                  self.links=0
+              def handle_starttag(self,tag,attrs):
+                  if tag=="title": self.title_mode=True
+                  if tag=="form": self.forms+=1
+                  if tag=="script": self.scripts+=1
+                  if tag=="a": self.links+=1
+              def handle_endtag(self,tag):
+                  if tag=="title": self.title_mode=False
+              def handle_data(self,data):
+                  if self.title_mode: self.title.append(data[:100])
+          try:
+              raw=Path(sys.argv[1]).read_bytes()
+              kind="html" if b"<html" in raw[:3000].lower() else "other"
+              parsed=Shape()
+              parsed.feed(raw.decode("utf-8","replace")[:200000])
+              title=" ".join(parsed.title).lower()
+              class_name=("signal-desk" if "signal" in title
+                          else "moj-prop" if "moj prop" in title
+                          else "not-found" if "404" in title or "not found" in title
+                          else "other" if title else "missing")
+              # This is diagnostic evidence, never authorization to overwrite.
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND="+kind)
+              print("PUBLIC_SIGNAL_LIVE_TITLE_CLASS="+class_name)
+              print("PUBLIC_SIGNAL_LIVE_BYTE_COUNT="+str(len(raw)))
+              print("PUBLIC_SIGNAL_LIVE_SHA256_PREFIX="+hashlib.sha256(raw).hexdigest()[:12])
+              print("PUBLIC_SIGNAL_LIVE_FORM_COUNT="+str(parsed.forms))
+              print("PUBLIC_SIGNAL_LIVE_LINK_COUNT="+str(parsed.links))
+              print("PUBLIC_SIGNAL_LIVE_SCRIPT_COUNT="+str(parsed.scripts))
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          except (OSError, ValueError, TypeError):
+              print("PUBLIC_SIGNAL_LIVE_DOCUMENT_KIND=unavailable")
+              print("PUBLIC_SIGNAL_LIVE_CONTENT_REVIEW_REQUIRED=true")
+          PY
+          # Inspect only public HTML and the public API's contract; do not log
+          # emails, CSRF token values, cookies, or subscriber identifiers.
+          if [[ -f "$check_dir/signal_desk.body" ]]; then
+            if grep -Fq 'id="free-preview"' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=yes"
+            else
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=no"
+            fi
+            if grep -Fq 'id="free-education-membership"' "$check_dir/signal_desk.body" &&
+               grep -Fq '/moj-signal-free-subscribe/' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=yes"
+            else
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=no"
+            fi
+          fi
+          python3 - "$check_dir/signal_free_signup_api.body" <<'PY'
+          import json,sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as f:
+                  data=json.load(f)
+              valid=(type(data) is dict and data.get("ok") is True
+                     and data.get("agent") == "mojtaba.bot.ai"
+                     and data.get("product") == "free-historical-research-updates"
+                     and data.get("paid_entitlement") is False
+                     and type(data.get("enabled")) is bool
+                     and type(data.get("csrf_token")) is str
+                     and bool(data.get("csrf_token")))
+          except (OSError, UnicodeError, ValueError, TypeError):
+              data={}
+              valid=False
+          print("PUBLIC_SIGNAL_FREE_API_CONTRACT=" + ("valid" if valid else "invalid"))
+          print("PUBLIC_SIGNAL_FREE_EMAIL_FLAG=" +
+                ("enabled-config-only" if data.get("enabled") is True and valid
+                 else "disabled" if valid else "unknown"))
+          print("PUBLIC_SIGNAL_FREE_CONFIRMED_MEMBER_COUNT=not_checked")
+          print("PUBLIC_SIGNAL_FREE_REAL_SMTP_DELIVERY=not_checked")
+          print("PUBLIC_SIGNAL_PAID_PAYMENT_DELIVERY=not_checked")
+          PY
+          if [[ "$mojplaywin_unhealthy" == "0" ]]; then
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=PASS"
+          else
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=DEGRADED"
+          fi
+          echo "PUBLIC_MOJPLAYWIN_UNHEALTHY_ROUTE_COUNT=$mojplaywin_unhealthy"
           if [[ "$unhealthy" == "0" ]]; then
             echo "PUBLIC_BUYER_ROUTE_GATE=PASS"
           else

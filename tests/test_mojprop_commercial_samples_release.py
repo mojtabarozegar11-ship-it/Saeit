@@ -116,7 +116,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.route = self.docroot / "moj-prop"
         self.route.mkdir(parents=True)
         stage = self.home / ".mojplaywin-moj-prop-catalog-123" / "templates/moj-prop-v4"
-        for path in release.FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL):
+        for path in release.FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL, release.BASELINE_SIGNAL_FREE_PREVIEW):
             source = SITE_SOURCE / path
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -169,6 +169,30 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         release.restore(backup)
         self.assertEqual(path.read_bytes(), prior)
 
+    def test_reviewed_free_preview_releases_to_double_optin_and_restores_exactly(self):
+        page = self.route / "signals/index.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        old = (SITE_SOURCE / release.BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
+        self.assertIn(b'id="free-preview"', old)
+        self.assertNotIn(b'id="free-education-membership"', old)
+        page.write_bytes(old)
+        release.deploy("123", "a" * 40)
+        self.assertEqual(page.read_bytes(), (SITE_SOURCE / "signals/index.html").read_bytes())
+        manifest = self.backups / "moj-prop-catalog-123"
+        self.assertTrue((manifest / "manifest.json").is_file())
+        release.restore(manifest)
+        self.assertEqual(page.read_bytes(), old)
+
+    def test_only_exact_free_preview_version_is_approved(self):
+        page = self.route / "signals/index.html"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        old = (SITE_SOURCE / release.BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
+        page.write_bytes(old + b"<!-- unreviewed live addition -->")
+        with self.assertRaisesRegex(RuntimeError, "differs from all exact reviewed baselines"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(page.read_bytes(), old + b"<!-- unreviewed live addition -->")
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
     def test_unknown_live_signal_desk_blocks_deployment_and_preserves_customer_changes(self):
         path = self.route / "signals/index.html"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,6 +200,26 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             release.deploy("123", "a" * 40)
         self.assertIn("Operator customised", path.read_text("utf-8"))
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_readonly_preflight_proves_no_backup_or_live_write(self):
+        before_home = (self.route / "index.html").read_bytes()
+        before_catalog = (self.route / "catalog/index.html").read_bytes()
+        with patch("builtins.print") as messages:
+            release.preflight("123")
+        self.assertIn("MOJ_PROP_STATIC_PREFLIGHT=PASS",
+                      [call.args[0] for call in messages.call_args_list])
+        self.assertEqual((self.route / "index.html").read_bytes(), before_home)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), before_catalog)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_readonly_preflight_refuses_unknown_live_content_before_any_write(self):
+        target = self.route / "signals/index.html"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("Unknown live Signal Desk content", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "differs from all exact reviewed baselines"):
+            release.preflight("123")
+        self.assertEqual(target.read_text("utf-8"), "Unknown live Signal Desk content")
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
     def test_idempotent_deploy_never_makes_second_backup(self):
