@@ -11,12 +11,12 @@ from .mojprop_catalog_contract import public_service_catalog
 
 def _one_line(value: object) -> str:
     """Keep user-supplied contact fields from injecting forged proposal headers."""
-    return re.sub(r"[\\x00-\\x1f\\x7f\\u2028\\u2029]+", " ", str(value)).strip()
+    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029]+", " ", str(value)).strip()
 
 
 def _quoted_scope(text: str) -> str:
     """Show the customer's exact scope as quoted content, not operator instructions."""
-    return "\\n".join("> " + line for line in text.splitlines())
+    return "\n".join("> " + line for line in text.splitlines())
 
 
 def build_offer_draft(lead) -> str:
