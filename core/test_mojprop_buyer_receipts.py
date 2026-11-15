@@ -57,6 +57,16 @@ class MojPropBuyerReceiptTests(TestCase):
                 self.assertEqual(response.status_code, 404)
                 self.assertNotIn("status", response.json())
 
+    def test_duplicate_bearer_receipts_are_rejected_even_with_valid_last_token(self):
+        result = self.make_lead()
+        response = self.browser.get(
+            "/moj-prop-status/?receipt_token=invalid&receipt_token="
+            + result["receipt_token"]
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("status", response.json())
+        self.assertEqual(response["Cache-Control"], "no-store")
+
     def test_invalid_token_has_same_no_cache_and_no_referrer_headers(self):
         response = self.browser.get("/moj-prop-status/", {"receipt_token": "invalid"})
         self.assertEqual(response.status_code, 404)
