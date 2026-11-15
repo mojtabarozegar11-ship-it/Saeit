@@ -13,20 +13,13 @@ on:
       - "core/mojprop_views.py"
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/mojplaywin-moj-prop-deploy.yml"
-      - "scripts/update_mojplaywin_moj_prop_catalog.py"
-      - "scripts/deploy_mojplaywin_moj_prop.py"
-      - "templates/moj-prop-v4/**"
-      - "config/urls.py"
-      - "core/admin.py"
-      - "core/models.py"
-      - "core/mojprop_views.py"
-      - "core/migrations/0041_mojprop_request.py"
-      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
+    inputs:
+      confirm_owner_release:
+        description: "Owner case-specific production release approval confirmed"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -66,8 +59,34 @@ jobs:
           print("Moj Prop catalog pages parse and contain the expected standalone content.")
           PY
 
+      - name: Validate real Moj Prop buyer form JavaScript and retry contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          html = Path("templates/moj-prop-v4/index.html").read_text("utf-8")
+          blocks = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, re.S)
+          if len(blocks) != 1:
+              raise SystemExit("Expected one auditable inline sales-form script")
+          for token in (
+              "const endpoint='/moj-prop-intake/'",
+              "submission_id:submissionId",
+              "crypto.getRandomValues",
+              "if(!submissionId) submissionId=secureSubmissionId()",
+              'option value="week"',
+          ):
+              if token not in html:
+                  raise SystemExit("Missing real buyer request control")
+          Path(os.environ["RUNNER_TEMP"], "moj-prop-form.js").write_text(
+              blocks[0], encoding="utf-8",
+          )
+          PY
+          node --check "$RUNNER_TEMP/moj-prop-form.js"
+
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm_owner_release == true
     needs: validate
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20

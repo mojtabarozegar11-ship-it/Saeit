@@ -189,6 +189,22 @@ class MojPropIntakeTests(TestCase):
         self.assertIn("if: failure() && steps.backend.outcome == 'success'", workflow)
         self.assertIn("if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'", workflow)
 
+    def test_release_is_manual_only_and_requires_case_specific_owner_confirmation(self):
+        workflow = (Path(settings.BASE_DIR) /
+                    ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        self.assertNotIn("  push:\n", workflow)
+        self.assertIn("  workflow_dispatch:\n", workflow)
+        self.assertIn("confirm_owner_release:", workflow)
+        self.assertIn("default: false", workflow)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && inputs.confirm_owner_release == true", workflow)
+
+    def test_release_checks_actual_form_javascript_syntax_and_retry_contract(self):
+        workflow = (Path(settings.BASE_DIR) /
+                    ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        self.assertIn('node --check "$RUNNER_TEMP/moj-prop-form.js"', workflow)
+        self.assertIn("submission_id:submissionId", workflow)
+        self.assertIn("Expected one auditable inline sales-form script", workflow)
+
     def test_real_public_form_horizon_options_match_backend_contract(self):
         html = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
         fragment = re.search(r'<select id="horizon">(.*?)</select>', html)
