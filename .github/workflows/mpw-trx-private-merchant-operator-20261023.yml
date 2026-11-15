@@ -87,7 +87,8 @@ jobs:
               exit 1
             fi
           fi
-          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"      - name: Check both actual TRON solidified heads on cPanel without funds or DB writes
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Check both actual TRON solidified heads on cPanel without funds or DB writes
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
