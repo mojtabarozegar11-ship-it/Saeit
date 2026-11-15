@@ -41,8 +41,8 @@ jobs:
           assert "contents: read" in source
           assert "runs-on: ubuntu-latest" in source
           assert "self-" + "hosted" not in source
-          assert "secrets." not in source
-          assert "ssh " not in source
-          assert "scp " not in source
+          assert ("se" + "crets.") not in source
+          assert ("s" + "sh ") not in source
+          assert ("s" + "cp ") not in source
           print("SOURCE_ONLY=PASS; DB_RESTORE_UNVERIFIED=true; RELEASE=false")
           PY
