@@ -23,3 +23,36 @@ class MojtabaSignalFunnelContractTests(SimpleTestCase):
                 "Object.prototype.hasOwnProperty.call(labels,requestedService)",
                 source,
             )
+
+
+class LegacySignalRootRealSubmissionTests(SimpleTestCase):
+    """No buyer should mistake a local fake ID for a received sales request."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.html = (Path(settings.BASE_DIR) / "templates/moj-prop/index.html").read_text("utf-8")
+
+    def test_submits_to_real_backend_and_requires_confirmed_201(self):
+        self.assertIn("const endpoint='/moj-prop-intake/';", self.html)
+        self.assertIn("method:'POST'", self.html)
+        self.assertIn("response.status!==201", self.html)
+        self.assertIn("body.request_id.startsWith('MOJPROP-')", self.html)
+        self.assertIn("X-CSRFToken", self.html)
+        self.assertIn("credentials:'same-origin'", self.html)
+
+    def test_removes_local_phantom_order_ids_and_mailto_only_handoff(self):
+        self.assertNotIn("localStorage.setItem('mojprop-last-request'", self.html)
+        self.assertNotIn("Math.random().toString(36)", self.html)
+        self.assertNotIn("mailto:", self.html)
+        self.assertIn("Request NOT submitted.", self.html)
+
+    def test_all_horizon_choices_match_actual_backend(self):
+        for code in ("urgent", "week", "month", "review"):
+            self.assertIn('<option value="'+code+'">', self.html)
+        self.assertIn('id="website" name="website"', self.html)
+        self.assertIn("consent:document.getElementById('consent').checked", self.html)
+
+    def test_receipt_id_is_only_allocated_by_backend(self):
+        self.assertIn("Request ID: '+(id||'not allocated')", self.html)
+        self.assertIn("receipt=draft(data,'received for manual review',body.request_id)", self.html)
