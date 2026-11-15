@@ -73,10 +73,10 @@ class MojPropSalesQueueTests(TestCase):
         self.assertFalse(data["payment_or_delivery_automatically_approved"])
         self.assertTrue(all(item["count"] == 0 for item in data["categories"]))
 
-    def test_urgent_new_lead_is_actionable_at_one_hour(self):
+    def test_urgent_new_leads_are_actionable_immediately(self):
         self._lead("URGENT", status="new", horizon="urgent", age_hours=2)
         self._lead("NEWER", status="new", horizon="urgent")
-        self.assertEqual(self.categories()["urgent_unreviewed"]["count"], 1)
+        self.assertEqual(self.categories()["urgent_unreviewed"]["count"], 2)
 
     def test_new_lead_older_than_day_is_escalated(self):
         self._lead("OLDER", age_hours=26)
@@ -164,3 +164,19 @@ class MojPropSalesQueueTests(TestCase):
                 action_queue_snapshot(detail_limit=invalid)
         with self.assertRaises(CommandError):
             call_command("mojprop_sales_action_queue", details=True, limit=30)
+
+    def test_closed_leads_do_not_pollute_human_followup_actions(self):
+        for status in ("closed", "spam", "delivered"):
+            lead = self._lead("END-" + status, status=status)
+            self._offer(lead, status="draft", created_hours=48)
+            self._offer(lead, status="approved", created_hours=48)
+            # The draft is real DB state, but the customer is not contactable.
+        report = self.categories()
+        self.assertEqual(report["draft_over_24h"]["count"], 0)
+        self.assertEqual(report["approved_not_issued"]["count"], 0)
+
+    def test_closed_lead_with_expiring_offer_not_recontacted(self):
+        for status in ("closed", "spam", "delivered"):
+            lead = self._lead("CLOSE-" + status, status=status)
+            self._offer(lead, status="issued", expires_hours=6)
+        self.assertEqual(self.categories()["issued_expires_soon"]["count"], 0)
