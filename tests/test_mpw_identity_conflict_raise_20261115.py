@@ -27,5 +27,18 @@ class IdentityConflictRaiseEvidence(unittest.TestCase):
         self.assertFalse(self.check('def f():\n    message = "Guest buyer email identity conflict"\n    raise\n'))
 
 
+    def test_disabled_if_false_raise_is_not_denial(self):
+        self.assertFalse(self.check('def f():\\n    if False:\\n        raise ValueError("Guest buyer email identity conflict")\\n'))
+
+    def test_disabled_if_zero_raise_is_not_denial(self):
+        self.assertFalse(self.check('def f():\\n    if 0:\\n        raise ValueError("Guest buyer email identity conflict")\\n'))
+
+    def test_live_else_branch_is_denial(self):
+        self.assertTrue(self.check('def f():\\n    if False:\\n        pass\\n    else:\\n        raise ValueError("Guest buyer email identity conflict")\\n'))
+
+    def test_disabled_else_branch_is_not_denial(self):
+        self.assertFalse(self.check('def f():\\n    if True:\\n        pass\\n    else:\\n        raise ValueError("Guest buyer email identity conflict")\\n'))
+
+
 if __name__ == "__main__":
     unittest.main()
