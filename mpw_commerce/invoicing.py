@@ -6,7 +6,7 @@ endpoint. No merchant-wallet signature or per-sale approval is necessary.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_CEILING
+from decimal import Decimal, ROUND_CEILING
 import re
 
 from django.conf import settings
@@ -75,15 +75,16 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
         or timezone.is_naive(quote.observed_at)
         or not timedelta(0)<=now-quote.observed_at<=timedelta(seconds=90)):
         raise InvoiceRejected("Invalid server price source or stale quote")
-    try:
-        rate=Decimal(str(quote.usd_per_asset))
-        if not rate.is_finite() or rate<=0:
-            raise ValueError()
-    except (InvalidOperation,ValueError):
-        raise InvoiceRejected("Invalid quote")
+    # Never silently convert a float into an authoritative money quote.
+    # The trusted price adapter must supply its exact Decimal representation.
+    rate = quote.usd_per_asset
+    if type(rate) is not Decimal or not rate.is_finite() or rate <= 0:
+        raise InvoiceRejected("Invalid trusted Decimal quote")
     with transaction.atomic():
         order=(Order.objects.select_for_update()
-               .select_related("customer").get(pk=order_id))
+               .select_related("customer").filter(pk=order_id).first())
+        if order is None:
+            raise InvoiceRejected("Unknown order")
         try:
             total,_=order_snapshot(order)
         except CommercePolicyError as exc:
