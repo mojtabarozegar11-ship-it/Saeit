@@ -1975,6 +1975,28 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_external_settlement_reviews_canonical_trx_receipt_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reviewed = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=lambda proof: reviewed.append(proof) or True)
+            self._prepare_private_invoice(ledger, "order-52")
+            ev = self.payment(
+                provider=" manual-review ", transaction_id="A" * 64,
+                amount=Decimal("30.000000"))
+            digest = validate_payment_evidence(ev,
+                expected_order_id="order-52", expected_invoice_id="invoice-52",
+                expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                           event_id="settle-52", payload_digest=digest,
+                           payment_evidence=ev)
+            self.assertEqual(len(reviewed), 1)
+            self.assertEqual(reviewed[0].transaction_id, "a" * 64)
+            self.assertEqual(reviewed[0].provider, "manual-review")
+            self.assertEqual(reviewed[0].amount.as_tuple().exponent, 0)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
