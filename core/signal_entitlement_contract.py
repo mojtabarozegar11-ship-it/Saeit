@@ -80,9 +80,14 @@ class SignedSignalLease:
     hmac_sha256: str
 
 
+def _buyer_digest(email, key):
+    """Keyed email pseudonym: public SHA256(address) is dictionary-reversible."""
+    return hmac.new(key, b"moj.signal.buyer.v2\x00" + email.encode("ascii"), sha256).hexdigest()
+
+
 def _claim_payload(lease):
     data = {
-        "format": "moj.signal.single_global_entitlement.v1",
+        "format": "moj.signal.single_global_entitlement.v2",
         "sku": lease.sku,
         "buyer_digest": lease.buyer_digest,
         "merchant_tenant_id": lease.merchant_tenant_id,
@@ -143,7 +148,7 @@ def issue_signal_lease(*, trusted_gateway_invoice, verified_buyer_email,
         raise SignalEntitlementError("lease_contract_invalid")
     lease = SignedSignalLease(
         sku=sku,
-        buyer_digest=sha256(email.encode("ascii")).hexdigest(),
+        buyer_digest=_buyer_digest(email, signing_key),
         merchant_tenant_id=merchant_tenant_id,
         invoice_id=trusted_gateway_invoice,
         issued_at_utc=issued_at_utc.isoformat(),
@@ -182,7 +187,7 @@ def verify_signal_access(*, lease, buyer_email, requested_sku, mirror_brand,
             or lease.invoice_id not in independently_reconciled_invoices
             or lease.invoice_id in revoked_invoice_ids
             or not hmac.compare_digest(lease.buyer_digest,
-                                       sha256(email.encode("ascii")).hexdigest())):
+                                       _buyer_digest(email, signing_key))):
         return False
     expected = hmac.new(signing_key, _claim_payload(lease), sha256).hexdigest()
     return hmac.compare_digest(expected, lease.hmac_sha256)
