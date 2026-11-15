@@ -68,7 +68,8 @@ def inspect_rollout(registry=None, extra_owned_domains=None):
     }
 
 
-def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts):
+def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts,
+                                    verified_host_attestations=None):
     """Inventory additional sites WITHOUT activating or auto-inheriting payments.
 
     approved_site_hosts must originate from an independently maintained owner
@@ -79,6 +80,8 @@ def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts):
     """
     if type(merchant_registry) is not dict:
         raise ValueError("Protected merchant registry required")
+    if verified_host_attestations is not None and type(verified_host_attestations) is not dict:
+        raise ValueError("Independent site attestation registry required")
     if type(approved_site_hosts) not in (tuple, list) or len(approved_site_hosts) > 100:
         raise ValueError("Explicit owned hosts must be a bounded trusted list")
     hosts = tuple(canonical_host(host) for host in approved_site_hosts)
@@ -89,6 +92,17 @@ def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts):
     existing = inspect_rollout(registry=merchant_registry)
     additions = []
     for host in sorted(hosts):
+        # The operator-supplied hostname list is not independent evidence.
+        # Attestations must be read from a separately protected site registry.
+        proof = ((verified_host_attestations or {}).get(host))
+        host_verified = bool(
+            type(proof) is dict
+            and set(proof) == {
+                "ownership_verified", "dns_verified", "tls_verified",
+                "merchant_host_approved",
+            }
+            and all(proof[key] is True for key in proof)
+        )
         # The root and each brand are different payment tenants, even on the
         # exact same host. Neither an owned DNS name nor 200 OK enables billing.
         candidates = [("", "main_digital_store", "/store/", 4)]
@@ -106,10 +120,14 @@ def inspect_explicit_site_expansion(*, merchant_registry, approved_site_hosts):
                 "host": host, "brand": brand, "section": section,
                 "path": path, "priority": priority,
                 "tenant_id": decision.tenant_id,
-                "eligible_for_adapter_review": decision.eligible_for_checkout_review,
-                "missing": list(decision.missing),
+                "eligible_for_adapter_review": (
+                    host_verified and decision.eligible_for_checkout_review
+                ),
+                "missing": list(decision.missing) + (
+                    [] if host_verified else ["site_ownership_dns_tls_or_merchant_proof_missing"]
+                ),
                 "checkout_enabled": False, "invoice_created": False,
-                "domain_live_independently_verified": False,
+                "domain_live_independently_verified": host_verified,
             })
     all_entries = tuple(sorted(
         (*existing["entries"], *additions),
