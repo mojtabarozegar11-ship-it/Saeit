@@ -17,6 +17,13 @@ def _normalized(value):
     return text.strip().casefold()
 
 
+def _action(value):
+    """HTTP path matching is case-sensitive; normalizing case hides broken URLs."""
+    if type(value) is not str:
+        return ""
+    return html.unescape(value).strip()
+
+
 class _EmailBoundCheckoutForm(HTMLParser):
     def __init__(self, action):
         super().__init__(convert_charrefs=True)
@@ -34,13 +41,24 @@ class _EmailBoundCheckoutForm(HTMLParser):
         if tag == "form":
             if self.active is not None:
                 self.invalid = True
+            if ("novalidate" in fields or "target" in fields
+                    or _normalized(fields.get("enctype") or "application/x-www-form-urlencoded")
+                    != "application/x-www-form-urlencoded"
+                    or _normalized(fields.get("accept-charset") or "utf-8") != "utf-8"):
+                self.invalid = True
             self.active = {
-                "target": _normalized(fields.get("action")) == self.action,
+                "target": _action(fields.get("action")) == self.action,
                 "post": _normalized(fields.get("method")) == "post",
                 "csrf": 0,
                 "email": 0,
             }
         elif tag == "input":
+            if self.active is not None and any(
+                key in fields for key in ("form", "formaction", "formmethod",
+                                          "formtarget", "formenctype",
+                                          "formnovalidate")
+            ):
+                self.invalid = True
             name = _normalized(fields.get("name"))
             typ = _normalized(fields.get("type"))
             field_id = _normalized(fields.get("id"))
@@ -53,7 +71,9 @@ class _EmailBoundCheckoutForm(HTMLParser):
                 if (self.active is None or not self.active["target"]
                         or not self.active["post"] or name != "email"
                         or typ != "email" or "required" not in fields
-                        or "disabled" in fields or _normalized(fields.get("value"))
+                        or "disabled" in fields or "readonly" in fields
+                        or "multiple" in fields
+                        or _normalized(fields.get("value"))
                         or self.active["email"]):
                     self.invalid = True
                 else:
@@ -67,6 +87,13 @@ class _EmailBoundCheckoutForm(HTMLParser):
                     self.invalid = True
                 else:
                     self.active["csrf"] += 1
+
+        elif tag == "button" and self.active is not None:
+            if any(key in fields for key in (
+                "form", "formaction", "formmethod", "formtarget",
+                "formenctype", "formnovalidate",
+            )):
+                self.invalid = True
 
     def handle_endtag(self, tag):
         if tag == "form":
