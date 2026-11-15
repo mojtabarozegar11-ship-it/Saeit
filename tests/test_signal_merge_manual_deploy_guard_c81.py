@@ -57,7 +57,7 @@ class ManualSignalDeploymentTests(unittest.TestCase):
                 # YAML may put a validate job before deploy. Locate the
                 # precise top-level job, not a brittle jobs:<newline>deploy pair.
                 match = re.search(
-                    r"(?m)^  " + re.escape(jobname) + r":\\s*$", source
+                    r"(?m)^  " + re.escape(jobname) + r":\s*$", source
                 )
                 self.assertIsNotNone(match, "Missing release job " + jobname)
                 rest = source[match.end():]
