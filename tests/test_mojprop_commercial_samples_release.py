@@ -67,6 +67,21 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
             self.assertIn("/moj-prop/#request", page.read_text("utf-8"))
             self.assertNotIn("onchain_checkout(", page.read_text("utf-8"))
 
+    def test_production_release_requires_private_receipt_endpoint_before_static_form(self):
+        workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+        self.assertIn("MOJ_PROP_STATUS_API_PREFLIGHT=PASS", workflow)
+        self.assertIn("MOJ_PROP_API_PREFLIGHT=PASS", workflow)
+        self.assertIn("inputs.owner_approved_static_release == true", workflow)
+        self.assertLess(
+            workflow.index("Verify live Django intake is ready BEFORE publishing form"),
+            workflow.index("Verify private status receipt API exists"),
+        )
+        self.assertLess(
+            workflow.index("Verify private status receipt API exists"),
+            workflow.index("Update only /moj-prop/ commercial catalog"),
+        )
+        self.assertNotIn("scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4", workflow)
+
     def test_source_control_keeps_both_old_baselines_immutable(self):
         for name in ("index-v4.html", "catalog-index-v4.html"):
             self.assertTrue((SITE_SOURCE / "baselines" / name).is_file())
