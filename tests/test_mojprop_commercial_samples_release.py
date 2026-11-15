@@ -307,6 +307,24 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         path.write_text(json.dumps(pristine), "utf-8")
         release.restore(directory)
 
+    def test_new_manifest_cannot_be_downgraded_to_legacy_seven_file_rollback(self):
+        release.deploy("123", "a" * 40)
+        path = self.backups / "moj-prop-catalog-123/manifest.json"
+        full = json.loads(path.read_text("utf-8"))
+        self.assertEqual(full["schema"], release.MANIFEST_SCHEMA)
+        self.assertEqual(len(full["files"]), len(release.FILES))
+        # An untrusted manifest edited to look like the 7-file legacy version
+        # may otherwise leave the newly deployed Starter30 assets untouched.
+        forged = dict(full)
+        forged.pop("schema")
+        forged["files"] = full["files"][:7]
+        path.write_text(json.dumps(forged), "utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Legacy or unrecognized"):
+            release.restore(path.parent)
+        self.assertTrue((self.route / "starter-30-trx/index.html").is_file())
+        path.write_text(json.dumps(full), "utf-8")
+        release.restore(path.parent)
+
     def test_symlinked_backup_directory_cannot_be_used_for_rollback(self):
         release.deploy("123", "a" * 40)
         linked = self.backups / "moj-prop-catalog-888"
