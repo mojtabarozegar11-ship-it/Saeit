@@ -319,7 +319,7 @@ class MojPropOfferAdmin(ModelAdmin):
 
     list_display = (
         "lead", "version", "title", "amount", "currency", "status",
-        "delivery_days", "expires_at", "created_at",
+        "accepted_at", "delivery_days", "expires_at", "created_at",
     )
     list_filter = ("status", "currency", "delivery_days", "created_at")
     search_fields = (
@@ -333,6 +333,7 @@ class MojPropOfferAdmin(ModelAdmin):
         "lead", "version", "title", "scope", "exclusions",
         "amount", "currency", "delivery_days",
         "status", "reviewed_at", "issued_at", "expires_at",
+        "accepted_at", "acceptance_reference",
         "created_by", "internal_note", "manual_proposal",
         "created_at", "updated_at",
     )
