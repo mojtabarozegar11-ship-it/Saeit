@@ -77,6 +77,23 @@ class Starter30StaticReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rel.preflight("../123", COMMIT)
 
+    def test_atomic_write_does_not_clobber_concurrent_file(self):
+        self.target.mkdir(parents=True)
+        live = self.target / "index.html"
+        live.write_text("independent file")
+        with self.assertRaises(FileExistsError):
+            rel._atomic(live, b"malicious clobber")
+        self.assertEqual(live.read_text(), "independent file")
+
+    def test_atomic_write_creates_new_file_without_overwrite(self):
+        self.target.mkdir(parents=True)
+        live = self.target / "sample.txt"
+        rel._atomic(live, b"new content")
+        self.assertEqual(live.read_bytes(), b"new content")
+        with self.assertRaises(FileExistsError):
+            rel._atomic(live, b"second version")
+        self.assertEqual(live.read_bytes(), b"new content")
+
     def test_existing_customer_asset_refused(self):
         self.target.mkdir(parents=True)
         (self.target / "index.html").write_text("independent customer document")
