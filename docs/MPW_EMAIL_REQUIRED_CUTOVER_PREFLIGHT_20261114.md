@@ -19,3 +19,11 @@ Current source preflight now calls the independent read-only email-required modu
 8. Explicit owner deployment approval, immutable backup, exact rewrite-rule, rollback.
 
 The source-only report never opens a network connection, database, sends email, issues invoice, trades, modifies cPanel or receives money. Source passing is not production commerce readiness.
+
+## 2026-11-15 recovery POST ambiguity fix (source branch; no mail sent)
+- The receipt/recovery email form now requires exactly one canonical `email` field. Duplicate identical addresses, multiple conflicting addresses, empty duplicate values and legacy checkout aliases fail closed; the customer sees the same generic response rather than an email-existence oracle.
+- The recovery-code form similarly requires exactly one `code` value; multiple codes never select the last `QueryDict.get` result or consume a one-time token.
+- Request method, POST interface, maximum length, type and ASCII control characters are validated before any rate-limited lookup or token consumption. The existing Django email validator, token expiry and database guards still run afterward.
+- `tests/test_mpw_recovery_post_ambiguity_20261115.py` supplies 43 offline unique test methods, using the actual helper AST from the current production-source module. Source workflow and broader public audit both invoke this test suite; success proves input classification only.
+- **Production hold:** both opt-in flags and the live sender/domain/SMTP configuration, applied migrations, CSP, effective Passenger root, static fallback removal, payment finality and protected download must still be independently verified. Prior owner authorization to prepare emails/TRON never permits emitting customer mail, transferring money or deploying this Draft PR before these concrete gates pass.
+- Customer recovery must not encourage paying again after a missing browser cookie. Never describe a created invoice, a green test, or an HTTP 200 response as a completed sale.
