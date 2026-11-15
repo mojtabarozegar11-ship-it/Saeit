@@ -126,5 +126,5 @@ class MojPropReleaseGateTests(SimpleTestCase):
         self.assertEqual(POLICY.min_closed_trades_per_challenge, 50)
 
     def test_wrong_plan_is_rejected_before_a_release_decision(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ValueError):
             self.review(plan_code="MOJ-PROP-99")
