@@ -282,10 +282,25 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
 from .models import MojPropRequest
 
 
+from django.utils import timezone as mojprop_timezone
+
+
+@admin.action(description="Start manual review of new Moj Prop requests")
+def start_mojprop_review(modeladmin, request, queryset):
+    """Claim triage without pretending an offer, payment or delivery occurred."""
+    updated = queryset.filter(status="new").update(
+        status="reviewing", reviewed_at=mojprop_timezone.now(),
+    )
+    modeladmin.message_user(request, f"{updated} new request(s) moved to reviewing.")
+
+
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
-    list_display = ("request_id", "name", "email", "route", "status", "created_at")
+    list_display = ("request_id", "name", "email", "route", "horizon", "status", "created_at", "reviewed_at")
     list_filter = ("status", "route", "horizon", "created_at")
     search_fields = ("request_id", "name", "email", "notes")
     readonly_fields = ("request_id", "created_at", "updated_at", "ip_hash", "user_agent")
     ordering = ("-created_at",)
+    date_hierarchy = "created_at"
+    list_per_page = 50
+    actions = (start_mojprop_review,)
