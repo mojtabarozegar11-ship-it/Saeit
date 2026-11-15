@@ -333,15 +333,17 @@ class MojPropRequestAdmin(ModelAdmin):
         # Use "closed" or "spam" status, not destructive admin deletion.
         return False
 
-    @admin.action(description="Export UNSENT written offer drafts for reviewed leads")
+    @admin.action(description="Export ONE private UNSENT proposal draft for manual review")
     def download_offer_drafts(self, request, queryset):
         # This action never sends mail, changes order status or charges a customer.
-        if not request.user.is_staff or not request.user.has_perm("core.view_mojproprequest"):
+        if not request.user.is_staff or not request.user.has_perm("core.change_mojproprequest"):
             return HttpResponse(status=403)
-        leads = list(queryset.order_by("request_id")[:100])
-        if not leads or queryset.count() != len(leads):
-            return HttpResponse("Select 1–100 reviewed customer requests.", status=409,
+        # A single buyer per download prevents accidental cross-customer
+        # disclosure when forwarding a draft to one customer manually.
+        if queryset.count() != 1:
+            return HttpResponse("Select exactly one reviewed customer request.", status=409,
                                 content_type="text/plain")
+        leads = list(queryset.order_by("request_id")[:1])
         try:
             docs = [build_offer_draft(lead) for lead in leads]
         except ValueError:
