@@ -1050,6 +1050,46 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("refund_exceeds_original_payment")
         return _trx_from_sun(outstanding_sun)
 
+    def private_trx_reconciliation_totals(self) -> Mapping[str, object]:
+        """Exact amounts for THIS local ledger; never market as business income.
+
+        Excludes invoices or wallet balances without a settled order/transaction
+        pair. Does not include provider fees, customer delivery or legal status.
+        """
+        rows = self.connection.execute(
+            """SELECT o.order_id, o.amount FROM orders AS o
+               WHERE o.currency = 'TRX'
+                 AND o.state IN ('settled', 'fulfillment_pending', 'fulfilled', 'verified_revenue')
+                 AND EXISTS (
+                   SELECT 1 FROM settled_transactions AS t
+                   WHERE t.order_id = o.order_id AND t.network = 'TRON'
+                 )"""
+        ).fetchall()
+        original = sum(_native_trx_sun(Decimal(row["amount"])) for row in rows)
+        if rows:
+            refunded = sum(
+                int(item["amount_sun"])
+                for row in rows
+                for item in self.connection.execute(
+                    "SELECT amount_sun FROM independently_confirmed_refunds WHERE order_id = ?",
+                    (row["order_id"],),
+                )
+            )
+        else:
+            refunded = 0
+        if refunded > original:
+            raise CommercialGateError("refund_exceeds_original_payment")
+        return {
+            "scope": "this_private_ledger_only",
+            "network": "TRON",
+            "asset": "TRX",
+            "settled_order_count": len(rows),
+            "original_sun": original,
+            "refunded_sun": refunded,
+            "outstanding_sun": original - refunded,
+            "independent_live_revenue_verified": False,
+        }
+
     def snapshot(self, order_id: str) -> Mapping[str, str]:
         order_id = _slug(order_id, "order_id")
         row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
