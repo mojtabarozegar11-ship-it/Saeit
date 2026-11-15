@@ -368,6 +368,13 @@ class SQLiteCommercialLedger:
                 )
                 if target is CommercialState.SETTLED and payload_digest != evidence_digest:
                     raise CommercialGateError("settlement_payload_mismatch")
+                if target is CommercialState.VERIFIED_REVENUE:
+                    settled = self.connection.execute(
+                        "SELECT transaction_id FROM settled_transactions WHERE network = ? AND order_id = ?",
+                        (payment_evidence.network, order_id),
+                    ).fetchone()
+                    if settled is None or settled["transaction_id"] != payment_evidence.transaction_id:
+                        raise CommercialGateError("verified_revenue_settlement_mismatch")
             # Chain transfers are single-use across orders; uniqueness is durable.
             if target is CommercialState.SETTLED:
                 try:
