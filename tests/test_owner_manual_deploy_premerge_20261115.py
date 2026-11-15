@@ -22,9 +22,13 @@ class ManualDeployGuardTests(unittest.TestCase):
             with self.subTest(workflow=filename):
                 source = (ROOT / ".github" / "workflows" / filename).read_text("utf-8")
                 self.assertIn("workflow_dispatch:", source.split("\njobs:", 1)[0])
+                condition = "github.event_name == 'workflow_dispatch'"
+                if filename == "mojplaywin-moj-prop-deploy.yml":
+                    self.assertIn("owner_approved_static_release:", source)
+                    condition += " && inputs.owner_approved_static_release == true"
                 pattern = (r"(?m)^  " + re.escape(job) + r":\n"
                            r"(?:    \#.*\n)*"
-                           r"    if: github\.event_name == 'workflow_dispatch'$")
+                           r"    if: " + re.escape(condition) + r"$")
                 self.assertRegex(source, pattern)
 
     def test_main_push_does_not_retain_unconditional_production_job(self):
@@ -34,7 +38,10 @@ class ManualDeployGuardTests(unittest.TestCase):
                 header = source.split("\njobs:", 1)[0]
                 self.assertIn("branches: [main]", header)
                 job_source = source.split("\n  " + job + ":", 1)[1]
-                self.assertTrue(job_source.lstrip().startswith("#"))
+                self.assertRegex(
+                    job_source[:400],
+                    r"(?m)^    if: github\.event_name == 'workflow_dispatch'",
+                )
                 self.assertNotIn(
                     "if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'",
                     job_source[:300],
