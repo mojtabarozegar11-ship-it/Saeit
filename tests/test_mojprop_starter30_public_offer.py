@@ -52,12 +52,18 @@ class Starter30PublicOfferTests(unittest.TestCase):
 
     def test_manual_inquiry_is_product_specific(self):
         page = PUBLIC.read_text("utf-8")
-        self.assertIn("MOJPROP-STARTER30%20Educational%20Assessment%20Inquiry", page)
+        self.assertIn("MOJPROP-STARTER30", page)
+        self.assertIn("/moj-prop/?service=blueprint&amp;package=starter-30-trx#request", page)
+        self.assertNotIn("mailto:", page)
         self.assertIn("not an order", page.lower())
 
     def test_product_not_misrouted_to_149_usd_blueprint(self):
         page = PUBLIC.read_text("utf-8")
-        self.assertNotIn("?service=blueprint", page)
+        # The first-party route carries an explicit canonical package marker;
+        # the private CRM proposal generator must not quote the generic USD149
+        # Blueprint tariff for this buyer-selected training product.
+        self.assertIn("?service=blueprint&amp;package=starter-30-trx#request", page)
+        self.assertNotIn("?service=blueprint#request", page)
         self.assertNotIn("?service=audit", page)
 
     def test_release_document_exists_and_covers_receipts(self):
