@@ -78,16 +78,20 @@ COPY = {
 }
 
 def financial_brand_page(request, brand, locale, page_type):
+    # The Django-validated host must also belong to an owned merchant anchor.
+    # A permissive ALLOWED_HOSTS or a proxy mistake cannot make an unrelated
+    # domain serve brand financial copy. Accept company-owned subdomains, but
+    # reject lookalike suffixes without the required dot-boundary.
+    from django.http import Http404
+    host = request.get_host().split(":")[0].lower()
+    anchors = ("mojplaywin.com", "zomorodmelal.ir")
+    if not any(host == anchor or host.endswith("." + anchor)
+               for anchor in anchors):
+        raise Http404("Financial brand host is not authorized")
     match = next((item for item in BRANDS if item[0] == brand), None)
     if locale == "host":
-        # The raw X-Forwarded-Host header is not a verified merchant identity.
-        # Django get_host() applies ALLOWED_HOSTS and trusted proxy settings.
-        # Avoid substring matching (zomorodmelal.ir.attacker.tld != company).
-        verified_host = request.get_host().split(":")[0].lower()
-        locale = (
-            "fa" if verified_host in
-            ("zomorodmelal.ir", "www.zomorodmelal.ir") else "en"
-        )
+        locale = ("fa" if host == "zomorodmelal.ir"
+                  or host.endswith(".zomorodmelal.ir") else "en")
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
