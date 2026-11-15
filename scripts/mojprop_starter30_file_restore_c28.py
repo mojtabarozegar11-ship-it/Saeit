@@ -80,26 +80,16 @@ def _read(fd: int, name: str, uid: int, *, minimum=64) -> bytes:
         os.close(handle)
 
 
-def _write(fd: int, name: str, body: bytes) -> tuple[int, int]:
+def _write(fd: int, name: str, body: bytes) -> None:
     handle = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, 0o600, dir_fd=fd)
-    created = os.fstat(handle)
-    try:
-        with os.fdopen(handle, "wb") as dest:
-            dest.write(body)
-            dest.flush()
-            os.fsync(dest.fileno())
-        return created.st_dev, created.st_ino
-    except BaseException:
-        # O_EXCL succeeded, so only remove OUR newly created inode. Never
-        # delete an unrelated file substituted at the same private path.
-        try:
-            current = os.stat(name, dir_fd=fd, follow_symlinks=False)
-            if stat.S_ISREG(current.st_mode) and (
-                    current.st_dev, current.st_ino) == (created.st_dev, created.st_ino):
-                os.unlink(name, dir_fd=fd)
-        except FileNotFoundError:
-            pass
-        raise
+    # Deliberately NEVER unlink a pathname, including after errors: a
+    # concurrent same-UID process could swap it after any identity check.
+    # Failed runs retain small private 0600 incomplete evidence, are never
+    # marked successful and permanently consume the one-use approval.
+    with os.fdopen(handle, "wb") as dest:
+        dest.write(body)
+        dest.flush()
+        os.fsync(dest.fileno())
 
 
 def _mkdir(fd: int, name: str, uid: int, *, unique=False) -> int:
@@ -203,7 +193,6 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                         runfd = None
                         bfd = None
                         restorefd = None
-                        created_entries = []
                         completed = False
                         try:
                             runfd = _mkdir(vfd, run_id, uid, unique=True)
@@ -212,13 +201,11 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                             checksums = {}
                             for i, body in enumerate(originals):
                                 name = "file-" + str(i) + ".bin"
-                                identity = _write(bfd, name, body)
-                                created_entries.append((bfd, name, identity))
+                                _write(bfd, name, body)
                                 persisted = _read(bfd, name, uid)
                                 if persisted != body:
                                     raise RuntimeError("source backup mismatch")
-                                identity = _write(restorefd, name, persisted)
-                                created_entries.append((restorefd, name, identity))
+                                _write(restorefd, name, persisted)
                                 restored = _read(restorefd, name, uid)
                                 digest = hashlib.sha256(body).hexdigest()
                                 if hashlib.sha256(restored).hexdigest() != digest:
@@ -237,40 +224,21 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                                         "tenant_isolation_proven": False,
                                         "release_permitted": False,
                                         "payment_permitted": False}
-                            identity = _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
-                            created_entries.append((runfd, "manifest.json", identity))
+                            _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
                             completed = True
                         finally:
-                            if not completed and runfd is not None:
-                                # Reclaim ONLY files whose exclusive creation
-                                # returned a particular inode identity. A file
-                                # injected after directory creation but before
-                                # our O_EXCL is never eligible for deletion.
-                                for child_fd, filename, identity in reversed(created_entries):
-                                    try:
-                                        current = os.stat(filename, dir_fd=child_fd, follow_symlinks=False)
-                                    except FileNotFoundError:
-                                        continue
-                                    if stat.S_ISREG(current.st_mode) and (
-                                            current.st_dev, current.st_ino) == identity:
-                                        os.unlink(filename, dir_fd=child_fd)
-                                    else:
-                                        raise RuntimeError("private partial file replaced; cannot clean safely")
+                            # No unlink/rmdir anywhere. A same-UID tenant
+                            # process can race a pathname replacement between
+                            # stat and unlink; safest outcome is to retain
+                            # bounded, private, non-authorizing partial bytes.
+                            # Source is public and total copy size is capped;
+                            # exact unrounded quota headroom was required.
                             if restorefd is not None:
                                 os.close(restorefd)
                             if bfd is not None:
                                 os.close(bfd)
-                            try:
-                                if not completed and runfd is not None:
-                                    for child in ("backup", "isolated-restore"):
-                                        try:
-                                            os.rmdir(child, dir_fd=runfd)
-                                        except FileNotFoundError:
-                                            pass
-                                    os.rmdir(run_id, dir_fd=vfd)
-                            finally:
-                                if runfd is not None:
-                                    os.close(runfd)
+                            if runfd is not None:
+                                os.close(runfd)
                     finally:
                         os.close(vfd)
                 finally:
