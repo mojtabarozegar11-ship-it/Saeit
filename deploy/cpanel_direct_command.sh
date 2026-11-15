@@ -79,7 +79,7 @@ EOF
 "; id -un; hostname'
       ;;
     cpanel_version)
-      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+      timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get' | python3 -B scripts/cpanel_readonly_uapi_gate.py
       ;;
     zomorod_fields_audit_live)
       zomorod_fields_audit_stream
@@ -146,7 +146,7 @@ case "$operation" in
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'printf "CPANEL_SSH=READY\n"; id -un; hostname'
     ;;
   cpanel_version)
-    timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get'
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json Version get' | python3 -B scripts/cpanel_readonly_uapi_gate.py
     ;;
   zomorod_fields_audit_live)
     zomorod_fields_audit_stream
