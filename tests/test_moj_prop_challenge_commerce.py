@@ -37,6 +37,7 @@ class MojPropChallengeCheckoutSafetyTests(SimpleTestCase):
             "existing_commitments_usd": "0",
             "required_first_tier_accounts": 1,
             "attestations": {item: True for item in REQUIRED},
+            "trusted_merchant_registry": TRON_REGISTRY,
         }
         kwargs.update(change)
         return assess_challenge_checkout(**kwargs)
@@ -153,6 +154,29 @@ class MojPropChallengeCheckoutSafetyTests(SimpleTestCase):
         x = self.ready(required_first_tier_accounts=901)
         self.assertFalse(x.eligible_for_external_legal_review)
         self.assertEqual(x.capital_shortfall_usd, 100)
+
+    def test_no_protected_merchant_registry_cannot_grant_legal_review(self):
+        for forged in (None, True, "verified", []):
+            with self.subTest(forged=repr(forged)):
+                d = self.ready(trusted_merchant_registry=forged)
+                self.assertFalse(d.eligible_for_external_legal_review)
+                self.assertIn("protected_prop_merchant_registry_missing", d.blockers)
+
+    def test_revoked_prop_merchant_does_not_pass_stale_signed_dto(self):
+        revoked = dict(TRON_REGISTRY)
+        revoked[("mojplaywin.com", "moj_prop")] = {
+            **TRON_REGISTRY[("mojplaywin.com", "moj_prop")],
+            "jurisdiction_approved": False,
+        }
+        d = self.ready(trusted_merchant_registry=revoked)
+        self.assertFalse(d.eligible_for_external_legal_review)
+        self.assertIn("prop_merchant_registration_changed_or_forged", d.blockers)
+
+    def test_other_brand_merchant_cannot_take_over_moj_prop_checkout_review(self):
+        alien = {("mojplaywin.com", "saman"): TRON_REGISTRY[("mojplaywin.com", "saman")]}
+        d = self.ready(trusted_merchant_registry=alien)
+        self.assertFalse(d.eligible_for_external_legal_review)
+        self.assertIn("prop_merchant_registration_changed_or_forged", d.blockers)
 
     def test_no_private_account_or_invoice_is_mutated(self):
         x = self.ready()
