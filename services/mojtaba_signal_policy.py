@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
+import ipaddress
 from urllib.parse import urlsplit
 
 
@@ -100,6 +101,20 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
             or url.password is not None or not host.count(".") or url.fragment
             or port == 0):
         raise SignalRecordError("independent HTTPS source URL required")
+    # Prevent private-network and self-owned evidence domains from being
+    # treated as independent sources by a future server-side fetch adapter.
+    if (not host.isascii() or host.endswith(".")
+            or host.endswith((".localhost", ".local", ".internal"))
+            or host.lower() in ("localhost", "mojtaba.bot.ai", "mojplaywin.com", "zomorodmelal.ir")
+            or host.lower().endswith((".mojtaba.bot.ai", ".mojplaywin.com", ".zomorodmelal.ir"))):
+        raise SignalRecordError("self-owned or private evidence host forbidden")
+    try:
+        literal_host = ipaddress.ip_address(host)
+    except ValueError:
+        literal_host = None
+    if literal_host is not None and not literal_host.is_global:
+        raise SignalRecordError("private IP evidence source forbidden")
+    # URL validation is still not DNS pinning or a live source attestation.
     observed = _aware(record.observed_at, "observed_at")
     reviewed = _aware(record.reviewed_at, "reviewed_at")
     as_of = _aware(record.as_of, "as_of")
