@@ -677,8 +677,6 @@ class MojPropOffer(T):
             errors["accepted_at"] = "Unaccepted offers must not include acceptance evidence."
         if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
             errors["expires_at"] = "Expiry must follow issuance."
-        if self.status == "issued" and self.expires_at and self.expires_at <= now:
-            errors["expires_at"] = "Do not issue an already-expired commercial proposal."
         if self.status == "accepted":
             if not self.accepted_at or not has_acceptance_reference:
                 errors["acceptance_reference"] = "Record verifiable customer acceptance before calling a quote accepted."
