@@ -80,3 +80,21 @@ class DigitalBuyerRequestTests(TestCase):
         self.assertIn("product ID: 225", offer.manual_quote_text)
         self.assertIn("No payment has been collected", offer.manual_quote_text)
         self.assertEqual(lead.status, "new")
+
+    def test_digital_inquiry_requires_csrf_even_when_json_and_consent_valid(self):
+        attacker = Client(enforce_csrf_checks=True)
+        response = attacker.post(
+            "/moj-prop-intake/", json.dumps(self.payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_digital_inquiry_receipt_does_not_leak_in_browser_referrers_or_caches(self):
+        response = self.submit(product_id=879)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertEqual(response["Referrer-Policy"], "no-referrer")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
