@@ -104,8 +104,17 @@ def _currency(value: object) -> str:
 def _validate_trx_sun_precision(value: Decimal, currency: str) -> None:
     """TRON native TRX settles in integer SUN, never fractional SUN."""
     if currency == "TRX":
-        sun = value * Decimal("1000000")
-        if sun != sun.to_integral_value():
+        # Decimal multiplication uses the current context's precision and can
+        # round tiny fractional-SUN remainders away. Inspect the actual base-10
+        # coefficient/exponent instead, without arithmetic or allocation.
+        digits = value.as_tuple().digits
+        fraction_digits = max(0, -value.as_tuple().exponent - 6)
+        if fraction_digits and (
+            fraction_digits >= len(digits)
+            and any(digit != 0 for digit in digits)
+            or fraction_digits < len(digits)
+            and any(digit != 0 for digit in digits[-fraction_digits:])
+        ):
             raise CommercialGateError("trx_fractional_sun_forbidden")
 
 
