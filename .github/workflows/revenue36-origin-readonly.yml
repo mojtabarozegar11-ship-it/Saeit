@@ -4,10 +4,6 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "core/moj_prop_public.py"
-      - "core/signal_interest_views.py"
-      - "core/signal_interest_models.py"
-      - "core/templates/core/moj_prop_public.html"
       - ".github/workflows/revenue36-origin-readonly.yml"
 
 permissions:
@@ -20,6 +16,8 @@ jobs:
     timeout-minutes: 9
     steps:
       - name: Configure pinned VPS-to-cPanel SSH relay
+        id: relay
+        continue-on-error: true
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -34,7 +32,15 @@ jobs:
           chmod 600 "$WORK/"*.key
           ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          if timeout 8 bash -c 'echo >/dev/tcp/178.239.147.150/22' 2>/dev/null; then
+            echo "VPS_PORT22_REACHABLE=yes"
+          else
+            echo "VPS_PORT22_REACHABLE=no"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY_SCAN=starting"
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          echo "VPS_HOST_KEY_SCAN=complete"
           test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$WORK/config" <<EOF
           Host saeit-vps
@@ -64,6 +70,7 @@ jobs:
           test "$(ssh-keygen -lf "$WORK/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$WORK/host.candidate" "$WORK/host.known"
       - name: Read-only cPanel runtime and disk evidence
+        if: steps.relay.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -85,6 +92,12 @@ jobs:
             df -Pk /home/zomorod2
             echo "STAGING_GIT_HEAD=$(test -d "$BASE/.git" && git -C "$BASE" rev-parse --short HEAD || echo unavailable)"
           '
+      - name: Explain blocked relay without claiming production evidence
+        if: steps.relay.outcome != 'success'
+        shell: bash
+        run: |
+          echo "::warning::VPS-to-cPanel SSH relay unavailable; no origin files or DB were read or modified."
+          echo "ORIGIN_SSH_PROOF=blocked" >> "$GITHUB_STEP_SUMMARY"
       - name: Read-only public HTTP status
         shell: bash
         run: |
@@ -93,6 +106,12 @@ jobs:
             code="$(curl --connect-timeout 6 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
             printf 'PUBLIC_URL=%s STATUS=%s\n' "$url" "$code"
           done
+      - name: Mark missing private origin evidence as failed
+        if: steps.relay.outcome != 'success'
+        shell: bash
+        run: |
+          echo "::error::Cannot claim readiness: SSH network or fingerprint gate did not pass."
+          exit 1
       - name: Remove temporary credentials
         if: always()
         shell: bash
