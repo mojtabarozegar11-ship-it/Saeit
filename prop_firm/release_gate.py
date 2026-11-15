@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from core.commercialization_readiness import assess_sector
 from .challenge_commerce import assess_challenge_checkout
+from .independent_attestation import assess_independent_attestations
 from .plans import DEFAULT_PLAN_CODE, plan_for_code
 from .policy_integrity import policy_drift_defects
 
@@ -54,6 +55,9 @@ def assess_moj_prop_release(
     challenge_attestations=None,
     sector_attestations=None,
     trusted_merchant_registry=None,
+    independent_attestations=None,
+    trusted_attestation_keys=None,
+    attestation_now=None,
     plan_code=DEFAULT_PLAN_CODE,
 ) -> MojPropReleaseDecision:
     """Evaluate one canonical plan without producing a live commercial side effect.
@@ -77,6 +81,12 @@ def assess_moj_prop_release(
         trusted_merchant_registry=trusted_merchant_registry,
     )
     sector = assess_sector("moj_prop", sector_attestations)
+    independent = assess_independent_attestations(
+        independent_attestations,
+        trusted_attestation_keys,
+        now=attestation_now,
+        plan_code=plan.code,
+    )
 
     blockers: list[str] = []
     for defect in defects:
@@ -85,14 +95,21 @@ def assess_moj_prop_release(
         _add_unique(blockers, f"challenge:{blocker}")
     for missing in sector.missing:
         _add_unique(blockers, f"sector:{missing}")
+    for error in independent.errors:
+        _add_unique(blockers, f"independent_attestation:{error}")
+
+    # A mutable plan registry flag is never independent external proof.
+    # Only verified, unexpired, plan-bound signed attestations count.
+    capital_proof = independent.capital is not None
+    broker_proof = independent.broker is not None
 
     if not plan.business_active_owner_declared:
         _add_unique(blockers, "plan_not_owner_active")
     if plan.temporary_owner_hold:
         _add_unique(blockers, "plan_temporarily_inactive_pending_owner_funding")
-    if not plan.funding_independently_verified:
+    if not capital_proof:
         _add_unique(blockers, "independent_capital_proof_required")
-    if not plan.broker_live_account_independently_verified:
+    if not broker_proof:
         _add_unique(blockers, "independent_broker_proof_required")
 
     policy_consistent = not defects
@@ -110,6 +127,6 @@ def assess_moj_prop_release(
         blockers=tuple(blockers),
         owner_declared_active=plan.business_active_owner_declared,
         owner_declared_funded=plan.capital_funded_owner_declared,
-        independent_capital_proof_on_record=plan.funding_independently_verified,
-        independent_broker_proof_on_record=plan.broker_live_account_independently_verified,
+        independent_capital_proof_on_record=capital_proof,
+        independent_broker_proof_on_record=broker_proof,
     )

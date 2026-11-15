@@ -83,6 +83,50 @@ class MojPropProvisionalAllocationTests(TestCase):
         with self.assertRaises(AllocationRejected):
             self.stage()
 
+    def test_duplicate_funded_broker_account_never_stages_double_trader_profit(self):
+        self.trade_day()
+        PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.FUNDED,
+            status=PropAccount.Status.ACTIVE, tier_index=0,
+            starting_capital_usd=Decimal("100.00"),
+            opened_at=OPENED, reference=self.account.reference,
+            reconciled_by_operator=True, policy_version=POLICY.version,
+        )
+        with self.assertRaisesRegex(AllocationRejected, "reference is not unique"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+        self.assertFalse(PropProfitJournalLine.objects.exists())
+
+    def test_funded_broker_reference_with_hidden_whitespace_is_not_reconciled(self):
+        self.trade_day()
+        self.account.reference = " broker-demo-reference-only "
+        self.account.save(update_fields=["reference"])
+        with self.assertRaisesRegex(AllocationRejected, "reference is not unique"):
+            self.stage()
+
+    def test_two_allowlisted_broker_sources_cannot_share_a_funded_account(self):
+        self.trade_day()
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            "broker_fixture": EVIDENCE_KEY,
+            "another_trusted": "other-signed-key-only-for-regression",
+        }):
+            PropEquityObservation.objects.filter(
+                account=self.account, is_session_open=False,
+            ).update(data_source="another_trusted")
+            with self.assertRaisesRegex(AllocationRejected, "source continuity mismatch"):
+                self.stage()
+
+    def test_two_trusted_execution_sources_are_not_one_broker_period(self):
+        self.trade_day()
+        self.trade_day(day=11, pnl="2", source="another_trusted",
+                       initial_equity="103", final_equity="105")
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            "broker_fixture": EVIDENCE_KEY,
+            "another_trusted": "other-signed-key-only-for-regression",
+        }):
+            with self.assertRaisesRegex(AllocationRejected, "source continuity mismatch"):
+                self.stage()
+
     def test_valid_verified_month_stages_only_provisional_distribution(self):
         self.trade_day()
         a = self.stage()
@@ -331,3 +375,55 @@ class MojPropProvisionalAllocationTests(TestCase):
                 period_number=1,
             )
         self.assertEqual(a1.period_number, 1)
+
+
+    def test_naive_accounting_clock_cannot_stage_profit(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "timezone-aware"):
+            stage_provisional_allocation(
+                account_id=self.account.pk, as_of=datetime(2026, 2, 1)
+            )
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_malformed_accounting_clock_fails_closed(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "timezone-aware"):
+            stage_provisional_allocation(account_id=self.account.pk, as_of=object())
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_future_operator_time_cannot_stage_uncompleted_month(self):
+        self.trade_day()
+        with self.assertRaisesRegex(AllocationRejected, "Future accounting"):
+            stage_provisional_allocation(
+                account_id=self.account.pk,
+                as_of=datetime.now(timezone.utc) + timedelta(days=365),
+            )
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_preopening_equity_observation_blocks_provisional_profit(self):
+        self.trade_day()
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=True
+        ).update(observed_at=OPENED - timedelta(hours=1))
+        with self.assertRaisesRegex(AllocationRejected, "predates funded account"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_same_upstream_event_in_equity_and_execution_is_rejected(self):
+        self.trade_day()
+        original = PropExecution.objects.get(account=self.account)
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False
+        ).update(external_event_id=original.external_event_id)
+        with self.assertRaisesRegex(AllocationRejected, "Duplicated"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+
+    def test_empty_broker_event_id_is_not_immutable_evidence(self):
+        self.trade_day()
+        PropEquityObservation.objects.filter(
+            account=self.account, is_session_open=False
+        ).update(external_event_id="")
+        with self.assertRaisesRegex(AllocationRejected, "empty broker evidence"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())

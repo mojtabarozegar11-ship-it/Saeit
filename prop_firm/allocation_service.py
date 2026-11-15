@@ -4,6 +4,7 @@ This is not an accounts-payable approval or transfer service. Nothing here
 sends bank, TRX, wallet, broker, social, mail, or customer notifications.
 """
 from decimal import Decimal
+from datetime import datetime, timedelta
 import hashlib
 import re
 
@@ -39,6 +40,17 @@ def _verified_source(account, *, period_end):
     )
     if not executions or not marks:
         raise AllocationRejected("No complete broker trade/equity history")
+    # A mark before this funded account opened belongs to another period or
+    # account; it cannot silently seed a favorable drawdown baseline.
+    if any(mark.observed_at < account.opened_at for mark in marks):
+        raise AllocationRejected("Equity observation predates funded account")
+    # Executions and equity marks share an immutable upstream event namespace.
+    # Distinct rows may not recycle the same event as two independent facts.
+    event_keys = [(item.data_source, item.external_event_id)
+                  for item in (*executions, *marks)]
+    if (any(not event_id for _, event_id in event_keys)
+            or len(set(event_keys)) != len(event_keys)):
+        raise AllocationRejected("Duplicated or empty broker evidence identifier")
     if any(
         event.reconciliation_status != "verified"
         or event.data_source not in sources
@@ -53,6 +65,13 @@ def _verified_source(account, *, period_end):
         for mark in marks
     ):
         raise AllocationRejected("Unverified brokerage equity evidence")
+    # Signing keys from separate providers do not make their records one
+    # continuous funded account. Mixing brokers can double count equity or
+    # conceal losses even when every row was individually signed.
+    execution_sources = {event.data_source for event in executions}
+    mark_sources = {mark.data_source for mark in marks}
+    if len(execution_sources) != 1 or mark_sources != execution_sources:
+        raise AllocationRejected("Funded brokerage source continuity mismatch")
     return executions, marks
 
 
@@ -96,12 +115,23 @@ def stage_provisional_allocation(*, account_id, as_of=None, period_number=None):
     authenticated and independently reconciled back-office process.
     """
     now = timezone.now() if as_of is None else as_of
+    if not isinstance(now, datetime) or timezone.is_naive(now):
+        raise AllocationRejected("Accounting clock must be timezone-aware")
+    if now > timezone.now() + timedelta(seconds=30):
+        raise AllocationRejected("Future accounting periods cannot be staged")
     account = (PropAccount.objects.select_for_update()
                .select_related("trader").filter(pk=account_id).first())
     if not account or account.kind != PropAccount.Kind.FUNDED:
         raise AllocationRejected("Verified funded account required")
     if account.status != PropAccount.Status.ACTIVE or not account.reference:
         raise AllocationRejected("Funded broker account not active")
+    # A single real broker account may never back two separate customer
+    # allocations. The broker reference is financial identity, not a label.
+    if (account.reference != account.reference.strip()
+            or PropAccount.objects.filter(
+                kind=PropAccount.Kind.FUNDED, reference=account.reference,
+            ).exclude(pk=account.pk).exists()):
+        raise AllocationRejected("Broker account reference is not unique")
     if account.policy_version != POLICY.version:
         raise AllocationRejected("Account policy version mismatch")
     if (account.trader.kyc_status != "verified"

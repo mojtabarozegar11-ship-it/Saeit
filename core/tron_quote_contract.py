@@ -79,7 +79,8 @@ def _message(quote):
     }, sort_keys=True, separators=(",", ":")).encode("ascii")
 
 
-def _order_is_authoritative(order_id, tenant_id, sku, amount_usd, order_registry):
+def _order_is_authoritative(order_id, tenant_id, sku, amount_usd,
+                            order_registry, as_of_utc):
     """Quote prices must match an unpaid order from the protected DB snapshot."""
     if type(order_registry) is not dict:
         return False
@@ -90,6 +91,16 @@ def _order_is_authoritative(order_id, tenant_id, sku, amount_usd, order_registry
             or record.get("sku") != sku
             or record.get("payment_state") != "pending"
             or record.get("cancelled") is not False):
+        return False
+    # An unexpired, server-dated ORDER is mandatory; a 'pending' status
+    # alone cannot keep an abandoned payment instruction payable forever.
+    try:
+        deadline = record.get("expires_at_utc")
+        _utc(as_of_utc, "server_clock")
+        _utc(deadline, "order_expiry")
+        if not as_of_utc < deadline:
+            return False
+    except (NativeTrxQuoteError, TypeError, ValueError):
         return False
     try:
         return _amount(record.get("usd_price"), "order_price") == _amount(amount_usd, "quote_price")
@@ -131,7 +142,8 @@ def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
             and timedelta(0) < expires_at_utc - observed_at_utc <= MAX_RATE_AGE):
         raise NativeTrxQuoteError("exchange_rate_expired")
     usd, rate = _amount(usd_price, "usd_price"), _amount(trx_usd_rate, "trx_rate")
-    if not _order_is_authoritative(order_id, tenant.tenant_id, sku, usd, trusted_order_registry):
+    if not _order_is_authoritative(order_id, tenant.tenant_id, sku, usd,
+                                    trusted_order_registry, now_utc):
         raise NativeTrxQuoteError("trusted_order_missing_or_mismatched")
     if rate < Decimal("0.000001") or rate > Decimal("10000"):
         raise NativeTrxQuoteError("exchange_rate_out_of_bounds")
@@ -185,7 +197,7 @@ def verify_native_trx_quote(*, quote, merchant_registry, now_utc, signing_key,
         usd = _amount(quote.usd_price, "usd_price")
         rate = _amount(quote.trx_usd_rate, "trx_rate")
         if not _order_is_authoritative(quote.order_id, quote.tenant_id, quote.sku,
-                                       usd, trusted_order_registry):
+                                       usd, trusted_order_registry, now_utc):
             return False
         if not Decimal("0.000001") <= rate <= Decimal("10000"):
             return False

@@ -175,24 +175,23 @@ def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
     return (
         record.get("asset") == "TRX"
         and record.get("network") == "tron-mainnet"
+        and record.get("invoice_id") == lease.invoice_id
+        and type(record.get("tx_id")) is str
+        and re.fullmatch(r"[0-9a-f]{64}", record["tx_id"]) is not None
         and record.get("merchant_tenant_id") == lease.merchant_tenant_id
         and record.get("sku") == lease.sku
         and record.get("buyer_digest") == lease.buyer_digest
+        and type(record.get("expected_sun")) is int
+        and record["expected_sun"] > 0
         and type(record.get("settled_sun")) is int
-        and type(record.get("invoice_amount_sun")) is int
-        and record["invoice_amount_sun"] > 0
-        # A confirmed transaction with one SUN is not a paid $12/$29/$59
-        # subscription. Confirm actual settled native TRX covers the
-        # immutable invoice quote from the protected merchant ledger.
-        and record["settled_sun"] >= record["invoice_amount_sun"]
+        and record["settled_sun"] == record["expected_sun"]
         and record.get("finality_verified") is True
+        and record.get("refunded") is False
         and record.get("refund_pending") is False
         and record.get("charge_disputed") is False
-        # A completed refund, settlement reversal, or explicit entitlement
-        # revocation may occur AFTER refund_pending becomes False.  Deny
-        # access unless the protected settlement ledger explicitly records
-        # these states as false; missing booleans cannot imply approval.
-        and record.get("refunded") is False
+        # The invoice may cease to be payable AFTER a completed reversal or
+        # staff revocation, even though refund_pending is already False.
+        # Missing/untyped claims in the protected ledger fail closed.
         and record.get("settlement_reversed") is False
         and record.get("entitlement_revoked") is False
     )
