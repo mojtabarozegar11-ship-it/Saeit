@@ -189,3 +189,13 @@ class CustomerQuoteTokenTests(TestCase):
         with self.assertRaises(ValueError):
             quote_read_token(self.quote)
         self.assertEqual(self.view().status_code, 404)
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_corrupt_contract_view_responds_404_without_exposing_internal_terms(self):
+        from core.mojprop_quote_contract import QuoteContractError
+        with patch("core.mojprop_quote_views.make_quote_snapshot",
+                   side_effect=QuoteContractError("private quote integrity failure")):
+            response = self.view()
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(b"private quote integrity failure", response.content)
+        self.assertNotIn(b"private-buyer@example.org", response.content)
