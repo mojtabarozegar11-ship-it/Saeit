@@ -3,7 +3,11 @@
 No live prices, investment advice, performance claims, or purchasable items are
 fabricated here. Pages only describe the service and link to the existing shop.
 """
+from django.conf import settings
 from django.shortcuts import render
+
+# One destination bot across *all* localized brands. No independent robots.
+SOLE_BOT_PUBLIC_URL = "https://mojtaba.bot.ai/"
 
 BRANDS = [
     ("saman", "سمن", "SAMAN", "سمن"),
@@ -47,6 +51,7 @@ COPY = {
   "game_intro":"یک زیرسایت بازی با هویت مستقل برای سرگرمی، یادگیری و تعامل؛ بدون ادعای جایگزینی آموزش یا مشاورهٔ مالی.",
   "game_notice":"این بخش برای معرفی و توسعهٔ بازی است؛ خرید درون‌بازی یا دارایی مالی بدون فعال‌سازی رسمی نمایش داده نمی‌شود.",
   "cta":"بازگشت به فروشگاه اصلی", "disclaimer":"محتوا آموزشی و اطلاع‌رسانی است و توصیهٔ شخصی سرمایه‌گذاری، پیشنهاد خریدوفروش یا تضمین نتیجه محسوب نمی‌شود.",
+  "bot_handoff":"مشاهده ربات واحد مجتبی برای آشنایی با خدمات پژوهشی",
   "pill":"تحلیل شفاف · آموزش کاربردی"
  },
  "en": {
@@ -60,6 +65,7 @@ COPY = {
   "game_intro":"A dedicated game subsite for play, learning, and interaction, without claiming to replace financial education or advice.",
   "game_notice":"This section introduces the game experience. No in-game purchase or financial asset is shown until officially activated.",
   "cta":"Visit the main shop", "disclaimer":"For education and information only. This is not personalized investment advice or a recommendation to buy or sell, and no outcome is guaranteed.",
+  "bot_handoff":"Explore non-financial research services on the single Mojtaba.bot.ai",
   "pill":"Clear analysis · Practical learning"
  },
  "ar": {
@@ -73,6 +79,7 @@ COPY = {
   "game_intro":"مساحة لعبة مستقلة للترفيه والتعلم والتفاعل، من دون ادعاء أنها بديل عن التعليم أو النصيحة المالية.",
   "game_notice":"هذا القسم للتعريف بتجربة اللعبة؛ لا تُعرض مشتريات داخل اللعبة أو أصول مالية قبل التفعيل الرسمي.",
   "cta":"زيارة المتجر الرئيسي", "disclaimer":"للتعليم والمعلومات فقط. لا يُعد ذلك نصيحة استثمارية شخصية أو توصية بالشراء أو البيع، ولا نضمن النتائج.",
+  "bot_handoff":"استكشف خدمات البحث والتثقيف لدى روبوت مجتبى الموحد",
   "pill":"تحليل واضح · تعلم عملي"
  }
 }
@@ -80,9 +87,11 @@ COPY = {
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
     if locale == "host":
-        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
-        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
-        locale = "fa" if "zomorodmelal.ir" in host else "en"
+        # Django get_host() validates ALLOWED_HOSTS. A forged forwarded host
+        # must not choose a localized financial page or marketing disclosure.
+        host = request.get_host().split(":")[0].lower().removeprefix("www.")
+        locale = "fa" if (host == "zomorodmelal.ir" or
+                          host.endswith(".zomorodmelal.ir")) else "en"
     if locale not in COPY:
         locale = "en"
     if match is None or page_type not in {"signals", "store", "game"}:
@@ -99,8 +108,17 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
+    # Never advertise a bot link until the merchant has independently
+    # confirmed that the exact sole domain is available to visitors.
+    bot_handoff_url = (
+        SOLE_BOT_PUBLIC_URL
+        if page_type == "signals" and
+           getattr(settings, "MOJTABA_BOT_PUBLIC_VERIFIED", False) is True
+        else None
+    )
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
+        "bot_handoff_url": bot_handoff_url,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
