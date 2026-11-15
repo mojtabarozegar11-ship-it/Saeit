@@ -183,6 +183,13 @@ def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
         and record.get("finality_verified") is True
         and record.get("refund_pending") is False
         and record.get("charge_disputed") is False
+        # A completed refund, settlement reversal, or explicit entitlement
+        # revocation may occur AFTER refund_pending becomes False.  Deny
+        # access unless the protected settlement ledger explicitly records
+        # these states as false; missing booleans cannot imply approval.
+        and record.get("refunded") is False
+        and record.get("settlement_reversed") is False
+        and record.get("entitlement_revoked") is False
     )
 
 
