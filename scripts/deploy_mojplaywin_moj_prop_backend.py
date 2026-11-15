@@ -30,6 +30,7 @@ ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
 URLCONF = Path("config/urls.py")
+SETTINGSCONF = Path("config/settings.py")
 FILES = (
     Path("core/models.py"),
     Path("core/admin.py"),
@@ -40,14 +41,17 @@ FILES = (
     Path("core/mojprop_offer_draft.py"),
     Path("core/mojprop_quote_contract.py"),
     Path("core/mojprop_quote_views.py"),
+    Path("core/signal_free_models.py"),
+    Path("core/signal_free_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
     Path("core/migrations/0042_mojprop_offer.py"),
     Path("core/migrations/0043_mojprop_digital_inquiry.py"),
     Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
     Path("core/migrations/0045_mojprop_delivery_evidence.py"),
+    Path("core/migrations/0046_signal_free_subscription.py"),
     Path("scripts/mojprop_schema_preflight_c83.py"),
 )
-ALL_FILES = (URLCONF,) + FILES
+ALL_FILES = (URLCONF, SETTINGSCONF) + FILES
 REPLACE_FILES = tuple(path for path in FILES if path not in (
     Path("core/models.py"), Path("core/admin.py"),
 ))
@@ -110,6 +114,9 @@ def selftest(repo_root: Path) -> None:
         ('path("moj-prop-status/"', urls),
         ("get_token", view),
         ("_ip_hash", view),
+        ("MojSignalFreeSubscription", (repo_root / "core/signal_free_models.py").read_text(encoding="utf-8")),
+        ("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED", (repo_root / SETTINGSCONF).read_text(encoding="utf-8")),
+        ('path("moj-signal-free-subscribe/"', urls),
     )
     missing = [marker for marker, text in required if marker not in text]
     if missing:
@@ -307,6 +314,88 @@ def patch_urlconf(target: Path) -> None:
     mode = stat.S_IMODE(target.stat().st_mode)
     atomic_write_text(target, source.rstrip() + additions, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
+
+
+def patch_free_model_import(target: Path, source: Path) -> None:
+    """Attach only the independently reviewed free model to the owner code."""
+    assert_regular(target, "live model module")
+    required = "from .signal_free_models import MojSignalFreeSubscription"
+    if required not in source.read_text(encoding="utf-8"):
+        raise RuntimeError("reviewed free subscription model import is missing")
+    live = target.read_text(encoding="utf-8")
+    if required in live:
+        return
+    if "from django.db import models" not in live:
+        raise RuntimeError("unrecognized live models module")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + required + "\n", mode)
+    print("SIGNAL_FREE_MODEL_IMPORT_INSTALLED")
+
+
+def patch_free_admin_readonly(target: Path, source: Path) -> None:
+    """Do not grant any action that could subscribe, email or charge buyers."""
+    assert_regular(target, "live admin")
+    live = target.read_text(encoding="utf-8")
+    if "class MojSignalFreeSubscriptionAdmin(" in live:
+        return
+    staged = source.read_text(encoding="utf-8")
+    marker = "\nfrom .signal_free_models import MojSignalFreeSubscription\n"
+    if staged.count(marker) != 1:
+        raise RuntimeError("reviewed read-only free subscription admin missing")
+    addon = staged[staged.index(marker) + 1:]
+    if "class MojSignalFreeSubscriptionAdmin(" not in addon:
+        raise RuntimeError("reviewed read-only admin class missing")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + addon.rstrip() + "\n", mode)
+    print("SIGNAL_FREE_READONLY_ADMIN_INSTALLED")
+
+
+def patch_free_settings(target: Path, source: Path) -> None:
+    """Never activate marketing when adding the strictly disabled setting."""
+    assert_regular(target, "live settings")
+    staged = source.read_text(encoding="utf-8")
+    line = 'MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED = env.bool("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED", default=False)'
+    if line not in staged:
+        raise RuntimeError("reviewed default-off signup setting missing")
+    live = target.read_text(encoding="utf-8")
+    if "MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED" in live:
+        if line not in live:
+            raise RuntimeError("different live free signup feature flag requires review")
+        return
+    if "EMAIL_BACKEND" not in live or "env.bool" not in live:
+        raise RuntimeError("live SMTP environment setting helpers are unrecognized")
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + "\n\n" + line + "\n", mode)
+    print("SIGNAL_FREE_EMAIL_FLAG_DEFAULT_DISABLED")
+
+
+def patch_free_urlconf(target: Path) -> None:
+    """Add exactly three root-level routes; never depend on a static directory."""
+    assert_regular(target, "live URL configuration")
+    live = target.read_text(encoding="utf-8")
+    expected = (
+        'path("moj-signal-free-subscribe/"',
+        'path("moj-signal-free-confirm/<str:token>/"',
+        'path("moj-signal-free-unsubscribe/<str:token>/"',
+    )
+    matches = [marker in live for marker in expected]
+    if all(matches):
+        return
+    if any(matches) or "from django.urls import" not in live or "urlpatterns" not in live:
+        raise RuntimeError("partial or unsupported free membership URL configuration")
+    addition = (
+        "\n\n# One separate opt-in service for mojtaba.bot.ai education only.\n"
+        "from core.signal_free_views import signal_free_subscribe, signal_free_confirm, signal_free_unsubscribe\n"
+        "urlpatterns += [\n"
+        '    path("moj-signal-free-subscribe/", signal_free_subscribe, name="moj_signal_free_subscribe"),\n'
+        '    path("moj-signal-free-confirm/<str:token>/", signal_free_confirm, name="moj_signal_free_confirm"),\n'
+        '    path("moj-signal-free-unsubscribe/<str:token>/", signal_free_unsubscribe, name="moj_signal_free_unsubscribe"),\n'
+        "]\n"
+    )
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, live.rstrip() + addition, mode)
+    print("SIGNAL_FREE_ROOT_ENDPOINTS_INSTALLED")
+
 
 def _passenger_config() -> str | None:
     candidates = []
@@ -522,6 +611,10 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         patch_models(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
         patch_admin(ROOT / Path("core/admin.py"), staged_root / Path("core/admin.py"))
         patch_urlconf(ROOT / URLCONF)
+        patch_free_model_import(ROOT / Path("core/models.py"), staged_root / Path("core/models.py"))
+        patch_free_admin_readonly(ROOT / Path("core/admin.py"), staged_root / Path("core/admin.py"))
+        patch_free_settings(ROOT / SETTINGSCONF, staged_root / SETTINGSCONF)
+        patch_free_urlconf(ROOT / URLCONF)
 
         python = choose_python()
         run_checked([str(python), "manage.py", "check", "--deploy"], ROOT)
@@ -529,7 +622,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         # unreviewed pending DDL on the commercial production database.
         # Schema closure rejected any unknown core migration >=0041.
         run_checked([str(python), "manage.py", "migrate",
-                     "core", "0045_mojprop_delivery_evidence", "--noinput"], ROOT)
+                     "core", "0046_signal_free_subscription", "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
         restart_passenger()
