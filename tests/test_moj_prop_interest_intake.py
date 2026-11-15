@@ -10,6 +10,7 @@ from prop_firm.interest import (
 
 APPROVED_SETTINGS = {
     "MOJ_PROP_INTEREST_ENABLED": True,
+    "MOJ_PROP_RETENTION_JOB_VERIFIED": True,
     "MOJ_PROP_INTEREST_HMAC_KEY_HEX": "7d" * 32,
     "MOJ_PROP_PRIVACY_URL": "/moj-prop/privacy/",
     "ALLOWED_HOSTS": ["mojplaywin.com", "www.mojplaywin.com", "testserver"],
