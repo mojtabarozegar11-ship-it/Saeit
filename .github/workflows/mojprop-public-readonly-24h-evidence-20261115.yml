@@ -19,6 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Probe public HTTPS GET routes only — no secrets, POST or customer data
         shell: bash
         run: |
@@ -103,6 +106,29 @@ jobs:
           PY
             fi
           done
+          # Compare the public page byte-for-byte with only reviewed source
+          # releases. No content is printed; "unknown" prevents unsafe overwrite.
+          python3 - "$check_dir/signal_desk.body" <<'PY'
+          import sys
+          from pathlib import Path
+          root=Path("templates/moj-prop-v4")
+          target=Path(sys.argv[1])
+          known={
+              "original":root/"baselines/signals-index-before-free.html",
+              "free-preview":root/"baselines/signals-index-after-free-preview.html",
+              "double-opt-in":root/"signals/index.html",
+          }
+          outcome="unknown"
+          try:
+              live=target.read_bytes()
+              outcome=next((name for name, source in known.items()
+                            if source.is_file() and live == source.read_bytes()), "unknown")
+          except OSError:
+              pass
+          print("PUBLIC_SIGNAL_DESK_EXACT_RELEASE=" + outcome)
+          print("PUBLIC_SIGNAL_DESK_SAFE_UPGRADE=" +
+                ("yes" if outcome in ("original", "free-preview", "double-opt-in") else "unverified"))
+          PY
           # Inspect only public HTML and the public API's contract; do not log
           # emails, CSRF token values, cookies, or subscriber identifiers.
           if [[ -f "$check_dir/signal_desk.body" ]]; then
