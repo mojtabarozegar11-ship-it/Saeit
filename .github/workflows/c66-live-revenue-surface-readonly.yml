@@ -1,0 +1,38 @@
+name: C66 live business surfaces read-only scorecard
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - ".github/workflows/c66-live-revenue-surface-readonly.yml"
+permissions:
+  contents: read
+jobs:
+  five-priority-live-get-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Record public GET availability without login, payment or mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://mojplaywin.com/moj-prop/"
+            "https://mojplaywin.com/moj-prop/catalog/"
+            "https://mojplaywin.com/moj-prop-intake/"
+            "https://mojplaywin.com/moj-prop/signals/"
+            "https://mojtaba.bot.ai/"
+            "https://mojplaywin.com/commerce/"
+            "https://mojplaywin.com/store/"
+            "https://mojplaywin.com/games/mojcoin/"
+            # Bazei is a SEPARATE Passenger application with these real routes.
+            "https://game.mojplaywin.com/health/"
+            "https://game.mojplaywin.com/moj-coin/"
+            "https://game.mojplaywin.com/api/moj-coin/content/"
+          )
+          for target in "${urls[@]}"; do
+            output="$(curl --silent --show-error --connect-timeout 4 --max-time 8               --retry 0 --location --max-redirs 2 --output /dev/null               --write-out 'status=%{http_code} tls=%{ssl_verify_result}' "$target" 2>&1)" || true
+            # No credentials, usernames, email, payment, POST or customer data.
+            printf 'LIVE_BUSINESS_SURFACE url=%s result=%s\n' "$target" "$output"
+          done
+          echo "AUDIT_READ_ONLY=TRUE; DEPLOY=NO; CUSTOMER_ORDERS=0; CHARGES=0"

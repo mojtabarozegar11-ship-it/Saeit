@@ -6,6 +6,7 @@ creates a payment intent, sends an email, or presents investment advice.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import hmac
 import json
 import secrets
@@ -14,13 +15,14 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, DatabaseError, transaction
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
+from django.views.decorators.csrf import csrf_protect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import MojPropRequest
+from .models import MojPropRequest, MojPropRateBucket
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -44,40 +46,89 @@ def _payload(request):
     return request.POST
 
 
+class MojPropQuotaExceeded(Exception):
+    """Atomic quota reject: no lead persisted and no charge collected."""
+
+
+class MojPropUntrustedOrigin(Exception):
+    """No trusted client address could be determined."""
+
+
 def _client_ip(request) -> str:
-    # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    return str(
-        request.META.get("HTTP_X_REAL_IP")
-        or request.META.get("REMOTE_ADDR")
-        or "unknown"
-    ).strip()[:128]
+    # X-Real-IP and X-Forwarded-For are client controlled unless the
+    # operator has pinned a trusted reverse proxy. Do not trust by default.
+    raw = request.META.get("REMOTE_ADDR")
+    try:
+        if type(raw) is not str:
+            raise ValueError("no network origin")
+        peer = ipaddress.ip_address(raw.strip()).compressed
+        allowed = getattr(settings, "MOJ_PROP_TRUSTED_PROXY_IPS", [])
+        if type(allowed) not in (list, tuple):
+            raise ValueError("unsafe proxy allowlist type")
+        trusted = set()
+        for origin in allowed:
+            if type(origin) is not str:
+                raise ValueError("non-string proxy address")
+            trusted.add(ipaddress.ip_address(origin.strip()).compressed)
+        if peer in trusted:
+            # Only a PINNED proxy may supply the actual visitor address.
+            # No comma-separated client-supplied X-Forwarded-For chains.
+            forwarded = request.META.get("HTTP_X_REAL_IP")
+            if type(forwarded) is not str:
+                raise ValueError("trusted proxy omitted X-Real-IP")
+            return ipaddress.ip_address(forwarded.strip()).compressed
+        return peer
+    except ValueError as exc:
+        raise MojPropUntrustedOrigin("client_origin_unavailable") from exc
 
 
 def _ip_hash(request) -> str:
-    secret = str(getattr(settings, "SECRET_KEY", "change-me")).encode("utf-8")
-    return hmac.new(secret, _client_ip(request).encode("utf-8"), hashlib.sha256).hexdigest()
+    secret = settings.SECRET_KEY.encode("utf-8")
+    return hmac.new(secret, _client_ip(request).encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def _request_id() -> str:
     return f"MOJPROP-{timezone.now():%Y%m%d}-{secrets.token_hex(4).upper()}"
 
 
-def _rate_limited(email: str, ip_hash: str) -> bool:
-    since = timezone.now() - RATE_WINDOW
-    recent = MojPropRequest.objects.filter(created_at__gte=since)
-    return (
-        recent.filter(ip_hash=ip_hash).count() >= MAX_REQUESTS_PER_WINDOW
-        or recent.filter(email__iexact=email).count() >= MAX_REQUESTS_PER_WINDOW
-    )
+def _consume_quota(email: str, ip_hash: str, now) -> None:
+    """Called INSIDE the transaction creating the canonical lead.
+
+    All cPanel workers share one DB row and row lock for each HMAC scope.
+    A rejected request rolls back *both* counters and the lead row.
+    """
+    if not now.tzinfo:
+        raise ValueError("timezone aware clock required")
+    minute = (now.minute // 10) * 10
+    floor = now.replace(minute=minute, second=0, microsecond=0)
+    expires = floor + timedelta(minutes=30)
+    for scope, value in (("origin", ip_hash), ("email", email)):
+        material = f"mojprop:v1:{scope}:{floor.isoformat()}:{value}"
+        digest = hmac.new(settings.SECRET_KEY.encode("utf-8"),
+                          material.encode("utf-8"), hashlib.sha256).hexdigest()
+        bucket, _ = MojPropRateBucket.objects.select_for_update().get_or_create(
+            digest=digest,
+            defaults={"count": 0, "expires_at": expires},
+        )
+        if bucket.count >= MAX_REQUESTS_PER_WINDOW:
+            raise MojPropQuotaExceeded
+        bucket.count += 1
+        bucket.save(update_fields=["count"])
 
 
 def _json(data, status=200):
     response = JsonResponse(data, status=status)
     response["Cache-Control"] = "no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    if status == 429:
+        # Browsers and upstream edge controls can honor the quota response
+        # without parsing free-form messages or personal customer data.
+        response["Retry-After"] = str(data.get("retry_after", 600))
     return response
 
 
 @require_http_methods(["GET", "POST"])
+@csrf_protect
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
     if request.method == "GET":
@@ -87,8 +138,18 @@ def mojprop_intake(request):
     if payload is None:
         return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
 
+    # A malicious JSON sender must not turn object/list/number values into
+    # seemingly valid CRM strings. Reject data loss rather than truncate it.
+    bounds = {"name": 200, "email": 254, "service": 30, "horizon": 20,
+              "notes": 5000, "website": 120}
+    for key, maximum in bounds.items():
+        candidate = payload.get(key, "")
+        if type(candidate) is not str or len(candidate) > maximum:
+            return _json({"ok": False, "detail": "Invalid request field.",
+                          "fields": {key: "A bounded text value is required."}},
+                         status=400)
     # Honeypot field: real forms never display or populate this value.
-    if _text(payload, "website", 120):
+    if payload.get("website"):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
     name = _text(payload, "name", 200)
@@ -117,17 +178,16 @@ def mojprop_intake(request):
     if errors:
         return _json({"ok": False, "detail": "Please correct the highlighted fields.", "fields": errors}, status=400)
 
-    ip_hash = _ip_hash(request)
-    if _rate_limited(email, ip_hash):
-        return _json(
-            {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
-            status=429,
-        )
-
+    try:
+        ip_hash = _ip_hash(request)
+    except MojPropUntrustedOrigin:
+        return _json({"ok": False, "detail": "Request origin cannot be verified."},
+                     status=503)
     request_obj = None
     for _ in range(3):
         try:
             with transaction.atomic():
+                _consume_quota(email, ip_hash, timezone.now())
                 request_obj = MojPropRequest.objects.create(
                     request_id=_request_id(),
                     name=name,
@@ -141,10 +201,20 @@ def mojprop_intake(request):
                     user_agent=str(request.META.get("HTTP_USER_AGENT", ""))[:300],
                 )
             break
+        except MojPropQuotaExceeded:
+            return _json(
+                {"ok": False, "detail": "Too many requests. Please try again later.",
+                 "retry_after": 600}, status=429)
         except IntegrityError:
+            # Both quota increments have rolled back; retry only a genuine
+            # request-id collision. Persistent errors fail closed below.
             continue
+        except DatabaseError:
+            return _json({"ok": False, "detail": "Request service unavailable."},
+                         status=503)
     if request_obj is None:
-        return _json({"ok": False, "detail": "Could not allocate a request ID. Please retry."}, status=503)
+        return _json({"ok": False, "detail": "Request storage temporarily unavailable."},
+                     status=503)
 
     return _json(
         {

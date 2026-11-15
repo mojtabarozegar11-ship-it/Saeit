@@ -250,8 +250,16 @@ jobs:
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
-          timeout 60s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py rollback $GITHUB_RUN_ID"
+          # A no-op catalog update does not create a rollback backup.
+          # If the smoke fails for a separate reason, never invent a backup
+          # or try an ungrounded rollback. The failed smoke still fails CI.
+          if timeout 20s ssh -F "$WORK/config" saeit-host \
+              "test -f /home/zomorod2/.mojplaywin-backups/moj-prop-catalog-$GITHUB_RUN_ID/manifest.json"; then
+            timeout 60s ssh -F "$WORK/config" saeit-host \
+              "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/update_mojplaywin_moj_prop_catalog.py rollback $GITHUB_RUN_ID"
+          else
+            echo "MOJ_PROP_CATALOG_ROLLBACK_SKIPPED_NO_BACKUP: no verified backup; no blind overwrite"
+          fi
       - name: Remove remote staging bundle
         if: always()
         shell: bash

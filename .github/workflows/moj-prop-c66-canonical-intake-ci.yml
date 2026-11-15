@@ -1,0 +1,51 @@
+name: C66 canonical Moj Prop lead and quota CI
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - "core/models.py"
+      - "core/mojprop_views.py"
+      - "core/migrations/0044_mojprop_rate_bucket.py"
+      - "core/management/commands/moj_prop_purge_rate_buckets.py"
+      - "tests/test_moj_prop_c66_*.py"
+      - ".github/workflows/moj-prop-c66-canonical-intake-ci.yml"
+permissions:
+  contents: read
+jobs:
+  canonical-request-and-quota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEBUG: "true"
+      SECRET_KEY: ci-only-prop-c66-unique-private-key
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver,mojplaywin.com
+      DATABASE_URL: sqlite:///ci-mojprop-canonical-c66.sqlite3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install existing Django requirements
+        run: python -m pip install -r requirements.txt
+      - name: Require no missing or conflicting core migration
+        run: |
+          python manage.py check
+          python manage.py makemigrations core --check --dry-run
+      - name: Test real canonical request path, rate and retention DB
+        run: |
+          python manage.py test tests.test_moj_prop_c66_shared_quota tests.test_moj_prop_c66_security tests.test_moj_prop_c66_retention tests.test_moj_prop_c66_form_contract tests.test_moj_prop_c67_admin_workbench tests.test_moj_prop_c67_lead_funnel tests.test_moj_prop_c67_csrf tests.test_moj_prop_c67_input_integrity tests.test_moj_prop_c67_http_contract tests.test_moj_prop_c67_trusted_proxy tests.test_moj_prop_c67_closed_lead_retention --verbosity 2
+      - name: Apply core.0044 only to isolated CI database
+        run: |
+          python manage.py migrate core --noinput
+          python - <<'PY'
+          import os, django
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from django.db import connection
+          expected={"moj_prop_intake_rate_bucket", "core_mojproprequest"}
+          names=set(connection.introspection.table_names())
+          assert expected<=names, expected-names
+          print("C66_CANONICAL_LEAD_AND_QUOTA_MIGRATIONS=PASS")
+          PY

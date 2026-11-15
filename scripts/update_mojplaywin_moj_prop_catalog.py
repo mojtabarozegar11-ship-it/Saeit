@@ -51,7 +51,11 @@ def staged_root(run_id: str) -> Path:
             raise RuntimeError(f"Missing or unsafe staged file: {relative}")
     index = (root / "index.html").read_text(encoding="utf-8")
     catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-    for required in ('<title>Moj Prop', 'href="/moj-prop/catalog/"', 'See service prices', 'mojtaba.bot.ai'):
+    for required in ('<title>Moj Prop', 'href="/moj-prop/catalog/"', 'See service prices',
+                     'mojtaba.bot.ai', "const endpoint='/moj-prop-intake/';",
+                     '<option value="urgent">', '<option value="week">',
+                     '<option value="month">', '<option value="review">',
+                     'I consent to storing my name, email, and request notes'):
         if required not in index:
             raise RuntimeError(f"Moj Prop index validation failed: {required}")
     for required in ('<title>Moj Prop Catalog', 'From US$149', 'From US$249'):
@@ -115,21 +119,28 @@ def deploy(run_id: str, commit_sha: str) -> None:
     }
     (backup / "index.before").write_bytes(previous)
     (backup / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    changed = False
+    index_written = False
+    catalog_written = False
     try:
         atomic_write(old_index, new_index)
+        index_written = True
         if catalog_created:
             atomic_write(catalog, new_catalog)
-        changed = True
+            catalog_written = True
         if digest(old_index.read_bytes()) != manifest["index_after"]:
             raise RuntimeError("Moj Prop index verification failed")
         if digest(catalog.read_bytes()) != manifest["catalog_after"]:
             raise RuntimeError("Moj Prop catalog verification failed")
     except Exception:
-        if changed and catalog_created and catalog.is_file() and not catalog.is_symlink():
-            catalog.unlink()
-        if digest(old_index.read_bytes()) == manifest["index_after"]:
-            atomic_write(old_index, previous)
+        # The index is written BEFORE the optional catalog. If that second
+        # write fails, the old 'changed=False' guard left the new index live.
+        # Restore only the bytes written by THIS attempt, never later changes.
+        if catalog_written and catalog_created and catalog.is_file() and not catalog.is_symlink():
+            if digest(catalog.read_bytes()) == manifest["catalog_after"]:
+                catalog.unlink()
+        if index_written and old_index.is_file() and not old_index.is_symlink():
+            if digest(old_index.read_bytes()) == manifest["index_after"]:
+                atomic_write(old_index, previous)
         raise
     mode = "catalog_created" if catalog_created else "index_refreshed"
     print(f"MOJ_PROP_CATALOG_UPDATED commit={commit_sha} mode={mode}")

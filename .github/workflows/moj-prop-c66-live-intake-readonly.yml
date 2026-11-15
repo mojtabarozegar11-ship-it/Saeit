@@ -1,0 +1,106 @@
+name: C66 public Moj Prop intake read-only acceptance
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - ".github/workflows/moj-prop-c66-live-intake-readonly.yml"
+      - "core/mojprop_views.py"
+      - "templates/moj-prop-v4/index.html"
+permissions:
+  contents: read
+jobs:
+  public-customer-get-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read public Moj Prop main and actual customer intake GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          for path in / /moj-prop/ /moj-prop-intake/; do
+            status="$(curl -sS --max-time 20 --retry 0 --location --max-redirs 2               --output "$tmp/body" --write-out '%{http_code}'               --header 'Cache-Control: no-cache' "https://mojplaywin.com$path" || true)"
+            printf 'PUBLIC_MOJPROP_GET path=%s http=%s\n' "$path" "$status"
+            if [[ "$path" == "/moj-prop-intake/" ]]; then
+              [[ "$status" == "200" ]] || {
+                echo "BLOCKED: canonical public buyer intake is not reachable"; exit 2;
+              }
+              # Do not print the CSRF token or customer information into logs.
+              python3 - "$tmp/body" <<'PY'
+          import json,sys
+          from pathlib import Path
+          try:
+              payload=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          except (ValueError, UnicodeError) as exc:
+              raise SystemExit("PUBLIC_INTAKE_CONTENT_NOT_JSON") from exc
+          if (payload.get("ok") is not True or
+                  payload.get("service") != "moj-prop-intake" or
+                  not isinstance(payload.get("csrf_token"),str) or
+                  not payload["csrf_token"]):
+              raise SystemExit("PUBLIC_INTAKE_GET_CONTRACT_MISMATCH")
+          print("PUBLIC_INTAKE_GET_CONTRACT=PASS; REQUESTS_CREATED=0; PAYMENTS=0")
+          PY
+            fi
+          done
+
+      - name: Diagnose public DNS versus pinned cPanel origin after failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "PUBLIC_DNS_A_RECORDS:"
+          getent ahostsv4 mojplaywin.com | awk '{print $1}' | sort -u | head -10
+          echo "PUBLIC_DNS_AAAA_RECORDS:"
+          getent ahostsv6 mojplaywin.com | awk '{print $1}' | sort -u | head -10
+          for mode in public_ipv4 pinned_origin_ipv4; do
+            if [[ "$mode" == "pinned_origin_ipv4" ]]; then
+              # Pinned SSH host is already public in the current deploy workflow.
+              # TLS host/SNI remains mojplaywin.com; this is READ-ONLY HTTPS.
+              args=(--ipv4 --resolve mojplaywin.com:443:178.239.147.125)
+            else
+              args=(--ipv4)
+            fi
+            code="$(curl -sS --connect-timeout 4 --max-time 9 --retry 0 \
+              "${args[@]}" -o /dev/null -w '%{http_code}' \
+              'https://mojplaywin.com/moj-prop-intake/' 2>&1)"
+            printf 'PUBLIC_NETWORK_DIAGNOSTIC mode=%s outcome=%s\n' "$mode" "$code"
+          done
+          echo "NO_CUSTOMER_POST_NO_LOGIN_NO_DEPLOY_NO_PAYMENT"
+
+      - name: Verify deployed inquiry form actually emits accepted horizon enum
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          html="$(mktemp)"
+          trap 'rm -f -- "$html"' EXIT
+          curl -fsS --connect-timeout 4 --max-time 12 --retry 0             'https://mojplaywin.com/moj-prop/' -o "$html"
+          python3 - "$html" <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import sys
+          class Fields(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.horizon=False
+                  self.values=[]
+              def handle_starttag(self,tag,attrs):
+                  data=dict(attrs)
+                  if tag=="select":
+                      self.horizon=data.get("id")=="horizon"
+                  elif tag=="option" and self.horizon:
+                      self.values.append(data.get("value"))
+              def handle_endtag(self,tag):
+                  if tag=="select":
+                      self.horizon=False
+          p=Fields()
+          p.feed(Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace"))
+          expected={"urgent","week","month","review"}
+          if set(p.values)!=expected:
+              print("BLOCKED: deployed Moj Prop form sends invalid backend horizon codes")
+              print("LIVE_MOJPROP_HORIZON_PARITY=FAIL; UNAPPROVED_LABELS="+str(len(p.values)-len(set(p.values)&expected)))
+              raise SystemExit(2)
+          print("LIVE_MOJPROP_HORIZON_PARITY=PASS; NO_REQUEST_POSTED")
+          PY
