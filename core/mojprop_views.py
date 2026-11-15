@@ -248,7 +248,7 @@ def mojprop_intake(request):
 @require_http_methods(["GET"])
 def mojprop_receipt_status(request):
     """Read only the public stage when holding the signed private receipt."""
-    token = str(request.GET.get("receipt_token", ""))
+    # A bearer receipt must be unambiguous: reject duplicate query parameters.\n    # QueryDict.get() silently selects the last value otherwise.\n    tokens = request.GET.getlist("receipt_token")\n    token = tokens[0] if len(tokens) == 1 else ""
     request_id = verify_receipt_token(token)
     if request_id is None:
         return _json(
