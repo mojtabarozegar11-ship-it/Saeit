@@ -71,7 +71,8 @@ def _merchant_config(route, offer):
 
 
 def _intact(row, pending, route, offer, *, receiver, key, now):
-    if (row.order_id != pending["order_id"]
+    # order_id is Django's integer FK; compare the natural order identifier.
+    if (row.order.order_id != pending["order_id"]
             or row.order.tenant_id != pending["tenant_id"]
             or type(row.signed_token) is not str
             or not 1 <= len(row.signed_token) <= 4096
