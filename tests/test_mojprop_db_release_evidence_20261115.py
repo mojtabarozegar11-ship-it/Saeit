@@ -28,7 +28,13 @@ class RestoreEvidenceContractTests(unittest.TestCase):
         self.case.mkdir(mode=0o700)
         self.sql = self.case / "full-database.sql.gz"
         with gzip.open(self.sql, "wb") as stream:
-            stream.write(b"create table previous_live_data(x int);\n" * 180)
+            rows = (
+                "INSERT INTO previous_live_data(hash) VALUES ('"
+                + hashlib.sha256(str(i).encode("ascii")).hexdigest()
+                + "');\\n"
+                for i in range(200)
+            )
+            stream.write("".join(rows).encode("utf-8"))
         self.sql.chmod(0o600)
         self.proof = self.case / "isolated-restore-evidence.json"
         self.data = {
