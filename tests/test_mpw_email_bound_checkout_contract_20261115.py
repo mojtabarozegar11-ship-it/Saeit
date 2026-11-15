@@ -73,5 +73,47 @@ class EmailRequiredCheckoutTests(unittest.TestCase):
         self.assertFalse(valid(form(), True))
 
 
+
+    def test_invoice_path_case_is_not_a_valid_checkout_route(self):
+        self.assertFalse(valid(form().replace(
+            b'/commerce/trx-easy/start/72/', b'/COMMERCE/trx-easy/start/72/'),
+            72))
+
+    def test_form_level_email_validation_cannot_be_disabled(self):
+        for injection in (
+            b' novalidate', b' target="_blank"',
+            b' enctype="multipart/form-data"',
+            b' accept-charset="utf-16"',
+        ):
+            with self.subTest(injection=injection):
+                self.assertFalse(valid(form().replace(
+                    b'<form method="post"', b'<form' + injection + b' method="post"'),
+                    72))
+
+    def test_invoice_email_must_be_editable_and_single_address(self):
+        original = b'<input type="email" name="email" autocomplete="email" required>'
+        for variant in (
+            b'<input type="email" name="email" required readonly>',
+            b'<input type="email" name="email" required multiple>',
+            b'<input type="email" name="email" required form="external">',
+        ):
+            with self.subTest(variant=variant):
+                self.assertFalse(valid(form().replace(original, variant), 72))
+
+    def test_submit_controls_cannot_override_post_target_or_validation(self):
+        base = form()
+        for override in (
+            b'formaction="https://attacker.invalid/receive"',
+            b'formmethod="get"', b'formnovalidate',
+            b'formenctype="text/plain"', b'formtarget="_blank"',
+        ):
+            with self.subTest(override=override):
+                self.assertFalse(valid(base.replace(
+                    b'</form>', b'<button type="submit" ' + override +
+                    b'>Buy</button></form>'), 72))
+                self.assertFalse(valid(base.replace(
+                    b'</form>', b'<input type="submit" ' + override +
+                    b'></form>'), 72))
+
 if __name__ == "__main__":
     unittest.main()
