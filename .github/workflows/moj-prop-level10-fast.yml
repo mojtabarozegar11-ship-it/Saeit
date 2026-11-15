@@ -19,4 +19,4 @@ jobs:
       - name: Install test runner
         run: python -m pip install --upgrade pip pytest
       - name: Run level 10 regression
-        run: python -m pytest tests/test_moj_prop_level10_lock.py -q
+        run: python -m pytest --confcutdir=tests tests/test_moj_prop_level10_lock.py -q
