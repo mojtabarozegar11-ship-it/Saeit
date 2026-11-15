@@ -52,7 +52,7 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        response = types.SimpleNamespace(status_code=201)
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(

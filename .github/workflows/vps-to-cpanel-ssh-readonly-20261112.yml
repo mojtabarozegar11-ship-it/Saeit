@@ -12,6 +12,9 @@ jobs:
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 3
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Verify VPS to cPanel SSH on port 1396
         shell: bash
         env:
@@ -30,3 +33,7 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           timeout 30s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 1396 zomorod2@zohal.pws-dns.net 'printf "CPANEL_SSH_AUTH_OK=1\\n"; printf "CPANEL_HOST=%s\\n" "$(hostname -f 2>/dev/null || hostname)"'
+          # Read-only, bounded, PII-free source inventory; never imports Django or touches DB.
+          # No branch/PR trigger is provided; dispatch from main is intentional.
+          test -f scripts/mpw_origin_release_readonly.py
+          timeout 50s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no -p 1396 zomorod2@zohal.pws-dns.net 'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_origin_release_readonly.py

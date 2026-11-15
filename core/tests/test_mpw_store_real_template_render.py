@@ -29,11 +29,13 @@ class MojPlayWinStoreRealTemplateTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertGreater(len(response.content), 2000)
         for route in (
-            b"/store/product/72/checkout/",
-            b"/store/product/225/checkout/",
+            b"/store/product/72/",
+            b"/store/product/225/",
             b"/store/product/879/",
         ):
             self.assertIn(route, response.content)
+        self.assertNotIn(b"/store/product/72/checkout/", response.content)
+        self.assertNotIn(b"/store/product/225/checkout/", response.content)
 
     @override_settings(
         STORAGES={

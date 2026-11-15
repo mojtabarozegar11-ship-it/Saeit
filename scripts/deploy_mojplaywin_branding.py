@@ -25,6 +25,8 @@ MERGED_FILES = (
 )
 OWNED_FILES = (
     Path("core/mojplaywin_views.py"),
+    Path("core/mojplaywin_product_detail.py"),
+    Path("core/templates/mojplaywin/product_detail.html"),
     Path("core/templates/mojplaywin/home.html"),
     Path("core/templates/mojplaywin/store.html"),
     Path("core/templates/mojplaywin/section.html"),
@@ -191,6 +193,26 @@ def route_mojplaywin_brand_store(urlconf):
         )
     return updated.replace(old_route, new_route, 1)
 
+def route_mojplaywin_product_detail(urlconf):
+    """Restore curated product detail pages on both sites without unrelated draft code."""
+    old_import = "from core.product_seo_views import product_detail"
+    new_import = "from core.mojplaywin_product_detail import brand_product_detail"
+    old_route = 'path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),'
+    new_route = 'path("store/product/<int:product_id>/", brand_product_detail, name="store_product_detail"),'
+    if new_import in urlconf and new_route in urlconf:
+        return urlconf
+    if old_route in urlconf and old_import in urlconf:
+        return urlconf.replace(old_import, new_import, 1).replace(old_route, new_route, 1)
+    if "store_product_detail" in urlconf or old_import in urlconf or new_import in urlconf:
+        raise RuntimeError("Conflicting product route; refuse unsafe deployment")
+    store_import = "from core.commerce_views import store_home, auctions_home"
+    store_route = '    path("store/", store_home, name="store"),'
+    if store_import not in urlconf or store_route not in urlconf:
+        raise RuntimeError("Missing known store route; refuse unsafe deployment")
+    return (urlconf.replace(store_import, store_import + "\n" + new_import, 1)
+            .replace(store_route, store_route + "\n    " + new_route, 1))
+
+
 def restart_passenger():
     restart = DOCROOT / "tmp" / "restart.txt"
     restart.parent.mkdir(parents=True, exist_ok=True)
@@ -219,7 +241,11 @@ def rollback(run_id):
     for relative in FILES:
         target = APP_ROOT / relative
         ensure_safe_path(target)
-        entry = manifest[str(relative)]
+        entry = manifest.get(str(relative))
+        if entry is None:
+            if manifest.get("__schema_version__") == 2:
+                raise RuntimeError(f"Missing rollback manifest entry: {relative}")
+            continue  # Older backups did not track newly introduced product files.
         saved = backup / relative
         if entry["existed"]:
             if not saved.is_file() or saved.is_symlink():
@@ -281,6 +307,7 @@ def deploy(run_id, commit_sha, stage_arg):
             outputs[relative] = ensure_indexnow_route(outputs[relative])
             outputs[relative] = route_mojplaywin_brand_home(outputs[relative])
             outputs[relative] = route_mojplaywin_brand_store(outputs[relative])
+            outputs[relative] = route_mojplaywin_product_detail(outputs[relative])
         if relative == Path("core/seo_views.py"):
             outputs[relative] = ensure_indexnow_seo(outputs[relative])
         if relative.suffix == ".py":
@@ -301,7 +328,7 @@ def deploy(run_id, commit_sha, stage_arg):
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Deployment backup already exists")
     backup.mkdir(mode=0o700, parents=True)
-    manifest = {}
+    manifest = {"__schema_version__": 2}
     manifest["__indexnow_key_file__"] = {"existed": INDEXNOW_FILE.is_file(), "mode": INDEXNOW_FILE.stat().st_mode & 0o777 if INDEXNOW_FILE.is_file() else 0o644}
     if INDEXNOW_FILE.is_file():
         shutil.copy2(INDEXNOW_FILE, backup / "indexnow-key.txt")
