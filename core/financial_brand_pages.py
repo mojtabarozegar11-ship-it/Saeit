@@ -24,6 +24,8 @@ BRANDS = [
     ("206", "۲۰۶", "206", "٢٠٦"),
     ("108", "۱۰۸", "108", "١٠٨"),
 ]
+SIGNAL_INTAKE_PATH = "/moj-prop/?service=signals#request"
+
 PALETTES = [
     ("emerald", "#0b322b", "#c9a65a"), ("amethyst", "#2b173c", "#dfbd7a"),
     ("sapphire", "#112947", "#d7b56d"), ("rose", "#472233", "#e0ba83"),
@@ -102,7 +104,7 @@ def financial_brand_page(request, brand, locale, page_type):
         title, intro, notice = copy["game_title"], copy["game_intro"], copy["game_notice"]
     palette = PALETTES[next(i for i, item in enumerate(BRANDS) if item[0] == slug)]
     shop_url = "/store/" if locale == "fa" else "/commerce/"
-    destination_url = "/moj-prop/?service=signals#request" if page_type == "signals" else shop_url
+    destination_url = SIGNAL_INTAKE_PATH if page_type == "signals" else shop_url
     destination_label = copy["signals_cta"] if page_type == "signals" else copy["cta"]
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
