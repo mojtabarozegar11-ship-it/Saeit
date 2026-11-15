@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for url in https://mojplaywin.com/ https://mojplaywin.com/moj-prop/ https://mojplaywin.com/saman/market-signals/; do
+          for url in https://mojplaywin.com/ https://mojplaywin.com/moj-prop/ https://mojplaywin.com/saman/market-signals/ https://mojplaywin.com/store/ https://mojplaywin.com/store/product/72/ https://mojplaywin.com/store/product/225/ https://mojplaywin.com/store/product/879/ https://mojtaba.bot.ai/ https://zomorodmelal.ir/saman/market-signals/; do
             code="$(curl --connect-timeout 6 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
             printf 'PUBLIC_URL=%s STATUS=%s\n' "$url" "$code"
           done

@@ -105,3 +105,12 @@ def test_pr_workflow_holds_all_production_secrets_and_uses_only_hosted_runner():
     assert "persist-credentials: false" in wf
     assert "commercial_release_authorized" in source
     assert "False" in source
+
+def test_public_readonly_probe_covers_mojprop_signals_store_and_bot():
+    root = Path(__file__).resolve().parents[1]
+    wf = (root / ".github/workflows/revenue36-origin-readonly.yml").read_text()
+    expected = ["https://mojplaywin.com/","https://mojplaywin.com/moj-prop/","https://mojplaywin.com/saman/market-signals/","https://mojplaywin.com/store/","https://mojplaywin.com/store/product/72/","https://mojplaywin.com/store/product/225/","https://mojplaywin.com/store/product/879/","https://mojtaba.bot.ai/","https://zomorodmelal.ir/saman/market-signals/"]
+    for endpoint in expected:
+        assert endpoint in wf
+    assert wf.count("curl --connect-timeout 6 --max-time 15") == 1
+    assert "MOJPLAYWIN_RELEASE_AUTHORIZED=NO" in wf
