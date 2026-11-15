@@ -104,6 +104,8 @@ def deploy(run_id: str, commit_sha: str) -> None:
         if current_catalog != new_catalog:
             raise RuntimeError("Moj Prop catalog exists but differs from the approved payload; refusing to replace it")
     catalog_created = not catalog_exists
+    if BACKUPS.is_symlink():
+        raise RuntimeError("Moj Prop backup root is a symlink; refusing deployment")
     backup = BACKUPS / f"moj-prop-catalog-{run_id}"
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Moj Prop catalog backup already exists")
@@ -151,6 +153,8 @@ def deploy(run_id: str, commit_sha: str) -> None:
 def rollback(run_id: str) -> None:
     run_id = safe_id(run_id)
     backup = BACKUPS / f"moj-prop-catalog-{run_id}"
+    if BACKUPS.is_symlink() or backup.is_symlink():
+        raise RuntimeError("Moj Prop rollback backup path is a symlink")
     manifest_path = backup / "manifest.json"
     previous_path = backup / "index.before"
     if not manifest_path.is_file() or not previous_path.is_file():
