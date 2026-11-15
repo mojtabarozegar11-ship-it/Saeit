@@ -12,6 +12,7 @@ WORKFLOWS = {
     "mojplaywin-moj-prop-deploy.yml": "deploy",
     "mojplaywin-main-deploy.yml": "deploy-main",
     "mojplaywin-farnaz-deploy.yml": "deploy",
+    "mojplaywin-saman-deploy.yml": "deploy-saman",
     "zomorod-app-pages-deploy.yml": "publish",
 }
 
