@@ -1,8 +1,8 @@
-"""Restore MojPropRequest.source choices in migration state.
+"""Converge MojPropRequest.source migration state with the branch model.
 
-0043 intentionally aligned the nullable/blank/default/length attributes but
-did not carry the model choices into migration state. Keep 0043 immutable and
-make the next migration converge the historical state with the model.
+The preceding CI generated this state-alignment migration after the merge
+repair. Keep the historical migrations immutable and record the exact model
+field state used by this branch.
 """
 from django.db import migrations, models
 
@@ -17,14 +17,9 @@ class Migration(migrations.Migration):
             model_name="mojproprequest",
             name="source",
             field=models.CharField(
-                blank=True,
-                choices=[
-                    ("moj-prop", "Moj Prop"),
-                    ("mojtaba.bot.ai", "Mojtaba.bot.ai"),
-                    ("mojplaywin", "MojPlayWin"),
-                ],
-                default="moj-prop",
                 max_length=80,
+                blank=True,
+                default="moj-prop",
             ),
         ),
     ]
