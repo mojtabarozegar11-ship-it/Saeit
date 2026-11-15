@@ -48,6 +48,27 @@ class MojPropCommercialStageTests(TestCase):
             "approved", "ACCEPTANCE: email-approval-archived-20261115-CRM01",
         ).is_valid())
 
+    def test_previous_offer_reference_cannot_be_erased_when_customer_accepts(self):
+        previous = "OFFER: proposal/MOJPROP-20261115-CRM01/v1"
+        MojPropRequest.objects.filter(pk=self.customer.pk).update(
+            status="offer_sent", internal_note=previous
+        )
+        self.assertFalse(self.form(
+            "approved", "ACCEPTANCE: customer-approval-archive/20261115-CRM01"
+        ).is_valid())
+        self.assertTrue(self.form(
+            "approved",
+            previous + "\nACCEPTANCE: customer-approval-archive/20261115-CRM01"
+        ).is_valid())
+
+    def test_historical_delivery_evidence_cannot_be_overwritten_in_same_status(self):
+        evidence = "OFFER: signed-proposal/MOJPROP-20261115-CRM01/v1"
+        MojPropRequest.objects.filter(pk=self.customer.pk).update(
+            status="offer_sent", internal_note=evidence
+        )
+        self.assertFalse(self.form("offer_sent", "").is_valid())
+        self.assertTrue(self.form("offer_sent", evidence).is_valid())
+
     def test_delivery_needs_documented_evidence(self):
         MojPropRequest.objects.filter(pk=self.customer.pk).update(status="approved")
         self.assertFalse(self.form("delivered", "finished").is_valid())
