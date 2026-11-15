@@ -704,6 +704,7 @@ class SQLiteCommercialLedger:
         tenant_registry: Mapping[str, str],
         independent_release_verifier: Callable[[OfferContract], bool],
         release_evidence_sha256: str,
+        independent_release_evidence_verifier: Callable[[OfferContract, str], bool],
         independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Permanently link a staged order to one approved merchant identity."""
@@ -716,6 +717,16 @@ class SQLiteCommercialLedger:
             independent_release_verifier=independent_release_verifier,
             independent_domain_delegation_verifier=independent_domain_delegation_verifier,
         )
+        if not callable(independent_release_evidence_verifier):
+            raise CommercialGateError("merchant_release_evidence_verifier_invalid")
+        try:
+            attested = independent_release_evidence_verifier(
+                offer, release_evidence_sha256,
+            )
+        except Exception:
+            raise CommercialGateError("merchant_release_evidence_verifier_failed") from None
+        if attested is not True:
+            raise CommercialGateError("merchant_release_evidence_unverified")
         order_id = _slug(order_id, "order_id")
         with self.connection:
             self.connection.execute("BEGIN IMMEDIATE")
