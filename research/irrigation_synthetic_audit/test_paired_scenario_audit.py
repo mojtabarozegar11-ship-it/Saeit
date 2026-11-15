@@ -308,6 +308,15 @@ class AuditTests(unittest.TestCase):
         with self.assertRaisesRegex(AuditError, "cross-family"):
             analyze_family(self.make_records("R1", change), "R1")
 
+    def test_climate_path_balance_rejects_skewed_classes(self):
+        def skew_one_path(rows):
+            for row in rows:
+                if row["seed"] == 1008:
+                    row["climate_class"] = "dry"
+                    row["cohort"] = row["cohort"].replace("wet", "dry")
+        with self.assertRaisesRegex(AuditError, "unbalanced climate paths"):
+            analyze_family(self.make_records("C", skew_one_path), "C")
+
     def test_r1_reports_twelve_climate_paths(self):
         report = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual(len(report["climate_path_effects"]), 12)
