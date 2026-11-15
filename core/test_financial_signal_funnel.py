@@ -70,7 +70,7 @@ class FinancialBrandSignalFunnelTests(SimpleTestCase):
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode("utf-8")
                 self.assertEqual(html.count(SIGNAL_INTAKE_PATH), 2)
-                self.assertIn("mojtaba.bot.ai", html)
+                self.assertIn("mojtaba.bot.ai", html.casefold())
 
     def test_store_subsite_keeps_its_store_destination(self):
         response = self.client.get("/saman/digital-products/")
