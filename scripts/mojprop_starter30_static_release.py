@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import stat
 import sys
 import tempfile
 
@@ -80,6 +81,35 @@ def _atomic(path: Path, data: bytes, mode: int = 0o644) -> None:
             temporary.unlink()
 
 
+def _private_backup_root(*, create: bool) -> None:
+    """Never chmod/follow an existing backup root or accept unknown owner bytes.
+
+    A previous installer used BACKUP.mkdir(..., exist_ok=True) followed by
+    os.chmod(BACKUP, 0700). If BACKUP were a symlink, chmod could change
+    permissions of an unrelated directory. Deny instead of repairing it.
+    """
+    parent = BACKUP.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise RuntimeError("untrusted backup parent")
+    parent_mode = parent.lstat()
+    if (not stat.S_ISDIR(parent_mode.st_mode)
+            or parent_mode.st_uid != os.geteuid()
+            or parent_mode.st_mode & stat.S_IWOTH):
+        raise RuntimeError("untrusted backup parent owner or mode")
+    if BACKUP.is_symlink():
+        raise RuntimeError("symlinked backup directory")
+    if BACKUP.exists():
+        state = BACKUP.lstat()
+        if (not stat.S_ISDIR(state.st_mode)
+                or state.st_uid != os.geteuid()
+                or state.st_mode & 0o077):
+            raise RuntimeError("existing private backup root is not safe")
+    elif create:
+        BACKUP.mkdir(mode=0o700)
+    else:
+        raise RuntimeError("required private backup does not exist")
+
+
 def _stage(run_id: str) -> Path:
     return HOME / (".mojprop-starter30-stage-" + run_id) / "templates/moj-prop-v4/starter-30-trx"
 
@@ -131,8 +161,7 @@ def deploy(run_id: str, commit: str) -> None:
     location = BACKUP / run_id
     if location.exists() or location.is_symlink():
         raise RuntimeError("run id already used")
-    BACKUP.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(BACKUP, 0o700)
+    _private_backup_root(create=True)
     location.mkdir(mode=0o700)
     manifest_path = location / "manifest.json"
     with manifest_path.open("x", encoding="utf-8") as output:
@@ -155,6 +184,7 @@ def deploy(run_id: str, commit: str) -> None:
 def rollback(run_id: str, commit: str) -> None:
     _safe_id(run_id, commit)
     _host()
+    _private_backup_root(create=False)
     location = BACKUP / run_id
     manifest_path = location / "manifest.json"
     if location.is_symlink() or manifest_path.is_symlink() or not manifest_path.is_file():

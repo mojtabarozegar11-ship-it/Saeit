@@ -154,5 +154,82 @@ class Starter30StaticReleaseTests(unittest.TestCase):
             rel.rollback("123", COMMIT)
 
 
+    def test_deploy_denies_symlinked_backup_without_chmod_target(self):
+        foreign = self.home / "foreign-vault"
+        foreign.mkdir(mode=0o755)
+        self.backup.symlink_to(foreign, target_is_directory=True)
+        original_mode = foreign.stat().st_mode & 0o777
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            with self.assertRaisesRegex(RuntimeError, "symlinked backup"):
+                rel.deploy("123", COMMIT)
+        self.assertEqual(foreign.stat().st_mode & 0o777, original_mode)
+        self.assertFalse(self.target.exists())
+
+    def test_deploy_denies_existing_world_readable_backup_without_repair(self):
+        self.backup.mkdir(mode=0o755)
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            with self.assertRaisesRegex(RuntimeError, "private backup root"):
+                rel.deploy("123", COMMIT)
+        self.assertEqual(self.backup.stat().st_mode & 0o777, 0o755)
+        self.assertFalse(self.target.exists())
+
+    def test_deploy_denies_backup_path_preexisting_file(self):
+        self.backup.write_text("not a vault")
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            with self.assertRaises(RuntimeError):
+                rel.deploy("123", COMMIT)
+        self.assertEqual(self.backup.read_text(), "not a vault")
+
+    def test_deploy_denies_backup_symlink_even_to_owner_home(self):
+        self.backup.symlink_to(self.home, target_is_directory=True)
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            with self.assertRaises(RuntimeError):
+                rel.deploy("123", COMMIT)
+        self.assertFalse(self.target.exists())
+
+    def test_rollback_denies_swapped_backup_root(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        original = self.home / ".real-backups"
+        self.backup.rename(original)
+        self.backup.symlink_to(original, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "symlinked backup"):
+            rel.rollback("123", COMMIT)
+        self.assertTrue((self.target / "index.html").exists())
+
+    def test_rollback_denies_world_readable_backup_root(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        self.backup.chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError, "private backup root"):
+            rel.rollback("123", COMMIT)
+        self.assertTrue((self.target / "journal-template.csv").exists())
+
+    def test_rollback_missing_backup_dir_never_unlinks_content(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        original = self.home / "moved-backups"
+        self.backup.rename(original)
+        with self.assertRaisesRegex(RuntimeError, "required private backup"):
+            rel.rollback("123", COMMIT)
+        self.assertTrue((self.target / "index.html").exists())
+
+    def test_backup_root_cannot_use_world_writable_parent(self):
+        backup_parent = self.home / "shared"
+        backup_parent.mkdir()
+        backup_parent.chmod(0o777)
+        with patch.object(rel, "BACKUP", backup_parent / "backups"):
+            with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+                with self.assertRaisesRegex(RuntimeError, "backup parent"):
+                    rel.deploy("123", COMMIT)
+        self.assertFalse((backup_parent / "backups").exists())
+        self.assertFalse(self.target.exists())
+
+    def test_deploy_first_backup_root_is_private(self):
+        with patch.dict(os.environ, {"MOJPROP_STARTER30_OWNER_APPROVED": "static-only-approved"}):
+            rel.deploy("123", COMMIT)
+        self.assertEqual(self.backup.stat().st_mode & 0o777, 0o700)
+
+
 if __name__ == "__main__":
     unittest.main()
