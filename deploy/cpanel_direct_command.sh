@@ -90,7 +90,7 @@ EOF
     mpw_source_parity_readonly)
       guard=scripts/mpw_c29_cpanel_live_source_readonly.py
       test -f "$guard" && test ! -L "$guard"
-      test "$(git hash-object -- "$guard")" = "0398f28f6d60b95ddbf21c2da467d9d88ef20f35"
+      test "$(git hash-object -- "$guard")" = "8e78cdcbd2cc8b58b1406d32d2576cded4eaeb22"
       timeout 65s ssh -T -F "$work/config" saeit-cpanel \
         'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < "$guard"
       ;;
