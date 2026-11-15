@@ -14,10 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 LEGACY_LOCKS = {
-    "mojplaywin-main-deploy.yml": "deploy-main",
+    # Legacy shared-content jobs must stay hard-stopped.
     "mojplaywin-active-home-editorials.yml": "deploy-active-home",
     "mojplaywin-legacy-content-deploy.yml": "deploy-content",
 }
+MANUAL_RELEASE_JOBS = {
+    "mojplaywin-main-deploy.yml": "deploy-main",
+    "mojplaywin-moj-prop-deploy.yml": "deploy",
+    "mojplaywin-farnaz-deploy.yml": "deploy",
+    "zomorod-app-pages-deploy.yml": "publish",
+}
+MAIN_MANUAL_JOB = ("mojplaywin-main-deploy.yml", "deploy-main")
 CANDIDATE_MAIN_FILES = (
     "core/mojplaywin_views.py",
     "core/templates/mojplaywin/home.html",
@@ -28,7 +35,9 @@ CANDIDATE_MAIN_FILES = (
 CANDIDATE_SAFETY_FILES = tuple(
     ".github/workflows/" + file for file in LEGACY_LOCKS
 ) + (
+    *(f".github/workflows/{file}" for file in MANUAL_RELEASE_JOBS),
     ".github/workflows/mojplaywin-deploy-trigger-readonly-audit.yml",
+    "tests/test_owner_manual_deploy_premerge_20261115.py",
     "scripts/mojplaywin_detect_deploy_triggers.py",
     "tests/test_mojplaywin_shared_deploy_hard_stop.py",
 )
@@ -88,6 +97,30 @@ def can_match(pattern: str, path: str) -> bool:
     )
 
 
+def manual_release_job_guarded(source: str, header: str, job: str,
+                               *, require_static_owner_approval: bool = False) -> bool:
+    """Only an explicit manual dispatch may execute a release job."""
+    if event_block(header, "workflow_dispatch") is None:
+        return False
+    anchor = re.search(r"(?m)^  " + re.escape(job) + r":\s*$", source)
+    if anchor is None:
+        return False
+    tail = source[anchor.end():]
+    tail = re.split(r"(?m)^  [a-zA-Z][\w-]+:\s*$", tail, maxsplit=1)[0]
+    head = tail.split("\n    steps:", 1)[0]
+    conditions = re.findall(r"(?m)^    if:\s*(.+)$", head)
+    allowed = "github.event_name == 'workflow_dispatch'"
+    if require_static_owner_approval:
+        if "owner_approved_static_release:" not in header:
+            return False
+        allowed += " && inputs.owner_approved_static_release == true"
+    return conditions == [allowed]
+
+
+def manual_main_deployment_guarded(source: str, header: str) -> bool:
+    return manual_release_job_guarded(source, header, MAIN_MANUAL_JOB[1])
+
+
 def inspect(filename: Path) -> dict:
     source = filename.read_text(encoding="utf-8")
     match = re.search(r"(?m)^jobs:\s*$", source)
@@ -103,6 +136,11 @@ def inspect(filename: Path) -> dict:
     ]
     name = filename.name
     job = LEGACY_LOCKS.get(name)
+    manual_guarded = (manual_release_job_guarded(
+        source, header, MANUAL_RELEASE_JOBS[name],
+        require_static_owner_approval=name == "mojplaywin-moj-prop-deploy.yml")
+        if name in MANUAL_RELEASE_JOBS else None)
+    main_guarded = manual_guarded if name == MAIN_MANUAL_JOB[0] else None
     locked = bool(
         job and re.search(
             r"(?m)^  " + re.escape(job) + r":\s*\n"
@@ -119,6 +157,8 @@ def inspect(filename: Path) -> dict:
         "deployer_indicators": [x for x in DEPLOY_MARKERS if x.lower() in source.lower()],
         "guarded_job": job,
         "guarded_job_locked": locked if job else None,
+        "manual_main_deployment_guarded": main_guarded,
+        "manual_release_job_guarded": manual_guarded,
     }
 
 
@@ -128,6 +168,15 @@ def main() -> None:
     unlocked_legacy = [
         v["workflow"] for v in inspected if v["guarded_job"] and not v["guarded_job_locked"]
     ]
+    main_site_manual_only = any(
+        v["workflow"] == MAIN_MANUAL_JOB[0] and v["manual_main_deployment_guarded"]
+        for v in inspected
+    )
+    blocked_manual_releases = sorted(
+        file for file in MANUAL_RELEASE_JOBS
+        if not any(v["workflow"] == file and v["manual_release_job_guarded"]
+                   for v in inspected)
+    )
     review = [
         v for v in inspected
         if v["runs_after_workflow"] or (v["triggered_by_candidate_paths"] and not v["guarded_job_locked"])
@@ -136,6 +185,9 @@ def main() -> None:
         "scope": "SOURCE ONLY; NEVER AUTHORIZES DEPLOYMENT",
         "workflows_scanned": len(inspected),
         "legacy_jobs_hard_stopped": not unlocked_legacy,
+        "main_site_deploy_manual_only": main_site_manual_only,
+        "four_release_jobs_manual_only": not blocked_manual_releases,
+        "unguarded_release_jobs": blocked_manual_releases,
         "unlocked_legacy": unlocked_legacy,
         "other_trigger_paths_require_manual_review": review,
         "unrestricted_push_to_main": [
@@ -146,7 +198,7 @@ def main() -> None:
         "release_authorized": False,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if unlocked_legacy:
+    if unlocked_legacy or blocked_manual_releases or not main_site_manual_only:
         raise SystemExit(2)
 
 

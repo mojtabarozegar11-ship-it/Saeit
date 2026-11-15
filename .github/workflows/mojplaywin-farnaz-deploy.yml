@@ -53,7 +53,8 @@ jobs:
         run: python -m py_compile scripts/deploy_farnaz_django.py
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Unrelated config/urls.py merges must never deploy the Farnaz site.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
