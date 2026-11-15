@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from .signal_commercial_catalog import CANONICAL_AGENT, SIGNAL_BRANDS
 from .tron_tenant_policy import (TenantDecision, canonical_host,
-                                 DEFAULT_ALLOWED_ANCHORS)
+                                 registered_scope, DEFAULT_ALLOWED_ANCHORS)
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def canonical_signal_product(sku, brand):
     }
 
 
-def subscription_review(*, tenant, proofs):
+def subscription_review(*, tenant, proofs, trusted_merchant_registry=None):
     if not isinstance(tenant, TenantDecision) or tenant.brand not in SIGNAL_BRANDS:
         raise ValueError("A separately verified signal-brand merchant is required")
     if not isinstance(proofs, dict):
@@ -82,6 +82,21 @@ def subscription_review(*, tenant, proofs):
         blockers.append("merchant_identity_or_attestations_inconsistent")
     if tenant.payment_enabled is not False or tenant.invoice_created is not False:
         blockers.append("unexpected_active_payment_or_invoice_claim")
+    # No caller-supplied data transfer object is itself a source of truth.
+    # Re-resolve merchant scope against a *protected* registry, separate
+    # from HTTP form fields and commercial assertions.
+    if type(trusted_merchant_registry) is not dict:
+        blockers.append("protected_merchant_registry_missing")
+    else:
+        try:
+            canonical = registered_scope(
+                host=tenant.host, brand=tenant.brand,
+                registry=trusted_merchant_registry,
+            )
+            if canonical != tenant:
+                blockers.append("merchant_registration_changed_or_forged")
+        except (ValueError, TypeError, AttributeError):
+            blockers.append("merchant_registration_changed_or_forged")
     return {
         "eligible_for_external_review": not blockers,
         "missing": blockers,
