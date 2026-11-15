@@ -35,7 +35,7 @@ jobs:
           python manage.py makemigrations core --check --dry-run
       - name: Test real canonical request path, rate and retention DB
         run: |
-          python manage.py test tests.test_moj_prop_c66_shared_quota tests.test_moj_prop_c66_security tests.test_moj_prop_c66_retention --verbosity 2
+          python manage.py test tests.test_moj_prop_c66_shared_quota tests.test_moj_prop_c66_security tests.test_moj_prop_c66_retention tests.test_moj_prop_c66_form_contract --verbosity 2
       - name: Apply core.0044 only to isolated CI database
         run: |
           python manage.py migrate core --noinput
