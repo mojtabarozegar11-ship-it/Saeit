@@ -14,6 +14,29 @@ class MojtabaSignalFunnelContractTests(SimpleTestCase):
             signal_page.count('/moj-prop/?service=signals#request'), 2
         )
 
+    def test_published_manual_price_cards_use_the_authoritative_catalog(self):
+        from services.mojtaba_signal_catalog import PLANS
+        signal_page = (
+            Path(settings.BASE_DIR) / "templates/moj-prop/signals/index.html"
+        ).read_text(encoding="utf-8")
+        for code, plan in PLANS.items():
+            with self.subTest(plan=code):
+                self.assertIn("plan="+code+"#request", signal_page)
+                self.assertIn("USD "+format(plan.price_usd, ".2f"), signal_page)
+        self.assertIn("not an active checkout", signal_page)
+        self.assertIn("explicit risk disclosure", signal_page)
+        self.assertNotIn("guaranteed returns", signal_page.casefold())
+
+    def test_legacy_buyer_form_preserves_preselected_paid_research_plan(self):
+        source = (
+            Path(settings.BASE_DIR) / "templates/moj-prop/index.html"
+        ).read_text(encoding="utf-8")
+        for code in ("education-weekly", "education-monthly", "education-quarterly"):
+            self.assertIn(code, source)
+        self.assertIn(".get('plan')", source)
+        self.assertIn("Object.prototype.hasOwnProperty.call(allowedPlans,requestedPlan)", source)
+        self.assertIn("No recurring subscription or payment is authorized yet.", source)
+
     def test_request_forms_accept_a_safe_service_query_prefill(self):
         for relative in ("templates/moj-prop-v4/index.html", "templates/moj-prop/index.html"):
             source = (Path(settings.BASE_DIR) / relative).read_text(encoding="utf-8")
