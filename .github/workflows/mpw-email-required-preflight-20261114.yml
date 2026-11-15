@@ -16,6 +16,8 @@ jobs:
         run: python3 -m py_compile scripts/mpw_dynamic_store_cutover_20261108.py scripts/mpw_email_required_preflight_20261114.py services/mpw_invoice_funnel_identity.py services/mpw_trx_email_recovery.py
       - name: Check real buyer-email source with adversarial tests
         run: python3 -m unittest discover -s tests -p 'test_mpw_email_required_preflight_20261114.py' -v
+      - name: Verify completed digital purchase recovery without database
+        run: python3 -m unittest discover -s tests -p 'test_mpw_guest_recovery_completed_digital_20261115.py' -v
       - name: Enforce exact required-email checkout markup across aliases
         run: python3 -m unittest discover -s tests -p 'test_mpw_email_bound_checkout_contract_20261115.py' -v
       - name: Retest original rollback and cutover safety
