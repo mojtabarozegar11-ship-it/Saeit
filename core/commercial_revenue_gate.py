@@ -617,6 +617,7 @@ class SQLiteCommercialLedger:
                 canonical_host TEXT NOT NULL,
                 offer_id TEXT NOT NULL,
                 offer_type TEXT NOT NULL,
+                delivery_manifest_sha256 TEXT NOT NULL,
                 release_evidence_sha256 TEXT NOT NULL,
                 recorded_at TEXT NOT NULL
             );
@@ -748,9 +749,10 @@ class SQLiteCommercialLedger:
                 raise CommercialGateError("merchant_binding_after_settlement_forbidden")
             try:
                 self.connection.execute(
-                    "INSERT INTO merchant_order_bindings VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO merchant_order_bindings VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (order_id, offer.tenant_id, offer.canonical_host,
-                     offer.offer_id, offer.offer_type.value, release_evidence_sha256,
+                     offer.offer_id, offer.offer_type.value, offer.delivery_manifest_sha256,
+                     release_evidence_sha256,
                      datetime.now(timezone.utc).isoformat()),
                 )
             except sqlite3.IntegrityError:
@@ -883,6 +885,15 @@ class SQLiteCommercialLedger:
             row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
             if row is None:
                 raise CommercialGateError("order_not_found")
+            if target is CommercialState.FULFILLED:
+                bound_manifest = self.connection.execute(
+                    "SELECT delivery_manifest_sha256 FROM merchant_order_bindings WHERE order_id = ?",
+                    (order_id,),
+                ).fetchone()
+                if (bound_manifest is not None
+                        and bound_manifest["delivery_manifest_sha256"]
+                        and bound_manifest["delivery_manifest_sha256"] != fulfillment_manifest_sha256):
+                    raise CommercialGateError("merchant_delivery_manifest_mismatch")
             if target is CommercialState.VERIFIED_REVENUE and self.connection.execute(
                 "SELECT 1 FROM independently_confirmed_refunds WHERE order_id = ? LIMIT 1",
                 (order_id,),
