@@ -104,6 +104,29 @@ class MojPropProvisionalAllocationTests(TestCase):
         with self.assertRaisesRegex(AllocationRejected, "reference is not unique"):
             self.stage()
 
+    def test_two_allowlisted_broker_sources_cannot_share_a_funded_account(self):
+        self.trade_day()
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            "broker_fixture": EVIDENCE_KEY,
+            "another_trusted": "other-signed-key-only-for-regression",
+        }):
+            PropEquityObservation.objects.filter(
+                account=self.account, is_session_open=False,
+            ).update(data_source="another_trusted")
+            with self.assertRaisesRegex(AllocationRejected, "source continuity mismatch"):
+                self.stage()
+
+    def test_two_trusted_execution_sources_are_not_one_broker_period(self):
+        self.trade_day()
+        self.trade_day(day=11, pnl="2", source="another_trusted",
+                       initial_equity="103", final_equity="105")
+        with override_settings(MOJ_PROP_TRUSTED_EVIDENCE_KEYS={
+            "broker_fixture": EVIDENCE_KEY,
+            "another_trusted": "other-signed-key-only-for-regression",
+        }):
+            with self.assertRaisesRegex(AllocationRejected, "source continuity mismatch"):
+                self.stage()
+
     def test_valid_verified_month_stages_only_provisional_distribution(self):
         self.trade_day()
         a = self.stage()
