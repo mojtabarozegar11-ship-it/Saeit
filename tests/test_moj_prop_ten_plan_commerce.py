@@ -31,6 +31,7 @@ class TenPlanFundingReadinessTests(SimpleTestCase):
         self.assertEqual(x.first_real_tier_usd,Decimal("100"))
         self.assertEqual(x.final_tier_usd,Decimal("100000"))
         self.assertEqual(x.plan_code,DEFAULT_PLAN_CODE)
+        self.assertFalse(x.proposed_fee_not_live)
         self.assertFalse(x.checkout_enabled)
 
     def test_all_nine_added_plans_have_correct_capital_and_fee(self):
