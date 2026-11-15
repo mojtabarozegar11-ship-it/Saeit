@@ -65,8 +65,52 @@ def sanitize_action_queue(raw: object) -> dict:
     }
 
 
+def inspect_minimal_intake_presence(connection) -> dict:
+    """An older deployed app may lack the reviewed queue command.
+
+    Only inspect public schema names and EXISTS of consented active leads.
+    A missing table or column is UNKNOWN, not "zero customers".
+    """
+    available = False
+    active = None
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema=DATABASE() AND table_name='core_mojproprequest'"
+        )
+        table_exists = int(cursor.fetchone()[0]) == 1
+        if table_exists:
+            cursor.execute(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                "WHERE table_schema=DATABASE() AND table_name='core_mojproprequest' "
+                "AND column_name IN ('consent','status')"
+            )
+            available = int(cursor.fetchone()[0]) == 2
+            if available:
+                cursor.execute(
+                    "SELECT EXISTS(SELECT 1 FROM core_mojproprequest "
+                    "WHERE consent=1 AND status IN "
+                    "('new','reviewing','offer_sent','approved'))"
+                )
+                active = int(cursor.fetchone()[0]) == 1
+    return {
+        "schema": "mojprop.sales_queue.boolean_public_diagnostic.v1",
+        "read_only": True,
+        "exact_reviewed_queue_source": False,
+        "limited_intake_presence_checked": available,
+        "other_queue_categories_not_checked": True,
+        "any_actionable_consent_scoped_lead": active,
+        "categories_with_work_pending":
+            ["consented_active_intake"] if active is True else [],
+        "exact_lead_counts_or_personal_data_emitted": False,
+        "offer_or_payment_created": False,
+        "customer_contact_sent": False,
+        "revenue_recognized": False,
+    }
+
+
 def main() -> None:
-    if ROOT.is_symlink() or not ROOT.is_dir() or not COMMAND.is_file():
+    if ROOT.is_symlink() or not ROOT.is_dir():
         raise SystemExit("MOJPROP_LIVE_ROOT_NOT_VERIFIED")
     if ROOT.resolve() != ROOT or any(
         ancestor.is_symlink() for ancestor in
@@ -74,18 +118,17 @@ def main() -> None:
     ):
         raise SystemExit("MOJPROP_UNSAFE_QUEUE_SOURCE")
     try:
-        source = COMMAND.read_bytes()
-        if git_blob_sha256_legacy_sha1(source) != REVIEWED_SOURCE_GIT_SHA:
-            raise SystemExit("MOJPROP_QUEUE_LIVE_SOURCE_DIFFERS_FROM_REVIEWED")
+        command_deployed = COMMAND.is_file()
+        if command_deployed:
+            source = COMMAND.read_bytes()
+            if git_blob_sha256_legacy_sha1(source) != REVIEWED_SOURCE_GIT_SHA:
+                raise SystemExit("MOJPROP_QUEUE_LIVE_SOURCE_DIFFERS_FROM_REVIEWED")
         os.chdir(ROOT)
         sys.path.insert(0, str(ROOT))
         os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
         import django
         django.setup()
         from django.db import connection
-        from core.management.commands.mojprop_sales_action_queue import (
-            action_queue_snapshot,
-        )
         if connection.vendor != "mysql":
             raise ValueError("unexpected database vendor")
         # Enforce SELECT-only on the connection during ORM execution, even if
@@ -95,8 +138,14 @@ def main() -> None:
                 raise PermissionError("read-only SQL guard")
             return execute(sql, params, many, context)
         with connection.execute_wrapper(select_only):
-            # detail_limit=0: no IDs are collected for the JSON report.
-            summary = sanitize_action_queue(action_queue_snapshot(detail_limit=0))
+            if command_deployed:
+                from core.management.commands.mojprop_sales_action_queue import (
+                    action_queue_snapshot,
+                )
+                # detail_limit=0: no IDs are collected for the JSON report.
+                summary = sanitize_action_queue(action_queue_snapshot(detail_limit=0))
+            else:
+                summary = inspect_minimal_intake_presence(connection)
     except Exception as exc:
         # Only the class is logged, never exception messages or customer data.
         raise SystemExit("MOJPROP_QUEUE_INSPECTION_BLOCKED_" + type(exc).__name__)
