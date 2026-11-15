@@ -36,6 +36,9 @@
       const form=document.getElementById('request-form');
       const result=document.getElementById('result');
       const copy=document.getElementById('copy');
+      const receiptTokenInput=document.getElementById('receipt-token');
+      const statusCheck=document.getElementById('status-check');
+      const statusResult=document.getElementById('status-result');
       const submit=form.querySelector('button[type="submit"]');
       const endpoint='/moj-prop-intake/';
       let csrfToken='';
@@ -57,11 +60,12 @@
         return csrfToken;
       }
 
-      function draft(name,email,service,horizon,notes,status,requestId){
+      function draft(name,email,service,horizon,notes,status,requestId,receiptToken){
         return [
           'Moj Prop / mojtaba.bot.ai request',
           '',
           requestId ? 'Request ID: '+requestId : 'Request ID: not allocated',
+          receiptToken ? 'Private receipt token (keep secret): '+receiptToken : '',
           'Name: '+name,
           'Email: '+email,
           'Route: '+labels[service],
@@ -94,7 +98,9 @@
           });
           const data=await response.json();
           if(!response.ok || !data.ok) throw new Error(data.detail||'The request could not be received.');
-          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id);
+          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,data.receipt_token||'');
+          receiptTokenInput.value=data.receipt_token||'';
+          statusResult.textContent=data.receipt_token ? 'Save the receipt securely; you can check review progress here.' : 'Request received; save your request ID for manual follow-up.';
           result.textContent=receipt;
           copy.disabled=false;
         }catch(error){
@@ -104,6 +110,29 @@
         }finally{
           submit.disabled=false;
           submit.textContent='Send request for review';
+        }
+      });
+
+      statusCheck.addEventListener('click',async function(){
+        const token=receiptTokenInput.value.trim();
+        if(!token || token.length>256){
+          statusResult.textContent='Enter a valid private receipt token; no request was changed.';
+          return;
+        }
+        statusCheck.disabled=true;
+        statusResult.textContent='Checking this receipt without requesting any payment…';
+        try{
+          const response=await fetch('/moj-prop-status/?receipt_token='+encodeURIComponent(token),{
+            credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',
+            headers:{Accept:'application/json'}
+          });
+          const data=await response.json();
+          if(!response.ok || !data.ok) throw new Error('Receipt invalid or expired; use your original contact channel.');
+          statusResult.textContent='Request '+data.request_id+': '+data.stage+'. No payment is collected here.';
+        }catch(error){
+          statusResult.textContent=error.message;
+        }finally{
+          statusCheck.disabled=false;
         }
       });
 
