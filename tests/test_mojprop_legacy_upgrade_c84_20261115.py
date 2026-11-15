@@ -96,6 +96,23 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
                 installer.patch_admin(self.root / "core/admin.py", SOURCE / "core/admin.py")
         self.assertEqual(after, [(self.root / name).read_bytes() for name in PREFIXES])
 
+    def test_live_model_or_admin_symlink_must_not_escape_tenant(self):
+        for relative in ("core/models.py", "core/admin.py"):
+            with self.subTest(relative=relative):
+                path = self.root / relative
+                original = path.read_bytes()
+                outside = self.root / ("outside-" + Path(relative).name)
+                outside.write_bytes(original)
+                path.unlink()
+                path.symlink_to(outside)
+                with self.assertRaisesRegex(
+                    RuntimeError, "unsafe live commercial source path"
+                ):
+                    check_schema_closure(self.root, SOURCE)
+                self.assertEqual(outside.read_bytes(), original)
+                path.unlink()
+                path.write_bytes(original)
+
     def test_owner_edited_partial_model_or_admin_is_rejected_and_untouched(self):
         for relative in PREFIXES:
             with self.subTest(relative=relative):
