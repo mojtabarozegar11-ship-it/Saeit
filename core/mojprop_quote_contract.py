@@ -23,7 +23,7 @@ def _text(value, name, minimum, maximum):
             or any((ord(ch) < 32 and ch not in "\n\t")
                    or 0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
         raise QuoteContractError("invalid " + name)
-    if name == "title" and any(ch in value for ch in ("\\n", "\\t", "\\u2028", "\\u2029")):
+    if name == "title" and any(ch in value for ch in ("\n", "\t", "\u2028", "\u2029")):
         raise QuoteContractError("title must not inject a second proposal line")
     return value.strip()
 
