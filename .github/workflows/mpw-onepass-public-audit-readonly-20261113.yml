@@ -10,6 +10,8 @@ on:
       - 'tests/test_mpw_checkout_render_contract_20261114.py'
       - 'tests/test_mpw_paid_sku_scope_20261113.py'
       - 'services/mpw_trx_guest_commerce.py'
+      - 'services/mpw_invoice_funnel_identity.py'
+      - 'tests/test_mpw_invoice_funnel_identity_20261115.py'
       - 'services/mpw_checkout_render_contract.py'
       - 'services/mpw_trx_email_recovery.py'
       - 'tests/test_mpw_email_recovery_20261105.py'
