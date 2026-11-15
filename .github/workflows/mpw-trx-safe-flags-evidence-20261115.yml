@@ -5,6 +5,8 @@ on:
     paths:
       - "scripts/mpw_trx_live_gates_readonly_20261115.py"
       - ".github/workflows/mpw-trx-safe-flags-evidence-20261115.yml"
+      - "scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py"
+      - "tests/test_mpw_trx_canary_existing_receipts_readonly_20261116.py"
 
 permissions:
   contents: read
@@ -24,7 +26,11 @@ jobs:
       - name: Compile immutable diagnostic
         run: |
           set -euo pipefail
-          python3 -B -m py_compile scripts/mpw_trx_live_gates_readonly_20261115.py
+          python3 -B -m py_compile scripts/mpw_trx_live_gates_readonly_20261115.py scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_trx_canary_existing_receipts_readonly_20261116 -q
+          test -f scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          test ! -L scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py)" = "02fc1bd354bbb335945d6bb97680438f74876ff9"
 
       - name: Connect to cPanel with pinned host key
         id: link
@@ -54,6 +60,18 @@ jobs:
           test -s "$d/config"
           timeout 90s ssh -T -F "$d/config" cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_trx_live_gates_readonly_20261115.py
 
+      - name: Inspect real existing native-TRX evidence and effective canary gate — no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py \
+            | python3 -c 'import json,sys; s=sys.stdin.read(10000); lines=[x for x in s.splitlines() if x.startswith("MPW_TRX_CANARY_RECEIPT_READONLY=")]; assert len(lines)==1,"missing or duplicate bounded evidence"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.trx.canary.existing_receipts.readonly.v1" and d["read_only"] is True and d["no_host_changes_or_financial_writes"] is True; print(lines[0])'
+          echo "EXISTING_TRX_LEDGER_READONLY=COMPLETE"
+          echo "A stored paid intent or receipt is NOT an independently verified customer delivery or fresh chain finality." >> "$GITHUB_STEP_SUMMARY"
       - name: Remove relay material
         if: always()
         run: |
