@@ -56,7 +56,7 @@ def _nocache(response):
     return response
 
 
-def _select_order(product_id: int, buyer_id: int, connection):
+def _select_order(product_id: int, buyer_id: int, connection, *, merchant_domain=None):
     from django.contrib.auth import get_user_model
     from django.db import transaction
     from django.utils import timezone
@@ -95,7 +95,8 @@ def _select_order(product_id: int, buyer_id: int, connection):
             unit_price=product.price,currency="USD")
         intent_id,_,_=reserve_commercial_intent(
             order.pk,buyer_id,db=connection,
-            rate_provider=_rate_provider,configured_receiver=_configured_receiver)
+            rate_provider=_rate_provider,configured_receiver=_configured_receiver,
+            merchant_domain=merchant_domain)
         return intent_id
 
 
@@ -117,7 +118,10 @@ def _start_order(request, product_id):
     if public_trx_product(product_id) is None:
         raise Http404("Product is not approved for public TRX purchase")
     try:
-        invoice_id=_select_order(product_id,request.user.pk,db)
+        invoice_id=_select_order(
+            product_id, request.user.pk, db,
+            merchant_domain=request.get_host().split(":")[0],
+        )
     except (PaymentHold,ValueError,Product.DoesNotExist) as exc:
         raise Http404("Payment is not available") from exc
     # A guest order is always linked to its validated email and a durable
