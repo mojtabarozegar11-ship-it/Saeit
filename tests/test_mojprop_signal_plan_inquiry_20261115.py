@@ -6,6 +6,7 @@ It creates no real order, payment, email, wallet call or outside network traffic
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -94,6 +95,16 @@ class SignalPlanInquiryTests(unittest.TestCase):
                     'href="/moj-prop/?service=signals&plan=' + plan + '#request"',
                     html,
                 )
+
+    def test_indicative_prices_match_the_server_owned_single_bot_catalog(self):
+        from services.mojtaba_signal_catalog import get_signal_plan
+        html = HOME.read_text(encoding="utf-8")
+        for plan_id in ("education-weekly", "education-monthly", "education-quarterly"):
+            with self.subTest(plan=plan_id):
+                price = format(get_signal_plan(plan_id).price_usd, "f")
+                pattern = re.escape("'" + plan_id + "':{") + r"label:'[^']+',usd:'" + re.escape(price) + r"'"
+                self.assertRegex(html, pattern)
+                self.assertFalse(get_signal_plan(plan_id).price_usd.is_zero())
 
     def test_browser_inquiry_is_explicitly_nonfinancial(self):
         html = HOME.read_text(encoding="utf-8")
