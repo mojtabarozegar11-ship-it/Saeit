@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>{{ product.title }} — MojPlayWin secure TRX checkout</title>
+<style>
+:root{color-scheme:dark;background:#101827;color:#f3f6fc;font-family:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;padding:18px}
+main{width:min(100%,700px);margin:3rem auto;background:#1b2638;border:1px solid #536078;border-radius:20px;padding:clamp(18px,4vw,35px)}
+h1{font-size:clamp(1.5rem,4vw,2rem);line-height:1.2;overflow-wrap:anywhere}
+p{line-height:1.7}.price{font-size:2rem;color:#f4d38c;font-weight:800}
+.notice{background:#26344a;border:1px solid #74839b;padding:14px;border-radius:10px}
+label{display:block;font-weight:650;margin-top:22px;margin-bottom:8px}
+input{display:block;width:100%;padding:14px;border-radius:9px;border:1px solid #aebcd3;background:#0e1623;color:#fff;font:inherit;max-width:100%}
+button{display:block;width:100%;padding:15px;border:0;border-radius:10px;background:#eac778;color:#151a23;font:inherit;font-weight:750;margin:18px 0;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #91c9ff;outline-offset:2px}
+a{color:#a9dbff}small{color:#c4d0de}nav{display:flex;gap:18px;flex-wrap:wrap}
+</style></head><body><main>
+<nav aria-label="MojPlayWin"><a href="/">Home</a><a href="/store/">Store</a><a href="/support/">Support</a></nav>
+<p><small>MOJPLAYWIN · DIGITAL DELIVERY · TRON MAINNET</small></p>
+<h1>{{ product.title }}</h1>
+<p class="price">${{ price_usd }} USD</p>
+<p>Request a one-time TRX invoice for the listed digital product. The receiving address, exact payable amount in TRX, network and expiry are displayed by the server on the following invoice page.</p>
+<div class="notice">
+<strong>Before paying</strong>
+<p>No money is charged by submitting this form. Do not transfer TRX before receiving a server-issued invoice. Blockchain transfers may be irreversible. Never send USDT or money to an address supplied by an unsolicited message.</p>
+</div>
+<form method="post" action="/commerce/trx-easy/start/{{ product.pk }}/" accept-charset="utf-8">
+{% csrf_token %}
+<label for="mpw-buyer-email">Email for your invoice, receipt and digital purchase recovery</label>
+<input id="mpw-buyer-email" name="email" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" required>
+<button type="submit">Create my one-time TRX invoice</button>
+</form>
+<p><small>Payment and download are available only after independent network confirmation and verification of the purchased product. No automatic subscription, stored wallet permission or recurring charge is requested.</small></p>
+<p><a href="/commerce/trx-easy/purchases/">Recover an eligible purchase</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a></p>
+</main></body></html>
