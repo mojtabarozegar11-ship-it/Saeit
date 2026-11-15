@@ -70,7 +70,7 @@ jobs:
               for f in config/urls.py core/models.py core/admin.py core/financial_brand_pages.py core/templates/core/financial_brand_page.html; do
                 if test -f "$BASE/$f"; then
                   printf "STAGING_FILE_SHA256 %s " "$f"
-                  sha256sum "$BASE/$f" | awk "{print \\$1}"
+                  git hash-object "$BASE/$f"
                 else
                   printf "STAGING_FILE_MISSING %s\n" "$f"
                 fi
