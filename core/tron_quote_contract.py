@@ -20,6 +20,8 @@ ORDER_RE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:-]{7,95}\Z")
 SKU_RE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:-]{1,119}\Z")
 SUN = Decimal("1000000")
 MAX_SUN = 10**15
+MAX_MONEY_INPUT_CHARS = 96
+MIN_AMOUNT_DECIMAL_MAGNITUDE = -12
 MAX_RATE_AGE = timedelta(minutes=5)
 MAX_QUOTE_LIFETIME = timedelta(minutes=10)
 
@@ -46,11 +48,18 @@ class NativeTrxQuote:
 def _amount(value, name):
     if type(value) not in (str, int, Decimal):
         raise NativeTrxQuoteError(name + "_type")
+    # Bound input BEFORE Decimal parsing or expansion to avoid oversized quotes.
+    encoded = str(value)
+    if not 0 < len(encoded) <= MAX_MONEY_INPUT_CHARS:
+        raise NativeTrxQuoteError(name + "_input_too_long")
     try:
-        amount = Decimal(str(value))
+        amount = Decimal(encoded)
     except (ValueError, InvalidOperation, ArithmeticError):
         raise NativeTrxQuoteError(name + "_invalid") from None
-    if not amount.is_finite() or amount <= 0 or amount.adjusted() > 12:
+    # Reject tiny exponent-bomb amounts before format(amount, "f") can allocate
+    # very long zero-padded strings (e.g. 1e-100000000).
+    if (not amount.is_finite() or amount <= 0 or amount.adjusted() > 12
+            or amount.adjusted() < MIN_AMOUNT_DECIMAL_MAGNITUDE):
         raise NativeTrxQuoteError(name + "_range")
     return amount
 

@@ -203,6 +203,36 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                   "usd_price": "12", "payment_state": "pending", "cancelled": True}
         self.assertFalse(self.valid(trusted_order_registry={"order-10001": record}))
 
+    def test_oversized_decimal_text_is_rejected_before_parsing(self):
+        for usd in ("9" * 200, "1." + "0" * 500 + "1"):
+            with self.subTest(length=len(usd)), self.assertRaisesRegex(
+                NativeTrxQuoteError, "usd_price_input_too_long"
+            ):
+                self.quote(usd_price=usd)
+        with self.assertRaisesRegex(NativeTrxQuoteError, "trx_rate_input_too_long"):
+            self.quote(trx_usd_rate="0." + "0" * 200 + "1")
+
+    def test_exponent_bombs_and_absurd_small_order_prices_rejected(self):
+        for price in ("1e-100000", Decimal("1e-5000"), "0.0000000000001"):
+            with self.subTest(price=str(price)), self.assertRaisesRegex(
+                NativeTrxQuoteError, "usd_price_range"
+            ):
+                self.quote(usd_price=price)
+        self.assertFalse(self.valid(
+            quote=replace(self.quote(), usd_price="1e-100000")
+        ))
+
+    def test_minimum_supported_small_price_can_still_quote_one_sun(self):
+        reg = {"order-10001": {
+            "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+            "usd_price": "0.000000000001", "payment_state": "pending",
+            "cancelled": False,
+        }}
+        quote = self.quote(usd_price="0.000000000001",
+                           trx_usd_rate="1", trusted_order_registry=reg)
+        self.assertEqual(quote.exact_amount_sun, 1)
+        self.assertTrue(self.valid(quote=quote, trusted_order_registry=reg))
+
     def test_invoice_or_receipt_never_created_by_quote_function(self):
         q = self.quote()
         self.assertFalse(hasattr(q, "paid"))
