@@ -51,7 +51,13 @@ def staged_root(run_id: str) -> Path:
             raise RuntimeError(f"Missing or unsafe staged file: {relative}")
     index = (root / "index.html").read_text(encoding="utf-8")
     catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-    for required in ('<title>Moj Prop', 'href="/moj-prop/catalog/"', 'See service prices', 'mojtaba.bot.ai'):
+    for required in (
+        '<title>Moj Prop', 'href="/moj-prop/catalog/"', 'See service prices',
+        "const endpoint='/moj-prop-intake/';",
+        '<option value="urgent">', '<option value="week">',
+        '<option value="month">', '<option value="review">',
+        'I consent to storing my contact details and request notes',
+    ):
         if required not in index:
             raise RuntimeError(f"Moj Prop index validation failed: {required}")
     for required in ('<title>Moj Prop Catalog', 'From US$149', 'From US$249'):
