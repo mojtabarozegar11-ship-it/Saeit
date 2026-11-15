@@ -39,6 +39,7 @@ STARTER30_FILES = (
     Path("starter-30-trx/journal-guide.txt"),
 )
 FILES = HTML_FILES + STARTER30_FILES
+MANIFEST_SCHEMA = "mojprop.static.starter30.v2"
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
@@ -197,6 +198,11 @@ def verified_manifest(path: Path) -> dict:
         raise RuntimeError("Symlinked or missing rollback directory")
     assert_file(path)
     value = json.loads(path.read_text("utf-8"))
+    if type(value) is not dict or value.get("schema") != MANIFEST_SCHEMA:
+        # Legacy 7-file backups must use the EXACT prior pinned installer.
+        # Accepting a downgraded manifest here could silently leave three
+        # new Starter30 assets installed after an apparent rollback.
+        raise RuntimeError("Legacy or unrecognized static backup manifest; use the pinned prior rollback version")
     expected = [str(item) for item in FILES]
     if type(value) is not dict or type(value.get("files")) is not list:
         raise RuntimeError("Unrecognized Moj Prop rollback manifest")
@@ -276,7 +282,7 @@ def deploy(run_id: str, commit: str) -> None:
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Backup ID already used")
     backup.mkdir(parents=True, mode=0o700)
-    manifest = {"run_id": run_id, "commit_sha": commit, "files": changes, "rolled_back": False}
+    manifest = {"schema": MANIFEST_SCHEMA, "run_id": run_id, "commit_sha": commit, "files": changes, "rolled_back": False}
     for item in changes:
         if item["existed"]:
             previous = ROUTE / item["path"]
