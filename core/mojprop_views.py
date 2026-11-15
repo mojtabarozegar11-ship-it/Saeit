@@ -75,7 +75,9 @@ def _payload(request):
             return None
         return value
     form = request.POST
-    if set(form.keys()) - ALLOWED_FIELDS:
+    # A normal browser form carries Django's CSRF hidden field. It is not
+    # customer data and must not block an otherwise valid, consented lead.
+    if set(form.keys()) - (ALLOWED_FIELDS | {"csrfmiddlewaretoken"}):
         return None
     if any(len(form.getlist(key)) != 1 for key in form):
         return None
@@ -144,7 +146,7 @@ def mojprop_intake(request):
 
     payload = _payload(request)
     if payload is None:
-        return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
+        return _json({"ok": False, "detail": "Use valid JSON or a single-valued HTML form."}, status=400)
 
     # Type-check JSON values; Python stringification must not turn arrays,
     # objects or integers into fabricated buyer names/addresses.
@@ -152,7 +154,10 @@ def mojprop_intake(request):
         if field in payload and not isinstance(payload[field], str):
             return _json({"ok": False, "detail": "Invalid field types."}, status=400)
     consent_value = payload.get("consent")
-    if isinstance(payload, dict) and type(consent_value) is not bool:
+    is_json_payload = type(payload) is dict
+    # QueryDict subclasses dict, but ordinary form checkbox values are
+    # strings ("on"/"1"), not JSON booleans. Keep the formats distinct.
+    if is_json_payload and type(consent_value) is not bool:
         return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
@@ -176,7 +181,10 @@ def mojprop_intake(request):
     route = _text(payload, "service", 30)
     horizon = _text(payload, "horizon", 20)
     notes = _text(payload, "notes", 5000)
-    consent = consent_value is True or (not isinstance(payload, dict) and str(consent_value).lower() in {"1", "true", "on"})
+    consent = consent_value is True or (
+        not is_json_payload and isinstance(consent_value, str)
+        and consent_value.lower() in {"1", "true", "on"}
+    )
 
     errors = {}
     if len(name) < 2:
