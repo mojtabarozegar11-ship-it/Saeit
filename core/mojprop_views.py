@@ -10,6 +10,7 @@ import hmac
 import json
 import secrets
 from datetime import timedelta
+from ipaddress import ip_address
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -42,7 +43,8 @@ def _text(payload, key: str, limit: int) -> str:
         raise ValueError("invalid field: " + key)
     value = value.strip()
     allowed_controls = chr(10) + chr(9) if key == "notes" else ""
-    if any(ord(char) < 32 and char not in allowed_controls for char in value):
+    if any((ord(char) < 32 and char not in allowed_controls)
+           or 0xD800 <= ord(char) <= 0xDFFF for char in value):
         raise ValueError("control character in " + key)
     return value
 
@@ -61,7 +63,10 @@ def _payload(request):
     declared_length = request.META.get("CONTENT_LENGTH")
     if declared_length not in (None, ""):
         try:
-            if int(declared_length) > MAX_REQUEST_BYTES:
+            length = int(declared_length)
+            if length < 0:
+                return None
+            if length > MAX_REQUEST_BYTES:
                 raise OverflowError("request body exceeds intake limit")
         except (TypeError, ValueError):
             return None
@@ -84,7 +89,7 @@ def _payload(request):
                 object_pairs_hook=_unique_json_pairs,
                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")),
             )
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
             return None
         return value if isinstance(value, dict) else None
     return None
@@ -92,11 +97,20 @@ def _payload(request):
 
 def _client_ip(request) -> str:
     # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    peer = str(request.META.get("REMOTE_ADDR") or "unknown").strip()[:128]
-    # Never trust a spoofable client-supplied proxy header by default.
+    raw_peer = str(request.META.get("REMOTE_ADDR") or "").strip()
+    try:
+        peer = ip_address(raw_peer).compressed
+    except ValueError:
+        return "unknown-peer"
+    # Only a configured reverse proxy may assert a forwarded single IP.
     trusted_proxies = getattr(settings, "MOJPROP_TRUSTED_PROXIES", ())
     if isinstance(trusted_proxies, (list, tuple, frozenset)) and peer in trusted_proxies:
-        return str(request.META.get("HTTP_X_REAL_IP") or peer).strip()[:128]
+        forwarded = str(request.META.get("HTTP_X_REAL_IP") or "").strip()
+        try:
+            return ip_address(forwarded).compressed
+        except ValueError:
+            # A forged / malformed / multi-IP header must not rotate rate keys.
+            return peer
     return peer
 
 
