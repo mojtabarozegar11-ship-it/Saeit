@@ -277,12 +277,33 @@ def _passenger_config() -> str | None:
     return None
 
 
+def _print_passenger_diagnostics() -> None:
+    for command in ("uapi", "whmapi1", "apachectl", "httpd"):
+        resolved = shutil.which(command)
+        print(f"MOJ_PROP_{command.upper()}=" + (resolved or "NOT_FOUND"))
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid,user,comm,args"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        for line in result.stdout.splitlines():
+            lowered = line.lower()
+            if any(token in lowered for token in ("passenger", "passenger_wsgi", "saeit-staging", "mojplaywin.com")):
+                print("MOJ_PROP_PROCESS=" + line[:500])
+    except Exception as exc:
+        print("MOJ_PROP_PROCESS_DIAGNOSTIC_ERROR=" + type(exc).__name__)
+
+
 def restart_passenger() -> None:
     restart = DOCROOT / "tmp" / "restart.txt"
     if restart.is_symlink():
         raise RuntimeError("Passenger restart path is a symlink")
     restart.parent.mkdir(parents=True, exist_ok=True)
     restart.touch()
+    _print_passenger_diagnostics()
     passenger_config = _passenger_config()
     print("MOJ_PROP_PASSENGER_CONFIG=" + (passenger_config or "NOT_FOUND"))
     if passenger_config:
