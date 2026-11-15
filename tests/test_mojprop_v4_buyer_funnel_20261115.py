@@ -48,6 +48,24 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn('id="consent"', self.html)
         self.assertIn('aria-live="polite"', self.html)
 
+    def test_manual_product_selection_for_direct_site_visitors(self):
+        """A digital buyer without prefilled URL must be able to pick a SKU."""
+        self.assertIn('id="digital-product" name="digital-product"', self.html)
+        self.assertIn('id="digital-product-field" hidden', self.html)
+        for sku in ("72", "225", "879"):
+            self.assertIn('<option value="'+sku+'">', self.html)
+        self.assertIn("serviceSelector.addEventListener('change',syncDigitalProduct)",self.html)
+        self.assertIn("productSelector.required=isDigital",self.html)
+        self.assertIn("productSelector.disabled=!isDigital",self.html)
+        self.assertIn("product_id:selectedProduct",self.html)
+        self.assertIn("Catalog product ID: '+(selectedProduct||'n/a')",self.html)
+
+    def test_server_request_timeout_covers_csrf_and_post(self):
+        self.assertIn("async function csrf(signal)",self.html)
+        self.assertIn("cache:'no-store',signal",self.html)
+        self.assertIn("await csrf(abortController.signal)",self.html)
+        self.assertIn("signal:abortController.signal",self.html)
+
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
         self.assertIn("This form sends a request", self.html)
