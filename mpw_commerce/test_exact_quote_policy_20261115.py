@@ -136,3 +136,36 @@ class ExactQuotePolicyTests(TestCase):
                 9999999, "TRX", buyer=buyer, quote=quote, now=self.now,
             )
         self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_rate_that_cannot_fit_decimal_30_12_is_not_a_payment_quote(self):
+        from mpw_commerce.invoicing import InvoiceRejected
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "verified-wallet-quote-22", self.now)
+        bad_rates = (
+            Decimal("0.0000000000001"),
+            Decimal("0.1234567890123"),
+            Decimal("999999999999999999.9999999999991"),
+            Decimal("1000000000000000000"),
+            Decimal("1E-80"),
+        )
+        for bad in bad_rates:
+            with self.subTest(rate=str(bad)), self.assertRaises(InvoiceRejected):
+                reserve_order_invoice(
+                    self.orders[0].pk, "TRX", buyer=buyer,
+                    quote=TrustedRate(bad, "coinbase", self.now),
+                    now=self.now,
+                )
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_source_comparison_object_cannot_impersonate_trusted_exchange(self):
+        from mpw_commerce.invoicing import InvoiceRejected
+        class Impersonator:
+            def __eq__(self, other):
+                return other == "coinbase"
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "verified-wallet-quote-22", self.now)
+        with self.assertRaises(InvoiceRejected):
+            reserve_order_invoice(
+                self.orders[0].pk, "TRX", buyer=buyer,
+                quote=TrustedRate(Decimal("0.2"), Impersonator(), self.now),
+                now=self.now,
+            )
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
