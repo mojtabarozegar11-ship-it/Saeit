@@ -18,6 +18,7 @@ from core.commercial_revenue_gate import (
     validate_payment_evidence,
     validate_signal_request,
     authorize_nonfinancial_signal_dispatch,
+    validate_merchant_trx_receipt,
     invoice_commitment,
 )
 
@@ -1833,6 +1834,69 @@ class CommercialGateTests(unittest.TestCase):
             requested_action="research_summary", bot_identity="mojtaba-bot-ai",
             offer=approved, tenant_registry={"moj_prop": "mojplaywin.com"},
             independent_release_verifier=lambda offer: True))
+
+
+    def _approved_manual_trx_merchant(self, **changes):
+        return self.offer(offer_type=OfferType.TRX_GATEWAY,
+            active=True, owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True, **changes)
+
+    def test_merchant_receipt_must_come_from_trx_merchant_offer(self):
+        with self.assertRaisesRegex(CommercialGateError, "trx_merchant_offer_required"):
+            validate_merchant_trx_receipt(
+                offer=self.offer(), tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                evidence=self.payment(), expected_order_id="order-52",
+                expected_invoice_id="invoice-52")
+
+    def test_draft_trx_gateway_cannot_claim_merchant_settlement(self):
+        with self.assertRaisesRegex(CommercialGateError, "trx_merchant_not_authorized"):
+            validate_merchant_trx_receipt(
+                offer=self.offer(offer_type=OfferType.TRX_GATEWAY),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                evidence=self.payment(), expected_order_id="order-52",
+                expected_invoice_id="invoice-52")
+
+    def test_trx_merchant_receipt_denies_wrong_tenant_host_even_with_valid_tx(self):
+        with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
+            validate_merchant_trx_receipt(
+                offer=self._approved_manual_trx_merchant(),
+                tenant_registry={"moj_prop": "other.example"},
+                independent_release_verifier=lambda offer: True,
+                evidence=self.payment(), expected_order_id="order-52",
+                expected_invoice_id="invoice-52")
+
+    def test_trx_merchant_receipt_requires_independent_release_approval(self):
+        with self.assertRaisesRegex(CommercialGateError, "independent_release_unverified"):
+            validate_merchant_trx_receipt(
+                offer=self._approved_manual_trx_merchant(),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: False,
+                evidence=self.payment(), expected_order_id="order-52",
+                expected_invoice_id="invoice-52")
+
+    def test_trx_merchant_receipt_rejects_wrong_invoice_price(self):
+        with self.assertRaisesRegex(CommercialGateError, "payment_amount_mismatch"):
+            validate_merchant_trx_receipt(
+                offer=self._approved_manual_trx_merchant(),
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                evidence=self.payment(amount=Decimal("29")),
+                expected_order_id="order-52", expected_invoice_id="invoice-52")
+
+    def test_trx_merchant_receipt_produces_only_private_digest(self):
+        digest = validate_merchant_trx_receipt(
+            offer=self._approved_manual_trx_merchant(),
+            tenant_registry={"moj_prop": "mojplaywin.com"},
+            independent_release_verifier=lambda offer: True,
+            evidence=self.payment(), expected_order_id="order-52",
+            expected_invoice_id="invoice-52")
+        self.assertEqual(len(digest), 64)
+        self.assertEqual(digest, validate_payment_evidence(
+            self.payment(), expected_order_id="order-52",
+            expected_invoice_id="invoice-52", expected_amount=Decimal("30"),
+            expected_currency="TRX"))
 
 
 if __name__ == "__main__":
