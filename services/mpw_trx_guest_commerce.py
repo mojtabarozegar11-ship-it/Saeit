@@ -309,7 +309,7 @@ def patch_public(namespace):
                 'Your orders are private and require the original browser session.</p>'
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
-                'Never share a wallet recovery phrase or private key.</p>'
+                'Never share a wallet recovery phrase or private key.</p>' +
                 recovery_link +
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
