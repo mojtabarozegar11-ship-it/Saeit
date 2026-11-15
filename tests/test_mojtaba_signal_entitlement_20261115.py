@@ -54,3 +54,31 @@ class SignalEntitlementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_typed_receipt_evidence_rejects_coercion_and_faulty_payloads(self):
+        for value in (True, 123456, ["receipt:2026:0001"],
+                      {"id": "receipt:2026:0001"}, None):
+            with self.subTest(receipt=repr(value)), self.assertRaises(SignalEntitlementError):
+                advance_signal_entitlement(
+                    "offered", "payment_verified",
+                    evidence={"verified": True, "receipt_id": value},
+                )
+
+    def test_delivery_reference_requires_canonical_string(self):
+        for value in (True, 12345678, ["delivery:2026:0001"], None):
+            with self.subTest(delivery=repr(value)), self.assertRaises(SignalEntitlementError):
+                advance_signal_entitlement(
+                    "paid", "delivery_acknowledged",
+                    evidence={"delivery_id": value},
+                )
+
+    def test_malformed_states_and_evidence_return_domain_error(self):
+        for value in (None, [], {}, 1, True):
+            with self.subTest(state=repr(value)):
+                with self.assertRaises(SignalEntitlementError):
+                    advance_signal_entitlement(value, "offer_issued")
+                with self.assertRaises(SignalEntitlementError):
+                    commercial_flags(value)
+        for value in ([], "", False, 0):
+            with self.subTest(evidence=repr(value)), self.assertRaises(SignalEntitlementError):
+                advance_signal_entitlement("offered", "payment_verified", evidence=value)
