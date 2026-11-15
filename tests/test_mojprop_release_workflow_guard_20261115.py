@@ -4,7 +4,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml"
+WORKFLOW = ROOT / ".github/workflows/mojprop-backend-controlled-release-20261115.yml"
 
 
 class MojPropSafeReleaseWorkflowTests(unittest.TestCase):
@@ -15,8 +15,11 @@ class MojPropSafeReleaseWorkflowTests(unittest.TestCase):
         cls.deploy = "\n  deploy:\n" + cls.deploy
 
     def test_pull_request_and_push_do_not_execute_production_deploy(self):
-        self.assertIn("pull_request:", self.validate)
-        self.assertIn("push:", self.validate)
+        # Backend migration has no push/PR trigger; it cannot be dispatched by CI.
+        self.assertNotIn("\n  pull_request:", self.validate)
+        self.assertNotIn("\n  push:", self.validate)
+        self.assertNotIn("\n  workflow_run:", self.validate)
+        self.assertIn("\n  workflow_dispatch:", self.validate)
         self.assertIn("github.event_name == 'workflow_dispatch'", self.deploy)
         # The old rule used push as an alternate release trigger.
         self.assertNotIn("github.event_name == 'push' ||", self.deploy)
