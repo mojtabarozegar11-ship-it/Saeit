@@ -1,0 +1,73 @@
+name: Moj Prop Branch Full CI (no release)
+
+on:
+  push:
+    branches: [fix/mojprop-root-form-horizon-c73-20261115]
+    paths:
+      - "core/**"
+      - "config/**"
+      - "templates/moj-prop-v4/**"
+      - "tests/test_mojprop_*.py"
+      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
+      - ".github/workflows/mojprop-branch-full-ci-20261115.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-no-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-branch-tests:
+    name: Full Django check/migrations/pytest on source HEAD only
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEBUG: "false"
+      SECRET_KEY: "branch-ci-only-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install declared test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          parser="$RUNNER_TEMP/mpw-pdf-parser"
+          install -d -m 700 "$parser"
+          python -m pip install --no-deps --require-hashes --target "$parser" -r .github/requirements/mpw-pdf-parser-ci.txt
+          echo "PYTHONPATH=$parser" >> "$GITHUB_ENV"
+      - name: Compile customer receipt, sale queue and quote boundary
+        run: |
+          set -euo pipefail
+          python -m py_compile core/mojprop_views.py core/mojprop_quote_contract.py core/management/commands/mojprop_sales_action_queue.py core/management/commands/mojprop_commercial_pipeline.py
+      - name: Run Django system and migration closure checks
+        run: |
+          set -euo pipefail
+          python manage.py check --deploy
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+      - name: Run the complete source branch test suite
+        run: |
+          set -euo pipefail
+          python -m pytest -q
+      - name: Assert release is impossible from this workflow
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          s=Path(".github/workflows/mojprop-branch-full-ci-20261115.yml").read_text()
+          assert "permissions:\n  contents: read" in s
+          assert "runs-on: ubuntu-latest" in s
+          assert "self-hosted" not in s
+          assert "HOST_SSH_PRIVATE_KEY" not in s
+          assert "deploy RUN_ID" not in s
+          print("BRANCH_FULL_CI_ONLY=true; RELEASE=false")
+          PY
