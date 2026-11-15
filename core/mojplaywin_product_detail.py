@@ -72,19 +72,17 @@ def _approved_purchase_url(request, product):
     if not request.is_secure() or request.get_host().split(":")[0].lower() not in MPW_HOSTS:
         return None
     try:
-        from django.urls import reverse, resolve
         from services.mpw_trx_commercial_context import checkout_flags
         from services.mpw_trx_public_catalog import public_trx_product
+        from .mojplaywin_checkout_route import verified_guest_checkout_url
         if checkout_flags(request).get("mpw_trx_easy_enabled") is not True:
             return None
         if public_trx_product(product.pk) is None:
             return None
-        path = reverse("mpw_commerce:book", args=[product.pk])
-        if resolve(path).url_name != "book":
-            return None
-        if not path.startswith("/commerce/book/"):
-            return None
-        return path
+        # Legacy namespaced reverse("mpw_commerce:book") may resolve to a
+        # different, prepended public guest handler at the exact same path.
+        # Verify the effective callback by identity; fail closed otherwise.
+        return verified_guest_checkout_url(product.pk)
     except Exception:
         # Any missing private component, migration, provider or URL is a HOLD,
         # not an invitation to generate an invoice or mark a sale as live.
