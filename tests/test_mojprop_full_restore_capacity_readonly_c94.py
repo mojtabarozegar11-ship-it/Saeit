@@ -132,6 +132,55 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
             self.assertFalse(allowed)
             self.assertEqual(reason, "quota_volume_not_reported")
 
+    def test_official_cpanel_uapi_quota_good_does_not_claim_restore(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        data = {"result": {"status": 1, "data": {
+            "under_quota_overall": 1, "under_megabyte_limit": 1,
+            "under_inode_limit": 1, "megabyte_limit": "900",
+            "megabytes_remain": "500", "inode_limit": 10000,
+            "inodes_remain": 9000,
+        }}}
+        valid, reason = _cpanel_quota_data_adequate(data, 200_000_000)
+        self.assertTrue(valid)
+        self.assertEqual(reason, "cpanel_uapi_quota_verified")
+        return data
+
+    def test_cpanel_uapi_quota_unlimited_or_disabled_is_not_proof(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        d = {"result": {"status": 1, "data": {
+            "under_quota_overall": 1, "under_megabyte_limit": 1,
+            "under_inode_limit": 1, "megabyte_limit": 0,
+            "megabytes_remain": 0, "inode_limit": 0, "inodes_remain": 0,
+        }}}
+        valid, reason = _cpanel_quota_data_adequate(d, 1000)
+        self.assertFalse(valid)
+        self.assertEqual(reason, "cpanel_uapi_unlimited_or_disabled_unproven")
+
+    def test_cpanel_uapi_quota_small_or_malformed_remains_closed(self):
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import _cpanel_quota_data_adequate
+        basis = {"under_quota_overall": 1, "under_megabyte_limit": 1,
+                 "under_inode_limit": 1, "megabyte_limit": 900,
+                 "megabytes_remain": 100, "inode_limit": 10000,
+                 "inodes_remain": 9000}
+        for delta in ({}, {"megabytes_remain": "NaN"},
+                      {"megabytes_remain": -1},
+                      {"under_inode_limit": "1"},
+                      {"inodes_remain": -1}):
+            with self.subTest(delta=delta):
+                d = dict(basis, **delta)
+                good, reason = _cpanel_quota_data_adequate(
+                    {"result": {"status": 1, "data": d}}, 200_000_000
+                )
+                self.assertFalse(good)
+
+    def test_cpanel_uapi_fixed_read_only_method(self):
+        text = (ROOT / "scripts/mojprop_full_restore_capacity_readonly_c94.py").read_text()
+        self.assertIn('"Quota", "get_quota_info"', text)
+        self.assertIn('"/usr/local/cpanel/bin/uapi"', text)
+        self.assertIn('check=True, timeout=12', text)
+        self.assertNotIn('"set_quota"', text)
+        self.assertNotIn('"create"', text)
+
 
 if __name__ == "__main__":
     unittest.main()
