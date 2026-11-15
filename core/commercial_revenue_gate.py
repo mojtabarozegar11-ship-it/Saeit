@@ -611,6 +611,20 @@ class SQLiteCommercialLedger:
                 order_id TEXT NOT NULL REFERENCES orders(order_id),
                 PRIMARY KEY (network, transaction_id)
             );
+            CREATE TABLE IF NOT EXISTS merchant_order_bindings (
+                order_id TEXT PRIMARY KEY REFERENCES orders(order_id),
+                tenant_id TEXT NOT NULL,
+                canonical_host TEXT NOT NULL,
+                offer_id TEXT NOT NULL,
+                release_evidence_sha256 TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            CREATE TRIGGER IF NOT EXISTS no_merchant_binding_update
+                BEFORE UPDATE ON merchant_order_bindings
+                BEGIN SELECT RAISE(ABORT, 'immutable_merchant_binding'); END;
+            CREATE TRIGGER IF NOT EXISTS no_merchant_binding_delete
+                BEFORE DELETE ON merchant_order_bindings
+                BEGIN SELECT RAISE(ABORT, 'immutable_merchant_binding'); END;
             CREATE TABLE IF NOT EXISTS independently_confirmed_refunds (
                 refund_tx TEXT PRIMARY KEY,
                 order_id TEXT NOT NULL REFERENCES orders(order_id),
@@ -684,6 +698,51 @@ class SQLiteCommercialLedger:
                 )
         except sqlite3.IntegrityError as exc:
             raise CommercialGateError("order_already_exists") from exc
+
+    def bind_approved_merchant_order(
+        self, *, order_id: str, offer: OfferContract,
+        tenant_registry: Mapping[str, str],
+        independent_release_verifier: Callable[[OfferContract], bool],
+        release_evidence_sha256: str,
+        independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
+    ) -> None:
+        """Permanently link a staged order to one approved merchant identity."""
+        if not isinstance(offer, OfferContract) or offer.active is not True:
+            raise CommercialGateError("active_merchant_offer_required")
+        if not isinstance(release_evidence_sha256, str) or not _HEX64.fullmatch(release_evidence_sha256):
+            raise CommercialGateError("merchant_release_evidence_required")
+        validate_offer(
+            offer, tenant_registry=tenant_registry,
+            independent_release_verifier=independent_release_verifier,
+            independent_domain_delegation_verifier=independent_domain_delegation_verifier,
+        )
+        order_id = _slug(order_id, "order_id")
+        with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
+            row = self.connection.execute(
+                "SELECT offer_id, amount, currency, state FROM orders WHERE order_id = ?",
+                (order_id,),
+            ).fetchone()
+            if row is None:
+                raise CommercialGateError("order_not_found")
+            if (row["offer_id"] != offer.offer_id
+                    or row["amount"] != _canonical_amount(offer.price, offer.currency)
+                    or row["currency"] != offer.currency):
+                raise CommercialGateError("merchant_order_offer_mismatch")
+            if row["state"] not in (
+                CommercialState.ORDERED.value, CommercialState.QUOTED.value,
+                CommercialState.INVOICED.value, CommercialState.PAYMENT_PENDING.value,
+            ):
+                raise CommercialGateError("merchant_binding_after_settlement_forbidden")
+            try:
+                self.connection.execute(
+                    "INSERT INTO merchant_order_bindings VALUES (?, ?, ?, ?, ?, ?)",
+                    (order_id, offer.tenant_id, offer.canonical_host,
+                     offer.offer_id, release_evidence_sha256,
+                     datetime.now(timezone.utc).isoformat()),
+                )
+            except sqlite3.IntegrityError:
+                raise CommercialGateError("merchant_order_already_bound") from None
 
     def bind_issued_invoice(self, *, order_id: str, invoice_id: str,
                             payload_digest: str) -> None:
