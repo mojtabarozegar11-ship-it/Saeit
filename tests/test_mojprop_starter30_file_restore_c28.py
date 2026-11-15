@@ -29,8 +29,7 @@ class C28ScopedRealRestore(unittest.TestCase):
                            approval_id="9873211", quota_probe=enough_quota)
 
     def test_two_public_file_backup_and_private_isolated_restore(self):
-        originals = [(self.root / x[-1]).read_bytes() if False else
-                     (self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES]
+        originals = [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES]
         result = mod.audit_and_restore(**self.params)
         self.assertTrue(result["isolated_two_file_restore"])
         self.assertFalse(result["subsite_isolation_proven"])
@@ -43,6 +42,44 @@ class C28ScopedRealRestore(unittest.TestCase):
         for directory in ("backup", "isolated-restore"):
             self.assertEqual(len(list((self.vault / "172900101" / directory).iterdir())), 2)
         self.assertEqual((self.vault / "172900101").stat().st_mode & 0o077, 0)
+
+    def test_single_use_approval_persists_outside_renameable_vault(self):
+        mod.audit_and_restore(**self.params)
+        claim = self.home / ".mojprop-c28-approval-9873211.used"
+        self.assertEqual(claim.read_bytes(), b"CONSUMED\n")
+        self.assertFalse((self.vault / "approval-9873211.used").exists())
+
+    def test_real_quota_parser_needs_account_block_and_inode_headroom(self):
+        fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            class Out:
+                stdout = ("Disk quotas for user sample (uid 1001):\n"
+                          "Filesystem space quota limit grace files quota limit grace\n"
+                          "/dev/vda1 12K 1024M 2048M 20 2000 4000\n")
+            with patch.object(mod.subprocess, "run", return_value=Out()):
+                self.assertTrue(mod._quota_evidence(fd, getpass.getuser(), 8192))
+        finally:
+            os.close(fd)
+
+    def test_real_quota_soft_limit_nearly_exhausted_is_denied(self):
+        fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            class Out:
+                stdout = "/dev/vda1 1023M 1024M 2048M 20 2000 4000\n"
+            with patch.object(mod.subprocess, "run", return_value=Out()):
+                self.assertFalse(mod._quota_evidence(fd, getpass.getuser(), 8192))
+        finally:
+            os.close(fd)
+
+    def test_real_quota_inode_limit_nearly_exhausted_is_denied(self):
+        fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            class Out:
+                stdout = "/dev/vda1 12K 1024M 2048M 1999 2000 4000\n"
+            with patch.object(mod.subprocess, "run", return_value=Out()):
+                self.assertFalse(mod._quota_evidence(fd, getpass.getuser(), 8192))
+        finally:
+            os.close(fd)
 
     def test_exact_run_replay_denied(self):
         mod.audit_and_restore(**self.params)
