@@ -1752,6 +1752,30 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_private_ledger_nested_ancestor_symlink_is_not_followed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actual = root / "actual"
+            (actual / "child").mkdir(parents=True)
+            (root / "alias").symlink_to(actual, target_is_directory=True)
+            db = root / "alias" / "child" / "ledger.sqlite3"
+            with self.assertRaisesRegex(CommercialGateError, "ledger_parent_missing_or_symlink"):
+                SQLiteCommercialLedger(str(db))
+            self.assertFalse((actual / "child" / "ledger.sqlite3").exists())
+
+    def test_private_ledger_nested_ancestor_symlink_is_denied_on_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actual = root / "actual"
+            (actual / "child").mkdir(parents=True)
+            db = actual / "child" / "ledger.sqlite3"
+            ledger = SQLiteCommercialLedger(str(db))
+            ledger.close()
+            (root / "alias").symlink_to(actual, target_is_directory=True)
+            with self.assertRaisesRegex(CommercialGateError, "ledger_parent_missing_or_symlink"):
+                SQLiteCommercialLedger(str(root / "alias" / "child" / "ledger.sqlite3"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
