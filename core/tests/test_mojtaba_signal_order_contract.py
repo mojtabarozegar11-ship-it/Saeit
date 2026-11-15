@@ -167,5 +167,84 @@ class SignalOrderContractTests(unittest.TestCase):
         self.assertEqual(len(record["customer_ref_digest"]), 64)
 
 
+    def test_customer_cannot_claim_external_pending_state(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "settlement_required"):
+            validate_order_intent(
+                self.intent(state="pending_external_settlement"),
+                self.route(), self.offer(), now=NOW
+            )
+
+    def test_stale_order_requires_new_customer_intent(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "stale_order_intent"):
+            validate_order_intent(
+                self.intent(requested_at="2026-11-13T11:00:00Z"),
+                self.route(), self.offer(), now=NOW
+            )
+
+    def test_non_datetime_server_clock_rejected(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "order_clock"):
+            validate_order_intent(
+                self.intent(), self.route(), self.offer(), now=object()
+            )
+
+    def test_placeholder_customer_hash_is_not_an_identity(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "customer_ref_digest"):
+            validate_order_intent(
+                self.intent(customer_ref_digest="0" * 64),
+                self.route(), self.offer(), now=NOW
+            )
+
+    def test_trx_cannot_have_more_than_six_effective_decimals(self):
+        price = Decimal("1.1234567")
+        with self.assertRaisesRegex(SignalOrderContractError, "order_price_precision"):
+            validate_order_intent(
+                self.intent(price=price), self.route(),
+                self.offer(price=price), now=NOW
+            )
+
+    def test_trx_trailing_zeroes_do_not_change_effective_precision(self):
+        price = Decimal("1.23000000")
+        validate_order_intent(
+            self.intent(price=price), self.route(),
+            self.offer(price=price), now=NOW
+        )
+
+    def test_usd_precision_limited_to_cents(self):
+        price = Decimal("1.001")
+        with self.assertRaisesRegex(SignalOrderContractError, "order_price_precision"):
+            validate_order_intent(
+                self.intent(price=price, currency="USD"), self.route(),
+                self.offer(price=price, currency="USD"), now=NOW
+            )
+
+    def test_extreme_amounts_are_rejected_before_ledger(self):
+        price = Decimal("1000000000")
+        with self.assertRaisesRegex(SignalOrderContractError, "order_price_out_of_bounds"):
+            validate_order_intent(
+                self.intent(price=price), self.route(),
+                self.offer(price=price), now=NOW
+            )
+
+    def test_malformed_batch_entry_reports_contract_error(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "order_intent_required"):
+            validate_order_batch([None])
+
+    def test_oversized_batch_is_bounded(self):
+        with self.assertRaisesRegex(SignalOrderContractError, "order_batch_too_large"):
+            validate_order_batch([self.intent()] * 501)
+
+    def test_pending_record_tracks_host_and_does_not_imply_revenue(self):
+        record = build_pending_order_record(
+            self.intent(), self.route(), self.offer(), now=NOW
+        )
+        self.assertEqual(record["canonical_host"], "mojplaywin.com")
+        self.assertEqual(record["path_prefix"], "/signals/")
+        self.assertEqual(record["requested_at"], "2026-11-15T11:59:00Z")
+        for key in ("entitlement_granted", "receipt_issued",
+                    "delivery_verified", "settlement_verified"):
+            self.assertIs(record[key], False)
+
+
+
 if __name__ == "__main__":
     unittest.main()
