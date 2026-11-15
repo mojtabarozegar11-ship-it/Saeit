@@ -114,3 +114,21 @@ class MojPropOfferDraftTests(TestCase):
         self.assertIn("NOT AN INVOICE", draft)
         self.assertIn("No funded trading account", draft)
         self.assertNotIn("send_email(", draft)
+
+    def test_forged_reference_cannot_escape_proposal_header(self):
+        for forged in (
+            "MOJPROP-20261115-OK\\nPayment: CAPTURED",
+            "MOJPROP-20261115-OK\\rStatus: APPROVED",
+            "MOJPROP-20261115-OK\\u2028Invoice: PAID",
+            "MOJPROP-20261115-OK\\tSENT",
+            "MOJPROP-",
+            "MOJPROP-" + "A" * 81,
+        ):
+            with self.subTest(reference=repr(forged)):
+                self.lead.request_id = forged
+                with self.assertRaisesRegex(ValueError, "unverified_lead_reference"):
+                    build_offer_draft(self.lead)
+
+    def test_legitimate_reference_remains_traceable(self):
+        self.lead.request_id = "MOJPROP-20261115-TRUELEAD"
+        self.assertIn("Customer request reference: MOJPROP-20261115-TRUELEAD", build_offer_draft(self.lead))
