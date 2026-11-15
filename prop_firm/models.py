@@ -184,6 +184,9 @@ class PropEquityObservation(models.Model):
     """Broker/simulation mark-to-market evidence. No client-controlled values."""
     account = models.ForeignKey(PropAccount, on_delete=models.PROTECT,
                                 related_name="equity_observations")
+    # Legacy rows deliberately default to unknown; never infer that a
+    # SHA-shaped digest means the mark came from an approved broker.
+    data_source = models.CharField(max_length=64, blank=True, default="")
     external_event_id = models.CharField(max_length=160)
     observed_at = models.DateTimeField(db_index=True)
     equity_usd = models.DecimalField(max_digits=18, decimal_places=4)
