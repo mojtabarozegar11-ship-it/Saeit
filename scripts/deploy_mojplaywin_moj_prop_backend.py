@@ -174,7 +174,8 @@ def format_core_migration_dependencies(leaves) -> str:
                    or re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", n) is None
                    for n in leaves)
             or len(leaves) != len(set(leaves))
-            or "0041_mojprop_request" in leaves):
+            or "0041_mojprop_request" in leaves
+            or "0042_alter_mojproprequest_source" in leaves):
         raise RuntimeError("Unverified Moj Prop core migration graph")
     return "dependencies = [\n" + "".join(
         f'        ("core", "{n}"),\n' for n in sorted(leaves)
