@@ -37,7 +37,7 @@ def pipeline_snapshot():
     handoffs = MojPropDeliveryEvidence.objects.all()
     handed_off = handoffs.filter(
         status__in=("sent", "acknowledged"), handed_off_at__isnull=False,
-        offer__status="accepted", offer__accepted_at__isnull=False,
+        offer_id__in=accepted.values("pk"),
         clearance_reference__gt="", handoff_reference__gt="",
     )
     acknowledged = handed_off.filter(
@@ -61,7 +61,7 @@ def pipeline_snapshot():
         "distinct_leads_with_issued_quotes": unique_issued_leads,
         "distinct_accepted_leads": accepted_leads,
         "quotes_by_status": offer_status,
-        "distinct_accepted_quotes": accepted_leads,
+        "distinct_accepted_quotes": accepted.count(),
         "private_artifacts_prepared": handoffs.filter(status="prepared").count(),
         "handoffs_recorded": handed_off.count(),
         "customer_acknowledgments_recorded": acknowledged.count(),
