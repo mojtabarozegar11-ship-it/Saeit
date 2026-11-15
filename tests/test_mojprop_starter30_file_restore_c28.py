@@ -55,7 +55,7 @@ class C28ScopedRealRestore(unittest.TestCase):
             class Out:
                 stdout = ("Disk quotas for user sample (uid 1001):\n"
                           "Filesystem space quota limit grace files quota limit grace\n"
-                          "/dev/vda1 12K 1024M 2048M 20 2000 4000\n")
+                          "/dev/vda1 12 1048576 2097152 20 2000 4000\n")
             with patch.object(mod.subprocess, "run", return_value=Out()):
                 self.assertTrue(mod._quota_evidence(fd, getpass.getuser(), 8192))
         finally:
@@ -65,9 +65,23 @@ class C28ScopedRealRestore(unittest.TestCase):
         fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
         try:
             class Out:
-                stdout = "/dev/vda1 1023M 1024M 2048M 20 2000 4000\n"
+                stdout = "/dev/vda1 1047552 1048576 2097152 20 2000 4000\n"
             with patch.object(mod.subprocess, "run", return_value=Out()):
                 self.assertFalse(mod._quota_evidence(fd, getpass.getuser(), 8192))
+        finally:
+            os.close(fd)
+
+    def test_unrounded_one_megabyte_headroom_at_100g_is_denied(self):
+        # Human -s might say 100G used vs 101G limit; exact KiB reveals
+        # 1 MiB remaining, far below the 64 MiB minimum reserve.
+        fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            class Out:
+                stdout = "/dev/vda1 104857600 104858624 104858624 20 2000 4000\n"
+            with patch.object(mod.subprocess, "run", return_value=Out()) as command:
+                self.assertFalse(mod._quota_evidence(fd, getpass.getuser(), 8192))
+                self.assertIn("-wvu", command.call_args.args[0])
+                self.assertNotIn("-svu", command.call_args.args[0])
         finally:
             os.close(fd)
 
@@ -75,7 +89,7 @@ class C28ScopedRealRestore(unittest.TestCase):
         fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
         try:
             class Out:
-                stdout = "/dev/vda1 12K 1024M 2048M 1999 2000 4000\n"
+                stdout = "/dev/vda1 12 1048576 2097152 1999 2000 4000\n"
             with patch.object(mod.subprocess, "run", return_value=Out()):
                 self.assertFalse(mod._quota_evidence(fd, getpass.getuser(), 8192))
         finally:
@@ -172,12 +186,12 @@ class C28ScopedRealRestore(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             mod.audit_and_restore(**self.params)
 
-    def test_quantity_units(self):
-        self.assertEqual(mod._quantity("1K"), 1024)
-        self.assertEqual(mod._quantity("1M"), 1024 ** 2)
-        self.assertEqual(mod._quantity("2G"), 2 * 1024 ** 3)
-        with self.assertRaises(RuntimeError):
-            mod._quantity("unlimited")
+    def test_quota_uses_raw_exact_kib_no_human_rounding(self):
+        self.assertEqual(mod._quantity("1"), 1024)
+        self.assertEqual(mod._quantity("1024"), 1024 ** 2)
+        for text in ("1K", "1M", "2G", "unlimited", "1024*"):
+            with self.subTest(text=text), self.assertRaises(RuntimeError):
+                mod._quantity(text)
 
     def test_quota_missing_command_refused(self):
         fd = os.open(self.home, os.O_RDONLY | os.O_DIRECTORY)
