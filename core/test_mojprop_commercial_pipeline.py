@@ -220,3 +220,51 @@ class PipelineReportingTests(TestCase):
         self.assertEqual(snapshot["customer_acknowledgments_recorded"], 0)
         self.assertEqual(snapshot["handoff_coverage_percent"], 0.0)
 
+    def test_quote_version_count_is_not_mislabeled_as_unique_buyer_count(self):
+        lead = self.make_lead("P-QUOTE-VERSIONS", "brief")
+        now = timezone.now()
+        for version in (1, 2):
+            MojPropOffer.objects.create(
+                lead=lead, version=version, title="Accepted scoped research",
+                scope="Documented research with clearly defined milestones." * 2,
+                amount=Decimal("100.00"), status="accepted",
+                reviewed_at=now - timedelta(days=3),
+                issued_at=now - timedelta(days=2),
+                accepted_at=now - timedelta(days=1),
+                acceptance_reference=f"buyer-accepts-version-{version}",
+                expires_at=now + timedelta(days=1),
+            )
+        report = pipeline_snapshot()
+        self.assertEqual(report["distinct_accepted_leads"], 1)
+        self.assertEqual(report["distinct_accepted_quotes"], 2)
+        self.assertEqual(report["acceptance_rate_percent"], 100.0)
+        self.assertIsNone(report["collected_revenue"])
+
+    def test_dispatch_cannot_count_without_independent_customer_acceptance(self):
+        lead = self.make_lead("P-UNSIGNED-HANDOFF", "audit")
+        now = timezone.now()
+        offer = MojPropOffer.objects.create(
+            lead=lead, title="Private research delivery",
+            scope="A documented deliverable with sources and scope." * 2,
+            amount=Decimal("100.00"), status="accepted",
+            reviewed_at=now - timedelta(days=3),
+            issued_at=now - timedelta(days=2),
+            accepted_at=now - timedelta(days=1),
+            acceptance_reference="",
+            expires_at=now + timedelta(days=2),
+        )
+        MojPropDeliveryEvidence.objects.create(
+            offer=offer, artifact_sha256="a" * 64,
+            artifact_name="document.pdf", status="acknowledged",
+            clearance_reference="internal-credit-001",
+            handoff_reference="dispatch-001",
+            handed_off_at=now - timedelta(hours=2),
+            acknowledgment_reference="customer-claimed-001",
+            acknowledged_at=now - timedelta(hours=1),
+        )
+        report = pipeline_snapshot()
+        self.assertEqual(report["distinct_accepted_leads"], 0)
+        self.assertEqual(report["distinct_accepted_quotes"], 0)
+        self.assertEqual(report["handoffs_recorded"], 0)
+        self.assertEqual(report["customer_acknowledgments_recorded"], 0)
+        self.assertIsNone(report["collected_revenue"])
