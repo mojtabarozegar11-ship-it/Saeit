@@ -96,6 +96,22 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# Public receiving address verified against owner's native-TRX Trust Wallet QR.
+# Source merge alone never permits a payable customer invoice. Independently
+# approved native billing and finalized-chain verification are separate gates.
+# No keys, mnemonic or secrets are stored here; do not infer www/other domains.
+from services.mojtaba_tron_owner_receiver import (
+    APPROVED_NATIVE_TRX_RECIPIENT as MPW_TRX_OWNER_RECEIVER,
+    owner_merchant_registry,
+)
+MPW_TRX_INVOICE_RELEASE_VERIFIED = env.bool("MPW_TRX_INVOICE_RELEASE_VERIFIED", default=False)
+MPW_TRX_SOLIDITY_RELEASE_VERIFIED = env.bool("MPW_TRX_SOLIDITY_RELEASE_VERIFIED", default=False)
+MPW_TRX_MERCHANT_BINDINGS = owner_merchant_registry(
+    invoice_enabled=MPW_TRX_INVOICE_RELEASE_VERIFIED,
+    finality_enabled=MPW_TRX_SOLIDITY_RELEASE_VERIFIED,
+)
+
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
