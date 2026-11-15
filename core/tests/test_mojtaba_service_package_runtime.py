@@ -251,7 +251,7 @@ def test_cli_rejects_world_readable_existing_artifact(tmp_path, monkeypatch):
     assert engine.main() == 2
 
 
-@pytest.mark.parametrize("unsafe", ["[link](javascript:alert)", "R\\\\bad", "audit\\u202eTXT"])
+@pytest.mark.parametrize("unsafe", ["[link](javascript:alert)", "R" + chr(92) + "bad", "audit" + chr(0x202e) + "TXT"])
 def test_research_ids_reject_markup_and_directional_spoofing(unsafe):
     with pytest.raises(InvalidService):
         generate({"service_code": "RS-01", "data": {"claims": [
