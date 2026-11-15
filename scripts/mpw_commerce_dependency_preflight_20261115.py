@@ -33,16 +33,32 @@ REQUIRED = (
 
 
 def missing_paths(root: Path) -> list[str]:
-    root = Path(root).resolve()
+    """Reject symlinked files *and ancestors*, even when targets stay in-tree."""
+    root = Path(root)
+    if root.is_symlink():
+        return list(REQUIRED)
+    try:
+        root = root.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return list(REQUIRED)
     missing = []
     for relative in REQUIRED:
-        candidate = (root / relative).resolve()
-        try:
-            candidate.relative_to(root)
-        except ValueError:
+        parts = Path(relative).parts
+        candidate = root.joinpath(*parts)
+        # Resolving first hides an in-repository symlink and makes is_symlink()
+        # on the resolved path always report False. Inspect original segments.
+        segments = (root.joinpath(*parts[:index])
+                    for index in range(1, len(parts) + 1))
+        if any(segment.is_symlink() for segment in segments):
             missing.append(relative)
             continue
-        if candidate.is_symlink() or not candidate.is_file():
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root)
+        except (OSError, ValueError, RuntimeError):
+            missing.append(relative)
+            continue
+        if not candidate.is_file():
             missing.append(relative)
     return missing
 
