@@ -223,6 +223,41 @@ class C28ScopedRealRestore(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 mod.audit_and_restore(**self.params)
 
+    def test_quota_exception_cleans_only_this_private_run_and_consumes_nonce(self):
+        originals = [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES]
+        real_write = mod._write
+        triggered = {"count": 0}
+
+        def fail_one_copy(fd, name, content):
+            if name == "file-1.bin":
+                triggered["count"] += 1
+                if triggered["count"] == 2:
+                    raise OSError(122, "Disk quota exceeded")
+            return real_write(fd, name, content)
+
+        with patch.object(mod, "_write", side_effect=fail_one_copy):
+            with self.assertRaises(OSError):
+                mod.audit_and_restore(**self.params)
+        self.assertFalse((self.vault / "172900101").exists())
+        self.assertTrue((self.home / ".mojprop-c28-approval-9873211.used").exists())
+        self.assertEqual(originals, [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES])
+        self.params["run_id"] = "172900102"
+        with self.assertRaises(FileExistsError):
+            mod.audit_and_restore(**self.params)
+
+    def test_manifest_or_private_write_failure_does_not_touch_live_tree(self):
+        original = mod._write
+        def fail_manifest(fd, name, content):
+            if name == "manifest.json":
+                raise OSError(28, "No space left on device")
+            return original(fd, name, content)
+        with patch.object(mod, "_write", side_effect=fail_manifest):
+            with self.assertRaises(OSError):
+                mod.audit_and_restore(**self.params)
+        self.assertFalse((self.vault / "172900101").exists())
+        self.assertEqual((self.root / "moj-prop/index.html").read_bytes(), b"A" * 150)
+        self.assertEqual((self.root / "moj-prop/catalog/index.html").read_bytes(), b"B" * 170)
+
     def test_never_grants_payment_or_full_site_recovery(self):
         report = mod.audit_and_restore(**self.params)
         for key in ("database_backup_or_restore", "all_site_backup_proven",
