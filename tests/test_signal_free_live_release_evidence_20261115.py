@@ -98,11 +98,14 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
             backend.index("- name: Deploy Moj Prop intake backend with backup and migration"),
         )
         self.assertLess(
-            static.index("- name: Fail closed on unknown live Signal Desk BEFORE any writes"),
+            static.index("- name: Pin live Signal Desk before any separate Starter30 release writes"),
             static.index("- name: Update only /moj-prop/ commercial catalog"),
         )
         self.assertIn("SIGNAL_FREE_PUBLIC_PAGE=PASS", backend)
-        self.assertIn("MOJTABA_FREE_SIGNUP_API_PREFLIGHT=PASS", static)
+        self.assertIn("STARTER30_WITHOUT_SIGNAL_DESK_WRITE=PASS", static)
+        self.assertIn("SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS", static)
+        self.assertIn("STARTER30_THREE_FILES_PUBLIC_HTTP=PASS", static)
+        self.assertNotIn("SIGNAL_FREE_ROOT_BACKEND_MISSING: BLOCK_STATIC_RELEASE", static)
         self.assertNotIn("moj_signal_free_stats --apply", backend)
 
 
