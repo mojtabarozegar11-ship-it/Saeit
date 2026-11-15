@@ -286,19 +286,19 @@ def patch_commercial(namespace):
                     # isolated adapter contract testable without faking a response.
                     status_code = getattr(response, "status_code", 200)
                     if 200 <= status_code < 300:
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
-                    try:
-                        from core.models import Product
-                        product = Product.objects.filter(
-                            pk=kwargs.get("product_id"), active=True,
-                        ).first()
-                        if product is not None:
-                            _record_funnel_event_best_effort(
-                                request, "invoice_created", product,
-                            )
-                    except Exception:
-                        pass
+                        # Order creation and its response are authoritative. The
+                        # separate analytics lookup may be absent or unavailable.
+                        try:
+                            from core.models import Product
+                            product = Product.objects.filter(
+                                pk=kwargs.get("product_id"), active=True,
+                            ).first()
+                            if product is not None:
+                                _record_funnel_event_best_effort(
+                                    request, "invoice_created", product,
+                                )
+                        except Exception:
+                            pass
                 return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
