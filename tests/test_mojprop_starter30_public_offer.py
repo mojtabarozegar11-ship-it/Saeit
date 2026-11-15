@@ -99,7 +99,10 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertIn(Path("starter-30-trx/index.html"), FILES)
         self.assertIn(Path("starter-30-trx/journal-template.csv"), FILES)
         self.assertIn(Path("starter-30-trx/journal-guide.txt"), FILES)
-        self.assertEqual(MANIFEST_SCHEMA, "mojprop.static.starter30.v2")
+        self.assertEqual(MANIFEST_SCHEMA, "mojprop.static.starter30.v3-preserve-signals")
+        from scripts.update_mojplaywin_moj_prop_catalog import PRESERVED_LIVE_FILES
+        self.assertEqual(PRESERVED_LIVE_FILES, (Path("signals/index.html"),))
+        self.assertNotIn(Path("signals/index.html"), FILES)
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
         self.assertIn("github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true", workflow)
         self.assertIn("MOJ_PROP_API_PREFLIGHT=PASS", workflow)
