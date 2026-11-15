@@ -294,6 +294,12 @@ class SQLiteCommercialLedger:
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS order_events_order_idx ON order_events(order_id);
+            CREATE TABLE IF NOT EXISTS settled_transactions (
+                network TEXT NOT NULL,
+                transaction_id TEXT NOT NULL,
+                order_id TEXT NOT NULL REFERENCES orders(order_id),
+                PRIMARY KEY (network, transaction_id)
+            );
             """
         )
         self.connection.commit()
@@ -362,6 +368,15 @@ class SQLiteCommercialLedger:
                 )
                 if target is CommercialState.SETTLED and payload_digest != evidence_digest:
                     raise CommercialGateError("settlement_payload_mismatch")
+            # Chain transfers are single-use across orders; uniqueness is durable.
+            if target is CommercialState.SETTLED:
+                try:
+                    self.connection.execute(
+                        "INSERT INTO settled_transactions (network, transaction_id, order_id) VALUES (?, ?, ?)",
+                        (payment_evidence.network, payment_evidence.transaction_id, order_id),
+                    )
+                except sqlite3.IntegrityError as exc:
+                    raise CommercialGateError("transaction_already_settled") from exc
             next_value = transition_state(
                 current, target, payment_evidence=payment_evidence,
                 fulfillment_manifest_sha256=fulfillment_manifest_sha256,
