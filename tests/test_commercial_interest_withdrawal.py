@@ -109,3 +109,31 @@ class WithdrawalTests(TestCase):
                                   HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,202)
         self.assertContains(response,"لغو رضایت تماس",status_code=202)
+
+    def test_repeat_signal_intake_cannot_reissue_revocation_bearer(self):
+        payload = {"email": "Buyer@Example.org", "brand": "saman",
+                   "plan_code": "moj-signals-standard", "source_language": "en",
+                   "contact_consent": "yes", "consent_version": "mojtaba-signals-interest-v1",
+                   "csrfmiddlewaretoken": "browser-managed"}
+        first = self.client.post("/market-signals/interest/", payload, secure=True,
+                                 HTTP_HOST="mojplaywin.com")
+        self.assertIn("commercial-interest/withdraw/", first.content.decode())
+        second = self.client.post("/market-signals/interest/", payload, secure=True,
+                                  HTTP_HOST="mojplaywin.com")
+        self.assertEqual(second.status_code, 202)
+        self.assertNotIn("commercial-interest/withdraw/", second.content.decode())
+        self.assertEqual(CommercialInterest.objects.count(), 1)
+
+    def test_repeat_prop_intake_cannot_reissue_revocation_bearer(self):
+        payload = {"email": "Buyer@Example.org", "plan_code": "MOJ-PROP-01",
+                   "source_language": "fa", "contact_consent": "yes",
+                   "consent_version": "moj-prop-interest-v1",
+                   "csrfmiddlewaretoken": "browser-managed"}
+        first = self.client.post("/moj-prop/interest/", payload, secure=True,
+                                 HTTP_HOST="mojplaywin.com")
+        self.assertIn("commercial-interest/withdraw/", first.content.decode())
+        second = self.client.post("/moj-prop/interest/", payload, secure=True,
+                                  HTTP_HOST="mojplaywin.com")
+        self.assertEqual(second.status_code, 202)
+        self.assertNotIn("commercial-interest/withdraw/", second.content.decode())
+        self.assertEqual(CommercialInterest.objects.count(), 1)

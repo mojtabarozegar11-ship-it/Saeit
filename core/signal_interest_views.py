@@ -90,7 +90,7 @@ def signal_interest(request):
         return HttpResponse("Not available", status=503)
 
     with transaction.atomic():
-        lead, _ = SignalInterest.objects.get_or_create(
+        lead, created = SignalInterest.objects.get_or_create(
             email=email, offer_family="signals", brand=brand, plan_code=sku,
             defaults={
                 "source_host": host,
@@ -104,7 +104,9 @@ def signal_interest(request):
         format_html('<!doctype html><html lang="{}"><meta name="robots" content="noindex,nofollow">'
                     '<meta name="referrer" content="no-referrer"><title>Mojtaba.bot.ai</title>'
                     '<main><p>{}</p><p><a href="{}">{}</a></p></main></html>',
-                    language, SUCCESS[language], withdrawal_url(request, lead), label),
+                    language, SUCCESS[language], withdrawal_url(request, lead), label)
+        if created else format_html("<!doctype html><html lang=\"{}\"><main><p>{}</p></main></html>",
+                                    language, SUCCESS[language]),
         status=202, content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = "private, no-store, max-age=0"

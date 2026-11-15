@@ -125,7 +125,7 @@ def moj_prop_public_interest(request):
     except Exception:
         return HttpResponse("Request unavailable", status=503)
     with transaction.atomic():
-        lead, _ = CommercialInterest.objects.get_or_create(
+        lead, created = CommercialInterest.objects.get_or_create(
             email=email, offer_family="moj_prop", brand="moj_prop", plan_code=SKU,
             defaults={"source_host": host, "source_language": language,
                       "consent_version": CONSENT},
@@ -136,7 +136,9 @@ def moj_prop_public_interest(request):
         format_html('<!doctype html><html lang="{}"><meta name="robots" content="noindex,nofollow">'
                     '<meta name="referrer" content="no-referrer"><title>MOJ PROP</title>'
                     '<main><p>{}</p><p><a href="{}">{}</a></p></main></html>',
-                    language, LANGUAGE[language]["result"], withdrawal_url(request, lead), label),
+                    language, LANGUAGE[language]["result"], withdrawal_url(request, lead), label)
+        if created else format_html("<!doctype html><html lang=\"{}\"><main><p>{}</p></main></html>",
+                                    language, LANGUAGE[language]["result"]),
         status=202, content_type="text/html; charset=utf-8",
     )
     response["Cache-Control"] = "private, no-store, max-age=0"
