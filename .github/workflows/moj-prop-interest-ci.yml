@@ -1,0 +1,42 @@
+name: MOJ PROP opt-in information intake
+on:
+  push:
+    branches: ["cycle64-moj-prop-interest-intake-20261115"]
+  pull_request:
+    paths:
+      - "prop_firm/interest.py"
+      - "prop_firm/models.py"
+      - "prop_firm/migrations/0008_information_inquiries.py"
+      - "prop_firm/management/**"
+      - "config/urls.py"
+      - "core/moj_prop_views.py"
+      - "core/templates/mojplaywin/moj_prop*.html"
+      - "tests/test_moj_prop_interest_intake.py"
+      - "tests/test_moj_prop_inquiry_retention.py"
+      - ".github/workflows/moj-prop-interest-ci.yml"
+permissions:
+  contents: read
+jobs:
+  consented-information-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DEBUG: "true"
+      SECRET_KEY: ci-only-prop-inquiry
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com
+      MOJ_PROP_INTEREST_ENABLED: "false"
+      MOJ_PROP_RETENTION_JOB_VERIFIED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Confirm model migration completeness
+        run: python manage.py makemigrations --check --dry-run prop_firm
+      - name: Check Django URL and template configuration
+        run: python manage.py check
+      - name: Test exact-domain consented leads and owner-controlled retention
+        run: python manage.py test tests.test_moj_prop_interest_intake tests.test_moj_prop_inquiry_retention --verbosity 2
