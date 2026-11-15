@@ -97,7 +97,12 @@ def verify(manifest_path):
                     raise ValueError("duplicate JSON key: " + key)
                 obj[key] = value
             return obj
-        data = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
+        def reject_nonfinite(token):
+            # Python accepts NaN/Infinity by default although JSON forbids them.
+            # Fail closed for scientific provenance metadata.
+            raise ValueError("non-finite JSON constant: " + token)
+        data = json.loads(raw, object_pairs_hook=reject_duplicate_keys,
+                          parse_constant=reject_nonfinite)
     except (OSError, UnicodeError, ValueError) as exc:
         return ["manifest unreadable or invalid JSON: " + str(exc)]
     if not check(isinstance(data, dict), "root must be object"):
