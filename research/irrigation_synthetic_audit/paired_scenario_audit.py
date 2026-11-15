@@ -132,10 +132,11 @@ def analyze_family(records: list[dict], family: str) -> dict:
     for key, vals in matched.items():
         require(set(vals) == policies, f"{family}: incomplete policy match for {key}")
 
+    # The source drainage field is in mm. Never label its arithmetic mean as m3.
     means = {p: {
         "water_m3": statistics.fmean(x["water"] for x in rows),
         "q100_plot_days": statistics.fmean(x["q"] for x in rows),
-        "drainage_m3_equivalent": statistics.fmean(x["drainage"] for x in rows),
+        "drainage_sum_mm": statistics.fmean(x["drainage"] for x in rows),
         "count": len(rows),
     } for p, rows in sorted(policy_values.items())}
     counts = dict(q_lower=0, q_tied=0, q_higher=0, higher_water=0,
