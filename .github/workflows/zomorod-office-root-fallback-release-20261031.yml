@@ -16,6 +16,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   validate:
+    # Legacy workflow retired; outdated route expectations must not break main CI.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -30,7 +32,9 @@ jobs:
           echo "OFFICE_LOGIN_ROUTE_SOURCE=verified"
   release:
     needs: validate
-    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # RETIRED: never patch company office routes on a MojPlayWin source merge.
+    # No workflow_dispatch is declared. Legacy release is permanently held.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
