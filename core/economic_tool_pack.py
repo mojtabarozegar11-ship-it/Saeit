@@ -455,7 +455,7 @@ def master_self_improvement(payload):
 
 
 
-def _private_service_read_bytes(path):
+def _private_service_read_bytes(path, *, allow_publish_race=False):
     """Require one owner-only regular artifact, read with symlink refusal."""
     if not hasattr(os, "O_NOFOLLOW"):
         raise ValueError("SERVICE_PACKAGE_SAFE_READ_UNAVAILABLE")
@@ -464,7 +464,8 @@ def _private_service_read_bytes(path):
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
             if (not stat.S_ISREG(info.st_mode) or (info.st_mode & 0o077)
-                    or info.st_nlink != 1 or info.st_size > 262144):
+                    or (info.st_nlink != 1 and not (allow_publish_race and info.st_nlink == 2))
+                    or info.st_size > 262144):
                 raise ValueError("SERVICE_PACKAGE_UNSAFE_EXISTING_FILE")
             content = stream.read(262145)
     except OSError:
@@ -524,7 +525,7 @@ def service_package(payload):
             # overwrite the same output and both claim a new verified effect.
             os.link(tmp, target, follow_symlinks=False)
         except FileExistsError:
-            if _private_service_read_bytes(target) != document.encode("utf-8"):
+            if _private_service_read_bytes(target, allow_publish_race=True) != document.encode("utf-8"):
                 raise ValueError("SERVICE_PACKAGE_CONCURRENT_OUTPUT_COLLISION")
             return {
                 "action_performed": "Reused independently verified private service package.",
