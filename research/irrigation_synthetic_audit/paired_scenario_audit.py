@@ -29,6 +29,8 @@ POLICIES = {
     "C": {"integrated", "v2", "v3"},
     "R1": {"integrated", "integrated_forecast_ET", "v2", "v3"},
 }
+# Actual author-owned RegimeR2160 workbook rows use "R-", not "R1-".
+FAMILY_COHORT_PREFIX = {"C": "C-", "R1": "R-"}
 WEIGHTS = (0, 1, 2, 5, 10, 20, 50, 100)
 TOL = 1e-8
 EXPECTED = {
@@ -123,7 +125,7 @@ def analyze_family(records: list[dict], family: str) -> dict:
     policy_values: dict[str, list[dict]] = defaultdict(list)
     for row in records:
         key, policy = row["key"], row["policy"]
-        require(key[0].startswith(f"{family}-"),
+        require(key[0].startswith(FAMILY_COHORT_PREFIX[family]),
                 f"{family}: cross-family or malformed cohort identifier: {key[0]!r}")
         require(policy in policies, f"{family}: unexpected policy {policy!r}")
         require(policy not in matched[key], f"{family}: duplicate (key,policy): {key,policy}")
