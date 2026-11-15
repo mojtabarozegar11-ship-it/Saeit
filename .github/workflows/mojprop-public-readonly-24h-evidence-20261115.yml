@@ -31,9 +31,13 @@ jobs:
             "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
             "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
             "signal_desk|https://mojplaywin.com/moj-prop/signals/"
+            "signal_free_signup_api|https://mojplaywin.com/moj-signal-free-subscribe/"
+            "saman_brand_signals|https://mojplaywin.com/saman/market-signals/"
+            "saman_ar_signals|https://mojplaywin.com/ar/saman/market-signals/"
             "single_bot_root|https://mojtaba.bot.ai/"
           )
           unhealthy=0
+          mojplaywin_unhealthy=0
           for item in "${targets[@]}"; do
             name="${item%%|*}"
             url="${item#*|}"
@@ -61,6 +65,7 @@ jobs:
             esac
             if [[ "$code" != "200" || "$curl_exit" != "0" ]]; then
               unhealthy=$((unhealthy+1))
+              [[ "$name" == "single_bot_root" ]] || mojplaywin_unhealthy=$((mojplaywin_unhealthy+1))
             fi
             echo "GET_ONLY_${name}_HTTP=$code"
             echo "GET_ONLY_${name}_CURL_EXIT=$curl_exit"
@@ -98,6 +103,50 @@ jobs:
           PY
             fi
           done
+          # Inspect only public HTML and the public API's contract; do not log
+          # emails, CSRF token values, cookies, or subscriber identifiers.
+          if [[ -f "$check_dir/signal_desk.body" ]]; then
+            if grep -Fq 'id="free-preview"' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=yes"
+            else
+              echo "PUBLIC_SIGNAL_HISTORICAL_SAMPLE=no"
+            fi
+            if grep -Fq 'id="free-education-membership"' "$check_dir/signal_desk.body" &&
+               grep -Fq '/moj-signal-free-subscribe/' "$check_dir/signal_desk.body"; then
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=yes"
+            else
+              echo "PUBLIC_SIGNAL_OPTIN_FORM=no"
+            fi
+          fi
+          python3 - "$check_dir/signal_free_signup_api.body" <<'PY'
+          import json,sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as f:
+                  data=json.load(f)
+              valid=(type(data) is dict and data.get("ok") is True
+                     and data.get("agent") == "mojtaba.bot.ai"
+                     and data.get("product") == "free-historical-research-updates"
+                     and data.get("paid_entitlement") is False
+                     and type(data.get("enabled")) is bool
+                     and type(data.get("csrf_token")) is str
+                     and bool(data.get("csrf_token")))
+          except (OSError, UnicodeError, ValueError, TypeError):
+              data={}
+              valid=False
+          print("PUBLIC_SIGNAL_FREE_API_CONTRACT=" + ("valid" if valid else "invalid"))
+          print("PUBLIC_SIGNAL_FREE_EMAIL_FLAG=" +
+                ("enabled-config-only" if data.get("enabled") is True and valid
+                 else "disabled" if valid else "unknown"))
+          print("PUBLIC_SIGNAL_FREE_CONFIRMED_MEMBER_COUNT=not_checked")
+          print("PUBLIC_SIGNAL_FREE_REAL_SMTP_DELIVERY=not_checked")
+          print("PUBLIC_SIGNAL_PAID_PAYMENT_DELIVERY=not_checked")
+          PY
+          if [[ "$mojplaywin_unhealthy" == "0" ]]; then
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=PASS"
+          else
+            echo "PUBLIC_MOJPLAYWIN_HOST_ROUTE_GATE=DEGRADED"
+          fi
+          echo "PUBLIC_MOJPLAYWIN_UNHEALTHY_ROUTE_COUNT=$mojplaywin_unhealthy"
           if [[ "$unhealthy" == "0" ]]; then
             echo "PUBLIC_BUYER_ROUTE_GATE=PASS"
           else
