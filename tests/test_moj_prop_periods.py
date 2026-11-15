@@ -92,9 +92,6 @@ class MojPropPeriodsTests(unittest.TestCase):
         self.assertEqual(result["trading_days"], 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
     def test_first_completed_month_can_be_reconciled_much_later(self):
         period = completed_period_by_number(
@@ -123,3 +120,7 @@ if __name__ == "__main__":
                     opened_at=START, as_of=START + timedelta(days=100),
                     period_number=number,
                 ))
+
+
+if __name__ == "__main__":
+    unittest.main()
