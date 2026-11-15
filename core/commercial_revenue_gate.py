@@ -842,7 +842,7 @@ class SQLiteCommercialLedger:
         if not isinstance(evidence, ConfirmedRefund):
             raise CommercialGateError("refund_evidence_invalid")
         order_id = _slug(evidence.order_id, "order_id")
-        _slug(evidence.source_id, "source_id")
+        source_id = _slug(evidence.source_id, "source_id")
         original_tx = _text(evidence.original_transaction_id, "original_transaction_id").lower()
         refund_tx = _text(evidence.refund_transaction_id, "refund_transaction_id").lower()
         if any(not _TRON_TX.fullmatch(tx) or set(tx) == {"0"} for tx in (original_tx, refund_tx)):
@@ -893,7 +893,7 @@ class SQLiteCommercialLedger:
                 raise CommercialGateError("refund_transfer_already_recorded")
             if self.connection.execute(
                 "SELECT 1 FROM independently_confirmed_refunds WHERE source_id = ?",
-                (evidence.source_id,),
+                (source_id,),
             ).fetchone():
                 raise CommercialGateError("refund_source_already_used")
             # Only plausible, authorized local order/transfer identities may
@@ -909,7 +909,7 @@ class SQLiteCommercialLedger:
             try:
                 self.connection.execute(
                     "INSERT INTO independently_confirmed_refunds VALUES (?, ?, ?, ?, ?)",
-                    (refund_tx, order_id, sun, evidence.source_id, datetime.now(timezone.utc).isoformat()),
+                    (refund_tx, order_id, sun, source_id, datetime.now(timezone.utc).isoformat()),
                 )
             except sqlite3.IntegrityError:
                 present = self.connection.execute(
