@@ -33,7 +33,12 @@ function makeNode() {
     value: "", hidden: true, checked: false, disabled: false, textContent: "",
     style: {}, required: false,
     maxLength: 5000, listeners: {}, addEventListener(type, handler) {
-      this.listeners[type] = handler;
+      // A real DOM keeps every event listener; don't overwrite earlier
+      // service change listeners when adding another product selector.
+      const previous = this.listeners[type];
+      this.listeners[type] = previous
+        ? (...args) => { previous(...args); return handler(...args); }
+        : handler;
     }, setAttribute() {}, removeAttribute() {}
   };
 }
