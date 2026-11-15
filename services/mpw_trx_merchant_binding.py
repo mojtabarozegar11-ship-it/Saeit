@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import hashlib
+import hmac
 import re
 
 _DOMAIN = re.compile(
@@ -16,6 +18,7 @@ _DOMAIN = re.compile(
     r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
 )
 _MERCHANT = re.compile(r"^[a-z0-9][a-z0-9_-]{2,47}$")
+_BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 
 class MerchantBindingRejected(ValueError):
@@ -29,6 +32,34 @@ class MerchantBinding:
     network: str
     recipient: str
 
+
+
+def validate_tron_recipient(value: str) -> str:
+    """Require a checksummed, canonical TRON-format Base58Check address.
+
+    The leading T alone is not proof of address integrity. Decode exactly
+    21 payload bytes (0x41 + 20 account bytes) and the four-byte double-SHA256
+    checksum. Prefix 0x41 is shared by TRON Mainnet, Nile and Shasta; the
+    separate merchant registry must explicitly bind tron-mainnet. This
+    performs no wallet lookup, RPC or network operation.
+    """
+    if (type(value) is not str or len(value) != 34
+            or not value.startswith("T")
+            or any(ch not in _BASE58 for ch in value)):
+        raise MerchantBindingRejected("Invalid TRON mainnet receiver address")
+    number = 0
+    for ch in value:
+        number = number * 58 + _BASE58.index(ch)
+    try:
+        raw = number.to_bytes(25, "big")
+    except OverflowError as exc:
+        raise MerchantBindingRejected("TRON receiver address overflow") from exc
+    if raw[0] != 0x41:
+        raise MerchantBindingRejected("TRON receiver format prefix mismatch")
+    digest = hashlib.sha256(hashlib.sha256(raw[:21]).digest()).digest()[:4]
+    if not hmac.compare_digest(raw[21:], digest):
+        raise MerchantBindingRejected("TRON receiver checksum mismatch")
+    return value
 
 def normalize_domain(value: str) -> str:
     if type(value) is not str:
@@ -88,6 +119,7 @@ def binding_for_request(settings, request_domain: str, recipient: str) -> Mercha
         raise MerchantBindingRejected("Merchant binding network/domain mismatch")
     if type(recipient) is not str or configured_recipient != recipient:
         raise MerchantBindingRejected("Receiver does not belong to request merchant")
+    recipient = validate_tron_recipient(recipient)
     return MerchantBinding(
         domain=domain,
         merchant_id=merchant_id,
@@ -104,6 +136,7 @@ def require_same_invoice_host(invoice, request_domain: str) -> str:
     attribution. A new payable invoice additionally needs an active registry.
     """
     domain = normalize_domain(request_domain)
+    validate_tron_recipient(getattr(invoice, "recipient", None))
     saved, merchant_id = validate_persisted_binding(
         getattr(invoice, "merchant_domain", None),
         getattr(invoice, "merchant_id", None),
