@@ -153,3 +153,32 @@ class CommerceOrderRequest(models.Model):
         max_length=3, choices=[("ETH", "ETH"), ("TRX", "TRX")],
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+class GuestTrxDelivery(models.Model):
+    """Durable invoice/receipt outbox for the existing guest delivery worker.
+
+    This table queues messages only; it never proves payment or grants a file.
+    """
+    order = models.OneToOneField(
+        "core.Order", on_delete=models.PROTECT,
+        related_name="mpw_guest_trx_delivery",
+    )
+    email = models.EmailField(max_length=254)
+    invoice_state = models.CharField(max_length=16, default="pending")
+    invoice_attempts = models.PositiveSmallIntegerField(default=0)
+    receipt_state = models.CharField(max_length=16, default="pending")
+    receipt_attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["invoice_state", "invoice_attempts"],
+                name="mpw_guest_inv_outbox_idx",
+            ),
+            models.Index(
+                fields=["receipt_state", "receipt_attempts"],
+                name="mpw_guest_rcpt_outbox_idx",
+            ),
+        ]
