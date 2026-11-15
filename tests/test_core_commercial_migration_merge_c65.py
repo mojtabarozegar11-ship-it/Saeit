@@ -6,6 +6,7 @@ from django.db.migrations.operations.models import CreateModel
 LEFT = ("core", "0040_commercefunnelevent")
 RIGHT = ("core", "0041_mojprop_request")
 MERGE = ("core", "0042_merge_commerce_funnel_mojprop_20261115")
+LEAF = ("core", "0043_alter_mojproprequest_source")
 BASE = ("core", "0039_educationassessment_educationattempt_and_more")
 
 
@@ -16,7 +17,7 @@ class CoreCommercialMigrationMergeTests(SimpleTestCase):
         cls.loader = MigrationLoader(None)
 
     def test_core_has_exactly_one_leaf(self):
-        self.assertEqual(self.loader.graph.leaf_nodes("core"), [MERGE])
+        self.assertEqual(self.loader.graph.leaf_nodes("core"), [LEAF])
 
     def test_no_core_migration_conflict_remains(self):
         self.assertNotIn("core", self.loader.detect_conflicts())
@@ -45,7 +46,18 @@ class CoreCommercialMigrationMergeTests(SimpleTestCase):
         self.assertEqual(created, ["MojPropRequest"])
 
     def test_both_branches_are_in_merge_execution_plan(self):
-        plan = self.loader.graph.forwards_plan(MERGE)
+        plan = self.loader.graph.forwards_plan(LEAF)
         self.assertIn(LEFT, plan)
         self.assertIn(RIGHT, plan)
-        self.assertEqual(plan[-1], MERGE)
+        self.assertEqual(plan[-2:], [MERGE, LEAF])
+    def test_0043_optional_lead_source_is_explicitly_in_migration_chain(self):
+        migration = self.loader.disk_migrations[LEAF]
+        self.assertEqual(migration.dependencies, [MERGE])
+        self.assertEqual(len(migration.operations), 1)
+        from django.db.migrations.operations.fields import AlterField
+        op = migration.operations[0]
+        self.assertIsInstance(op, AlterField)
+        self.assertEqual(op.model_name, "mojproprequest")
+        self.assertEqual(op.name, "source")
+        self.assertIs(op.field.blank, True)
+        self.assertEqual(op.field.default, "moj-prop")
