@@ -118,9 +118,38 @@ class MojPropOfferTests(TestCase):
             offer.full_clean()
         offer.refresh_from_db()
         offer.status = "accepted"
+        offer.accepted_at = issued + timedelta(minutes=3)
+        offer.acceptance_reference = "signed-approval:manual-case-FADEBEEF"
         offer.full_clean()
-        offer.save(update_fields=["status"])
+        offer.save(update_fields=["status", "accepted_at", "acceptance_reference"])
         self.assertEqual(offer.status, "accepted")
+
+    def test_acceptance_requires_a_real_reference_and_valid_time(self):
+        issued = timezone.now() - timedelta(hours=1)
+        quote = self.offer(
+            status="issued", reviewed_at=issued,
+            issued_at=issued, expires_at=issued + timedelta(days=5),
+        )
+        quote.full_clean()
+        quote.save()
+        quote.status = "accepted"
+        with self.assertRaises(ValidationError):
+            quote.full_clean()
+        quote.acceptance_reference = "signed-contract:ACCEPT-20261115"
+        quote.accepted_at = issued - timedelta(minutes=1)
+        with self.assertRaises(ValidationError):
+            quote.full_clean()
+        quote.accepted_at = issued + timedelta(days=6)
+        with self.assertRaises(ValidationError):
+            quote.full_clean()
+        quote.accepted_at = timezone.now() + timedelta(days=1)
+        with self.assertRaises(ValidationError):
+            quote.full_clean()
+        quote.accepted_at = timezone.now()
+        quote.full_clean()
+        quote.save()
+        self.assertEqual(quote.status, "accepted")
+        self.assertIn("Proposal status: accepted", quote.manual_quote_text)
 
     def test_delivery_days_cannot_be_infinite_or_zero(self):
         for value in (0, 91, -1):
