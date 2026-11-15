@@ -57,7 +57,7 @@ jobs:
               Check().feed(html)
           home = (root / "index.html").read_text(encoding="utf-8")
           catalog = (root / "catalog/index.html").read_text(encoding="utf-8")
-          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop/intake/', "See service prices", "Send request for review"]
+          home_required = ["<title>Moj Prop", 'href="/moj-prop/catalog/"', '/moj-prop-intake/', "See service prices", "Send request for review"]
           catalog_required = ["<title>Moj Prop Catalog", "From US$149", "From US$249"]
           missing = [item for item in home_required + catalog_required if item not in home + catalog]
           if missing:
@@ -162,7 +162,7 @@ jobs:
           [[ "$catalog_status" == "200" ]]
           intake_status="000"
           for intake_attempt in {1..10}; do
-            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop/intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
+            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
             [[ "$intake_status" == "200" ]] && break
             echo "Moj Prop intake not ready (HTTP $intake_status, attempt $intake_attempt)."
             sleep 3
@@ -189,7 +189,7 @@ jobs:
           assert "<title>Moj Prop" in home
           assert 'href="/moj-prop/catalog/"' in home
           assert "See service prices" in home
-          assert "/moj-prop/intake/" in home
+          assert "/moj-prop-intake/" in home
           assert "Send request for review" in home
           assert "<title>Moj Prop Catalog" in catalog
           assert "From US$149" in catalog
@@ -220,14 +220,14 @@ jobs:
               from django.test import RequestFactory, Client
               from django.urls import resolve
               from core.mojprop_views import mojprop_intake
-              request = RequestFactory().get('/moj-prop/intake/', HTTP_HOST='mojplaywin.com')
+              request = RequestFactory().get('/moj-prop-intake/', HTTP_HOST='mojplaywin.com')
               direct = mojprop_intake(request)
               print('MOJ_PROP_DIRECT_STATUS=' + str(direct.status_code))
               print('MOJ_PROP_DIRECT_BODY=' + direct.content[:300].decode('utf-8', 'replace'))
-              print('MOJ_PROP_RESOLVED=' + repr(resolve('/moj-prop/intake/').func))
+              print('MOJ_PROP_RESOLVED=' + repr(resolve('/moj-prop-intake/').func))
               client = Client(HTTP_HOST='mojplaywin.com', secure=True)
               client.raise_request_exception = False
-              response = client.get('/moj-prop/intake/', follow=True)
+              response = client.get('/moj-prop-intake/', follow=True)
               print('MOJ_PROP_CLIENT_STATUS=' + str(response.status_code))
               print('MOJ_PROP_CLIENT_LOCATION=' + str(response.headers.get('Location', '')))
               print('MOJ_PROP_CLIENT_BODY=' + response.content[:300].decode('utf-8', 'replace'))
