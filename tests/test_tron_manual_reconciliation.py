@@ -33,7 +33,7 @@ class TronManualReconciliationTests(unittest.TestCase):
             "host": "mojplaywin.com",
             "brand": "moj_prop",
             "invoice_id": "invoice-001",
-            "tx_id": "tx-001",
+            "tx_id": digest("tx-001"),
             "network": "tron-mainnet",
             "asset": "TRX",
             "amount_sun": 30_000_000,
@@ -120,14 +120,14 @@ class TronManualReconciliationTests(unittest.TestCase):
             ])
 
     def test_batch_rejects_duplicate_receipt(self):
-        second = self.candidate(tx_id="tx-002")
+        second = self.candidate(tx_id=digest("tx-002"))
         with self.assertRaisesRegex(TronReconciliationError, "duplicate_receipt_id"):
             validate_receipt_batch([self.candidate(), second])
 
     def test_batch_accepts_distinct_receipts_and_transactions(self):
         result = validate_receipt_batch([
             self.candidate(),
-            self.candidate(receipt_id="receipt-002", tx_id="tx-002"),
+            self.candidate(receipt_id="receipt-002", tx_id=digest("tx-002")),
         ])
         self.assertEqual(len(result), 2)
 
@@ -147,6 +147,52 @@ class TronManualReconciliationTests(unittest.TestCase):
             validate_receipt_candidate(
                 self.candidate(), {"tenant_id": "moj-prop-merchant"}, now=NOW
             )
+
+
+    def test_literal_fake_transaction_id_rejected(self):
+        with self.assertRaisesRegex(TronReconciliationError, "tx_id_invalid"):
+            validate_receipt_candidate(self.candidate(tx_id="tx-001"), SCOPE, now=NOW)
+
+    def test_receipt_amount_must_fit_canonical_sun_ledger(self):
+        with self.assertRaisesRegex(TronReconciliationError, "amount_sun"):
+            validate_receipt_candidate(
+                self.candidate(amount_sun=10**15 + 1), SCOPE, now=NOW
+            )
+
+    def test_confirmation_target_has_reasonable_bound(self):
+        with self.assertRaisesRegex(TronReconciliationError, "required_confirmations"):
+            validate_receipt_candidate(
+                self.candidate(required_confirmations=10001), SCOPE, now=NOW
+            )
+
+    def test_all_zero_provider_proof_digest_rejected(self):
+        with self.assertRaisesRegex(TronReconciliationError, "provider_reference_digest"):
+            validate_receipt_candidate(
+                self.candidate(provider_reference_digest="0" * 64), SCOPE, now=NOW
+            )
+
+    def test_clock_object_is_validated_before_comparison(self):
+        with self.assertRaisesRegex(TronReconciliationError, "reconciliation_clock"):
+            validate_receipt_candidate(self.candidate(), SCOPE, now=object())
+
+    def test_batch_malformed_item_has_contract_error(self):
+        with self.assertRaisesRegex(TronReconciliationError, "receipt_candidate_required"):
+            validate_receipt_batch([None])
+
+    def test_batch_size_bounded_to_protect_reconciler(self):
+        with self.assertRaisesRegex(TronReconciliationError, "receipt_batch_too_large"):
+            validate_receipt_batch([self.candidate()] * 501)
+
+    def test_review_preserves_correlatable_digests_without_settlement(self):
+        candidate = self.candidate()
+        record = build_review_record(candidate, SCOPE, now=NOW)
+        self.assertEqual(record["observed_at"], candidate.observed_at)
+        self.assertEqual(record["to_address_digest"], candidate.to_address_digest)
+        self.assertEqual(
+            record["provider_reference_digest"], candidate.provider_reference_digest
+        )
+        self.assertIs(record["revenue_collected"], False)
+
 
 
 if __name__ == "__main__":
