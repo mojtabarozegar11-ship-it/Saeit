@@ -1,7 +1,7 @@
 """Persistence for Moj Prop, a MojPlayWin division; no brokerage/payment integrations.
 
 Database rows represent evidence references, NOT authority to move capital.
-No public write endpoints are supplied. All funding, payout and live trading remain off.
+Only the non-financial applicant intake may write a lead row; funding, payout and live trading remain off.
 """
 import uuid
 from decimal import Decimal
