@@ -75,46 +75,57 @@ def _select_db_estimate():
     return int(value)
 
 
-def _quota_checked(needed_bytes):
-    """Exact quota(1) read, independent of uninstalled app helper modules."""
+def _quota_result(needed_bytes):
+    """Return only a bounded outcome code; never expose raw quota or paths."""
     import subprocess
-    # The filesystem check must also pass. Host account quota can be tighter.
-    fd = os.open(HOME, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        stats = os.fstatvfs(fd)
-        if (stats.f_bavail * stats.f_frsize < needed_bytes + 64 * 1024 * 1024
-                or stats.f_favail < 32):
-            return False
-    finally:
-        os.close(fd)
+        fd = os.open(HOME, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            stats = os.fstatvfs(fd)
+            if (stats.f_bavail * stats.f_frsize < needed_bytes + 64 * 1024 * 1024
+                    or stats.f_favail < 32):
+                return False, "filesystem_reserve_failed"
+        finally:
+            os.close(fd)
+    except OSError:
+        return False, "filesystem_probe_failed"
     try:
         proc = subprocess.run(
             ["quota", "-wvu", ACCOUNT], timeout=6, check=True,
             capture_output=True, text=True,
             env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin"},
         )
+    except FileNotFoundError:
+        return False, "quota_program_unavailable"
+    except subprocess.TimeoutExpired:
+        return False, "quota_program_timeout"
     except (OSError, subprocess.SubprocessError):
-        return False
+        return False, "quota_program_failed"
     saw_volume = False
     for line in proc.stdout.splitlines():
         fields = line.split()
         if not fields or not fields[0].startswith("/dev/"):
             continue
         if len(fields) != 7 or any(not x.isdecimal() for x in fields[1:]):
-            return False
+            return False, "quota_format_unrecognized"
         used_kib, soft_kib, hard_kib, inode_used, inode_soft, inode_hard = (
             int(x) for x in fields[1:]
         )
         used, soft, hard = used_kib * 1024, soft_kib * 1024, hard_kib * 1024
         if any(limit and limit - used < needed_bytes + 64 * 1024 * 1024
                for limit in (soft, hard)):
-            return False
+            return False, "quota_blocks_insufficient"
         if any(limit and limit - inode_used < 32
                for limit in (inode_soft, inode_hard)):
-            return False
+            return False, "quota_inodes_insufficient"
         saw_volume = True
-    return saw_volume
+    return (True, "quota_exact_verified") if saw_volume else (
+        False, "quota_volume_not_reported"
+    )
 
+
+def _quota_checked(needed_bytes):
+    return _quota_result(needed_bytes)[0]
 
 def main():
     out = {
@@ -146,8 +157,10 @@ def main():
         free = int(fs.f_bavail) * int(fs.f_frsize)
         requirement = 2 * db_bytes + HEADROOM if 0 < db_bytes <= MAX_REASONABLE_DB_ESTIMATE else 0
         # Failure to prove the quota is UNKNOWN, not automatically 'no space'.
-        quota = _quota_checked(requirement) if requirement else False
+        quota, reason = (_quota_result(requirement) if requirement else
+                         (False, "connected_db_estimate_unavailable"))
         out["quota_probe_available"] = quota is True
+        out["quota_outcome"] = reason
         out.update(capacity_flags(free_bytes=free, db_bytes=db_bytes, quota_accepted=quota))
     except Exception as exc:
         # No exception text, DB names, table names, quotas, buyer details, paths.
