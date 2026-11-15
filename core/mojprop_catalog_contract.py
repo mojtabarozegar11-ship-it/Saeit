@@ -32,11 +32,13 @@ def public_service_catalog() -> list[dict]:
     # priced Moj Prop service. Reject unknown routes, but do not crash the
     # four-offer public GET endpoint after that separate migration is applied.
     non_service_inquiries = {"digital": "Digital product purchase inquiry"}
+    extra_routes = {
+        route: label for route, label in expected.items()
+        if route not in paid_service_routes
+    }
     if (not paid_service_routes.issubset(expected)
             or any(expected[item.route] != item.label for item in SERVICES)
-            or {route: label for route, label in expected.items()
-                if route not in paid_service_routes}
-            not in ({}, non_service_inquiries})):
+            or extra_routes not in ({}, non_service_inquiries)):
         raise RuntimeError("Moj Prop catalog and Django intake route contract differ")
     if len({item.sample_slug for item in SERVICES}) != len(SERVICES):
         raise RuntimeError("Moj Prop sample slugs are not unique")
