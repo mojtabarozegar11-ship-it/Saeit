@@ -55,7 +55,7 @@ STATE_ORDER = (
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
 _HOST = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
-_TX = re.compile(r"^[A-Za-z0-9:_-]{8,256}$")
+_TRON_TX = re.compile(r"^[0-9a-fA-F]{64}$")
 # Only canonical non-financial deliverables may be requested. A blacklist
 # can be bypassed with concatenation, other scripts, or mixed-language prompts.
 _ALLOWED_NONFINANCIAL_SIGNAL_ACTIONS = frozenset({
@@ -84,6 +84,9 @@ def _amount(value: object, field: str = "amount") -> Decimal:
         raise CommercialGateError(f"{field}_must_be_decimal")
     if not value.is_finite() or value <= Decimal("0"):
         raise CommercialGateError(f"{field}_must_be_finite_positive")
+    # Bounded staged monetary values prevent accidental allocation / reporting overflow.
+    if value > Decimal("1000000000000000"):
+        raise CommercialGateError(f"{field}_exceeds_safety_cap")
     return value
 
 
@@ -146,6 +149,7 @@ def validate_offer(
                 re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", part)
                 for part in parts)
         and host != "dr.mojtaba.rozegar"
+        and not host.endswith(".dr.mojtaba.rozegar")
     )
     if not valid_host:
         raise CommercialGateError("canonical_host_invalid")
@@ -229,11 +233,16 @@ def validate_payment_evidence(
     expected_currency: str,
 ) -> str:
     """Return a stable digest only for a complete, manually reviewed TRX proof."""
-    if evidence.order_id != _text(expected_order_id, "expected_order_id"):
+    if not isinstance(evidence, PaymentEvidence):
+        raise CommercialGateError("payment_evidence_invalid")
+    expected_order_id = _slug(expected_order_id, "expected_order_id")
+    expected_invoice_id = _slug(expected_invoice_id, "expected_invoice_id")
+    if evidence.order_id != expected_order_id:
         raise CommercialGateError("payment_order_mismatch")
-    if evidence.invoice_id != _text(expected_invoice_id, "expected_invoice_id"):
+    if evidence.invoice_id != expected_invoice_id:
         raise CommercialGateError("payment_invoice_mismatch")
-    if _text(evidence.provider, "provider") == "not_configured":
+    provider = _slug(evidence.provider, "provider")
+    if provider in {"not_configured", "none", "unknown", "test", "mock"}:
         raise CommercialGateError("payment_provider_not_configured")
     if evidence.network != "TRON" or evidence.asset != "TRX":
         raise CommercialGateError("payment_chain_asset_mismatch")
@@ -243,11 +252,14 @@ def validate_payment_evidence(
     currency = _currency(evidence.currency)
     if currency != _currency(expected_currency):
         raise CommercialGateError("payment_currency_mismatch")
+    if currency != "TRX":
+        raise CommercialGateError("native_trx_currency_required")
     _validate_trx_sun_precision(amount, currency)
     _validate_trx_sun_precision(expected_amount, currency)
     transaction_id = _text(evidence.transaction_id, "transaction_id")
-    if not _TX.fullmatch(transaction_id):
+    if not _TRON_TX.fullmatch(transaction_id):
         raise CommercialGateError("transaction_id_invalid")
+    transaction_id = transaction_id.lower()
     flags = (
         evidence.chain_finalized,
         evidence.amount_matches,
@@ -260,7 +272,7 @@ def validate_payment_evidence(
     return _digest({
         "order_id": evidence.order_id,
         "invoice_id": evidence.invoice_id,
-        "provider": evidence.provider.strip(),
+        "provider": provider,
         "network": evidence.network,
         "asset": evidence.asset,
         "amount": str(amount),
@@ -295,6 +307,8 @@ def transition_state(
     verified_revenue: bool = False,
 ) -> CommercialState:
     """Allow exactly one governed step; never skip a payment or delivery gate."""
+    if not isinstance(current, CommercialState) or not isinstance(target, CommercialState):
+        raise CommercialGateError("invalid_state_transition")
     try:
         expected = STATE_ORDER[STATE_ORDER.index(current) + 1]
     except (ValueError, IndexError):
@@ -311,9 +325,9 @@ def transition_state(
             expected_currency=payment_evidence.currency,
         )
     if target is CommercialState.FULFILLED:
-        if not _HEX64.fullmatch(fulfillment_manifest_sha256):
+        if not isinstance(fulfillment_manifest_sha256, str) or not _HEX64.fullmatch(fulfillment_manifest_sha256):
             raise CommercialGateError("fulfillment_manifest_required")
-    if target is CommercialState.VERIFIED_REVENUE and not verified_revenue:
+    if target is CommercialState.VERIFIED_REVENUE and verified_revenue is not True:
         raise CommercialGateError("verified_revenue_attestation_required")
     return target
 
@@ -393,7 +407,9 @@ class SQLiteCommercialLedger:
         event_id = _text(event_id, "event_id")
         if len(event_id) > 128 or any(ord(char) < 33 or ord(char) > 126 for char in event_id):
             raise CommercialGateError("event_id_invalid")
-        if not _HEX64.fullmatch(payload_digest):
+        if not isinstance(target, CommercialState):
+            raise CommercialGateError("invalid_state_transition")
+        if not isinstance(payload_digest, str) or not _HEX64.fullmatch(payload_digest):
             raise CommercialGateError("payload_digest_invalid")
         with self.connection:
             row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
@@ -411,6 +427,8 @@ class SQLiteCommercialLedger:
                     raise CommercialGateError("stale_event_replay")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
+            if target is CommercialState.FULFILLED and payload_digest != fulfillment_manifest_sha256:
+                raise CommercialGateError("fulfillment_payload_mismatch")
             evidence_digest = None
             if target in (CommercialState.SETTLED, CommercialState.VERIFIED_REVENUE):
                 if not isinstance(payment_evidence, PaymentEvidence):
@@ -428,14 +446,14 @@ class SQLiteCommercialLedger:
                         "SELECT transaction_id FROM settled_transactions WHERE network = ? AND order_id = ?",
                         (payment_evidence.network, order_id),
                     ).fetchone()
-                    if settled is None or settled["transaction_id"] != payment_evidence.transaction_id:
+                    if settled is None or settled["transaction_id"] != payment_evidence.transaction_id.lower():
                         raise CommercialGateError("verified_revenue_settlement_mismatch")
             # Chain transfers are single-use across orders; uniqueness is durable.
             if target is CommercialState.SETTLED:
                 try:
                     self.connection.execute(
                         "INSERT INTO settled_transactions (network, transaction_id, order_id) VALUES (?, ?, ?)",
-                        (payment_evidence.network, payment_evidence.transaction_id, order_id),
+                        (payment_evidence.network, payment_evidence.transaction_id.lower(), order_id),
                     )
                 except sqlite3.IntegrityError as exc:
                     raise CommercialGateError("transaction_already_settled") from exc
@@ -456,6 +474,7 @@ class SQLiteCommercialLedger:
             return next_value
 
     def snapshot(self, order_id: str) -> Mapping[str, str]:
+        order_id = _slug(order_id, "order_id")
         row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
         if row is None:
             raise CommercialGateError("order_not_found")
