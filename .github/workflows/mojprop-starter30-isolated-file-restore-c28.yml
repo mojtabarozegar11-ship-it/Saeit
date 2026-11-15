@@ -10,6 +10,8 @@ on:
 permissions:
   contents: read
   checks: read
+  actions: read
+  pull-requests: read
 concurrency:
   group: mojprop-c28-private-restore
   cancel-in-progress: false
@@ -54,6 +56,7 @@ jobs:
         env:
           GH_APPROVED_COMMENT_ID: ${{ vars.MOJPROP_C28_APPROVED_COMMENT_ID }}
           GH_MAIN_SHA: ${{ github.sha }}
+          GH_REVIEWED_PR_HEAD: ${{ vars.MOJPROP_C28_REVIEWED_PR_HEAD_SHA }}
         with:
           script: |
             const {owner,repo}=context.repo;
@@ -66,16 +69,56 @@ jobs:
             if (!/^[0-9a-f]{40}$/.test(sha)) throw Error("invalid pinned commit");
             const main=await github.rest.repos.getBranch({owner,repo,branch:"main"});
             if (main.data.commit.sha!==sha) throw Error("main moved; re-approve exact commit");
-            const runs=await github.paginate(github.rest.checks.listForRef,
-              {owner,repo,ref:sha,per_page:100});
-            const green=n=>runs.filter(x=>x.name===n && x.status==="completed" &&
-              x.conclusion==="success");
-            if (green("test").length<2 || !green("check").length) {
-              throw Error("two independent exact-main CI jobs and policy have not passed");
+            const prHead=process.env.GH_REVIEWED_PR_HEAD;
+            if (!/^[0-9a-f]{40}$/.test(prHead)) {
+              throw Error("reviewed PR head not independently approved");
             }
-            // Security signoff is the separately protected repository variable
-            // MOJPROP_C28_SECURITY_APPROVED_SHA, tested in job-level if.
-            core.info("C28_EXACT_HEAD_CI_AND_OWNER_SECURITY_GATE_PASSED");
+            const approved=await github.rest.pulls.get({owner,repo,pull_number:2437});
+            if (!approved.data.merged || approved.data.head.sha!==prHead ||
+                approved.data.base.ref!=="main") {
+              throw Error("original reviewed PR not merged into main");
+            }
+            const ancestry=await github.rest.repos.compareCommits({
+              owner,repo,base:prHead,head:sha
+            });
+            if (ancestry.data.behind_by!==0) {
+              throw Error("reviewed exact PR code is not ancestor of current main");
+            }
+            // Require specific workflow identity, event and exact commit.
+            // Merely counting generic test/check JOB NAMES is unsafe: many
+            // unrelated dispatch workflows use those same job names.
+            async function requiredCheck(commit,path,job,event) {
+              const checks=await github.paginate(github.rest.checks.listForRef,{
+                owner,repo,ref:commit,per_page:100
+              });
+              const candidates=checks.filter(x=>x.name===job &&
+                x.status==="completed" && x.conclusion==="success");
+              for (const c of candidates) {
+                const match=(c.details_url||"").match(/\/actions\/runs\/([0-9]+)\/job\/[0-9]+/);
+                if (!match) continue;
+                const run=await github.rest.actions.getWorkflowRun({
+                  owner,repo,run_id:Number(match[1])
+                });
+                if (run.data.path===path && run.data.head_sha===commit &&
+                    run.data.event===event && run.data.status==="completed" &&
+                    run.data.conclusion==="success") return true;
+              }
+              return false;
+            }
+            const requirements=[
+              [sha,".github/workflows/ci.yml","test","push"],
+              [sha,".github/workflows/django-ci.yml","test","push"],
+              [prHead,".github/workflows/factory-evidence-quality-tests.yml","check","pull_request"],
+              [prHead,".github/workflows/mojprop-starter30-isolated-file-restore-c28.yml","source-only","pull_request"],
+            ];
+            for (const [commit,path,job,event] of requirements) {
+              if (!await requiredCheck(commit,path,job,event)) {
+                throw Error("missing exact-commit verified workflow: "+path);
+              }
+            }
+            // Separate owner-controlled security approval remains required
+            // for this exact main SHA; absence of ANY variable denies access.
+            core.info("C28_EXACT_WORKFLOW_CI_AND_OWNER_SECURITY_GATE_PASSED");
 
   isolated-private-copy:
     needs: [approved-preflight]
