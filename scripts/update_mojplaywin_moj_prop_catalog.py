@@ -24,6 +24,8 @@ FILES = (
     Path("index.html"),
     Path("samples/prop-blueprint/index.html"),
     Path("samples/gold-market-brief/index.html"),
+    Path("samples/educational-signal/index.html"),
+    Path("samples/commercial-gate-audit/index.html"),
     Path("catalog/index.html"),
 )
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
@@ -88,9 +90,11 @@ def source_root(run_id: str) -> Path:
         raise RuntimeError("Staged homepage lacks working intake contract")
     catalog = html["catalog/index.html"]
     if ("/moj-prop/samples/prop-blueprint/" not in catalog
-            or "/moj-prop/samples/gold-market-brief/" not in catalog):
+            or "/moj-prop/samples/gold-market-brief/" not in catalog
+            or "/moj-prop/samples/educational-signal/" not in catalog
+            or "/moj-prop/samples/commercial-gate-audit/" not in catalog):
         raise RuntimeError("Staged catalog sample links missing")
-    for sample in FILES[1:3]:
+    for sample in FILES[1:5]:
         doc = html[str(sample)]
         if "<title>" not in doc or "Sample" not in doc:
             raise RuntimeError("Staged commercial sample invalid: " + str(sample))
