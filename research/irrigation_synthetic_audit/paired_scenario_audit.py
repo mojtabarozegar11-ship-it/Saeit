@@ -120,6 +120,8 @@ def analyze_family(records: list[dict], family: str) -> dict:
     policy_values: dict[str, list[dict]] = defaultdict(list)
     for row in records:
         key, policy = row["key"], row["policy"]
+        require(key[0].startswith(f"{family}-"),
+                f"{family}: cross-family or malformed cohort identifier: {key[0]!r}")
         require(policy in policies, f"{family}: unexpected policy {policy!r}")
         require(policy not in matched[key], f"{family}: duplicate (key,policy): {key,policy}")
         matched[key][policy] = row
