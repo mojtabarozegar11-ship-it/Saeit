@@ -180,3 +180,40 @@ class MojPropIntakeSafetyTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(MojPropRequest.objects.count(), 0)
+
+
+    def test_unpaired_unicode_surrogate_cannot_reach_customer_database(self):
+        for key in ("name", "notes"):
+            with self.subTest(field=key):
+                data = {**self.data, key: self.data[key] + "\\ud800"}
+                response = self.post(data)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_deep_json_structure_returns_400_instead_of_server_error(self):
+        raw = "[" * 1100 + "0" + "]" * 1100
+        response = self.post(raw=raw)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_negative_declared_body_size_rejected_at_parser_boundary(self):
+        from django.test import RequestFactory
+        from core.mojprop_views import _payload
+        request = RequestFactory().post(
+            "/moj-prop-intake/", json.dumps(self.data),
+            content_type="application/json",
+        )
+        request.META["CONTENT_LENGTH"] = "-1"
+        self.assertIsNone(_payload(request))
+
+    @override_settings(MOJPROP_TRUSTED_PROXIES=("127.0.0.1",))
+    def test_malformed_trusted_forwarded_headers_cannot_rotate_rate_keys(self):
+        bad_ips = ("1.2.3.4, 5.6.7.8", "not-an-ip", "203.0.113.999",
+                   "x" * 150, "198.51.100.3; spoofed", "8.8.8.8,")
+        for index, bad in enumerate(bad_ips):
+            response = self.post(
+                {**self.data, "email": f"distinct{index}@example.org"},
+                REMOTE_ADDR="127.0.0.1", HTTP_X_REAL_IP=bad,
+            )
+            self.assertEqual(response.status_code, 201 if index < 5 else 429)
+        self.assertEqual(MojPropRequest.objects.count(), 5)
