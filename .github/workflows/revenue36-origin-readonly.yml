@@ -1,0 +1,39 @@
+name: Revenue36 owner selfhosted origin read-only evidence
+
+# Never give SSH secrets or factory-runner access to unreviewed PR code.
+# Only cross-check immutable, successful, time-bounded manual run receipts.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/revenue36-origin-readonly.yml"
+      - "scripts/revenue36_origin_evidence_readonly.py"
+      - "tests/test_revenue36_origin_evidence_readonly.py"
+
+permissions:
+  contents: read
+
+jobs:
+  origin-proof:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout source without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify three current owner-triggered self-hosted origin receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/revenue36_origin_evidence_readonly.py
+      - name: Independently observe current public routes (no release claim)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://mojplaywin.com/ https://mojplaywin.com/moj-prop/ https://mojplaywin.com/saman/market-signals/ https://mojplaywin.com/store/ https://mojplaywin.com/store/product/72/ https://mojplaywin.com/store/product/225/ https://mojplaywin.com/store/product/879/ https://mojtaba.bot.ai/ https://zomorodmelal.ir/saman/market-signals/; do
+            code="$(curl --connect-timeout 6 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            printf 'PUBLIC_URL=%s STATUS=%s\n' "$url" "$code"
+          done
+          echo 'MOJPLAYWIN_RELEASE_AUTHORIZED=NO'

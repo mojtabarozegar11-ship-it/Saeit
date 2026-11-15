@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="{{ locale }}" dir="{{ direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="{{ copy.description }}">
+<title>{{ copy.title }}</title>
+<style>
+:root{color-scheme:dark;--ink:#101b2f;--gold:#dfbd79;--white:#f8f6f0}
+*{box-sizing:border-box}
+body{margin:0;background:#09121f;color:var(--white);font:16px/1.8 system-ui,Arial,sans-serif}
+main{max-width:960px;margin:32px auto;padding:clamp(22px,6vw,72px);background:linear-gradient(130deg,#14243c,#101a2c);border:1px solid #8d7852;border-radius:24px}
+h1{font-size:clamp(1.9rem,4.5vw,3.6rem);line-height:1.25;margin:.2em 0}
+p{max-width:780px}small,.hint{color:#c1c6d1}
+.logo{font-weight:700;color:var(--gold);letter-spacing:.09em}
+label{display:block;margin:16px 0 5px}
+input[type=email]{width:100%;padding:14px;background:#0a1727;color:white;border:1px solid #8390a0;border-radius:9px;font:inherit}
+input[type=checkbox]{accent-color:var(--gold)}
+button{background:var(--gold);color:#1a1711;border:none;border-radius:10px;padding:14px 22px;font:inherit;font-weight:bold;cursor:pointer;margin-top:12px}
+a{color:var(--gold)}form{max-width:650px;margin:25px 0}
+.langs{display:flex;gap:12px;flex-wrap:wrap}
+footer{border-top:1px solid #596170;margin-top:40px;padding-top:18px;font-size:.85rem;color:#b1b8c7}
+</style>
+</head>
+<body><main>
+<div class="logo">MOJ PROP · MojPlayWin</div>
+<nav class="langs" aria-label="Languages">
+<a href="/moj-prop/">EN</a><a href="/moj-prop/fa/">FA</a>
+<a href="/moj-prop/ar/">AR</a><a href="/moj-prop/de/">DE</a>
+</nav>
+<h1>{{ copy.headline }}</h1><p>{{ copy.description }}</p>
+<form method="post" action="/moj-prop/interest/" accept-charset="UTF-8">
+{% csrf_token %}
+<input type="hidden" name="plan_code" value="MOJ-PROP-01">
+<input type="hidden" name="source_language" value="{{ locale }}">
+<input type="hidden" name="consent_version" value="moj-prop-interest-v1">
+<label for="email">{{ copy.email }}</label>
+<input id="email" type="email" name="email" maxlength="254" autocomplete="email" required>
+<label><input type="checkbox" name="contact_consent" value="yes" required> {{ copy.consent }}</label>
+<button type="submit">{{ copy.send }}</button>
+</form>
+<p class="hint">MOJ-PROP-01 · 30 TRX (proposed entry fee, not payable here). No wallet address, invoice or trading account is issued by this page.</p>
+<footer>MojPlayWin · MOJ PROP · Customer contact request only. No financial performance or profits are guaranteed.</footer>
+</main></body></html>

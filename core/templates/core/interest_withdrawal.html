@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ direction }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>{{ copy.0 }}</title></head>
+<body><main style="font-family:system-ui,sans-serif;max-width:620px;margin:10vh auto;padding:24px;line-height:1.8">
+<h1>{{ copy.0 }}</h1>
+{% if confirmed %}<p role="status">{{ copy.3 }}</p>
+{% else %}<p>{{ copy.1 }}</p>
+<form method="post">{% csrf_token %}<button type="submit">{{ copy.2 }}</button></form>
+{% endif %}
+</main></body></html>

@@ -51,8 +51,30 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             helper = source_function("_record_funnel_event_best_effort")
             self.assertFalse(helper(object(), "begin_checkout", object()))
 
+    def test_unpaid_or_failed_response_never_records_invoice_event(self):
+        response = types.SimpleNamespace(status_code=402)
+        request = object()
+        product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
+            filter=Mock(side_effect=AssertionError("product should not be read"))))
+        record = Mock()
+        namespace = {"_" + name: (lambda *args, **kwargs: response) for name in (
+            "start_order", "show_invoice", "invoice_status",
+            "reconcile_invoice", "download_paid",
+        )}
+        with patch.dict(sys.modules, stub_modules(record, product_model)):
+            installer = source_function("patch_commercial", {
+                "_dispatch": Mock(return_value=response),
+                "_record_funnel_event_best_effort": Mock(),
+            })
+            installer(namespace)
+            self.assertIs(namespace["start_order"](request, product_id=72), response)
+        record.assert_not_called()
+        product_model.objects.filter.assert_not_called()
+
     def test_invoice_response_preserved_when_telemetry_or_lookup_fails(self):
-        response = object()
+        # A recorded invoice must come from a successful 2xx response.
+        # A bare object has no status_code and correctly emits no sales event.
+        response = types.SimpleNamespace(status_code=200)
         request = object()
         product = object()
         product_model = types.SimpleNamespace(objects=types.SimpleNamespace(
