@@ -78,7 +78,7 @@ class MojPropOfferTests(TestCase):
         with self.assertRaises(ValidationError):
             stale.full_clean()
 
-    def test_one_lead_can_only_have_one_quote(self):
+    def test_same_lead_and_version_cannot_be_duplicated(self):
         first = self.offer()
         first.full_clean()
         first.save()
@@ -87,6 +87,40 @@ class MojPropOfferTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 self.offer(amount=Decimal("160.00")).save()
+
+    def test_new_version_is_separate_not_overwriting_accepted_terms(self):
+        previous = self.offer()
+        previous.full_clean()
+        previous.save()
+        second = self.offer(version=2, amount=Decimal("135.00"))
+        second.full_clean()
+        second.save()
+        self.assertEqual(MojPropOffer.objects.filter(lead=self.lead).count(), 2)
+        previous.refresh_from_db()
+        self.assertEqual(previous.amount, Decimal("125.00"))
+        self.assertIn("version 2", second.manual_quote_text)
+
+    def test_issued_offer_is_immutable_and_can_only_be_superseded(self):
+        issued = timezone.now()
+        offer = self.offer(
+            status="issued", reviewed_at=issued,
+            issued_at=issued, expires_at=issued + timedelta(days=7),
+        )
+        offer.full_clean()
+        offer.save()
+        offer.amount = Decimal("1.00")
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.refresh_from_db()
+        self.assertEqual(offer.amount, Decimal("125.00"))
+        offer.status = "draft"
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.refresh_from_db()
+        offer.status = "accepted"
+        offer.full_clean()
+        offer.save(update_fields=["status"])
+        self.assertEqual(offer.status, "accepted")
 
     def test_delivery_days_cannot_be_infinite_or_zero(self):
         for value in (0, 91, -1):
