@@ -328,13 +328,14 @@ class MojPropOfferAdmin(ModelAdmin):
     autocomplete_fields = ("lead",)
     readonly_fields = (
         "created_at", "updated_at", "created_by", "manual_proposal",
+        "public_quote_link",
     )
     fields = (
         "lead", "version", "title", "scope", "exclusions",
         "amount", "currency", "delivery_days",
         "status", "reviewed_at", "issued_at", "expires_at",
         "accepted_at", "acceptance_reference",
-        "created_by", "internal_note", "manual_proposal",
+        "created_by", "internal_note", "manual_proposal", "public_quote_link",
         "created_at", "updated_at",
     )
     ordering = ("-created_at",)
@@ -354,6 +355,20 @@ class MojPropOfferAdmin(ModelAdmin):
         if not obj.pk:
             return "Save the draft first; no message is sent."
         return obj.manual_quote_text
+
+    @admin.display(description="Unsent signed buyer URL (expires after 24 h)")
+    def public_quote_link(self, obj):
+        from django.conf import settings
+        from core.mojprop_quote_views import quote_read_token
+        if getattr(settings, "MOJPROP_PUBLIC_QUOTES_ENABLED", False) is not True:
+            return "Public quote sharing is disabled until owner-approved deployment."
+        try:
+            token = quote_read_token(obj)
+        except ValueError:
+            return "Quote is not issued, has expired or needs review."
+        # Return a relative route; admins must not assume the other site's
+        # hostname or publish a query containing customer information.
+        return reverse("mojprop_quote_public", kwargs={"token": token})
 
     def save_model(self, request, obj, form, change):
         if not change:
