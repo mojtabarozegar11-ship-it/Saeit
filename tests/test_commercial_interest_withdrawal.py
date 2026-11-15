@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+from django.core.cache import cache
 """One-way contact revocation: real database mutation without invoices or email."""
 from django.core import signing
 from django.test import Client, TestCase, override_settings
@@ -7,6 +9,17 @@ from core.models import Order, PaymentIntent
 
 @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir", "evil.example"])
 class WithdrawalTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # Per-test bounded intake limiter, never bypasses production limits.
+
+    def post_interest(self, path, payload):
+        """Browser-equivalent URL-encoded form; no multipart test-only exceptions."""
+        return self.client.post(
+            path, urlencode(payload), content_type="application/x-www-form-urlencoded",
+            secure=True, HTTP_HOST="mojplaywin.com",
+        )
+
     def add(self, family="signals"):
         if family == "signals":
             return CommercialInterest.objects.create(
@@ -95,8 +108,7 @@ class WithdrawalTests(TestCase):
         body={"email":"Buyer@Example.org", "brand":"saman", "plan_code":"moj-signals-standard",
               "source_language":"en", "contact_consent":"yes",
               "consent_version":"mojtaba-signals-interest-v1", "csrfmiddlewaretoken":"browser-managed"}
-        response=self.client.post("/market-signals/interest/", body,
-                                  secure=True, HTTP_HOST="mojplaywin.com")
+        response=self.post_interest("/market-signals/interest/", body)
         self.assertEqual(response.status_code, 202)
         self.assertContains(response, "Withdraw contact consent", status_code=202)
         self.assertIn("commercial-interest/withdraw/",response.content.decode())
@@ -105,8 +117,7 @@ class WithdrawalTests(TestCase):
         body={"email":"Buyer@Example.org","plan_code":"MOJ-PROP-01","source_language":"fa",
               "contact_consent":"yes","consent_version":"moj-prop-interest-v1",
               "csrfmiddlewaretoken":"browser-managed"}
-        response=self.client.post("/moj-prop/interest/",body,secure=True,
-                                  HTTP_HOST="mojplaywin.com")
+        response=self.post_interest("/moj-prop/interest/", body)
         self.assertEqual(response.status_code,202)
         self.assertContains(response,"لغو رضایت تماس",status_code=202)
 
@@ -115,11 +126,9 @@ class WithdrawalTests(TestCase):
                    "plan_code": "moj-signals-standard", "source_language": "en",
                    "contact_consent": "yes", "consent_version": "mojtaba-signals-interest-v1",
                    "csrfmiddlewaretoken": "browser-managed"}
-        first = self.client.post("/market-signals/interest/", payload, secure=True,
-                                 HTTP_HOST="mojplaywin.com")
+        first = self.post_interest("/market-signals/interest/", payload)
         self.assertIn("commercial-interest/withdraw/", first.content.decode())
-        second = self.client.post("/market-signals/interest/", payload, secure=True,
-                                  HTTP_HOST="mojplaywin.com")
+        second = self.post_interest("/market-signals/interest/", payload)
         self.assertEqual(second.status_code, 202)
         self.assertNotIn("commercial-interest/withdraw/", second.content.decode())
         self.assertEqual(CommercialInterest.objects.count(), 1)
@@ -129,11 +138,9 @@ class WithdrawalTests(TestCase):
                    "source_language": "fa", "contact_consent": "yes",
                    "consent_version": "moj-prop-interest-v1",
                    "csrfmiddlewaretoken": "browser-managed"}
-        first = self.client.post("/moj-prop/interest/", payload, secure=True,
-                                 HTTP_HOST="mojplaywin.com")
+        first = self.post_interest("/moj-prop/interest/", payload)
         self.assertIn("commercial-interest/withdraw/", first.content.decode())
-        second = self.client.post("/moj-prop/interest/", payload, secure=True,
-                                  HTTP_HOST="mojplaywin.com")
+        second = self.post_interest("/moj-prop/interest/", payload)
         self.assertEqual(second.status_code, 202)
         self.assertNotIn("commercial-interest/withdraw/", second.content.decode())
         self.assertEqual(CommercialInterest.objects.count(), 1)
