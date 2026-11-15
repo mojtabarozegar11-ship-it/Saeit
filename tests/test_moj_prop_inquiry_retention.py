@@ -7,7 +7,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from prop_firm.models import PropInformationInquiry
+from prop_firm.models import PropInformationInquiry, PropInterestHourlyBucket
 
 
 class InquiryRetentionCommandTests(TestCase):
@@ -41,3 +41,31 @@ class InquiryRetentionCommandTests(TestCase):
         self.assertIn("expired_inquiries_deleted=1", out.getvalue())
         self.assertEqual(PropInformationInquiry.objects.count(), 1)
         self.assertTrue(PropInformationInquiry.objects.filter(email="client2@example.net").exists())
+    def make_bucket(self, suffix="a", expired=True):
+        return PropInterestHourlyBucket.objects.create(
+            digest=suffix * 64, count=3,
+            expires_at=timezone.now() + timedelta(days=-1 if expired else 1),
+        )
+
+    def test_dry_run_preserves_expired_buckets(self):
+        self.make_bucket()
+        out = StringIO()
+        call_command("moj_prop_purge_expired_inquiries", stdout=out)
+        self.assertIn("expired_buckets=1", out.getvalue())
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 1)
+
+    def test_commit_without_owner_approval_never_deletes_bucket(self):
+        self.make_bucket()
+        with self.assertRaisesRegex(CommandError, "Explicit owner approval"):
+            call_command("moj_prop_purge_expired_inquiries", "--commit")
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 1)
+
+    def test_owner_approved_expiry_purges_only_old_buckets(self):
+        self.make_bucket("a", True)
+        self.make_bucket("b", False)
+        out = StringIO()
+        call_command("moj_prop_purge_expired_inquiries",
+                     "--commit", "--owner-authorized", stdout=out)
+        self.assertIn("expired_buckets_deleted=1", out.getvalue())
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 1)
+        self.assertTrue(PropInterestHourlyBucket.objects.filter(digest="b" * 64).exists())
