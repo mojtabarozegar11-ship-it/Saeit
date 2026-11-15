@@ -4,6 +4,7 @@ No network, cPanel, production database or customer payment is touched.
 """
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 import unittest
@@ -169,6 +170,46 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "subsequently modified"):
             release.restore(self.backups / "moj-prop-catalog-123")
         self.assertTrue((self.route / "samples/prop-blueprint/index.html").exists())
+
+    def test_tampered_backup_manifest_never_restores_unapproved_paths(self):
+        release.deploy("123", "a" * 40)
+        directory = self.backups / "moj-prop-catalog-123"
+        path = directory / "manifest.json"
+        pristine = json.loads(path.read_text("utf-8"))
+        delivered_home = (self.route / "index.html").read_bytes()
+
+        def extra_entry(manifest):
+            manifest["files"].append(dict(manifest["files"][0]))
+
+        def forged_path(manifest):
+            manifest["files"][0]["path"] = "../../outside.html"
+
+        def mismatched_run(manifest):
+            manifest["run_id"] = "124"
+
+        def bad_digest(manifest):
+            manifest["files"][0]["after_sha"] = "not-a-sha"
+
+        def unsafe_mode(manifest):
+            manifest["files"][0]["mode"] = 0o777
+
+        for mutate in (extra_entry, forged_path, mismatched_run, bad_digest, unsafe_mode):
+            with self.subTest(invalid=mutate.__name__):
+                bad = json.loads(json.dumps(pristine))
+                mutate(bad)
+                path.write_text(json.dumps(bad), "utf-8")
+                with self.assertRaises(RuntimeError):
+                    release.restore(directory)
+                self.assertEqual((self.route / "index.html").read_bytes(), delivered_home)
+        path.write_text(json.dumps(pristine), "utf-8")
+        release.restore(directory)
+
+    def test_symlinked_backup_directory_cannot_be_used_for_rollback(self):
+        release.deploy("123", "a" * 40)
+        linked = self.backups / "moj-prop-catalog-888"
+        linked.symlink_to(self.backups / "moj-prop-catalog-123", target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Symlinked"):
+            release.restore(linked)
 
     def test_symlinked_sample_target_blocks_installation(self):
         target = self.route / "samples/prop-blueprint/index.html"
