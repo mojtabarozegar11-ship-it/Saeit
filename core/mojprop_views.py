@@ -66,8 +66,13 @@ def _payload(request):
             return None
     # Django's request.POST may already have consumed a form stream.
     # Never access request.body after parsing a URL-encoded form.
-    if content_type == "application/x-www-form-urlencoded":
-        return request.POST
+    if content_type in ("application/x-www-form-urlencoded", "multipart/form-data"):
+        # Django TestClient and some browsers send multipart forms. Keep
+        # compatibility without allowing uploads or ambiguous duplicate keys.
+        data = request.POST
+        if request.FILES or any(len(values) != 1 for _, values in data.lists()):
+            return None
+        return data
     if content_type == "application/json":
         try:
             raw = request.body
@@ -148,7 +153,8 @@ def mojprop_intake(request):
     notes = fields["notes"]
     consent_value = payload.get("consent")
     consent = consent_value is True or (
-        request.content_type.split(";", 1)[0].lower() == "application/x-www-form-urlencoded"
+        request.content_type.split(";", 1)[0].lower()
+        in ("application/x-www-form-urlencoded", "multipart/form-data")
         and consent_value in ("1", "true", "on", "yes")
     )
 
