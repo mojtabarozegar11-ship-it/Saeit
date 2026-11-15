@@ -1,12 +1,13 @@
 name: MOJ PROP opt-in information intake
 on:
   push:
-    branches: ["cycle64-moj-prop-interest-intake-20261115"]
+    branches: ["cycle64-moj-prop-interest-intake-20261115", "cycle65-prop-durable-lead-rate-limit-20261115"]
   pull_request:
     paths:
       - "prop_firm/interest.py"
       - "prop_firm/models.py"
       - "prop_firm/migrations/0008_information_inquiries.py"
+      - "prop_firm/migrations/0009_interest_hour_buckets.py"
       - "prop_firm/management/**"
       - "config/urls.py"
       - "core/moj_prop_views.py"
