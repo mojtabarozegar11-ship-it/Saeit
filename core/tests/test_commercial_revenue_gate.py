@@ -84,6 +84,12 @@ class CommercialGateTests(unittest.TestCase):
         with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
             validate_signal_request(requested_action="sell")
 
+    def test_signal_request_blocks_embedded_trade_instruction(self):
+        for action in ("buy BTC", "please SELL trx", "trade:TRX", "long_position"):
+            with self.subTest(action=action):
+                with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
+                    validate_signal_request(requested_action=action)
+
     def test_signal_request_allows_research(self):
         validate_signal_request(requested_action="research_summary")
 
