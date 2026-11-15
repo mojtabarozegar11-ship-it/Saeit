@@ -18,6 +18,10 @@ a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{displ
 </head><body><main class="shell">
 <nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
 <section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% elif page_type == "game" %}Game world{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
-<section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
+<section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% elif page_type == "game" %}{{ brand_name }} · Game world{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p>
+{% if page_type == "signals" and bot_handoff_url %}
+<p><a class="button" rel="noopener noreferrer" href="{{ bot_handoff_url }}">{{ copy.bot_handoff }} ↗</a></p>
+<p style="font-size:.87rem;color:#596664">Single official agent: mojtaba.bot.ai. No checkout, paid access, live trade signal or verified performance is implied by this link.</p>
+{% else %}<a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a>{% endif %}</article><aside class="notice">{{ page_notice }}</aside></section>
 <footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
 </main></body></html>

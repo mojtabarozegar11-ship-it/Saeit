@@ -1,0 +1,35 @@
+name: Mojtaba.bot.ai multilingual brand handoff
+on:
+  push:
+    branches:
+      - cycle65-single-bot-brand-handoff-20261115
+  pull_request:
+    paths:
+      - "core/financial_brand_pages.py"
+      - "core/templates/core/financial_brand_page.html"
+      - "config/settings.py"
+      - "tests/test_single_bot_brand_handoff_c65.py"
+      - ".github/workflows/mojtaba-brand-handoff-ci.yml"
+permissions:
+  contents: read
+jobs:
+  multilingual-referral:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DEBUG: "true"
+      SECRET_KEY: ci-only-bot-brand-handoff
+      ALLOWED_HOSTS: localhost,127.0.0.1,mojplaywin.com,zomorodmelal.ir
+      MOJTABA_BOT_PUBLIC_VERIFIED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check Django brand routing without public release
+        run: python manage.py check
+      - name: Validate 17 brand pages, 3 locales, sole bot and host isolation
+        run: python manage.py test tests.test_single_bot_brand_handoff_c65 --verbosity 2
