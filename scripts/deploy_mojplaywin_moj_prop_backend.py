@@ -17,13 +17,14 @@ import tempfile
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
+URLCONF = Path("config/urls.py")
 FILES = (
-    Path("config/urls.py"),
     Path("core/models.py"),
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
 )
+ALL_FILES = (URLCONF,) + FILES
 
 
 def digest(path: Path) -> str:
@@ -66,7 +67,7 @@ def compile_python(path: Path) -> None:
 
 
 def selftest(repo_root: Path) -> None:
-    for relative in FILES:
+    for relative in ALL_FILES:
         source = repo_root / relative
         assert_regular(source, "source")
         if source.suffix == ".py":
@@ -135,12 +136,50 @@ def atomic_replace(source: Path, target: Path, mode: int) -> None:
             temporary.unlink()
 
 
+def atomic_write_text(target: Path, text: str, mode: int) -> None:
+    assert_safe_parent(target, ROOT)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.mojprop-", dir=str(target.parent)
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def patch_urlconf(target: Path) -> None:
+    assert_regular(target, "live URL configuration")
+    source = target.read_text(encoding="utf-8")
+    if 'path("moj-prop/intake/"' in source:
+        print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
+        return
+    if "from django.urls import" not in source or "urlpatterns" not in source:
+        raise RuntimeError("live URL configuration has no safe Django path anchor")
+    if "path" not in source.split("from django.urls import", 1)[1].split("\n", 1)[0]:
+        raise RuntimeError("live URL configuration does not import path")
+    block = (
+        "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
+        "from core.mojprop_views import mojprop_intake\n"
+        'urlpatterns += [path("moj-prop/intake/", mojprop_intake, name="mojprop_intake")]\n'
+    )
+    mode = stat.S_IMODE(target.stat().st_mode)
+    atomic_write_text(target, source.rstrip() + block, mode)
+    print("MOJ_PROP_URLCONF_PATCH=PASS")
+
+
 def restore(backup: Path) -> None:
     manifest_path = backup / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink():
         raise RuntimeError("backend backup manifest is missing")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    for relative in FILES:
+    for relative in ALL_FILES:
         entry = manifest[str(relative)]
         target = ROOT / relative
         assert_safe_parent(target, ROOT)
@@ -178,15 +217,15 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("Passenger routing file no longer points to Saeit-staging")
     if staged_root.is_symlink() or not staged_root.is_dir():
         raise RuntimeError("backend staging root is missing or unsafe")
-    for relative in FILES:
+    for relative in ALL_FILES:
         assert_regular(staged_root / relative, "backend staged file")
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
         raise RuntimeError(f"refusing to reuse backend backup: {backup}")
     backup.mkdir(parents=True, mode=0o700)
-    manifest = {"run_id": run_id, "commit": commit, "files": [str(item) for item in FILES]}
-    for relative in FILES:
+    manifest = {"run_id": run_id, "commit": commit, "files": [str(item) for item in ALL_FILES]}
+    for relative in ALL_FILES:
         backup_target(ROOT / relative, backup, manifest, relative)
     (backup / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -199,6 +238,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
             atomic_replace(staged_root / relative, target, current_mode)
             if digest(target) != digest(staged_root / relative):
                 raise RuntimeError(f"post-copy hash mismatch: {relative}")
+        patch_urlconf(ROOT / URLCONF)
 
         python = choose_python()
         run_checked([str(python), "manage.py", "check", "--deploy"], ROOT)
