@@ -260,3 +260,32 @@ class EmailRequiredSourceContracts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourcePathContainmentRegression(unittest.TestCase):
+    """Source audit must never read paths outside its explicitly approved root."""
+
+    def test_absolute_source_path_is_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            external = Path(directory) / "external.py"
+            external.write_text("SAFE = True\\n", encoding="utf-8")
+            self.assertIsNone(m._load(Path(directory), str(external)))
+
+    def test_parent_traversal_is_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(m._load(Path(directory), "../external.py"))
+
+    def test_non_string_source_path_is_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(m._load(Path(directory), None))
+            self.assertIsNone(m._load(Path(directory), 42))
+
+    def test_empty_source_path_is_denied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(m._load(Path(directory), ""))
+
+    def test_valid_bounded_relative_source_still_parses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "safe.py").write_text("VALUE = 1\\n", encoding="utf-8")
+            self.assertIsInstance(m._load(root, "safe.py"), ast.Module)
