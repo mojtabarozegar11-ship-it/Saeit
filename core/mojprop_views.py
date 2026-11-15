@@ -162,6 +162,14 @@ def mojprop_intake(request):
     # A valid digital-product inquiry identifies exactly one listed SKU.
     # No price, recipient, payment flag, txid, or buyer identity is accepted.
     product_id = payload.get("product_id")
+    # HTML forms encode every field as text. Accept only canonical ASCII SKU
+    # digits for form submissions; JSON clients must continue sending an int.
+    if route == "digital" and request.content_type.split(";", 1)[0].lower() in (
+        "application/x-www-form-urlencoded", "multipart/form-data"
+    ) and isinstance(product_id, str) and product_id in {
+        str(sku) for sku in CATALOG_INQUIRY_PRODUCTS
+    }:
+        product_id = int(product_id)
     errors = {}
     if route == "digital":
         if type(product_id) is not int or product_id not in CATALOG_INQUIRY_PRODUCTS:
