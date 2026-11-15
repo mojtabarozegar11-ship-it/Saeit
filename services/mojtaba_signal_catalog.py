@@ -4,7 +4,7 @@ The catalog makes a product and price explicit, but it deliberately does not
 activate billing, publication, trading, or customer delivery.
 """
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 import re
 
@@ -39,9 +39,15 @@ class SignalPlan:
                 or any(ord(ch) < 32 or 0xD800 <= ord(ch) <= 0xDFFF
                        for ch in self.description)):
             raise SignalCatalogError("plan must disclose risk without a promise of return")
-        if type(self.price_usd) is not Decimal or not self.price_usd.is_finite() or self.price_usd <= 0:
-            raise SignalCatalogError("finite positive price required")
-        if self.price_usd != self.price_usd.quantize(Decimal("0.01")):
+        if (type(self.price_usd) is not Decimal
+                or not self.price_usd.is_finite()
+                or not Decimal("0.01") <= self.price_usd <= Decimal("10000.00")):
+            raise SignalCatalogError("finite bounded positive price required")
+        try:
+            exact_cents = self.price_usd.quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError) as exc:
+            raise SignalCatalogError("invalid price precision") from exc
+        if self.price_usd != exact_cents:
             raise SignalCatalogError("price must have two decimals")
 
 PLANS = MappingProxyType({
