@@ -89,6 +89,16 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
         self.assertIn("MOJPROP_ROLLBACK_VERIFIED", backend)
         self.assertIn("MOJPROP_TENANT_ISOLATION_VERIFIED", backend)
         self.assertIn("inputs.owner_approved_static_release == true", static)
+        self.assertIn("MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY", backend)
+        self.assertIn("MOJ_PROP_LIVE_STATIC_COMPATIBILITY=CHECKED_READ_ONLY", static)
+        self.assertLess(
+            backend.index("- name: Fail closed on unknown live Signal Desk BEFORE any writes"),
+            backend.index("- name: Deploy Moj Prop intake backend with backup and migration"),
+        )
+        self.assertLess(
+            static.index("- name: Fail closed on unknown live Signal Desk BEFORE any writes"),
+            static.index("- name: Update only /moj-prop/ commercial catalog"),
+        )
         self.assertIn("SIGNAL_FREE_PUBLIC_PAGE=PASS", backend)
         self.assertIn("MOJTABA_FREE_SIGNUP_API_PREFLIGHT=PASS", static)
         self.assertNotIn("moj_signal_free_stats --apply", backend)
