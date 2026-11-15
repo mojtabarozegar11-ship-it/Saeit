@@ -27,6 +27,11 @@ def created_invoice_product_id(response, args, kwargs):
         return None
     if type(location) is not str or not 0 < len(location) <= _MAX_LOCATION:
         return None
+    # urlsplit silently strips leading C0 controls/spaces and removes TAB/CR/LF.
+    # A telemetry success must reflect the literal Location header, not a
+    # normalized or potentially header-injected redirect.
+    if any(ord(ch) <= 32 or ord(ch) == 127 for ch in location):
+        return None
     try:
         redirect = urlsplit(location)
     except ValueError:
