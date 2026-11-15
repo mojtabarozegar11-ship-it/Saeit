@@ -63,8 +63,8 @@ jobs:
           from pathlib import Path
           src=Path(".github/workflows/tron-settlement-issuance-integrity-20261115.yml").read_text()
           assert "permissions:" in src and "contents: read" in src
-          assert "self-hosted" not in src
-          assert "HOST_SSH_PRIVATE_KEY" not in src
-          assert "wallet.private" not in src
+          assert ("self-"+"hosted") not in src
+          assert ("HOST_SSH_"+"PRIVATE_KEY") not in src
+          assert ("wallet."+"private") not in src
           print("TRON_TESTS_ONLY=TRUE; LIVE_TRANSFER=FALSE")
           PY
