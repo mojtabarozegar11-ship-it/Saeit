@@ -17,12 +17,14 @@ REQUIRED_GATES = (
 def evaluate_commercial_release(checks):
     if type(checks) is not dict:
         raise TypeError("release checks must be a mapping")
+    unknown = sorted(set(checks) - set(REQUIRED_GATES))
     normalized = {name: checks.get(name) is True for name in REQUIRED_GATES}
     missing = [name for name in REQUIRED_GATES if not normalized[name]]
     return {
         "schema": "mpw.commercial-release-gate.v1",
-        "technical_gate_passed": not missing,
+        "technical_gate_passed": not missing and not unknown,
         "missing_gates": missing,
+        "unknown_gates": unknown,
         "payment_enabled": False,
         "production_activation_allowed": False,
         "requires_owner_confirmation": True,
