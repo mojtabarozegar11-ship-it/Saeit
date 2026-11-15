@@ -42,7 +42,7 @@ class MojPropTruthfulPublicStatusTests(unittest.TestCase):
         self.assertIn("No public TRX wallet address is displayed.", html)
         self.assertIn("written offer", html)
         self.assertNotIn("payment_verified", html)
-        self.assertNotIn("confirmed order", html.lower())
+        self.assertIn("does not create a confirmed order", html.lower())
 
 
 if __name__ == "__main__":
