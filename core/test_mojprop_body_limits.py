@@ -68,6 +68,15 @@ class MojPropBodyBoundaryTests(TestCase):
                 self.assertEqual(response.status_code, 400)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_reserved_non_deliverable_email_addresses_cannot_open_sales_leads(self):
+        for email in ("customer@example.invalid", "buyer@localhost",
+                      "sales@company.local", "buyer@mock.test"):
+            with self.subTest(email=email):
+                response = self.post(json.dumps(dict(self.valid, email=email)))
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("email", response.json()["fields"])
+        self.assertFalse(MojPropRequest.objects.exists())
+
     def test_valid_bounded_json_still_creates_actual_manual_review_lead(self):
         response = self.post(json.dumps(self.valid))
         self.assertEqual(response.status_code, 201)
