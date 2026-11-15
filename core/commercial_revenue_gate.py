@@ -108,6 +108,16 @@ def _validate_trx_sun_precision(value: Decimal, currency: str) -> None:
             raise CommercialGateError("trx_fractional_sun_forbidden")
 
 
+def _canonical_amount(value: Decimal, currency: str) -> str:
+    """Stable monetary identity: 30, 30.0 and 3E+1 must commit identically."""
+    amount = _amount(value)
+    code = _currency(currency)
+    _validate_trx_sun_precision(amount, code)
+    if amount.adjusted() < -24:
+        raise CommercialGateError("amount_precision_exceeds_safe_limit")
+    return format(amount.normalize(), "f")
+
+
 def _digest(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -118,7 +128,7 @@ def invoice_commitment(*, order_id: str, invoice_id: str, amount: Decimal, curre
     return _digest({
         "order_id": _slug(order_id, "order_id"),
         "invoice_id": _slug(invoice_id, "invoice_id"),
-        "amount": str(_amount(amount)),
+        "amount": _canonical_amount(amount, currency),
         "currency": _currency(currency),
     })
 
@@ -294,7 +304,7 @@ def validate_payment_evidence(
         "provider": provider,
         "network": evidence.network,
         "asset": evidence.asset,
-        "amount": str(amount),
+        "amount": _canonical_amount(amount, currency),
         "currency": currency,
         "transaction_id": transaction_id,
     })
@@ -459,12 +469,13 @@ class SQLiteCommercialLedger:
         currency = _currency(currency)
         _validate_trx_sun_precision(amount, currency)
         now = datetime.now(timezone.utc).isoformat()
-        digest = _digest({"order_id": order_id, "offer_id": offer_id, "amount": str(amount), "currency": currency})
+        canonical_amount = _canonical_amount(amount, currency)
+        digest = _digest({"order_id": order_id, "offer_id": offer_id, "amount": canonical_amount, "currency": currency})
         try:
             with self.connection:
                 self.connection.execute(
                     "INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (order_id, offer_id, CommercialState.ORDERED.value, str(amount), currency, now, now),
+                    (order_id, offer_id, CommercialState.ORDERED.value, canonical_amount, currency, now, now),
                 )
                 self.connection.execute(
                     "INSERT INTO order_events VALUES (?, ?, ?, ?, ?)",
