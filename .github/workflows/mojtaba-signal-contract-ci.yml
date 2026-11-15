@@ -6,6 +6,8 @@ on:
       - "core/mojtaba_signal_service_contract.py"
       - "core/mojtaba_signal_order_contract.py"
       - "core/mojtaba_signal_order_ledger.py"
+      - "signal_orders/**"
+      - "config/settings.py"
       - "core/mojtaba_signal_tron_invoice_contract.py"
       - "core/tests/test_mojtaba_signal_tron_invoice_contract.py"
       - "core/tests/test_mojtaba_signal_service_contract.py"
@@ -31,3 +33,22 @@ jobs:
         env:
           PYTHONPATH: core
         run: python -m unittest discover -v -s core/tests -p 'test_mojtaba_signal*_contract.py'
+
+  durable-signal-orders:
+    runs-on: ubuntu-latest
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-signal-orders-secret"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Django dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Confirm durable model migrations are complete
+        run: python manage.py makemigrations --check --dry-run signal_orders
+      - name: Run transactional pending-order integration suite
+        run: python manage.py test signal_orders.tests --verbosity 2
