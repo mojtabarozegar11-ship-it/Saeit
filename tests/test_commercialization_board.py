@@ -16,8 +16,8 @@ from core.mojplaywin_product_detail import PUBLIC_CATALOG
 
 
 class PureCommercializationBoardTests(SimpleTestCase):
-    def test_all_eleven_business_lines_exist(self):
-        self.assertEqual(len(SECTORS), 11)
+    def test_all_twelve_business_lines_exist(self):
+        self.assertEqual(len(SECTORS), 12)
         self.assertEqual(set(SECTORS), set(PRIORITY))
 
     def test_owner_four_priorities_are_immutable(self):
@@ -28,7 +28,18 @@ class PureCommercializationBoardTests(SimpleTestCase):
         self.assertEqual(len(SECTORS["signal_subscriptions"]), 7)
         self.assertEqual(len(SECTORS["tron_gateway"]), 8)
         self.assertEqual(len(SECTORS["mojplaywin_store"]), 7)
-        self.assertEqual(sum(len(v) for v in SECTORS.values()), 64)
+        self.assertEqual(sum(len(v) for v in SECTORS.values()), 70)
+
+    def test_moj_coin_is_exact_fifth_priority_not_generic_games(self):
+        self.assertEqual(PRIORITY[:5], (
+            "moj_prop", "signal_subscriptions", "tron_gateway",
+            "mojplaywin_store", "moj_coin",
+        ))
+        self.assertIn("games", PRIORITY[5:])
+        self.assertEqual(len(SECTORS["moj_coin"]), 6)
+        self.assertIn("tron_purchase_and_entitlement_reconciled", SECTORS["moj_coin"])
+        self.assertIn("token_mechanics_and_local_law_reviewed", SECTORS["moj_coin"])
+        self.assertEqual(assess_sector("moj_coin").percent_evidenced, 0)
 
     def test_all_lines_are_blocked_without_evidence(self):
         result = build_board()
@@ -73,7 +84,7 @@ class PureCommercializationBoardTests(SimpleTestCase):
                 self.assertEqual(a.missing, ())
         result = build_board({n: {g: True for g in gs} for n, gs in SECTORS.items()})
         self.assertFalse(result["ready_for_live_payment"])
-        self.assertEqual(result["eligible_for_commercial_review"], 11)
+        self.assertEqual(result["eligible_for_commercial_review"], 12)
 
     def test_out_of_scope_flags_do_not_override_missing_required_fields(self):
         a = assess_sector("moj_prop", {"is_admin": True, "automatic_payment": True})
@@ -324,7 +335,7 @@ class CommercializationBoardApiTests(TestCase):
         self.assertEqual(codes[:4], [
             "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
         ])
-        self.assertContains(response, "۱۱ بخش")
+        self.assertContains(response, "۱۲ بخش")
 
     def test_price_mismatched_catalog_is_excluded_from_price_verified_count(self):
         Product.objects.create(
