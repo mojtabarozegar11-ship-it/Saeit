@@ -203,32 +203,32 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                             bfd = _mkdir(runfd, "backup", uid, unique=True)
                             restorefd = _mkdir(runfd, "isolated-restore", uid, unique=True)
                             checksums = {}
-                                for i, body in enumerate(originals):
-                                    name = "file-" + str(i) + ".bin"
-                                    _write(bfd, name, body)
-                                    persisted = _read(bfd, name, uid)
-                                    if persisted != body:
-                                        raise RuntimeError("source backup mismatch")
-                                    _write(restorefd, name, persisted)
-                                    restored = _read(restorefd, name, uid)
-                                    digest = hashlib.sha256(body).hexdigest()
-                                    if hashlib.sha256(restored).hexdigest() != digest:
-                                        raise RuntimeError("restore digest mismatch")
-                                    # Relative to pinned source *directory handles*;
-                                    # no path-based read following replaced ancestor.
-                                    if hashlib.sha256(_read(source_dirs[i], "index.html", uid)).hexdigest() != digest:
-                                        raise RuntimeError("public source changed")
-                                    checksums[name] = digest
-                                manifest = {"schema": "mojprop.static.restore.evidence.v2",
-                                            "run_id": run_id, "approval_id": approval_id,
-                                            "sha256": checksums,
-                                            "isolated_two_file_restore": True,
-                                            "live_files_modified": False,
-                                            "db_backup_or_restore": False,
-                                            "tenant_isolation_proven": False,
-                                            "release_permitted": False,
-                                            "payment_permitted": False}
-                                _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
+                            for i, body in enumerate(originals):
+                                name = "file-" + str(i) + ".bin"
+                                _write(bfd, name, body)
+                                persisted = _read(bfd, name, uid)
+                                if persisted != body:
+                                    raise RuntimeError("source backup mismatch")
+                                _write(restorefd, name, persisted)
+                                restored = _read(restorefd, name, uid)
+                                digest = hashlib.sha256(body).hexdigest()
+                                if hashlib.sha256(restored).hexdigest() != digest:
+                                    raise RuntimeError("restore digest mismatch")
+                                # Relative to pinned source *directory handles*;
+                                # no path-based read following replaced ancestor.
+                                if hashlib.sha256(_read(source_dirs[i], "index.html", uid)).hexdigest() != digest:
+                                    raise RuntimeError("public source changed")
+                                checksums[name] = digest
+                            manifest = {"schema": "mojprop.static.restore.evidence.v2",
+                                        "run_id": run_id, "approval_id": approval_id,
+                                        "sha256": checksums,
+                                        "isolated_two_file_restore": True,
+                                        "live_files_modified": False,
+                                        "db_backup_or_restore": False,
+                                        "tenant_isolation_proven": False,
+                                        "release_permitted": False,
+                                        "payment_permitted": False}
+                            _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
                             completed = True
                         finally:
                             if not completed and runfd is not None:
