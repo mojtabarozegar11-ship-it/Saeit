@@ -125,21 +125,21 @@ class CommercialBackendClosureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "conflicting core migration"):
             check_schema_closure(self.live, SOURCE)
 
-    def test_production_migration_targets_only_mojprop_core_0045(self):
+    def test_production_migration_targets_only_mojprop_core_0046(self):
         body = (SOURCE / "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"core", "0045_mojprop_delivery_evidence", "--noinput"', body)
+        self.assertIn('"core", "0046_signal_free_subscription", "--noinput"', body)
         self.assertNotIn('["manage.py", "migrate", "--noinput"]', body)
         self.assertLess(
             body.index("check_schema_closure(ROOT, staged_root)"),
-            body.index('"0045_mojprop_delivery_evidence", "--noinput"'),
+            body.index('"0046_signal_free_subscription", "--noinput"'),
         )
 
     def test_missing_staged_migration_causes_preflight_failure(self):
         stage = Path(self.sandbox.name) / "stage"
         for relative in (
-            Path("core/models.py"), Path("core/admin.py"), Path("config/urls.py"),
+            Path("core/models.py"), Path("core/admin.py"), Path("config/urls.py"), Path("config/settings.py"),
             *(Path(name) for name in MODULES),
             *(Path(f"core/migrations/{name}.py") for name in MIGRATIONS),
         ):
@@ -216,6 +216,72 @@ class CommercialBackendClosureTests(unittest.TestCase):
         for admin in ("MojPropRequestAdmin", "MojPropOfferAdmin",
                       "MojPropDeliveryEvidenceAdmin"):
             self.assertIn("class " + admin + "(", updated)
+
+    def test_separate_free_registration_modules_and_schema_are_all_in_release_tar(self):
+        archive = staged_tar_paths()
+        for path in (
+            "core/signal_free_models.py", "core/signal_free_views.py",
+            "core/migrations/0046_signal_free_subscription.py",
+            "config/settings.py",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, archive)
+                self.assertIn(Path(path), installer.ALL_FILES)
+        workflow = (SOURCE / ".github/workflows/mojprop-backend-controlled-release-20261115.yml").read_text("utf-8")
+        self.assertLess(
+            workflow.index("- name: Deploy Moj Prop intake backend with backup and migration"),
+            workflow.index("- name: Update only /moj-prop/ commercial catalog"),
+        )
+        self.assertIn("SIGNAL_FREE_OPTIN_BACKEND_GET=PASS", workflow)
+        self.assertIn("SIGNAL_FREE_PUBLIC_PAGE=PASS", workflow)
+
+    def test_live_owner_models_admin_settings_receive_only_scoped_free_additions(self):
+        from contextlib import redirect_stdout
+        model = self.live / "core/models.py"
+        admin = self.live / "core/admin.py"
+        settings = self.live / "config/settings.py"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        model.write_text("from django.db import models\\nclass T: pass\\nclass Unrelated: pass\\n", encoding="utf-8")
+        admin.write_text(
+            "from django.contrib import admin\\nfrom django.contrib.admin import ModelAdmin\\n"
+            "class OwnerAdmin: pass\\n",
+            encoding="utf-8",
+        )
+        settings.write_text("EMAIL_BACKEND='smtp'\\nenv.bool('X', default=False)\\n", encoding="utf-8")
+        with patch.object(installer, "ROOT", self.live), redirect_stdout(io.StringIO()):
+            for _ in range(2):
+                installer.patch_free_model_import(model, SOURCE / "core/models.py")
+                installer.patch_free_admin_readonly(admin, SOURCE / "core/admin.py")
+                installer.patch_free_settings(settings, SOURCE / "config/settings.py")
+        self.assertEqual(model.read_text().count("from .signal_free_models import MojSignalFreeSubscription"), 1)
+        self.assertEqual(admin.read_text().count("class MojSignalFreeSubscriptionAdmin("), 1)
+        self.assertIn("OwnerAdmin", admin.read_text())
+        self.assertIn("class Unrelated", model.read_text())
+        self.assertIn("default=False", settings.read_text())
+        self.assertEqual(settings.read_text().count("MOJTABA_SIGNAL_FREE_SIGNUP_ENABLED"), 2)
+
+    def test_only_three_root_free_routes_are_added_once(self):
+        target = self.live / "config/urls.py"
+        target.parent.mkdir(exist_ok=True)
+        target.write_text("from django.urls import path\\nurlpatterns = []\\n", encoding="utf-8")
+        with patch.object(installer, "ROOT", self.live):
+            with contextlib.redirect_stdout(io.StringIO()):
+                installer.patch_free_urlconf(target)
+                once = target.read_text()
+                installer.patch_free_urlconf(target)
+        self.assertEqual(target.read_text(), once)
+        for uri in ("moj-signal-free-subscribe/", "moj-signal-free-confirm/<str:token>/",
+                    "moj-signal-free-unsubscribe/<str:token>/"):
+            self.assertEqual(once.count('path("' + uri + '"'), 1)
+        self.assertNotIn("email.send(", once)
+        self.assertNotIn("trx", once.lower())
+
+    def test_unknown_existing_signal_module_is_preserved_by_schema_preflight(self):
+        path = self.live / "core/signal_free_models.py"
+        path.write_text("class UnknownLiveCustom: pass\\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "unreviewed live signal-free module drift"):
+            check_schema_closure(self.live, SOURCE)
+        self.assertIn("UnknownLiveCustom", path.read_text())
 
     def test_quote_route_installed_once_and_never_pays(self):
         target = self.live / "config/urls.py"
