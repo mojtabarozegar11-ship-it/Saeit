@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
@@ -283,6 +283,7 @@ from .models import MojPropRequest
 from django import forms
 from django.utils import timezone
 from .mojprop_workflow import validate_status_change
+from .mojprop_offer_draft import build_offer_draft
 
 
 class MojPropRequestStatusForm(forms.ModelForm):
@@ -307,6 +308,7 @@ class MojPropRequestStatusForm(forms.ModelForm):
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
     form = MojPropRequestStatusForm
+    actions = ("download_offer_drafts",)
     list_display = ("request_id", "name", "email", "route", "status", "created_at")
     list_filter = ("status", "route", "horizon", "created_at")
     search_fields = ("request_id", "name", "email", "notes")
@@ -325,6 +327,27 @@ class MojPropRequestAdmin(ModelAdmin):
         # Preserve written proposal, consent, delivery and dispute evidence.
         # Use "closed" or "spam" status, not destructive admin deletion.
         return False
+
+    @admin.action(description="Export UNSENT written offer drafts for reviewed leads")
+    def download_offer_drafts(self, request, queryset):
+        # This action never sends mail, changes order status or charges a customer.
+        if not request.user.is_staff or not request.user.has_perm("core.view_mojproprequest"):
+            return HttpResponse(status=403)
+        leads = list(queryset.order_by("request_id")[:100])
+        if not leads or queryset.count() != len(leads):
+            return HttpResponse("Select 1–100 reviewed customer requests.", status=409,
+                                content_type="text/plain")
+        try:
+            docs = [build_offer_draft(lead) for lead in leads]
+        except ValueError:
+            return HttpResponse("Selected requests are not eligible for an offer draft.",
+                                status=409, content_type="text/plain")
+        response = HttpResponse("\n\n--- UNSENT DRAFT SEPARATOR ---\n\n".join(docs),
+                                content_type="text/plain; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="mojprop-unsent-offer-drafts.txt"'
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
     def save_model(self, request, obj, form, change):
         old = (MojPropRequest.objects.filter(pk=obj.pk)
