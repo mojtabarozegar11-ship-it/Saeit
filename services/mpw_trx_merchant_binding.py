@@ -94,3 +94,31 @@ def binding_for_request(settings, request_domain: str, recipient: str) -> Mercha
         network=network,
         recipient=recipient,
     )
+
+
+def require_same_invoice_host(invoice, request_domain: str) -> str:
+    """Protect buyer invoice lookup from cross-domain/alias reuse.
+
+    A settled invoice must remain recoverable even after the merchant registry
+    has been disabled, so this guard checks only the *persisted* immutable
+    attribution. A new payable invoice additionally needs an active registry.
+    """
+    domain = normalize_domain(request_domain)
+    saved, merchant_id = validate_persisted_binding(
+        getattr(invoice, "merchant_domain", None),
+        getattr(invoice, "merchant_id", None),
+    )
+    if (saved != domain or getattr(invoice, "network", None) != "tron-mainnet"
+            or type(getattr(invoice, "recipient", None)) is not str
+            or not merchant_id):
+        raise MerchantBindingRejected("Invoice is owned by a different merchant host")
+    return domain
+
+
+def require_current_merchant_for_invoice(settings, request_domain, invoice) -> MerchantBinding:
+    """Prevent a prior merchant's pending invoice from being reused after drift."""
+    domain = require_same_invoice_host(invoice, request_domain)
+    binding = binding_for_request(settings, domain, invoice.recipient)
+    if binding.merchant_id != invoice.merchant_id:
+        raise MerchantBindingRejected("Merchant identifier drifted since invoice issue")
+    return binding
