@@ -60,6 +60,21 @@ class CommercialGateTests(unittest.TestCase):
         with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
             validate_offer(self.offer(canonical_host="https://mojplaywin.com"))
 
+    def test_malformed_domain_labels_are_rejected(self):
+        for host in ("mojplaywin..com", "-mojplaywin.com", "mojplaywin-.com",
+                     "mojplaywin.com.", ".mojplaywin.com", "localhost", "mojplaywin.c_m"):
+            with self.subTest(host=host):
+                with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
+                    validate_offer(self.offer(canonical_host=host))
+
+    def test_personal_social_identity_cannot_serve_as_merchant_domain(self):
+        with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
+            validate_offer(self.offer(canonical_host="dr.mojtaba.rozegar"))
+
+    def test_valid_subdomain_remains_supported_for_authorized_tenant(self):
+        validate_offer(self.offer(canonical_host="shop.mojplaywin.com"),
+                       tenant_registry={"moj_prop": "shop.mojplaywin.com"})
+
     def test_cross_tenant_scope_is_rejected(self):
         with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
             validate_offer(self.offer(), tenant_registry={"moj_prop": "other.example"})
