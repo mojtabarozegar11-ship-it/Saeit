@@ -139,6 +139,9 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
     if target.exists():
         assert_regular(target, "live target")
         saved = backup / relative
+        # A hostile symlink below the private backup directory must not
+        # redirect saved customer-facing application source elsewhere.
+        assert_safe_parent(saved, backup)
         saved.parent.mkdir(parents=True, exist_ok=True)
         original_sha = digest(target)
         shutil.copy2(target, saved)
@@ -510,6 +513,7 @@ def verify_backup_manifest(backup: Path) -> dict:
         if type(entry) is not dict or type(entry.get("existed")) is not bool:
             raise RuntimeError("backend backup entry is missing or malformed")
         saved = backup / relative
+        assert_safe_parent(saved, backup)
         if entry["existed"]:
             if type(entry.get("sha256")) is not str or not re.fullmatch(
                 r"[0-9a-f]{64}", entry["sha256"]
@@ -536,9 +540,14 @@ def restore(backup: Path) -> None:
         assert_safe_parent(target, ROOT)
         if entry["existed"]:
             saved = backup / relative
+            assert_safe_parent(saved, backup)
             assert_regular(saved, "backend backup")
+            if digest(saved) != entry["sha256"]:
+                raise RuntimeError("backend source changed during restore")
             atomic_replace(saved, target, int(entry["mode"]))
-        elif target.exists():
+            if digest(target) != entry["sha256"]:
+                raise RuntimeError("backend restored source failed verification")
+        elif target.exists() or target.is_symlink():
             assert_regular(target, "unexpected target")
             target.unlink()
     restart_passenger()
