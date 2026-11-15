@@ -93,6 +93,24 @@ class CommercialGateTests(unittest.TestCase):
     def test_signal_request_allows_research(self):
         validate_signal_request(requested_action="research_summary")
 
+    def test_nonfinancial_signal_service_codes_are_explicit(self):
+        for action in ("research_summary", "operational_alert",
+                       "agricultural_cost_report", "service_quality_report"):
+            with self.subTest(action=action):
+                validate_signal_request(requested_action=action)
+
+    def test_financial_signal_syntax_evasions_are_denied(self):
+        for action in ("BUYBTC", "buy_btc", "forex_signal", "خرید بیت کوین",
+                       "شراء بيتكوين", "sellNow", "buy signal", "RESEARCH_SUMMARY"):
+            with self.subTest(action=action):
+                with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
+                    validate_signal_request(requested_action=action)
+
+    def test_truthy_nonboolean_financial_authorization_rejected(self):
+        with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
+            validate_signal_request(requested_action="research_summary",
+                                    financial_authorized="false")
+
     def test_payment_requires_tron_trx(self):
         with self.assertRaisesRegex(CommercialGateError, "payment_chain_asset_mismatch"):
             validate_payment_evidence(self.payment(asset="USDT"), expected_order_id="order-52", expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
