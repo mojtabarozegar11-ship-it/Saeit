@@ -47,9 +47,12 @@ def test_issue_comment_never_reaches_untrusted_manual_operation():
     manual = raw.split("      - name: Execute selected read-only cPanel operation", 1)[1]
     manual = manual.split("      - name: Inspect existing cPanel", 1)[0]
     observed = raw.split("      - name: Inspect existing cPanel", 1)[1]
+    observed = observed.split("      - name: Audit current MojPlayWin", 1)[0]
     assert "if: github.event_name == 'workflow_dispatch'" in manual
     assert 'bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"' in manual
-    assert "if: github.event_name == 'issue_comment'" in observed
+    assert "if: >-" in observed
+    assert "github.event_name == 'issue_comment'" in observed
+    assert "github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'" in observed
     assert "inputs.operation" not in observed
     assert "FACTORY_VPS_RUNNER: \"1\"" in observed
     assert "persist-credentials: false" in raw
