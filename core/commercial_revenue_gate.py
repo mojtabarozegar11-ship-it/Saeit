@@ -160,6 +160,10 @@ def validate_offer(
             raise CommercialGateError("moj_prop_release_gates_incomplete")
     if offer.active and not offer.owner_approved:
         raise CommercialGateError("owner_approval_required")
+    if offer.active and tenant_registry is None:
+        # An activated offer cannot choose its own merchant hostname without
+        # an independently controlled tenant-to-host binding from the caller.
+        raise CommercialGateError("tenant_registry_required")
     if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
         raise CommercialGateError("delivery_manifest_hash_invalid")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
