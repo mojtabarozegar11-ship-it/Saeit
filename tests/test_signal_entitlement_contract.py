@@ -40,6 +40,7 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "sku": lease.sku,
             "buyer_digest": lease.buyer_digest,
             "settled_sun": 12000000,
+            "invoice_amount_sun": 12000000,
             "finality_verified": True,
             "refund_pending": False,
             "charge_disputed": False,
@@ -149,12 +150,43 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             independently_reconciled_invoices=self.paid_invoice_record(lease),
         ))
 
+    def test_underpaid_invoice_cannot_unlock_subscription(self):
+        lease = self.lease()
+        ledger = self.paid_invoice_record(lease, settled_sun=11999999)
+        self.assertFalse(self.access(
+            lease=lease, independently_reconciled_invoices=ledger))
+
+    def test_full_and_overpayment_do_not_get_counted_as_incomplete(self):
+        lease = self.lease()
+        for paid in (12000000, 13000000):
+            with self.subTest(paid=paid):
+                ledger = self.paid_invoice_record(lease, settled_sun=paid)
+                self.assertTrue(self.access(
+                    lease=lease, independently_reconciled_invoices=ledger))
+
+    def test_missing_or_forged_quote_amount_never_unlocks_access(self):
+        lease = self.lease()
+        base = self.paid_invoice_record(lease)[lease.invoice_id]
+        for value in (None, True, 0, -1, "12000000", 12000001):
+            with self.subTest(quote=value):
+                record = dict(base)
+                if value is None:
+                    record.pop("invoice_amount_sun")
+                else:
+                    record["invoice_amount_sun"] = value
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: record},
+                ))
+
     def test_paid_invoice_must_match_exact_tenant_sku_buyer_and_finality(self):
         variations = (
             {"merchant_tenant_id": "signal_other"},
             {"sku": "moj-signals-professional"},
             {"buyer_digest": "0" * 64},
             {"settled_sun": 0}, {"settled_sun": True},
+            {"settled_sun": 1}, {"invoice_amount_sun": 0},
+            {"invoice_amount_sun": True},
             {"asset": "USDT"}, {"network": "tron-testnet"},
             {"finality_verified": "yes"}, {"finality_verified": False},
             {"refund_pending": True}, {"charge_disputed": True},
