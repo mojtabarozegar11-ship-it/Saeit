@@ -29,11 +29,15 @@ FILES = (
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
+    Path("core/migrations/0042_merge_commercefunnel_mojprop.py"),
+    Path("core/migrations/0043_alter_mojproprequest_source.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = (
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
+    Path("core/migrations/0042_merge_commercefunnel_mojprop.py"),
+    Path("core/migrations/0043_alter_mojproprequest_source.py"),
 )
 
 
@@ -164,26 +168,92 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
             temporary.unlink()
 
 
+def format_core_migration_dependencies(leaves, *, allow_moj_prop_parent=False) -> str:
+    """Join verified core graph leaves, optionally allowing the freshly staged 0041."""
+    if (type(leaves) not in (tuple, list) or not 1 <= len(leaves) <= 8
+            or len(set(leaves)) != len(leaves)
+            or any(type(name) is not str
+                   or not re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", name)
+                   for name in leaves)
+            or ("0041_mojprop_request" in leaves and not allow_moj_prop_parent)
+            or "0042_merge_commercefunnel_mojprop" in leaves
+            or "0043_alter_mojproprequest_source" in leaves):
+        raise RuntimeError("Unverified or conflicting core migration graph")
+    return "dependencies = [\n" + "".join(
+        f'        ("core", "{name}"),\n' for name in sorted(leaves)
+    ) + "    ]"
+
+
+def live_core_migration_leaves(*, allow_moj_prop_parent=False):
+    """Query Django's real disk graph, not an unreliable shell filename glob."""
+    python = choose_python()
+    probe = """
+import json, os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+import django
+django.setup()
+from django.db.migrations.loader import MigrationLoader
+loader = MigrationLoader(None)
+nodes = sorted(name for app, name in loader.graph.leaf_nodes("core"))
+print("MOJ_PROP_CORE_LEAVES=" + json.dumps(nodes))
+"""
+    run = subprocess.run(
+        [str(python), "-c", probe], cwd=str(ROOT), capture_output=True,
+        text=True, check=True, timeout=90,
+    )
+    matches = [line.split("=", 1)[1] for line in run.stdout.splitlines()
+               if line.startswith("MOJ_PROP_CORE_LEAVES=")]
+    if len(matches) != 1:
+        raise RuntimeError("Cannot verify Django core migration leaf nodes")
+    leaves = json.loads(matches[0])
+    format_core_migration_dependencies(
+        leaves, allow_moj_prop_parent=allow_moj_prop_parent,
+    )
+    return tuple(leaves)
+
+
 def install_migration(source: Path, target: Path) -> None:
     assert_regular(source, "staged migration")
-    migration_dir = ROOT / "core/migrations"
-    candidates = []
-    for item in migration_dir.glob("*.py"):
-        if item.is_symlink() or not item.is_file():
-            continue
-        match = re.match(r"^([0-9]+)_([a-zA-Z0-9_]+)[.]py$", item.name)
-        if not match or item.name == "0041_mojprop_request.py":
-            continue
-        candidates.append((int(match.group(1)), item.stem))
-    parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
-    text = source.read_text(encoding="utf-8")
-    marker = '("core", "0039_educationassessment_educationattempt_and_more")'
-    if marker not in text:
-        raise RuntimeError("staged Moj Prop migration baseline marker is missing")
-    text = text.replace(marker, f'("core", "{parent}")', 1)
-    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
-    atomic_write_text(target, text, mode)
-    print("MOJ_PROP_MIGRATION_PARENT=" + parent)
+    if target.exists() or target.is_symlink():
+        raise RuntimeError("Moj Prop migration already exists; inspect before overwrite")
+    leaves = live_core_migration_leaves()
+    staged = source.read_text(encoding="utf-8")
+    match = re.search(r"dependencies\s*=\s*\[.*?\]", staged, flags=re.S)
+    if match is None or len(re.findall(r"\(\s*['\"]core['\"],", match.group())) != 1:
+        raise RuntimeError("Staged migration has no unique core parent")
+    content = staged[:match.start()] + format_core_migration_dependencies(leaves) + staged[match.end():]
+    atomic_write_text(target, content, 0o640)
+    print("MOJ_PROP_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
+
+
+def install_join_migration(source: Path, target: Path) -> None:
+    """Install a zero-operation 0042 merge based on the verified live graph.
+
+    The effective cPanel app may have additional owner-preserved migrations;
+    do not guess its branch history or overwrite an existing migration.
+    """
+    assert_regular(source, "staged join migration")
+    if target.exists() or target.is_symlink():
+        raise RuntimeError("Moj Prop join migration exists; inspect instead of overwriting")
+    leaves = live_core_migration_leaves(allow_moj_prop_parent=True)
+    if "0041_mojprop_request" not in leaves:
+        raise RuntimeError("Moj Prop intake must be a live migration leaf before join")
+    staged = source.read_text(encoding="utf-8")
+    if ('operations = []' not in staged
+            or 'class Migration' not in staged):
+        raise RuntimeError("Unrecognized Moj Prop join migration payload")
+    match = re.search(r"dependencies\\s*=\\s*\\[.*?\\]", staged, flags=re.S)
+    if match is None:
+        raise RuntimeError("Moj Prop join migration has no dependency list")
+    content = (
+        staged[:match.start()]
+        + format_core_migration_dependencies(
+            leaves, allow_moj_prop_parent=True,
+        )
+        + staged[match.end():]
+    )
+    atomic_write_text(target, content, 0o640)
+    print("MOJ_PROP_JOIN_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
 
 
 def patch_models(target: Path, source: Path) -> None:
@@ -227,30 +297,30 @@ def patch_admin(target: Path, source: Path) -> None:
 
 
 def patch_urlconf(target: Path) -> None:
+    """Install only the independent first-party API outside static /moj-prop/."""
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
-    # Apache serves /moj-prop/ as a static directory. The public intake API
-    # therefore needs a root-level WSGI path in addition to the legacy alias.
     if 'path("moj-prop-intake/"' in source:
-        print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
+        print("MOJ_PROP_API_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
         raise RuntimeError("live URL configuration has no safe Django path anchor")
     import_line = next(
-        (line for line in source.splitlines() if line.startswith("from django.urls import ")),
-        "",
+        (line for line in source.splitlines() if line.startswith("from django.urls import ")), ""
     )
     if "path" not in import_line:
         raise RuntimeError("live URL configuration does not import path")
+    block = "\n\n# Moj Prop API outside static Passenger-disabled /moj-prop/.\n"
     if "from core.mojprop_views import mojprop_intake" not in source:
-        source = source.rstrip() + (
-            "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
-            "from core.mojprop_views import mojprop_intake\n"
-        )
-    route = 'urlpatterns += [path("moj-prop-intake/", mojprop_intake, name="mojprop_intake")]\n'
+        block += "from core.mojprop_views import mojprop_intake\n"
+    block += ('urlpatterns.insert(0, path("moj-prop-intake/", '
+              'mojprop_intake, name="mojprop_intake"))\n')
+    if 'path("moj-prop/intake/"' not in source:
+        block += ('urlpatterns += [path("moj-prop/intake/", '
+                  'mojprop_intake, name="mojprop_intake_legacy")]\n')
     mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, source.rstrip() + "\n" + route, mode)
-    print("MOJ_PROP_URLCONF_PATCH=PASS")
+    atomic_write_text(target, source.rstrip() + block, mode)
+    print("MOJ_PROP_API_URLCONF_PATCH=PASS")
 
 
 def restore(backup: Path) -> None:
@@ -315,6 +385,8 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
             target = ROOT / relative
             if relative == Path("core/migrations/0041_mojprop_request.py"):
                 install_migration(staged_root / relative, target)
+            elif relative == Path("core/migrations/0042_merge_commercefunnel_mojprop.py"):
+                install_join_migration(staged_root / relative, target)
             else:
                 current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
                 atomic_replace(staged_root / relative, target, current_mode)
