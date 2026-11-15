@@ -22,7 +22,7 @@ ROOT = HOME / "mojplaywin.com"
 VAULT = HOME / ".mojprop-static-restore-evidence"
 PUBLIC_FILES = (("moj-prop", "index.html"), ("moj-prop", "catalog", "index.html"))
 ID = re.compile(r"[1-9][0-9]{0,18}\Z")
-QUANTITY = re.compile(r"([0-9]+)([KMGTP]?)\Z")
+QUANTITY = re.compile(r"[0-9]+\Z")
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
 NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 MAX_BYTES = 512_000
@@ -109,11 +109,11 @@ def _mkdir(fd: int, name: str, uid: int, *, unique=False) -> int:
 
 
 def _quantity(token: str) -> int:
-    match = QUANTITY.fullmatch(token)
-    if not match:
-        raise RuntimeError("unrecognized quota units")
-    amount = int(match.group(1))
-    return amount * (1024 ** (" KMGTP".index(match.group(2)) if match.group(2) else 0))
+    # quota(1) WITHOUT -s reports exact integer KiB, not rounded human
+    # suffixes. Reject every suffix/asterisk/unrecognized token.
+    if not QUANTITY.fullmatch(token):
+        raise RuntimeError("unrecognized or rounded quota units")
+    return int(token) * 1024
 
 
 def _quota_evidence(home_fd: int, owner: str, needed: int) -> bool:
@@ -123,7 +123,7 @@ def _quota_evidence(home_fd: int, owner: str, needed: int) -> bool:
         return False
     try:
         report = subprocess.run(
-            ["quota", "-svu", owner], timeout=6, check=True, capture_output=True, text=True,
+            ["quota", "-wvu", owner], timeout=6, check=True, capture_output=True, text=True,
             env={"LC_ALL": "C", "PATH": "/usr/bin:/bin:/usr/local/bin"},
         ).stdout
     except (OSError, subprocess.SubprocessError):
@@ -131,8 +131,9 @@ def _quota_evidence(home_fd: int, owner: str, needed: int) -> bool:
     observed = 0
     for raw in report.splitlines():
         cols = raw.split()
-        # cPanel quota: filesystem, used, soft, hard, files, inode_soft, inode_hard.
-        # Any grace/soft-limit irregularity is deliberately refused.
+        # Linux quota -wvu (NOT -s) prints exact 1-KiB blocks and raw
+        # inode counts; -s human-readable rounding is UNSAFE at reserve
+        # boundaries. Grace/soft-limit anomalies are refused.
         if not cols or not cols[0].startswith("/dev/"):
             continue
         if len(cols) != 7:
