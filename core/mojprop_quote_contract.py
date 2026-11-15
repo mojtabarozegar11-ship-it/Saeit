@@ -4,7 +4,7 @@ This module turns an already reviewed/issued Django offer into a stable
 commercial snapshot. It never charges, sends, delivers, or marks revenue.
 """
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import re
 
 class QuoteContractError(ValueError):
@@ -28,7 +28,11 @@ def _text(value, name, minimum, maximum):
 def validate_acceptance_reference(value):
     """Return normalized buyer acceptance evidence or fail closed."""
     reference = _text(value, "acceptance reference", 6, 180)
-    if any(ord(ch) < 32 for ch in reference):
+    # Audit evidence must not contain hidden direction overrides or terminal
+    # controls that can alter the apparent buyer approval in logs and reports.
+    forbidden_bidi = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
+    if any(ord(ch) < 32 or 0x7F <= ord(ch) <= 0x9F
+           or ord(ch) in forbidden_bidi for ch in reference):
         raise QuoteContractError("invalid acceptance reference")
     return reference
 
@@ -53,11 +57,18 @@ def make_quote_snapshot(offer, *, now=None):
         5000,
     )
     amount = getattr(offer, "amount", None)
-    if (type(amount) is not Decimal or not amount.is_finite()
-            or amount <= 0 or amount != amount.quantize(Decimal("0.01"))):
+    if type(amount) is not Decimal or not amount.is_finite() or amount <= 0:
         raise QuoteContractError("finite positive decimal amount required")
+    try:
+        # Match the Django DecimalField(max_digits=12, decimal_places=2).
+        # An extreme finite Decimal must be a domain rejection, never a 500.
+        if (amount > Decimal("9999999999.99")
+                or amount != amount.quantize(Decimal("0.01"))):
+            raise QuoteContractError("bounded two-decimal amount required")
+    except InvalidOperation as exc:
+        raise QuoteContractError("invalid decimal quote amount") from exc
     currency = getattr(offer, "currency", None)
-    if currency not in _CURRENCIES:
+    if type(currency) is not str or currency not in _CURRENCIES:
         raise QuoteContractError("unsupported quote currency")
     delivery_days = getattr(offer, "delivery_days", None)
     if type(delivery_days) is not int or not 1 <= delivery_days <= 90:
@@ -78,12 +89,13 @@ def make_quote_snapshot(offer, *, now=None):
     accepted_at = getattr(offer, "accepted_at", None)
     if status == "accepted":
         accepted_at = _aware(accepted_at, "accepted_at")
-        if accepted_at < issued_at or accepted_at >= expires_at:
+        if accepted_at < issued_at or accepted_at > moment or accepted_at >= expires_at:
             raise QuoteContractError("acceptance is outside the quote window")
         validate_acceptance_reference(
             getattr(offer, "acceptance_reference", None)
         )
-    elif accepted_at is not None:
+    elif (accepted_at is not None
+          or bool(getattr(offer, "acceptance_reference", None))):
         raise QuoteContractError("issued quote cannot carry acceptance evidence")
     return {
         "schema": "mojprop.quote.v1",
