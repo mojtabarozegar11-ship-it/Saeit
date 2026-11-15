@@ -281,10 +281,25 @@ def patch_commercial(namespace):
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
-                if view_name == "start_order" and 200 <= getattr(response, "status_code", 0) < 300:
-                    # Order creation and its response are authoritative. The
-                    # separate analytics lookup may be absent or unavailable.
+                if view_name == "start_order":
+                    # Count invoice_created only when a COMMITTED order writer
+                    # redirects to its exact server-issued invoice URL.
+                    # A 503/review page or arbitrary redirect is not an invoice.
                     try:
+                        import re
+                        location = (
+                            response.get("Location", "")
+                            if callable(getattr(response, "get", None)) else ""
+                        )
+                        if (
+                            getattr(response, "status_code", None) not in (302, 303)
+                            or type(location) is not str
+                            or re.fullmatch(
+                                r"/commerce/trx-easy/invoice/[1-9][0-9]{0,18}/",
+                                location,
+                            ) is None
+                        ):
+                            return response
                         from core.models import Product
                         product = Product.objects.filter(
                             pk=kwargs.get("product_id"), active=True,

@@ -102,7 +102,7 @@ class PlatformAdapterTests(unittest.TestCase):
 
     def test_instagram_two_stage_verified_media_only(self):
         m,c=respond(ok({"id":"container789"}),ok({"id":"post123"}))
-        out=send(account("instagram","123456"),{"text":"My professional study",
+        out=send(account("instagram","123456",public_url="https://www.instagram.com/allowed_company/"),{"text":"My professional study",
             "image_url":"https://mojplaywin.com/media/photo.jpg"},"token123",m)
         self.assertEqual(out.remote_id,"post123")
         self.assertEqual(len(c),2)
