@@ -102,6 +102,17 @@ def check_schema_closure(live_root, staged_root):
         if selected and selected != set(required):
             raise RuntimeError("partial Moj Prop " + label + " tree needs reviewed upgrade")
 
+    # Never let a targeted 'migrate core 0045' silently unapply or rewrite
+    # unrelated newer migrations in an owner-preserved application tree.
+    known = set(MIGRATIONS)
+    directory = live_root / "core/migrations"
+    for path in directory.glob("*.py"):
+        if path.is_symlink():
+            raise RuntimeError("unsafe live core migration symlink")
+        head = path.stem.split("_", 1)[0]
+        if head.isdigit() and int(head) >= 41 and path.stem not in known:
+            raise RuntimeError("unreviewed later or conflicting core migration: " + path.stem)
+
     for name in MIGRATIONS:
         dst = live_root / f"core/migrations/{name}.py"
         src = staged_root / f"core/migrations/{name}.py"
