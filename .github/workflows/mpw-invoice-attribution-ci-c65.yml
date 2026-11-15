@@ -1,0 +1,21 @@
+name: C65 merchant invoice redirect attribution
+on:
+  push:
+    branches: ["cycle65-trx-invoice-telemetry-redirect-p0-20261115"]
+  pull_request:
+    paths:
+      - "services/mpw_trx_guest_commerce.py"
+      - "tests/test_mpw_guest_telemetry_isolation_20261108.py"
+      - ".github/workflows/mpw-invoice-attribution-ci-c65.yml"
+permissions:
+  contents: read
+jobs:
+  strict-issued-invoice-telemetry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Execute real AST checkout wrapper and telemetry safeguards
+        run: python -m unittest discover -v -s tests -p 'test_mpw_guest_telemetry_isolation_20261108.py'
