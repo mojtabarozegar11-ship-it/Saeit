@@ -5,17 +5,32 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from core.commercialization_readiness import SECTORS
-from core.tron_tenant_policy import TenantDecision
+from core.tron_tenant_policy import (
+    CANONICAL_ASSET, CANONICAL_CHAIN, REQUIRED_ATTESTATIONS,
+    registered_scope,
+)
 from prop_firm.challenge_commerce import REQUIRED
 from prop_firm.plans import CHALLENGE_PLANS
 from prop_firm.release_gate import assess_moj_prop_release
 from prop_firm.rules import POLICY
 
 
+TRON_REGISTRY = {
+    ("mojplaywin.com", "moj_prop"): {
+        "tenant_id": "moj-prop-merchant",
+        "network": CANONICAL_CHAIN,
+        "asset": CANONICAL_ASSET,
+        **{name: True for name in REQUIRED_ATTESTATIONS},
+    },
+}
+
+
 class MojPropReleaseGateTests(SimpleTestCase):
     def tenant(self):
-        return TenantDecision(
-            "moj-prop-merchant", "mojplaywin.com", "moj_prop", True, (),
+        return registered_scope(
+            host="mojplaywin.com",
+            brand="moj_prop",
+            registry=TRON_REGISTRY,
         )
 
     def challenge_flags(self, plan_code="MOJ-PROP-01"):
@@ -40,6 +55,7 @@ class MojPropReleaseGateTests(SimpleTestCase):
             "required_first_tier_accounts": 1,
             "challenge_attestations": self.challenge_flags(),
             "sector_attestations": self.sector_flags(),
+            "trusted_merchant_registry": TRON_REGISTRY,
         }
         values.update(changes)
         return assess_moj_prop_release(**values)
