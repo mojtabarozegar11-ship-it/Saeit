@@ -79,6 +79,33 @@ class CommercialGateTests(unittest.TestCase):
         with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
             validate_offer(self.offer(), tenant_registry={"moj_prop": "other.example"})
 
+    def test_trx_offer_price_rejects_fractional_sun(self):
+        with self.assertRaisesRegex(CommercialGateError, "trx_fractional_sun_forbidden"):
+            validate_offer(self.offer(price=Decimal("0.0000001")))
+
+    def test_native_trx_one_sun_remains_valid(self):
+        validate_offer(self.offer(price=Decimal("0.000001")))
+
+    def test_trx_payment_evidence_rejects_fractional_sun(self):
+        with self.assertRaisesRegex(CommercialGateError, "trx_fractional_sun_forbidden"):
+            validate_payment_evidence(
+                self.payment(amount=Decimal("0.0000001")),
+                expected_order_id="order-52", expected_invoice_id="invoice-52",
+                expected_amount=Decimal("0.0000001"), expected_currency="TRX",
+            )
+
+    def test_trx_order_rejects_fractional_sun_before_persisting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            try:
+                with self.assertRaisesRegex(CommercialGateError, "trx_fractional_sun_forbidden"):
+                    ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                        amount=Decimal("0.0000001"), currency="TRX")
+                with self.assertRaisesRegex(CommercialGateError, "order_not_found"):
+                    ledger.snapshot("order-52")
+            finally:
+                ledger.close()
+
     def test_public_wallet_is_rejected(self):
         with self.assertRaisesRegex(CommercialGateError, "public_wallet_prohibited"):
             validate_offer(self.offer(public_wallet_published=True))
