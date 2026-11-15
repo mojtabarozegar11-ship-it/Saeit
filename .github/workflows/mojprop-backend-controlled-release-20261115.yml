@@ -7,6 +7,10 @@ on:
         description: "40-character verified main-branch release commit"
         required: true
         type: string
+      restore_case_id:
+        description: "Previously signed independent MariaDB restore case (1-20 digits)"
+        required: true
+        type: string
       owner_approval:
         description: "Owner-approved release only after independently verified restore and tenant isolation"
         required: true
@@ -66,6 +70,8 @@ jobs:
     needs: validate
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
+    env:
+      APPROVED_RESTORE_CASE_ID: ${{ inputs.restore_case_id }}
     steps:
       - uses: actions/checkout@v4
       - name: Fail closed unless this exact main commit is approved
@@ -77,7 +83,9 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUESTED_RELEASE_SHA" == "$GITHUB_SHA" ]]
+          [[ "$APPROVED_RESTORE_CASE_ID" =~ ^[0-9]{1,20}$ ]]
           echo "MOJPROP_RELEASE_PINNED_TO_VERIFIED_COMMIT=true"
+          echo "MOJPROP_RESTORE_CASE_ID_PREAPPROVED=true"
       - name: Configure pinned cPanel SSH from factory runner
         shell: bash
         env:
@@ -138,7 +146,7 @@ jobs:
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 90s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py verify-db-restore $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
+            "MOJPROP_APPROVED_RESTORE_CASE_ID=$APPROVED_RESTORE_CASE_ID python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py verify-db-restore $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
           echo 'MOJPROP_DB_PROOF_CHECKED_BEFORE_STATIC_OR_BACKEND_CHANGE=true'
       - name: Update only /moj-prop/ commercial catalog
         id: deploy
@@ -155,7 +163,7 @@ jobs:
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
           timeout 240s ssh -F "$WORK/config" saeit-host \
-            "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
+            "MOJPROP_APPROVED_RESTORE_CASE_ID=$APPROVED_RESTORE_CASE_ID python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py deploy $GITHUB_RUN_ID $GITHUB_SHA /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Verify Moj Prop catalog and preserve root and admin
         id: smoke
         shell: bash
