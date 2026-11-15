@@ -1997,6 +1997,41 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_trx_reconciliation_totals_exclude_unpaid_orders_and_state_revenue_claims(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            totals = ledger.private_trx_reconciliation_totals()
+            self.assertEqual(totals["settled_order_count"], 0)
+            self.assertEqual(totals["outstanding_sun"], 0)
+            self.assertIs(totals["independent_live_revenue_verified"], False)
+            ledger.close()
+
+    def test_private_trx_totals_aggregate_valid_settlement_and_refunds_without_rounding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda ev: True)
+            self._prepare_private_invoice(ledger, "order-53")
+            ev = self.payment(order_id="order-53", invoice_id="invoice-53",
+                              transaction_id="c" * 64)
+            digest = validate_payment_evidence(ev,
+                expected_order_id="order-53", expected_invoice_id="invoice-53",
+                expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-53", target=CommercialState.SETTLED,
+                           event_id="settled-order-53", payload_digest=digest, payment_evidence=ev)
+            with localcontext() as context:
+                context.prec = 6
+                ledger.record_confirmed_refund(self._refund_proof(
+                    amount=Decimal("11.000001")))
+                total = ledger.private_trx_reconciliation_totals()
+                self.assertEqual(total["settled_order_count"], 2)
+                self.assertEqual(total["original_sun"], 60000000)
+                self.assertEqual(total["refunded_sun"], 11000001)
+                self.assertEqual(total["outstanding_sun"], 48999999)
+                self.assertIs(total["independent_live_revenue_verified"], False)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
