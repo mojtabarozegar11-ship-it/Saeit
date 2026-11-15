@@ -4,7 +4,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
-from core.tron_tenant_policy import TenantDecision
+from core.tron_tenant_policy import TenantDecision, REQUIRED_ATTESTATIONS
 from prop_firm.challenge_commerce import REQUIRED, assess_challenge_checkout
 from prop_firm.plans import CHALLENGE_PLANS
 from prop_firm.policy_integrity import (
@@ -21,6 +21,13 @@ class PolicyIntegrityTests(SimpleTestCase):
             ),
             free_treasury_usd="1000", protected_reserves_usd="100",
             attestations={key: True for key in REQUIRED},
+            trusted_merchant_registry={
+                ("mojplaywin.com", "moj_prop"): {
+                    "tenant_id": "moj-prop-merchant",
+                    "network": "tron-mainnet", "asset": "TRX",
+                    **{key: True for key in REQUIRED_ATTESTATIONS},
+                },
+            },
         )
 
     def test_current_official_fourteen_level_two_stage_policy_consistent(self):
