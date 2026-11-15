@@ -1558,6 +1558,34 @@ class CommercialGateTests(unittest.TestCase):
             SQLiteCommercialLedger(":memory:", accepted_scope_verifier="true")
 
 
+    def test_duplicate_refund_transfer_does_not_call_external_verifier_twice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def trusted(proof):
+                calls.append(proof)
+                return True
+            ledger = self._refundable_ledger(directory, refund_verifier=trusted)
+            ledger.record_confirmed_refund(self._refund_proof())
+            with self.assertRaisesRegex(CommercialGateError, "refund_transfer_already_recorded"):
+                ledger.record_confirmed_refund(self._refund_proof())
+            self.assertEqual(len(calls), 1)
+            ledger.close()
+
+    def test_reused_refund_source_does_not_call_external_verifier_twice(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def trusted(proof):
+                calls.append(proof)
+                return True
+            ledger = self._refundable_ledger(directory, refund_verifier=trusted)
+            ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("10")))
+            with self.assertRaisesRegex(CommercialGateError, "refund_source_already_used"):
+                ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("11"),
+                    refund_transaction_id="c" * 64))
+            self.assertEqual(len(calls), 1)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
