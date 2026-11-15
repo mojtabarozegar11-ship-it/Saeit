@@ -1717,6 +1717,41 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_invalid_fulfillment_jump_cannot_call_external_delivery_verifier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            invoked = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                delivery_verifier=lambda order, manifest: invoked.append(order) or True)
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "invalid_state_transition"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                               event_id="wrong-jump-52", payload_digest="b" * 64,
+                               fulfillment_manifest_sha256="b" * 64)
+            self.assertEqual(invoked, [])
+            self.assertEqual(ledger.snapshot("order-52")["state"], "ordered")
+            ledger.close()
+
+    def test_invalid_settlement_jump_cannot_call_external_payment_verifier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            invoked = []
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=lambda ev: invoked.append(ev) or True)
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            ev = self.payment()
+            digest = validate_payment_evidence(ev, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"),
+                expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "invalid_state_transition"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="wrong-settle-52", payload_digest=digest,
+                               payment_evidence=ev)
+            self.assertEqual(invoked, [])
+            self.assertEqual(ledger.snapshot("order-52")["state"], "ordered")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
