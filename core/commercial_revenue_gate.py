@@ -13,8 +13,11 @@ from decimal import Decimal
 from enum import Enum
 import hashlib
 import json
+import os
+from pathlib import Path
 import re
 import sqlite3
+import stat
 from typing import Mapping, Optional
 
 
@@ -346,7 +349,27 @@ class SQLiteCommercialLedger:
     """Small durable, append-only order ledger for private governed staging."""
 
     def __init__(self, path: str):
+        # This ledger contains private customer/order references and MUST NOT
+        # silently become a world-readable file or follow a symlink.
+        if not isinstance(path, str) or not path:
+            raise CommercialGateError("ledger_path_invalid")
+        memory = path == ":memory:"
+        target = None if memory else Path(path)
+        created = bool(target is not None and not target.exists())
+        if target is not None:
+            if target.is_symlink():
+                raise CommercialGateError("ledger_symlink_prohibited")
+            if target.exists():
+                metadata = target.stat()
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077:
+                    raise CommercialGateError("ledger_file_permissions_unsafe")
+            elif not target.parent.is_dir():
+                raise CommercialGateError("ledger_parent_missing")
+            elif target.parent.stat().st_mode & 0o002:
+                raise CommercialGateError("ledger_parent_world_writable")
         self.connection = sqlite3.connect(path)
+        if created:
+            os.chmod(path, 0o600)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.executescript(
@@ -380,6 +403,20 @@ class SQLiteCommercialLedger:
                 order_id TEXT NOT NULL REFERENCES orders(order_id),
                 PRIMARY KEY (network, transaction_id)
             );
+            -- This is append-only at the API/SQL connection layer. It does
+            -- not claim cryptographic protection from database administrators.
+            CREATE TRIGGER IF NOT EXISTS no_order_event_update BEFORE UPDATE ON order_events
+                BEGIN SELECT RAISE(ABORT, 'immutable_order_event'); END;
+            CREATE TRIGGER IF NOT EXISTS no_order_event_delete BEFORE DELETE ON order_events
+                BEGIN SELECT RAISE(ABORT, 'immutable_order_event'); END;
+            CREATE TRIGGER IF NOT EXISTS no_invoice_update BEFORE UPDATE ON issued_invoices
+                BEGIN SELECT RAISE(ABORT, 'immutable_invoice'); END;
+            CREATE TRIGGER IF NOT EXISTS no_invoice_delete BEFORE DELETE ON issued_invoices
+                BEGIN SELECT RAISE(ABORT, 'immutable_invoice'); END;
+            CREATE TRIGGER IF NOT EXISTS no_settlement_update BEFORE UPDATE ON settled_transactions
+                BEGIN SELECT RAISE(ABORT, 'immutable_settlement'); END;
+            CREATE TRIGGER IF NOT EXISTS no_settlement_delete BEFORE DELETE ON settled_transactions
+                BEGIN SELECT RAISE(ABORT, 'immutable_settlement'); END;
             """
         )
         self.connection.commit()
@@ -420,6 +457,7 @@ class SQLiteCommercialLedger:
         if not isinstance(payload_digest, str) or not _HEX64.fullmatch(payload_digest):
             raise CommercialGateError("invoice_digest_invalid")
         with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
             order = self.connection.execute(
                 "SELECT state, amount, currency FROM orders WHERE order_id = ?", (order_id,),
             ).fetchone()
@@ -467,6 +505,7 @@ class SQLiteCommercialLedger:
         if not isinstance(payload_digest, str) or not _HEX64.fullmatch(payload_digest):
             raise CommercialGateError("payload_digest_invalid")
         with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
             row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
             if row is None:
                 raise CommercialGateError("order_not_found")
