@@ -1263,6 +1263,52 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_unregistered_invoice_does_not_call_external_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            called = []
+            def verifier(evidence):
+                called.append(evidence)
+                return True
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=verifier)
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
+                           event_id="quote-52", payload_digest="a" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.INVOICED,
+                           event_id="invoice-52", payload_digest=invoice_commitment(
+                               order_id="order-52", invoice_id="invoice-52",
+                               amount=Decimal("30"), currency="TRX"))
+            ledger.advance(order_id="order-52", target=CommercialState.PAYMENT_PENDING,
+                           event_id="pending-52", payload_digest="b" * 64)
+            ev = self.payment()
+            digest = validate_payment_evidence(ev, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "registered_invoice_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settled-52", payload_digest=digest, payment_evidence=ev)
+            self.assertEqual(called, [])
+            ledger.close()
+
+    def test_invoice_mismatch_does_not_call_external_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            called = []
+            def verifier(evidence):
+                called.append(evidence)
+                return True
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=verifier)
+            self._prepare_private_invoice(ledger, "order-52")
+            ev = self.payment(invoice_id="invoice-53")
+            digest = validate_payment_evidence(ev, expected_order_id="order-52",
+                expected_invoice_id="invoice-53", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "settlement_invoice_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settled-52", payload_digest=digest, payment_evidence=ev)
+            self.assertEqual(called, [])
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
