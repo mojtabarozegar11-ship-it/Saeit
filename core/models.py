@@ -710,3 +710,78 @@ class MojPropOffer(T):
 
     def get_lead_route_display(self):
         return dict(MojPropRequest.ROUTE_CHOICES).get(self.lead.route, "Unknown")
+
+
+class MojPropDeliveryEvidence(T):
+    """Auditable handoff of one accepted proposal's private deliverable.
+
+    No message is sent here, no download is exposed, and a written reference
+    alone is never treated as proof of a blockchain/card payment.
+    """
+    STATUS_CHOICES = (
+        ("prepared", "Artifact prepared privately"),
+        ("sent", "External handoff recorded"),
+        ("acknowledged", "Customer acknowledgement recorded"),
+    )
+    offer = models.OneToOneField(
+        MojPropOffer, on_delete=models.PROTECT, related_name="delivery_evidence"
+    )
+    artifact_sha256 = models.CharField(max_length=64)
+    artifact_name = models.CharField(max_length=180)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="prepared")
+    # An actual legal clearance/credit term must be recorded before dispatch;
+    # this field does not assert a payment or an amount was received.
+    clearance_reference = models.CharField(max_length=180, blank=True, default="")
+    handoff_reference = models.CharField(max_length=180, blank=True, default="")
+    handed_off_at = models.DateTimeField(null=True, blank=True)
+    acknowledgment_reference = models.CharField(max_length=180, blank=True, default="")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        import re
+        from django.utils import timezone
+        super().clean()
+        errors = {}
+        if (type(self.artifact_sha256) is not str or re.fullmatch(
+                r"[0-9a-f]{64}", self.artifact_sha256) is None
+                or self.artifact_sha256 == "0" * 64):
+            errors["artifact_sha256"] = "A real private deliverable SHA256 is required."
+        if not self.artifact_name or not self.artifact_name.strip():
+            errors["artifact_name"] = "Name the prepared deliverable."
+        if self.offer_id and self.offer.status != "accepted":
+            errors["offer"] = "Deliverables require an accepted written offer."
+        if self.status in ("sent", "acknowledged"):
+            if (not self.clearance_reference.strip()
+                    or not self.handoff_reference.strip()
+                    or self.handed_off_at is None):
+                errors["handoff_reference"] = "Handoff requires a clearance, timestamp and delivery reference."
+        if self.status == "acknowledged":
+            if not self.acknowledgment_reference.strip() or self.acknowledged_at is None:
+                errors["acknowledgment_reference"] = "The customer acknowledgment must be independently recorded."
+        elif self.acknowledged_at or self.acknowledgment_reference.strip():
+            errors["acknowledgment_reference"] = "Unacknowledged deliveries cannot carry buyer acknowledgment."
+        if self.handed_off_at and self.handed_off_at > timezone.now():
+            errors["handed_off_at"] = "Cannot dispatch a deliverable in the future."
+        if self.acknowledged_at and (self.acknowledged_at > timezone.now()
+                                    or (self.handed_off_at and
+                                        self.acknowledged_at < self.handed_off_at)):
+            errors["acknowledged_at"] = "Acknowledgment must follow handoff."
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).first()
+            if previous:
+                allowed = {
+                    "prepared": ("prepared", "sent"),
+                    "sent": ("sent", "acknowledged"),
+                    "acknowledged": ("acknowledged",),
+                }
+                if self.status not in allowed.get(previous.status, ()):
+                    errors["status"] = "Delivery lifecycle cannot be reversed."
+                if previous.status in ("sent", "acknowledged"):
+                    protected = ("offer_id", "artifact_sha256", "artifact_name",
+                                 "clearance_reference", "handoff_reference",
+                                 "handed_off_at")
+                    if any(getattr(self, field) != getattr(previous, field)
+                           for field in protected):
+                        errors["status"] = "Dispatched deliverable evidence is immutable."
+        if errors:
+            raise ValidationError(errors)
