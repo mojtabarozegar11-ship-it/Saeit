@@ -50,6 +50,19 @@ def check(fn):
 receiver = _configured_receiver()
 backend = check(lambda: _paid_read_db(settings, connection))
 commercial = check(lambda: _commercial_db(settings, connection))
+def safe_module_file(module):
+    return str(getattr(module, "__file__", "")) if module is not None else ""
+settings_module = sys.modules.get("config.settings")
+flag_names = ("MPW_WALLETLESS_TRX_PUBLIC_ENABLED", "MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED")
+defined_by = []
+for module_name, module in sorted(sys.modules.items()):
+    if module is None:
+        continue
+    try:
+        if any(name in getattr(module, "__dict__", {}) for name in flag_names):
+            defined_by.append({"module": module_name, "file": safe_module_file(module)})
+    except Exception:
+        continue
 def flag_meta(name: str):
     value = getattr(settings, name, None)
     text = value.lower() if isinstance(value, str) and value.lower() in ("true", "false") else None
@@ -77,6 +90,8 @@ report = {
         "dummy_public_true_canary_false": dummy_contract,
     },
     "database": {"vendor": connection.vendor, "alias": connection.alias},
+    "settings_source": {"module_file": safe_module_file(settings_module), "defined_names": sorted(name for name in getattr(settings_module, "__dict__", {}) if name.startswith("MPW_") and "SECRET" not in name and "KEY" not in name)},
+    "flag_defined_by_modules": defined_by,
     "paid_read_backend": backend,
     "commercial_gate": commercial,
     "permanent_public_gates_closed": (
