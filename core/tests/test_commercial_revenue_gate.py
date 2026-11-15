@@ -334,6 +334,31 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_tron_transaction_cannot_settle_two_orders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            for order_id in ("order-52", "order-53"):
+                ledger.create_order(order_id=order_id, offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+                for state, prefix in ((CommercialState.QUOTED, "quote"),
+                                      (CommercialState.INVOICED, "invoice"),
+                                      (CommercialState.PAYMENT_PENDING, "pending")):
+                    ledger.advance(order_id=order_id, target=state,
+                                   event_id=f"{prefix}-{order_id}", payload_digest="a" * 64)
+            first = self.payment()
+            digest1 = validate_payment_evidence(first, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                           event_id="settle-52", payload_digest=digest1, payment_evidence=first)
+            second = self.payment(order_id="order-53", invoice_id="invoice-53")
+            digest2 = validate_payment_evidence(second, expected_order_id="order-53",
+                expected_invoice_id="invoice-53", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "transaction_already_settled"):
+                ledger.advance(order_id="order-53", target=CommercialState.SETTLED,
+                               event_id="settle-53", payload_digest=digest2, payment_evidence=second)
+            self.assertEqual(ledger.snapshot("order-53")["state"], "payment_pending")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
