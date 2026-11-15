@@ -9,6 +9,8 @@ on:
       - "tests/test_mojprop_commercial_release_closure_c83_20261115.py"
       - "tests/test_mojprop_backend_receipts_release_20261115.py"
       - "tests/test_mojprop_backup_integrity_c84_20261115.py"
+      - "tests/test_mojprop_legacy_upgrade_c84_20261115.py"
+      - "scripts/fixtures/mojprop_legacy_*.py"
       - "core/migrations/004?_mojprop_*.py"
       - "core/mojprop_*.py"
 permissions:
@@ -35,6 +37,8 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_mojprop_backend_receipts_release_20261115.py' -v
       - name: Verify immutable source backup integrity and all-or-nothing rollback
         run: python3 -m unittest discover -s tests -p 'test_mojprop_backup_integrity_c84_20261115.py' -v
+      - name: Verify byte-pinned intake-only legacy upgrade and owner-drift refusal
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_legacy_upgrade_c84_20261115.py' -v
       - name: Assert this action cannot reach any production credential or publish
         run: |
           python3 - <<'PY'
