@@ -714,6 +714,30 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("active_merchant_offer_required")
         if not isinstance(release_evidence_sha256, str) or not _HEX64.fullmatch(release_evidence_sha256):
             raise CommercialGateError("merchant_release_evidence_required")
+        # No independent verifier may be called for a missing, ineligible,
+        # repriced or already-bound local order. Recheck under the write lock
+        # below to retain concurrency protection.
+        order_id = _slug(order_id, "order_id")
+        preflight = self.connection.execute(
+            "SELECT offer_id, amount, currency, state FROM orders WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if preflight is None:
+            raise CommercialGateError("order_not_found")
+        if (preflight["offer_id"] != offer.offer_id
+                or preflight["amount"] != _canonical_amount(offer.price, offer.currency)
+                or preflight["currency"] != offer.currency):
+            raise CommercialGateError("merchant_order_offer_mismatch")
+        if preflight["state"] not in (
+            CommercialState.ORDERED.value, CommercialState.QUOTED.value,
+            CommercialState.INVOICED.value, CommercialState.PAYMENT_PENDING.value,
+        ):
+            raise CommercialGateError("merchant_binding_after_settlement_forbidden")
+        if self.connection.execute(
+            "SELECT 1 FROM merchant_order_bindings WHERE order_id = ?",
+            (order_id,),
+        ).fetchone():
+            raise CommercialGateError("merchant_order_already_bound")
         validate_offer(
             offer, tenant_registry=tenant_registry,
             independent_release_verifier=independent_release_verifier,
@@ -729,7 +753,6 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("merchant_release_evidence_verifier_failed") from None
         if attested is not True:
             raise CommercialGateError("merchant_release_evidence_unverified")
-        order_id = _slug(order_id, "order_id")
         with self.connection:
             self.connection.execute("BEGIN IMMEDIATE")
             row = self.connection.execute(
