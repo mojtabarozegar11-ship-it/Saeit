@@ -23,10 +23,19 @@ class SignalPlan:
     description: str
 
     def __post_init__(self):
-        if not _PLAN_ID.fullmatch(self.plan_id):
+        if type(self.plan_id) is not str or not _PLAN_ID.fullmatch(self.plan_id):
             raise SignalCatalogError("invalid plan identifier")
-        if not self.title.strip() or not self.description.strip():
-            raise SignalCatalogError("plan text is required")
+        if type(self.title) is not str or not 4 <= len(self.title.strip()) <= 180:
+            raise SignalCatalogError("plan title is required")
+        if type(self.cadence) is not str or self.cadence not in (
+                "weekly", "monthly", "quarterly"):
+            raise SignalCatalogError("unsupported plan cadence")
+        if (type(self.description) is not str
+                or not 40 <= len(self.description.strip()) <= 800
+                or "risk" not in self.description.casefold()
+                or "guaranteed" in self.description.casefold()
+                or any(ord(ch) < 32 for ch in self.description)):
+            raise SignalCatalogError("plan must disclose risk without a promise of return")
         if type(self.price_usd) is not Decimal or not self.price_usd.is_finite() or self.price_usd <= 0:
             raise SignalCatalogError("finite positive price required")
         if self.price_usd != self.price_usd.quantize(Decimal("0.01")):
