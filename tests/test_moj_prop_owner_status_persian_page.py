@@ -41,6 +41,16 @@ class TenPlanPersianPageTests(unittest.TestCase):
         self.assertIn("2000 TRX", self.document)
         self.assertIn("تعرفه‌های پلن‌های ۲ تا ۱۰ پیشنهادی‌اند", self.document)
 
+    def test_source_contains_only_one_persian_page_not_legacy_appended_tail(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "prop_firm/site.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(source.count("def render_site():"), 1)
+        self.assertEqual(source.count("return f'''<!doctype html>"), 1)
+        self.assertEqual(source.count('if __name__ == "__main__":'), 1)
+        self.assertTrue(source.rstrip().endswith("build_site(parser.parse_args().output)"))
+
     def test_informational_page_never_accepts_orders(self):
         p=Tags()
         p.feed(self.document)
