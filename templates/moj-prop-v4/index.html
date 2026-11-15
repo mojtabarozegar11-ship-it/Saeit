@@ -97,14 +97,18 @@
             headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRFToken':token},
             body:JSON.stringify({name,email,service,horizon,notes,website,consent:document.getElementById('consent').checked})
           });
-          const data=await response.json();
-          if(!response.ok || !data.ok) throw new Error(data.detail||'The request could not be received.');
+          const data=await response.json().catch(()=>({}));
+          if(response.status!==201 || data.ok!==true ||
+             typeof data.request_id!=='string' ||
+             !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id)){
+            throw new Error(data.detail||'The request was not confirmed by the intake service.');
+          }
           receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id);
           result.textContent=receipt;
           copy.disabled=false;
         }catch(error){
-          receipt=draft(name,email,service,horizon,notes,'not submitted; local draft only','');
-          result.textContent=receipt+'\n\nReason: '+error.message;
+          receipt='';
+          result.textContent='Request NOT submitted. '+error.message+' No ID or payment was created.';
           copy.disabled=false;
         }finally{
           submit.disabled=false;
