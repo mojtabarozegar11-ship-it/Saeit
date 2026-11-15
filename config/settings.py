@@ -131,3 +131,9 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Public interest (not challenge/checkout): deliberately disabled until a
+# reviewed privacy notice, protected HMAC secret and retention process exist.
+MOJ_PROP_INTEREST_ENABLED = env.bool("MOJ_PROP_INTEREST_ENABLED", default=False)
+MOJ_PROP_INTEREST_HMAC_KEY_HEX = env("MOJ_PROP_INTEREST_HMAC_KEY_HEX", default="")
+MOJ_PROP_PRIVACY_URL = env("MOJ_PROP_PRIVACY_URL", default="")
