@@ -146,6 +146,42 @@ class InvoiceFunnelIdentityTests(unittest.TestCase):
     def test_41_large_valid_product_id(self):
         self.assertEqual(self.check(kwargs={"product_id": 2147483647}), 2147483647)
 
+    def test_42_leading_space_denied(self):
+        self.assertIsNone(self.check(response=Redirect(" /commerce/trx-easy/invoice/42/")))
+
+    def test_43_leading_tab_denied(self):
+        self.assertIsNone(self.check(response=Redirect("\t/commerce/trx-easy/invoice/42/")))
+
+    def test_44_leading_newline_denied(self):
+        self.assertIsNone(self.check(response=Redirect("\n/commerce/trx-easy/invoice/42/")))
+
+    def test_45_leading_carriage_return_denied(self):
+        self.assertIsNone(self.check(response=Redirect("\r/commerce/trx-easy/invoice/42/")))
+
+    def test_46_trailing_tab_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invoice/42/\t")))
+
+    def test_47_trailing_newline_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invoice/42/\n")))
+
+    def test_48_embedded_tab_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invo\tice/42/")))
+
+    def test_49_embedded_newline_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invo\nice/42/")))
+
+    def test_50_embedded_carriage_return_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invo\rice/42/")))
+
+    def test_51_leading_null_denied(self):
+        self.assertIsNone(self.check(response=Redirect("\u0000/commerce/trx-easy/invoice/42/")))
+
+    def test_52_leading_del_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invoice/42/")))
+
+    def test_53_embedded_space_denied(self):
+        self.assertIsNone(self.check(response=Redirect("/commerce/trx-easy/invo ice/42/")))
+
 
 if __name__ == "__main__":
     unittest.main()
