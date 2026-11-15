@@ -127,7 +127,21 @@ def commercialization_board_api(request):
         },
         "owner_priority_order": [
             "moj_prop", "signal_subscriptions", "tron_gateway", "mojplaywin_store",
+            "moj_coin",
         ],
+        "moj_coin": {
+            "owner_priority": 5,
+            "independently_verified_paid_launch": False,
+            "live_token_or_player_funding_verified": False,
+            "game_release_gates": [
+                "client_build_and_server_gameplay_verified",
+                "server_authoritative_economy_and_anti_cheat_audited",
+                "game_assets_and_player_rights_verified",
+                "tron_purchase_and_entitlement_reconciled",
+                "player_account_recovery_and_refunds_verified",
+                "token_mechanics_and_local_law_reviewed",
+            ],
+        },
     }
     data["warnings"] = [
         "An intent, webhook, or analytics event is not independently reconciled cash.",
