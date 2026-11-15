@@ -1,0 +1,33 @@
+"""Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
+from django.test import SimpleTestCase
+
+from core.financial_brand_pages import BRANDS
+
+
+class FinancialBrandSignalFunnelTests(SimpleTestCase):
+    def test_all_host_signal_subsites_use_the_canonical_signal_intake(self):
+        for slug, *_ in BRANDS:
+            with self.subTest(slug=slug):
+                response = self.client.get(f"/{slug}/market-signals/")
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode("utf-8")
+                self.assertEqual(html.count("/moj-prop/?service=signals#request"), 2)
+                self.assertIn("mojtaba.bot.ai", html)
+                self.assertNotIn('href="/store/"', html)
+                self.assertNotIn('href="/commerce/"', html)
+
+    def test_all_arabic_signal_subsites_use_the_same_intake(self):
+        for slug, *_ in BRANDS:
+            with self.subTest(slug=slug):
+                response = self.client.get(f"/ar/{slug}/market-signals/")
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode("utf-8")
+                self.assertEqual(html.count("/moj-prop/?service=signals#request"), 2)
+                self.assertIn("mojtaba.bot.ai", html)
+
+    def test_store_subsite_keeps_its_store_destination(self):
+        response = self.client.get("/saman/digital-products/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn('href="/commerce/"', html)
+        self.assertNotIn("/moj-prop/?service=signals#request", html)
