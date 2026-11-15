@@ -156,18 +156,27 @@ def validate_offer(
         raise CommercialGateError("offer_type_invalid")
     if tenant_registry is not None and tenant_registry.get(tenant_id) != host:
         raise CommercialGateError("tenant_scope_mismatch")
+    gates = (offer.owner_approved, offer.legal_reviewed, offer.kyc_ready,
+             offer.rights_cleared, offer.public_wallet_published,
+             offer.automatic_payment_enabled, offer.financial_call_enabled, offer.active)
+    if any(type(flag) is not bool for flag in gates):
+        raise CommercialGateError("offer_gates_must_be_boolean")
     if offer.public_wallet_published:
         raise CommercialGateError("public_wallet_prohibited")
     if offer.automatic_payment_enabled:
         raise CommercialGateError("automatic_payment_disabled")
     if offer.offer_type is OfferType.SIGNAL and offer.financial_call_enabled:
         raise CommercialGateError("financial_signal_disabled")
-    if offer.offer_type is OfferType.MOJ_PROP and offer.active:
-        required = (offer.owner_approved, offer.legal_reviewed, offer.kyc_ready, offer.rights_cleared)
+    if offer.active:
+        # Source-only readiness must never accept typed truthy strings, nor
+        # let non-Prop paid offers bypass legal/KYC/rights release checks.
+        required = (offer.owner_approved, offer.legal_reviewed,
+                    offer.kyc_ready, offer.rights_cleared)
         if not all(required):
-            raise CommercialGateError("moj_prop_release_gates_incomplete")
-    if offer.active and not offer.owner_approved:
-        raise CommercialGateError("owner_approval_required")
+            raise CommercialGateError(
+                "moj_prop_release_gates_incomplete" if offer.offer_type is OfferType.MOJ_PROP
+                else "offer_release_gates_incomplete"
+            )
     if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
         raise CommercialGateError("delivery_manifest_hash_invalid")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
