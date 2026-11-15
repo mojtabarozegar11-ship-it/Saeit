@@ -253,6 +253,26 @@ def patch_urlconf(target: Path) -> None:
     print("MOJ_PROP_URLCONF_PATCH=PASS")
 
 
+def restart_passenger() -> None:
+    restart = DOCROOT / "tmp" / "restart.txt"
+    if restart.is_symlink():
+        raise RuntimeError("Passenger restart path is a symlink")
+    restart.parent.mkdir(parents=True, exist_ok=True)
+    restart.touch()
+    passenger_config = shutil.which("passenger-config")
+    if passenger_config:
+        result = subprocess.run(
+            [passenger_config, "restart-app", str(DOCROOT), "--ignore-app-not-running"],
+            check=False,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Passenger restart failed with exit code {result.returncode}")
+        print("MOJ_PROP_PASSENGER_RESTART=PASS")
+    else:
+        print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
+
+
 def restore(backup: Path) -> None:
     manifest_path = backup / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink():
@@ -269,11 +289,7 @@ def restore(backup: Path) -> None:
         elif target.exists():
             assert_regular(target, "unexpected target")
             target.unlink()
-    restart = DOCROOT / "tmp" / "restart.txt"
-    if restart.is_symlink():
-        raise RuntimeError("Passenger restart path is a symlink")
-    restart.parent.mkdir(parents=True, exist_ok=True)
-    restart.touch()
+    restart_passenger()
     print("MOJ_PROP_BACKEND_ROLLBACK=PASS")
 
 
@@ -329,11 +345,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         run_checked([str(python), "manage.py", "migrate", "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
-        restart = DOCROOT / "tmp" / "restart.txt"
-        if restart.is_symlink():
-            raise RuntimeError("Passenger restart path is a symlink")
-        restart.parent.mkdir(parents=True, exist_ok=True)
-        restart.touch()
+        restart_passenger()
         print("MOJ_PROP_BACKEND_DEPLOY=PASS")
         print("MOJ_PROP_BACKEND_COMMIT=" + commit)
         print("MOJ_PROP_BACKUP=" + str(backup))
