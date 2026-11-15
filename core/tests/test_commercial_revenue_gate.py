@@ -399,6 +399,38 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_offer_rejects_fractional_native_sun(self):
+        for amount in (Decimal("0.0000001"), Decimal("30.00000001"),
+                       Decimal("9223372036854.775808")):
+            with self.subTest(amount=amount), self.assertRaisesRegex(
+                    CommercialGateError, "price_invalid_native_sun"):
+                validate_offer(self.offer(price=amount))
+
+    def test_native_sun_offer_boundary_is_accepted(self):
+        validate_offer(self.offer(price=Decimal("0.000001")))
+        validate_offer(self.offer(price=Decimal("9223372036854.775807")))
+
+    def test_payment_rejects_untransferable_native_trx_amount(self):
+        for amount in (Decimal("30.00000001"), Decimal("0.0000001"),
+                       Decimal("9223372036854.775808")):
+            with self.subTest(amount=amount), self.assertRaisesRegex(
+                    CommercialGateError, "amount_invalid_native_sun"):
+                validate_payment_evidence(
+                    self.payment(amount=amount), expected_order_id="order-52",
+                    expected_invoice_id="invoice-52", expected_amount=amount,
+                    expected_currency="TRX",
+                )
+
+    def test_order_ledger_rejects_fractional_sun_before_persistence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "amount_invalid_native_sun"):
+                ledger.create_order(order_id="order-sun", offer_id="moj-s04",
+                                    amount=Decimal("0.00000001"), currency="TRX")
+            self.assertEqual(ledger.connection.execute("SELECT COUNT(*) FROM orders").fetchone()[0], 0)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
