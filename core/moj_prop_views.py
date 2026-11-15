@@ -120,3 +120,21 @@ def moj_prop_interest(request):
         return response
 
     return endpoint(request)
+
+def moj_prop_privacy(request):
+    """Source-specific inquiry disclosure, not a blanket legal compliance claim."""
+    if request.get_host().split(":")[0].lower() not in {
+        "mojplaywin.com", "www.mojplaywin.com"
+    }:
+        raise Http404("Moj Prop information belongs to MojPlayWin")
+    if request.method not in ("GET", "HEAD"):
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(["GET", "HEAD"])
+    response = render(request, "mojplaywin/moj_prop_privacy.html")
+    response["Cache-Control"] = "public, max-age=300"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    response["Content-Security-Policy"] = (
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; "
+        "style-src 'self' 'unsafe-inline'"
+    )
+    return response
