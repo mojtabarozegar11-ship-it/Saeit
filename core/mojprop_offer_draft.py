@@ -23,7 +23,7 @@ def _one_line(value: object) -> str:
 def _quoted_scope(text: str) -> str:
     """Show the customer's exact scope as quoted content, not operator instructions."""
     normalised = _normalise_line_breaks(text)
-    normalised = re.sub(r"[\x00-\x08\x0b-\x1f\x7f\u2028\u2029]", " ", normalised)
+    normalised = re.sub(r"[\x00-\x08\x0b-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069]", " ", normalised)
     return "\n".join(
         "> " + line.strip() for line in normalised.splitlines() if line.strip()
     )
