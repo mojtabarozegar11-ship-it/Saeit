@@ -1586,6 +1586,31 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_historical_verified_revenue_is_not_claimed_live_after_refund(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._fulfilled_scope_fixture(directory)
+            ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                event_id="verified-52", payload_digest="c" * 64,
+                payment_evidence=self.payment(), verified_revenue=True)
+            self.assertEqual(ledger.snapshot("order-52")["effective_revenue_status"],
+                             "historical_attestation_only")
+            ledger.record_confirmed_refund(self._refund_proof(amount=Decimal("11.5")))
+            self.assertEqual(ledger.snapshot("order-52")["state"], "verified_revenue")
+            self.assertEqual(ledger.snapshot("order-52")["effective_revenue_status"],
+                             "refund_reconciliation_required")
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("18.5"))
+            ledger.close()
+
+    def test_unpaid_quote_cannot_be_reported_as_verified_revenue(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            self.assertEqual(ledger.snapshot("order-52")["effective_revenue_status"],
+                             "not_verified")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
