@@ -118,3 +118,7 @@ jobs:
           test "$(git hash-object -- scripts/mojplaywin_isolated_restore_capabilities_readonly.py)" = "70dcf0fabd4c581a41c6d01438c25faaa75df6bd"
           timeout 110s bash deploy/cpanel_direct_command.sh mpw_backup_readiness_readonly
           PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+          test "$(git hash-object -- scripts/mojplaywin_backup_vps_destination_readonly.py)" = "08b4cd466e18fcfb61369c0626d9e2596db5506b"
+          test "$(git hash-object -- scripts/mpw_vps_mount_capacity_readonly_20261105.py)" = "89a8b3ec3df04a8994c88caa8f6589bfa2f7ef26"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mojplaywin_backup_vps_destination_readonly.py vps
+          PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mpw_vps_mount_capacity_readonly_20261105.py
