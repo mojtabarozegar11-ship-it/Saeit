@@ -279,7 +279,7 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
 
 
-from .models import MojPropRequest
+from .models import MojPropRequest, MojPropOffer
 
 
 from django.utils import timezone as mojprop_timezone
@@ -296,7 +296,7 @@ def start_mojprop_review(modeladmin, request, queryset):
 
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
-    list_display = ("request_id", "name", "email", "route", "horizon", "status", "created_at", "reviewed_at")
+    list_display = ("request_id", "name", "email", "route", "horizon", "status", "offer_stage", "created_at", "reviewed_at")
     list_filter = ("status", "route", "horizon", "created_at")
     search_fields = ("request_id", "name", "email", "notes")
     readonly_fields = ("request_id", "created_at", "updated_at", "ip_hash", "user_agent")
@@ -304,3 +304,52 @@ class MojPropRequestAdmin(ModelAdmin):
     date_hierarchy = "created_at"
     list_per_page = 50
     actions = (start_mojprop_review,)
+
+
+    @admin.display(description="Written quote status")
+    def offer_stage(self, obj):
+        # Missing quotes are unresolved work, not hidden paid sales.
+        try:
+            return obj.commercial_offer.status
+        except MojPropOffer.DoesNotExist:
+            return "NO OFFER"
+
+
+@admin.register(MojPropOffer)
+class MojPropOfferAdmin(ModelAdmin):
+    """Real commercial quote pipeline; no automatic mail or fake settlement."""
+
+    list_display = (
+        "lead", "title", "amount", "currency", "status",
+        "delivery_days", "expires_at", "created_at",
+    )
+    list_filter = ("status", "currency", "delivery_days", "created_at")
+    search_fields = (
+        "lead__request_id", "lead__email", "lead__name", "title", "scope",
+    )
+    autocomplete_fields = ("lead",)
+    readonly_fields = (
+        "created_at", "updated_at", "created_by", "manual_proposal",
+    )
+    fields = (
+        "lead", "title", "scope", "exclusions",
+        "amount", "currency", "delivery_days",
+        "status", "reviewed_at", "issued_at", "expires_at",
+        "created_by", "internal_note", "manual_proposal",
+        "created_at", "updated_at",
+    )
+    ordering = ("-created_at",)
+
+    @admin.display(description="Unsent written proposal (not an invoice)")
+    def manual_proposal(self, obj):
+        if not obj.pk:
+            return "Save the draft first; no message is sent."
+        return obj.manual_quote_text
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        # Admin.save_model is also invoked on internal edits: validate
+        # every status, price and timeline before persisting.
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
