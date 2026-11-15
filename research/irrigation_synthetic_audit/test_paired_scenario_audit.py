@@ -1,12 +1,13 @@
 """Negative-path checks for the strict synthetic scenario postprocessor."""
 
 import csv
+import hashlib
 import math
 import tempfile
 import unittest
 from pathlib import Path
 
-from research.irrigation_synthetic_audit.paired_scenario_audit import (AuditError, FIELDS, analyze_family, load_records)
+from research.irrigation_synthetic_audit.paired_scenario_audit import (AuditError, FIELDS, analyze_family, file_sha256, load_records, verify_paper)
 
 
 def rows_for_family(family):
@@ -107,6 +108,186 @@ class AuditTests(unittest.TestCase):
             rows[0]["bias_vwc"] = .3
         with self.assertRaisesRegex(AuditError, "sensor bias"):
             self.make_records("C", unsupported)
+
+
+    def test_no_tradeoff_crossing_is_null(self):
+        def dominate(rows):
+            for row in rows:
+                if row["policy"] == "v3":
+                    row["gross_water_m3"] = 90
+        report = analyze_family(self.make_records("C", dominate), "C")
+        self.assertIsNone(report["case_crossing_lambda_median"])
+        self.assertEqual(report["comparisons"]["v3_dominates"], 540)
+
+    def test_tradeoff_crossing_has_correct_unit_ratio(self):
+        result = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(result["case_crossing_lambda_median"], 5.0)
+        self.assertEqual(result["mean_loss_crossing_lambda"], 5.0)
+
+    def test_path_level_output_has_twelve_complete_paths(self):
+        result = analyze_family(self.make_records("C"), "C")
+        effects = result["climate_path_effects"]
+        self.assertEqual(len(effects), 12)
+        self.assertEqual(sum(p["matched_keys"] for p in effects), 540)
+        self.assertTrue(all(p["matched_keys"] == 45 for p in effects))
+        self.assertTrue(all(p["mean_delta_water_m3"] == 10 for p in effects))
+        self.assertTrue(all(p["mean_delta_q100"] == -2 for p in effects))
+
+    def test_path_heterogeneity_is_not_hidden_by_global_mean(self):
+        def different_one_path(rows):
+            for row in rows:
+                if row["seed"] == 1000 and row["policy"] == "v3":
+                    row["gross_water_m3"] = 130
+        result = analyze_family(self.make_records("C", different_one_path), "C")
+        effects = result["climate_path_effects"]
+        self.assertEqual(effects[0]["mean_delta_water_m3"], 30)
+        self.assertTrue(all(p["mean_delta_water_m3"] == 10 for p in effects[1:]))
+        self.assertAlmostEqual(result["mean_delta_water_m3"], 10 + 20 / 12)
+
+    def test_pareto_partition_sums_to_matched_keys(self):
+        result = analyze_family(self.make_records("C"), "C")
+        counts = result["comparisons"]
+        categories = ("v3_dominates", "v2_dominates", "both_tied",
+                      "q_better_water_worse", "water_better_q_worse")
+        self.assertEqual(sum(counts[c] for c in categories), 540)
+        self.assertEqual(counts["water_better_q_worse"], 0)
+
+    def test_reverse_tradeoff_category_detected(self):
+        def reverse_tradeoff(rows):
+            for row in rows:
+                if row["policy"] == "v3":
+                    row["gross_water_m3"] = 90
+                    row["q_positive_plot_days"] = 12
+                    row["below_98_plot_days"] = 11
+        result = analyze_family(self.make_records("C", reverse_tradeoff), "C")
+        self.assertEqual(result["comparisons"]["water_better_q_worse"], 540)
+        self.assertEqual(result["comparisons"]["v3_dominates"], 0)
+
+    def test_overlong_csv_record_rejected(self):
+        row = next(rows_for_family("C"))
+        text = ",".join(FIELDS) + "\\n" + ",".join(str(row[f]) for f in FIELDS) + ",extra\\n"
+        with tempfile.TemporaryDirectory() as dirname:
+            path = Path(dirname) / "extra.csv"
+            path.write_text(text.replace("\\n", "\n"), encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "extra CSV fields"):
+                load_records(path)
+
+    def test_empty_csv_rejected(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            path = Path(dirname) / "empty.csv"
+            path.write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "Missing CSV header"):
+                load_records(path)
+
+    def test_missing_required_metric_header_rejected(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            path = Path(dirname) / "header.csv"
+            path.write_text("cohort,policy\\n".replace("\\n", "\n"), encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "Missing columns"):
+                load_records(path)
+
+    def test_unknown_forecast_case_rejected(self):
+        def change(rows):
+            rows[0]["forecast_case"] = "oracle"
+        with self.assertRaisesRegex(AuditError, "forecast case"):
+            self.make_records("C", change)
+
+    def test_unknown_climate_class_rejected(self):
+        def change(rows):
+            rows[0]["climate_class"] = "unknown"
+        with self.assertRaisesRegex(AuditError, "climate class"):
+            self.make_records("C", change)
+
+    def test_unsupported_et_factor_rejected(self):
+        def change(rows):
+            rows[0]["et_forecast_multiplier"] = 1.5
+        with self.assertRaisesRegex(AuditError, "ET factor"):
+            self.make_records("C", change)
+
+    def test_negative_water_rejected(self):
+        def change(rows):
+            rows[0]["gross_water_m3"] = -1
+        with self.assertRaisesRegex(AuditError, "Water cap"):
+            self.make_records("C", change)
+
+    def test_negative_drainage_rejected(self):
+        def change(rows):
+            rows[0]["drainage_sum_mm"] = -1
+        with self.assertRaisesRegex(AuditError, "Negative drainage"):
+            self.make_records("C", change)
+
+    def test_nonfinite_drainage_rejected(self):
+        def change(rows):
+            rows[0]["drainage_sum_mm"] = math.inf
+        with self.assertRaisesRegex(AuditError, "Nonfinite"):
+            self.make_records("C", change)
+
+    def test_excessive_event_count_rejected(self):
+        def change(rows):
+            rows[0]["irrigation_events"] = 121
+        with self.assertRaisesRegex(AuditError, "Invalid event or threshold count"):
+            self.make_records("C", change)
+
+    def test_threshold_count_order_rejected(self):
+        def change(rows):
+            rows[0]["q_positive_plot_days"] = 2
+            rows[0]["below_98_plot_days"] = 3
+        with self.assertRaisesRegex(AuditError, "Invalid event or threshold count"):
+            self.make_records("C", change)
+
+    def test_negative_q_count_rejected(self):
+        def change(rows):
+            rows[0]["q_positive_plot_days"] = -1
+        with self.assertRaisesRegex(AuditError, "Invalid event or threshold count"):
+            self.make_records("C", change)
+
+    def test_missing_policy_label_rejected(self):
+        def change(rows):
+            rows[0]["policy"] = ""
+        with self.assertRaisesRegex(AuditError, "Missing scenario/policy"):
+            self.make_records("C", change)
+
+    def test_unknown_policy_rejected(self):
+        def change(rows):
+            rows[0]["policy"] = "unknown_policy"
+        with self.assertRaisesRegex(AuditError, "unexpected policy"):
+            analyze_family(self.make_records("C", change), "C")
+
+    def test_noninteger_seed_rejected(self):
+        def change(rows):
+            rows[0]["seed"] = "1.25"
+        with self.assertRaisesRegex(AuditError, "Invalid count/seed"):
+            self.make_records("C", change)
+
+    def test_noninteger_event_count_rejected(self):
+        def change(rows):
+            rows[0]["irrigation_events"] = "1.5"
+        with self.assertRaisesRegex(AuditError, "Invalid count/seed"):
+            self.make_records("C", change)
+
+    def test_manuscript_checkpoints_not_assumed_for_mock_data(self):
+        result = analyze_family(self.make_records("C"), "C")
+        with self.assertRaisesRegex(AuditError, "discrepancy"):
+            verify_paper(result)
+
+    def test_file_digest_is_exact_byte_sha256(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            path = Path(dirname) / "bytes.bin"
+            contents = b"abc\\x00".replace(b"\\x00", b"\x00")
+            path.write_bytes(contents)
+            self.assertEqual(file_sha256(path), hashlib.sha256(contents).hexdigest())
+
+    def test_water_cap_boundary_is_accepted(self):
+        def change(rows):
+            for row in rows:
+                row["gross_water_m3"] = 320
+        result = analyze_family(self.make_records("C", change), "C")
+        self.assertEqual(result["means"]["v2"]["water_m3"], 320)
+
+    def test_r1_reports_twelve_climate_paths(self):
+        report = analyze_family(self.make_records("R1"), "R1")
+        self.assertEqual(len(report["climate_path_effects"]), 12)
+        self.assertEqual(sum(p["matched_keys"] for p in report["climate_path_effects"]), 540)
 
 
 if __name__ == "__main__":
