@@ -33,12 +33,8 @@ function makeNode() {
     value: "", hidden: true, checked: false, disabled: false, textContent: "",
     style: {}, required: false,
     maxLength: 5000, listeners: {}, addEventListener(type, handler) {
-      // A real DOM keeps every event listener; don't overwrite earlier
-      // service change listeners when adding another product selector.
-      const previous = this.listeners[type];
-      this.listeners[type] = previous
-        ? (...args) => { previous(...args); return handler(...args); }
-        : handler;
+      const prev = this.listeners[type];
+      this.listeners[type] = prev ? (...args)=>{prev(...args);return handler(...args);} : handler;
     }, setAttribute() {}, removeAttribute() {}
   };
 }
@@ -66,18 +62,13 @@ const ctx = {
       return {ok:true, json:async()=>({csrf_token:"test-only-csrf"})};
     }
     posted.push({url, body:JSON.parse(options.body)});
-    if (process.argv[5] === "lost-response") throw Error("POST transport response lost");
-    if (process.argv[5] === "invalid-email") {
-      return {status:400,ok:false,json:async()=>({
-        ok:false,detail:"Please correct the highlighted fields.",
-        fields:{email:"A valid email is required."}
-      })};
-    }
-    if (process.argv[5] === "throttled") {
-      return {status:429,ok:false,json:async()=>({
-        ok:false,detail:"Too many requests."
-      })};
-    }
+    if (process.argv[5] === "lost-response") throw Error("POST response lost");
+    if (process.argv[5] === "invalid-email") return {status:400,ok:false,json:async()=>({
+      ok:false,detail:"Please correct the highlighted fields.",fields:{email:"A valid email is required."}
+    })};
+    if (process.argv[5] === "throttled") return {status:429,ok:false,json:async()=>({
+      ok:false,detail:"Too many requests."
+    })};
     return {status:201,ok:true,json:async()=>({
       ok:true, request_id:"MOJPROP-20261115-A1B2C3D4",
       receipt_token:"synthetic-signed-token"
@@ -182,6 +173,46 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertEqual(state["posted"][0]["body"]["product_id"], 72)
         self.assertNotIn("Requested educational plan", state["posted"][0]["body"]["notes"])
 
+    def test_bounded_notes_must_not_create_a_false_receipt(self):
+        state = self._browser(
+            "?service=signals&plan=education-weekly",
+            notes="G" * 4970,
+        )
+        self.assertEqual(state["posted"], [])
+        self.assertFalse(state["downloadEnabled"])
+        self.assertIn("Request NOT submitted", state["receipt"])
+
+
+    def test_free_educational_request_preserves_free_scope_not_paid_sku(self):
+        state = self._browser("?service=signals&tier=free")
+        self.assertEqual(len(state["posted"]), 1)
+        notes = state["posted"][0]["body"]["notes"]
+        self.assertEqual(state["posted"][0]["body"]["service"], "signals")
+        self.assertIn("Requested free educational example", notes)
+        self.assertIn("FREE", state["summary"])
+        self.assertIn("free educational example", state["receipt"].lower())
+        self.assertNotIn("Requested educational plan:", notes)
+        self.assertTrue(state["downloadEnabled"])
+        self.assertFalse(state["hidden"])
+
+    def test_free_tier_wins_over_buyer_supplied_paid_plan_parameter(self):
+        state = self._browser("?service=signals&tier=free&plan=education-quarterly")
+        self.assertIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("education-quarterly", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("79.90", state["summary"])
+
+    def test_switching_away_removes_free_entitlement_claim(self):
+        state = self._browser("?service=signals&tier=free", "audit")
+        self.assertTrue(state["hidden"])
+        self.assertNotIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertEqual(state["posted"][0]["body"]["service"], "audit")
+
+    def test_unknown_free_tier_is_not_a_free_request(self):
+        state = self._browser("?service=signals&tier=bogus")
+        self.assertNotIn("Requested free educational example", state["posted"][0]["body"]["notes"])
+        self.assertTrue(state["hidden"])
+
+
     def test_starter_catalog_and_home_link_to_exact_real_intake(self):
         catalog = (ROOT / "templates/moj-prop-v4/catalog/index.html").read_text("utf-8")
         home = HOME.read_text("utf-8")
@@ -264,16 +295,6 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertNotIn("No ID or payment was created", state["receipt"])
         self.assertFalse(state["downloadEnabled"])
         self.assertNotIn("MOJPROP-20261115-A1B2C3D4", state["receipt"])
-
-    def test_bounded_notes_must_not_create_a_false_receipt(self):
-        state = self._browser(
-            "?service=signals&plan=education-weekly",
-            notes="G" * 4970,
-        )
-        self.assertEqual(state["posted"], [])
-        self.assertFalse(state["downloadEnabled"])
-        self.assertIn("Request NOT submitted", state["receipt"])
-
 
 if __name__ == "__main__":
     unittest.main()

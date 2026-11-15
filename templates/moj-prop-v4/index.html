@@ -89,7 +89,11 @@
         'education-quarterly':Object.freeze({label:'quarterly',usd:'79.90'})
       });
       const requestedPlan=new URLSearchParams(window.location.search).get('plan');
-      const selectedPlan=Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)
+      const freeTierRequested=requestedService==='signals' &&
+        new URLSearchParams(window.location.search).get('tier')==='free';
+      // A free research request must never inherit a paid SKU from a URL.
+      const selectedPlan=!freeTierRequested &&
+        Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)
         ? requestedPlan : '';
       const planSummary=document.getElementById('selected-signal-plan');
       const notesField=document.getElementById('notes');
@@ -97,22 +101,39 @@
         ? 'Requested educational plan: '+selectedPlan+
           ' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\n'
         : '';
-      if(requestedService==='signals' && selectedPlan && !notesField.value.trim()){
-        notesField.value='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief. A recurring subscription and payment have not been authorized.';
+      const freePrefix=freeTierRequested
+        ? 'Requested free educational example: one-off manual review; no subscription or payment.\n'
+        : '';
+      let signalPrefill='';
+      if(requestedService==='signals' && !notesField.value.trim()){
+        if(freeTierRequested){
+          signalPrefill='Please provide a FREE historical educational example through mojtaba.bot.ai. '+
+            'This is a one-off research request for manual review, not a live trading signal, subscription, or delivery guarantee.';
+        }else if(selectedPlan){
+          signalPrefill='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+
+            ' market brief. A recurring subscription and payment have not been authorized.';
+        }
+        if(signalPrefill) notesField.value=signalPrefill;
       }
       function syncSignalPlan(){
-        const show=Boolean(selectedPlan && serviceSelector.value==='signals');
+        // Remove only unchanged system prefill when switching away from signals.
+        if(serviceSelector.value!=='signals' && signalPrefill && notesField.value===signalPrefill){
+          notesField.value='';
+          signalPrefill='';
+          syncDigitalProduct();
+        }
+        const show=serviceSelector.value==='signals' && Boolean(selectedPlan || freeTierRequested);
         planSummary.hidden=!show;
-        planSummary.textContent=show
-          ? 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+
-            signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.'
-          : '';
-        notesField.maxLength=5000-(show ? planPrefix.length : 0);
+        planSummary.textContent=!show ? ''
+          : freeTierRequested
+          ? 'FREE educational example request. No automatic newsletter, payment or signal delivery.'
+          : 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+
+            signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.';
+        notesField.maxLength=5000-(show ? (freeTierRequested ? freePrefix.length : planPrefix.length) : 0);
       }
       serviceSelector.addEventListener('change',syncSignalPlan);
       syncSignalPlan();
 
-      // The Starter is a scoped manual inquiry, not a payable invoice.
       const requestedPackage=new URLSearchParams(window.location.search).get('package');
       const selectedStarter=requestedService==='blueprint' && requestedPackage==='starter-30-trx';
       const starterSummary=document.getElementById('selected-starter-package');
@@ -129,7 +150,7 @@
           ? 'Moj Prop Starter — 30 TRX advertised, one-time; written agreement and verified lawful invoice required before any payment.'
           : '';
         notesField.maxLength=5000-(show ? starterPrefix.length
-          : serviceSelector.value==='signals' && selectedPlan ? planPrefix.length : 0);
+          : serviceSelector.value==='signals' ? (freeTierRequested ? freePrefix.length : planPrefix.length) : 0);
       }
       serviceSelector.addEventListener('change',syncStarterPackage);
       syncStarterPackage();
@@ -168,7 +189,7 @@
         const service=document.getElementById('service').value;
         const horizon=document.getElementById('horizon').value;
         const notes=document.getElementById('notes').value.trim();
-        const submittedNotes=service==='signals' ? planPrefix+notes
+        const submittedNotes=service==='signals' ? (freeTierRequested ? freePrefix : planPrefix)+notes
           : service==='blueprint' ? starterPrefix+notes : notes;
         const website=document.getElementById('website').value.trim();
         const selectedProduct=service==='digital'&&permittedProducts.has(productSelector.value)?Number(productSelector.value):null;
@@ -206,8 +227,6 @@
              !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id) ||
              (data.receipt_token!==undefined &&
               (typeof data.receipt_token!=='string' || data.receipt_token.length>256))){
-             // A valid JSON 4xx rejection proves this POST was rejected; a lost
-             // response or proxy 5xx does NOT prove the database wrote nothing.
              explicitRejection=[400,403,413,429].includes(response.status) &&
                data.ok===false && typeof data.detail==='string';
              const problems=data.fields && typeof data.fields==='object' ? Object.entries(data.fields).map(([field,message])=>field+': '+message).join('; ') : '';

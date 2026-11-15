@@ -25,6 +25,7 @@ BRANDS = [
     ("108", "۱۰۸", "108", "١٠٨"),
 ]
 SIGNAL_INTAKE_PATH = "https://mojplaywin.com/moj-prop/?service=signals#request"
+SIGNAL_FREE_PREVIEW_PATH = "https://mojplaywin.com/moj-prop/signals/#free-preview"
 
 PALETTES = [
     ("emerald", "#0b322b", "#c9a65a"), ("amethyst", "#2b173c", "#dfbd7a"),
@@ -43,6 +44,7 @@ COPY = {
   "signals_intro":"مرور ساختارمند بازارهای مالی، سناریوها و مدیریت ریسک؛ با توضیح روشنِ فرض‌ها و محدودیت‌ها.",
   "signals_notice":"در این صفحه هنوز سیگنال زنده یا سابقهٔ عملکردِ راستی‌آزمایی‌شده منتشر نشده است. هیچ بازده یا سودی تضمین نمی‌شود.",
   "signals_cta":"Mojtaba.bot.ai · درخواست یادداشت آموزشی",
+  "signals_free_cta":"مشاهده نمونه رایگان آموزشی",
   "store_title":"فروشگاه محصولات دیجیتال",
   "store_intro":"راهنماها، قالب‌ها و محتوای آموزشی دیجیتال با توضیح روشن دربارهٔ محتوا و شرایط استفاده.",
   "store_notice":"فهرست محصولات و پرداخت این زیردسته هنوز فعال نشده است؛ موجودی، قیمت یا لینک خریدِ ساختگی نمایش داده نمی‌شود.",
@@ -57,6 +59,7 @@ COPY = {
   "signals_intro":"Structured market context, scenarios, and risk management, with assumptions and limitations stated clearly.",
   "signals_notice":"No live signal or independently verified performance history is published on this page yet. Returns and profits are never guaranteed.",
   "signals_cta":"Mojtaba.bot.ai · request an educational note",
+  "signals_free_cta":"View free educational example",
   "store_title":"Digital products shop",
   "store_intro":"Digital guides, templates, and learning materials with clear descriptions and usage terms.",
   "store_notice":"This sub-store's product listing and checkout are not active yet. No fictional stock, prices, or purchase links are shown.",
@@ -71,6 +74,7 @@ COPY = {
   "signals_intro":"عرض منظم للسوق والسيناريوهات وإدارة المخاطر، مع توضيح الافتراضات والقيود.",
   "signals_notice":"لا تُنشر هنا حالياً إشارات مباشرة أو نتائج أداء موثقة مستقلة. لا نضمن أي عائد أو ربح.",
   "signals_cta":"Mojtaba.bot.ai · طلب مذكرة تعليمية",
+  "signals_free_cta":"شاهد المثال التعليمي المجاني",
   "store_title":"متجر المنتجات الرقمية",
   "store_intro":"أدلة وقوالب ومواد تعليمية رقمية مع وصف واضح للمحتوى وشروط الاستخدام.",
   "store_notice":"قائمة المنتجات والدفع لهذا المتجر الفرعي غير مفعّلين بعد. لن نعرض مخزوناً أو أسعاراً أو روابط شراء وهمية.",
@@ -110,10 +114,13 @@ def financial_brand_page(request, brand, locale, page_type):
     shop_url = "/store/" if locale == "fa" else "/commerce/"
     destination_url = SIGNAL_INTAKE_PATH if page_type == "signals" else shop_url
     destination_label = copy["signals_cta"] if page_type == "signals" else copy["cta"]
+    free_destination_url = SIGNAL_FREE_PREVIEW_PATH if page_type == "signals" else ""
+    free_destination_label = copy["signals_free_cta"] if page_type == "signals" else ""
     return render(request, "core/financial_brand_page.html", {
         "brand_name": name, "brand_slug": slug, "locale": locale,
         "page_type": page_type, "page_title": title, "page_intro": intro,
         "page_notice": notice, "copy": copy, "shop_url": shop_url,
         "destination_url": destination_url, "destination_label": destination_label,
+        "free_destination_url": free_destination_url, "free_destination_label": free_destination_label,
         "page_palette": palette, "page_direction": "rtl" if locale in {"fa", "ar"} else "ltr",
     })
