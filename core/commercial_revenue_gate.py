@@ -534,6 +534,58 @@ class SQLiteCommercialLedger:
                     raise CommercialGateError("event_replay_mismatch")
                 if prior["state"] != row["state"] or prior["state"] != target.value:
                     raise CommercialGateError("stale_event_replay")
+                # An idempotent replay is not an authorization bypass: proof
+                # is required again for paid, delivered and revenue states.
+                if target in (CommercialState.SETTLED, CommercialState.VERIFIED_REVENUE):
+                    if not isinstance(payment_evidence, PaymentEvidence):
+                        raise CommercialGateError("settlement_evidence_required")
+                    replay_digest = _validated_evidence_digest(
+                        payment_evidence, expected_order_id=order_id,
+                        expected_amount=Decimal(row["amount"]), expected_currency=row["currency"],
+                    )
+                    if target is CommercialState.SETTLED and replay_digest != payload_digest:
+                        raise CommercialGateError("event_replay_mismatch")
+                    issued = self.connection.execute(
+                        "SELECT invoice_id FROM issued_invoices WHERE order_id = ?", (order_id,),
+                    ).fetchone()
+                    if issued is None or issued["invoice_id"] != payment_evidence.invoice_id:
+                        raise CommercialGateError("settlement_invoice_mismatch")
+                    settled = self.connection.execute(
+                        "SELECT transaction_id FROM settled_transactions WHERE network = ? AND order_id = ?",
+                        (payment_evidence.network, order_id),
+                    ).fetchone()
+                    if settled is None or settled["transaction_id"] != payment_evidence.transaction_id.lower():
+                        raise CommercialGateError("verified_revenue_settlement_mismatch")
+                    if self._settlement_verifier is None:
+                        raise CommercialGateError("independent_settlement_verifier_required")
+                    try:
+                        payment_confirmed = self._settlement_verifier(payment_evidence)
+                    except Exception:
+                        raise CommercialGateError("independent_settlement_verifier_failed") from None
+                    if payment_confirmed is not True:
+                        raise CommercialGateError("independent_settlement_unverified")
+                    if target is CommercialState.VERIFIED_REVENUE and verified_revenue is not True:
+                        raise CommercialGateError("verified_revenue_attestation_required")
+                if target in (CommercialState.FULFILLED, CommercialState.VERIFIED_REVENUE):
+                    manifest = fulfillment_manifest_sha256
+                    if target is CommercialState.VERIFIED_REVENUE:
+                        delivered = self.connection.execute(
+                            "SELECT payload_digest FROM order_events WHERE order_id = ? AND state = ?",
+                            (order_id, CommercialState.FULFILLED.value),
+                        ).fetchone()
+                        if delivered is None:
+                            raise CommercialGateError("fulfillment_evidence_missing")
+                        manifest = delivered["payload_digest"]
+                    elif manifest != payload_digest:
+                        raise CommercialGateError("fulfillment_payload_mismatch")
+                    if self._delivery_verifier is None:
+                        raise CommercialGateError("independent_delivery_verifier_required")
+                    try:
+                        delivered_confirmed = self._delivery_verifier(order_id, manifest)
+                    except Exception:
+                        raise CommercialGateError("independent_delivery_verifier_failed") from None
+                    if delivered_confirmed is not True:
+                        raise CommercialGateError("independent_delivery_unverified")
                 return CommercialState(prior["state"])
             current = CommercialState(row["state"])
             if target is CommercialState.FULFILLED and payload_digest != fulfillment_manifest_sha256:
