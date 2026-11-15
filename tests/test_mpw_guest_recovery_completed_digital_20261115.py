@@ -4,11 +4,21 @@ Pure ORM mocks, no real orders, email, media access, paid invoice or RPC.
 The independent finalized payment and guest email ownership checks continue
 to run separately on each recovery endpoint and are not bypassed here.
 """
+import ast
+from pathlib import Path
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from services import mpw_trx_email_recovery as recovery
+SOURCE = Path(__file__).resolve().parents[1] / "services/mpw_trx_email_recovery.py"
+TREE = ast.parse(SOURCE.read_text(encoding="utf-8"))
+NODES = [
+    n for n in TREE.body if isinstance(n, ast.FunctionDef) and n.name == "_ready"
+]
+if len(NODES) != 1:
+    raise AssertionError("Buyer entitlement helper must exist exactly once")
+SCOPE = {}
+exec(compile(ast.Module(body=NODES, type_ignores=[]), str(SOURCE), "exec"), SCOPE)
 
 
 class PurchasedDigitalRecoveryTests(unittest.TestCase):
@@ -35,11 +45,10 @@ class PurchasedDigitalRecoveryTests(unittest.TestCase):
     def run_recovery(self, **kwargs):
         orderitems, fulfillment = self.candidate(**kwargs)
         order = SimpleNamespace(pk=101)
-        with patch.object(recovery, "apps") as apps, patch.object(
-            recovery, "OrderItem", orderitems
-        ):
-            apps.get_model.return_value = fulfillment
-            result = recovery._ready(order)
+        apps = Mock()
+        apps.get_model.return_value = fulfillment
+        with patch.dict(SCOPE, {"apps": apps, "OrderItem": orderitems}):
+            result = SCOPE["_ready"](order)
         return result, fulfillment
 
     def test_completed_digital_grants_remain_recoverable(self):
