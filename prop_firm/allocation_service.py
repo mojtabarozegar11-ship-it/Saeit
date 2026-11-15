@@ -53,6 +53,13 @@ def _verified_source(account, *, period_end):
         for mark in marks
     ):
         raise AllocationRejected("Unverified brokerage equity evidence")
+    # Signing keys from separate providers do not make their records one
+    # continuous funded account. Mixing brokers can double count equity or
+    # conceal losses even when every row was individually signed.
+    execution_sources = {event.data_source for event in executions}
+    mark_sources = {mark.data_source for mark in marks}
+    if len(execution_sources) != 1 or mark_sources != execution_sources:
+        raise AllocationRejected("Funded brokerage source continuity mismatch")
     return executions, marks
 
 
