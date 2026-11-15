@@ -359,6 +359,38 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_verified_revenue_cannot_swap_settlement_transaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            for state, event in ((CommercialState.QUOTED, "quote-52"),
+                                 (CommercialState.INVOICED, "invoice-52"),
+                                 (CommercialState.PAYMENT_PENDING, "pending-52")):
+                ledger.advance(order_id="order-52", target=state,
+                               event_id=event, payload_digest="a" * 64)
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                           event_id="settle-52", payload_digest=digest, payment_evidence=evidence)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="fulfill-pending-52", payload_digest="b" * 64)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                           event_id="fulfilled-52", payload_digest="c" * 64,
+                           fulfillment_manifest_sha256="d" * 64)
+            with self.assertRaisesRegex(CommercialGateError, "verified_revenue_settlement_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                               event_id="verified-52", payload_digest="e" * 64,
+                               payment_evidence=self.payment(transaction_id="different-valid-transaction"),
+                               verified_revenue=True)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfilled")
+            ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                           event_id="verified-52-valid", payload_digest="e" * 64,
+                           payment_evidence=evidence, verified_revenue=True)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "verified_revenue")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
