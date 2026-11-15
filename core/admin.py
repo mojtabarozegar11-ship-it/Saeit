@@ -284,6 +284,8 @@ from django import forms
 from django.utils import timezone
 from .mojprop_workflow import validate_status_change
 from .mojprop_offer_draft import build_offer_draft
+from django.db import transaction
+from django.core.exceptions import PermissionDenied, ValidationError
 
 
 class MojPropRequestStatusForm(forms.ModelForm):
@@ -353,8 +355,25 @@ class MojPropRequestAdmin(ModelAdmin):
         return response
 
     def save_model(self, request, obj, form, change):
-        old = (MojPropRequest.objects.filter(pk=obj.pk)
-               .values_list("status", flat=True).first()) if change else None
-        if old == "new" and obj.status == "reviewing" and obj.reviewed_at is None:
-            obj.reviewed_at = timezone.now()
-        super().save_model(request, obj, form, change)
+        if not change or not obj.pk:
+            raise PermissionDenied("A real consented customer request is required")
+        # Re-evaluate against the latest locked row. A stale admin form must
+        # never overwrite a more recent client's approval or delivery evidence.
+        with transaction.atomic():
+            locked = (MojPropRequest.objects.select_for_update()
+                      .filter(pk=obj.pk).first())
+            if locked is None:
+                raise PermissionDenied("Customer request no longer exists")
+            try:
+                validate_status_change(
+                    locked.status, obj.status, obj.internal_note, locked.internal_note
+                )
+            except ValidationError as exc:
+                raise PermissionDenied(
+                    "Customer status/evidence changed; refresh before saving"
+                ) from exc
+            if locked.status == "new" and obj.status == "reviewing" and locked.reviewed_at is None:
+                obj.reviewed_at = timezone.now()
+            else:
+                obj.reviewed_at = locked.reviewed_at
+            super().save_model(request, obj, form, change)
