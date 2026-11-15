@@ -268,6 +268,12 @@ def analyze_family(records: list[dict], family: str) -> dict:
         "climate_class_effects": climate_class_effects,
         "means": means, "comparisons": counts,
         "mean_delta_water_m3": mean_dv, "mean_delta_q100": mean_dq,
+        "median_delta_water_m3": statistics.median(x[0] for x in all_deltas),
+        "median_delta_q100": statistics.median(x[1] for x in all_deltas),
+        "range_delta_water_m3": [min(x[0] for x in all_deltas),
+                                  max(x[0] for x in all_deltas)],
+        "range_delta_q100": [min(x[1] for x in all_deltas),
+                             max(x[1] for x in all_deltas)],
         "mean_loss_crossing_lambda": mean_dv / -mean_dq if mean_dq < 0 else None,
         "case_crossing_lambda_median": statistics.median(crossed) if crossed else None,
         "weights": {str(w): {**weights[w], "mean_delta_loss": mean_dv+w*mean_dq}
