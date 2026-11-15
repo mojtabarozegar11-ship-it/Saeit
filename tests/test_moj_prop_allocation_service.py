@@ -83,6 +83,27 @@ class MojPropProvisionalAllocationTests(TestCase):
         with self.assertRaises(AllocationRejected):
             self.stage()
 
+    def test_duplicate_funded_broker_account_never_stages_double_trader_profit(self):
+        self.trade_day()
+        PropAccount.objects.create(
+            trader=self.trader, kind=PropAccount.Kind.FUNDED,
+            status=PropAccount.Status.ACTIVE, tier_index=0,
+            starting_capital_usd=Decimal("100.00"),
+            opened_at=OPENED, reference=self.account.reference,
+            reconciled_by_operator=True, policy_version=POLICY.version,
+        )
+        with self.assertRaisesRegex(AllocationRejected, "reference is not unique"):
+            self.stage()
+        self.assertFalse(PropProfitAllocation.objects.exists())
+        self.assertFalse(PropProfitJournalLine.objects.exists())
+
+    def test_funded_broker_reference_with_hidden_whitespace_is_not_reconciled(self):
+        self.trade_day()
+        self.account.reference = " broker-demo-reference-only "
+        self.account.save(update_fields=["reference"])
+        with self.assertRaisesRegex(AllocationRejected, "reference is not unique"):
+            self.stage()
+
     def test_valid_verified_month_stages_only_provisional_distribution(self):
         self.trade_day()
         a = self.stage()
