@@ -2,7 +2,8 @@
 from django.contrib import admin
 from .models import (
     PropTrader, PropAccount, PropExecution, PropEquityObservation, PropDecisionLog,
-    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,\n    PropApplicant,
+    PropProfitAllocation, PropProfitJournalLine, PropSocialEvidence, PropChallengeEnrollment,
+    PropApplicant,
 )
 
 
