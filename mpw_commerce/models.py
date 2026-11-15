@@ -39,10 +39,6 @@ class CommerceInvoice(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["network","recipient","amount_atomic"],
-                name="mpw_commerce_unique_native_amount",
-            ),
             models.CheckConstraint(
                 condition=Q(total_usd__gt=0),
                 name="mpw_commerce_positive_usd",
