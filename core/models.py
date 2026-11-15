@@ -578,6 +578,8 @@ class MojPropOffer(T):
     expires_at = models.DateTimeField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     issued_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    acceptance_reference = models.CharField(max_length=180, blank=True, default="")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name="mojprop_offers", null=True, blank=True,
@@ -647,6 +649,15 @@ class MojPropOffer(T):
                 errors["expires_at"] = "A written offer must have an expiry date."
         if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
             errors["expires_at"] = "Expiry must follow issuance."
+        if self.status == "accepted":
+            if not self.accepted_at or not self.acceptance_reference.strip():
+                errors["acceptance_reference"] = "Record verifiable customer acceptance before calling a quote accepted."
+            if (self.accepted_at and self.issued_at and self.accepted_at < self.issued_at):
+                errors["accepted_at"] = "Customer cannot accept before a quote was issued."
+            if (self.accepted_at and self.expires_at and self.accepted_at > self.expires_at):
+                errors["accepted_at"] = "An expired proposal cannot be accepted."
+        if self.accepted_at and self.accepted_at > timezone.now():
+            errors["accepted_at"] = "Customer acceptance cannot be in the future."
         if errors:
             raise ValidationError(errors)
 
@@ -663,6 +674,7 @@ class MojPropOffer(T):
             f"Exclusions: {self.exclusions}\n"
             f"Quoted amount: {self.amount} {self.currency}\n"
             f"Target delivery: {self.delivery_days} day(s) after a separate agreement.\n"
+            f"Proposal status: {self.status}; expires: {self.expires_at.isoformat() if self.expires_at else 'not issued'}\n"
             "No payment has been collected; a lawful payment route and written agreement are required."
         )
 
