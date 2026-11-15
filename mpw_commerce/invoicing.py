@@ -70,7 +70,8 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
         or timezone.is_naive(buyer.verified_at)
         or not timedelta(0)<=now-buyer.verified_at<=timedelta(minutes=5)):
         raise InvoiceRejected("Expired buyer-sender challenge")
-    if (quote.source not in ("coingecko","coinbase")
+    if (type(quote.source) is not str
+        or quote.source not in ("coingecko","coinbase")
         or type(quote.observed_at) is not datetime
         or timezone.is_naive(quote.observed_at)
         or not timedelta(0)<=now-quote.observed_at<=timedelta(seconds=90)):
@@ -80,6 +81,14 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
     rate = quote.usd_per_asset
     if type(rate) is not Decimal or not rate.is_finite() or rate <= 0:
         raise InvoiceRejected("Invalid trusted Decimal quote")
+    # CommerceInvoice.quote_usd_per_asset is decimal(30,12). Rounding a
+    # trusted rate during save must never change the customer invoice amount.
+    try:
+        if (rate >= Decimal("1e18")
+                or rate != rate.quantize(Decimal("0.000000000001"))):
+            raise InvoiceRejected("Quote exceeds immutable database precision")
+    except (ArithmeticError, ValueError) as exc:
+        raise InvoiceRejected("Quote cannot be represented exactly") from exc
     with transaction.atomic():
         order=(Order.objects.select_for_update()
                .select_related("customer").filter(pk=order_id).first())
