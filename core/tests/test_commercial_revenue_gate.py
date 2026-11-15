@@ -754,6 +754,117 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def _prepare_private_invoice(self, ledger, order_id):
+        invoice_id = "invoice-" + order_id.split("-")[-1]
+        digest = invoice_commitment(order_id=order_id, invoice_id=invoice_id,
+                                    amount=Decimal("30"), currency="TRX")
+        ledger.create_order(order_id=order_id, offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+        ledger.advance(order_id=order_id, target=CommercialState.QUOTED,
+                       event_id="quoted-" + order_id, payload_digest="a" * 64)
+        ledger.advance(order_id=order_id, target=CommercialState.INVOICED,
+                       event_id="invoiced-" + order_id, payload_digest=digest)
+        ledger.bind_issued_invoice(order_id=order_id, invoice_id=invoice_id, payload_digest=digest)
+        ledger.advance(order_id=order_id, target=CommercialState.PAYMENT_PENDING,
+                       event_id="pending-" + order_id, payload_digest="b" * 64)
+        return invoice_id
+
+    def test_invoice_reference_cannot_be_rebound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            with self.assertRaisesRegex(CommercialGateError, "invoice_already_registered"):
+                ledger.bind_issued_invoice(order_id="order-52", invoice_id="invoice-52",
+                    payload_digest=invoice_commitment(order_id="order-52", invoice_id="invoice-52",
+                                                      amount=Decimal("30"), currency="TRX"))
+            ledger.close()
+
+    def test_settlement_rejects_another_invoice_even_with_matching_trx(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            wrong = self.payment(invoice_id="invoice-53")
+            proof = validate_payment_evidence(wrong, expected_order_id="order-52",
+                expected_invoice_id="invoice-53", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "settlement_invoice_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                               event_id="settle-52", payload_digest=proof, payment_evidence=wrong)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+    def test_same_tron_tx_different_letter_case_cannot_settle_two_orders(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            self._prepare_private_invoice(ledger, "order-53")
+            first = self.payment(transaction_id="A" * 64)
+            proof1 = validate_payment_evidence(first, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                           event_id="settled-52", payload_digest=proof1, payment_evidence=first)
+            second = self.payment(order_id="order-53", invoice_id="invoice-53",
+                                  transaction_id="a" * 64)
+            proof2 = validate_payment_evidence(second, expected_order_id="order-53",
+                expected_invoice_id="invoice-53", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "transaction_already_settled"):
+                ledger.advance(order_id="order-53", target=CommercialState.SETTLED,
+                               event_id="settled-53", payload_digest=proof2, payment_evidence=second)
+            self.assertEqual(ledger.snapshot("order-53")["state"], "payment_pending")
+            ledger.close()
+
+    def test_invalid_expected_invoice_identifier_fails_closed(self):
+        with self.assertRaisesRegex(CommercialGateError, "expected_invoice_id_invalid"):
+            validate_payment_evidence(self.payment(), expected_order_id="order-52",
+                expected_invoice_id="invoice 52", expected_amount=Decimal("30"), expected_currency="TRX")
+
+    def test_snapshot_rejects_invalid_identifier_without_sqlite_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            with self.assertRaisesRegex(CommercialGateError, "order_id_required"):
+                ledger.snapshot(None)
+            ledger.close()
+
+    def test_invalid_ledger_state_enum_does_not_mutate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "invalid_state_transition"):
+                ledger.advance(order_id="order-52", target="quoted",
+                               event_id="quoted-52", payload_digest="a" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "ordered")
+            ledger.close()
+
+    def test_invoice_registry_disallows_update_and_delete(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "immutable_invoice"):
+                ledger.connection.execute("UPDATE issued_invoices SET invoice_id = ? WHERE order_id = ?",
+                                          ("invoice-53", "order-52"))
+            ledger.connection.rollback()
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "immutable_invoice"):
+                ledger.connection.execute("DELETE FROM issued_invoices WHERE order_id = ?", ("order-52",))
+            ledger.connection.rollback()
+            ledger.close()
+
+    def test_second_connection_cannot_consume_stale_uncommitted_order_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "ledger.sqlite3")
+            first = SQLiteCommercialLedger(path)
+            first.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            second = SQLiteCommercialLedger(path)
+            second.connection.execute("PRAGMA busy_timeout=1")
+            first.connection.execute("BEGIN IMMEDIATE")
+            try:
+                with self.assertRaises(sqlite3.OperationalError):
+                    second.advance(order_id="order-52", target=CommercialState.QUOTED,
+                                   event_id="quote-52", payload_digest="a" * 64)
+            finally:
+                first.connection.rollback()
+            self.assertEqual(second.snapshot("order-52")["state"], "ordered")
+            first.close()
+            second.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
