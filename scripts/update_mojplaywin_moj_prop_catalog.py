@@ -121,12 +121,14 @@ def deploy(run_id: str, commit_sha: str) -> None:
     }
     (backup / "index.before").write_bytes(previous)
     (backup / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    changed = False
+    index_written = False
+    catalog_written = False
     try:
         atomic_write(old_index, new_index)
+        index_written = True
         if catalog_created:
             atomic_write(catalog, new_catalog)
-        changed = True
+            catalog_written = True
         if digest(old_index.read_bytes()) != manifest["index_after"]:
             raise RuntimeError("Moj Prop index verification failed")
         if digest(catalog.read_bytes()) != manifest["catalog_after"]:
