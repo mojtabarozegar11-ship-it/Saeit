@@ -559,9 +559,10 @@ class MojPropOffer(T):
         ("expired", "Expired"),
     )
     CURRENCIES = (("USD", "US dollar"), ("IRR", "Iranian rial"))
-    lead = models.OneToOneField(
-        MojPropRequest, on_delete=models.PROTECT, related_name="commercial_offer"
+    lead = models.ForeignKey(
+        MojPropRequest, on_delete=models.PROTECT, related_name="commercial_offers"
     )
+    version = models.PositiveSmallIntegerField(default=1)
     title = models.CharField(max_length=180)
     scope = models.TextField()
     exclusions = models.TextField(
@@ -583,6 +584,13 @@ class MojPropOffer(T):
     class Meta:
         ordering = ("-created_at",)
         constraints = [
+            models.UniqueConstraint(
+                fields=("lead", "version"), name="mojprop_one_offer_per_version"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(version__gte=1) & models.Q(version__lte=999),
+                name="mojprop_valid_offer_version",
+            ),
             models.CheckConstraint(
                 condition=models.Q(amount__gt=0),
                 name="mojprop_offer_positive_amount",
@@ -612,8 +620,21 @@ class MojPropOffer(T):
         if (type(self.delivery_days) is not int
                 or not 1 <= self.delivery_days <= 90):
             errors["delivery_days"] = "Delivery must be between 1 and 90 days."
+        if type(self.version) is not int or not 1 <= self.version <= 999:
+            errors["version"] = "Proposal version must be 1-999."
         if self.lead_id and self.lead.route not in ("blueprint", "signals", "brief", "audit"):
             errors["lead"] = "Unsupported commercial request."
+        if self.pk:
+            prior = type(self).objects.filter(pk=self.pk).first()
+            if prior and prior.status in ("issued", "accepted"):
+                protected = ("lead_id", "version", "title", "scope",
+                             "exclusions", "amount", "currency",
+                             "delivery_days", "issued_at", "reviewed_at", "expires_at")
+                if any(getattr(prior, field) != getattr(self, field) for field in protected):
+                    errors["status"] = "Issued proposal terms cannot be rewritten; create a new revision."
+                if self.status not in (prior.status, "cancelled", "expired", "accepted"):
+                    errors["status"] = "An issued offer cannot revert to draft or review."
+
         if self.status in ("approved", "issued", "accepted") and self.reviewed_at is None:
             errors["reviewed_at"] = "A manual review timestamp is required."
         if self.status in ("issued", "accepted"):
@@ -631,7 +652,7 @@ class MojPropOffer(T):
         """Copyable draft text; intentionally not an invoice or a payment request."""
         return (
             f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\n"
-            f"Reference: {self.lead.request_id}\n"
+            f"Reference: {self.lead.request_id} / version {self.version}\n"
             f"Service: {self.get_lead_route_display()}\n"
             f"Deliverable: {self.title}\n"
             f"Scope: {self.scope}\n"
