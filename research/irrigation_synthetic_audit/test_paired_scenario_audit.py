@@ -13,6 +13,7 @@ from research.irrigation_synthetic_audit.paired_scenario_audit import (AuditErro
 def rows_for_family(family):
     policies = ("integrated", "v2", "v3") if family == "C" else (
         "integrated", "integrated_forecast_ET", "v2", "v3")
+    prefix = "C" if family == "C" else "R"  # Matches real workbook IDs.
     for path_id in range(12):
         climate = ("dry", "medium", "wet")[path_id // 4]
         for bias in (-.02, -.01, 0, .01, .02):
@@ -20,7 +21,7 @@ def rows_for_family(family):
                 for weather_case in ("perfect", "missing", "falsePositive"):
                     for policy in policies:
                         yield {
-                            "cohort": f"{family}-{climate}-{path_id}",
+                            "cohort": f"{prefix}-{climate}-{path_id}",
                             "seed": 1000 + path_id, "climate_class": climate,
                             "bias_vwc": bias, "et_forecast_multiplier": et,
                             "forecast_case": weather_case, "policy": policy,
@@ -75,7 +76,7 @@ class AuditTests(unittest.TestCase):
     def test_cross_family_cohort_rejected(self):
         def contaminate(rows):
             for row in rows:
-                row["cohort"] = row["cohort"].replace("C-", "R1-", 1)
+                row["cohort"] = row["cohort"].replace("C-", "R-", 1)
         with self.assertRaisesRegex(AuditError, "cross-family"):
             analyze_family(self.make_records("C", contaminate), "C")
 
@@ -283,6 +284,19 @@ class AuditTests(unittest.TestCase):
                 row["gross_water_m3"] = 320
         result = analyze_family(self.make_records("C", change), "C")
         self.assertEqual(result["means"]["v2"]["water_m3"], 320)
+
+    def test_real_workbook_r_prefix_accepted(self):
+        report = analyze_family(self.make_records("R1"), "R1")
+        self.assertEqual(report["matched_keys"], 540)
+        self.assertTrue(all(p["cohort"].startswith("R-")
+                            for p in report["climate_path_effects"]))
+
+    def test_incorrect_r1_prefix_rejected(self):
+        def change(rows):
+            for row in rows:
+                row["cohort"] = row["cohort"].replace("R-", "R1-", 1)
+        with self.assertRaisesRegex(AuditError, "cross-family"):
+            analyze_family(self.make_records("R1", change), "R1")
 
     def test_r1_reports_twelve_climate_paths(self):
         report = analyze_family(self.make_records("R1"), "R1")
