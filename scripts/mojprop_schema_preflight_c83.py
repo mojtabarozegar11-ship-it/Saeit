@@ -63,16 +63,27 @@ def has_reviewed_legacy_suffix(live_root, staged_root, relative):
 
 
 def migration_operations_signature(path):
-    """Compare migration operations, ignoring only installer-selected parent."""
+    """Fingerprint the WHOLE migration, ignoring only its approved DB parent.
+
+    Comparing the operations expression alone misses malicious/unreviewed
+    RunPython helper functions, imports, class options and executable top-level
+    code. The installer may choose the dependency parent, but nothing else.
+    """
     root = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     migrations = [n for n in root.body if isinstance(n, ast.ClassDef) and n.name == "Migration"]
     if len(migrations) != 1:
         raise RuntimeError("Moj Prop migration must contain exactly one Migration class")
-    ops = [n.value for n in migrations[0].body if isinstance(n, ast.Assign)
+    definitions = migrations[0].body
+    ops = [n for n in definitions if isinstance(n, ast.Assign)
            and any(isinstance(t, ast.Name) and t.id == "operations" for t in n.targets)]
-    if len(ops) != 1:
-        raise RuntimeError("Moj Prop migration missing or ambiguous operations")
-    return ast.dump(ops[0], include_attributes=False)
+    parents = [n for n in definitions if isinstance(n, ast.Assign)
+               and any(isinstance(t, ast.Name) and t.id == "dependencies" for t in n.targets)]
+    if len(ops) != 1 or len(parents) != 1:
+        raise RuntimeError("Moj Prop migration missing or ambiguous operations/dependencies")
+    if len(parents[0].targets) != 1 or not isinstance(parents[0].targets[0], ast.Name):
+        raise RuntimeError("Moj Prop migration has unsafe dependency assignment")
+    parents[0].value = ast.Constant(value="__INSTALLER_SELECTED_PARENT__")
+    return ast.dump(root, include_attributes=False)
 
 
 def _dependency(path, name):
