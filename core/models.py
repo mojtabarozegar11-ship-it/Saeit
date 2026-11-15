@@ -543,3 +543,17 @@ class MojPropRequest(T):
             models.Index(fields=("email", "created_at"), name="mojprop_email_created_idx"),
             models.Index(fields=("ip_hash", "created_at"), name="mojprop_ip_created_idx"),
         ]
+
+class MojPropRateBucket(models.Model):
+    """Cross-worker abuse quota for the ONE canonical public Moj Prop intake.
+
+    Digest is a keyed HMAC of client origin/email and a time window; no raw IP,
+    email, or agent string is stored in this auxiliary table.
+    """
+    digest = models.CharField(max_length=64, primary_key=True, editable=False)
+    count = models.PositiveSmallIntegerField(default=0, editable=False)
+    expires_at = models.DateTimeField(editable=False)
+
+    class Meta:
+        db_table = "moj_prop_intake_rate_bucket"
+        default_permissions = ("view",)
