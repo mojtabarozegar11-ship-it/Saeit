@@ -98,3 +98,31 @@ class DigitalBuyerRequestTests(TestCase):
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
         self.assertEqual(MojPropRequest.objects.count(), 1)
 
+
+    def test_digital_buyer_receives_private_receipt_and_can_read_progress(self):
+        response = self.submit(product_id=225)
+        self.assertEqual(response.status_code, 201)
+        token = response.json().get("receipt_token")
+        self.assertTrue(token)
+        status = self.client.get("/moj-prop-status/", {"receipt_token": token})
+        self.assertEqual(status.status_code, 200)
+        body = status.json()
+        self.assertEqual(body["request_id"], response.json()["request_id"])
+        self.assertEqual(body["status"], "new")
+        self.assertEqual(body["payment_status"], "not_collected_by_this_service")
+        self.assertNotIn("email", body)
+        self.assertNotIn("notes", body)
+        self.assertNotIn("product_id", body)
+        self.assertEqual(status["Referrer-Policy"], "no-referrer")
+        self.assertEqual(status["Cache-Control"], "no-store")
+
+    def test_unsigned_or_modified_receipt_never_exposes_a_digital_lead(self):
+        response = self.submit(product_id=879)
+        token = response.json()["receipt_token"]
+        for secret in ("", response.json()["request_id"], token + "x"):
+            with self.subTest(secret_present=bool(secret)):
+                lookup = self.client.get("/moj-prop-status/", {"receipt_token": secret})
+                self.assertEqual(lookup.status_code, 404)
+                self.assertNotIn("email", lookup.content.decode("utf-8"))
+                self.assertNotIn("notes", lookup.content.decode("utf-8"))
+
