@@ -72,8 +72,8 @@ def _read(fd: int, name: str, uid: int, *, minimum=64) -> bytes:
         with os.fdopen(os.dup(handle), "rb") as src:
             body = src.read(MAX_BYTES + 1)
         after = os.fstat(handle)
-        if len(body) != before.st_size or (after.st_ino, after.st_mtime_ns, after.st_size) != (
-                before.st_ino, before.st_mtime_ns, before.st_size):
+        if len(body) != before.st_size or (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_ctime_ns, after.st_size) != (
+                before.st_dev, before.st_ino, before.st_mtime_ns, before.st_ctime_ns, before.st_size):
             raise RuntimeError("file changed while reading")
         return body
     finally:
