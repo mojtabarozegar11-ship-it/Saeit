@@ -78,15 +78,22 @@ def _email(value):
 
 
 def _posted_email(request):
-    # Different checkout templates have historically used these four names.
-    # Reject conflicting values instead of choosing an attacker-controlled one.
+    """Require one unambiguous owned buyer address, even for legacy forms.
+
+    Never ignore an empty repeated value: an attacker could otherwise append
+    hidden aliases that are interpreted differently by an invoice handler.
+    """
+    names = ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email")
     values = []
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        for value in request.POST.getlist(key):
-            if value:
-                values.append(_email(value))
-    if not values or any(value != values[0] for value in values):
-        raise ValueError("Missing or conflicting checkout email")
+    for key in names:
+        items = request.POST.getlist(key)
+        # One physical field per name. Do not accept HTTP parameter pollution.
+        if len(items) > 1:
+            raise ValueError("Duplicate checkout email field")
+        if items:
+            values.append(_email(items[0]))
+    if len(values) != 1:
+        raise ValueError("Missing or ambiguous checkout email")
     return values[0]
 
 
