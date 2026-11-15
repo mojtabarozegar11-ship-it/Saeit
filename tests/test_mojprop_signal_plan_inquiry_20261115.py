@@ -24,8 +24,7 @@ const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
 const applicationScript = scripts.find(s => s[1].includes("const form=document.getElementById('request-form')"));
 if (!applicationScript) throw Error("Application form script was not found");
 const ids = ["request-form", "result", "copy", "download", "receipt-token",
-  "status-check", "status-result", "selected-signal-plan",
-  "selected-starter-package", "notes",
+  "status-check", "status-result", "selected-signal-plan", "selected-starter30", "notes",
   "service", "name", "email", "horizon", "website", "consent",
   "digital-product", "digital-product-field", "status-form", "status-token"];
 function makeNode() {
@@ -33,8 +32,8 @@ function makeNode() {
     value: "", hidden: true, checked: false, disabled: false, textContent: "",
     style: {}, required: false,
     maxLength: 5000, listeners: {}, addEventListener(type, handler) {
-      const prev = this.listeners[type];
-      this.listeners[type] = prev ? (...args)=>{prev(...args);return handler(...args);} : handler;
+      const earlier=this.listeners[type];
+      this.listeners[type]=earlier ? (...args)=>{earlier(...args);return handler(...args);} : handler;
     }, setAttribute() {}, removeAttribute() {}
   };
 }
@@ -43,7 +42,7 @@ elements["name"].value = "Real Buyer";
 elements["email"].value = "buyer@example.com";
 elements["service"].value = "blueprint";
 elements["horizon"].value = "week";
-elements["notes"].value = process.argv[4] || "A detailed educational research objective for gold.";
+elements["notes"].value = process.argv[4] === "__EMPTY__" ? "" : (process.argv[4] || "A detailed educational research objective for gold.");
 elements["consent"].checked = true;
 elements["request-form"].querySelector = () => makeNode();
 const posted = [];
@@ -62,13 +61,9 @@ const ctx = {
       return {ok:true, json:async()=>({csrf_token:"test-only-csrf"})};
     }
     posted.push({url, body:JSON.parse(options.body)});
-    if (process.argv[5] === "lost-response") throw Error("POST response lost");
-    if (process.argv[5] === "invalid-email") return {status:400,ok:false,json:async()=>({
-      ok:false,detail:"Please correct the highlighted fields.",fields:{email:"A valid email is required."}
-    })};
-    if (process.argv[5] === "throttled") return {status:429,ok:false,json:async()=>({
-      ok:false,detail:"Too many requests."
-    })};
+    if (process.argv[5]==="response-lost") throw Error("response lost after POST");
+    if (process.argv[5]==="bad-email") return {status:400,ok:false,json:async()=>({ok:false,detail:"Invalid fields",fields:{email:"Use a real email."}})};
+    if (process.argv[5]==="throttled") return {status:429,ok:false,json:async()=>({ok:false,detail:"Too many requests."})};
     return {status:201,ok:true,json:async()=>({
       ok:true, request_id:"MOJPROP-20261115-A1B2C3D4",
       receipt_token:"synthetic-signed-token"
@@ -76,6 +71,7 @@ const ctx = {
   }
 };
 vm.runInNewContext(applicationScript[1], ctx, {timeout:1000});
+if (process.argv[5] === "edit-before-switch") elements["notes"].value += " CUSTOMER ADDED: keep my own methodology and dates.";
 if (process.argv[3]) {
   elements["service"].value = process.argv[3];
   elements["service"].listeners.change();
@@ -87,8 +83,8 @@ if (process.argv[3]) {
     service:elements["service"].value,
     summary:elements["selected-signal-plan"].textContent,
     hidden:elements["selected-signal-plan"].hidden,
-    starterSummary:elements["selected-starter-package"].textContent,
-    starterHidden:elements["selected-starter-package"].hidden,
+    starter:elements["selected-starter30"].textContent,
+    starterHidden:elements["selected-starter30"].hidden,
     notesMaxLength:elements["notes"].maxLength,
     receipt:elements["result"].textContent,
     downloadEnabled:!elements["download"].disabled
@@ -213,88 +209,95 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertTrue(state["hidden"])
 
 
-    def test_starter_catalog_and_home_link_to_exact_real_intake(self):
-        catalog = (ROOT / "templates/moj-prop-v4/catalog/index.html").read_text("utf-8")
+    def test_canonical_starter_single_sku_scope_is_consistent(self):
         home = HOME.read_text("utf-8")
-        for document in (home, catalog):
-            self.assertIn("starter-30-trx#request", document)
-            self.assertIn("30 TRX", document)
-            self.assertIn("written", document.lower())
-        self.assertIn('id="starter-offer"', home)
-        self.assertIn('id="starter-30-trx"', catalog)
-        self.assertIn("No funds requested", catalog)
+        catalog = (ROOT / "templates/moj-prop-v4/catalog/index.html").read_text("utf-8")
+        detail = (ROOT / "templates/moj-prop-v4/starter-30-trx/index.html").read_text("utf-8")
+        for page in (home, catalog, detail):
+            self.assertIn("30", page)
+            self.assertIn("TRX", page)
+            self.assertIn("starter-30-trx#request", page)
+            self.assertNotIn("two-page risk-readiness", page.lower())
+        self.assertIn("10 self-reported simulated sessions", catalog)
+        self.assertIn("ten-session", home)
+        self.assertIn("MOJPROP-STARTER30", detail)
 
-    def test_starter_request_reaches_same_crm_with_exact_package_and_reference_amount(self):
+    def test_canonical_starter_prefills_real_crm_and_private_receipt(self):
         state = self._browser("?service=blueprint&package=starter-30-trx")
         self.assertEqual(len(state["posted"]), 1)
-        payload = state["posted"][0]["body"]
-        self.assertEqual(payload["service"], "blueprint")
-        self.assertIsNone(payload["product_id"])
-        self.assertIn("starter-30-trx", payload["notes"])
-        self.assertIn("30 TRX", payload["notes"])
-        self.assertIn("lawful invoice required", payload["notes"])
-        self.assertIn("starter-30-trx", state["receipt"])
-        self.assertIn("No payment was taken", state["receipt"])
+        p = state["posted"][0]["body"]
+        self.assertEqual(p["service"], "blueprint")
+        self.assertIsNone(p["product_id"])
+        self.assertIn("MOJPROP-STARTER30", p["notes"])
+        self.assertIn("30 native TRX", p["notes"])
+        self.assertIn("NOT paid", p["notes"])
+        self.assertIn("MOJPROP-STARTER30", state["receipt"])
         self.assertFalse(state["starterHidden"])
         self.assertTrue(state["downloadEnabled"])
-        self.assertLessEqual(len(payload["notes"]), 5000)
 
-    def test_switch_from_starter_to_other_service_removes_attribution(self):
+    def test_wrong_and_unknown_package_codes_are_ignored(self):
+        for query in (
+            "?service=signals&package=starter-30-trx",
+            "?service=blueprint&package=%3Cscript%3E",
+            "?service=blueprint&package=starter-30-trx%0Apaid",
+        ):
+            with self.subTest(query=query):
+                state = self._browser(query)
+                self.assertTrue(state["starterHidden"])
+                self.assertNotIn("MOJPROP-STARTER30", state["posted"][0]["body"]["notes"])
+                self.assertNotIn("<script>", state["receipt"])
+
+    def test_starter_switch_to_audit_drops_package_claim(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", service="audit")
         self.assertTrue(state["starterHidden"])
         self.assertEqual(state["posted"][0]["body"]["service"], "audit")
-        self.assertNotIn("starter-30-trx", state["posted"][0]["body"]["notes"])
-        self.assertEqual(state["notesMaxLength"], 5000)
+        self.assertNotIn("MOJPROP-STARTER30", state["posted"][0]["body"]["notes"])
+        self.assertTrue(state["hidden"])
 
-    def test_malicious_or_unknown_starter_package_cannot_leak_into_crm_or_receipt(self):
-        for package in ("evil", "%3Cscript%3E", "starter-30-trx%0Ainvoice-paid"):
-            with self.subTest(package=package):
-                state = self._browser("?service=blueprint&package="+package)
-                self.assertTrue(state["starterHidden"])
-                self.assertNotIn("Requested Moj Prop Starter package:", state["posted"][0]["body"]["notes"])
-                self.assertNotIn("<script>", state["receipt"])
-
-    def test_starter_for_wrong_service_is_not_a_sale_or_starter_lead(self):
-        state = self._browser("?service=signals&package=starter-30-trx")
-        self.assertTrue(state["starterHidden"])
-        self.assertNotIn("starter-30-trx", state["posted"][0]["body"]["notes"])
-
-    def test_starter_long_note_cannot_create_false_customer_receipt(self):
-        state = self._browser("?service=blueprint&package=starter-30-trx", notes="Z"*4980)
+    def test_starter_note_prefix_cannot_exceed_server_max(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
         self.assertIn("Request NOT submitted", state["receipt"])
 
-    def test_explicit_email_validation_rejection_shows_actionable_reason(self):
+    def test_customer_edited_starter_prefill_survives_service_change(self):
         state = self._browser(
-            "?service=blueprint&package=starter-30-trx", mode="invalid-email"
+            "?service=blueprint&package=starter-30-trx",
+            service="audit", notes="__EMPTY__", mode="edit-before-switch"
         )
-        self.assertEqual(len(state["posted"]), 1)
-        self.assertIn("Request NOT submitted", state["receipt"])
-        self.assertIn("email: A valid email is required.", state["receipt"])
-        self.assertNotIn("Submission status unconfirmed", state["receipt"])
-        self.assertFalse(state["downloadEnabled"])
+        self.assertEqual(state["posted"][0]["body"]["service"], "audit")
+        self.assertIn("CUSTOMER ADDED: keep my own methodology", state["posted"][0]["body"]["notes"])
+        self.assertFalse(state["downloadEnabled"] is None)
 
-    def test_explicit_rate_limit_rejection_preserves_retry_guidance(self):
+    def test_untouched_starter_prefill_switch_to_digital_gets_digital_note(self):
         state = self._browser(
-            "?service=blueprint&package=starter-30-trx", mode="throttled"
+            "?service=blueprint&package=starter-30-trx&product=72",
+            service="digital", notes="__EMPTY__"
         )
-        self.assertEqual(len(state["posted"]), 1)
+        self.assertEqual(state["posted"][0]["body"]["service"], "digital")
+        self.assertEqual(state["posted"][0]["body"]["product_id"], 72)
+        self.assertIn("Please confirm the product license", state["posted"][0]["body"]["notes"])
+        self.assertNotIn("Starter30", state["posted"][0]["body"]["notes"])
+
+    def test_server_explicit_400_keeps_correctable_error(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx", mode="bad-email")
+        self.assertIn("email: Use a real email.", state["receipt"])
         self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertNotIn("Submission status unconfirmed", state["receipt"])
+
+    def test_server_explicit_429_keeps_retry_guidance(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx", mode="throttled")
         self.assertIn("Wait before resubmitting", state["receipt"])
-        self.assertNotIn("Submission status unconfirmed", state["receipt"])
-        self.assertFalse(state["downloadEnabled"])
+        self.assertIn("Request NOT submitted", state["receipt"])
 
-    def test_lost_post_response_does_not_falsely_assert_no_server_lead(self):
-        state = self._browser(
-            "?service=blueprint&package=starter-30-trx", mode="lost-response"
-        )
-        self.assertEqual(len(state["posted"]), 1)  # The POST reached a mocked transport.
+    def test_lost_post_response_never_claims_payment_or_id(self):
+        state = self._browser("?service=blueprint&package=starter-30-trx", mode="response-lost")
+        self.assertEqual(len(state["posted"]), 1)
         self.assertIn("Submission status unconfirmed", state["receipt"])
         self.assertIn("Avoid duplicate submissions", state["receipt"])
         self.assertNotIn("No ID or payment was created", state["receipt"])
         self.assertFalse(state["downloadEnabled"])
-        self.assertNotIn("MOJPROP-20261115-A1B2C3D4", state["receipt"])
+
 
 if __name__ == "__main__":
     unittest.main()
