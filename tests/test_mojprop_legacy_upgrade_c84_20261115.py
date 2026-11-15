@@ -14,6 +14,7 @@ from unittest.mock import patch
 from scripts import deploy_mojplaywin_moj_prop_backend as installer
 from scripts.mojprop_schema_preflight_c83 import (
     LEGACY_BASELINES, check_schema_closure, has_reviewed_legacy_suffix,
+    migration_operations_signature,
 )
 
 
@@ -98,6 +99,32 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
             rel = Path(snap)
             self.assertIn(rel, installer.ALL_FILES)
             self.assertNotIn(rel, installer.REPLACE_FILES)
+
+    def test_existing_migration_extra_code_rejected_even_when_operations_match(self):
+        name = "0041_mojprop_request"
+        original = (SOURCE / "core/migrations" / (name + ".py")).read_text("utf-8")
+        dst = self.root / "core/migrations" / (name + ".py")
+        dst.write_text(original + "\n\ndef unreviewed_migration_side_effect():\n"
+                       "    raise RuntimeError('side effect')\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "existing live migration differs"):
+            check_schema_closure(self.root, SOURCE)
+
+    def test_migration_signature_ignores_only_selected_dependency_parent(self):
+        a = self.root / "a.py"
+        b = self.root / "b.py"
+        a.write_text('class Migration:\n'
+                     '    dependencies = [("core", "0040_old")]\n'
+                     '    operations = [1]\n', encoding="utf-8")
+        b.write_text('class Migration:\n'
+                     '    dependencies = [("core", "0040_new")]\n'
+                     '    operations = [1]\n', encoding="utf-8")
+        self.assertEqual(migration_operations_signature(a),
+                         migration_operations_signature(b))
+        b.write_text(b.read_text("utf-8") + "\n"
+                     "def unreviewed_helper(): return 1\n", encoding="utf-8")
+        self.assertNotEqual(migration_operations_signature(a),
+                            migration_operations_signature(b))
+
 
 
 if __name__ == "__main__":
