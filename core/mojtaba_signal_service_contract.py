@@ -13,6 +13,7 @@ from decimal import Decimal
 from enum import Enum
 import re
 import unicodedata
+from itertools import islice
 from typing import Iterable, Tuple
 
 
@@ -94,6 +95,8 @@ class SignalTenantRoute:
 
 
 def validate_route(route: SignalTenantRoute) -> None:
+    if not isinstance(route, SignalTenantRoute):
+        raise SignalContractError("route_contract_required")
     _slug(route.tenant_id, "tenant_id")
     _host(route.canonical_host)
     _path(route.path_prefix)
@@ -108,7 +111,14 @@ def validate_route(route: SignalTenantRoute) -> None:
 
 
 def validate_route_registry(routes: Iterable[SignalTenantRoute]) -> Tuple[SignalTenantRoute, ...]:
-    normalized = tuple(routes)
+    if isinstance(routes, (str, bytes, dict)):
+        raise SignalContractError("route_registry_required")
+    try:
+        normalized = tuple(islice(routes, 4097))
+    except TypeError as exc:
+        raise SignalContractError("route_registry_required") from exc
+    if len(normalized) > 4096:
+        raise SignalContractError("route_registry_too_large")
     seen_tenant_locales = set()
     tenant_hosts = {}
     seen_endpoints = set()
@@ -146,6 +156,8 @@ class SignalOffer:
 
 
 def validate_offer(offer: SignalOffer) -> None:
+    if not isinstance(offer, SignalOffer):
+        raise SignalContractError("offer_contract_required")
     _slug(offer.offer_id, "offer_id")
     _slug(offer.tenant_id, "tenant_id")
     if offer.bot_identity != BOT_IDENTITY:
