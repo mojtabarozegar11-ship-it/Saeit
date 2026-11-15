@@ -294,12 +294,15 @@ class MojPropRequestStatusForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         if self.instance.pk and "status" in cleaned and "internal_note" in cleaned:
-            previous = (MojPropRequest.objects.filter(pk=self.instance.pk)
-                        .values_list("status", flat=True).first())
-            if previous is None:
+            recorded = (MojPropRequest.objects.filter(pk=self.instance.pk)
+                        .values_list("status", "internal_note").first())
+            if recorded is None:
                 raise forms.ValidationError("Original customer request no longer exists")
+            previous, previous_note = recorded
             try:
-                validate_status_change(previous, cleaned["status"], cleaned["internal_note"])
+                validate_status_change(
+                    previous, cleaned["status"], cleaned["internal_note"], previous_note
+                )
             except forms.ValidationError as exc:
                 self.add_error("status", exc)
         return cleaned
