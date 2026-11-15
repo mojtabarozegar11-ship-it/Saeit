@@ -611,9 +611,23 @@ def verify_public_buyer_routes(run_id: str) -> bool:
                 with urllib.request.urlopen(request, timeout=min(7, remaining)) as reply:
                     if reply.status == 200 and reply.geturl() == url:
                         body = reply.read(250_000)
-                        if title in body and action in body:
+                        if title in body and (action in body or (
+                            ("/checkout/" in route or route.startswith("/commerce/book/"))
+                            and b"Create my one-time TRX invoice" in body
+                        )):
                             checkout = ("/checkout/" in route or route.startswith("/commerce/book/"))
-                            if not checkout or has_guarded_guest_invoice_form(body, int(route.split("/")[3])):
+                            if not checkout:
+                                checked += 1
+                                continue
+                            # The owner now REQUIRES one explicit buyer email
+                            # on the public invoice form. The historical
+                            # email-free checker is left only for old archive
+                            # tests; it must never authorize the new cutover.
+                            from scripts.mpw_email_bound_public_invoice_gate import (
+                                has_guarded_guest_email_invoice_form,
+                            )
+                            if has_guarded_guest_email_invoice_form(
+                                    body, int(route.split("/")[3])):
                                 checked += 1
                                 continue
                             category = "checkout_form_invalid"
