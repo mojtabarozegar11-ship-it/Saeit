@@ -82,6 +82,19 @@ def _amount(value: object, field: str = "amount") -> Decimal:
     return value
 
 
+SUN_PER_TRX = Decimal("1000000")
+MAX_SUN = (1 << 63) - 1
+
+
+def _sun_amount(value: object, field: str = "amount") -> Decimal:
+    """Native TRX supports exactly six decimal places, never eight."""
+    amount = _amount(value, field)
+    sun = amount * SUN_PER_TRX
+    if sun != sun.to_integral_value() or sun > MAX_SUN:
+        raise CommercialGateError(f"{field}_invalid_native_sun")
+    return amount
+
+
 def _currency(value: object) -> str:
     value = _text(value, "currency")
     if value != value.upper() or not re.fullmatch(r"[A-Z0-9]{2,10}", value):
@@ -124,8 +137,8 @@ def validate_offer(
     host = _text(offer.canonical_host, "canonical_host").lower()
     if host != offer.canonical_host or "://" in host or "/" in host or not _HOST.fullmatch(host):
         raise CommercialGateError("canonical_host_invalid")
-    _currency(offer.currency)
-    _amount(offer.price, "price")
+    currency = _currency(offer.currency)
+    (_sun_amount if currency == "TRX" else _amount)(offer.price, "price")
     if not isinstance(offer.offer_type, OfferType):
         raise CommercialGateError("offer_type_invalid")
     if tenant_registry is not None and tenant_registry.get(tenant_id) != host:
@@ -189,8 +202,8 @@ def validate_payment_evidence(
         raise CommercialGateError("payment_provider_not_configured")
     if evidence.network != "TRON" or evidence.asset != "TRX":
         raise CommercialGateError("payment_chain_asset_mismatch")
-    amount = _amount(evidence.amount)
-    if amount != _amount(expected_amount, "expected_amount"):
+    amount = _sun_amount(evidence.amount)
+    if amount != _sun_amount(expected_amount, "expected_amount"):
         raise CommercialGateError("payment_amount_mismatch")
     currency = _currency(evidence.currency)
     if currency != _currency(expected_currency):
@@ -310,8 +323,8 @@ class SQLiteCommercialLedger:
     def create_order(self, *, order_id: str, offer_id: str, amount: Decimal, currency: str) -> None:
         order_id = _slug(order_id, "order_id")
         offer_id = _slug(offer_id, "offer_id")
-        amount = _amount(amount)
         currency = _currency(currency)
+        amount = (_sun_amount if currency == "TRX" else _amount)(amount)
         now = datetime.now(timezone.utc).isoformat()
         digest = _digest({"order_id": order_id, "offer_id": offer_id, "amount": str(amount), "currency": currency})
         try:
