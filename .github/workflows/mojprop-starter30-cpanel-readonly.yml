@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "scripts/mojprop_starter30_live_readonly.py"
+      - "scripts/mojprop_starter30_baseline_compare.py"
+      - "tests/test_mojprop_starter30_baseline_compare.py"
       - "tests/test_mojprop_starter30_live_readonly.py"
       - ".github/workflows/mojprop-starter30-cpanel-readonly.yml"
   issue_comment:
@@ -28,8 +30,8 @@ jobs:
       - name: Validate no-effect audited inventory contract
         run: |
           set -euo pipefail
-          python3 -B -m unittest tests.test_mojprop_starter30_live_readonly -v
-          python3 -B -m py_compile scripts/mojprop_starter30_live_readonly.py
+          python3 -B -m unittest tests.test_mojprop_starter30_live_readonly tests.test_mojprop_starter30_baseline_compare -v
+          python3 -B -m py_compile scripts/mojprop_starter30_live_readonly.py scripts/mojprop_starter30_baseline_compare.py
 
   inventory:
     # Explicit trusted owner comment only; no push, merge, or PR can reach cPanel.
@@ -55,8 +57,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object -- scripts/mojprop_starter30_live_readonly.py)" = "390f2f45e53c7b8bd59ede2138f6a7e25cfe7054"
-          python3 -B -m unittest tests.test_mojprop_starter30_live_readonly -q
+          test "$(git hash-object -- scripts/mojprop_starter30_live_readonly.py)" = "af03022a550d75bbe5cf6e13221fe526e159e65d"
+          test "$(git hash-object -- scripts/mojprop_starter30_baseline_compare.py)" = "9c85c5fefcd42b997e52dcf87ff22f270253a5e5"
+          python3 -B -m unittest tests.test_mojprop_starter30_live_readonly tests.test_mojprop_starter30_baseline_compare -q
       - name: Inspect current exact cPanel Starter30 public asset tree
         shell: bash
         env:
@@ -90,5 +93,5 @@ jobs:
           timeout 90s ssh -T -F "$work/config" owner-cpanel \
             'for p in /home/zomorod2/virtualenv/Saeit/3.11/bin/python /opt/alt/python311/bin/python3.11 python3.11 python3; do if command -v "$p" >/dev/null 2>&1 && "$p" -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >/dev/null 2>&1; then exec "$p" -B -; fi; done; echo CPANEL_PYTHON_UNAVAILABLE >&2; exit 72' \
             < scripts/mojprop_starter30_live_readonly.py \
-            | python3 -c 'import json,sys; doc=json.load(sys.stdin); assert doc["schema"]=="mojprop.starter30.live_readonly.v1"; assert doc["read_only"] is True and doc["release_permitted"] is False and doc["revenue_proven"] is False; print(json.dumps(doc, sort_keys=True))'
+            | python3 -c 'import json,sys; from pathlib import Path; from scripts.mojprop_starter30_baseline_compare import classify; doc=json.load(sys.stdin); report=classify(doc,Path("templates/moj-prop-v4")); print("LIVE_READONLY_INVENTORY="+json.dumps(doc,sort_keys=True)); print("LIVE_STATIC_BASELINE_CLASSIFICATION="+json.dumps(report,sort_keys=True))'
           echo 'CPANEL_STARTER30_READONLY_CHECK_COMPLETED=true; NO_RELEASE_NO_PAYMENT=true'
