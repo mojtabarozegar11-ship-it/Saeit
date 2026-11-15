@@ -1250,14 +1250,14 @@ class CommercialGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(order_id="order-52", offer_id="moj-s04",
-                                amount=Decimal("9000000000000"), currency="TRX")
+                                amount=Decimal("10000000000000"), currency="TRX")
             ledger.connection.execute(
                 "UPDATE orders SET state = ? WHERE order_id = ?",
                 (CommercialState.SETTLED.value, "order-52"))
             for tx, source in (("b" * 64, "ext-source-1"), ("c" * 64, "ext-source-2")):
                 ledger.connection.execute(
                     "INSERT INTO independently_confirmed_refunds VALUES (?, ?, ?, ?, ?)",
-                    (tx, "order-52", 4500000000000000000, source, "2026-11-15T00:00:00+00:00"))
+                    (tx, "order-52", 5000000000000000000, source, "2026-11-15T00:00:00+00:00"))
             ledger.connection.commit()
             self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("0"))
             ledger.close()
