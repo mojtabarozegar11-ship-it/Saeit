@@ -64,6 +64,13 @@ class AuditTests(unittest.TestCase):
         result = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual((result["record_count"], result["matched_keys"]), (2160, 540))
 
+    def test_cross_family_cohort_rejected(self):
+        def contaminate(rows):
+            for row in rows:
+                row["cohort"] = row["cohort"].replace("C-", "R1-", 1)
+        with self.assertRaisesRegex(AuditError, "cross-family"):
+            analyze_family(self.make_records("C", contaminate), "C")
+
     def test_duplicate_key_rejected(self):
         def duplicate(rows):
             rows[1] = rows[0].copy()
