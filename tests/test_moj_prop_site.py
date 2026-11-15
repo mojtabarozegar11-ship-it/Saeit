@@ -87,6 +87,10 @@ class MojPropCatalogTests(unittest.TestCase):
                 self.assertEqual(set(statuses),
                                  {"owner_active", "funding_hold", "owner_disclosure", "owner_fee"})
                 self.assertTrue(all(statuses.values()))
+                # The primary hero must not contradict the per-plan cards.
+                self.assertEqual(context["hero"][4], statuses["owner_active"])
+                self.assertIn(statuses["funding_hold"], context["hero"][5])
+                self.assertIn(statuses["owner_disclosure"], context["hero"][5])
                 self.assertEqual(context["owner_active_plans"], 1)
                 self.assertEqual(context["temporary_funding_hold_plans"], 9)
                 cards = context["challenge_plans"]
