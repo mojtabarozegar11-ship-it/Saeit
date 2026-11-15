@@ -4,7 +4,19 @@ No email sending, payment intent, signed contract or trade execution.
 """
 from __future__ import annotations
 
+import re
+
 from .mojprop_catalog_contract import public_service_catalog
+
+
+def _one_line(value: object) -> str:
+    """Keep user-supplied contact fields from injecting forged proposal headers."""
+    return re.sub(r"[\\x00-\\x1f\\x7f\\u2028\\u2029]+", " ", str(value)).strip()
+
+
+def _quoted_scope(text: str) -> str:
+    """Show the customer's exact scope as quoted content, not operator instructions."""
+    return "\\n".join("> " + line for line in text.splitlines())
 
 
 def build_offer_draft(lead) -> str:
@@ -26,12 +38,12 @@ def build_offer_draft(lead) -> str:
         "MOJ PROP / MOJTABA.BOT.AI — UNSENT COMMERCIAL OFFER DRAFT",
         "NOT A CONTRACT — NOT AN INVOICE — OWNER APPROVAL REQUIRED",
         f"Customer request reference: {lead.request_id}",
-        f"Customer: {lead.name}",
-        f"Contact email (not yet messaged): {lead.email}",
+        f"Customer: {_one_line(lead.name)}",
+        f"Contact email (not yet messaged): {_one_line(lead.email)}",
         f"Requested service: {service['title']}",
         f"Requested timing: {lead.get_horizon_display()}",
         "Client objective / scope supplied:",
-        details,
+        _quoted_scope(details),
         "",
         "Proposed work: written analysis/service deliverable to be scoped and reviewed.",
         f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED.",
