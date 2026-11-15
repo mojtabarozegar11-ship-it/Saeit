@@ -111,6 +111,73 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "missing or unsafe"):
             backend.verify_backup_manifest(self.backup)
 
+    def test_symlinked_backup_parent_is_refused_before_restoration(self):
+        core = self.backup / "core"
+        relocated = self.base / "relocated-core"
+        core.rename(relocated)
+        core.symlink_to(relocated, target_is_directory=True)
+        for rel in FILES:
+            (self.live / rel).write_bytes(b"new-live-bytes")
+        with self.assertRaisesRegex(RuntimeError, "symlink parent refused"):
+            backend.restore(self.backup)
+        for rel in FILES:
+            self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
+        self.restart.assert_not_called()
+
+    def test_backup_creation_rejects_symlinked_parent(self):
+        core = self.backup / "core"
+        relocated = self.base / "elsewhere"
+        core.rename(relocated)
+        core.symlink_to(relocated, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "symlink parent refused"):
+            backend.backup_target(
+                self.live / FILES[0], self.backup,
+                {"run_id": RUN, "commit": SHA, "files": list(map(str, FILES))},
+                FILES[0],
+            )
+
+    def test_post_preflight_source_mutation_detected_before_first_restore(self):
+        original = backend.verify_backup_manifest
+        def malicious_change_after_validation(backup):
+            result = original(backup)
+            (backup / FILES[0]).write_bytes(b"changed-since-preflight")
+            return result
+        for rel in FILES:
+            (self.live / rel).write_bytes(b"active-production-version")
+        with patch.object(backend, "verify_backup_manifest",
+                          side_effect=malicious_change_after_validation):
+            with self.assertRaisesRegex(RuntimeError, "changed during restore"):
+                backend.restore(self.backup)
+        for rel in FILES:
+            self.assertEqual(
+                (self.live / rel).read_bytes(), b"active-production-version"
+            )
+        self.restart.assert_not_called()
+
+    def test_corrupt_restore_write_refused_without_restart(self):
+        for rel in FILES:
+            (self.live / rel).write_bytes(b"new-live-bytes")
+        def damaged_copy(_source, target, _mode):
+            target.write_bytes(b"corrupt-after-copy")
+        with patch.object(backend, "atomic_replace", side_effect=damaged_copy):
+            with self.assertRaisesRegex(RuntimeError, "failed verification"):
+                backend.restore(self.backup)
+        self.restart.assert_not_called()
+
+    def test_broken_symlink_live_target_cannot_evade_absent_backup_check(self):
+        rel = FILES[0]
+        (self.backup / rel).unlink()
+        self.rewrite_manifest(lambda m: m[str(rel)].update(
+            existed=False,
+        ))
+        live = self.live / rel
+        live.unlink()
+        live.symlink_to(self.base / "nonexistent-future-target")
+        with self.assertRaisesRegex(RuntimeError, "missing or unsafe"):
+            backend.restore(self.backup)
+        self.assertTrue(live.is_symlink())
+        self.restart.assert_not_called()
+
     def test_unexpected_source_for_previously_absent_file_is_rejected(self):
         self.rewrite_manifest(lambda v: v[str(FILES[0])].update(existed=False))
         with self.assertRaisesRegex(RuntimeError, "unexpected source"):
