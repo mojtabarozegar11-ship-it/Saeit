@@ -5,12 +5,14 @@ on:
     paths:
       - ".github/workflows/mojplaywin-moj-prop-deploy.yml"
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
+      - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
   push:
     branches: [main]
     paths:
       - ".github/workflows/mojplaywin-moj-prop-deploy.yml"
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
+      - "scripts/deploy_mojplaywin_moj_prop.py"
       - "templates/moj-prop-v4/**"
   workflow_dispatch:
 
