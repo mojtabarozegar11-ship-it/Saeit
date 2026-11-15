@@ -18,6 +18,12 @@ LEGACY_LOCKS = {
     "mojplaywin-active-home-editorials.yml": "deploy-active-home",
     "mojplaywin-legacy-content-deploy.yml": "deploy-content",
 }
+MANUAL_RELEASE_JOBS = {
+    "mojplaywin-main-deploy.yml": "deploy-main",
+    "mojplaywin-moj-prop-deploy.yml": "deploy",
+    "mojplaywin-farnaz-deploy.yml": "deploy",
+    "zomorod-app-pages-deploy.yml": "publish",
+}
 MAIN_MANUAL_JOB = ("mojplaywin-main-deploy.yml", "deploy-main")
 CANDIDATE_MAIN_FILES = (
     "core/mojplaywin_views.py",
@@ -29,8 +35,9 @@ CANDIDATE_MAIN_FILES = (
 CANDIDATE_SAFETY_FILES = tuple(
     ".github/workflows/" + file for file in LEGACY_LOCKS
 ) + (
-    ".github/workflows/mojplaywin-main-deploy.yml",
+    *(f".github/workflows/{file}" for file in MANUAL_RELEASE_JOBS),
     ".github/workflows/mojplaywin-deploy-trigger-readonly-audit.yml",
+    "tests/test_owner_manual_deploy_premerge_20261115.py",
     "scripts/mojplaywin_detect_deploy_triggers.py",
     "tests/test_mojplaywin_shared_deploy_hard_stop.py",
 )
@@ -90,11 +97,11 @@ def can_match(pattern: str, path: str) -> bool:
     )
 
 
-def manual_main_deployment_guarded(source: str, header: str) -> bool:
-    """Require a single exact manual-only job condition, not just a dispatch event."""
+def manual_release_job_guarded(source: str, header: str, job: str) -> bool:
+    """Only an explicit manual dispatch may execute a release job."""
     if event_block(header, "workflow_dispatch") is None:
         return False
-    anchor = re.search(r"(?m)^  deploy-main:\s*$", source)
+    anchor = re.search(r"(?m)^  " + re.escape(job) + r":\s*$", source)
     if anchor is None:
         return False
     tail = source[anchor.end():]
@@ -102,6 +109,10 @@ def manual_main_deployment_guarded(source: str, header: str) -> bool:
     head = tail.split("\n    steps:", 1)[0]
     conditions = re.findall(r"(?m)^    if:\s*(.+)$", head)
     return conditions == ["github.event_name == 'workflow_dispatch'"]
+
+
+def manual_main_deployment_guarded(source: str, header: str) -> bool:
+    return manual_release_job_guarded(source, header, MAIN_MANUAL_JOB[1])
 
 
 def inspect(filename: Path) -> dict:
@@ -119,8 +130,10 @@ def inspect(filename: Path) -> dict:
     ]
     name = filename.name
     job = LEGACY_LOCKS.get(name)
-    main_guarded = (manual_main_deployment_guarded(source, header)
-                    if name == MAIN_MANUAL_JOB[0] else None)
+    manual_guarded = (manual_release_job_guarded(
+        source, header, MANUAL_RELEASE_JOBS[name])
+        if name in MANUAL_RELEASE_JOBS else None)
+    main_guarded = manual_guarded if name == MAIN_MANUAL_JOB[0] else None
     locked = bool(
         job and re.search(
             r"(?m)^  " + re.escape(job) + r":\s*\n"
@@ -138,6 +151,7 @@ def inspect(filename: Path) -> dict:
         "guarded_job": job,
         "guarded_job_locked": locked if job else None,
         "manual_main_deployment_guarded": main_guarded,
+        "manual_release_job_guarded": manual_guarded,
     }
 
 
@@ -151,6 +165,11 @@ def main() -> None:
         v["workflow"] == MAIN_MANUAL_JOB[0] and v["manual_main_deployment_guarded"]
         for v in inspected
     )
+    blocked_manual_releases = sorted(
+        file for file in MANUAL_RELEASE_JOBS
+        if not any(v["workflow"] == file and v["manual_release_job_guarded"]
+                   for v in inspected)
+    )
     review = [
         v for v in inspected
         if v["runs_after_workflow"] or (v["triggered_by_candidate_paths"] and not v["guarded_job_locked"])
@@ -160,6 +179,8 @@ def main() -> None:
         "workflows_scanned": len(inspected),
         "legacy_jobs_hard_stopped": not unlocked_legacy,
         "main_site_deploy_manual_only": main_site_manual_only,
+        "four_release_jobs_manual_only": not blocked_manual_releases,
+        "unguarded_release_jobs": blocked_manual_releases,
         "unlocked_legacy": unlocked_legacy,
         "other_trigger_paths_require_manual_review": review,
         "unrestricted_push_to_main": [
@@ -170,7 +191,7 @@ def main() -> None:
         "release_authorized": False,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if unlocked_legacy or not main_site_manual_only:
+    if unlocked_legacy or blocked_manual_releases or not main_site_manual_only:
         raise SystemExit(2)
 
 
