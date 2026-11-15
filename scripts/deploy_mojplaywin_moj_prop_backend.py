@@ -135,10 +135,13 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
         assert_regular(target, "live target")
         saved = backup / relative
         saved.parent.mkdir(parents=True, exist_ok=True)
+        original_sha = digest(target)
         shutil.copy2(target, saved)
+        if digest(saved) != original_sha:
+            raise RuntimeError("live backend backup copy failed checksum verification")
         manifest[str(relative)] = {
             "existed": True,
-            "sha256": digest(target),
+            "sha256": original_sha,
             "mode": stat.S_IMODE(target.stat().st_mode),
         }
     else:
@@ -452,11 +455,55 @@ def restart_passenger() -> None:
     print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
-def restore(backup: Path) -> None:
+def verify_backup_manifest(backup: Path) -> dict:
+    """Verify the *entire* pinned backup before changing any restored file.
+
+    This protects Python source recovery integrity only. MariaDB requires its
+    own independently proven snapshot and restore procedure.
+    """
+    if backup.is_symlink() or not backup.is_dir():
+        raise RuntimeError("backend backup directory is missing or symlinked")
     manifest_path = backup / "manifest.json"
     if not manifest_path.is_file() or manifest_path.is_symlink():
         raise RuntimeError("backend backup manifest is missing")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if type(manifest) is not dict:
+        raise RuntimeError("backend backup manifest format is invalid")
+    if manifest.get("files") != [str(path) for path in ALL_FILES]:
+        raise RuntimeError("backend backup file inventory differs from pinned installer")
+    if type(manifest.get("run_id")) is not str:
+        raise RuntimeError("backend backup run id is missing")
+    validate_run_id(manifest["run_id"])
+    if backup.name != manifest["run_id"]:
+        raise RuntimeError("backend backup run id does not match directory")
+    if type(manifest.get("commit")) is not str:
+        raise RuntimeError("backend backup commit is missing")
+    validate_commit(manifest["commit"])
+    for relative in ALL_FILES:
+        entry = manifest.get(str(relative))
+        if type(entry) is not dict or type(entry.get("existed")) is not bool:
+            raise RuntimeError("backend backup entry is missing or malformed")
+        saved = backup / relative
+        if entry["existed"]:
+            if type(entry.get("sha256")) is not str or not re.fullmatch(
+                r"[0-9a-f]{64}", entry["sha256"]
+            ):
+                raise RuntimeError("backend backup digest is malformed")
+            mode = entry.get("mode")
+            if type(mode) is not int or mode < 0 or mode > 0o777:
+                raise RuntimeError("backend backup mode is invalid")
+            assert_regular(saved, "backend saved source")
+            if digest(saved) != entry["sha256"]:
+                raise RuntimeError("backend backup source checksum mismatch")
+        elif saved.exists() or saved.is_symlink():
+            raise RuntimeError("backend backup inventory contains unexpected source")
+    return manifest
+
+
+def restore(backup: Path) -> None:
+    # Verify all files before touching any of the live source; otherwise an
+    # invalid backup found halfway through restore leaves the app half reverted.
+    manifest = verify_backup_manifest(backup)
     for relative in ALL_FILES:
         entry = manifest[str(relative)]
         target = ROOT / relative
@@ -508,6 +555,8 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     (backup / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    # No live write occurs before every saved file passes digest+inventory.
+    verify_backup_manifest(backup)
 
     try:
         for relative in REPLACE_FILES:
