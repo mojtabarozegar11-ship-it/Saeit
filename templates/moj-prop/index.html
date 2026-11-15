@@ -52,13 +52,26 @@
         'education-quarterly':'quarterly'
       };
       const requestedPlan=new URLSearchParams(window.location.search).get('plan');
-      if(requestedService==='signals' &&
+      const freeTierRequested=requestedService==='signals' &&
+        new URLSearchParams(window.location.search).get('tier')==='free';
+      let signalPrefill='';
+      if(freeTierRequested){
+        signalPrefill='One-off FREE educational market-brief example request through mojtaba.bot.ai. '+
+          'This is manual review only, not a live signal, a mailing-list subscription, a payment, or a delivery guarantee.';
+      }else if(requestedService==='signals' &&
          Object.prototype.hasOwnProperty.call(allowedPlans,requestedPlan)){
-        document.getElementById('notes').value=
-          'Please provide a written, risk-disclosed manual proposal for the '+
+        signalPrefill='Please provide a written, risk-disclosed manual proposal for the '+
           allowedPlans[requestedPlan]+' educational market-brief plan ('+
           requestedPlan+'). No recurring subscription or payment is authorized yet.';
       }
+      if(signalPrefill) document.getElementById('notes').value=signalPrefill;
+      serviceSelect.addEventListener('change',function(){
+        const notes=document.getElementById('notes');
+        if(serviceSelect.value!=='signals' && notes.value===signalPrefill){
+          notes.value='';
+          signalPrefill='';
+        }
+      });
       let csrfToken='', receipt='';
       async function csrf(){
         if(csrfToken) return csrfToken;
