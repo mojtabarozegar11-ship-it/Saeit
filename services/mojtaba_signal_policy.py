@@ -128,3 +128,13 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
             "independent_source_verified": False,
             "publication_allowed": False,
             "delivery_confirmed": False, "payment_received": False}
+
+
+def manual_signal_offer_for_plan(plan_id):
+    """Expose the fixed catalog through the single-agent policy boundary."""
+    from .mojtaba_signal_catalog import build_manual_signal_offer
+    result = build_manual_signal_offer(plan_id)
+    result["content_policy_passed"] = True
+    result["publication_allowed"] = False
+    result["payment_received"] = False
+    return result
