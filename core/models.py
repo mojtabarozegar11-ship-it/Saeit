@@ -647,10 +647,27 @@ class MojPropOffer(T):
                 errors["issued_at"] = "Only manually issued written offers can be tracked."
             if self.expires_at is None:
                 errors["expires_at"] = "A written offer must have an expiry date."
+        now = timezone.now()
+        if self.reviewed_at and self.reviewed_at > now:
+            errors["reviewed_at"] = "Manual review cannot be recorded in the future."
+        if self.issued_at and self.issued_at > now:
+            errors["issued_at"] = "A written quote cannot be marked issued in the future."
+        if self.issued_at and self.reviewed_at and self.issued_at < self.reviewed_at:
+            errors["issued_at"] = "Issuance cannot precede manual review."
+        if self.status in ("draft", "approved") and self.issued_at is not None:
+            errors["issued_at"] = "An unissued proposal must not carry issuance evidence."
+        has_acceptance_reference = (
+            isinstance(self.acceptance_reference, str)
+            and bool(self.acceptance_reference.strip())
+        )
+        if self.status in ("draft", "approved", "issued") and (
+            self.accepted_at is not None or has_acceptance_reference
+        ):
+            errors["accepted_at"] = "Unaccepted offers must not include acceptance evidence."
         if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
             errors["expires_at"] = "Expiry must follow issuance."
         if self.status == "accepted":
-            if not self.accepted_at or not self.acceptance_reference.strip():
+            if not self.accepted_at or not has_acceptance_reference:
                 errors["acceptance_reference"] = "Record verifiable customer acceptance before calling a quote accepted."
             if (self.accepted_at and self.issued_at and self.accepted_at < self.issued_at):
                 errors["accepted_at"] = "Customer cannot accept before a quote was issued."
