@@ -57,7 +57,8 @@ def _id(value, field):
 
 
 def _timestamp(value):
-    if type(value) is not str or not value.endswith("Z"):
+    if (type(value) is not str
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z", value)):
         raise SignalOrderContractError("requested_at_invalid")
     try:
         parsed = datetime.fromisoformat(value[:-1] + "+00:00")
@@ -116,14 +117,16 @@ def validate_order_intent(
             or intent.customer_ref_digest == "0" * 64):
         raise SignalOrderContractError("customer_ref_digest_invalid")
     requested = _timestamp(intent.requested_at)
-    if now is not None:
-        if not isinstance(now, datetime) or now.tzinfo is None:
-            raise SignalOrderContractError("order_clock_must_be_timezone_aware")
-        server_now = now.astimezone(timezone.utc)
-        if requested > server_now + timedelta(seconds=30):
-            raise SignalOrderContractError("order_requested_in_future")
-        if server_now - requested > _MAX_ORDER_AGE:
-            raise SignalOrderContractError("stale_order_intent")
+    # Never allow an omitted server clock to bypass stale/future order gates.
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if not isinstance(now, datetime) or now.tzinfo is None:
+        raise SignalOrderContractError("order_clock_must_be_timezone_aware")
+    server_now = now.astimezone(timezone.utc)
+    if requested > server_now + timedelta(seconds=30):
+        raise SignalOrderContractError("order_requested_in_future")
+    if server_now - requested > _MAX_ORDER_AGE:
+        raise SignalOrderContractError("stale_order_intent")
     if intent.state not in _ALLOWED_STATES:
         raise SignalOrderContractError("settlement_required_before_paid_state")
 
