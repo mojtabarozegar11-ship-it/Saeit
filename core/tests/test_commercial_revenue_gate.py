@@ -299,7 +299,7 @@ class CommercialGateTests(unittest.TestCase):
                     event_id=event, payload_digest=("a" * 64),
                 )
             evidence = self.payment()
-            from commercial_revenue_gate import validate_payment_evidence
+            # Use the same package-qualified import as the test module.
             digest = validate_payment_evidence(
                 evidence, expected_order_id="order-52",
                 expected_invoice_id="invoice-52",
