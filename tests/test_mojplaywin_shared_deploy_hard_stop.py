@@ -68,6 +68,22 @@ class ProtectedSubsiteDeployLockTests(unittest.TestCase):
             src.index("Roll back if smoke checks fail"),
         )
 
+    def test_main_push_is_never_equivalent_to_explicit_manual_release(self):
+        from scripts.mojplaywin_detect_deploy_triggers import (
+            manual_main_deployment_guarded,
+        )
+        source = MAIN.read_text(encoding="utf-8")
+        header = source.split("\njobs:", 1)[0]
+        self.assertTrue(manual_main_deployment_guarded(source, header))
+        pushed = source.replace(
+            "if: github.event_name == 'workflow_dispatch'",
+            "if: github.event_name == 'push'",
+            1,
+        )
+        self.assertFalse(manual_main_deployment_guarded(pushed, header))
+        no_dispatch = header.replace("  workflow_dispatch:", "")
+        self.assertFalse(manual_main_deployment_guarded(source, no_dispatch))
+
     def test_only_two_legacy_workflows_are_locked(self):
         self.assertEqual(len(WORKFLOWS), 2)
         self.assertNotIn(MAIN.name, WORKFLOWS)
