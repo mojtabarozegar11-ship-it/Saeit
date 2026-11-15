@@ -28,6 +28,17 @@ class Starter30LiveReadOnlyTests(unittest.TestCase):
     def put(self, name, content):
         (self.package / name).write_bytes(content)
 
+    def test_python38_runner_source_uses_compatible_path_guard(self):
+        from inspect import getsource
+        body = getsource(probe._safe_content)
+        self.assertNotIn(".is_relative_to(", body)
+        self.assertIn(".relative_to(", body)
+
+    def test_path_outside_the_owner_docroot_is_not_read(self):
+        external = self.home / "private-data.txt"
+        external.write_bytes(b"never read unrelated directory")
+        self.assertIsNone(probe._safe_content(self.root, external))
+
     def test_json_serialisable(self):
         json.dumps(self.report())
 
