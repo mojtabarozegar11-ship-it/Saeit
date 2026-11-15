@@ -31,5 +31,9 @@ class MojPropV4ReceiptContractTests(SimpleTestCase):
 
     def test_receipt_is_only_built_after_strict_success_gate(self):
         gate = "if(response.status!==201 || data.ok!==true"
-        draft = "receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id);"
+        draft = ("receipt=draft(name,email,service,horizon,notes,"
+                 "'received for manual review',data.request_id,data.receipt_token||'');")
+        self.assertIn("receiptTokenInput.value=data.receipt_token||'';", self.html)
+        self.assertIn("copy.disabled=true;", self.html)
+        self.assertIn("download.disabled=true;", self.html)
         self.assertLess(self.html.index(gate), self.html.index(draft))
