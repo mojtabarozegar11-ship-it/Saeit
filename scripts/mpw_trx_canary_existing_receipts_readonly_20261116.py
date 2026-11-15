@@ -71,13 +71,34 @@ def _read_existing_receipt_state():
         receipt_error_type = type(exc).__name__
 
     receipt_found = False
+    customer_download_entitlement_found = False
+    entitlement_checker_available = False
+    try:
+        # No download is attempted. This is a read-only authorization check.
+        from mpw_commerce.entitlements import can_access_purchased_digital_item
+        entitlement_checker_available = callable(can_access_purchased_digital_item)
+    except ImportError:
+        entitlement_checker_available = False
+
     if receipt_validator_available:
         for intent in paid.select_related("order").order_by("pk")[:MAX_REVIEW]:
             try:
-                if validator(intent.order, intent) is True:
-                    receipt_found = True
+                is_credit = validator(intent.order, intent) is True
             except (ValueError, TypeError, AttributeError, KeyError):
                 continue
+            if not is_credit:
+                continue
+            receipt_found = True
+            if entitlement_checker_available:
+                for item_id in intent.order.items.values_list("id", flat=True)[:5]:
+                    try:
+                        if can_access_purchased_digital_item(
+                            item_id, intent.order.customer_id
+                        ) is True:
+                            customer_download_entitlement_found = True
+                            break
+                    except (ValueError, TypeError, AttributeError, KeyError):
+                        continue
 
     recorded_delivery = False
     delivery_event_model_available = False
@@ -100,6 +121,11 @@ def _read_existing_receipt_state():
     record["stored_receipt_validator_available"] = receipt_validator_available
     record["stored_receipt_validator_error_type"] = receipt_error_type
     record["delivery_event_model_available"] = delivery_event_model_available
+    record["paid_order_download_entitlement_checker_available"] = entitlement_checker_available
+    record["stored_verified_paid_order_download_entitlement_present"] = (
+        customer_download_entitlement_found
+    )
+    record["customer_download_actually_performed"] = False
     return record
 
 
