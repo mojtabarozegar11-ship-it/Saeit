@@ -68,6 +68,24 @@ def _signal_price_note(lead, generic_start: int) -> str:
     )
 
 
+def _starter30_selection(lead) -> str:
+    """Classify buyer-claimed SKU scope; never grant a paid entitlement.
+
+    The customer controls the notes string. An exact frontend-generated prefix
+    makes the intended manual SKU recognizable for operator triage, but does
+    NOT authenticate the SKU, price, signature, payment or authorization.
+    """
+    if lead.route != "blueprint":
+        return "none"
+    notes = str(lead.notes)
+    code = "MOJPROP-STARTER30"
+    if notes.startswith("Requested canonical product: " + code + " ("):
+        return "buyer_claim"
+    if code in notes:
+        return "ambiguous"
+    return "none"
+
+
 def build_offer_draft(lead) -> str:
     """Render a traceable customer-specific written-scope draft; never charge."""
     if not lead.pk or lead.status != "reviewing" or lead.consent is not True:
@@ -79,6 +97,7 @@ def build_offer_draft(lead) -> str:
     if not lead.request_id.startswith("MOJPROP-"):
         raise ValueError("unverified_lead_reference")
     details = str(lead.notes).strip()
+    starter_selection = _starter30_selection(lead)
     if len(details) < 20:
         raise ValueError("scope_missing")
     if not lead.email or not lead.name:
@@ -89,15 +108,25 @@ def build_offer_draft(lead) -> str:
         f"Customer request reference: {lead.request_id}",
         f"Customer: {_one_line(lead.name)}",
         f"Contact email (not yet messaged): {_one_line(lead.email)}",
-        f"Requested service: {service['title']}",
+        ("Requested service: Moj Prop Starter 30 (buyer-claimed, NOT approved)"
+         if starter_selection == "buyer_claim"
+         else f"Requested service: {service['title']}"),
         f"Requested timing: {lead.get_horizon_display()}",
         "Client objective / scope supplied:",
         _quoted_scope(details),
         "",
         "Proposed work: written analysis/service deliverable to be scoped and reviewed.",
         (_signal_price_note(lead, service["indicative_from_usd"]) if lead.route == "signals"
-         else f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED."),
-        "Deliverable sample: " + service["sample_url"],
+         else ("Requested Starter30 reference: 30 native TRX INDICATIVE; price WITHHELD, "
+               "not a payable quote; legal terms, buyer contract and merchant custody unverified."
+               if starter_selection == "buyer_claim"
+               else ("Price WITHHELD: ambiguous Starter30 identifier in a generic Blueprint inquiry; "
+                     "operator must clarify, never substitute the USD 149 blueprint tariff."
+                     if starter_selection == "ambiguous"
+                     else f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED."))),
+        ("Reference material: 10-session simulated journal and scorecard; live publication UNVERIFIED."
+         if starter_selection != "none"
+         else "Deliverable sample: " + service["sample_url"]),
         "Jurisdiction, taxes, precise scope, revisions and delivery date: require separate human confirmation.",
         "Payment: DISABLED until valid written offer and approved lawful receiver/checkout.",
         "No funded trading account, investment advice, automatic orders, promised profits or paid entitlement.",
