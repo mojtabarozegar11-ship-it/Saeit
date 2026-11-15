@@ -157,6 +157,31 @@ class MojPlayWinProductDetailsTests(TestCase):
             ["7.50", "4.00", "6.80"],
         )
 
+    def test_product_pages_are_never_shared_cached_across_customers(self):
+        for product_id in (72, 225, 879):
+            with self.subTest(product=product_id):
+                response = self.get(product_id)
+                self.assertIn("no-store", response["Cache-Control"])
+                self.assertIn("private", response["Cache-Control"])
+                self.assertIn("Cookie", response["Vary"])
+
+    def test_gateway_purchase_link_is_never_cached_after_rights_revocation(self):
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        with patch("core.mojplaywin_product_detail._approved_purchase_url",
+                   return_value="/commerce/book/72/"):
+            approved_response = self.get(72)
+        self.assertTrue(approved_response.context["purchase_available"])
+        self.assertIn("no-store", approved_response["Cache-Control"])
+        with patch("core.mojplaywin_product_detail._approved_purchase_url",
+                   return_value=None):
+            held_response = self.get(72)
+        self.assertFalse(held_response.context["purchase_available"])
+        self.assertNotContains(held_response, 'href="/commerce/book/72/"')
+        self.assertIn("no-store", held_response["Cache-Control"])
+
     def test_verified_private_gateway_can_restore_legitimate_buy_button(self):
         item = Product.objects.create(
             pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
