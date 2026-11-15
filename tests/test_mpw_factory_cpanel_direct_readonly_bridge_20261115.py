@@ -155,3 +155,23 @@ def test_backup_readiness_script_and_vps_capability_are_source_pinned():
     assert 'python -B -' in helper
     assert '"release_permitted": False' in backup.read_text()
     assert '"isolated_restore_performed":False' in capability.read_text()
+
+
+def test_independent_vps_mount_and_backup_destination_are_metadata_only():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    step = workflow.split("      - name: Audit scoped cPanel backup prerequisites", 1)[1]
+    sources = {
+        "scripts/mojplaywin_backup_vps_destination_readonly.py": "08b4cd466e18fcfb61369c0626d9e2596db5506b",
+        "scripts/mpw_vps_mount_capacity_readonly_20261105.py": "89a8b3ec3df04a8994c88caa8f6589bfa2f7ef26",
+    }
+    for rel, expected in sources.items():
+        source = ROOT / rel
+        assert _blob_sha(source) == expected
+        assert expected in step
+        assert '"release_permitted": False' in source.read_text()
+    assert "python3 -B scripts/mojplaywin_backup_vps_destination_readonly.py vps" in step
+    assert "python3 -B scripts/mpw_vps_mount_capacity_readonly_20261105.py" in step
+    assert "github.event.comment.body == 'MPW-FACTORY-BACKUP-READINESS-READONLY-20261115'" in step
+    for forbidden in ("sudo ", "mount ", "umount ", "docker run", "rsync ",
+                      "scp ", "tar -xf", "migrate", "curl -X POST", "chown ", "chmod "):
+        assert forbidden not in step
