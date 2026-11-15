@@ -118,6 +118,38 @@ class MojPropIntakeSafetyTests(TestCase):
         self.assertEqual(second.status_code, 201)
         self.assertNotEqual(*MojPropRequest.objects.values_list("ip_hash", flat=True))
 
+
+    def test_multipart_duplicate_form_fields_rejected_without_database_write(self):
+        from django.http import QueryDict
+        from django.test.client import MULTIPART_CONTENT, BOUNDARY, encode_multipart
+        data = {**self.data, "consent": "on"}
+        encoded = encode_multipart(BOUNDARY, data)
+        needle = b'Content-Disposition: form-data; name="email"'
+        self.assertIn(needle, encoded)
+        # Duplicate email fields must be rejected rather than trusting the last.
+        duplicate = (b'--' + BOUNDARY.encode() + b'\\r\\n' +
+                     b'Content-Disposition: form-data; name="email"\\r\\n\\r\\n' +
+                     b'attacker@example.org\\r\\n')
+        crafted = encoded.replace(
+            b'--' + BOUNDARY.encode() + b'--',
+            duplicate + b'--' + BOUNDARY.encode() + b'--', 1,
+        )
+        response = self.client.post(
+            "/moj-prop-intake/", crafted, content_type=MULTIPART_CONTENT,
+            HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_multipart_file_attachment_not_accepted_as_lead(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        data = {**self.data, "consent": "on",
+                "attachment": SimpleUploadedFile("sensitive.txt", b"do not store")}
+        response = self.client.post("/moj-prop-intake/", data,
+                                    HTTP_X_CSRFTOKEN=self.token)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
     def test_urlencoded_form_keeps_a_legitimate_non_json_intake(self):
         response = self.client.post(
             "/moj-prop-intake/",
