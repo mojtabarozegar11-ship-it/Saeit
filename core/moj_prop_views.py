@@ -15,6 +15,10 @@ def moj_prop_landing(request, lang="en"):
         raise Http404("Moj Prop belongs to MojPlayWin")
     try:
         data = page_context(lang)
+        # Only render an information CTA when the consent/privacy backend
+        # has been explicitly released. It never links to a payment form.
+        from prop_firm.interest import intake_enabled
+        data["interest_enabled"] = intake_enabled()
     except ValueError as error:
         raise Http404("Unsupported language") from error
     response = render(request, "mojplaywin/moj_prop.html", data)
