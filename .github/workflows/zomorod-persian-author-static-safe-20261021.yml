@@ -18,6 +18,17 @@ on:
       - config/urls.py
       - core/seo_views.py
       - .github/workflows/zomorod-persian-author-static-safe-20261021.yml
+  workflow_dispatch:
+    inputs:
+      owner_approved_author_release:
+        description: 'Reviewed author-page release only; source merges must never publish'
+        required: true
+        type: boolean
+        default: false
+      reviewed_release_sha:
+        description: 'Exact reviewed 40-hex commit on main'
+        required: true
+        type: string
 permissions: {contents: read}
 concurrency:
   group: zomorod-persian-author-static-safe
@@ -47,12 +58,32 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_zomorod_author_identity_seo.py' -v
   deploy:
     needs: source-qa
-    if: github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name != 'pull_request'
+    # A PR merge changing config/urls.py may validate source, not SSH-publish.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
+      - name: Refuse unreviewed author publication before preparing SSH credentials
+        shell: bash
+        env:
+          OWNER_APPROVED: ${{ inputs.owner_approved_author_release }}
+          RELEASE_SHA: ${{ inputs.reviewed_release_sha }}
+          RESTORE_VERIFIED: ${{ vars.ZM_AUTHOR_BACKUP_RESTORE_VERIFIED }}
+          ROLLBACK_VERIFIED: ${{ vars.ZM_AUTHOR_ROLLBACK_VERIFIED }}
+          TENANT_ISOLATION_VERIFIED: ${{ vars.ZM_AUTHOR_TENANT_ISOLATION_VERIFIED }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$OWNER_APPROVED" == "true" ]]
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
+          [[ "$RESTORE_VERIFIED" == "true" ]]
+          [[ "$ROLLBACK_VERIFIED" == "true" ]]
+          [[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]
+          echo 'ZM_AUTHOR_MANUAL_RELEASE=PINNED_AND_ATTESTED'
       - name: Establish pinned SSH relay to verified cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
