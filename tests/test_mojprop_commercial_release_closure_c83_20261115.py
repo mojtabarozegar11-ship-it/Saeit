@@ -15,7 +15,21 @@ from scripts import deploy_mojplaywin_moj_prop_backend as installer
 from scripts.mojprop_schema_preflight_c83 import (
     MIGRATIONS, MODELS, MODULES, check_schema_closure,
 )
-from tests.test_mojprop_backend_release_archive_c82_20261115 import staged_tar_paths
+import shlex
+
+
+def staged_tar_paths():
+    workflow = Path(__file__).resolve().parents[1] / (
+        ".github/workflows/mojprop-backend-controlled-release-20261115.yml"
+    )
+    text = workflow.read_text(encoding="utf-8")
+    step = text.split("- name: Package only Moj Prop installer and page", 1)[1]
+    line = next(line.strip() for line in step.splitlines()
+                if line.strip().startswith("run: tar -cf "))
+    args = shlex.split(line.removeprefix("run: "))
+    if args[:2] != ["tar", "-cf"]:
+        raise AssertionError("Unexpected release archive invocation")
+    return set(args[3:])
 
 
 SOURCE = Path(__file__).resolve().parents[1]
