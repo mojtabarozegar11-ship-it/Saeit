@@ -20,7 +20,7 @@ permissions: {contents: read}
 jobs:
   merchant-private-canary:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 19
     steps:
       - uses: actions/checkout@v4
