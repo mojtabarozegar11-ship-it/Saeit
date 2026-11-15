@@ -140,3 +140,55 @@ class DigitalBuyerRequestTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 404)
                 self.assertEqual(response.headers["Cache-Control"], "no-store")
+
+    def test_private_receipt_lookup_via_post_does_not_put_token_in_url(self):
+        created = self.submit(product_id=72)
+        token = created.json()["receipt_token"]
+        checked = self.client.post(
+            "/moj-prop-status/", json.dumps({"receipt_token": token}),
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(checked.status_code, 200)
+        self.assertEqual(checked.json()["request_id"], created.json()["request_id"])
+        self.assertEqual(checked.json()["status"], "new")
+        self.assertEqual(checked.json()["payment_status"], "not_collected_by_this_service")
+        self.assertNotIn("email", checked.json())
+        self.assertNotIn("notes", checked.json())
+        self.assertNotIn(token, checked.content.decode("utf-8"))
+        self.assertEqual(checked["Cache-Control"], "no-store")
+
+    def test_private_status_post_requires_csrf(self):
+        token = self.submit(product_id=225).json()["receipt_token"]
+        attacker = Client(enforce_csrf_checks=True)
+        checked = attacker.post(
+            "/moj-prop-status/", json.dumps({"receipt_token": token}),
+            content_type="application/json",
+        )
+        self.assertEqual(checked.status_code, 403)
+
+    def test_ambiguous_or_untrusted_status_post_is_not_accepted(self):
+        token = self.submit(product_id=879).json()["receipt_token"]
+        invalid_payloads = (
+            {},
+            {"receipt_token": [token]},
+            {"receipt_token": token, "order_paid": True},
+            {"receipt_token": None},
+            {"receipt_token": token + "x"},
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=repr(payload)[:70]):
+                response = self.client.post(
+                    "/moj-prop-status/", json.dumps(payload),
+                    content_type="application/json",
+                    HTTP_X_CSRFTOKEN=self.token,
+                )
+                self.assertIn(response.status_code, (400, 404))
+                self.assertNotIn("email", response.json())
+        duplicate = (
+            '{"receipt_token":"' + token + '","receipt_token":"' + token + '"}'
+        )
+        response = self.client.post(
+            "/moj-prop-status/", duplicate,
+            content_type="application/json", HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(response.status_code, 400)
