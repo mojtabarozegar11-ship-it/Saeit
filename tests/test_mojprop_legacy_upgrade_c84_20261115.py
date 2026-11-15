@@ -109,6 +109,25 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "existing live migration differs"):
             check_schema_closure(self.root, SOURCE)
 
+    def test_extra_cross_app_dependency_cannot_hide_behind_selected_parent(self):
+        source = self.root / "mig-original.py"
+        tampered = self.root / "mig-extra-dependency.py"
+        source.write_text(
+            'class Migration:\n'
+            '    dependencies = [("core", "0040_previous")]\n'
+            '    operations = [1]\n',
+            encoding="utf-8",
+        )
+        tampered.write_text(
+            'class Migration:\n'
+            '    dependencies = [("core", "0040_other"), '
+            '("third_party", "0002_unreviewed")]\n'
+            '    operations = [1]\n',
+            encoding="utf-8",
+        )
+        self.assertNotEqual(migration_operations_signature(source),
+                            migration_operations_signature(tampered))
+
     def test_migration_signature_ignores_only_selected_dependency_parent(self):
         a = self.root / "a.py"
         b = self.root / "b.py"
