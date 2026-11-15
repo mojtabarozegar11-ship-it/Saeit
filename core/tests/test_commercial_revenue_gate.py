@@ -20,6 +20,11 @@ from core.commercial_revenue_gate import (
 
 
 class CommercialGateTests(unittest.TestCase):
+    def _offline_ledger(self, path):
+        # Explicitly synthetic fixtures; never use these adapters in production.
+        return SQLiteCommercialLedger(path, settlement_verifier=lambda _: True,
+                                      delivery_verifier=lambda order, manifest: True)
+
     def offer(self, **changes):
         values = {
             "offer_id": "moj-s04",
@@ -395,7 +400,7 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_sqlite_verified_revenue_requires_evidence_again(self):
         with tempfile.TemporaryDirectory() as directory:
-            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(
                 order_id="order-52", offer_id="moj-s04",
                 amount=Decimal("30"), currency="TRX",
@@ -466,7 +471,7 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_tron_transaction_cannot_settle_two_orders(self):
         with tempfile.TemporaryDirectory() as directory:
-            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
             for order_id in ("order-52", "order-53"):
                 ledger.create_order(order_id=order_id, offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
                 for state, prefix in ((CommercialState.QUOTED, "quote"),
@@ -502,7 +507,7 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_verified_revenue_cannot_swap_settlement_transaction(self):
         with tempfile.TemporaryDirectory() as directory:
-            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
             for state, event in ((CommercialState.QUOTED, "quote-52"),
                                  (CommercialState.INVOICED, "invoice-52"),
@@ -629,7 +634,7 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_fulfillment_is_immutably_bound_to_manifest_digest(self):
         with tempfile.TemporaryDirectory() as directory:
-            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
             for target, key in ((CommercialState.QUOTED, "quote-52"),
                                 (CommercialState.INVOICED, "invoice-52"),
@@ -793,7 +798,7 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_same_tron_tx_different_letter_case_cannot_settle_two_orders(self):
         with tempfile.TemporaryDirectory() as directory:
-            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger = self._offline_ledger(str(Path(directory) / "ledger.sqlite3"))
             self._prepare_private_invoice(ledger, "order-52")
             self._prepare_private_invoice(ledger, "order-53")
             first = self.payment(transaction_id="A" * 64)
@@ -882,6 +887,87 @@ class CommercialGateTests(unittest.TestCase):
             validate_payment_evidence(self.payment(transaction_id="0" * 64),
                 expected_order_id="order-52", expected_invoice_id="invoice-52",
                 expected_amount=Decimal("30"), expected_currency="TRX")
+
+
+    def test_unverified_payment_cannot_settle_or_mutate_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "independent_settlement_verifier_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                    event_id="settled-52", payload_digest=digest, payment_evidence=evidence)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+    def test_independent_payment_denial_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=lambda _: False)
+            self._prepare_private_invoice(ledger, "order-52")
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "independent_settlement_unverified"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                    event_id="settled-52", payload_digest=digest, payment_evidence=evidence)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+    def test_independent_verifier_error_fails_closed(self):
+        def offline(_):
+            raise TimeoutError("provider offline")
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=offline)
+            self._prepare_private_invoice(ledger, "order-52")
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "independent_settlement_verifier_failed"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                    event_id="settled-52", payload_digest=digest, payment_evidence=evidence)
+            ledger.close()
+
+    def test_truthy_string_verification_is_not_external_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=lambda _: "true")
+            self._prepare_private_invoice(ledger, "order-52")
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "independent_settlement_unverified"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                    event_id="settled-52", payload_digest=digest, payment_evidence=evidence)
+            ledger.close()
+
+    def test_verifier_inputs_must_be_callable(self):
+        with self.assertRaisesRegex(CommercialGateError, "settlement_verifier_invalid"):
+            SQLiteCommercialLedger(":memory:", settlement_verifier="yes")
+        with self.assertRaisesRegex(CommercialGateError, "delivery_verifier_invalid"):
+            SQLiteCommercialLedger(":memory:", delivery_verifier=1)
+
+    def test_manifest_alone_cannot_prove_customer_delivery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"),
+                settlement_verifier=lambda _: True)
+            self._prepare_private_invoice(ledger, "order-52")
+            evidence = self.payment()
+            digest = validate_payment_evidence(evidence, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                event_id="settled-52", payload_digest=digest, payment_evidence=evidence)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                event_id="pending-delivery-52", payload_digest="b" * 64)
+            with self.assertRaisesRegex(CommercialGateError, "independent_delivery_verifier_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                    event_id="delivered-52", payload_digest="d" * 64,
+                    fulfillment_manifest_sha256="d" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfillment_pending")
+            ledger.close()
 
 
 if __name__ == "__main__":
