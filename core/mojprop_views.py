@@ -34,15 +34,40 @@ def _text(payload, key: str, limit: int) -> str:
     return str(value).strip()[:limit] if value is not None else ""
 
 
+MAX_BODY_BYTES = 16 * 1024
+ALLOWED_FIELDS = frozenset((
+    "name", "email", "service", "horizon", "notes", "consent", "website"
+))
+
+
 def _payload(request):
-    content_type = request.META.get("CONTENT_TYPE", "")
-    if content_type.startswith("application/json"):
+    """Allow bounded JSON or a single-valued HTML form; reject hidden extras."""
+    content_type = str(request.META.get("CONTENT_TYPE", "")).split(";", 1)[0].strip().lower()
+    if content_type not in ("application/json", "application/x-www-form-urlencoded"):
+        return None
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except (ValueError, TypeError):
+        return None
+    if length > MAX_BODY_BYTES or length < 0:
+        return None
+    if content_type == "application/json":
+        body = request.body
+        if len(body) > MAX_BODY_BYTES:
+            return None
         try:
-            value = json.loads(request.body.decode("utf-8"))
+            value = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return None
-        return value if isinstance(value, dict) else None
-    return request.POST
+        if type(value) is not dict or set(value) - ALLOWED_FIELDS:
+            return None
+        return value
+    form = request.POST
+    if set(form.keys()) - ALLOWED_FIELDS:
+        return None
+    if any(len(form.getlist(key)) != 1 for key in form):
+        return None
+    return form
 
 
 def _client_ip(request) -> str:
