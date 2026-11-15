@@ -1,5 +1,6 @@
 """Public service descriptions must never imply an authorized charge or trade."""
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
@@ -36,6 +37,35 @@ class MojPropServiceOfferContractTests(TestCase):
         self.assertEqual(response.json()["service_catalog"], public_service_catalog())
         self.assertTrue(response.json()["csrf_token"])
         self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_companion_digital_sku_inquiry_does_not_disable_four_service_get(self):
+        # PR #2362 introduces a real, unpriced product inquiry: a different
+        # request category, never a fifth marketed paid service.
+        with patch.object(MojPropRequest, "ROUTE_CHOICES", (
+            *MojPropRequest.ROUTE_CHOICES,
+            ("digital", "Digital product purchase inquiry"),
+        )):
+            offers = public_service_catalog()
+            self.assertEqual({offer["route"] for offer in offers},
+                             {"blueprint", "signals", "brief", "audit"})
+            self.assertEqual(len(offers), 4)
+            self.assertFalse(any(offer["checkout_enabled"] for offer in offers))
+
+    def test_unreviewed_new_route_still_fails_closed(self):
+        with patch.object(MojPropRequest, "ROUTE_CHOICES", (
+            *MojPropRequest.ROUTE_CHOICES,
+            ("live_trading", "Auto trading without consent"),
+        )):
+            with self.assertRaisesRegex(RuntimeError, "route contract differ"):
+                public_service_catalog()
+
+    def test_mislabeled_digital_inquiry_fails_closed(self):
+        with patch.object(MojPropRequest, "ROUTE_CHOICES", (
+            *MojPropRequest.ROUTE_CHOICES,
+            ("digital", "Fake instant product checkout"),
+        )):
+            with self.assertRaisesRegex(RuntimeError, "route contract differ"):
+                public_service_catalog()
 
     def test_catalog_does_not_hold_undisclosed_wallet_or_order_capability(self):
         offers = public_service_catalog()
