@@ -266,6 +266,24 @@ def patch_commercial(namespace):
     from django.views.decorators.cache import never_cache
     from django.views.decorators.csrf import csrf_protect
     from django.views.decorators.http import require_GET, require_POST
+    import re
+
+    def issued_invoice_redirect(response):
+        # Only the exact server-issued owner invoice redirect confirms that
+        # the order writer reached its committed invoice handoff.
+        # A success-looking 200 page, login redirect or error is not an invoice.
+        if getattr(response, "status_code", None) not in (302, 303):
+            return False
+        try:
+            target = response.get("Location", "")
+        except (TypeError, AttributeError, ValueError):
+            return False
+        return (
+            type(target) is str and re.fullmatch(
+                r"/commerce/trx-easy/invoice/[1-9][0-9]{0,18}/", target,
+            ) is not None
+        )
+
     targets = {
         "start_order": ("_start_order", True, require_POST, True),
         "show_invoice": ("_show_invoice", False, require_GET, False),
@@ -281,7 +299,7 @@ def patch_commercial(namespace):
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
                 response = _dispatch(request, view, args, kwargs, create=make_claim)
-                if view_name == "start_order" and 200 <= getattr(response, "status_code", 0) < 300:
+                if view_name == "start_order" and issued_invoice_redirect(response):
                     # Order creation and its response are authoritative. The
                     # separate analytics lookup may be absent or unavailable.
                     try:
