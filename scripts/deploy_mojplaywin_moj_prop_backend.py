@@ -194,12 +194,11 @@ def install_migration(source: Path, target: Path) -> None:
         match = re.match(r"^([0-9]+)_([a-zA-Z0-9_]+)[.]py$", item.name)
         # The full commercial chain 0041..0045 depends on 0041. Taking
         # 0045 as 0041's parent would create a cyclic migration graph.
-        if not match or item.name in {
-            "0041_mojprop_request.py", "0042_mojprop_offer.py",
-            "0043_mojprop_digital_inquiry.py",
-            "0044_mojprop_acceptance_evidence.py",
-            "0045_mojprop_delivery_evidence.py",
-        }:
+        if not match:
+            continue
+        if int(match.group(1)) >= 41:
+            # Never make the initial intake migration depend on an existing
+            # later revision, including a concurrent migration above 0045.
             continue
         candidates.append((int(match.group(1)), item.stem))
     parent = max(candidates, key=lambda value: (value[0], value[1]))[1] if candidates else "0001_initial"
