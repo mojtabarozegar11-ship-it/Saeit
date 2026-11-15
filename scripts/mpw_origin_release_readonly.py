@@ -12,7 +12,12 @@ from pathlib import Path
 
 HOME = Path("/home/zomorod2")
 DOCROOT = HOME / "mojplaywin.com"
+# Two observed/claimed roots are candidates, not proven MojPlayWin production.
+# The live direct Django check on 2026-11-15 reached HOME/Saeit, while the
+# historic MojPlayWin deploy script expects HOME/Saeit-staging. The Passenger
+# UAPI root fingerprint did not attest to either path. Never select by guess.
 APP = HOME / "Saeit-staging"
+COMPANY_CANDIDATE = HOME / "Saeit"
 MAX_READ_BYTES = 200_000
 PROBES = (
     ("passenger_mapping", DOCROOT, "passenger_wsgi.py", ("Saeit-staging",)),
@@ -38,6 +43,16 @@ PROBES = (
      ("def withdrawal", "csrf_protect")),
     ("withdrawal_template", APP, "core/templates/core/interest_withdrawal.html",
      ('method="post"',)),
+    # Separate candidate inventory prevents mistaking the known Saeit Django
+    # company app for the historic MojPlayWin Saeit-staging target.
+    ("company_candidate_manage", COMPANY_CANDIDATE, "manage.py", ()),
+    ("company_candidate_urlconf", COMPANY_CANDIDATE, "config/urls.py", ()),
+    ("company_candidate_store", COMPANY_CANDIDATE,
+     "core/templates/mojplaywin/store.html", ()),
+    ("company_candidate_prop", COMPANY_CANDIDATE,
+     "core/moj_prop_public.py", ()),
+    ("company_candidate_signals", COMPANY_CANDIDATE,
+     "core/signal_interest_views.py", ()),
 )
 
 
@@ -69,6 +84,11 @@ def inspect(probes=PROBES) -> dict:
     return {
         "kind": "readonly_passenger_source_inventory",
         "merchant": "mojplaywin.com",
+        "candidate_roots": {
+            "historical_brand_app": "Saeit-staging",
+            "direct_django_check_app": "Saeit",
+        },
+        "candidate_root_is_live_passenger_app_proven": False,
         "host_fingerprint_checked_by_workflow": True,
         "file_probe_count": len(observations),
         "matched_file_probes": sum(s == "matched" for s in observations.values()),

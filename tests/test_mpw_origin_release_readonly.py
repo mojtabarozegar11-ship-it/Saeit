@@ -8,7 +8,7 @@ from scripts.mpw_origin_release_readonly import inspect, status, PROBES, MAX_REA
 
 class OriginReadOnlyInventoryTests(TestCase):
     def test_probe_scope_is_explicit_and_bounded(self):
-        self.assertEqual(len(PROBES), 15)
+        self.assertEqual(len(PROBES), 20)
         self.assertEqual(len({probe[0] for probe in PROBES}), len(PROBES))
         self.assertTrue(all(isinstance(x[2], str) and ".." not in Path(x[2]).parts for x in PROBES))
         self.assertGreater(MAX_READ_BYTES, 5000)
@@ -82,3 +82,14 @@ class OriginReadOnlyInventoryTests(TestCase):
         self.assertIn("StrictHostKeyChecking=yes", source)
         self.assertIn("PYTHONDONTWRITEBYTECODE=1 python3 -B -", source)
         self.assertIn("mpw_origin_release_readonly.py", source)
+
+    def test_django_root_candidates_remain_separate_until_live_passenger_proven(self):
+        from scripts.mpw_origin_release_readonly import APP, COMPANY_CANDIDATE
+        self.assertNotEqual(APP, COMPANY_CANDIDATE)
+        self.assertEqual(APP.name, "Saeit-staging")
+        self.assertEqual(COMPANY_CANDIDATE.name, "Saeit")
+        result = inspect((("staging", APP, "manage.py", ()),
+                          ("company", COMPANY_CANDIDATE, "manage.py", ())))
+        self.assertIs(result["candidate_root_is_live_passenger_app_proven"], False)
+        self.assertNotEqual(result["candidate_roots"]["historical_brand_app"],
+                            result["candidate_roots"]["direct_django_check_app"])
