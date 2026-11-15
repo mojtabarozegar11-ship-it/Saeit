@@ -140,3 +140,76 @@ historical synthetic archive; version any new prospective experiment.
 - Verify site-specific delivery, support and permitted licensing before
   marketing any agricultural analysis service. **No external release
   or journal submission is authorized by this internal note.**
+
+## Additional paired simulated outcomes and climate-path deletion sensitivity (15 November update)
+
+These values were recomputed **read-only** from all 1,620 rows of native
+`CohortC1620!A1:L1621` and all 2,160 rows of native
+`RegimeR2160!A1:L2161` in the author-held
+[ZM-IRR-MODEL-2026-01 workbook](https://docs.google.com/spreadsheets/d/1NC1pgdb1Dkhk1HdgdF_sFvnx1i86O88u_fgVdxvvKQA/edit).
+The same 540 unique synthetic matched keys per family were paired by
+cohort, seed, climate class, bias, ET multiplier and rainfall-information case.
+These are descriptive **model outputs**, not independent observed trials,
+and no real farm/yield/water savings or financial valuation is inferred.
+
+### Table 4. Additional outcomes: v3 minus v2
+
+| Modeled outcome and unit | Cohort C mean | R1 mean | C paired median | R1 paired median |
+| --- | ---: | ---: | ---: | ---: |
+| Below-98 end-storage count (synthetic plot-days) | −4.342593 | −4.794444 | 0 | 0 |
+| Irrigation events (count across modeled plots) | +1.855556 | +1.703704 | 2 | 1 |
+| Drainage sum (mm of modeled summed depth) | +13.435478 | +12.016956 | +0.347607 | +2.145296 |
+
+The `drainage_sum_mm` values are **summed millimetre depths as recorded
+by the simulator**; they are not directly volumes in m³. Converting any
+individual depth to a volume needs the exact associated plot area and
+aggregation semantics. Do **not** attach crop yield, profit or observed
+benefit labels to Q98.
+
+### Table 5. Heterogeneity in the three supplementary outcomes
+
+| Family | Climate class | Matched keys | Δbelow-98 days | Δevents | Δdrainage sum (mm) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| C | dry | 180 | −6.638889 | +0.938889 | +2.965777 |
+| C | medium | 180 | −5.194444 | +2.072222 | +11.509785 |
+| C | wet | 180 | −1.194444 | +2.555556 | +25.830873 |
+| R1 | dry | 180 | −5.927778 | +1.627778 | +5.945195 |
+| R1 | medium | 180 | −6.077778 | +2.133333 | +13.279381 |
+| R1 | wet | 180 | −2.377778 | +1.350000 | +16.826293 |
+
+Path-cluster nonindependence remains material: each 180-key climate class
+has only four weather paths, each repeated under 45 designed settings.
+These are *within-model conditional averages*, not environmental population
+estimates or confidence intervals.
+
+### Table 6. Delete-one-climate-path deterministic sensitivity
+
+Each of 12 checks in a family removes all **45** keys belonging to a
+single simulated climate path and recomputes the paired average on the
+remaining **495** keys. The ranges below give the minimum and maximum
+of these 12 leave-one-path-out descriptive averages, **not a
+bootstrap confidence interval**.
+
+| Family | Number of deletions | Remaining keys per deletion | Range of mean Δwater (m³) | Range of mean ΔQ100 (plot-days) |
+| --- | ---: | ---: | ---: | ---: |
+| C | 12 | 495 | +31.990085 to +39.347952 | −7.519192 to −6.256566 |
+| R1 | 12 | 495 | +27.312080 to +33.354852 | −8.149495 to −7.040404 |
+
+**Observation:** all 24 path-deletion checks retain a positive *modeled*
+mean difference in gross water and a negative difference in *modeled* Q.
+No sign reversal in this limited check should be misrepresented as a
+confidence probability or as external robustness. Unknown model bias,
+the retrospective rainfall information set, and absence of real farm
+measurements are unaffected by deletion stability.
+
+### Computational contract
+
+The research postprocessor now emits `supplementary_paired_outcomes`
+for Q98, irrigation events and drainage (mean, median, range, per-climate
+and per-path values) and `leave_one_climate_path_out` for twelve
+path-exclusion descriptive comparisons per family. A set of 26 targeted
+regression methods was authored for sign, units, paired denominators,
+stratification, perturbed paths, medians, and exclusion effects.
+Do not describe authored tests as *passing* until CI records for the
+corresponding SHA have been checked. The original synthetic generator
+still requires source replay and information-time fairness audit.
