@@ -9,9 +9,22 @@ from __future__ import annotations
 from decimal import Decimal
 from .rules import LEVELS, POLICY
 from .plans import CHALLENGE_PLANS, ALL_PLANS_SELLABLE
+from .level10_lock import (
+    OWNER_DECISION_LEVEL_CAPITAL_USD,
+    OWNER_DECISION_LEVEL_NUMBER,
+    REQUIRED_LEVEL_10_ATTESTATIONS,
+)
 
 
 CANONICAL_CONTRACT_ID = "moj-prop-2026-11-15-v1.2-14level-two-stage"
+_EXPECTED_LEVEL_10_ATTESTATIONS = (
+    "owner_decision_recorded",
+    "jurisdiction_legal_approval",
+    "broker_contract_verified",
+    "independent_capital_proof",
+    "kyc_aml_ready",
+    "payout_ledger_ready",
+)
 
 
 def policy_drift_defects() -> tuple[str, ...]:
@@ -22,6 +35,11 @@ def policy_drift_defects() -> tuple[str, ...]:
     ))
     required = {
         "14_level_ladder": LEVELS == expected_levels,
+        "level_10_owner_decision_lock_contract": (
+            OWNER_DECISION_LEVEL_NUMBER == 10
+            and OWNER_DECISION_LEVEL_CAPITAL_USD == expected_levels[9]
+            and REQUIRED_LEVEL_10_ATTESTATIONS == _EXPECTED_LEVEL_10_ATTESTATIONS
+        ),
         "ten_plans": len(CHALLENGE_PLANS) == 10,
         "single_owner_active_plan": (
             sum(p.business_active_owner_declared is True for p in CHALLENGE_PLANS) == 1
@@ -76,7 +94,8 @@ def policy_integrity_report() -> dict:
         "canonical_contract_id": CANONICAL_CONTRACT_ID,
         "policy_source": "prop_firm.rules.POLICY",
         "plan_source": "prop_firm.plans.CHALLENGE_PLANS",
-        "checked_invariants": 18,
+        "owner_decision_lock_source": "prop_firm.level10_lock",
+        "checked_invariants": 19,
         "defects": list(defects),
         "source_policy_consistent": not defects,
         "external_funding_or_broker_verified": False,

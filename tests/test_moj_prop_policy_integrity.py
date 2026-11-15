@@ -33,7 +33,7 @@ class PolicyIntegrityTests(SimpleTestCase):
     def test_current_official_fourteen_level_two_stage_policy_consistent(self):
         self.assertEqual(policy_drift_defects(), ())
         report = policy_integrity_report()
-        self.assertEqual(report["checked_invariants"], 18)
+        self.assertEqual(report["checked_invariants"], 19)
         self.assertEqual(report["canonical_contract_id"], CANONICAL_CONTRACT_ID)
         self.assertTrue(report["source_policy_consistent"])
         self.assertFalse(report["payment_or_trading_authorized"])
