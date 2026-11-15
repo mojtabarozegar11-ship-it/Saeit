@@ -2,6 +2,7 @@
 from django.test import SimpleTestCase
 from core.tron_rollout_inventory import (
     DISCOVERED_DOMAIN_ANCHORS, rollout_targets, inspect_rollout,
+    inspect_explicit_site_expansion,
 )
 from core.tron_tenant_policy import (
     CANONICAL_ASSET, CANONICAL_CHAIN, REQUIRED_ATTESTATIONS,
@@ -72,3 +73,58 @@ class RolloutCoverageTests(SimpleTestCase):
         self.assertEqual(len(main), 1)
         self.assertEqual(len(prop), 1)
         self.assertNotEqual(main[0]["section"], prop[0]["section"])
+
+    def test_explicit_third_host_expands_inventory_without_enabling_billing(self):
+        result = inspect_explicit_site_expansion(
+            merchant_registry={}, approved_site_hosts=["shop.example.org"],
+        )
+        self.assertEqual(result["logical_payment_scopes_not_hosts"], 55)
+        third = [x for x in result["entries"] if x["host"] == "shop.example.org"]
+        self.assertEqual(len(third), 18)
+        self.assertEqual(len([x for x in third if x["section"] == "market_signal_subscription"]), 17)
+        self.assertTrue(all(not x["checkout_enabled"] for x in third))
+        self.assertTrue(all(not x["eligible_for_adapter_review"] for x in third))
+        self.assertTrue(all(not x["domain_live_independently_verified"] for x in third))
+
+    def test_explicit_subdomain_does_not_inherit_parent_merchant(self):
+        registry = {("mojplaywin.com", ""): {
+            "tenant_id": "main", "network": CANONICAL_CHAIN,
+            "asset": CANONICAL_ASSET,
+            **{key: True for key in REQUIRED_ATTESTATIONS},
+        }}
+        result = inspect_explicit_site_expansion(
+            merchant_registry=registry,
+            approved_site_hosts=["play.mojplaywin.com"],
+        )
+        sub = [x for x in result["entries"] if x["host"] == "play.mojplaywin.com"]
+        self.assertEqual(len(sub), 18)
+        self.assertTrue(all(not x["eligible_for_adapter_review"] for x in sub))
+        self.assertFalse(result["live_gateway_connected"])
+
+    def test_explicit_new_host_only_its_registered_tenant_is_reviewable(self):
+        registry = {("shop.example.org", ""): {
+            "tenant_id": "example_store", "network": CANONICAL_CHAIN,
+            "asset": CANONICAL_ASSET,
+            **{key: True for key in REQUIRED_ATTESTATIONS},
+        }}
+        result = inspect_explicit_site_expansion(
+            merchant_registry=registry,
+            approved_site_hosts=["shop.example.org"],
+        )
+        third = [x for x in result["entries"] if x["host"] == "shop.example.org"]
+        self.assertEqual(sum(x["eligible_for_adapter_review"] for x in third), 1)
+        self.assertTrue(any(x["brand"] == "" and x["eligible_for_adapter_review"] for x in third))
+        self.assertTrue(all(not x["checkout_enabled"] for x in third))
+
+    def test_extra_host_inputs_are_bounded_unique_and_canonical(self):
+        for hosts in ("shop.example.org", ["mojplaywin.com"],
+                      ["new.example.org"] * 2, ["https://shop.example.org"],
+                      ["site%d.example.org" % i for i in range(101)]):
+            with self.subTest(hosts=repr(hosts)[:30]), self.assertRaises(ValueError):
+                inspect_explicit_site_expansion(
+                    merchant_registry={}, approved_site_hosts=hosts,
+                )
+        with self.assertRaises(ValueError):
+            inspect_explicit_site_expansion(
+                merchant_registry=None, approved_site_hosts=["shop.example.org"],
+            )
