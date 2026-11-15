@@ -1090,7 +1090,7 @@ class CommercialGateTests(unittest.TestCase):
             parent = path.parent
             parent.chmod(0o777)
             try:
-                with self.assertRaisesRegex(CommercialGateError, "ledger_parent_world_writable"):
+                with self.assertRaisesRegex(CommercialGateError, "ledger_parent_writable_by_others"):
                     SQLiteCommercialLedger(str(path))
             finally:
                 parent.chmod(0o700)
@@ -1638,6 +1638,19 @@ class CommercialGateTests(unittest.TestCase):
             with self.assertRaisesRegex(CommercialGateError, "order_not_found"):
                 ledger.snapshot("order-52")
             ledger.close()
+
+
+    def test_private_ledger_rejects_group_writable_parent_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ledger.sqlite3"
+            folder = path.parent
+            folder.chmod(0o770)
+            try:
+                with self.assertRaisesRegex(CommercialGateError, "ledger_parent_writable_by_others"):
+                    SQLiteCommercialLedger(str(path))
+                self.assertFalse(path.exists())
+            finally:
+                folder.chmod(0o700)
 
 
 if __name__ == "__main__":
