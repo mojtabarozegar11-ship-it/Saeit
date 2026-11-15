@@ -68,3 +68,5 @@ class PropInterestIntakeTests(TestCase):
         self.assertEqual(response.status_code,200)
         self.assertContains(response,'action="/moj-prop/interest/"')
         self.assertContains(response,"No order or TRX invoice is created")
+        self.assertEqual(response["Cache-Control"],"private, no-store, max-age=0")
+        self.assertIn("Cookie",response.get("Vary",""))
