@@ -275,7 +275,7 @@ jobs:
           timeout 90s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_moj_prop_backend.py rollback $GITHUB_RUN_ID"
       - name: Roll back only Moj Prop route if deployment verification fails
-        if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
+        if: failure() && steps.deploy.outcome == 'success' && (steps.backend.outcome == 'failure' || steps.smoke.outcome == 'failure')
         shell: bash
         run: |
           set -euo pipefail
