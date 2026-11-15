@@ -40,9 +40,9 @@ jobs:
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read().replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10); sys.stdout.write(s)' > "$d/host.key"
           chmod 600 "$d/host.key"
           ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
-          printf '%s\\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          printf 'Host cpanel\\n HostName 178.239.147.125\\n User zomorod2\\n Port 1396\\n IdentityFile %s/host.key\\n UserKnownHostsFile %s/known\\n StrictHostKeyChecking yes\\n IdentitiesOnly yes\\n BatchMode yes\\n ConnectTimeout 20\\n ConnectionAttempts 1\\n ForwardAgent no\\n RequestTTY no\\n' "$d" "$d" > "$d/config"
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 20\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$d" "$d" > "$d/config"
           chmod 600 "$d/config"
           timeout 90s ssh -T -F "$d/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
 
