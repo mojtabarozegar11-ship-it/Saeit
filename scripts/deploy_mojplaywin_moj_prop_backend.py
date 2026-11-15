@@ -40,6 +40,32 @@ REPLACE_FILES = (
     Path("core/migrations/0041_mojprop_request.py"),
 )
 
+# The legacy installer only knows 0041. Installing today's models/URLs and
+# then running migrate could leave the database partially upgraded, with no
+# database snapshot/restore path in restore(). Block rather than fake safety.
+COMMERCIAL_SCHEMA_MIGRATIONS = tuple(
+    Path(f"core/migrations/004{number}_{name}.py")
+    for number, name in (
+        (2, "mojprop_offer"),
+        (3, "mojprop_digital_inquiry"),
+        (4, "mojprop_acceptance_evidence"),
+        (5, "mojprop_delivery_evidence"),
+    )
+)
+
+
+def require_legacy_installer_compatibility(staged_root: Path) -> None:
+    """Block old installer BEFORE creating backups or changing live code."""
+    present = [p for p in COMMERCIAL_SCHEMA_MIGRATIONS
+               if (staged_root / p).exists() or (staged_root / p).is_symlink()]
+    if present:
+        # Do not allow an env toggle to bypass missing DB rollback.
+        raise RuntimeError(
+            "COMMERCIAL_DB_UPGRADE_BLOCKED: legacy installer copies only 0041; "
+            "0042-0045 require independent verified DB snapshot and rehearsal, "
+            "a new transactional migration release and full database rollback."
+        )
+
 
 def digest(path: Path) -> str:
     h = hashlib.sha256()
@@ -456,6 +482,9 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
         assert_regular(staged_root / relative, "backend staged file")
+    # Fail before *any* live file/DB change if today's commercial migrations
+    # exceed this legacy script's proven rollback scope.
+    require_legacy_installer_compatibility(staged_root)
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
