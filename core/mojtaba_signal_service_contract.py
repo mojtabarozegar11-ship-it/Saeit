@@ -188,18 +188,23 @@ def validate_offer(offer: SignalOffer) -> None:
         raise SignalContractError("active_offer_gates_incomplete")
 
 
-def _blocked_tokens(text: str) -> tuple[str, ...]:
-    # Normalize compatibility glyphs and invisible format characters so
-    # zero-width or full-width financial prompts cannot bypass the gate.
-    clean = unicodedata.normalize("NFKC", text)
+def _policy_normalize(value: str) -> str:
+    """Normalize both user text and policy tokens identically."""
+    clean = unicodedata.normalize("NFKC", value)
     clean = "".join(ch for ch in clean if unicodedata.category(ch) not in ("Cf", "Mn"))
-    normalized = " ".join(clean.lower().split())
+    return " ".join(clean.lower().split())
+
+
+def _blocked_tokens(text: str) -> tuple[str, ...]:
+    # A ZWNJ is removed from user text, so it must also be removed from
+    # blocked Persian phrases (e.g. سرمایه‌گذاری) before comparison.
+    normalized = _policy_normalize(text)
     found = set()
     for token in _ENGLISH_BLOCKED:
         if re.search(r"(?<![a-z])" + re.escape(token) + r"(?![a-z])", normalized):
             found.add(token)
     for token in _NON_ENGLISH_BLOCKED:
-        if token in normalized:
+        if _policy_normalize(token) in normalized:
             found.add(token)
     return tuple(sorted(found))
 

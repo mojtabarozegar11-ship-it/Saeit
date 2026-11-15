@@ -285,5 +285,24 @@ class MojtabaSignalContractTests(unittest.TestCase):
             validate_route_registry(stream())
 
 
+
+    def test_persian_halfspace_investment_request_is_rejected(self):
+        for phrase in (
+            "برای سرمایه‌گذاری در طلا پیشنهاد بده",
+            "سرمایه\u200cگذاری در ارز",
+        ):
+            with self.subTest(phrase=phrase), self.assertRaisesRegex(
+                SignalContractError, "financial_signal_disabled"
+            ):
+                validate_request(request_text=phrase)
+
+    def test_persian_plain_space_investment_remains_rejected(self):
+        with self.assertRaisesRegex(SignalContractError, "financial_signal_disabled"):
+            validate_request(request_text="سرمایه گذاری در ارز")
+
+    def test_nonfinancial_persian_research_remains_allowed(self):
+        validate_request(request_text="خلاصه پژوهش هزینه آبیاری و اقتصاد کشاورزی")
+
+
 if __name__ == "__main__":
     unittest.main()
