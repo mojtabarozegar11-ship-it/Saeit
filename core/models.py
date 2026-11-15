@@ -657,6 +657,7 @@ class MojPropOffer(T):
             f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\n"
             f"Reference: {self.lead.request_id} / version {self.version}\n"
             f"Service: {self.get_lead_route_display()}\n"
+            f"Catalog product ID: {self.lead.product_id or 'n/a'}\n"
             f"Deliverable: {self.title}\n"
             f"Scope: {self.scope}\n"
             f"Exclusions: {self.exclusions}\n"
