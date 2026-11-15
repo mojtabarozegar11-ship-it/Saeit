@@ -15,6 +15,8 @@ _ASSET = "TRX"
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$")
 _HOST = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _DIGEST = re.compile(r"^[a-f0-9]{64}$")
+_MAX_SUN = 10**15
+_MAX_RECEIPT_BATCH = 500
 
 
 class TronReconciliationError(ValueError):
@@ -52,7 +54,7 @@ def _host(value):
 
 
 def _digest(value, field):
-    if type(value) is not str or not _DIGEST.fullmatch(value):
+    if type(value) is not str or not _DIGEST.fullmatch(value) or value == "0" * 64:
         raise TronReconciliationError(f"{field}_invalid")
     return value
 
@@ -86,14 +88,15 @@ def validate_receipt_candidate(
     _host(candidate.host)
     _identifier(candidate.brand or "main", "brand")
     _identifier(candidate.invoice_id, "invoice_id")
-    _identifier(candidate.tx_id, "tx_id")
+    if type(candidate.tx_id) is not str or not _DIGEST.fullmatch(candidate.tx_id):
+        raise TronReconciliationError("tx_id_invalid_tron_transaction_hash")
     if candidate.network != _NETWORK or candidate.asset != _ASSET:
         raise TronReconciliationError("canonical_tron_asset_required")
-    if type(candidate.amount_sun) is not int or isinstance(candidate.amount_sun, bool) or candidate.amount_sun <= 0:
+    if type(candidate.amount_sun) is not int or not 1 <= candidate.amount_sun <= _MAX_SUN:
         raise TronReconciliationError("amount_sun_must_be_positive_integer")
     if type(candidate.confirmations) is not int or isinstance(candidate.confirmations, bool) or candidate.confirmations < 0:
         raise TronReconciliationError("confirmations_invalid")
-    if type(candidate.required_confirmations) is not int or isinstance(candidate.required_confirmations, bool) or candidate.required_confirmations < 1:
+    if type(candidate.required_confirmations) is not int or not 1 <= candidate.required_confirmations <= 10_000:
         raise TronReconciliationError("required_confirmations_invalid")
     _timestamp(candidate.observed_at)
     _digest(candidate.to_address_digest, "to_address_digest")
@@ -109,7 +112,7 @@ def validate_receipt_candidate(
         if getattr(candidate, key) != expected:
             raise TronReconciliationError("receipt_scope_mismatch")
     if now is not None:
-        if now.tzinfo is None:
+        if not isinstance(now, datetime) or now.tzinfo is None:
             raise TronReconciliationError("reconciliation_clock_must_be_timezone_aware")
         observed = _timestamp(candidate.observed_at)
         if observed > now + timedelta(seconds=30):
@@ -132,6 +135,9 @@ def build_review_record(
         "brand": candidate.brand,
         "invoice_id": candidate.invoice_id,
         "tx_id": candidate.tx_id,
+        "observed_at": candidate.observed_at,
+        "to_address_digest": candidate.to_address_digest,
+        "provider_reference_digest": candidate.provider_reference_digest,
         "network": candidate.network,
         "asset": candidate.asset,
         "amount_sun": candidate.amount_sun,
@@ -149,11 +155,16 @@ def build_review_record(
 def validate_receipt_batch(candidates) -> tuple[TrxReceiptCandidate, ...]:
     if not isinstance(candidates, (list, tuple)):
         raise TronReconciliationError("receipt_batch_required")
+    if len(candidates) > _MAX_RECEIPT_BATCH:
+        raise TronReconciliationError("receipt_batch_too_large")
     receipt_ids = set()
     tx_ids = set()
     for candidate in candidates:
+        if not isinstance(candidate, TrxReceiptCandidate):
+            raise TronReconciliationError("receipt_candidate_required")
         _identifier(candidate.receipt_id, "receipt_id")
-        _identifier(candidate.tx_id, "tx_id")
+        if type(candidate.tx_id) is not str or not _DIGEST.fullmatch(candidate.tx_id):
+            raise TronReconciliationError("tx_id_invalid_tron_transaction_hash")
         if candidate.receipt_id in receipt_ids:
             raise TronReconciliationError("duplicate_receipt_id")
         if candidate.tx_id in tx_ids:
