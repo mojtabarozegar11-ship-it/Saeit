@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n deploy/cpanel_direct_command.sh
-          test "$(git hash-object -- scripts/mpw_c29_cpanel_live_source_readonly.py)" = "0398f28f6d60b95ddbf21c2da467d9d88ef20f35"
+          test "$(git hash-object -- scripts/mpw_c29_cpanel_live_source_readonly.py)" = "8e78cdcbd2cc8b58b1406d32d2576cded4eaeb22"
           echo 'MOJ_SOURCE_PARITY_INSPECTOR_PINNED=PASS'
       - name: Read-only active cPanel code and WSGI fingerprints (sanitized)
         env:
