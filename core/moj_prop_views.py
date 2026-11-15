@@ -95,8 +95,14 @@ def moj_prop_interest(request):
         raise Http404
     if host not in ("mojplaywin.com", "www.mojplaywin.com") or not request.is_secure():
         raise Http404
+    # CSRF middleware may already have parsed POST; request.body can then raise
+    # RawPostDataException. Use validated CONTENT_LENGTH instead.
+    try:
+        content_length = int(request.META.get("CONTENT_LENGTH", "0"))
+    except (TypeError, ValueError):
+        return HttpResponse("Invalid form", status=400)
     if (request.content_type != "application/x-www-form-urlencoded"
-            or len(request.body) > 4096):
+            or not 0 < content_length <= 4096):
         return HttpResponse("Invalid form", status=400)
     if (request.POST.get("plan_code") != "MOJ-PROP-01"
             or request.POST.get("contact_consent") != "yes"
