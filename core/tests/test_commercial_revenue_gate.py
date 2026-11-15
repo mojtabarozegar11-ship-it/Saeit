@@ -3,7 +3,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from commercial_revenue_gate import (
+from core.commercial_revenue_gate import (
     CommercialGateError,
     CommercialState,
     OfferContract,
