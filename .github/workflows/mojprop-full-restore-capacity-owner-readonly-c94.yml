@@ -1,0 +1,69 @@
+name: Moj Prop full restore capacity gate — owner read-only
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojprop-full-restore-capacity-owner-readonly-c94.yml"
+      - "scripts/mojprop_full_restore_capacity_readonly_c94.py"
+      - "tests/test_mojprop_full_restore_capacity_readonly_c94.py"
+
+permissions:
+  contents: read
+
+jobs:
+  read_only_full_restore_feasibility:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - name: Checkout exact owner-authored PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate exact immutable read-only diagnostic and privacy regressions
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/mojprop_full_restore_capacity_readonly_c94.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_full_restore_capacity_readonly_c94 -q
+          test ! -L scripts/mojprop_full_restore_capacity_readonly_c94.py
+          test "$(git hash-object -- scripts/mojprop_full_restore_capacity_readonly_c94.py)" = "20a99acda03716aacfd7e5d42511f69e4ba8ef22"
+      - name: Connect only through pinned factory runner to the existing cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${HOST_KEY:?}"
+          umask 077
+          work="$RUNNER_TEMP/mojprop-capacity-c94"
+          install -d -m 700 "$work"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); sys.stdout.write(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n")' > "$work/host.key"
+          chmod 600 "$work/host.key"
+          ssh-keygen -y -P '' -f "$work/host.key" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$work/known"
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          printf 'Host cpanel\n HostName 178.239.147.125\n User zomorod2\n Port 1396\n IdentityFile %s/host.key\n UserKnownHostsFile %s/known\n StrictHostKeyChecking yes\n IdentitiesOnly yes\n BatchMode yes\n ConnectTimeout 15\n ConnectionAttempts 1\n ForwardAgent no\n RequestTTY no\n' "$work" "$work" > "$work/config"
+          chmod 600 "$work/config"
+          timeout 40s ssh -T -F "$work/config" cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging'
+      - name: Read only capacity and existing restore-evidence presence — no backups created
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mojprop-capacity-c94"
+          timeout 80s ssh -T -F "$work/config" cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mojprop_full_restore_capacity_readonly_c94.py \
+            | python3 -c 'import json,sys; data=sys.stdin.read(6000); prefix="MOJPROP_FULL_RESTORE_CAPACITY_READONLY="; lines=[x for x in data.splitlines() if x.startswith(prefix)]; assert len(lines)==1,"MISSING_SANITIZED_QUEUE"; d=json.loads(lines[0][len(prefix):]); assert d["schema"]=="mojprop.full_restore.capacity_readonly.v1" and d["read_only"] is True and d["no_host_or_database_writes"] is True and d["production_deployment_authorized"] is False and d["customer_payment_collected_by_probe"] is False; assert d["isolated_database_restore_executed"] is False and d["passenger_tenant_isolation_proven"] is False; print(lines[0])'
+          echo 'LIVE_MOJPROP_FULL_RESTORE_CAPACITY_READONLY=PASS'
+          echo 'No customer data, database dump, site change or payment; this scan alone cannot authorize deployment.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove ephemeral SSH authentication material
+        if: always()
+        shell: bash
+        run: |
+          work="$RUNNER_TEMP/mojprop-capacity-c94"
+          if test -d "$work"; then rm -f "$work/host.key" "$work/known" "$work/config"; rmdir "$work"; fi
