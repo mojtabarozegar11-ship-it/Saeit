@@ -44,7 +44,8 @@ class EducationalSignal:
 
 def _meaningful(value, name, *, minimum=15, maximum=1500):
     if (type(value) is not str or not minimum <= len(value.strip()) <= maximum
-            or any(ord(ch) < 32 and ch not in "\n\t" for ch in value)):
+            or any((ord(ch) < 32 and ch not in "\n\t")
+                   or 0xD800 <= ord(ch) <= 0xDFFF for ch in value)):
         raise SignalRecordError("invalid " + name)
     return value.strip()
 
@@ -80,11 +81,24 @@ def review_signal(record: EducationalSignal, *, now: datetime | None = None):
             "guaranteed profit", "risk free", "guaranteed return"
     ))):
         raise SignalRecordError("prohibited guaranteed-performance claim")
-    if type(record.evidence_url) is not str or len(record.evidence_url) > 500:
-        raise SignalRecordError("evidence URL required")
-    url = urlsplit(record.evidence_url)
-    if (url.scheme != "https" or not url.hostname or url.username or url.password
-            or not url.hostname.count(".") or url.fragment):
+    # URL splitting normalizes embedded tabs/newlines and may raise on invalid
+    # IPv6 or ports. Fail closed rather than allowing an unhandled 500 response.
+    if (type(record.evidence_url) is not str
+            or not 1 <= len(record.evidence_url) <= 500
+            or any(ord(ch) <= 32 or 0x7F <= ord(ch) <= 0x9F
+                   or 0xD800 <= ord(ch) <= 0xDFFF
+                   for ch in record.evidence_url)
+            or "\\" in record.evidence_url):
+        raise SignalRecordError("independent HTTPS source URL required")
+    try:
+        url = urlsplit(record.evidence_url)
+        host = url.hostname
+        port = url.port  # evaluate: invalid explicit port must be rejected
+    except ValueError as exc:
+        raise SignalRecordError("malformed HTTPS source URL") from exc
+    if (url.scheme != "https" or not host or url.username is not None
+            or url.password is not None or not host.count(".") or url.fragment
+            or port == 0):
         raise SignalRecordError("independent HTTPS source URL required")
     observed = _aware(record.observed_at, "observed_at")
     reviewed = _aware(record.reviewed_at, "reviewed_at")
