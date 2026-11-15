@@ -242,11 +242,16 @@ jobs:
           }
           echo 'SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS'
           for path in index.html journal-template.csv journal-guide.txt; do
-            code="$(curl --silent --show-error --max-time 25 -o /dev/null -w '%{http_code}' \
-              "https://mojplaywin.com/moj-prop/starter-30-trx/$path?v=$GITHUB_SHA")"
+            file="$RUNNER_TEMP/starter30-verified-$path"
+            code="$(curl --silent --show-error --max-redirs 0 --max-time 25 -o "$file" -w '%{http_code}' \
+              "https://mojplaywin.com/moj-prop/starter-30-trx/$path?v=$GITHUB_SHA" || true)"
             [[ "$code" == 200 ]] || { echo "STARTER30_DELIVERABLE_NOT_PUBLIC=$path HTTP=$code"; exit 1; }
+            # HTTP 200 alone is NOT a deliverable; byte-for-byte match reviewed GitHub source.
+            actual="$(sha256sum "$file" | awk '{print $1}')"
+            reviewed="$(sha256sum "templates/moj-prop-v4/starter-30-trx/$path" | awk '{print $1}')"
+            [[ "$actual" == "$reviewed" ]] || { echo "STARTER30_PUBLIC_SOURCE_DIGEST_MISMATCH=$path"; exit 1; }
           done
-          echo 'STARTER30_THREE_FILES_PUBLIC_HTTP=PASS'
+          echo 'STARTER30_THREE_FILES_PUBLIC_SHA256=PASS'
           intake_status="000"
           for intake_attempt in {1..10}; do
             intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop-intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID&attempt=$intake_attempt&ts=$(date +%s%N)" || true)"
