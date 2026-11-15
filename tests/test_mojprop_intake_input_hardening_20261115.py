@@ -158,3 +158,25 @@ class MojPropIntakeSafetyTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_browser_form_digital_sku_is_accepted_and_persisted(self):
+        data = {**self.data, "service": "digital", "product_id": "72", "consent": "on"}
+        response = self.client.post(
+            "/moj-prop-intake/", data, HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(response.status_code, 201, response.content[:300])
+        lead = MojPropRequest.objects.get()
+        self.assertEqual(lead.product_id, 72)
+        self.assertEqual(lead.route, "digital")
+
+    def test_browser_form_noncanonical_digital_sku_is_rejected(self):
+        for sku in ("072", "+72", "72 ", "72.0", "۷۲", "999", ""):
+            with self.subTest(sku=sku):
+                response = self.client.post(
+                    "/moj-prop-intake/",
+                    {**self.data, "service": "digital", "product_id": sku,
+                     "consent": "on"},
+                    HTTP_X_CSRFTOKEN=self.token,
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(MojPropRequest.objects.count(), 0)
