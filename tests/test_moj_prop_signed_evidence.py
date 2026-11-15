@@ -150,6 +150,18 @@ class BrokerSignedEvidenceTests(TestCase):
         self.assertEqual(result["result"], "recorded_pending")
         self.assertEqual(row.reconciliation_status, "pending")
         self.assertTrue(row.is_session_open)
+        self.assertEqual(row.data_source, SOURCE)
+
+    def test_authenticated_equity_evidence_stores_exact_allowlisted_source(self):
+        result = ingest_signed_evidence(**self.packet(
+            event_type="equity", event_id="mark-origin",
+            data={"equity_usd": "99.8750", "is_session_open": False},
+        ))
+        self.assertEqual(result["result"], "recorded_pending")
+        mark = PropEquityObservation.objects.get(external_event_id="mark-origin")
+        self.assertEqual(mark.data_source, SOURCE)
+        self.assertEqual(mark.reconciliation_status, "pending")
+        self.assertEqual(mark.equity_usd, Decimal("99.8750"))
 
     def test_missing_equity_flag_rejected(self):
         with self.assertRaises(EvidenceRejected):
