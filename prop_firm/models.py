@@ -507,8 +507,8 @@ class PropApplicant(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["status", "-created_at"], name="mp_applicant_status_created"),
-            models.Index(fields=["jurisdiction", "-created_at"], name="mp_applicant_jurisdiction_created"),
+            models.Index(fields=["status", "-created_at"], name="mp_app_status_created"),
+            models.Index(fields=["jurisdiction", "-created_at"], name="mp_app_juris_created"),
         ]
 
     def clean(self):
