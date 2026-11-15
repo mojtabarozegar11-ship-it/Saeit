@@ -630,14 +630,14 @@ class MojPropOffer(T):
     def manual_quote_text(self):
         """Copyable draft text; intentionally not an invoice or a payment request."""
         return (
-            f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\\n"
-            f"Reference: {self.lead.request_id}\\n"
-            f"Service: {self.get_lead_route_display()}\\n"
-            f"Deliverable: {self.title}\\n"
-            f"Scope: {self.scope}\\n"
-            f"Exclusions: {self.exclusions}\\n"
-            f"Quoted amount: {self.amount} {self.currency}\\n"
-            f"Target delivery: {self.delivery_days} day(s) after a separate agreement.\\n"
+            f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\n"
+            f"Reference: {self.lead.request_id}\n"
+            f"Service: {self.get_lead_route_display()}\n"
+            f"Deliverable: {self.title}\n"
+            f"Scope: {self.scope}\n"
+            f"Exclusions: {self.exclusions}\n"
+            f"Quoted amount: {self.amount} {self.currency}\n"
+            f"Target delivery: {self.delivery_days} day(s) after a separate agreement.\n"
             "No payment has been collected; a lawful payment route and written agreement are required."
         )
 
