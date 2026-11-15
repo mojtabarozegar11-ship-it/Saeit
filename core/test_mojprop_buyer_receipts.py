@@ -57,6 +57,13 @@ class MojPropBuyerReceiptTests(TestCase):
                 self.assertEqual(response.status_code, 404)
                 self.assertNotIn("status", response.json())
 
+    def test_invalid_token_has_same_no_cache_and_no_referrer_headers(self):
+        response = self.browser.get("/moj-prop-status/", {"receipt_token": "invalid"})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertEqual(response["Referrer-Policy"], "no-referrer")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+
     def test_expired_receipt_requires_private_manual_recovery(self):
         result = self.make_lead()
         with patch.object(signing.TimestampSigner, "unsign", side_effect=signing.SignatureExpired("old")):
