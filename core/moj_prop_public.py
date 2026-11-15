@@ -15,6 +15,8 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
 from .signal_interest_models import CommercialInterest
+from .interest_withdrawal import withdrawal_url
+from django.utils.html import format_html
 
 HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
 LOCALES = frozenset(("en", "fa", "ar", "de"))
@@ -74,7 +76,7 @@ def moj_prop_public(request, lang="en"):
     })
     patch_vary_headers(response, ("Cookie",))
     response["Cache-Control"] = "private, no-store, max-age=0"
-    response["Referrer-Policy"] = "same-origin"
+    response["Referrer-Policy"] = "no-referrer"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
@@ -123,15 +125,22 @@ def moj_prop_public_interest(request):
     except Exception:
         return HttpResponse("Request unavailable", status=503)
     with transaction.atomic():
-        CommercialInterest.objects.get_or_create(
+        lead, _ = CommercialInterest.objects.get_or_create(
             email=email, offer_family="moj_prop", brand="moj_prop", plan_code=SKU,
             defaults={"source_host": host, "source_language": language,
                       "consent_version": CONSENT},
         )
-    response = HttpResponse(LANGUAGE[language]["result"], status=202,
-                            content_type="text/plain; charset=utf-8")
+    label = {"en": "Withdraw contact consent", "fa": "لغو رضایت تماس",
+             "ar": "سحب الموافقة", "de": "Kontakt-Einwilligung widerrufen"}[language]
+    response = HttpResponse(
+        format_html('<!doctype html><html lang="{}"><meta name="robots" content="noindex,nofollow">'
+                    '<meta name="referrer" content="no-referrer"><title>MOJ PROP</title>'
+                    '<main><p>{}</p><p><a href="{}">{}</a></p></main></html>',
+                    language, LANGUAGE[language]["result"], withdrawal_url(request, lead), label),
+        status=202, content_type="text/html; charset=utf-8",
+    )
     response["Cache-Control"] = "private, no-store, max-age=0"
-    response["Referrer-Policy"] = "same-origin"
+    response["Referrer-Policy"] = "no-referrer"
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["X-Content-Type-Options"] = "nosniff"
     return response

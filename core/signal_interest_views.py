@@ -17,6 +17,8 @@ from django.views.decorators.http import require_POST
 
 from .signal_interest_policy import CANONICAL_AGENT, SIGNAL_BRANDS, SUPPORTED_LOCALES, SIGNAL_PLAN_CODES
 from .signal_interest_models import SignalInterest
+from .interest_withdrawal import withdrawal_url
+from django.utils.html import format_html
 
 ALLOWED_HOSTS = frozenset((
     "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir", "www.zomorodmelal.ir",
@@ -88,7 +90,7 @@ def signal_interest(request):
         return HttpResponse("Not available", status=503)
 
     with transaction.atomic():
-        SignalInterest.objects.get_or_create(
+        lead, _ = SignalInterest.objects.get_or_create(
             email=email, offer_family="signals", brand=brand, plan_code=sku,
             defaults={
                 "source_host": host,
@@ -96,10 +98,17 @@ def signal_interest(request):
                 "consent_version": "mojtaba-signals-interest-v1",
             },
         )
-    response = HttpResponse(SUCCESS[language], status=202,
-                            content_type="text/plain; charset=utf-8")
+    label = {"en": "Withdraw contact consent", "fa": "لغو رضایت تماس",
+             "ar": "سحب الموافقة على التواصل"}[language]
+    response = HttpResponse(
+        format_html('<!doctype html><html lang="{}"><meta name="robots" content="noindex,nofollow">'
+                    '<meta name="referrer" content="no-referrer"><title>Mojtaba.bot.ai</title>'
+                    '<main><p>{}</p><p><a href="{}">{}</a></p></main></html>',
+                    language, SUCCESS[language], withdrawal_url(request, lead), label),
+        status=202, content_type="text/html; charset=utf-8",
+    )
     response["Cache-Control"] = "private, no-store, max-age=0"
-    response["Referrer-Policy"] = "same-origin"
+    response["Referrer-Policy"] = "no-referrer"
     response["X-Content-Type-Options"] = "nosniff"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
