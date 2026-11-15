@@ -169,8 +169,9 @@ class MojPropSalesQueueTests(TestCase):
         for status in ("closed", "spam", "delivered"):
             lead = self._lead("END-" + status, status=status)
             self._offer(lead, status="draft", created_hours=48)
-            self._offer(lead, status="approved", created_hours=48)
-            # The draft is real DB state, but the customer is not contactable.
+            other = self._lead("END-APPROVED-" + status, status=status)
+            self._offer(other, status="approved", created_hours=48)
+            # Records exist, but a closed customer is not contactable.
         report = self.categories()
         self.assertEqual(report["draft_over_24h"]["count"], 0)
         self.assertEqual(report["approved_not_issued"]["count"], 0)
