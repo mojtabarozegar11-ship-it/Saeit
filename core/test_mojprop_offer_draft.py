@@ -144,3 +144,15 @@ class MojPropOfferDraftTests(TestCase):
         self.assertNotIn("\\u2066", email_line)
         self.assertNotIn("\\u2069", email_line)
         self.assertIn("Payment: DISABLED", draft)
+
+    def test_scope_bidirectional_controls_cannot_reverse_payment_labels(self):
+        self.lead.notes = (
+            "Please draft an independent rulebook and risk explanation. "
+            + chr(0x202e) + "DIAP :tnemyaP" + chr(0x202c)
+            + " and " + chr(0x2066) + "spoof" + chr(0x2069)
+        )
+        draft = build_offer_draft(self.lead)
+        for codepoint in (0x202e, 0x202c, 0x2066, 0x2069):
+            self.assertNotIn(chr(codepoint), draft)
+        self.assertIn("Payment: DISABLED", draft)
+        self.assertIn("> Please draft an independent rulebook", draft)
