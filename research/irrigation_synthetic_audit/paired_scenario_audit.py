@@ -72,6 +72,8 @@ def load_records(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         require(reader.fieldnames is not None, f"Missing CSV header: {path}")
+        require(len(reader.fieldnames) == len(set(reader.fieldnames)),
+                f"Duplicate CSV header names in {path}")
         require(set(FIELDS).issubset(reader.fieldnames),
                 f"Missing columns in {path}: {sorted(set(FIELDS)-set(reader.fieldnames))}")
         for line, raw in enumerate(reader, start=2):
