@@ -48,6 +48,9 @@
       <div class="mp-hero-actions">
         <a class="mp-button mp-button-gold" href="#rules">{{ hero.6 }}<span aria-hidden="true">↗</span></a>
         <a class="mp-button mp-button-quiet" href="#ladder">{{ nav.1 }}<span aria-hidden="true">↘</span></a>
+        {% if interest_enabled %}
+        <a class="mp-button mp-button-quiet" href="/moj-prop/interest/" lang="en">Request information — no payment or enrollment</a>
+        {% endif %}
       </div>
       <div class="mp-availability" role="status">
         <span class="mp-availability-mark" aria-hidden="true">●</span>
