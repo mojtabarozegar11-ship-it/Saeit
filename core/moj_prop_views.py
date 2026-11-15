@@ -69,3 +69,54 @@ def moj_prop_dashboard(request, lang="en"):
     response["X-Robots-Tag"] = "noindex, nofollow"
     response["X-Frame-Options"] = "DENY"
     return response
+
+def moj_prop_interest(request):
+    """Information inquiry, English-first; NEVER challenge enrollment or billing."""
+    from django.http import HttpResponse, Http404
+    from django.views.decorators.http import require_http_methods
+    from django.views.decorators.csrf import csrf_protect
+    from prop_firm.interest import intake_enabled, submit_inquiry, PropInterestError
+
+    @csrf_protect
+    @require_http_methods(["GET", "POST"])
+    def endpoint(request):
+        host = request.get_host().split(":")[0].lower()
+        if host not in ("mojplaywin.com", "www.mojplaywin.com"):
+            raise Http404("Moj Prop is exclusive to MojPlayWin")
+        if not intake_enabled():
+            raise Http404("Interest intake is not published")
+        if not request.is_secure():
+            raise Http404("Secure channel required")
+        success, error, status = False, "", 200
+        if request.method == "POST":
+            try:
+                submit_inquiry(
+                    email=request.POST.get("email", ""),
+                    consent=request.POST.get("privacy_consent") == "yes",
+                    remote_addr=request.META.get("REMOTE_ADDR", ""),
+                )
+                success = True
+            except PropInterestError as exc:
+                reason = str(exc)
+                if reason == "interest_rate_limited":
+                    status, error = 429, "Too many requests. Try again later."
+                elif reason in ("interest_rate_check_unavailable", "interest_intake_not_released"):
+                    status, error = 503, "Contact requests are temporarily unavailable."
+                else:
+                    status, error = 400, "Valid email and explicit consent are required."
+        response = render(
+            request, "mojplaywin/moj_prop_interest.html",
+            {"success": success, "error": error},
+            status=status,
+        )
+        response["Cache-Control"] = "private, no-store, max-age=0"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        response["X-Frame-Options"] = "DENY"
+        response["Referrer-Policy"] = "same-origin"
+        response["Content-Security-Policy"] = (
+            "default-src 'self'; form-action 'self'; base-uri 'self'; "
+            "frame-ancestors 'none'; style-src 'self' 'unsafe-inline'"
+        )
+        return response
+
+    return endpoint(request)
