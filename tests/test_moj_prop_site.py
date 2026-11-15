@@ -85,13 +85,16 @@ class MojPropCatalogTests(unittest.TestCase):
                 context = page_context(code)
                 statuses = context["plan_status_copy"]
                 self.assertEqual(set(statuses),
-                                 {"owner_active", "funding_hold", "owner_disclosure"})
+                                 {"owner_active", "funding_hold", "owner_disclosure", "owner_fee"})
                 self.assertTrue(all(statuses.values()))
                 self.assertEqual(context["owner_active_plans"], 1)
                 self.assertEqual(context["temporary_funding_hold_plans"], 9)
                 cards = context["challenge_plans"]
                 self.assertTrue(cards[0]["business_active_owner_declared"])
                 self.assertTrue(cards[0]["capital_funded_owner_declared"])
+                self.assertTrue(cards[0]["entry_fee_owner_confirmed"])
+                self.assertTrue(all(not card["entry_fee_owner_confirmed"]
+                                    for card in cards[1:]))
                 self.assertFalse(cards[0]["funding_independently_verified"])
                 self.assertFalse(cards[0]["checkout_enabled"])
                 for card in cards[1:]:
@@ -105,6 +108,7 @@ class MojPropCatalogTests(unittest.TestCase):
                 "core/templates/mojplaywin/moj_prop.html").read_text(encoding="utf-8")
         self.assertIn("plan.business_active_owner_declared", text)
         self.assertIn("plan_status_copy.owner_active", text)
+        self.assertIn("plan_status_copy.owner_fee", text)
         self.assertIn("plan_status_copy.funding_hold", text)
         self.assertIn("plan_status_copy.owner_disclosure", text)
         self.assertNotIn('name="wallet_private_key"', text)
