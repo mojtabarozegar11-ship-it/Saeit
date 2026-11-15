@@ -73,15 +73,31 @@ def verify(manifest_path):
 
     manifest_path = Path(manifest_path)
     try:
-        if manifest_path.is_symlink():
-            return ["manifest symlink forbidden"]
-        if manifest_path.stat().st_size > MAX_MANIFEST_BYTES:
-            return ["manifest exceeds size limit"]
-        with manifest_path.open("rb") as handle:
+        # Pin the manifest inode; a path check followed by open is racy.
+        flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
+        fd = os.open(manifest_path, flags)
+        with os.fdopen(fd, "rb") as handle:
+            before = os.fstat(handle.fileno())
+            if not stat.S_ISREG(before.st_mode):
+                return ["manifest must be a regular file"]
+            if before.st_size > MAX_MANIFEST_BYTES:
+                return ["manifest exceeds size limit"]
             raw = handle.read(MAX_MANIFEST_BYTES + 1)
+            after = os.fstat(handle.fileno())
+            if (before.st_size != after.st_size
+                    or before.st_mtime_ns != after.st_mtime_ns
+                    or before.st_ctime_ns != after.st_ctime_ns):
+                return ["manifest changed during read"]
         if len(raw) > MAX_MANIFEST_BYTES:
             return ["manifest exceeds size limit"]
-        data = json.loads(raw)
+        def reject_duplicate_keys(pairs):
+            obj = {}
+            for key, value in pairs:
+                if key in obj:
+                    raise ValueError("duplicate JSON key: " + key)
+                obj[key] = value
+            return obj
+        data = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
     except (OSError, UnicodeError, ValueError) as exc:
         return ["manifest unreadable or invalid JSON: " + str(exc)]
     if not check(isinstance(data, dict), "root must be object"):
