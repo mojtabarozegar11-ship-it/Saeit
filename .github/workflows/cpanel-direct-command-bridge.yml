@@ -15,6 +15,11 @@ on:
           - django_check
           - django_migrations
 
+  # Only an exact owner-authored command on the existing private-command issue
+  # can invoke the self-hosted *read-only* operation from chat. No push trigger.
+  issue_comment:
+    types: [created]
+
 permissions:
   contents: read
 
@@ -24,7 +29,21 @@ concurrency:
 
 jobs:
   cpanel:
-    if: "${{ github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' }}"
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.actor == 'mojtabarozegar11-ship-it' &&
+          github.event.issue.number == 1600 &&
+          !github.event.issue.pull_request &&
+          github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+          github.event.comment.author_association == 'OWNER' &&
+          github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'
+        )
+      )
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 8
     steps:
@@ -33,8 +52,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Execute selected read-only cPanel operation
+        if: github.event_name == 'workflow_dispatch'
         env:
           FACTORY_VPS_RUNNER: "1"
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -42,3 +63,20 @@ jobs:
           set -euo pipefail
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
+
+      - name: Inspect existing cPanel over factory-VPS direct SSH without writes
+        if: github.event_name == 'issue_comment'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          # The bridge and output sanitizer are already-reviewed main sources.
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "1f01a2408e82101b1321a7cd682fe6714508586b"
+          test "$(git hash-object -- scripts/mojplaywin_cpanel_readonly_inventory.py)" = "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
+          # Read-only operations run *on* the authorized self-hosted VPS.
+          # Never run a GitHub-hosted SSH hop to a possibly filtered VPS port.
+          timeout 95s bash deploy/cpanel_direct_command.sh relay_preflight
+          timeout 95s bash deploy/cpanel_direct_command.sh passenger_inventory
