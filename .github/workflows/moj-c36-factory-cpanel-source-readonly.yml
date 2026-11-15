@@ -1,0 +1,59 @@
+name: MOJ C36 factory-to-cPanel read-only effective source parity
+on:
+  push:
+    branches:
+      - ops/moj-c36-factory-cpanel-parity-readonly-20261115
+permissions:
+  contents: read
+concurrency:
+  group: moj-c36-factory-cpanel-source-readonly
+  cancel-in-progress: false
+jobs:
+  evidence:
+    runs-on: [self-hosted, factory-vps]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify established allowlist and source inspector
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/cpanel_direct_command.sh
+          test "$(git hash-object -- scripts/mpw_c29_cpanel_live_source_readonly.py)" = "0398f28f6d60b95ddbf21c2da467d9d88ef20f35"
+          echo 'MOJ_SOURCE_PARITY_INSPECTOR_PINNED=PASS'
+      - name: Read-only active cPanel code and WSGI fingerprints (sanitized)
+        env:
+          FACTORY_VPS_RUNNER: '1'
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${HOST_KEY:-}" ]]; then
+            echo 'MOJ_CPANEL_SOURCE_PARITY=UNKNOWN_NO_AUTHORIZED_SSH_KEY'
+            exit 0
+          fi
+          output="$(bash deploy/cpanel_direct_command.sh mpw_source_parity_readonly)"
+          printf '%s' "$output" | python3 -c '
+          import json,sys
+          raw=sys.stdin.read()
+          label="MPW_C29_PRODUCTION_SOURCE_PARITY="
+          if not raw.startswith(label):
+              raise SystemExit("SOURCE_PARITY_UNEXPECTED_OUTPUT")
+          report=json.loads(raw[len(label):])
+          print("MOJ_CPANEL_SOURCE_PARITY_MODE="+str(report.get("mode")))
+          print("MOJ_CPANEL_INSPECTED_ROOT_COUNT="+str(len(report.get("roots", []))))
+          for slot,root in enumerate(report.get("roots",[]),start=1):
+              public={
+                "root_slot":slot,
+                "exists":root.get("exists"),
+                "files":root.get("files",{}),
+                "public_bootstrap":root.get("public_bootstrap",{})
+              }
+              print("MOJ_CPANEL_SOURCE_SLOT="+json.dumps(public,sort_keys=True))
+          print("MOJ_CPANEL_WRITES="+str(report.get("writes")))
+          print("MOJ_CPANEL_CUSTOMER_READ="+str(report.get("customer_data_read")))
+          print("MOJ_CPANEL_SECRETS_READ="+str(report.get("secrets_read")))
+          print("MOJ_CPANEL_RELEASE_PERMITTED=false")
+          '
