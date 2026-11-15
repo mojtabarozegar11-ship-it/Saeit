@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from services.mpw_invoice_funnel_identity import created_invoice_product_id
+
 
 SOURCE = (Path(__file__).resolve().parents[1] / "services/mpw_trx_guest_commerce.py")
 
@@ -24,9 +26,15 @@ def stub_modules(record, product):
         "django.views.decorators.csrf", "django.views.decorators.http", "core", "core.models",
         "core.commerce_funnel",
         "services", "services.mpw_trx_email_recovery",
+        "services.mpw_invoice_funnel_identity",
     )
     result = {name: types.ModuleType(name) for name in names}
     result["services"].__path__ = []
+    # Export the real pure classifier through the synthetic services package;
+    # avoid hiding the actual dependency from the integration regression.
+    result["services.mpw_invoice_funnel_identity"].created_invoice_product_id = (
+        created_invoice_product_id
+    )
     for handler in ("recovery_request", "recovery_verify", "recovery_orders",
                     "recovery_download"):
         setattr(result["services.mpw_trx_email_recovery"], handler,
@@ -99,9 +107,12 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
                 4,
             )
             self.assertEqual(record.call_count, 1)
+            # Both documented Django dispatcher styles must retain the invoice response.
+            self.assertIs(namespace["start_order"](request, 72), response)
+            self.assertEqual(record.call_count, 2)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
-            self.assertEqual(dispatch.call_count, 2)
+            self.assertEqual(dispatch.call_count, 3)
 
 
 if __name__ == "__main__":
