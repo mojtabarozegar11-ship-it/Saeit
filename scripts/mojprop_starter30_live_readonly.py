@@ -113,6 +113,26 @@ def snapshot(root: Path = KNOWN_DOCROOT, *, owner: str = EXPECTED_OWNER) -> dict
 
     home = _safe_content(root, route / "index.html") if root_accepted else None
     catalog = _safe_content(root, route / "catalog" / "index.html") if root_accepted else None
+    # Classify ONLY the fixed, publicly reachable static page names.
+    # Report SHA256 of bounded, owner-verified regular files, never contents,
+    # private paths, secrets, environment variables or account data.
+    public_page_paths = {
+        "home": route / "index.html",
+        "catalog": route / "catalog" / "index.html",
+        "signal_desk": route / "signals" / "index.html",
+        "sample_prop_blueprint": route / "samples" / "prop-blueprint" / "index.html",
+        "sample_gold_market_brief": route / "samples" / "gold-market-brief" / "index.html",
+        "sample_educational_signal": route / "samples" / "educational-signal" / "index.html",
+        "sample_commercial_gate_audit": route / "samples" / "commercial-gate-audit" / "index.html",
+    }
+    public_page_digests = {}
+    for label, candidate in public_page_paths.items():
+        value = _safe_content(root, candidate) if root_accepted else None
+        public_page_digests[label] = {
+            "readable": value is not None,
+            "sha256": hashlib.sha256(value).hexdigest() if value is not None else None,
+        }
+
     main_html = assets["index.html"]["readable"]
     template = _safe_content(root, package / "journal-template.csv") if root_accepted else None
     page = _safe_content(root, package / "index.html") if root_accepted else None
@@ -123,6 +143,7 @@ def snapshot(root: Path = KNOWN_DOCROOT, *, owner: str = EXPECTED_OWNER) -> dict
         "docroot_and_route_ownership_verified": root_accepted,
         "candidate_package_directory_present": package_info["directory"],
         "assets": assets,
+        "public_page_digests": public_page_digests,
         "product_content": {
             "discloses_30_native_trx": bool(page and b"30 TRX" in page),
             "payment_disabled": bool(page and b"Payment not enabled" in page and b"Do not send TRX" in page),
