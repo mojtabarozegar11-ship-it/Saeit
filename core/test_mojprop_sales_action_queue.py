@@ -35,7 +35,7 @@ class MojPropSalesQueueTests(TestCase):
         issued_at = now - timedelta(hours=48) if status in (
             "issued", "accepted", "cancelled", "expired"
         ) else None
-        accepted_at = now - timedelta(hours=24) if status == "accepted" else None
+        accepted_at = now - timedelta(hours=30) if status == "accepted" else None
         row = MojPropOffer.objects.create(
             lead=lead, title="Scoped research deliverable",
             scope="A verifiable independent educational report with data and limitations.",
