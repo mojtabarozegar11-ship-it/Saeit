@@ -1,6 +1,6 @@
 """Actual admin form and workflow safeguards for real customer leads."""
 from django.contrib.admin.sites import AdminSite
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
 from core.admin import MojPropRequestAdmin, MojPropRequestStatusForm
@@ -94,6 +94,21 @@ class MojPropCommercialStageTests(TestCase):
         self.assertFalse(admin.has_delete_permission(None))
         self.assertFalse(admin.has_delete_permission(None, self.customer))
         self.assertTrue(MojPropRequest.objects.filter(pk=self.customer.pk).exists())
+
+    def test_stale_admin_form_cannot_overwrite_accepted_customer_proposal(self):
+        admin = MojPropRequestAdmin(MojPropRequest, AdminSite())
+        stale = MojPropRequest.objects.get(pk=self.customer.pk)
+        stale.status = "reviewing"
+        MojPropRequest.objects.filter(pk=self.customer.pk).update(
+            status="approved",
+            internal_note="OFFER: valid-proposal/MOJPROP-20261115-CRM01/v1\n"
+                          "ACCEPTANCE: customer-ack/MOJPROP-CRM01",
+        )
+        with self.assertRaises(PermissionDenied):
+            admin.save_model(None, stale, None, True)
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.status, "approved")
+        self.assertIn("ACCEPTANCE:", self.customer.internal_note)
 
     def test_review_transition_records_operator_review_time(self):
         admin = MojPropRequestAdmin(MojPropRequest, AdminSite())
