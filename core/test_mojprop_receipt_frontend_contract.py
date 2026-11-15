@@ -69,7 +69,7 @@ class MojPropReceiptFrontendContract(SimpleTestCase):
         html = self.html()
         self.assertIn("Object.entries(data.fields)", html)
         self.assertIn("response.status===429", html)
-        self.assertIn("Request NOT submitted.", html)
+        self.assertIn("This submission was not accepted.", html)
         self.assertNotIn("not submitted; local draft only", html)
         self.assertIn("receipt='';", html)
         self.assertIn("copy.disabled=true;", html)
