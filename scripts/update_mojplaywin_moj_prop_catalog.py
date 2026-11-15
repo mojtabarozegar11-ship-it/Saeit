@@ -88,7 +88,7 @@ def deploy(run_id: str, commit_sha: str) -> None:
         if catalog.is_symlink() or not catalog.is_file():
             raise RuntimeError("Moj Prop catalog exists but is unsafe")
         current_catalog = catalog.read_bytes()
-        marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\\n"
+        marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\n"
         index_matches = previous == new_index or previous == new_index.replace(marker, b"", 1)
         if index_matches and current_catalog == new_catalog:
             print("MOJ_PROP_CATALOG_ALREADY_LIVE")
