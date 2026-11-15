@@ -13,6 +13,8 @@ on:
       - "tests/test_mpw_tron_one_existing_payment_solidity_readonly_20261116.py"
       - "scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
       - "tests/test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py"
+      - "scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
+      - "tests/test_mpw_existing_paid_buyer_entitlement_readonly_20261116.py"
 
 permissions:
   contents: read
@@ -40,6 +42,11 @@ jobs:
           python3 -B -m unittest tests.test_mpw_tron_one_existing_payment_solidity_readonly_20261116 -q
           python3 -B -m py_compile scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
           python3 -B -m unittest tests.test_mpw_trx_existing_buyer_entitlement_link_readonly_20261116 -q
+          python3 -B -m py_compile scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          python3 -B -m unittest tests.test_mpw_existing_paid_buyer_entitlement_readonly_20261116 -q
+          test -f scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          test ! -L scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py
+          test "$(git hash-object -- scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py)" = "3f10cb8ff4652a8fab9ce06af9df8a462b0239d7"
           test -f scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
           test ! -L scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py
           test "$(git hash-object -- scripts/mpw_trx_existing_buyer_entitlement_link_readonly_20261116.py)" = "01b0189c22f2027702c0a0801a959f6d5565810e"
@@ -105,6 +112,18 @@ jobs:
             | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_TRX_PAID_PRODUCT_SCOPE_READONLY=")]; assert len(lines)==1,"missing or repeated report"; data=json.loads(lines[0].split("=",1)[1]); assert data["schema"]=="mpw.trx.existing.paid.product.delivery.v1" and data["read_only"] is True; print(lines[0])'
           echo 'TRON_EXISTING_PAID_ORDER_CLASSIFIED=READ_ONLY'
           echo 'An in-game cosmetic is not a digital download. Payment persistence does not establish external customer income.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Reconcile one prior buyer exact order invoice receipt asset entitlement -- READ ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="${RUNNER_TEMP}/mpw-trx-gates-ssh"
+          test -s "$d/config"
+          timeout 90s ssh -T -F "$d/config" cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' \
+            < scripts/mpw_existing_paid_buyer_entitlement_readonly_20261116.py \
+            | python3 -c 'import json,sys; raw=sys.stdin.read(8192); lines=[l for l in raw.splitlines() if l.startswith("MPW_ONE_PAID_BUYER_ENTITLEMENT_READONLY=")]; assert len(lines)==1,"missing or duplicated bounded report"; d=json.loads(lines[0].split("=",1)[1]); assert d["schema"]=="mpw.existing_paid_buyer.same_order_entitlement.readonly.v1" and d["read_only"] is True and d["no_money_or_customer_messages"] is True and d["production_db_or_files_changed"] is False; print(lines[0])'
+          echo 'TRON_SAME_ORDER_BUYER_DELIVERY_AUDIT=READ_ONLY'
+          echo 'Receipt/outbox and entitlement booleans do not prove an independent customer acknowledgment.' >> "$GITHUB_STEP_SUMMARY"
       - name: Independently reverify at most one prior paid Mainnet tx from solidified read-only node
         shell: bash
         run: |
