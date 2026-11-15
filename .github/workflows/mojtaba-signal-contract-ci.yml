@@ -6,6 +6,8 @@ on:
       - "core/mojtaba_signal_service_contract.py"
       - "core/mojtaba_signal_order_contract.py"
       - "core/mojtaba_signal_order_ledger.py"
+      - "core/mojtaba_signal_tron_invoice_contract.py"
+      - "core/tests/test_mojtaba_signal_tron_invoice_contract.py"
       - "core/tests/test_mojtaba_signal_service_contract.py"
       - "core/tests/test_mojtaba_signal_order_contract.py"
       - "core/tests/test_mojtaba_signal_order_ledger_contract.py"
