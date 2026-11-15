@@ -327,6 +327,7 @@ def authorize_nonfinancial_signal_dispatch(
     offer: OfferContract,
     tenant_registry: Mapping[str, str],
     independent_release_verifier: Callable[[OfferContract], bool],
+    independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
 ) -> None:
     """Guard dispatch by the ONE governed bot; no signal is published here."""
     if bot_identity != "mojtaba-bot-ai":
@@ -336,8 +337,11 @@ def authorize_nonfinancial_signal_dispatch(
     if offer.active is not True:
         raise CommercialGateError("signal_offer_not_authorized_for_dispatch")
     validate_signal_request(requested_action=requested_action)
-    validate_offer(offer, tenant_registry=tenant_registry,
-                   independent_release_verifier=independent_release_verifier)
+    validate_offer(
+        offer, tenant_registry=tenant_registry,
+        independent_release_verifier=independent_release_verifier,
+        independent_domain_delegation_verifier=independent_domain_delegation_verifier,
+    )
 
 
 @dataclass(frozen=True)
@@ -432,6 +436,7 @@ def validate_merchant_trx_receipt(
     evidence: PaymentEvidence,
     expected_order_id: str,
     expected_invoice_id: str,
+    independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
 ) -> str:
     """Private manual merchant-specific TRX evidence gate, NOT a payment API."""
     if not isinstance(offer, OfferContract) or offer.offer_type is not OfferType.TRX_GATEWAY:
@@ -441,6 +446,7 @@ def validate_merchant_trx_receipt(
     validate_offer(
         offer, tenant_registry=tenant_registry,
         independent_release_verifier=independent_release_verifier,
+        independent_domain_delegation_verifier=independent_domain_delegation_verifier,
     )
     return validate_payment_evidence(
         evidence, expected_order_id=expected_order_id,
