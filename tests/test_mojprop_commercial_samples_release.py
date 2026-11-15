@@ -202,6 +202,26 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertIn("Operator customised", path.read_text("utf-8"))
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
+    def test_readonly_preflight_proves_no_backup_or_live_write(self):
+        before_home = (self.route / "index.html").read_bytes()
+        before_catalog = (self.route / "catalog/index.html").read_bytes()
+        with patch("builtins.print") as messages:
+            release.preflight("123")
+        self.assertIn("MOJ_PROP_STATIC_PREFLIGHT=PASS",
+                      [call.args[0] for call in messages.call_args_list])
+        self.assertEqual((self.route / "index.html").read_bytes(), before_home)
+        self.assertEqual((self.route / "catalog/index.html").read_bytes(), before_catalog)
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_readonly_preflight_refuses_unknown_live_content_before_any_write(self):
+        target = self.route / "signals/index.html"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("Unknown live Signal Desk content", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "differs from all exact reviewed baselines"):
+            release.preflight("123")
+        self.assertEqual(target.read_text("utf-8"), "Unknown live Signal Desk content")
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
     def test_idempotent_deploy_never_makes_second_backup(self):
         release.deploy("123", "a" * 40)
         release.deploy("123", "a" * 40)
