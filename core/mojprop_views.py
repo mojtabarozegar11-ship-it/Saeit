@@ -46,12 +46,27 @@ def _payload(request):
 
 
 def _client_ip(request) -> str:
-    # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    return str(
-        request.META.get("HTTP_X_REAL_IP")
-        or request.META.get("REMOTE_ADDR")
-        or "unknown"
-    ).strip()[:128]
+    """Use the peer address; forward headers are trusted only from allowed proxies."""
+    from ipaddress import ip_address
+
+    remote = str(request.META.get("REMOTE_ADDR") or "").strip()
+    try:
+        peer = str(ip_address(remote))
+    except ValueError:
+        return "unknown"
+
+    # A public visitor must not choose a new rate-limit identity by sending
+    # X-Real-IP. Only explicitly configured reverse proxy peers can assert it.
+    allowed = getattr(settings, "MOJ_PROP_TRUSTED_PROXY_IPS", ())
+    if not isinstance(allowed, (tuple, list, set, frozenset)):
+        allowed = ()
+    if peer in allowed:
+        claimed = str(request.META.get("HTTP_X_REAL_IP") or "").strip()
+        try:
+            return str(ip_address(claimed))
+        except ValueError:
+            return peer
+    return peer
 
 
 def _ip_hash(request) -> str:
