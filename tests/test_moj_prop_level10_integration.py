@@ -20,10 +20,7 @@ class MojPropLevel10IntegrationTests(TestCase):
         self.assertEqual(policy_drift_defects(), ())
 
     def test_default_level10_decision_remains_locked(self):
-        decision = evaluate_level_lock(
-            level_number=10,
-            capital_usd=OWNER_DECISION_LEVEL_CAPITAL_USD,
-        )
+        decision = evaluate_level_lock(level_number=10)
         self.assertTrue(decision.locked)
         self.assertIn("owner_decision_recorded", decision.missing)
         self.assertFalse(decision.checkout_enabled)
