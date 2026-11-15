@@ -193,6 +193,7 @@ def ingest_signed_evidence(*, account_id, source, raw, signature, issued_at,
             target = PropEquityObservation
             incoming = dict(
                 account=account, external_event_id=event_id,
+                data_source=source,
                 observed_at=occurred, equity_usd=equity,
                 is_session_open=data["is_session_open"],
                 reconciliation_status="pending", evidence_digest=digest,
