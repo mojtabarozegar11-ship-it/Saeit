@@ -147,3 +147,9 @@ MOJTABA_SIGNAL_TRON_RECEIVER = env(
 MOJTABA_SIGNAL_TRON_QUOTE_HMAC_KEY_HEX = env(
     "MOJTABA_SIGNAL_TRON_QUOTE_HMAC_KEY_HEX", default="",
 )
+
+# Exact permitted service catalog SHA-256 digests; default DENY.
+# This configuration must come from separately approved legal/rights records.
+MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS = env.list(
+    "MOJTABA_SIGNAL_APPROVED_SERVICE_FINGERPRINTS", default=[],
+)
