@@ -3,13 +3,13 @@ name: Update Moj Prop commercial catalog on MojPlayWin
 on:
   pull_request:
     paths:
-      - ".github/workflows/mojplaywin-moj-prop-catalog-catalog-update.yml"
+      - ".github/workflows/mojplaywin-moj-prop-catalog-update.yml"
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "templates/moj-prop-v4"
   push:
     branches: [main]
     paths:
-      - ".github/workflows/mojplaywin-moj-prop-catalog-catalog-update.yml"
+      - ".github/workflows/mojplaywin-moj-prop-catalog-update.yml"
       - "scripts/update_mojplaywin_moj_prop_catalog.py"
       - "templates/moj-prop-v4"
   workflow_dispatch:
