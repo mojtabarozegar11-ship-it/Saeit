@@ -115,7 +115,7 @@ class MojPropContractTests(unittest.TestCase):
             validate_enrollment(self.enrollment(fee_payment_verified=True))
 
     def test_fee_transaction_id_is_validated(self):
-        validate_enrollment(self.enrollment(fee_payment_verified=True, transaction_id="trx-52-proof"))
+        validate_enrollment(self.enrollment(fee_payment_verified=True, transaction_id="a" * 64))
 
     def test_active_release_requires_all_gates(self):
         with self.assertRaisesRegex(PropContractError, "release_gates_incomplete"):
@@ -129,7 +129,7 @@ class MojPropContractTests(unittest.TestCase):
             legal_reviewed=True,
             owner_approved=True,
             rights_cleared=True,
-            transaction_id="trx-52-proof",
+            transaction_id="a" * 64,
         )
         activated = activate_enrollment(enrolled)
         self.assertEqual(activated.state, ChallengeState.ACTIVE)
@@ -173,6 +173,75 @@ class MojPropContractTests(unittest.TestCase):
     def test_peak_cannot_be_below_current_equity(self):
         with self.assertRaisesRegex(PropContractError, "peak_equity_inconsistent"):
             evaluate_challenge(self.rules(), self.snapshot(current_equity_usd=Decimal("111"), peak_equity_usd=Decimal("110")))
+
+    def test_raw_string_challenge_state_cannot_bypass_enum_validation(self):
+        for state in ("eligible", "active", "passed", "funded", "unknown"):
+            with self.subTest(state=state), self.assertRaisesRegex(
+                PropContractError, "enrollment_state_invalid"
+            ):
+                validate_enrollment(self.enrollment(state=state))
+
+    def test_fee_evidence_requires_canonical_lowercase_tron_transaction_id(self):
+        for tx in ("trx-52-proof", "A" * 64, "z" * 64, "a" * 63):
+            with self.subTest(tx=tx[:12]), self.assertRaisesRegex(
+                PropContractError, "verified_fee_requires_transaction_id"
+            ):
+                validate_enrollment(self.enrollment(
+                    fee_payment_verified=True, transaction_id=tx,
+                ))
+        validate_enrollment(self.enrollment(
+            fee_payment_verified=True, transaction_id="b" * 64,
+        ))
+
+    def test_excessive_drawdown_above_capital_rejected(self):
+        with self.assertRaisesRegex(PropContractError, "drawdown_above_total_capital"):
+            validate_rules(self.rules(
+                daily_loss_limit_pct=Decimal("5"),
+                max_drawdown_pct=Decimal("101"),
+            ))
+
+    def test_infinite_trading_window_rejected(self):
+        with self.assertRaisesRegex(PropContractError, "trading_day_window_invalid"):
+            validate_rules(self.rules(maximum_trading_days=367))
+
+    def test_excessive_open_position_count_rejected(self):
+        with self.assertRaisesRegex(PropContractError, "max_open_positions_invalid"):
+            validate_rules(self.rules(max_open_positions=101))
+
+    def test_day_open_equity_above_peak_is_inconsistent(self):
+        with self.assertRaisesRegex(PropContractError, "peak_equity_inconsistent"):
+            evaluate_challenge(self.rules(), self.snapshot(
+                start_of_day_equity_usd=Decimal("200"), peak_equity_usd=Decimal("110")
+            ))
+
+    def test_daily_loss_just_below_boundary_not_failed_by_display_rounding(self):
+        result = evaluate_challenge(self.rules(), self.snapshot(
+            start_of_day_equity_usd=Decimal("100"),
+            current_equity_usd=Decimal("95.0001"),
+            peak_equity_usd=Decimal("100"),
+        ))
+        self.assertEqual(result.daily_loss_pct, Decimal("5.00"))
+        self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
+
+    def test_drawdown_just_below_boundary_not_failed_by_display_rounding(self):
+        result = evaluate_challenge(self.rules(), self.snapshot(
+            start_of_day_equity_usd=Decimal("90.0001"),
+            current_equity_usd=Decimal("90.0001"),
+            peak_equity_usd=Decimal("100"),
+        ))
+        self.assertEqual(result.drawdown_pct, Decimal("10.00"))
+        self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
+
+    def test_profit_just_below_target_does_not_pass_by_display_rounding(self):
+        result = evaluate_challenge(self.rules(), self.snapshot(
+            current_equity_usd=Decimal("109.9995"),
+        ))
+        self.assertEqual(result.profit_pct, Decimal("10.00"))
+        self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
+
+    def test_state_transition_rejects_untyped_string(self):
+        with self.assertRaisesRegex(PropContractError, "invalid_challenge_state_type"):
+            advance_state("created", ChallengeState.PAYMENT_PENDING)
 
     def test_state_cannot_skip_to_funded(self):
         with self.assertRaisesRegex(PropContractError, "invalid_challenge_transition"):
