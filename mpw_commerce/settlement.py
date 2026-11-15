@@ -48,15 +48,25 @@ def _address_matches(asset, actual, expected):
 
 def _verify_evidence(invoice,normalized,proof):
     """Recheck independent evidence against every immutable invoice field."""
-    if not isinstance(proof,dict):
+    if type(proof) is not dict:
         raise SettlementRejected("No independent final-chain evidence")
     expected=RECEIVERS.get(invoice.asset)
     if not expected:
         raise SettlementRejected("Unsupported asset")
     network,recipient,_=expected
+    # A forged or corrupted on-disk invoice must never become a paid order,
+    # even when a chain transfer exists for the same numeric amount.
+    raw_amount = invoice.amount_atomic
+    if (type(raw_amount) is not str
+            or re.fullmatch(r"[1-9][0-9]{0,49}", raw_amount) is None):
+        raise SettlementRejected("Invalid immutable atomic payment amount")
     if (invoice.network!=network
         or not _address_matches(invoice.asset, invoice.recipient, recipient)
-        or invoice.total_usd<=0
+        or type(invoice.total_usd) is not Decimal
+        or not invoice.total_usd.is_finite() or invoice.total_usd<=0
+        or type(invoice.quote_usd_per_asset) is not Decimal
+        or not invoice.quote_usd_per_asset.is_finite()
+        or invoice.quote_usd_per_asset<=0
         or not invoice.sender_challenge_id
         or invoice.sender_signature_verified_at is None):
         raise SettlementRejected("Unsupported or altered payment invoice")
