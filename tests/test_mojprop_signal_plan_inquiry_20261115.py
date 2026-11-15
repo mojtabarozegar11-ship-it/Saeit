@@ -67,6 +67,17 @@ const ctx = {
     }
     posted.push({url, body:JSON.parse(options.body)});
     if (process.argv[5] === "lost-response") throw Error("POST transport response lost");
+    if (process.argv[5] === "invalid-email") {
+      return {status:400,ok:false,json:async()=>({
+        ok:false,detail:"Please correct the highlighted fields.",
+        fields:{email:"A valid email is required."}
+      })};
+    }
+    if (process.argv[5] === "throttled") {
+      return {status:429,ok:false,json:async()=>({
+        ok:false,detail:"Too many requests."
+      })};
+    }
     return {status:201,ok:true,json:async()=>({
       ok:true, request_id:"MOJPROP-20261115-A1B2C3D4",
       receipt_token:"synthetic-signed-token"
@@ -222,6 +233,26 @@ class SignalPlanInquiryTests(unittest.TestCase):
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
         self.assertIn("Request NOT submitted", state["receipt"])
+
+    def test_explicit_email_validation_rejection_shows_actionable_reason(self):
+        state = self._browser(
+            "?service=blueprint&package=starter-30-trx", mode="invalid-email"
+        )
+        self.assertEqual(len(state["posted"]), 1)
+        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("email: A valid email is required.", state["receipt"])
+        self.assertNotIn("Submission status unconfirmed", state["receipt"])
+        self.assertFalse(state["downloadEnabled"])
+
+    def test_explicit_rate_limit_rejection_preserves_retry_guidance(self):
+        state = self._browser(
+            "?service=blueprint&package=starter-30-trx", mode="throttled"
+        )
+        self.assertEqual(len(state["posted"]), 1)
+        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("Wait before resubmitting", state["receipt"])
+        self.assertNotIn("Submission status unconfirmed", state["receipt"])
+        self.assertFalse(state["downloadEnabled"])
 
     def test_lost_post_response_does_not_falsely_assert_no_server_lead(self):
         state = self._browser(
