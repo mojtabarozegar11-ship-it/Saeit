@@ -56,9 +56,14 @@ _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
 _HOST = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _TX = re.compile(r"^[A-Za-z0-9:_-]{8,256}$")
-_BLOCKED_SIGNAL_WORDS = frozenset(
-    {"buy", "sell", "hold", "long", "short", "entry", "exit", "trade", "order"}
-)
+# Only canonical non-financial deliverables may be requested. A blacklist
+# can be bypassed with concatenation, other scripts, or mixed-language prompts.
+_ALLOWED_NONFINANCIAL_SIGNAL_ACTIONS = frozenset({
+    "research_summary",
+    "operational_alert",
+    "agricultural_cost_report",
+    "service_quality_report",
+})
 
 
 def _text(value: object, field: str) -> str:
@@ -149,9 +154,11 @@ def validate_offer(
 
 
 def validate_signal_request(*, requested_action: str, financial_authorized: bool = False) -> None:
-    """Block investment calls while allowing research/operational services."""
-    action = _text(requested_action, "requested_action").lower()
-    if set(re.findall(r"[a-z]+", action)) & _BLOCKED_SIGNAL_WORDS or financial_authorized:
+    """Require an exact non-financial service code; no free-text execution."""
+    action = _text(requested_action, "requested_action")
+    if type(financial_authorized) is not bool or financial_authorized:
+        raise CommercialGateError("financial_signal_disabled")
+    if action not in _ALLOWED_NONFINANCIAL_SIGNAL_ACTIONS:
         raise CommercialGateError("financial_signal_disabled")
 
 
