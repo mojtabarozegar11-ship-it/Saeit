@@ -196,6 +196,31 @@ class MojPlayWinProductDetailsTests(TestCase):
         self.assertContains(response, "Continue to verified TRX checkout")
         self.assertContains(response, "Never send funds to an address found outside your verified order invoice.")
 
+    def test_private_purchase_link_refused_on_plain_http_even_with_live_backing(self):
+        from django.test import RequestFactory
+        from core.mojplaywin_product_detail import _approved_purchase_url
+        Product.objects.create(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        request = RequestFactory().get(
+            "/store/product/72/", HTTP_HOST="mojplaywin.com"
+        )
+        product = Product.objects.get(pk=72)
+        self.assertIsNone(_approved_purchase_url(request, product))
+
+    def test_private_purchase_link_refused_for_foreign_host_even_on_https(self):
+        from django.test import RequestFactory
+        from core.mojplaywin_product_detail import _approved_purchase_url
+        request = RequestFactory().get(
+            "/store/product/72/", secure=True, HTTP_HOST="evil.example"
+        )
+        product = Product(
+            pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
+            product_type="digital_book", currency="USD", price="7.50",
+        )
+        self.assertIsNone(_approved_purchase_url(request, product))
+
     def test_missing_private_gateway_holds_checkout_even_when_catalog_matches(self):
         Product.objects.create(
             pk=72, title=PUBLIC_CATALOG[72]["title"], active=True,
