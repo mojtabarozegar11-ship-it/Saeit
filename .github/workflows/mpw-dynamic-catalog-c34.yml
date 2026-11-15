@@ -27,7 +27,7 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile exact changes
         run: |
-          python -m py_compile core/mojplaywin_dynamic_catalog.py core/mojplaywin_product_detail.py core/mojplaywin_views.py tests/test_mojplaywin_dynamic_catalog.py
+          python -m py_compile core/mojplaywin_checkout_route.py core/mojplaywin_dynamic_catalog.py core/mojplaywin_product_detail.py core/mojplaywin_views.py tests/test_mojplaywin_dynamic_catalog.py tests/test_mojplaywin_effective_checkout_route.py
       - name: Check Django configuration
         run: python manage.py check
       - name: Check migration drift
@@ -35,4 +35,4 @@ jobs:
       - name: Build static manifest for production-like template rendering
         run: python manage.py collectstatic --noinput
       - name: Verify new-SKU catalog and existing three product detail pages
-        run: pytest -q tests/test_mojplaywin_dynamic_catalog.py tests/test_mojplaywin_product_detail.py
+        run: pytest -q tests/test_mojplaywin_effective_checkout_route.py tests/test_mojplaywin_dynamic_catalog.py tests/test_mojplaywin_product_detail.py
