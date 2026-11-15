@@ -82,10 +82,19 @@ def _read(fd: int, name: str, uid: int, *, minimum=64) -> bytes:
 
 def _write(fd: int, name: str, body: bytes) -> None:
     handle = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW, 0o600, dir_fd=fd)
-    with os.fdopen(handle, "wb") as dest:
-        dest.write(body)
-        dest.flush()
-        os.fsync(dest.fileno())
+    try:
+        with os.fdopen(handle, "wb") as dest:
+            dest.write(body)
+            dest.flush()
+            os.fsync(dest.fileno())
+    except BaseException:
+        # A partially written file belongs to THIS exclusive create, not to
+        # the webroot; reclaim its quota blocks via the pinned directory fd.
+        try:
+            os.unlink(name, dir_fd=fd)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _mkdir(fd: int, name: str, uid: int, *, unique=False) -> int:
@@ -185,12 +194,15 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                     os.fsync(hfd)
                     vfd = _mkdir(hfd, ".mojprop-static-restore-evidence", uid)
                     try:
-                        runfd = _mkdir(vfd, run_id, uid, unique=True)
+                        runfd = None
+                        bfd = None
+                        restorefd = None
+                        completed = False
                         try:
+                            runfd = _mkdir(vfd, run_id, uid, unique=True)
                             bfd = _mkdir(runfd, "backup", uid, unique=True)
                             restorefd = _mkdir(runfd, "isolated-restore", uid, unique=True)
-                            try:
-                                checksums = {}
+                            checksums = {}
                                 for i, body in enumerate(originals):
                                     name = "file-" + str(i) + ".bin"
                                     _write(bfd, name, body)
@@ -217,11 +229,36 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                                             "release_permitted": False,
                                             "payment_permitted": False}
                                 _write(runfd, "manifest.json", json.dumps(manifest, sort_keys=True).encode())
-                            finally:
-                                os.close(restorefd)
-                                os.close(bfd)
+                            completed = True
                         finally:
-                            os.close(runfd)
+                            if not completed and runfd is not None:
+                                # Delete ONLY entries exclusively created inside
+                                # this new run directory. Never delete pre-existing
+                                # files, live content or the consumed owner marker.
+                                for child_fd in (bfd, restorefd):
+                                    if child_fd is not None:
+                                        for i in range(len(PUBLIC_FILES)):
+                                            try:
+                                                os.unlink("file-" + str(i) + ".bin", dir_fd=child_fd)
+                                            except FileNotFoundError:
+                                                pass
+                                try:
+                                    os.unlink("manifest.json", dir_fd=runfd)
+                                except FileNotFoundError:
+                                    pass
+                            if restorefd is not None:
+                                os.close(restorefd)
+                            if bfd is not None:
+                                os.close(bfd)
+                            if not completed and runfd is not None:
+                                for child in ("backup", "isolated-restore"):
+                                    try:
+                                        os.rmdir(child, dir_fd=runfd)
+                                    except FileNotFoundError:
+                                        pass
+                                os.rmdir(run_id, dir_fd=vfd)
+                            if runfd is not None:
+                                os.close(runfd)
                     finally:
                         os.close(vfd)
                 finally:
