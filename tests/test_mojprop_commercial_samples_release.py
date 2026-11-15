@@ -299,6 +299,35 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertFalse((self.route / "starter-30-trx/index.html").exists())
 
 
+    def test_symlinked_live_signal_desk_still_blocks_publish_for_tenant_safety(self):
+        path = self.route / "signals/index.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        outside = self.home / "other-private-tenant.html"
+        outside.write_text("PRIVATE CONTENT", encoding="utf-8")
+        path.symlink_to(outside)
+        with self.assertRaisesRegex(RuntimeError, "Unsafe Signal Desk path"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(outside.read_text("utf-8"), "PRIVATE CONTENT")
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_legacy_ten_file_manifest_can_never_rewrite_owner_signal(self):
+        live = self.route / "signals/index.html"
+        live.parent.mkdir(parents=True, exist_ok=True)
+        live.write_bytes(b"customer signal changes are protected")
+        release.deploy("123", "a" * 40)
+        path = self.backups / "moj-prop-catalog-123/manifest.json"
+        original = json.loads(path.read_text("utf-8"))
+        forged = dict(original)
+        forged["schema"] = "mojprop.static.starter30.v2"
+        path.write_text(json.dumps(forged), "utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Legacy or unrecognized"):
+            release.restore(path.parent)
+        self.assertEqual(live.read_bytes(), b"customer signal changes are protected")
+        path.write_text(json.dumps(original), "utf-8")
+        release.restore(path.parent)
+        self.assertEqual(live.read_bytes(), b"customer signal changes are protected")
+
     def test_readonly_preflight_proves_no_backup_or_live_write(self):
         before_home = (self.route / "index.html").read_bytes()
         before_catalog = (self.route / "catalog/index.html").read_bytes()
