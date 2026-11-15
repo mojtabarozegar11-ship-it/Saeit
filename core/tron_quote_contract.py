@@ -81,12 +81,11 @@ def _message(quote):
 
 def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
                           usd_price, trx_usd_rate, observed_at_utc,
-                          expires_at_utc, signing_key):
+                          expires_at_utc, signing_key, now_utc):
     """Authenticated pricing, not an invoice. Called only after a durable order ID.
 
-    Exchange rate freshness is checked against the quote expiry for a fully
-    deterministic offline contract; API caller must separately ensure the
-    observation isn't in the future relative to its trusted server clock.
+    A protected server clock MUST be passed at issuance. Rates older than
+    five minutes or timestamped in the future cannot mint valid quotes.
     """
     key = _key(signing_key)
     if not isinstance(tenant, TenantDecision) or type(merchant_registry) is not dict:
@@ -106,11 +105,16 @@ def make_native_trx_quote(*, tenant, merchant_registry, order_id, sku,
         raise NativeTrxQuoteError("order_or_sku_invalid")
     _utc(observed_at_utc, "rate_observation")
     _utc(expires_at_utc, "quote_expiry")
-    if not (timedelta(0) < expires_at_utc - observed_at_utc <= MAX_RATE_AGE):
+    _utc(now_utc, "server_issuance")
+    if not (observed_at_utc <= now_utc < expires_at_utc
+            and now_utc - observed_at_utc <= MAX_RATE_AGE
+            and expires_at_utc - now_utc <= MAX_QUOTE_LIFETIME
+            and timedelta(0) < expires_at_utc - observed_at_utc <= MAX_RATE_AGE):
         raise NativeTrxQuoteError("exchange_rate_expired")
     usd, rate = _amount(usd_price, "usd_price"), _amount(trx_usd_rate, "trx_rate")
     if rate < Decimal("0.000001") or rate > Decimal("10000"):
         raise NativeTrxQuoteError("exchange_rate_out_of_bounds")
+    # Integral-SUN ceiling never quotes a transfer smaller than 1 SUN.
     sun = int((usd / rate * SUN).to_integral_value(rounding=ROUND_CEILING))
     if not 1 <= sun <= MAX_SUN:
         raise NativeTrxQuoteError("native_sun_amount_out_of_bounds")
