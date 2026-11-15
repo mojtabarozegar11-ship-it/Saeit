@@ -21,7 +21,8 @@ const fs = require("fs");
 const vm = require("vm");
 const html = fs.readFileSync(process.argv[1], "utf8");
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
-if (scripts.length !== 1) throw Error("Expected exactly one inline application script");
+const applicationScript = scripts.find(s => s[1].includes("const form=document.getElementById('request-form')"));
+if (!applicationScript) throw Error("Application form script was not found");
 const ids = ["request-form", "result", "copy", "download", "receipt-token",
   "status-check", "status-result", "selected-signal-plan", "notes",
   "service", "name", "email", "horizon", "website", "consent"];
@@ -60,7 +61,7 @@ const ctx = {
     })};
   }
 };
-vm.runInNewContext(scripts[0][1], ctx, {timeout:1000});
+vm.runInNewContext(applicationScript[1], ctx, {timeout:1000});
 if (process.argv[3]) {
   elements["service"].value = process.argv[3];
   elements["service"].listeners.change();
