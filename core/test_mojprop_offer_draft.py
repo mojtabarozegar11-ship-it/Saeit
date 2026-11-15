@@ -114,3 +114,62 @@ class MojPropOfferDraftTests(TestCase):
         self.assertIn("NOT AN INVOICE", draft)
         self.assertIn("No funded trading account", draft)
         self.assertNotIn("send_email(", draft)
+
+    def test_free_educational_inquiry_is_not_invoiced_as_generic_signal_service(self):
+        self.lead.route = "signals"
+        self.lead.notes = (
+            "Requested free educational example: one-off manual review; no "
+            "subscription or payment. Gold methodology and risk context only."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("FREE educational example requested", draft)
+        self.assertIn("no price quoted", draft)
+        self.assertNotIn("Indicative starting amount: USD 29", draft)
+        self.assertIn("Payment: DISABLED", draft)
+
+    def test_real_catalog_weekly_price_not_generic_29_for_specific_plan(self):
+        self.lead.route = "signals"
+        self.lead.notes = (
+            "Requested educational plan: education-weekly (indicative USD 9.90; "
+            "written quote required)\\n"
+            "Please review a dated nonpersonalized educational gold market brief."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Buyer-selected plan: education-weekly", draft)
+        self.assertIn("indicative catalog amount USD 9.90", draft)
+        self.assertNotIn("Indicative starting amount: USD 29", draft)
+        self.assertIn("final quote NOT APPROVED", draft)
+
+    def test_monthly_and_quarterly_derive_price_from_source_catalog(self):
+        for code, amount in (("education-monthly", "29.90"),
+                             ("education-quarterly", "79.90")):
+            with self.subTest(plan=code):
+                self.lead.route = "signals"
+                self.lead.notes = (
+                    "Please prepare a written educational research scope for the "
+                    f"requested plan ({code}); no payment authorized."
+                )
+                draft = build_offer_draft(self.lead)
+                self.assertIn("Buyer-selected plan: " + code, draft)
+                self.assertIn("indicative catalog amount USD " + amount, draft)
+
+    def test_mixed_free_and_paid_scope_cannot_generate_price(self):
+        self.lead.route = "signals"
+        self.lead.notes = (
+            "Requested free educational example: one-off manual review, but also "
+            "education-quarterly as a potentially different research scope."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Price WITHHELD: conflicting free/paid identifiers", draft)
+        self.assertNotIn("indicative catalog amount USD 79.90", draft)
+
+    def test_multiple_paid_skus_need_clarification_not_price(self):
+        self.lead.route = "signals"
+        self.lead.notes = (
+            "I would like the education-weekly or education-quarterly market "
+            "brief; please clarify price, frequency and deliverable."
+        )
+        draft = build_offer_draft(self.lead)
+        self.assertIn("Price WITHHELD: multiple educational plan identifiers", draft)
+        self.assertNotIn("indicative catalog amount USD", draft)
+

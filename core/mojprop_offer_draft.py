@@ -29,6 +29,45 @@ def _quoted_scope(text: str) -> str:
     )
 
 
+def _signal_price_note(lead, generic_start: int) -> str:
+    """Infer *nonbinding* buyer scope from text, never approve an invoice."""
+    # The public intake currently persists only a notes field, not a trusted
+    # paid-plan foreign key. Treat these strings as buyer claims, not evidence.
+    from services.mojtaba_signal_catalog import PLANS
+
+    notes = str(lead.notes)
+    free_requested = (
+        notes.startswith("Requested free educational example:")
+        or notes.startswith("One-off FREE educational market-brief example request")
+        or notes.startswith("Please provide a FREE historical educational example")
+    )
+    matched = [
+        code for code in PLANS
+        if re.search(r"(?<![a-z0-9-])" + re.escape(code) + r"(?![a-z0-9-])", notes)
+    ]
+    if free_requested and matched:
+        return "Price WITHHELD: conflicting free/paid identifiers; operator must clarify scope."
+    if free_requested:
+        return (
+            "FREE educational example requested; no price quoted, automatic "
+            "free entitlement, or delivery promised. Manual review required."
+        )
+    if len(matched) > 1:
+        return "Price WITHHELD: multiple educational plan identifiers; operator must clarify."
+    if len(matched) == 1:
+        code = matched[0]
+        plan = PLANS[code]
+        return (
+            f"Buyer-selected plan: {code}; indicative catalog amount USD "
+            f"{plan.price_usd:.2f}; final quote NOT APPROVED. "
+            "Plan identity must be confirmed before invoicing."
+        )
+    return (
+        f"Indicative starting amount: USD {generic_start}; final quote NOT APPROVED. "
+        "No particular educational signal plan was selected."
+    )
+
+
 def build_offer_draft(lead) -> str:
     """Render a traceable customer-specific written-scope draft; never charge."""
     if not lead.pk or lead.status != "reviewing" or lead.consent is not True:
@@ -56,7 +95,8 @@ def build_offer_draft(lead) -> str:
         _quoted_scope(details),
         "",
         "Proposed work: written analysis/service deliverable to be scoped and reviewed.",
-        f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED.",
+        (_signal_price_note(lead, service["indicative_from_usd"]) if lead.route == "signals"
+         else f"Indicative starting amount: USD {service['indicative_from_usd']}; final quote NOT APPROVED."),
         "Deliverable sample: " + service["sample_url"],
         "Jurisdiction, taxes, precise scope, revisions and delivery date: require separate human confirmation.",
         "Payment: DISABLED until valid written offer and approved lawful receiver/checkout.",
