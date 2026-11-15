@@ -354,27 +354,15 @@ def patch_commercial(namespace):
                     # redirect to a positive-ID local TRX invoice. Validation
                     # errors, 200 pages and unrelated redirects are NOT sales
                     # funnel successes; analytics may never break checkout.
-                    try:
-                        import re
-                        from urllib.parse import urlsplit
-                        location = response.get("Location", "")
-                        redirect = urlsplit(location) if type(location) is str else None
-                        invoice_created = (
-                            getattr(response, "status_code", None) in (302, 303)
-                            and redirect is not None
-                            and not redirect.scheme and not redirect.netloc
-                            and re.fullmatch(
-                                r"/commerce/trx-easy/invoice/[1-9][0-9]*/",
-                                redirect.path,
-                            ) is not None
-                        )
-                    except (AttributeError, TypeError, ValueError):
-                        invoice_created = False
-                    if invoice_created:
+                    from services.mpw_invoice_funnel_identity import (
+                        created_invoice_product_id,
+                    )
+                    product_id = created_invoice_product_id(response, args, kwargs)
+                    if product_id is not None:
                         try:
                             from core.models import Product
                             product = Product.objects.filter(
-                                pk=kwargs.get("product_id"), active=True,
+                                pk=product_id, active=True,
                             ).first()
                             if product is not None:
                                 _record_funnel_event_best_effort(
