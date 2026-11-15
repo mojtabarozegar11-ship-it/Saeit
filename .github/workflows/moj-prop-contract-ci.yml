@@ -24,4 +24,4 @@ jobs:
       - name: Run Moj Prop contract tests
         env:
           PYTHONPATH: core
-        run: python -m unittest -v core/tests/test_moj_prop_contract.py
+        run: python -m unittest discover -v -s core/tests -p 'test_moj_prop_contract.py'
