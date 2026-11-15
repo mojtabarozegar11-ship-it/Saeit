@@ -1,0 +1,49 @@
+name: P0 Django commercial migration graph repair
+on:
+  push:
+    branches: ["cycle65-core-migration-merge-p0-20261115"]
+  pull_request:
+    paths:
+      - "core/migrations/0040_commercefunnelevent.py"
+      - "core/migrations/0041_mojprop_request.py"
+      - "core/migrations/0042_merge_commerce_funnel_mojprop_20261115.py"
+      - "tests/test_core_commercial_migration_merge_c65.py"
+      - ".github/workflows/moj-prop-core-merge-migration-ci.yml"
+permissions:
+  contents: read
+jobs:
+  isolated-commercial-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DEBUG: "true"
+      SECRET_KEY: ci-only-commercial-core-merge
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: sqlite:///ci-commercial-migration-c65.sqlite3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Django project requirements
+        run: python -m pip install -r requirements.txt
+      - name: Check model graph and system configuration
+        run: |
+          python manage.py check
+          python manage.py makemigrations core --check --dry-run
+      - name: Run nine graph-level regressions
+        run: python manage.py test tests.test_core_commercial_migration_merge_c65 --verbosity 2
+      - name: Apply merged chain ONLY to ephemeral SQLite database
+        run: |
+          python manage.py migrate --noinput
+          python - <<'PY'
+          import os, django
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          django.setup()
+          from django.db import connection
+          tables = set(connection.introspection.table_names())
+          required = {"core_commercefunnelevent", "core_mojproprequest"}
+          assert required <= tables, f"missing independent business tables: {required - tables}"
+          print("EPHEMERAL_COMMERCE_AND_MOJ_PROP_TABLES=PASS")
+          PY
