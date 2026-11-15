@@ -87,9 +87,25 @@
         'education-quarterly':'quarterly'
       };
       const requestedPlan=new URLSearchParams(window.location.search).get('plan');
-      if(requestedService==='signals' && Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)){
-        document.getElementById('notes').value='Please provide a risk-disclosed educational '+signalPlans[requestedPlan]+' market brief. A recurring subscription and payment have not been authorized.';
+      const freeTierRequested=requestedService==='signals' &&
+        new URLSearchParams(window.location.search).get('tier')==='free';
+      let signalPrefill='';
+      if(freeTierRequested){
+        signalPrefill='One-off FREE educational market-brief example request through mojtaba.bot.ai. '+
+          'This is manual review only, not a live signal, a mailing-list subscription, a payment, or a delivery guarantee.';
+      }else if(requestedService==='signals' && Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)){
+        signalPrefill='Please provide a risk-disclosed educational '+signalPlans[requestedPlan]+
+          ' market brief (exact plan ID: '+requestedPlan+'). A recurring subscription and payment have not been authorized.';
       }
+      if(signalPrefill) document.getElementById('notes').value=signalPrefill;
+      serviceSelector.addEventListener('change',function(){
+        const notes=document.getElementById('notes');
+        if(serviceSelector.value!=='signals' && notes.value===signalPrefill){
+          notes.value='';
+          signalPrefill='';
+          syncDigitalProduct();
+        }
+      });
 
       async function csrf(signal){
         if(csrfToken) return csrfToken;
