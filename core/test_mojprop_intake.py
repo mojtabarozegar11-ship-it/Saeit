@@ -94,7 +94,9 @@ class MojPropIntakeTests(TestCase):
         self.assertLess(upload, backend)
         self.assertLess(backend, preflight)
         self.assertLess(preflight, static)
-        self.assertIn("core/migrations/0042_alter_mojproprequest_source.py", workflow)
+        self.assertIn("core/migrations/0042_merge_commercefunnel_mojprop.py", workflow)
+        self.assertIn("core/migrations/0043_alter_mojproprequest_source.py", workflow)
+        self.assertIn("inputs.confirm_owner_release == true", workflow)
         self.assertIn("https://mojplaywin.com/moj-prop-intake/", workflow)
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
         self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
@@ -295,3 +297,22 @@ class MojPropIntakeTests(TestCase):
         result = self.post(self.payload())
         self.assertEqual(result["Referrer-Policy"], "same-origin")
 
+
+    def test_root_api_endpoint_matches_static_form_and_django_urlconf(self):
+        from django.urls import resolve, reverse
+        from core.mojprop_views import mojprop_intake
+        home = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
+        self.assertEqual(reverse("mojprop_intake"), "/moj-prop-intake/")
+        self.assertIs(resolve("/moj-prop-intake/").func, mojprop_intake)
+        self.assertIn("const endpoint='/moj-prop-intake/';", home)
+        self.assertNotIn("const endpoint='/api/moj-prop/intake/';", home)
+
+    def test_forged_cross_origin_cannot_write_lead(self):
+        response = self.client.post(
+            "/moj-prop-intake/", data=json.dumps(self.payload()),
+            content_type="application/json", HTTP_HOST="mojplaywin.com",
+            HTTP_ORIGIN="https://untrusted.example",
+            HTTP_X_CSRFTOKEN=self.csrf_token, secure=True,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(MojPropRequest.objects.count(), 0)
