@@ -129,10 +129,11 @@ urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/",
 
 
 # Moj Prop public request intake is deliberately separate from payment and order APIs.
-from core.mojprop_views import mojprop_intake
+from core.mojprop_views import mojprop_intake, mojprop_receipt_status
 # The public /moj-prop/ directory is served as a static product surface by Apache.
 # Keep the intake API at a root-level WSGI path so GET and POST reach Passenger.
 urlpatterns += [
     path("moj-prop-intake/", mojprop_intake, name="mojprop_intake"),
+    path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status"),
     path("moj-prop/intake/", mojprop_intake, name="mojprop_intake_legacy"),
 ]
