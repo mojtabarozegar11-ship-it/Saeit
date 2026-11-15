@@ -26,31 +26,62 @@ ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
 MAX_REQUESTS_PER_WINDOW = 5
 RATE_WINDOW = timedelta(minutes=10)
+MAX_REQUEST_BYTES = 16_384
+FIELD_LIMITS = {
+    "name": 200, "email": 254, "service": 30, "horizon": 20,
+    "notes": 5000, "website": 120,
+}
+ALLOWED_FIELDS = frozenset((*FIELD_LIMITS, "consent"))
 
 
 def _text(payload, key: str, limit: int) -> str:
+    """Never silently truncate buyer input or coerce structured data to a string."""
     value = payload.get(key, "")
-    return str(value).strip()[:limit] if value is not None else ""
+    if not isinstance(value, str) or len(value) > limit:
+        raise ValueError("invalid field: " + key)
+    value = value.strip()
+    allowed_controls = "\\n\\t" if key == "notes" else ""
+    if any(ord(char) < 32 and char not in allowed_controls for char in value):
+        raise ValueError("control character in " + key)
+    return value
+
+
+def _unique_json_pairs(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON field")
+        value[key] = item
+    return value
 
 
 def _payload(request):
-    content_type = request.META.get("CONTENT_TYPE", "")
-    if content_type.startswith("application/json"):
+    if len(request.body) > MAX_REQUEST_BYTES:
+        raise OverflowError("request body exceeds intake limit")
+    content_type = request.META.get("CONTENT_TYPE", "").split(";", 1)[0].strip().lower()
+    if content_type == "application/json":
         try:
-            value = json.loads(request.body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+            value = json.loads(
+                request.body.decode("utf-8"),
+                object_pairs_hook=_unique_json_pairs,
+                parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")),
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             return None
         return value if isinstance(value, dict) else None
-    return request.POST
+    if content_type == "application/x-www-form-urlencoded":
+        return request.POST
+    return None
 
 
 def _client_ip(request) -> str:
     # Proxy-provided values are bounded and hashed immediately; the raw value is never stored.
-    return str(
-        request.META.get("HTTP_X_REAL_IP")
-        or request.META.get("REMOTE_ADDR")
-        or "unknown"
-    ).strip()[:128]
+    peer = str(request.META.get("REMOTE_ADDR") or "unknown").strip()[:128]
+    # Never trust a spoofable client-supplied proxy header by default.
+    trusted_proxies = getattr(settings, "MOJPROP_TRUSTED_PROXIES", ())
+    if isinstance(trusted_proxies, (list, tuple, frozenset)) and peer in trusted_proxies:
+        return str(request.META.get("HTTP_X_REAL_IP") or peer).strip()[:128]
+    return peer
 
 
 def _ip_hash(request) -> str:
@@ -83,21 +114,33 @@ def mojprop_intake(request):
     if request.method == "GET":
         return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake"})
 
-    payload = _payload(request)
+    try:
+        payload = _payload(request)
+    except OverflowError:
+        return _json({"ok": False, "detail": "Request is too large."}, status=413)
     if payload is None:
-        return _json({"ok": False, "detail": "Request body must be valid JSON."}, status=400)
+        return _json({"ok": False, "detail": "Use valid JSON or form data."}, status=400)
+    if set(payload) - ALLOWED_FIELDS:
+        return _json({"ok": False, "detail": "Unknown request fields."}, status=400)
+    try:
+        fields = {name: _text(payload, name, limit) for name, limit in FIELD_LIMITS.items()}
+    except ValueError:
+        return _json({"ok": False, "detail": "A field is malformed or too long."}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
-    if _text(payload, "website", 120):
+    if fields["website"]:
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
-    name = _text(payload, "name", 200)
-    email = _text(payload, "email", 254).lower()
-    route = _text(payload, "service", 30)
-    horizon = _text(payload, "horizon", 20)
-    notes = _text(payload, "notes", 5000)
+    name = fields["name"]
+    email = fields["email"].lower()
+    route = fields["service"]
+    horizon = fields["horizon"]
+    notes = fields["notes"]
     consent_value = payload.get("consent")
-    consent = consent_value is True or str(consent_value).lower() in {"1", "true", "on", "yes"}
+    consent = consent_value is True or (
+        request.content_type.split(";", 1)[0].lower() == "application/x-www-form-urlencoded"
+        and consent_value in ("1", "true", "on", "yes")
+    )
 
     errors = {}
     if len(name) < 2:
@@ -119,10 +162,12 @@ def mojprop_intake(request):
 
     ip_hash = _ip_hash(request)
     if _rate_limited(email, ip_hash):
-        return _json(
+        response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
+        response["Retry-After"] = "600"
+        return response
 
     request_obj = None
     for _ in range(3):
