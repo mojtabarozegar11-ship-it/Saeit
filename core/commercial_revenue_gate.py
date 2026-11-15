@@ -7,7 +7,7 @@ TRX, places a trade, publishes a signal, or grants a download by itself.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
@@ -369,6 +369,18 @@ class ConfirmedRefund:
     refund_transaction_id: str
     amount: Decimal
     source_id: str
+
+
+def _canonical_payment_evidence(evidence: PaymentEvidence) -> PaymentEvidence:
+    """Keep the external reviewer and local receipt digest on identical facts."""
+    return replace(
+        evidence,
+        order_id=_slug(evidence.order_id, "order_id"),
+        invoice_id=_slug(evidence.invoice_id, "invoice_id"),
+        provider=_slug(evidence.provider, "provider"),
+        amount=Decimal(_canonical_amount(evidence.amount, evidence.currency)),
+        transaction_id=_text(evidence.transaction_id, "transaction_id").lower(),
+    )
 
 
 def validate_payment_evidence(
@@ -779,7 +791,7 @@ class SQLiteCommercialLedger:
                     if self._settlement_verifier is None:
                         raise CommercialGateError("independent_settlement_verifier_required")
                     try:
-                        payment_confirmed = self._settlement_verifier(payment_evidence)
+                        payment_confirmed = self._settlement_verifier(_canonical_payment_evidence(payment_evidence))
                     except Exception:
                         raise CommercialGateError("independent_settlement_verifier_failed") from None
                     if payment_confirmed is not True:
@@ -886,7 +898,7 @@ class SQLiteCommercialLedger:
                 if self._settlement_verifier is None:
                     raise CommercialGateError("independent_settlement_verifier_required")
                 try:
-                    confirmed = self._settlement_verifier(payment_evidence)
+                    confirmed = self._settlement_verifier(_canonical_payment_evidence(payment_evidence))
                 except Exception:
                     raise CommercialGateError("independent_settlement_verifier_failed") from None
                 if confirmed is not True:
