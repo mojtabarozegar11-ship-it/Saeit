@@ -5,7 +5,7 @@ using a browser-supplied tx hash or a settings flag. Database writes (receipt,
 ledger, paid order, fulfillment outbox) commit atomically. Merchant does not
 approve individual purchases. All public integrations remain disabled.
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 import hashlib
 import json
@@ -38,6 +38,14 @@ def _normalized_transaction(invoice,tx_hash):
     return normalized
 
 
+def _address_matches(asset, actual, expected):
+    # TRON Base58Check addresses are case-sensitive; EVM hex is not.
+    if type(actual) is not str or type(expected) is not str:
+        return False
+    return (actual.lower() == expected.lower()
+            if asset == "ETH" else actual == expected)
+
+
 def _verify_evidence(invoice,normalized,proof):
     """Recheck independent evidence against every immutable invoice field."""
     if not isinstance(proof,dict):
@@ -46,7 +54,8 @@ def _verify_evidence(invoice,normalized,proof):
     if not expected:
         raise SettlementRejected("Unsupported asset")
     network,recipient,_=expected
-    if (invoice.network!=network or invoice.recipient.lower()!=recipient.lower()
+    if (invoice.network!=network
+        or not _address_matches(invoice.asset, invoice.recipient, recipient)
         or invoice.total_usd<=0
         or not invoice.sender_challenge_id
         or invoice.sender_signature_verified_at is None):
@@ -55,7 +64,7 @@ def _verify_evidence(invoice,normalized,proof):
             <=invoice.issued_at+timedelta(minutes=10)):
         raise SettlementRejected("Invalid locked payment window")
     block_time=proof.get("block_timestamp")
-    if (block_time is None or timezone.is_naive(block_time)
+    if (type(block_time) is not datetime or timezone.is_naive(block_time)
         or not invoice.issued_at<=block_time<=invoice.expires_at):
         raise SettlementRejected("Transfer was not mined within the quote window")
     if (
@@ -63,8 +72,10 @@ def _verify_evidence(invoice,normalized,proof):
         or proof.get("order_id")!=invoice.order_id
         or proof.get("network")!=invoice.network
         or proof.get("tx_hash")!=normalized
-        or proof.get("sender","").lower()!=invoice.expected_sender.lower()
-        or proof.get("recipient","").lower()!=recipient.lower()
+        or not _address_matches(
+            invoice.asset, proof.get("sender"), invoice.expected_sender)
+        or not _address_matches(
+            invoice.asset, proof.get("recipient"), recipient)
         or type(proof.get("amount_atomic")) is not int
         or proof.get("amount_atomic")!=int(invoice.amount_atomic)
         or proof.get("backend")!=network+"-verified"
