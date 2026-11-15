@@ -31,7 +31,8 @@ FIELD_LIMITS = {
     "name": 200, "email": 254, "service": 30, "horizon": 20,
     "notes": 5000, "website": 120,
 }
-ALLOWED_FIELDS = frozenset((*FIELD_LIMITS, "consent"))
+ALLOWED_FIELDS = frozenset((*FIELD_LIMITS, "consent", "product_id"))
+CATALOG_INQUIRY_PRODUCTS = frozenset((72, 225, 879))
 
 
 def _text(payload, key: str, limit: int) -> str:
@@ -158,7 +159,15 @@ def mojprop_intake(request):
         and consent_value in ("1", "true", "on", "yes")
     )
 
+    # A valid digital-product inquiry identifies exactly one listed SKU.
+    # No price, recipient, payment flag, txid, or buyer identity is accepted.
+    product_id = payload.get("product_id")
     errors = {}
+    if route == "digital":
+        if type(product_id) is not int or product_id not in CATALOG_INQUIRY_PRODUCTS:
+            errors["product_id"] = "Select an available product to request a quote."
+    elif product_id not in (None, ""):
+        errors["product_id"] = "Product IDs are for digital product inquiries only."
     if len(name) < 2:
         errors["name"] = "Name is required."
     try:
@@ -196,6 +205,7 @@ def mojprop_intake(request):
                     route=route,
                     horizon=horizon,
                     notes=notes,
+                    product_id=product_id if route == "digital" else None,
                     consent=True,
                     source="moj-prop-public",
                     ip_hash=ip_hash,
