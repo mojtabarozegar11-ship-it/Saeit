@@ -29,13 +29,20 @@ def _quoted_scope(text: str) -> str:
     )
 
 
+_SIGNAL_REQUEST_LINE = re.compile(
+    r"Requested educational plan: (education-(?:weekly|monthly|quarterly)) "
+    r"\(indicative USD ([0-9]{1,5}\.[0-9]{2}); written quote required\)\Z"
+)
+
+
 def _signal_price_note(lead, generic_start: int) -> str:
     """Infer *nonbinding* buyer scope from text, never approve an invoice."""
     # The public intake currently persists only a notes field, not a trusted
     # paid-plan foreign key. Treat these strings as buyer claims, not evidence.
     from services.mojtaba_signal_catalog import PLANS
 
-    notes = str(lead.notes)
+    notes = _normalise_line_breaks(lead.notes)
+    first_line = notes.splitlines()[0].strip() if notes.splitlines() else ""
     free_requested = (
         notes.startswith("Requested free educational example:")
         or notes.startswith("One-off FREE educational market-brief example request")
@@ -54,6 +61,16 @@ def _signal_price_note(lead, generic_start: int) -> str:
         )
     if len(matched) > 1:
         return "Price WITHHELD: multiple educational plan identifiers; operator must clarify."
+    # The leading, structured line is customer-supplied, not trusted pricing
+    # authority. A contradictory plan ID or quoted amount must stop a draft.
+    if first_line.startswith("Requested educational plan:"):
+        match = _SIGNAL_REQUEST_LINE.fullmatch(first_line)
+        if (match is None or len(matched) != 1 or matched[0] != match.group(1)
+                or match.group(2) != format(PLANS[matched[0]].price_usd, ".2f")):
+            return (
+                "Price WITHHELD: inconsistent customer plan or amount; "
+                "review the buyer's request against the official catalog."
+            )
     if len(matched) == 1:
         code = matched[0]
         plan = PLANS[code]
@@ -63,8 +80,8 @@ def _signal_price_note(lead, generic_start: int) -> str:
             "Plan identity must be confirmed before invoicing."
         )
     return (
-        f"Indicative starting amount: USD {generic_start}; final quote NOT APPROVED. "
-        "No particular educational signal plan was selected."
+        "Price WITHHELD: no specific educational signal plan selected; "
+        "confirm the customer's intended plan before proposing a price."
     )
 
 
