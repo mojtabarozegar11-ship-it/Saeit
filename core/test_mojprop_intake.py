@@ -94,7 +94,7 @@ class MojPropIntakeTests(TestCase):
         self.assertLess(upload, backend)
         self.assertLess(backend, preflight)
         self.assertLess(preflight, static)
-        self.assertIn("core/migrations/0042_alter_mojproprequest_source.py", workflow)
+        self.assertNotIn("core/migrations/0042_alter_mojproprequest_source.py", workflow)
         self.assertIn("https://mojplaywin.com/moj-prop-intake/", workflow)
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
         self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
@@ -116,29 +116,31 @@ class MojPropIntakeTests(TestCase):
             with self.subTest(leaves=leaves), self.assertRaises(RuntimeError):
                 format_core_migration_dependencies(leaves)
 
-    def test_joined_cpanel_graph_can_use_0041_without_public_0040(self):
-        from scripts.deploy_mojplaywin_moj_prop_backend import format_core_migration_dependencies
-        value = format_core_migration_dependencies(
-            ("0041_mojprop_request",), allow_moj_prop_parent=True,
-        )
-        self.assertIn('("core", "0041_mojprop_request")', value)
-        self.assertNotIn("0040_commercefunnelevent", value)
-
-    def test_joined_cpanel_graph_can_preserve_more_than_one_real_leaf(self):
-        from scripts.deploy_mojplaywin_moj_prop_backend import format_core_migration_dependencies
-        text = format_core_migration_dependencies(
-            ("0041_mojprop_request", "0040_commercefunnelevent"),
-            allow_moj_prop_parent=True,
-        )
-        self.assertIn('("core", "0041_mojprop_request")', text)
-        self.assertIn('("core", "0040_commercefunnelevent")', text)
-
-    def test_backend_merges_cpanel_schema_graph_instead_of_guessing_0040(self):
+    def test_cpanel_uses_actual_core_graph_and_refuses_migration_overwrite(self):
         script = (Path(settings.BASE_DIR) /
                   "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text("utf-8")
-        self.assertIn("install_join_migration(staged_root / relative, target)", script)
-        self.assertIn("live_core_migration_leaves(allow_moj_prop_parent=True)", script)
+        self.assertIn("live_core_migration_leaves()", script)
+        self.assertIn("MOJ_PROP_MIGRATION_PARENTS=", script)
+        self.assertIn("if target.exists() or target.is_symlink():", script)
         self.assertNotIn('if candidates else "0001_initial"', script)
+        self.assertNotIn("install_join_migration", script)
+        self.assertIn("def restart_passenger()", script)
+
+    def test_public_core_source_field_matches_existing_0041(self):
+        migration = (Path(settings.BASE_DIR) /
+                     "core/migrations/0041_mojprop_request.py").read_text("utf-8")
+        self.assertIn('("source", models.CharField(default="moj-prop", max_length=80))', migration)
+        self.assertFalse(MojPropRequest._meta.get_field("source").blank)
+        self.assertIn('("core", "0040_commercefunnelevent")', migration)
+        self.assertFalse((Path(settings.BASE_DIR) /
+                          "core/migrations/0042_alter_mojproprequest_source.py").exists())
+
+    def test_cpanel_deploy_logs_never_dump_raw_process_arguments_or_uapi_secrets(self):
+        script = (Path(settings.BASE_DIR) /
+                  "scripts/deploy_mojplaywin_moj_prop_backend.py").read_text("utf-8")
+        self.assertNotIn('print("MOJ_PROP_PROCESS=" + line[:500])', script)
+        self.assertNotIn('print("MOJ_PROP_UAPI_LIST=" + result.stdout', script)
+        self.assertNotIn('print("MOJ_PROP_SELECTOR_GET=" + result.stdout', script)
 
     def test_release_rollback_covers_preflight_and_static_errors(self):
         workflow = (Path(settings.BASE_DIR) /
