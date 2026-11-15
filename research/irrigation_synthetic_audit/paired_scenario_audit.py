@@ -391,14 +391,39 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def verify_frozen_sha256(path: Path, expected_sha256: str, label: str) -> str:
+    """Verify the exact bytes of a privately frozen CSV, before interpretation.
+
+    The expected hash must originate from a separately preserved, trusted
+    author manifest. A hash computed from the same unchecked file is not
+    independent provenance evidence.
+    """
+    require(len(expected_sha256) == 64
+            and all(ch in "0123456789abcdefABCDEF" for ch in expected_sha256),
+            f"{label}: expected SHA-256 must be 64 hexadecimal characters")
+    actual = file_sha256(path)
+    require(actual == expected_sha256.lower(),
+            f"{label}: frozen source SHA-256 mismatch")
+    return actual
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cohort-c", type=Path, required=True)
     parser.add_argument("--regime-r1", type=Path, required=True)
+    parser.add_argument("--expected-c-sha256",
+                        help="Trusted independent SHA-256 of the frozen C CSV")
+    parser.add_argument("--expected-r1-sha256",
+                        help="Trusted independent SHA-256 of the frozen R1 CSV")
     parser.add_argument("--verify-paper", action="store_true",
                         help="Reject output inconsistent with six-decimal manuscript checkpoints")
     args = parser.parse_args()
     try:
+        require(bool(args.expected_c_sha256) == bool(args.expected_r1_sha256),
+                "Both trusted frozen CSV SHA-256 values are required together")
+        if args.expected_c_sha256:
+            verify_frozen_sha256(args.cohort_c, args.expected_c_sha256, "C")
+            verify_frozen_sha256(args.regime_r1, args.expected_r1_sha256, "R1")
         reports = []
         for family, path in (("C", args.cohort_c), ("R1", args.regime_r1)):
             records = load_records(path)
@@ -414,6 +439,7 @@ def main() -> int:
     print(json.dumps({
         "audit": "synthetic matched-scenario output post-processing",
         "manuscript_numeric_checkpoint": "PASS" if args.verify_paper else "NOT_REQUESTED",
+        "frozen_source_sha256_check": "PASS" if args.expected_c_sha256 else "NOT_REQUESTED",
         "limits": "No simulation-generator replay, field validation, yield effect, or real water saving is established.",
         "families": reports,
     }, ensure_ascii=False, indent=2))
