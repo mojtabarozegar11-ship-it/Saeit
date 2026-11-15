@@ -142,12 +142,36 @@ def plan(root: Path) -> list[dict]:
 
 
 def verified_manifest(path: Path) -> dict:
+    """Treat even a local backup manifest as untrusted rollback instructions."""
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise RuntimeError("Symlinked or missing rollback directory")
     assert_file(path)
     value = json.loads(path.read_text("utf-8"))
-    if type(value) is not dict or value.get("files") is None:
+    expected = [str(item) for item in FILES]
+    if type(value) is not dict or type(value.get("files")) is not list:
         raise RuntimeError("Unrecognized Moj Prop rollback manifest")
-    if {item.get("path") for item in value["files"]} != {str(item) for item in FILES}:
-        raise RuntimeError("Rollback manifest does not cover exactly the approved files")
+    entries = value["files"]
+    if len(entries) != len(expected) or [item.get("path") for item in entries if type(item) is dict] != expected:
+        raise RuntimeError("Rollback manifest file list is incomplete or out of order")
+    if value.get("rolled_back") not in (True, False):
+        raise RuntimeError("Rollback status is invalid")
+    if not isinstance(value.get("run_id"), str):
+        raise RuntimeError("Missing rollback run ID")
+    safe_id(value["run_id"])
+    if not re.fullmatch(r"[0-9a-f]{40}", str(value.get("commit_sha", ""))):
+        raise RuntimeError("Rollback commit identity is invalid")
+    for item in entries:
+        if type(item.get("existed")) is not bool or type(item.get("changed")) is not bool:
+            raise RuntimeError("Invalid before/after backup flags")
+        if type(item.get("mode")) is not int or not 0 <= item["mode"] <= 0o777:
+            raise RuntimeError("Unsafe rollback file mode")
+        before = item.get("before_sha")
+        if (item["existed"] and not isinstance(before, str)) or (not item["existed"] and before is not None):
+            raise RuntimeError("Invalid previous-file digest")
+        if before is not None and not re.fullmatch(r"[0-9a-f]{64}", before):
+            raise RuntimeError("Previous-file digest malformed")
+        if not isinstance(item.get("after_sha"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["after_sha"]):
+            raise RuntimeError("Deployed-file digest malformed")
     return value
 
 
