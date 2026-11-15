@@ -39,7 +39,7 @@ def signed_packet(kind, *, key_id=None, issued=NOW - timedelta(minutes=5),
     packet = {
         "attestation_id": f"{kind}-attestation-001",
         "kind": kind,
-        "subject_id": f"moj-prop:{kind}",
+        "subject_id": f"moj-prop:MOJ-PROP-01:{kind}",
         "source": f"{kind}-reconciliation",
         "key_id": key_id,
         "issued_at": issued.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -188,3 +188,103 @@ class IndependentAttestationTests(SimpleTestCase):
         packet = signed_packet("capital")
         with self.assertRaises(AttestationRejected):
             verify_attestation(packet, None, now=NOW)
+
+    def test_validly_signed_attestation_for_other_plan_is_not_our_proof(self):
+        packet = signed_packet("capital")
+        packet["subject_id"] = "moj-prop:MOJ-PROP-09:capital"
+        self.resign(packet)
+        decision = self.review(
+            independent_attestations=[packet, signed_packet("broker")]
+        )
+        self.assertFalse(decision.independent_capital_proof_on_record)
+        self.assertIn("independent_capital_proof_required", decision.blockers)
+        self.assertFalse(decision.eligible_for_commercial_review)
+
+    def test_valid_plan_one_certificates_do_not_transfer_to_plan_two(self):
+        decision = self.review(
+            plan_code="MOJ-PROP-02",
+            independent_attestations=[signed_packet("capital"), signed_packet("broker")],
+        )
+        self.assertFalse(decision.independent_capital_proof_on_record)
+        self.assertFalse(decision.independent_broker_proof_on_record)
+
+    def test_reused_attestation_identifier_is_rejected(self):
+        capital = signed_packet("capital")
+        broker = signed_packet("broker")
+        broker["attestation_id"] = capital["attestation_id"]
+        self.resign(broker)
+        result = assess_independent_attestations([capital, broker], KEYS, now=NOW)
+        self.assertIn("duplicate_attestation_id", result.errors)
+        self.assertFalse(result.complete)
+
+    def test_same_upstream_source_cannot_sign_both_independent_claims(self):
+        capital = signed_packet("capital")
+        broker = signed_packet("broker")
+        broker["source"] = capital["source"]
+        self.resign(broker)
+        result = assess_independent_attestations([capital, broker], KEYS, now=NOW)
+        self.assertIn("capital_broker_must_have_distinct_sources", result.errors)
+        self.assertFalse(result.complete)
+
+    def test_evidence_digest_must_differ_between_claim_types(self):
+        capital = signed_packet("capital")
+        broker = signed_packet("broker")
+        broker["evidence_digest"] = capital["evidence_digest"]
+        self.resign(broker)
+        result = assess_independent_attestations([capital, broker], KEYS, now=NOW)
+        self.assertIn("capital_broker_must_have_distinct_evidence", result.errors)
+        self.assertFalse(result.complete)
+
+    def test_distinct_registry_names_with_same_key_material_are_not_independent(self):
+        keys = dict(KEYS)
+        keys["broker-registry"] = keys["capital-registry"]
+        broker = signed_packet("broker")
+        self.resign(broker, key=keys["broker-registry"])
+        result = assess_independent_attestations(
+            [signed_packet("capital"), broker], keys, now=NOW
+        )
+        self.assertIn("capital_broker_share_key_material", result.errors)
+        self.assertFalse(result.complete)
+
+    def test_single_key_cannot_support_two_categories(self):
+        broker = signed_packet("broker")
+        broker["key_id"] = "capital-registry"
+        self.resign(broker)
+        result = assess_independent_attestations(
+            [signed_packet("capital"), broker], KEYS, now=NOW
+        )
+        self.assertIn("capital_broker_must_have_distinct_keys", result.errors)
+        self.assertFalse(result.complete)
+
+    def test_oversized_attestation_batch_fails_closed(self):
+        result = assess_independent_attestations(
+            [signed_packet("capital")] * 9, KEYS, now=NOW
+        )
+        self.assertEqual(result.errors, ("too_many_attestations",))
+        self.assertFalse(result.complete)
+
+    def test_placeholder_digest_is_not_a_capital_receipt(self):
+        with self.assertRaises(AttestationRejected):
+            verify_attestation(signed_packet("capital", digest="0" * 64), KEYS, now=NOW)
+
+    def test_unhashable_claim_kind_is_rejected_without_typeerror(self):
+        packet = signed_packet("capital")
+        packet["kind"] = []
+        with self.assertRaises(AttestationRejected):
+            verify_attestation(packet, KEYS, now=NOW)
+
+    def test_invalid_clock_object_is_rejected_without_attributeerror(self):
+        with self.assertRaises(AttestationRejected):
+            verify_attestation(signed_packet("capital"), KEYS, now=object())
+
+    @staticmethod
+    def resign(packet, key=None):
+        body = json.dumps(
+            {name: packet[name] for name in sorted(packet) if name != "signature"},
+            ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")
+        secret = key if key is not None else KEYS[packet["key_id"]]
+        packet["signature"] = hmac.new(
+            secret.encode("utf-8"), b"MOJPROP-ATTESTATION-v1\\n" + body,
+            hashlib.sha256,
+        ).hexdigest()
