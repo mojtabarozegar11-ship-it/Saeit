@@ -38,5 +38,7 @@ jobs:
         run: python manage.py makemigrations --check --dry-run prop_firm
       - name: Check Django URL and template configuration
         run: python manage.py check
+      - name: Build hashed static asset manifest for real brand templates
+        run: python manage.py collectstatic --noinput
       - name: Test exact-domain consented leads and owner-controlled retention
         run: python manage.py test tests.test_moj_prop_interest_intake tests.test_moj_prop_inquiry_retention --verbosity 2
