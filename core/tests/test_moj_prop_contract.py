@@ -1,20 +1,36 @@
 import unittest
 from decimal import Decimal
 
-from moj_prop_contract import (
-    ChallengeDecision,
-    ChallengeSnapshot,
-    ChallengeState,
-    PropContractError,
-    PropEnrollment,
-    PropRules,
-    activate_enrollment,
-    advance_state,
-    evaluate_challenge,
-    next_funded_tier,
-    validate_enrollment,
-    validate_rules,
-)
+try:
+    from moj_prop_contract import (
+        ChallengeDecision,
+        ChallengeSnapshot,
+        ChallengeState,
+        PropContractError,
+        PropEnrollment,
+        PropRules,
+        activate_enrollment,
+        advance_state,
+        evaluate_challenge,
+        next_funded_tier,
+        validate_enrollment,
+        validate_rules,
+    )
+except ModuleNotFoundError:
+    from core.moj_prop_contract import (
+        ChallengeDecision,
+        ChallengeSnapshot,
+        ChallengeState,
+        PropContractError,
+        PropEnrollment,
+        PropRules,
+        activate_enrollment,
+        advance_state,
+        evaluate_challenge,
+        next_funded_tier,
+        validate_enrollment,
+        validate_rules,
+    )
 
 
 class MojPropContractTests(unittest.TestCase):
