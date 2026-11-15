@@ -154,6 +154,15 @@ def check_schema_closure(live_root, staged_root):
         if not _dependency(staged_root / f"core/migrations/{name}.py", previous):
             raise RuntimeError("commercial migration dependency chain is incomplete: " + name)
 
+    # Reject source paths that redirect writes beyond this isolated Django
+    # tenant. A symlinked live model/admin (including its parent directory)
+    # must never be patched by a source-only recovery operation.
+    for relative in ("core/models.py", "core/admin.py"):
+        live_path = live_root / relative
+        if (not live_path.is_file()
+                or live_path.is_symlink()
+                or any(parent.is_symlink() for parent in live_path.parents)):
+            raise RuntimeError("unsafe live commercial source path: " + relative)
     live_models = _classes(live_root / "core/models.py")
     live_admin = _classes(live_root / "core/admin.py")
     # A partially installed model/admin tree cannot be upgraded by appending
