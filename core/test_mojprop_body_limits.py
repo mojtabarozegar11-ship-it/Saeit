@@ -83,3 +83,26 @@ class MojPropBodyBoundaryTests(TestCase):
         lead = MojPropRequest.objects.get(request_id=response.json()["request_id"])
         self.assertEqual(lead.route, "audit")
         self.assertEqual(lead.status, "new")
+
+    def test_oversized_buyer_fields_are_rejected_not_silently_truncated(self):
+        cases = (
+            ("name", "N" * 201),
+            ("email", "a" * 245 + "@example.org"),
+            ("service", "audit" + "x" * 30),
+            ("horizon", "week" + "x" * 20),
+            ("notes", "Scope " + "x" * 5000),
+            ("website", " " * 121),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                response = self.post(json.dumps(dict(self.valid, **{field: value})))
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field, response.json()["fields"])
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_exact_notes_limit_is_preserved_in_crm(self):
+        notes = "x" * 5000
+        response = self.post(json.dumps(dict(self.valid, notes=notes)))
+        self.assertEqual(response.status_code, 201)
+        lead = MojPropRequest.objects.get(request_id=response.json()["request_id"])
+        self.assertEqual(lead.notes, notes)
