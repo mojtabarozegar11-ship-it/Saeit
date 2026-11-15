@@ -45,6 +45,7 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             "settled_sun": 12000000,
             "finality_verified": True,
             "refunded": False,
+            "refunded_sun": 0,
             "refund_pending": False,
             "charge_disputed": False,
             "settlement_reversed": False,
@@ -219,6 +220,61 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
                     lease=lease, mirror_brand=brand,
                     independently_reconciled_invoices=self.paid_invoice_record(
                         lease, entitlement_revoked=True,
+                    ),
+                ))
+
+    def test_partial_tron_refund_blocks_paid_signal_even_if_old_flag_false(self):
+        lease = self.lease()
+        self.assertTrue(self.access(lease=lease))
+        for refunded in (1, 11999999, 12000000):
+            with self.subTest(refunded_sun=refunded):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=refunded, refunded=False,
+                        refund_pending=False, settlement_reversed=False,
+                    ),
+                ))
+
+    def test_refund_sun_missing_false_like_and_negative_never_grants_access(self):
+        lease = self.lease()
+        original = self.paid_invoice_record(lease)[lease.invoice_id]
+        for invalid in (None, True, False, -1, "0", "1", 0.0):
+            with self.subTest(refund_amount=repr(invalid)):
+                candidate = dict(original)
+                if invalid is None:
+                    candidate.pop("refunded_sun")
+                else:
+                    candidate["refunded_sun"] = invalid
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices={lease.invoice_id: candidate},
+                ))
+
+    def test_zero_refunded_sun_does_not_override_revoked_invoice_state(self):
+        lease = self.lease()
+        for flag in ("refunded", "settlement_reversed", "entitlement_revoked"):
+            with self.subTest(flag=flag):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=0, **{flag: True},
+                    ),
+                ))
+
+    def test_refund_sun_zero_without_valid_invoice_never_grants_access(self):
+        lease = self.lease()
+        for invalid in (
+            {"settled_sun": 1},
+            {"expected_sun": 0},
+            {"tx_id": "x" * 64},
+            {"finality_verified": False},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(self.access(
+                    lease=lease,
+                    independently_reconciled_invoices=self.paid_invoice_record(
+                        lease, refunded_sun=0, **invalid,
                     ),
                 ))
 
