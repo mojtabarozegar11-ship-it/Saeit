@@ -181,3 +181,27 @@ class MojPropSalesQueueTests(TestCase):
             lead = self._lead("CLOSE-" + status, status=status)
             self._offer(lead, status="issued", expires_hours=6)
         self.assertEqual(self.categories()["issued_expires_soon"]["count"], 0)
+
+    def test_all_queue_categories_reject_unconsented_customer_contacts(self):
+        lead = self._lead("NO-CONSENT", status="new", horizon="urgent",
+                          route="signals", age_hours=50)
+        offer = self._offer(lead, status="accepted")
+        self._delivery(offer, status="sent")
+        MojPropRequest.objects.filter(pk=lead.pk).update(consent=False)
+        report = action_queue_snapshot(detail_limit=10)
+        self.assertEqual(report["total_queue_entries"], 0)
+        self.assertTrue(all(not entry["request_refs"] for entry in report["categories"]))
+
+    def test_closed_customer_accepted_and_delivery_queues_are_not_outreach(self):
+        for state in ("closed", "spam", "delivered"):
+            a = self._lead("END-ACCEPT-" + state, status=state)
+            self._offer(a, status="accepted")
+            b = self._lead("END-PREP-" + state, status=state)
+            self._delivery(self._offer(b, status="accepted"), status="prepared")
+            c = self._lead("END-SENT-" + state, status=state)
+            self._delivery(self._offer(c, status="accepted"), status="sent")
+        report = self.categories()
+        for category in ("accepted_no_artifact", "prepared_not_dispatched",
+                         "sent_unacknowledged"):
+            with self.subTest(category=category):
+                self.assertEqual(report[category]["count"], 0)
