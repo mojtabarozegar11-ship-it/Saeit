@@ -3,6 +3,7 @@
 Review-only tests: no SSH, hosting, GitHub dispatch, real wallet or spend.
 """
 import unittest
+import re
 from pathlib import Path
 
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
@@ -53,8 +54,15 @@ class ManualSignalDeploymentTests(unittest.TestCase):
         for filename, jobname in expected:
             with self.subTest(filename=filename):
                 source = (WORKFLOWS / filename).read_text()
-                self.assertIn("jobs:\n  " + jobname + ":\n", source)
-                job = source.split("jobs:\n  " + jobname + ":", 1)[1]
+                # YAML may put a validate job before deploy. Locate the
+                # precise top-level job, not a brittle jobs:<newline>deploy pair.
+                match = re.search(
+                    r"(?m)^  " + re.escape(jobname) + r":\\s*$", source
+                )
+                self.assertIsNotNone(match, "Missing release job " + jobname)
+                rest = source[match.end():]
+                next_job = re.search(r"(?m)^  [a-zA-Z][a-zA-Z0-9_-]*:\\s*$", rest)
+                job = rest[:next_job.start()] if next_job else rest
                 self.assertIn("github.event_name == 'workflow_dispatch'", job)
                 self.assertNotIn("github.event_name == 'push'", job)
 
