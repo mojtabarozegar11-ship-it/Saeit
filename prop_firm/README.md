@@ -1,24 +1,24 @@
 # Proprietary trading policy engine v1.2 (prospective cohorts)
 
-**Status:** Code for the proposed prop business. NOT a launched website, licensed provider, funded-account contract, broker adapter or payments service. The only organizational robot identity is **mojtaba.bot.ai**; this is an internal capability, not a second robot.
+**Business status (owner declaration, 15 Nov 2026):** **Plan 1 is funded and active according to the owner**; Plans 2–10 are funding in progress and **temporarily inactive**. This is an owner assertion, not independently verified treasury/broker evidence. The code in this PR remains draft: **no independently proven checkout, broker adapter, settlement or deployment here**. The only organizational robot identity is **mojtaba.bot.ai**; this is an internal capability, not a second robot.
 
 ## Confirmed product terms
-- **30 TRX per applicant** is the challenge participation fee, not the company's starting capital.
+- **Plan 1: 30 TRX per applicant**, confirmed by owner as the entry price; other 9 proposed prices differ. An entrance fee is not the company-funded trading capital.
 - Two *simulated* evaluation phases: realized-net profit goals **9.6% / 6%**, at least **6 valid trading days** each, maximum daily **4%** and fixed total **8%** mark-to-market equity loss; largest profitable day at most **32%** of net profit.
 - **At least 50 DISTINCT, independently verified CLOSED trades across both simulated stages COMBINED** within that same 28-day period, not 50 per stage. Each stage still requires at least six independently verified trading days. Only the FINAL phase-two pass is gated by the total-50 threshold, so participants can progress from stage one before 28-day social proofs mature.
 - **Trader-owned automated strategies (bots) AND manual trading are allowed** in the challenge, only when supported by the broker/simulator and subject to the same daily/total equity limits, stop-loss, per-order risk, open-risk ceiling, integrity and anti-manipulation rules. This is not authorization to start real trades, operate organizational robots, market-signal execution or third-party paid bot services.
 - A completed trade means a reconciled closed BROKER POSITION with a stable external position ID and data source. Repeated fill/execution events for the same position, pending/unverified rows, entries without a confirmed close and activity outside the purchase's 28-day window **do not** increase the count. Historic rows lacking position IDs require trustworthy reconciliation; do not automatically infer one trade per event.
 - **28-day challenge trading window from verified purchase**. No trades may qualify after the end of that window. Inactivity notice at 14 days and grace at 14 days are informational and do not extend the window.
-- Upon passing both stages, KYC, lawful company funding and broker approvals, the first *real* account is **$100**, contingent on available capital.
+- Upon passing both stages, KYC, lawful funding and broker approvals, **Plan 1** starts at **$100**; Plans 2–10 have their own larger proposed starting tiers, contingent on independent capital backing and release approval.
 - All **14 USD levels:** 100, 200, 400, 800, 1500, 3000, 5000, 10000, 20000, 35000, **50000**, 70000, 85000, 100000.
 - **30-day promotion window**, at most one level per qualifying window, profit goal **3.6%**, at least **12 valid trading days**, no risk breach, max day 32%, trustworthy reconciled evidence and verified funding for the next tier.
 - Per-trade stop-risk max **0.8%** and cumulative open stop-risk **1.6%** of tier capital; block an order if broker minimum lot/stop distance cannot fit.
 - Monthly net profit sharing **70% trader / 30% company**, on cumulative realized net P&L exceeding previously *allocated* profit. Losses must be recouped first; no double payment.
 
-## Ten MOJ PROP variants — plan 1 + nine new plans (pre-launch)
+## Ten MOJ PROP variants — owner-active Plan 1 + nine inactive funding plans
 
 The owner's Plan 1 remains **30 TRX** and begins its **conditional** real-funded
-ladder at **$100**. Nine new **proposed** plans offer differentiated starting
+ladder at **$100**. Nine temporarily **inactive** proposed plans offer differentiated starting
 capital and entry fees. Every plan shares the same immutable v1.2 rules:
 two simulated phases, 28 total calendar days, minimum six valid trading days
 per phase, 50 unique reconciled closed positions across both phases combined,
@@ -40,7 +40,7 @@ one Instagram + one Facebook post retained 28 days, trading bots permitted,
 | MOJ-PROP-10 | 35,000 | 2,000 |
 
 These are **ten separate product identities**, not ten new websites or ten
-active brokerage accounts. No SKU is approved for checkout. **Prices for
+verified active brokerage accounts. **Owner declares Plan 1 funded and active**, but independent evidence of its broker funding, actual TRX checkout and end-to-end settlement has not been provided to this code branch. Plans 2-10 remain on an explicit temporary owner funding hold and MUST NOT become sellable even if paper readiness attestations are true. No SKU is automatically approved for checkout here. **Prices for
 Plans 2–10 are internal commercial proposals**, not binding offers, and need
 explicit rate-sheet approval before any customer contract or TRX invoice.
 
