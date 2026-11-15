@@ -96,3 +96,38 @@ class SingleBotSignalPolicyTests(TestCase):
             scenario=self.s.scenario + " Additional range-bound risks apply."
         )["evidence_fingerprint"]
         self.assertNotEqual(before, after)
+
+    def test_malformed_source_urls_fail_closed_without_uncaught_errors(self):
+        invalid_urls = (
+            "https://[2001:db8::1",
+            "https://example.org:abc/path",
+            "https://example.org:65536/path",
+            "https://example.org:0/path",
+            "https://example.org/path\nX-Injected: 1",
+            "https://example.org/path\rX-Injected: 1",
+            "https://example.org/path\t?q=1",
+            " https://example.org/path",
+            "https://example.org/path ",
+            "https://example.org\\@attacker.org/path",
+            "https://example.org/path" + chr(0xD800),
+            "https://example.org/path" + chr(0x7F),
+            "https://example.org/path" + chr(0x85),
+        )
+        for value in invalid_urls:
+            with self.subTest(value=repr(value)), self.assertRaises(SignalRecordError):
+                self.verify(evidence_url=value)
+
+    def test_unpaired_unicode_surrogates_in_signal_text_fail_closed(self):
+        for field in ("scenario", "invalidation", "risk_statement"):
+            for char in (chr(0xD800), chr(0xDFFF)):
+                with self.subTest(field=field, char=hex(ord(char))):
+                    original = getattr(self.s, field)
+                    with self.assertRaises(SignalRecordError):
+                        self.verify(**{field: original + char})
+
+    def test_valid_https_source_with_query_keeps_stable_provenance(self):
+        result = self.verify(evidence_url="https://example.org/market/source?session=123")
+        self.assertTrue(result["content_policy_passed"])
+        self.assertFalse(result["publication_allowed"])
+        self.assertEqual(result["record"]["evidence_url"],
+                         "https://example.org/market/source?session=123")
