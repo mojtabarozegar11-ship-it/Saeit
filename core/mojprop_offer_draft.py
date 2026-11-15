@@ -37,7 +37,7 @@ def build_offer_draft(lead) -> str:
     service = offers.get(lead.route)
     if service is None:
         raise ValueError("unknown_customer_service")
-    if not lead.request_id.startswith("MOJPROP-"):
+    if not isinstance(lead.request_id, str) or not re.fullmatch(r"MOJPROP-[A-Za-z0-9-]{1,80}", lead.request_id):
         raise ValueError("unverified_lead_reference")
     details = str(lead.notes).strip()
     if len(details) < 20:
@@ -51,7 +51,7 @@ def build_offer_draft(lead) -> str:
         f"Customer: {_one_line(lead.name)}",
         f"Contact email (not yet messaged): {_one_line(lead.email)}",
         f"Requested service: {service['title']}",
-        f"Requested timing: {lead.get_horizon_display()}",
+        f"Requested timing: {_one_line(lead.get_horizon_display())}",
         "Client objective / scope supplied:",
         _quoted_scope(details),
         "",
