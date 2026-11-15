@@ -530,7 +530,7 @@ class MojPropRequest(T):
     notes = models.TextField()
     consent = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
-    source = models.CharField(max_length=80, blank=True, default="moj-prop")
+    source = models.CharField(max_length=80, default="moj-prop")
     ip_hash = models.CharField(max_length=64, blank=True, default="")
     user_agent = models.CharField(max_length=300, blank=True, default="")
     reviewed_at = models.DateTimeField(null=True, blank=True)
