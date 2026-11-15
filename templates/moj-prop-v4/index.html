@@ -74,6 +74,19 @@
       }
       serviceSelector.addEventListener('change',syncDigitalProduct);
       syncDigitalProduct();
+      const signalPlans={
+        'education-weekly':'weekly',
+        'education-monthly':'monthly',
+        'education-quarterly':'quarterly'
+      };
+      const requestedPlan=new URLSearchParams(window.location.search).get('plan');
+      if(requestedService==='signals' &&
+         Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)){
+        document.getElementById('notes').value=
+          'Please provide a risk-disclosed written manual proposal for the '+
+          signalPlans[requestedPlan]+' educational market-brief plan ('+
+          requestedPlan+'). A recurring subscription and payment have not been authorized.';
+      }
 
       async function csrf(signal){
         if(csrfToken) return csrfToken;
