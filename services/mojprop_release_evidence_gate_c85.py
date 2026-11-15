@@ -36,6 +36,7 @@ def validate_evidence(document: object, expected_sha: str, now: dt.datetime | No
     if document.get("status") != NO_DEPLOY:
         errors.append("status must remain NO_DEPLOY")
     now = now or dt.datetime.now(dt.timezone.utc)
+    artifact_refs: set[str] = set()
     for key in REQUIRED:
         item = document.get(key)
         if not isinstance(item, dict):
@@ -45,8 +46,17 @@ def validate_evidence(document: object, expected_sha: str, now: dt.datetime | No
             errors.append(f"{key}: not independently verified")
         if item.get("commit_sha") != expected_sha:
             errors.append(f"{key}: commit mismatch")
-        if not isinstance(item.get("artifact_uri"), str) or not item["artifact_uri"].strip():
+        uri = item.get("artifact_uri")
+        if not isinstance(uri, str) or not uri.strip():
             errors.append(f"{key}: missing artifact reference")
+        elif (uri.strip().lower() in {"none", "n/a", "unknown", "pending", "todo"}
+              or any(ord(ch) < 32 or ord(ch) == 127 for ch in uri)
+              or uri != uri.strip()):
+            errors.append(f"{key}: invalid artifact reference")
+        elif uri in artifact_refs:
+            errors.append(f"{key}: duplicate artifact reference")
+        else:
+            artifact_refs.add(uri)
         if not isinstance(item.get("reviewer"), str) or not item["reviewer"].strip():
             errors.append(f"{key}: missing reviewer")
         try:
