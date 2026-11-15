@@ -27,6 +27,17 @@ on:
       - "core/migrations/0041_mojprop_request.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "40-character verified main-branch release commit"
+        required: true
+        type: string
+      owner_approval:
+        description: "Owner-approved release only after independently verified restore and tenant isolation"
+        required: true
+        type: choice
+        options: [NO, OWNER_APPROVED]
+        default: NO
 
 permissions:
   contents: read
@@ -67,12 +78,31 @@ jobs:
           PY
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # A push/merge must never deploy; a manual choice alone is also insufficient.
+    # These three repository attestations must be set only after independent
+    # evidence of full DB/media backup+restore, rollback and child-site isolation.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.owner_approval == 'OWNER_APPROVED' &&
+      vars.MOJPROP_BACKUP_RESTORE_VERIFIED == 'true' &&
+      vars.MOJPROP_ROLLBACK_VERIFIED == 'true' &&
+      vars.MOJPROP_TENANT_ISOLATION_VERIFIED == 'true'
     needs: validate
     runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Fail closed unless this exact main commit is approved
+        shell: bash
+        env:
+          REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_RELEASE_SHA" == "$GITHUB_SHA" ]]
+          echo "MOJPROP_RELEASE_PINNED_TO_VERIFIED_COMMIT=true"
       - name: Configure pinned cPanel SSH from factory runner
         shell: bash
         env:
