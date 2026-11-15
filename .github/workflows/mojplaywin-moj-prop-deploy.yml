@@ -52,57 +52,44 @@ jobs:
   deploy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, factory-vps]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Configure pinned VPS-to-cPanel SSH relay
+      - name: Configure pinned cPanel SSH from factory runner
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test -n "$HOST_KEY"
           WORK="$RUNNER_TEMP/mojplaywin-moj-prop-ssh"
           install -d -m 700 "$WORK"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/host.key"
-          chmod 600 "$WORK/"*.key
-          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          chmod 600 "$WORK/host.key"
           ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125 > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cat > "$WORK/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $WORK/vps.key
-            UserKnownHostsFile $WORK/vps.known
           Host saeit-host
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $WORK/host.key
             UserKnownHostsFile $WORK/host.known
-            ProxyJump saeit-vps
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
+            ConnectTimeout 15
             ConnectionAttempts 1
+            ServerAliveInterval 20
+            ServerAliveCountMax 3
             ForwardAgent no
             RequestTTY no
           EOF
           chmod 600 "$WORK/config"
-          scan="$(ssh -F "$WORK/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$WORK/host.candidate"
-          test "$(ssh-keygen -lf "$WORK/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          cp "$WORK/host.candidate" "$WORK/host.known"
-          echo "PINNED_RELAY_READY=yes"
+          echo "PINNED_FACTORY_CPanel_READY=yes"
       - name: Verify existing site and prepare isolated staging
         shell: bash
         run: |
