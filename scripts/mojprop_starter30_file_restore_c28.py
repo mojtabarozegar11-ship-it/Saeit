@@ -260,15 +260,17 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                                 os.close(restorefd)
                             if bfd is not None:
                                 os.close(bfd)
-                            if not completed and runfd is not None:
-                                for child in ("backup", "isolated-restore"):
-                                    try:
-                                        os.rmdir(child, dir_fd=runfd)
-                                    except FileNotFoundError:
-                                        pass
-                                os.rmdir(run_id, dir_fd=vfd)
-                            if runfd is not None:
-                                os.close(runfd)
+                            try:
+                                if not completed and runfd is not None:
+                                    for child in ("backup", "isolated-restore"):
+                                        try:
+                                            os.rmdir(child, dir_fd=runfd)
+                                        except FileNotFoundError:
+                                            pass
+                                    os.rmdir(run_id, dir_fd=vfd)
+                            finally:
+                                if runfd is not None:
+                                    os.close(runfd)
                     finally:
                         os.close(vfd)
                 finally:
