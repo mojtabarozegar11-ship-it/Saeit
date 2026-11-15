@@ -203,16 +203,18 @@ def _ready(order):
     item = fields.get("item")
     if (item is None or getattr(getattr(item, "related_model", None), "_meta", None)
             is None or item.related_model._meta.label_lower != "core.orderitem"
-            or "status" not in fields):
+            or "status" not in fields or "kind" not in fields):
         return False
     count = OrderItem.objects.filter(order_id=order.pk).count()
     if count < 1:
         return False
-    # Count alone is insufficient: two ready rows for one item could mask
-    # another order item with no fulfillment. Require one distinct ready
-    # item per purchased item before granting any recovery download.
+    # A previously downloaded digital file can be marked complete: a buyer's
+    # purchased right to recover it must not be silently revoked. Physical
+    # shipments or service grants, even if complete, are NEVER digital files.
+    # Require one unique eligible grant for every purchased order item.
     ready = Fulfillment.objects.filter(
-        item__order_id=order.pk, status__iexact="ready"
+        item__order_id=order.pk, kind="digital",
+        status__in=("ready", "complete"),
     )
     return (
         ready.count() == count
