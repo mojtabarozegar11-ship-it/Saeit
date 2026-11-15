@@ -84,7 +84,8 @@ class PipelineReportingTests(TestCase):
         self.assertEqual(data["quote_coverage_percent"], 50.0)
         self.assertEqual(data["issued_quotes_awaiting_decision"], 1)
         self.assertEqual(data["new_leads_without_issued_quote"], 1)
-        self.assertIsNone(data["acceptance_rate_percent"])
+        # One issued offer exists; its observed acceptance rate is zero, not unknown.
+        self.assertEqual(data["acceptance_rate_percent"], 0.0)
 
     def test_accepted_quote_is_counted_once_and_never_revenue(self):
         lead = self.make_lead("P-ACCEPTED", "signals")
