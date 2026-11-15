@@ -21,7 +21,12 @@ def moj_prop_landing(request, lang="en"):
     except ValueError as error:
         raise Http404("Unsupported language") from error
     response = render(request, "mojplaywin/moj_prop.html", data)
-    response["Cache-Control"] = "public, max-age=300"
+    # The landing page now contains a per-session CSRF token: no shared cache.
+    from django.utils.cache import patch_vary_headers
+    patch_vary_headers(response, ("Cookie",))
+    response["Cache-Control"] = "private, no-store, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["Referrer-Policy"] = "same-origin"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
