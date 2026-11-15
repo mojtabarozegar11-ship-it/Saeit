@@ -112,6 +112,24 @@ class DeliveryEvidenceTests(TestCase):
         with self.assertRaises(ValidationError):
             proof.full_clean()
 
+    def test_delivery_cannot_predate_customer_acceptance(self):
+        proof = self.item(
+            status="sent",
+            handed_off_at=self.now-timedelta(hours=2),
+            clearance_reference="contract-credit-ref",
+            handoff_reference="external-delivery-log-ref",
+        )
+        with self.assertRaises(ValidationError):
+            proof.full_clean()
+
+    def test_prepared_document_cannot_claim_fake_dispatch(self):
+        proof = self.item(
+            status="prepared", handoff_reference="false-delivery-ref",
+            clearance_reference="unverified-clearance",
+        )
+        with self.assertRaises(ValidationError):
+            proof.full_clean()
+
     def test_no_unaccepted_offer_or_fake_checksum(self):
         self.quote.status="issued"
         self.quote.save(update_fields=["status"])
