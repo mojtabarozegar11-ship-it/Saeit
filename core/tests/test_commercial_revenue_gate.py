@@ -334,8 +334,10 @@ class CommercialGateTests(unittest.TestCase):
             ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
             ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
             first = ledger.advance(order_id="order-52", target=CommercialState.QUOTED, event_id="quote-52", payload_digest="a" * 64)
-            second = ledger.advance(order_id="order-52", target=CommercialState.SETTLED, event_id="quote-52", payload_digest="a" * 64, payment_evidence=self.payment())
+            second = ledger.advance(order_id="order-52", target=CommercialState.QUOTED, event_id="quote-52", payload_digest="a" * 64)
             self.assertEqual(first, second)
+            with self.assertRaisesRegex(CommercialGateError, "stale_event_replay"):
+                ledger.advance(order_id="order-52", target=CommercialState.SETTLED, event_id="quote-52", payload_digest="a" * 64, payment_evidence=self.payment())
             self.assertEqual(ledger.snapshot("order-52")["state"], "quoted")
             ledger.close()
 
