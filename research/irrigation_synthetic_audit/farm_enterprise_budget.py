@@ -14,7 +14,7 @@ import json
 import re
 
 IDENT = re.compile(r"[a-z][a-z0-9_-]{2,63}\Z")
-DECIMAL_TEXT = re.compile(r"(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?\Z")
+DECIMAL_TEXT = re.compile(r"(?:0|[1-9][0-9]{0,12})(?:\.[0-9]{1,6})?\Z")
 MAX_INPUT = Decimal("1000000000000")
 UNIT = Decimal("0.000001")
 ALLOWED_CURRENCIES = frozenset(("IRR", "TOMAN", "USD", "EUR"))
