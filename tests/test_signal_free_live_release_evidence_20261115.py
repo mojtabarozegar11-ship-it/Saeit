@@ -29,7 +29,9 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
     def test_static_installer_exact_baseline_or_refuse_unknown_content(self):
         text = (ROOT / "scripts/update_mojplaywin_moj_prop_catalog.py").read_text("utf-8")
         self.assertIn("BASELINE_SIGNAL_FREE_PREVIEW", text)
-        self.assertIn("before not in (after, old_signal, free_preview_signal)", text)
+        self.assertIn("PRESERVED_LIVE_FILES", text)
+        self.assertIn("neither plan, deploy, nor rollback lists it", text)
+        self.assertIn("signals/index.html", text)
         self.assertIn("refusing replacement", text)
         self.assertIn("def verified_manifest(", text)
         self.assertIn("Backup checksum mismatch", text)
@@ -96,11 +98,14 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
             backend.index("- name: Deploy Moj Prop intake backend with backup and migration"),
         )
         self.assertLess(
-            static.index("- name: Fail closed on unknown live Signal Desk BEFORE any writes"),
+            static.index("- name: Pin live Signal Desk before any separate Starter30 release writes"),
             static.index("- name: Update only /moj-prop/ commercial catalog"),
         )
         self.assertIn("SIGNAL_FREE_PUBLIC_PAGE=PASS", backend)
-        self.assertIn("MOJTABA_FREE_SIGNUP_API_PREFLIGHT=PASS", static)
+        self.assertIn("STARTER30_WITHOUT_SIGNAL_DESK_WRITE=PASS", static)
+        self.assertIn("SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS", static)
+        self.assertIn("STARTER30_THREE_FILES_PUBLIC_SHA256=PASS", static)
+        self.assertNotIn("SIGNAL_FREE_ROOT_BACKEND_MISSING: BLOCK_STATIC_RELEASE", static)
         self.assertNotIn("moj_signal_free_stats --apply", backend)
 
 

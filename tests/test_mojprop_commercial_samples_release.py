@@ -137,7 +137,7 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.route = self.docroot / "moj-prop"
         self.route.mkdir(parents=True)
         stage = self.home / ".mojplaywin-moj-prop-catalog-123" / "templates/moj-prop-v4"
-        for path in release.FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL, release.BASELINE_SIGNAL_FREE_PREVIEW):
+        for path in release.FILES + release.PRESERVED_LIVE_FILES + (release.BASELINE_CATALOG, release.BASELINE_HOME, release.BASELINE_SIGNAL, release.BASELINE_SIGNAL_FREE_PREVIEW):
             source = SITE_SOURCE / path
             target = stage / path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -245,50 +245,122 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         path.write_text(json.dumps(full), "utf-8")
         release.restore(path.parent)
 
-    def test_signal_desk_existing_approved_baseline_is_upgradable_and_reversible(self):
+    def test_signal_desk_baseline_is_preserved_without_any_replacement(self):
         path = self.route / "signals/index.html"
         path.parent.mkdir(parents=True, exist_ok=True)
         prior = (SITE_SOURCE / release.BASELINE_SIGNAL).read_bytes()
         path.write_bytes(prior)
         release.deploy("123", "a" * 40)
-        self.assertIn(b'id="free-education-membership"', path.read_bytes())
+        self.assertEqual(path.read_bytes(), prior)
         backup = self.backups / "moj-prop-catalog-123"
-        self.assertTrue((backup / "manifest.json").exists())
+        manifest = json.loads((backup / "manifest.json").read_text("utf-8"))
+        self.assertNotIn("signals/index.html", [entry["path"] for entry in manifest["files"]])
         release.restore(backup)
         self.assertEqual(path.read_bytes(), prior)
 
-    def test_reviewed_free_preview_releases_to_double_optin_and_restores_exactly(self):
+
+    def test_existing_free_preview_is_preserved_on_static_starter30_release(self):
         page = self.route / "signals/index.html"
         page.parent.mkdir(parents=True, exist_ok=True)
         old = (SITE_SOURCE / release.BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
-        self.assertIn(b'id="free-preview"', old)
-        self.assertNotIn(b'id="free-education-membership"', old)
         page.write_bytes(old)
         release.deploy("123", "a" * 40)
-        self.assertEqual(page.read_bytes(), (SITE_SOURCE / "signals/index.html").read_bytes())
-        manifest = self.backups / "moj-prop-catalog-123"
-        self.assertTrue((manifest / "manifest.json").is_file())
-        release.restore(manifest)
+        self.assertEqual(page.read_bytes(), old)
+        self.assertTrue((self.route / "starter-30-trx/journal-guide.txt").is_file())
+        release.restore(self.backups / "moj-prop-catalog-123")
         self.assertEqual(page.read_bytes(), old)
 
-    def test_only_exact_free_preview_version_is_approved(self):
+
+    def test_unreviewed_signal_edit_is_never_replaced_by_product_release(self):
         page = self.route / "signals/index.html"
         page.parent.mkdir(parents=True, exist_ok=True)
-        old = (SITE_SOURCE / release.BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
-        page.write_bytes(old + b"<!-- unreviewed live addition -->")
-        with self.assertRaisesRegex(RuntimeError, "differs from all exact reviewed baselines"):
-            release.deploy("123", "a" * 40)
-        self.assertEqual(page.read_bytes(), old + b"<!-- unreviewed live addition -->")
-        self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+        original = (SITE_SOURCE / release.BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
+        modified = original + b"<!-- independently reviewed only by the owner -->"
+        page.write_bytes(modified)
+        release.deploy("123", "a" * 40)
+        self.assertEqual(page.read_bytes(), modified)
+        release.restore(self.backups / "moj-prop-catalog-123")
+        self.assertEqual(page.read_bytes(), modified)
 
-    def test_unknown_live_signal_desk_blocks_deployment_and_preserves_customer_changes(self):
+
+    def test_unknown_live_signal_is_preserved_while_starter30_assets_publish(self):
         path = self.route / "signals/index.html"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("Operator customised and unpublished content", encoding="utf-8")
-        with self.assertRaises(RuntimeError):
+        unchanged = b"Operator customised and unpublished content"
+        path.write_bytes(unchanged)
+        release.deploy("123", "a" * 40)
+        self.assertEqual(path.read_bytes(), unchanged)
+        self.assertTrue((self.route / "starter-30-trx/index.html").exists())
+        manifest = json.loads((self.backups / "moj-prop-catalog-123/manifest.json").read_text("utf-8"))
+        self.assertEqual(len(manifest["files"]), len(release.FILES))
+        self.assertNotIn("signals/index.html", [entry["path"] for entry in manifest["files"]])
+        release.restore(self.backups / "moj-prop-catalog-123")
+        self.assertEqual(path.read_bytes(), unchanged)
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+
+    def test_symlinked_live_signal_desk_still_blocks_publish_for_tenant_safety(self):
+        path = self.route / "signals/index.html"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        outside = self.home / "other-private-tenant.html"
+        outside.write_text("PRIVATE CONTENT", encoding="utf-8")
+        path.symlink_to(outside)
+        with self.assertRaisesRegex(RuntimeError, "Unsafe Signal Desk path"):
             release.deploy("123", "a" * 40)
-        self.assertIn("Operator customised", path.read_text("utf-8"))
+        self.assertEqual(outside.read_text("utf-8"), "PRIVATE CONTENT")
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
+    def test_legacy_ten_file_manifest_can_never_rewrite_owner_signal(self):
+        live = self.route / "signals/index.html"
+        live.parent.mkdir(parents=True, exist_ok=True)
+        live.write_bytes(b"customer signal changes are protected")
+        release.deploy("123", "a" * 40)
+        path = self.backups / "moj-prop-catalog-123/manifest.json"
+        original = json.loads(path.read_text("utf-8"))
+        forged = dict(original)
+        forged["schema"] = "mojprop.static.starter30.v2"
+        path.write_text(json.dumps(forged), "utf-8")
+        with self.assertRaisesRegex(RuntimeError, "Legacy or unrecognized"):
+            release.restore(path.parent)
+        self.assertEqual(live.read_bytes(), b"customer signal changes are protected")
+        path.write_text(json.dumps(original), "utf-8")
+        release.restore(path.parent)
+        self.assertEqual(live.read_bytes(), b"customer signal changes are protected")
+
+    def test_symlinked_backup_root_cannot_redirect_starter30_publication(self):
+        foreign = self.home / "unrelated-tenant-private"
+        foreign.mkdir()
+        self.backups.symlink_to(foreign, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Symlinked Moj Prop backup root"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(list(foreign.iterdir()), [])
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_preexisting_untrusted_backup_root_is_not_chmod_repaired(self):
+        self.backups.mkdir()
+        self.backups.chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError, "Untrusted Moj Prop backup root owner or mode"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(self.backups.stat().st_mode & 0o777, 0o755)
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_world_writable_backup_parent_blocks_release_without_public_writes(self):
+        self.home.chmod(0o777)
+        with self.assertRaisesRegex(RuntimeError, "Untrusted Moj Prop backup parent owner or mode"):
+            release.deploy("123", "a" * 40)
+        self.assertFalse(self.backups.exists())
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_backup_root_replacement_cannot_redirect_rollback(self):
+        release.deploy("123", "a" * 40)
+        moved = self.home / "unrelated-existing-vault"
+        self.backups.rename(moved)
+        self.backups.symlink_to(moved, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Symlinked Moj Prop backup root"):
+            release.restore(self.backups / "moj-prop-catalog-123")
+        self.assertTrue((self.route / "starter-30-trx/index.html").exists())
+        self.assertTrue((moved / "moj-prop-catalog-123/manifest.json").is_file())
 
     def test_readonly_preflight_proves_no_backup_or_live_write(self):
         before_home = (self.route / "index.html").read_bytes()
@@ -301,14 +373,17 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertEqual((self.route / "catalog/index.html").read_bytes(), before_catalog)
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
 
-    def test_readonly_preflight_refuses_unknown_live_content_before_any_write(self):
+    def test_readonly_preflight_accepts_unknown_signal_but_never_writes(self):
         target = self.route / "signals/index.html"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("Unknown live Signal Desk content", encoding="utf-8")
-        with self.assertRaisesRegex(RuntimeError, "differs from all exact reviewed baselines"):
+        with patch("builtins.print") as messages:
             release.preflight("123")
+        self.assertIn("MOJ_PROP_STATIC_PREFLIGHT=PASS",
+                      [call.args[0] for call in messages.call_args_list])
         self.assertEqual(target.read_text("utf-8"), "Unknown live Signal Desk content")
         self.assertFalse((self.backups / "moj-prop-catalog-123").exists())
+
 
     def test_idempotent_deploy_never_makes_second_backup(self):
         release.deploy("123", "a" * 40)

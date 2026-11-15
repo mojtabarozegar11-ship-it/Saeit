@@ -14,6 +14,7 @@ import json
 import os
 import pwd
 import re
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -38,8 +39,11 @@ STARTER30_FILES = (
     Path("starter-30-trx/journal-template.csv"),
     Path("starter-30-trx/journal-guide.txt"),
 )
-FILES = HTML_FILES + STARTER30_FILES
-MANIFEST_SCHEMA = "mojprop.static.starter30.v2"
+# A real owner-edited Signal Desk was observed on cPanel (unknown hash).
+# Starter30 release is strictly *not* authorized to rewrite that separate page.
+PRESERVED_LIVE_FILES = (Path("signals/index.html"),)
+FILES = tuple(x for x in HTML_FILES if x not in PRESERVED_LIVE_FILES) + STARTER30_FILES
+MANIFEST_SCHEMA = "mojprop.static.starter30.v3-preserve-signals"
 BASELINE_CATALOG = Path("baselines/catalog-index-v4.html")
 BASELINE_HOME = Path("baselines/index-v4.html")
 BASELINE_SIGNAL = Path("baselines/signals-index-before-free.html")
@@ -96,7 +100,7 @@ def source_root(run_id: str) -> Path:
     path = HOME / (".mojplaywin-moj-prop-catalog-" + safe_id(run_id)) / "templates/moj-prop-v4"
     if path.is_symlink() or not path.is_dir():
         raise RuntimeError("Invalid staged Moj Prop source")
-    for relative in FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
+    for relative in FILES + PRESERVED_LIVE_FILES + (BASELINE_CATALOG, BASELINE_HOME, BASELINE_SIGNAL, BASELINE_SIGNAL_FREE_PREVIEW):
         assert_file(path / relative)
     html = {str(relative): (path / relative).read_text("utf-8") for relative in HTML_FILES}
     if ("const endpoint='/moj-prop-intake/';" not in html["index.html"]
@@ -159,6 +163,35 @@ def validate_host() -> None:
         assert_file(DOCROOT / relative)
 
 
+def verify_private_backup_root(*, create: bool) -> None:
+    """Refuse symlinked, world-writable or foreign-owned backup parents.
+
+    Never chmod existing host directories: this publisher has no authority
+    to repair the private data of unrelated tenants or workflows.
+    """
+    parent = BACKUPS.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise RuntimeError("Untrusted Moj Prop backup parent")
+    parent_stat = parent.lstat()
+    if (not stat.S_ISDIR(parent_stat.st_mode)
+            or parent_stat.st_uid != os.geteuid()
+            or parent_stat.st_mode & stat.S_IWOTH):
+        raise RuntimeError("Untrusted Moj Prop backup parent owner or mode")
+    if BACKUPS.is_symlink():
+        raise RuntimeError("Symlinked Moj Prop backup root refused")
+    if BACKUPS.exists():
+        info = BACKUPS.lstat()
+        if (not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077):
+            raise RuntimeError("Untrusted Moj Prop backup root owner or mode")
+    elif create:
+        BACKUPS.mkdir(mode=0o700)
+        verify_private_backup_root(create=False)
+    else:
+        raise RuntimeError("Moj Prop private backup root is missing")
+
+
 def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
     old_home = (root / BASELINE_HOME).read_bytes()
@@ -166,6 +199,13 @@ def plan(root: Path) -> list[dict]:
     free_preview_signal = (root / BASELINE_SIGNAL_FREE_PREVIEW).read_bytes()
     marker = b"<!-- MOJ_PROP_CATALOG_RELEASE_V4 -->\n"
     old_home_without_marker = old_home.replace(marker, b"", 1)
+    # The Signal Desk is independent of this product. Preserve even unreviewed
+    # owner edits byte-for-byte: neither plan, deploy, nor rollback lists it.
+    for preserved in PRESERVED_LIVE_FILES:
+        target = ROUTE / preserved
+        assert_safe_destination(target)
+        if target.is_symlink() or (target.exists() and not target.is_file()):
+            raise RuntimeError("Unsafe Signal Desk path; preserve and refuse unrelated release")
     intended = []
     for relative in FILES:
         target = ROUTE / relative
@@ -181,9 +221,6 @@ def plan(root: Path) -> list[dict]:
         elif relative == Path("catalog/index.html") and exists:
             if before != after and before != old_catalog:
                 raise RuntimeError("Live catalog differs from both approved baseline and release; refusing replacement")
-        elif relative == Path("signals/index.html") and exists:
-            if before not in (after, old_signal, free_preview_signal):
-                raise RuntimeError("Live Signal Desk differs from all exact reviewed baselines; refusing replacement")
         elif exists and before != after:
             raise RuntimeError("A public Moj Prop asset exists with unexpected content; refusing replacement")
         intended.append({
@@ -234,6 +271,9 @@ def verified_manifest(path: Path) -> dict:
 
 
 def restore(backup: Path, *, automated: bool = False) -> None:
+    verify_private_backup_root(create=False)
+    if backup.parent != BACKUPS or backup.is_symlink():
+        raise RuntimeError("Symlinked or out-of-scope Moj Prop rollback path refused")
     manifest = verified_manifest(backup / "manifest.json")
     if manifest.get("rolled_back") is True:
         print("MOJ_PROP_ALREADY_ROLLED_BACK")
@@ -296,6 +336,7 @@ def deploy(run_id: str, commit: str) -> None:
     if not any(item["changed"] for item in changes):
         print("MOJ_PROP_SAMPLES_AND_CATALOG_ALREADY_LIVE")
         return
+    verify_private_backup_root(create=True)
     backup = BACKUPS / ("moj-prop-catalog-" + run_id)
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Backup ID already used")
