@@ -205,10 +205,14 @@ def mojprop_intake(request):
 
     ip_hash = _ip_hash(request)
     if _rate_limited(email, ip_hash):
-        return _json(
+        response = _json(
             {"ok": False, "detail": "Too many requests. Please try again later.", "retry_after": 600},
             status=429,
         )
+        # API clients and browsers can honor this standard response header.
+        # It is not a signal to retry a paid order or bypass the throttle.
+        response["Retry-After"] = "600"
+        return response
 
     request_obj = None
     for _ in range(3):
