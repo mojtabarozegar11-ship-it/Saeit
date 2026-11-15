@@ -227,6 +227,24 @@ def restore(backup: Path, *, automated: bool = False) -> None:
     print("MOJ_PROP_CATALOG_ROLLBACK_COMPLETE")
 
 
+def preflight(run_id: str) -> None:
+    """Host-only, read-only exact release compatibility check.
+
+    Must run before backend schema migrations; a successful source CI is
+    insufficient proof of a compatible live Signal Desk or restorable DB.
+    """
+    safe_id(run_id)
+    validate_host()
+    root = source_root(run_id)
+    proposed = plan(root)  # refuses unknown customer-edited live content
+    print("MOJ_PROP_STATIC_PREFLIGHT=PASS")
+    print("MOJ_PROP_STATIC_PREFLIGHT_PATHS=" + str(len(proposed)))
+    print("MOJ_PROP_STATIC_PREFLIGHT_CHANGES=" + str(
+        sum(1 for item in proposed if item["changed"])
+    ))
+    print("MOJ_PROP_STATIC_PREFLIGHT_NO_WRITES=true")
+
+
 def deploy(run_id: str, commit: str) -> None:
     safe_id(run_id)
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
@@ -283,11 +301,13 @@ def deploy(run_id: str, commit: str) -> None:
 def main() -> None:
     if len(sys.argv) == 4 and sys.argv[1] == "deploy":
         deploy(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 3 and sys.argv[1] == "preflight":
+        preflight(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "rollback":
         validate_host()
         restore(BACKUPS / ("moj-prop-catalog-" + safe_id(sys.argv[2])))
     else:
-        raise SystemExit("Usage: catalog.py deploy RUN_ID SHA | rollback RUN_ID")
+        raise SystemExit("Usage: catalog.py preflight RUN_ID | deploy RUN_ID SHA | rollback RUN_ID")
 
 
 if __name__ == "__main__":
