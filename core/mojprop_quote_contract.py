@@ -72,8 +72,12 @@ def make_quote_snapshot(offer, *, now=None):
         accepted_at = _aware(accepted_at, "accepted_at")
         if accepted_at < issued_at or accepted_at >= expires_at:
             raise QuoteContractError("acceptance is outside the quote window")
-        if not isinstance(getattr(offer, "acceptance_reference", None), str) or not getattr(offer, "acceptance_reference").strip():
-            raise QuoteContractError("acceptance evidence required")
+        _text(
+            getattr(offer, "acceptance_reference", None),
+            "acceptance reference",
+            6,
+            180,
+        )
     elif accepted_at is not None:
         raise QuoteContractError("issued quote cannot carry acceptance evidence")
     return {
