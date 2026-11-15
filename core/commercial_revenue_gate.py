@@ -151,7 +151,7 @@ def validate_offer(
 def validate_signal_request(*, requested_action: str, financial_authorized: bool = False) -> None:
     """Block investment calls while allowing research/operational services."""
     action = _text(requested_action, "requested_action").lower()
-    if action in _BLOCKED_SIGNAL_WORDS or financial_authorized:
+    if set(re.findall(r"[a-z]+", action)) & _BLOCKED_SIGNAL_WORDS or financial_authorized:
         raise CommercialGateError("financial_signal_disabled")
 
 
