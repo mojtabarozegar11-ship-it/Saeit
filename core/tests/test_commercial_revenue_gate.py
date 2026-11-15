@@ -2417,6 +2417,48 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_older_merchant_ledger_schema_requires_reviewed_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.sqlite3"
+            cx = sqlite3.connect(str(path))
+            cx.execute(
+                "CREATE TABLE merchant_order_bindings ("
+                "order_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, "
+                "canonical_host TEXT NOT NULL, offer_id TEXT NOT NULL, "
+                "release_evidence_sha256 TEXT NOT NULL, recorded_at TEXT NOT NULL)"
+            )
+            cx.commit()
+            cx.close()
+            path.chmod(0o600)
+            with self.assertRaisesRegex(
+                CommercialGateError, "merchant_ledger_schema_migration_required"
+            ):
+                SQLiteCommercialLedger(str(path))
+            cx = sqlite3.connect(str(path))
+            original_columns = [row[1] for row in cx.execute(
+                "PRAGMA table_info(merchant_order_bindings)"
+            )]
+            self.assertNotIn("offer_type", original_columns)
+            # No extra order tables were created before the refusal.
+            self.assertIsNone(cx.execute(
+                "SELECT name FROM sqlite_master WHERE name = 'orders'"
+            ).fetchone())
+            cx.close()
+
+    def test_current_merchant_schema_reopens_without_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "ledger.sqlite3")
+            ledger = SQLiteCommercialLedger(path)
+            ledger.close()
+            ledger = SQLiteCommercialLedger(path)
+            columns = [row["name"] for row in ledger.connection.execute(
+                "PRAGMA table_info(merchant_order_bindings)"
+            )]
+            self.assertIn("offer_type", columns)
+            self.assertIn("delivery_manifest_sha256", columns)
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
