@@ -56,7 +56,7 @@ def _nocache(response):
     return response
 
 
-def _select_order(product_id: int, buyer_id: int, connection):
+def _select_order(product_id: int, buyer_id: int, connection, *, merchant_domain=None):
     from django.contrib.auth import get_user_model
     from django.db import transaction
     from django.utils import timezone
@@ -65,6 +65,10 @@ def _select_order(product_id: int, buyer_id: int, connection):
     from mpw_commerce.buyer_orders import _eligible
     from mpw_commerce.downloads import _private_file
     from types import SimpleNamespace
+    from django.conf import settings
+    from services.mpw_trx_merchant_binding import (
+        MerchantBindingRejected, require_current_merchant_for_invoice,
+    )
 
     with transaction.atomic(using=connection.alias):
         get_user_model().objects.select_for_update().get(pk=buyer_id)
@@ -84,6 +88,14 @@ def _select_order(product_id: int, buyer_id: int, connection):
             if pi is not None:
                 claim=_decode(pi)
                 if claim.expires_at>timezone.now():
+                    try:
+                        require_current_merchant_for_invoice(
+                            settings, merchant_domain, claim,
+                        )
+                    except MerchantBindingRejected:
+                        # Another host, disabled merchant or changed registry
+                        # must not reuse this previously payable invoice.
+                        continue
                     return pi.pk
         # Never issue a payable invoice for a missing or symlinked product.
         file=_private_file(SimpleNamespace(product=product))
@@ -95,7 +107,8 @@ def _select_order(product_id: int, buyer_id: int, connection):
             unit_price=product.price,currency="USD")
         intent_id,_,_=reserve_commercial_intent(
             order.pk,buyer_id,db=connection,
-            rate_provider=_rate_provider,configured_receiver=_configured_receiver)
+            rate_provider=_rate_provider,configured_receiver=_configured_receiver,
+            merchant_domain=merchant_domain)
         return intent_id
 
 
@@ -117,7 +130,10 @@ def _start_order(request, product_id):
     if public_trx_product(product_id) is None:
         raise Http404("Product is not approved for public TRX purchase")
     try:
-        invoice_id=_select_order(product_id,request.user.pk,db)
+        invoice_id=_select_order(
+            product_id, request.user.pk, db,
+            merchant_domain=request.get_host().split(":")[0],
+        )
     except (PaymentHold,ValueError,Product.DoesNotExist) as exc:
         raise Http404("Payment is not available") from exc
     # A guest order is always linked to its validated email and a durable
@@ -138,6 +154,17 @@ def _get_owner_invoice(request, invoice_id):
     ).first()
     if intent is None:
         raise Http404
+    # An authenticated buyer may have orders on multiple merchant hosts.
+    # Do not leak the payment address, status or downloadable entitlement
+    # from one host through another host's otherwise valid invoice ID.
+    from services.mpw_trx_merchant_binding import (
+        MerchantBindingRejected, require_same_invoice_host,
+    )
+    try:
+        saved=_decode(intent)
+        require_same_invoice_host(saved, request.get_host().split(":")[0])
+    except (PaymentHold, MerchantBindingRejected) as exc:
+        raise Http404("Invoice does not belong to this merchant host") from exc
     return intent
 
 

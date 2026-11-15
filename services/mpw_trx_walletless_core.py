@@ -40,6 +40,10 @@ class InvoiceIntent:
     issued_at: datetime
     expires_at: datetime
     quote_usd_per_trx: Decimal
+    # Empty defaults keep the arithmetic kernel reusable; payable persistence
+    # rejects an invoice that has not been bound to one configured merchant.
+    merchant_domain: str = ""
+    merchant_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,8 @@ def issue_intent(
     now: datetime,
     is_amount_reserved: Callable[[int], bool],
     random_below: Callable[[int], int],
+    merchant_domain: str = "",
+    merchant_id: str = "",
 ) -> InvoiceIntent:
     """Compute one exact and permanently unique SUN amount.
 
@@ -121,6 +127,8 @@ def issue_intent(
             usd_total=total, issued_at=current,
             expires_at=current + INVOICE_TTL,
             quote_usd_per_trx=rate,
+            merchant_domain=merchant_domain,
+            merchant_id=merchant_id,
         )
     raise PaymentHold("No unused amount; do not issue invoice")
 
