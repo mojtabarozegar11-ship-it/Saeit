@@ -110,9 +110,14 @@ class CheckoutTelemetryIsolationTests(unittest.TestCase):
             # Both documented Django dispatcher styles must retain the invoice response.
             self.assertIs(namespace["start_order"](request, 72), response)
             self.assertEqual(record.call_count, 2)
+            # Optional attribution becoming unavailable after order creation
+            # must preserve the redirect and must not count a false event.
+            with patch.dict(sys.modules, {"services.mpw_invoice_funnel_identity": None}):
+                self.assertIs(namespace["start_order"](request, 72), response)
+            self.assertEqual(record.call_count, 2)
             product_model.objects.filter.side_effect = RuntimeError("query unavailable")
             self.assertIs(namespace["start_order"](request, product_id=72), response)
-            self.assertEqual(dispatch.call_count, 3)
+            self.assertEqual(dispatch.call_count, 4)
 
 
 if __name__ == "__main__":
