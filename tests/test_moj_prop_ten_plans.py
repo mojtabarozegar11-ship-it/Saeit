@@ -62,6 +62,7 @@ class TenChallengePlansTests(SimpleTestCase):
         self.assertTrue(plan.business_active_owner_declared)
         self.assertTrue(plan.capital_funded_owner_declared)
         self.assertFalse(plan.temporary_owner_hold)
+        self.assertTrue(plan.entry_fee_owner_confirmed)
         self.assertFalse(plan.funding_independently_verified)
         self.assertFalse(plan.broker_live_account_independently_verified)
 
@@ -71,6 +72,7 @@ class TenChallengePlansTests(SimpleTestCase):
                 self.assertEqual(plan.business_status, "funding_in_progress_temporary_inactive")
                 self.assertTrue(plan.temporary_owner_hold)
                 self.assertFalse(plan.business_active_owner_declared)
+                self.assertFalse(plan.entry_fee_owner_confirmed)
                 self.assertFalse(plan.capital_funded_owner_declared)
                 self.assertFalse(plan.checkout_enabled)
 
