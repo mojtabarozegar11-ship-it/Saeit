@@ -47,3 +47,4 @@ jobs:
         env:
           PYTHONPATH: ${{ runner.temp }}/mpw-pdf-parser
         run: pytest -q
+# C54: branch-specific safety CI trigger is intentionally active.
