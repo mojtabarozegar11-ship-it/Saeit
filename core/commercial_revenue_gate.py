@@ -170,12 +170,17 @@ def validate_offer(
     offer: OfferContract,
     *,
     tenant_registry: Optional[Mapping[str, str]] = None,
+    independent_release_verifier: Optional[Callable[[OfferContract], bool]] = None,
 ) -> None:
     """Validate an offer without making it public or payable."""
     if not isinstance(offer, OfferContract):
         raise CommercialGateError("offer_contract_required")
     offer_id = _slug(offer.offer_id, "offer_id")
     tenant_id = _slug(offer.tenant_id, "tenant_id")
+    if tenant_registry is not None and not isinstance(tenant_registry, Mapping):
+        raise CommercialGateError("tenant_registry_invalid")
+    if independent_release_verifier is not None and not callable(independent_release_verifier):
+        raise CommercialGateError("release_verifier_invalid")
     host = _text(offer.canonical_host, "canonical_host").lower()
     # Host isolation must use a real canonical DNS hostname, not a string
     # such as "shop..example" that loosely matches a broad character regex.
@@ -253,6 +258,17 @@ def validate_offer(
         # rights-reviewed deliverable before an offer may be active.
         if not _HEX64.fullmatch(offer.delivery_manifest_sha256):
             raise CommercialGateError("active_digital_delivery_manifest_required")
+    if offer.active:
+        # Source booleans and a tenant lookup table cannot prove approval,
+        # legal eligibility or customer-facing release by themselves.
+        if independent_release_verifier is None:
+            raise CommercialGateError("independent_release_verifier_required")
+        try:
+            release_confirmed = independent_release_verifier(offer)
+        except Exception:
+            raise CommercialGateError("independent_release_verifier_failed") from None
+        if release_confirmed is not True:
+            raise CommercialGateError("independent_release_unverified")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
         raise CommercialGateError("offer_identity_invalid")
 
