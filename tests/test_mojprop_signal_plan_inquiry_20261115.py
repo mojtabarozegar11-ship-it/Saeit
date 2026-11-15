@@ -51,7 +51,10 @@ const ctx = {
   AbortController,
   setTimeout: () => 1,
   clearTimeout: () => {},
-  window: { location: { search: process.argv[2] || "" } },
+  // Deterministic test UUID replaces browser WebCrypto only in this sealed Node VM.
+  // The production page must still fail closed when WebCrypto is absent.
+  window: { location: { search: process.argv[2] || "" },
+    crypto: { randomUUID: () => "12345678-1234-4234-8234-123456789abc" } },
   document: { getElementById(id) {
     if (!elements[id]) throw Error("Missing test DOM node: " + id);
     return elements[id];
@@ -176,7 +179,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
         )
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
 
 
     def test_free_educational_request_preserves_free_scope_not_paid_sku(self):
@@ -258,7 +261,7 @@ class SignalPlanInquiryTests(unittest.TestCase):
         state = self._browser("?service=blueprint&package=starter-30-trx", notes="X"*4970)
         self.assertEqual(state["posted"], [])
         self.assertFalse(state["downloadEnabled"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
 
     def test_customer_edited_starter_prefill_survives_service_change(self):
         state = self._browser(
@@ -282,19 +285,19 @@ class SignalPlanInquiryTests(unittest.TestCase):
     def test_server_explicit_400_keeps_correctable_error(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="bad-email")
         self.assertIn("email: Use a real email.", state["receipt"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
         self.assertNotIn("Submission status unconfirmed", state["receipt"])
 
     def test_server_explicit_429_keeps_retry_guidance(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="throttled")
         self.assertIn("Wait before resubmitting", state["receipt"])
-        self.assertIn("Request NOT submitted", state["receipt"])
+        self.assertIn("This submission was not accepted", state["receipt"])
 
     def test_lost_post_response_never_claims_payment_or_id(self):
         state = self._browser("?service=blueprint&package=starter-30-trx", mode="response-lost")
         self.assertEqual(len(state["posted"]), 1)
         self.assertIn("Submission status unconfirmed", state["receipt"])
-        self.assertIn("Avoid duplicate submissions", state["receipt"])
+        self.assertIn("Retry the SAME unchanged form", state["receipt"])
         self.assertNotIn("No ID or payment was created", state["receipt"])
         self.assertFalse(state["downloadEnabled"])
 
