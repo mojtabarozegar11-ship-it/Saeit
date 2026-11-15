@@ -183,6 +183,7 @@
         const abortController=new AbortController();
         const timeout=setTimeout(()=>abortController.abort(),15000);
         let postAttempted=false;
+        let explicitRejection=false;
         try{
           if(submittedNotes.length>5000) throw new Error('Shorten notes to fit the selected educational plan.');
           const token=await csrf(abortController.signal);
@@ -205,6 +206,10 @@
              !/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(data.request_id) ||
              (data.receipt_token!==undefined &&
               (typeof data.receipt_token!=='string' || data.receipt_token.length>256))){
+             // A valid JSON 4xx rejection proves this POST was rejected; a lost
+             // response or proxy 5xx does NOT prove the database wrote nothing.
+             explicitRejection=[400,403,413,429].includes(response.status) &&
+               data.ok===false && typeof data.detail==='string';
              const problems=data.fields && typeof data.fields==='object' ? Object.entries(data.fields).map(([field,message])=>field+': '+message).join('; ') : '';
              const retry=response.status===429 ? ' Wait before resubmitting; no new request was recorded.' : '';
              throw new Error((data.detail||'The request could not be received.')+(problems?' '+problems:'')+retry);
@@ -222,7 +227,7 @@
           // A failed request is NOT a buyer receipt and must never enable
           // copy/download controls suggesting a customer was registered.
           receipt='';
-          result.textContent=postAttempted
+          result.textContent=postAttempted && !explicitRejection
             ? 'Submission status unconfirmed. The server may have saved your request despite a lost response. Avoid duplicate submissions; contact support before retrying. No payment was attempted by this form.'
             : 'Request NOT submitted. '+(error.name==='AbortError'?'The service timed out before submission.':error.message)+' No ID or payment was created.';
           copy.disabled=true;
