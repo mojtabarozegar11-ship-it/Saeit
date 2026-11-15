@@ -17,7 +17,7 @@ SUPPORTED_SOURCES: Final = frozenset(
     {"moj_prop_public_page", "mojtaba.bot.ai", "manual_referral"}
 )
 _EMAIL_RE: Final = re.compile(
-    r"(?=.{1,254}$)[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+$",
+    r"(?=.{1,254}$)[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$",
     re.ASCII,
 )
 
