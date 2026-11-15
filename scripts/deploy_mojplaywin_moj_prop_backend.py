@@ -23,7 +23,8 @@ import tempfile
 
 # SSH executes this file by absolute path: insert the bundle root explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts.mojprop_schema_preflight_c83 import check_schema_closure, migration_operations_signature
+from scripts.mojprop_schema_preflight_c83 import (check_schema_closure, migration_operations_signature,
+    has_reviewed_legacy_suffix, LEGACY_BASELINES)
 
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
@@ -233,10 +234,20 @@ def patch_models(target: Path, source: Path) -> None:
     assert_regular(target, "live models")
     assert_regular(source, "staged models")
     live = target.read_text(encoding="utf-8")
-    if "class MojPropRequest(" in live:
+    staged = source.read_text(encoding="utf-8")
+    legacy = "class MojPropRequest(" in live and "class MojPropOffer(" not in live
+    if "class MojPropRequest(" in live and not legacy:
         print("MOJ_PROP_MODEL_ALREADY_PATCHED")
         return
-    staged = source.read_text(encoding="utf-8")
+    if legacy:
+        root = source.parents[1]
+        if not has_reviewed_legacy_suffix(ROOT, root, "core/models.py"):
+            raise RuntimeError("unreviewed partial live Moj Prop model; abort")
+        snapshot = (root / LEGACY_BASELINES["core/models.py"]).read_text(
+            encoding="utf-8"
+        ).rstrip()
+        live = live.rstrip()[:-len(snapshot)]
+        print("MOJ_PROP_REVIEWED_LEGACY_MODEL_UPGRADE=TRUE")
     marker = "\nclass MojPropRequest("
     start = staged.find(marker)
     if start < 0:
@@ -253,10 +264,21 @@ def patch_admin(target: Path, source: Path) -> None:
     assert_regular(target, "live admin")
     assert_regular(source, "staged admin")
     live = target.read_text(encoding="utf-8")
-    if "class MojPropRequestAdmin(" in live:
+    staged = source.read_text(encoding="utf-8")
+    legacy = ("class MojPropRequestAdmin(" in live
+              and "class MojPropOfferAdmin(" not in live)
+    if "class MojPropRequestAdmin(" in live and not legacy:
         print("MOJ_PROP_ADMIN_ALREADY_PATCHED")
         return
-    staged = source.read_text(encoding="utf-8")
+    if legacy:
+        root = source.parents[1]
+        if not has_reviewed_legacy_suffix(ROOT, root, "core/admin.py"):
+            raise RuntimeError("unreviewed partial live Moj Prop admin; abort")
+        snapshot = (root / LEGACY_BASELINES["core/admin.py"]).read_text(
+            encoding="utf-8"
+        ).rstrip()
+        live = live.rstrip()[:-len(snapshot)]
+        print("MOJ_PROP_REVIEWED_LEGACY_ADMIN_UPGRADE=TRUE")
     # Source main includes the complete commercial model import; a strict
     # equality test for the old one-model import prevented every fresh setup.
     marker = "\nfrom .models import MojPropRequest, MojPropOffer, MojPropDeliveryEvidence\n"
