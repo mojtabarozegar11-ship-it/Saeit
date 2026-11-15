@@ -6,6 +6,9 @@ on:
 permissions: {contents: read}
 jobs:
   exact_scope:
+    # RETIRED: old checkout-copy publisher conflicts with the current email-bound sale path.
+    # This workflow has no workflow_dispatch event; never SSH on main push.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
