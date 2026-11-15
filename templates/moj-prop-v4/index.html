@@ -100,7 +100,7 @@
       if(selectedPlan && !notesField.value.trim()){
         notesField.value='Please provide a risk-disclosed educational '+
           signalPlans[selectedPlan].label.toLowerCase()+
-          '. No recurring subscription or payment has been authorized.';
+          '. A recurring subscription and payment have not been authorized.';
       }
       function syncSignalPlan(){
         const show=Boolean(selectedPlan && serviceSelect.value==='signals');
