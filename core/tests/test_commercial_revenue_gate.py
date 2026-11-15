@@ -25,7 +25,8 @@ class CommercialGateTests(unittest.TestCase):
     def _offline_ledger(self, path):
         # Explicitly synthetic fixtures; never use these adapters in production.
         return SQLiteCommercialLedger(path, settlement_verifier=lambda _: True,
-                                      delivery_verifier=lambda order, manifest: True)
+                                      delivery_verifier=lambda order, manifest: True,
+                                      accepted_scope_verifier=lambda order: True)
 
     def offer(self, **changes):
         values = {
@@ -1136,6 +1137,7 @@ class CommercialGateTests(unittest.TestCase):
             settlement_verifier=lambda evidence: True,
             delivery_verifier=lambda order, digest: True,
             refund_verifier=refund_verifier,
+            accepted_scope_verifier=lambda order: True,
         )
         self._prepare_private_invoice(ledger, "order-52")
         receipt = self.payment()
@@ -1519,6 +1521,41 @@ class CommercialGateTests(unittest.TestCase):
                 ledger.record_confirmed_refund(self._refund_proof())
             self.assertEqual(calls, [])
             ledger.close()
+
+
+    def _fulfilled_scope_fixture(self, directory):
+        ledger = self._refundable_ledger(directory, refund_verifier=lambda refund: True)
+        ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                       event_id="fulfillment-pending-52", payload_digest="a" * 64)
+        ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                       event_id="fulfilled-52", payload_digest="b" * 64,
+                       fulfillment_manifest_sha256="b" * 64)
+        return ledger
+
+    def test_revenue_claim_fails_without_customer_accepted_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._fulfilled_scope_fixture(directory)
+            ledger._accepted_scope_verifier = None
+            with self.assertRaisesRegex(CommercialGateError, "independent_scope_acceptance_required"):
+                ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                    event_id="revenue-52", payload_digest="c" * 64,
+                    payment_evidence=self.payment(), verified_revenue=True)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfilled")
+            ledger.close()
+
+    def test_revenue_scope_authorization_cannot_be_truthy_string(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._fulfilled_scope_fixture(directory)
+            ledger._accepted_scope_verifier = lambda order: "yes"
+            with self.assertRaisesRegex(CommercialGateError, "scope_acceptance_unverified"):
+                ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
+                    event_id="revenue-52", payload_digest="c" * 64,
+                    payment_evidence=self.payment(), verified_revenue=True)
+            ledger.close()
+
+    def test_scope_verifier_argument_type_is_validated(self):
+        with self.assertRaisesRegex(CommercialGateError, "accepted_scope_verifier_invalid"):
+            SQLiteCommercialLedger(":memory:", accepted_scope_verifier="true")
 
 
 if __name__ == "__main__":
