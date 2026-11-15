@@ -90,6 +90,37 @@
         <div class="mpw-product-body"><span class="mpw-product-type">Website kit · Interior design</span><h3 id="mpw-product-879-title">Atelier Interior — Client-Ready Website Kit</h3><p class="mpw-product-summary">A responsive website starter for an interior-design studio, with an editable portfolio structure and clear paths for prospective clients to make contact.</p><ul class="mpw-product-facts"><li><strong>Includes:</strong> HTML, CSS, JavaScript, setup instructions, and five original SVG illustrations</li><li><strong>Features:</strong> Project gallery, editable studio details, quote inquiry, and WhatsApp handoff</li><li><strong>Format:</strong> Downloadable ZIP · one-site/client license; demo photography is not included</li></ul><div class="mpw-product-bottom"><span class="mpw-product-price">US $6.80<small>listed price</small></span><a class="mpw-shop-secondary" href="/store/product/879/" aria-label="View Atelier Interior website kit details and checkout availability">View details &amp; availability <span aria-hidden="true">&nbsp;↗</span></a></div><a class="mpw-product-demo" href="https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/" target="_blank" rel="noopener noreferrer">Open the live demo <span aria-hidden="true">↗</span></a></div>
       </article>
     </div>
+    {% if approved_products or approved_next_cursor %}
+    <section class="mpw-shop-catalog" aria-labelledby="mpw-approved-products-title">
+      <div class="mpw-shop-catalog-head">
+        <div>
+          <span class="mpw-shop-kicker">VERIFIED DIGITAL CATALOGUE</span>
+          <h2 id="mpw-approved-products-title">Additional approved products</h2>
+        </div>
+        <span class="mpw-shop-count">Listings are verified again at checkout</span>
+      </div>
+      {% if approved_products %}
+      <div class="mpw-shop-grid">
+        {% for entry in approved_products %}
+        <article class="mpw-product" aria-labelledby="mpw-approved-{{ entry.product_id }}">
+          <div class="mpw-product-body">
+            <span class="mpw-product-type">Rights-reviewed digital product</span>
+            <h3 id="mpw-approved-{{ entry.product_id }}">{{ entry.title }}</h3>
+            <p class="mpw-product-summary">File availability, rights and payment eligibility are rechecked by the private gateway. No address or invoice is issued on this page.</p>
+            <div class="mpw-product-bottom">
+              <span class="mpw-product-price">US &#36;{{ entry.price_usd }}<small>catalogue price; TRX quoted at checkout</small></span>
+              <a class="mpw-shop-secondary" href="{{ entry.detail_url }}">View verified purchase availability</a>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if approved_next_cursor %}
+      <p class="mpw-shop-footer"><a class="mpw-shop-secondary" href="/store/?approved_after={{ approved_next_cursor }}">Show more approved products</a></p>
+      {% endif %}
+    </section>
+    {% endif %}
     <aside class="mpw-shop-payment" aria-label="Payment and digital delivery information"><div class="mpw-shop-payment-mark" aria-hidden="true">i</div><div><h3>How checkout and delivery work</h3><p>Checkout is available only when a verified live order invoice is issued. The intended payment asset is native TRX on the TRON network, not cards or USDT. No payment is accepted through this catalog page. Never send funds to an address found outside your verified order invoice. Digital delivery must follow confirmed on-chain settlement; if a verified invoice is not available, purchases remain unavailable. <a href="/commerce/trx-easy/purchases/">View your purchases and invoices</a>.</p></div></aside>
     <p class="mpw-shop-footer">Product specifications and listed prices are shown for clarity; review the individual product page for the current offer and terms before placing an order.</p>
   </section>
