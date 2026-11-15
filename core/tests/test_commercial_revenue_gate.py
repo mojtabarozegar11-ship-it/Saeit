@@ -1899,6 +1899,62 @@ class CommercialGateTests(unittest.TestCase):
             expected_currency="TRX"))
 
 
+    def _candidate_bot_ai_offer(self, **changes):
+        return self.offer(canonical_host="mojtaba.bot.ai", active=True,
+                          owner_approved=True, legal_reviewed=True,
+                          kyc_ready=True, rights_cleared=True, **changes)
+
+    def test_bot_ai_brand_host_never_counts_as_delegated_domain_without_proof(self):
+        with self.assertRaisesRegex(CommercialGateError, "independent_domain_delegation_required"):
+            validate_offer(self._candidate_bot_ai_offer(),
+                tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+                independent_release_verifier=lambda offer: True)
+
+    def test_bot_ai_delegation_false_or_truthy_string_never_releases_host(self):
+        for verdict in (False, "true", 1, None):
+            with self.subTest(verdict=verdict):
+                with self.assertRaisesRegex(CommercialGateError, "domain_delegation_unverified"):
+                    validate_offer(self._candidate_bot_ai_offer(),
+                        tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+                        independent_release_verifier=lambda offer: True,
+                        independent_domain_delegation_verifier=lambda host: verdict)
+
+    def test_bot_ai_delegation_adapter_exception_fails_closed(self):
+        def unavailable(_):
+            raise ConnectionError("registry unavailable")
+        with self.assertRaisesRegex(CommercialGateError, "domain_delegation_verifier_failed"):
+            validate_offer(self._candidate_bot_ai_offer(),
+                tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+                independent_release_verifier=lambda offer: True,
+                independent_domain_delegation_verifier=unavailable)
+
+    def test_bot_ai_delegation_validator_input_must_be_callable(self):
+        with self.assertRaisesRegex(CommercialGateError, "delegation_verifier_invalid"):
+            validate_offer(self._candidate_bot_ai_offer(),
+                tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+                independent_release_verifier=lambda offer: True,
+                independent_domain_delegation_verifier="trusted")
+
+    def test_verified_delegation_is_only_source_preflight_not_live_site(self):
+        self.assertIsNone(validate_offer(self._candidate_bot_ai_offer(),
+            tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+            independent_release_verifier=lambda offer: True,
+            independent_domain_delegation_verifier=lambda host: host == "mojtaba.bot.ai"))
+
+    def test_single_bot_dispatch_requires_domain_delegation_even_if_release_approved(self):
+        offer = self._candidate_bot_ai_offer(offer_type=OfferType.SIGNAL)
+        with self.assertRaisesRegex(CommercialGateError, "independent_domain_delegation_required"):
+            authorize_nonfinancial_signal_dispatch(
+                requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+                offer=offer, tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+                independent_release_verifier=lambda offer: True)
+        self.assertIsNone(authorize_nonfinancial_signal_dispatch(
+            requested_action="research_summary", bot_identity="mojtaba-bot-ai",
+            offer=offer, tenant_registry={"moj_prop": "mojtaba.bot.ai"},
+            independent_release_verifier=lambda offer: True,
+            independent_domain_delegation_verifier=lambda host: True))
+
+
 if __name__ == "__main__":
     unittest.main()
 
