@@ -185,7 +185,7 @@ class MojPropIntakeSafetyTests(TestCase):
     def test_unpaired_unicode_surrogate_cannot_reach_customer_database(self):
         for key in ("name", "notes"):
             with self.subTest(field=key):
-                data = {**self.data, key: self.data[key] + "\\ud800"}
+                data = {**self.data, key: self.data[key] + chr(0xD800)}
                 response = self.post(data)
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(MojPropRequest.objects.count(), 0)
