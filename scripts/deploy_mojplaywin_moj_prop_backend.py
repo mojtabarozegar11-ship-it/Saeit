@@ -265,7 +265,8 @@ def patch_urlconf(target: Path) -> None:
     source = target.read_text(encoding="utf-8")
     intake_exists = 'path("moj-prop-intake/"' in source
     status_exists = 'path("moj-prop-status/"' in source
-    if intake_exists and status_exists:
+    quote_exists = 'path("moj-prop-quote/<str:token>/"' in source
+    if intake_exists and status_exists and quote_exists:
         print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
@@ -284,11 +285,16 @@ def patch_urlconf(target: Path) -> None:
     if not status_exists:
         missing_imports.append("mojprop_receipt_status")
         routes.append('path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status")')
-    additions = (
-        "\n\n# Moj Prop public lead intake/status, not a payment system.\n"
-        + "from core.mojprop_views import " + ", ".join(missing_imports) + "\n"
-        + "urlpatterns += [" + ", ".join(routes) + "]\n"
-    )
+    # Quote links are independently disabled by default. Publishing a
+    # guarded URL route does NOT issue a proposal or make it payable.
+    if not quote_exists:
+        routes.append('path("moj-prop-quote/<str:token>/", customer_quote, name="mojprop_quote_public")')
+    additions = "\n\n# Moj Prop intake/status and private, owner-gated quote lookup.\n"
+    if missing_imports:
+        additions += "from core.mojprop_views import " + ", ".join(missing_imports) + "\n"
+    if not quote_exists:
+        additions += "from core.mojprop_quote_views import customer_quote\n"
+    additions += "urlpatterns += [" + ", ".join(routes) + "]\n"
     mode = stat.S_IMODE(target.stat().st_mode)
     atomic_write_text(target, source.rstrip() + additions, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
