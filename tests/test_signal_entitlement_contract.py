@@ -87,6 +87,15 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             with self.subTest(email=email[:25]), self.assertRaises(SignalEntitlementError):
                 self.lease(verified_buyer_email=email)
 
+    def test_email_digest_is_keyed_and_domain_separated(self):
+        from hashlib import sha256
+        lease = self.lease()
+        canonical_email = "buyer@realcompany.net"
+        self.assertNotEqual(lease.buyer_digest, sha256(canonical_email.encode("ascii")).hexdigest())
+        rotated = self.lease(signing_key=OTHER)
+        self.assertNotEqual(lease.buyer_digest, rotated.buyer_digest)
+        self.assertFalse(self.access(lease=rotated))
+
     def test_source_lease_keeps_only_hash_not_raw_email(self):
         x = self.lease()
         self.assertEqual(len(x.buyer_digest), 64)
