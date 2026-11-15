@@ -1,0 +1,76 @@
+name: Moj Prop public reachability evidence — read-only only
+on:
+  pull_request:
+    paths:
+      - "templates/moj-prop-v4/**"
+      - ".github/workflows/mojprop-public-readonly-24h-evidence-20261115.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojprop-public-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-get-only:
+    name: Read-only buyer-path evidence (NOT production release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe public HTTPS GET routes only — no secrets, POST or customer data
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_dir="$RUNNER_TEMP/mojprop-live-get"
+          mkdir -m 700 "$check_dir"
+          printf '%s\n' "### Read-only public site evidence (NOT a launch approval)" >> "$GITHUB_STEP_SUMMARY"
+          targets=(
+            "mojprop_root|https://mojplaywin.com/moj-prop/"
+            "mojprop_catalog|https://mojplaywin.com/moj-prop/catalog/"
+            "mojprop_intake_get|https://mojplaywin.com/moj-prop-intake/"
+            "signal_desk|https://mojplaywin.com/moj-prop/signals/"
+            "single_bot_root|https://mojtaba.bot.ai/"
+          )
+          for item in "${targets[@]}"; do
+            name="${item%%|*}"
+            url="${item#*|}"
+            code="$(curl --proto '=https' --tlsv1.2 -L --max-redirs 1 \
+              --connect-timeout 6 --max-time 15 --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              -o "$check_dir/$name.body" -w '%{http_code}' "$url" 2>/dev/null || true)"
+            [[ "$code" =~ ^[0-9]{3}$ ]] || code="000"
+            echo "GET_ONLY_${name}_HTTP=$code"
+            printf '%s\n' "- $name : HTTP $code (GET only)" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$code" == "200" && "$name" == "mojprop_root" ]]; then
+              if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
+                echo "PUBLIC_STARTER_IN_ROOT=yes"
+              else
+                echo "PUBLIC_STARTER_IN_ROOT=no"
+              fi
+            fi
+            if [[ "$code" == "200" && "$name" == "mojprop_catalog" ]]; then
+              if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
+                echo "PUBLIC_STARTER_IN_CATALOG=yes"
+              else
+                echo "PUBLIC_STARTER_IN_CATALOG=no"
+              fi
+            fi
+            if [[ "$code" == "200" && "$name" == "mojprop_intake_get" ]]; then
+              python3 - "$check_dir/$name.body" <<'PY'
+          import json
+          import sys
+          try:
+              with open(sys.argv[1], encoding="utf-8") as handle:
+                  payload = json.load(handle)
+              valid = payload.get("ok") is True and payload.get("service") == "moj-prop-intake" and bool(payload.get("csrf_token"))
+          except (OSError, ValueError, TypeError):
+              valid = False
+          print("PUBLIC_INTAKE_GET_CSRF_SHAPE=" + ("valid" if valid else "invalid"))
+          PY
+            fi
+          done
+          echo "PUBLIC_CHECK_IS_READ_ONLY=true"
+          echo "NO_POST_NO_PAYMENT_NO_RELEASE=true"
+          echo "HTTP evidence does not prove a persisted buyer lead, payment, merchant custody, or a restore plan."
