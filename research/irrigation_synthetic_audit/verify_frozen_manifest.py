@@ -1,26 +1,68 @@
 #!/usr/bin/env python3
-"""R01 frozen-source manifest verifier. Offline, read-only, no field-data claims.
+"""Read-only R01 artifact identity check; never evidence of field efficacy.
 
 Usage: python research/irrigation_synthetic_audit/verify_frozen_manifest.py MANIFEST.json
-Manifest schema:
-{"schema_version":1,"study":"R01","artifacts":[
- {"role":"input","path":"inputs/C.csv","sha256":"64 lowercase hex chars","bytes":123},
- {"role":"generator","path":"code/generator.py","sha256":"...","bytes":123},
- {"role":"config","path":"config.json","sha256":"...","bytes":123},
- {"role":"output","path":"outputs/C.csv","sha256":"...","bytes":123}
-]}
-Paths are relative to the manifest directory. Never publish private inputs.
-This tool verifies file identity, NOT experimental validity or generator replay.
+Manifest: {"schema_version":1,"study":"R01","artifacts":[{"role":"input",
+"path":"inputs/C.csv","sha256":"<64 lowercase hex>","bytes":123}, ...]}
+Required roles: input, generator, config, output. No private data are published.
 """
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 
 ROLES = {"input", "generator", "config", "output", "analysis", "table"}
 SHA = re.compile(r"[0-9a-f]{64}\Z")
+MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_ARTIFACTS = 10000
+
+
+def _digest_anchored(root, parts, expected_size):
+    """Open each path component relative to held directory FDs, without symlinks.
+
+    A concurrent rename can change directory entries, but cannot redirect
+    already-open descriptors to a different inode. Never write to artifacts.
+    """
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    file_flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0)
+    fds = []
+    try:
+        parent = os.open(root, directory_flags)
+        fds.append(parent)
+        for component in parts[:-1]:
+            parent = os.open(component, directory_flags, dir_fd=parent)
+            fds.append(parent)
+        fd = os.open(parts[-1], file_flags, dir_fd=parent)
+        fds.append(fd)
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("artifact is not a regular file")
+        if before.st_size != expected_size:
+            raise ValueError("byte count mismatch")
+        digest = hashlib.sha256()
+        count = 0
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            count += len(chunk)
+            if count > expected_size:
+                raise ValueError("artifact grew during read")
+            digest.update(chunk)
+        after = os.fstat(fd)
+        if (count != expected_size or before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+                or before.st_ctime_ns != after.st_ctime_ns):
+            raise ValueError("artifact changed during read")
+        return digest.hexdigest()
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
+
 
 def verify(manifest_path):
     errors = []
@@ -28,20 +70,31 @@ def verify(manifest_path):
         if not ok:
             errors.append(message)
         return bool(ok)
-    root = manifest_path.parent.resolve()
+
+    manifest_path = Path(manifest_path)
     try:
-        raw = manifest_path.read_bytes()
+        if manifest_path.is_symlink():
+            return ["manifest symlink forbidden"]
+        if manifest_path.stat().st_size > MAX_MANIFEST_BYTES:
+            return ["manifest exceeds size limit"]
+        with manifest_path.open("rb") as handle:
+            raw = handle.read(MAX_MANIFEST_BYTES + 1)
+        if len(raw) > MAX_MANIFEST_BYTES:
+            return ["manifest exceeds size limit"]
         data = json.loads(raw)
     except (OSError, UnicodeError, ValueError) as exc:
         return ["manifest unreadable or invalid JSON: " + str(exc)]
     if not check(isinstance(data, dict), "root must be object"):
         return errors
-    check(data.get("schema_version") == 1, "schema_version must be 1")
+    check(type(data.get("schema_version")) is int and data["schema_version"] == 1,
+          "schema_version must be 1")
     check(data.get("study") == "R01", "study must be R01")
     artifacts = data.get("artifacts")
     if not check(isinstance(artifacts, list), "artifacts must be array"):
         return errors
-    check(bool(artifacts), "artifacts must be nonempty")
+    if not check(0 < len(artifacts) <= MAX_ARTIFACTS, "artifact count out of bounds"):
+        return errors
+    root = manifest_path.parent
     seen = set()
     roles = set()
     for i, item in enumerate(artifacts):
@@ -55,40 +108,30 @@ def verify(manifest_path):
         if not check(isinstance(path, str) and bool(path) and "\x00" not in path,
                      tag + " invalid path"):
             continue
-        relative = Path(path)
-        if not check(not relative.is_absolute(), tag + " absolute path forbidden"):
-            continue
-        if not check(".." not in relative.parts, tag + " parent traversal forbidden"):
+        # Only canonical POSIX-relative artifact paths are allowed.
+        if not check("\\" not in path and not path.startswith("/")
+                     and all(p not in ("", ".", "..") for p in path.split("/")),
+                     tag + " noncanonical or unsafe path"):
             continue
         if not check(path not in seen, tag + " duplicate path"):
             continue
         seen.add(path)
-        resolved = (root / relative).resolve()
-        if not check(resolved.is_relative_to(root), tag + " path escapes manifest root"):
-            continue
-        if not check(resolved.is_file(), tag + " missing/non-file artifact"):
-            continue
-        if not check(not (root / relative).is_symlink(), tag + " symlink forbidden"):
-            continue
         size = item.get("bytes")
         if not check(type(size) is int and size >= 0, tag + " invalid byte count"):
             continue
-        if not check(resolved.stat().st_size == size, tag + " byte count mismatch"):
-            continue
         expected = item.get("sha256")
-        if not check(isinstance(expected, str) and SHA.fullmatch(expected),
+        if not check(isinstance(expected, str) and SHA.fullmatch(expected) is not None,
                      tag + " invalid SHA-256"):
             continue
-        digest = hashlib.sha256()
-        with resolved.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        check(digest.hexdigest() == expected, tag + " SHA-256 mismatch")
-    check("input" in roles, "missing input role")
-    check("generator" in roles, "missing generator role")
-    check("config" in roles, "missing config role")
-    check("output" in roles, "missing output role")
+        try:
+            digest = _digest_anchored(root, path.split("/"), size)
+            check(digest == expected, tag + " SHA-256 mismatch")
+        except (OSError, ValueError) as exc:
+            errors.append(tag + " inaccessible or invalid artifact: " + str(exc))
+    for role in ("input", "generator", "config", "output"):
+        check(role in roles, "missing " + role + " role")
     return errors
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -100,8 +143,9 @@ def main():
     if failures:
         print("BLOCKED: %d integrity violations" % len(failures), file=sys.stderr)
         return 1
-    print("PASS: manifest file identity verified; model validity NOT established")
+    print("PASS: file identity only; model validity NOT established")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
