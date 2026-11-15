@@ -51,3 +51,8 @@ def live_connected_database_identity_sha256() -> str:
     if not row or type(row[0]) is not str:
         raise RuntimeError("could not verify selected live database")
     return database_identity_digest(connection.settings_dict, row[0])
+
+
+if __name__ == "__main__":
+    # A read-only runtime fingerprint; never print URL/password/username.
+    print(live_connected_database_identity_sha256())
