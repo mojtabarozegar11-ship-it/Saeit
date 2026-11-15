@@ -99,6 +99,39 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
              patch("subprocess.run", return_value=bad):
             self.assertFalse(mod._quota_checked(1024 * 1024))
 
+    def test_quota_program_missing_is_unknown_not_approved(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=2000000, f_frsize=4096, f_favail=1000)
+        with patch.object(mod.os, "open", return_value=10), patch.object(mod.os, "fstatvfs", return_value=fs), patch.object(mod.os, "close"), patch("subprocess.run", side_effect=FileNotFoundError):
+            allowed, reason = mod._quota_result(1024**2)
+            self.assertFalse(allowed)
+            self.assertEqual(reason, "quota_program_unavailable")
+
+    def test_invalid_quota_record_reports_precise_blocker_without_leak(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=2000000, f_frsize=4096, f_favail=1000)
+        result = SimpleNamespace(stdout="/dev/sda 20* 100 200 1 100 200" + chr(10))
+        with patch.object(mod.os, "open", return_value=10), patch.object(mod.os, "fstatvfs", return_value=fs), patch.object(mod.os, "close"), patch("subprocess.run", return_value=result):
+            allowed, reason = mod._quota_result(1024**2)
+            self.assertFalse(allowed)
+            self.assertEqual(reason, "quota_format_unrecognized")
+            self.assertNotIn("/dev/", reason)
+
+    def test_no_volume_entry_is_distinct_from_approved_quota(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from scripts import mojprop_full_restore_capacity_readonly_c94 as mod
+        fs = SimpleNamespace(f_bavail=2000000, f_frsize=4096, f_favail=1000)
+        result = SimpleNamespace(stdout="no fixed quota applied" + chr(10))
+        with patch.object(mod.os, "open", return_value=10), patch.object(mod.os, "fstatvfs", return_value=fs), patch.object(mod.os, "close"), patch("subprocess.run", return_value=result):
+            allowed, reason = mod._quota_result(1024**2)
+            self.assertFalse(allowed)
+            self.assertEqual(reason, "quota_volume_not_reported")
+
 
 if __name__ == "__main__":
     unittest.main()
