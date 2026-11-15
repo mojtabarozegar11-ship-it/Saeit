@@ -60,6 +60,13 @@ class AuditTests(unittest.TestCase):
             self.assertEqual(result["means"][policy]["drainage_sum_mm"], 12.5)
             self.assertNotIn("drainage_m3_equivalent", result["means"][policy])
 
+    def test_duplicate_csv_header_rejected(self):
+        with tempfile.TemporaryDirectory() as dirname:
+            path = Path(dirname) / "duplicate_header.csv"
+            path.write_text("cohort,cohort,policy\\nC-dry-0,C-dry-0,v2\\n", encoding="utf-8")
+            with self.assertRaisesRegex(AuditError, "Duplicate CSV header"):
+                load_records(path)
+
     def test_four_policy_regime(self):
         result = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual((result["record_count"], result["matched_keys"]), (2160, 540))
