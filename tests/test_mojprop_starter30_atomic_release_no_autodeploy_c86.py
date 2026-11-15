@@ -40,3 +40,15 @@ def test_starter30_static_publication_is_owner_dispatch_only():
     assert "MOJ_PROP_STATUS_API_PREFLIGHT=PASS" in source
     assert "scripts/update_mojplaywin_moj_prop_catalog.py deploy" in source
     assert "templates/moj-prop-v4" in source
+
+
+def test_starter30_public_http_must_match_exact_reviewed_sha256():
+    source = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
+    assert "STARTER30_THREE_FILES_PUBLIC_SHA256=PASS" in source
+    assert "STARTER30_PUBLIC_SOURCE_DIGEST_MISMATCH=$path" in source
+    assert 'sha256sum "templates/moj-prop-v4/starter-30-trx/$path"' in source
+    assert 'sha256sum "$file"' in source
+    assert "for path in index.html journal-template.csv journal-guide.txt; do" in source
+    assert "SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS" in source
+    assert "MOJ_PROP_FREE_SIGNAL_PUBLICATION_LIVE=PASS" not in source
+
