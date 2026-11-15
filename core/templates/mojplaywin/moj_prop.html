@@ -123,7 +123,7 @@
         </p>
         <p class="mp-plan-field">{{ plans_copy.starting }}</p>
         <strong class="mp-plan-capital" dir="ltr">&#36;{{ plan.starting_capital_usd }}</strong>
-        <p class="mp-plan-field">{{ plans_copy.fee }}</p>
+        <p class="mp-plan-field">{% if plan.entry_fee_owner_confirmed %}{{ plan_status_copy.owner_fee }}{% else %}{{ plans_copy.fee }}{% endif %}</p>
         <strong class="mp-plan-fee" dir="ltr">{{ plan.fee_trx_proposed }} TRX</strong>
         <p class="mp-plan-field">{{ plans_copy.maximum }}: <b dir="ltr">&#36;{{ plan.maximum_capital_usd }}</b></p>
         <p class="mp-plan-meta" dir="ltr">{{ plan.duration_days }} DAYS · {{ plan.minimum_trades }} TRADES · 2 STAGES</p>
