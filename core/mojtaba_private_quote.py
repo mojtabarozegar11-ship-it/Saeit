@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import tempfile
 
 from .mojtaba_commercial_services import CODES, private_dir
@@ -50,6 +51,26 @@ def _render(payload, summary, sha):
     return "\n".join(lines)
 
 
+def _private_quote_read(path, *, allow_publish_race=False):
+    """Read only private regular artifacts; never follow an existing symlink."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise QuoteScenarioError("QUOTE_SAFE_READ_UNAVAILABLE")
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077
+                    or (info.st_nlink != 1 and not (allow_publish_race and info.st_nlink == 2))
+                    or info.st_size > 262144):
+                raise QuoteScenarioError("QUOTE_UNSAFE_EXISTING")
+            content = stream.read(262145)
+    except OSError:
+        raise QuoteScenarioError("QUOTE_UNSAFE_EXISTING") from None
+    if len(content) > 262144:
+        raise QuoteScenarioError("QUOTE_UNSAFE_EXISTING")
+    return content
+
+
 def prepare_private_quote(payload):
     """Create one immutable private quote scenario with SHA-256 byte proof."""
     if not isinstance(payload, dict) or set(payload) != {"service_code", "scenario"}:
@@ -72,7 +93,7 @@ def prepare_private_quote(payload):
     if path.is_symlink():
         raise QuoteScenarioError("QUOTE_UNSAFE_PATH")
     if path.exists():
-        if not path.is_file() or path.read_bytes() != document:
+        if _private_quote_read(path) != document:
             raise QuoteScenarioError("QUOTE_OUTPUT_COLLISION")
         return {"created": False, "service_code": code, "input_sha256": digest,
                 "output_sha256": hashlib.sha256(document).hexdigest(),
@@ -89,13 +110,17 @@ def prepare_private_quote(payload):
             os.link(temp, path, follow_symlinks=False)
             created = True
         except FileExistsError:
-            if path.is_symlink() or not path.is_file() or path.read_bytes() != document:
+            try:
+                prior = _private_quote_read(path, allow_publish_race=True)
+            except QuoteScenarioError:
+                raise QuoteScenarioError("QUOTE_CONCURRENT_COLLISION") from None
+            if prior != document:
                 raise QuoteScenarioError("QUOTE_CONCURRENT_COLLISION")
             created = False
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
-    if path.read_bytes() != document:
+    if _private_quote_read(path) != document:
         raise QuoteScenarioError("QUOTE_HASH_CHECK_FAILED")
     return {"created": created, "service_code": code, "input_sha256": digest,
             "output_sha256": hashlib.sha256(document).hexdigest(),
