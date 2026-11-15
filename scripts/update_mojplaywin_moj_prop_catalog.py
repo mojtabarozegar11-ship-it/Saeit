@@ -14,6 +14,7 @@ import json
 import os
 import pwd
 import re
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -162,6 +163,35 @@ def validate_host() -> None:
         assert_file(DOCROOT / relative)
 
 
+def verify_private_backup_root(*, create: bool) -> None:
+    """Refuse symlinked, world-writable or foreign-owned backup parents.
+
+    Never chmod existing host directories: this publisher has no authority
+    to repair the private data of unrelated tenants or workflows.
+    """
+    parent = BACKUPS.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise RuntimeError("Untrusted Moj Prop backup parent")
+    parent_stat = parent.lstat()
+    if (not stat.S_ISDIR(parent_stat.st_mode)
+            or parent_stat.st_uid != os.geteuid()
+            or parent_stat.st_mode & stat.S_IWOTH):
+        raise RuntimeError("Untrusted Moj Prop backup parent owner or mode")
+    if BACKUPS.is_symlink():
+        raise RuntimeError("Symlinked Moj Prop backup root refused")
+    if BACKUPS.exists():
+        info = BACKUPS.lstat()
+        if (not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_mode & 0o077):
+            raise RuntimeError("Untrusted Moj Prop backup root owner or mode")
+    elif create:
+        BACKUPS.mkdir(mode=0o700)
+        verify_private_backup_root(create=False)
+    else:
+        raise RuntimeError("Moj Prop private backup root is missing")
+
+
 def plan(root: Path) -> list[dict]:
     old_catalog = (root / BASELINE_CATALOG).read_bytes()
     old_home = (root / BASELINE_HOME).read_bytes()
@@ -241,6 +271,9 @@ def verified_manifest(path: Path) -> dict:
 
 
 def restore(backup: Path, *, automated: bool = False) -> None:
+    verify_private_backup_root(create=False)
+    if backup.parent != BACKUPS or backup.is_symlink():
+        raise RuntimeError("Moj Prop rollback path must stay within private backup root")
     manifest = verified_manifest(backup / "manifest.json")
     if manifest.get("rolled_back") is True:
         print("MOJ_PROP_ALREADY_ROLLED_BACK")
@@ -303,6 +336,7 @@ def deploy(run_id: str, commit: str) -> None:
     if not any(item["changed"] for item in changes):
         print("MOJ_PROP_SAMPLES_AND_CATALOG_ALREADY_LIVE")
         return
+    verify_private_backup_root(create=True)
     backup = BACKUPS / ("moj-prop-catalog-" + run_id)
     if backup.exists() or backup.is_symlink():
         raise RuntimeError("Backup ID already used")
