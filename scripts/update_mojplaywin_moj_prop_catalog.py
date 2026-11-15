@@ -134,10 +134,14 @@ def deploy(run_id: str, commit_sha: str) -> None:
         if digest(catalog.read_bytes()) != manifest["catalog_after"]:
             raise RuntimeError("Moj Prop catalog verification failed")
     except Exception:
-        if changed and catalog_created and catalog.is_file() and not catalog.is_symlink():
-            catalog.unlink()
-        if digest(old_index.read_bytes()) == manifest["index_after"]:
-            atomic_write(old_index, previous)
+        # If catalog creation fails after index is changed, restore the index.
+        # Never roll back bytes another worker changed after this attempt.
+        if catalog_written and catalog_created and catalog.is_file() and not catalog.is_symlink():
+            if digest(catalog.read_bytes()) == manifest["catalog_after"]:
+                catalog.unlink()
+        if index_written and old_index.is_file() and not old_index.is_symlink():
+            if digest(old_index.read_bytes()) == manifest["index_after"]:
+                atomic_write(old_index, previous)
         raise
     mode = "catalog_created" if catalog_created else "index_refreshed"
     print(f"MOJ_PROP_CATALOG_UPDATED commit={commit_sha} mode={mode}")
