@@ -401,7 +401,8 @@ class CommercialGateTests(unittest.TestCase):
 
     def test_offer_rejects_fractional_native_sun(self):
         for amount in (Decimal("0.0000001"), Decimal("30.00000001"),
-                       Decimal("9223372036854.775808")):
+                       Decimal("9223372036854.775808"), Decimal("1E+999999999"),
+                       Decimal("1E-999999999")):
             with self.subTest(amount=amount), self.assertRaisesRegex(
                     CommercialGateError, "price_invalid_native_sun"):
                 validate_offer(self.offer(price=amount))
