@@ -14,7 +14,9 @@ import os
 import re
 from pathlib import Path
 import shutil
+import signal
 import stat
+import time
 import subprocess
 import sys
 import tempfile
@@ -29,13 +31,11 @@ FILES = (
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
-    Path("core/migrations/0042_alter_mojproprequest_source.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = (
     Path("core/mojprop_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
-    Path("core/migrations/0042_alter_mojproprequest_source.py"),
 )
 
 
@@ -166,23 +166,23 @@ def atomic_write_text(target: Path, text: str, mode: int) -> None:
             temporary.unlink()
 
 
-def format_core_migration_dependencies(leaves, *, allow_moj_prop_parent=False) -> str:
-    """Join verified core graph leaves, optionally allowing the freshly staged 0041."""
-    if (type(leaves) not in (tuple, list) or not 1 <= len(leaves) <= 8
-            or len(set(leaves)) != len(leaves)
-            or any(type(name) is not str
-                   or not re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", name)
-                   for name in leaves)
-            or ("0041_mojprop_request" in leaves and not allow_moj_prop_parent)
-            or "0042_alter_mojproprequest_source" in leaves):
-        raise RuntimeError("Unverified or conflicting core migration graph")
+def format_core_migration_dependencies(leaves) -> str:
+    """Join real live Django core leaves; never fabricate 0001 dependencies."""
+    if (type(leaves) not in (tuple, list)
+            or not 1 <= len(leaves) <= 12
+            or any(type(n) is not str
+                   or re.fullmatch(r"[0-9]{4}_[A-Za-z0-9_]+", n) is None
+                   for n in leaves)
+            or len(leaves) != len(set(leaves))
+            or "0041_mojprop_request" in leaves):
+        raise RuntimeError("Unverified Moj Prop core migration graph")
     return "dependencies = [\n" + "".join(
-        f'        ("core", "{name}"),\n' for name in sorted(leaves)
+        f'        ("core", "{n}"),\n' for n in sorted(leaves)
     ) + "    ]"
 
 
-def live_core_migration_leaves(*, allow_moj_prop_parent=False):
-    """Query Django's real disk graph, not an unreliable shell filename glob."""
+def live_core_migration_leaves():
+    """Ask Django's actual private staging graph, never the file with max digits."""
     python = choose_python()
     probe = """
 import json, os
@@ -191,67 +191,44 @@ import django
 django.setup()
 from django.db.migrations.loader import MigrationLoader
 loader = MigrationLoader(None)
-nodes = sorted(name for app, name in loader.graph.leaf_nodes("core"))
-print("MOJ_PROP_CORE_LEAVES=" + json.dumps(nodes))
+leaves = sorted(n for app, n in loader.graph.leaf_nodes("core"))
+print("MOJ_PROP_CORE_LEAVES=" + json.dumps(leaves))
 """
-    run = subprocess.run(
-        [str(python), "-c", probe], cwd=str(ROOT), capture_output=True,
-        text=True, check=True, timeout=90,
+    result = subprocess.run(
+        [str(python), "-c", probe], cwd=str(ROOT),
+        capture_output=True, text=True, check=True, timeout=90,
     )
-    matches = [line.split("=", 1)[1] for line in run.stdout.splitlines()
+    matches = [line.split("=", 1)[1] for line in result.stdout.splitlines()
                if line.startswith("MOJ_PROP_CORE_LEAVES=")]
     if len(matches) != 1:
-        raise RuntimeError("Cannot verify Django core migration leaf nodes")
+        raise RuntimeError("Cannot determine Django migration graph")
     leaves = json.loads(matches[0])
-    format_core_migration_dependencies(
-        leaves, allow_moj_prop_parent=allow_moj_prop_parent,
-    )
+    format_core_migration_dependencies(leaves)
     return tuple(leaves)
 
 
 def install_migration(source: Path, target: Path) -> None:
-    assert_regular(source, "staged migration")
+    assert_regular(source, "staged Moj Prop migration")
     if target.exists() or target.is_symlink():
-        raise RuntimeError("Moj Prop migration already exists; inspect before overwrite")
+        raise RuntimeError("Migration exists; inspect before overwriting")
     leaves = live_core_migration_leaves()
     staged = source.read_text(encoding="utf-8")
-    match = re.search(r"dependencies\s*=\s*\[.*?\]", staged, flags=re.S)
-    if match is None or len(re.findall(r"\(\s*['\"]core['\"],", match.group())) != 1:
-        raise RuntimeError("Staged migration has no unique core parent")
-    content = staged[:match.start()] + format_core_migration_dependencies(leaves) + staged[match.end():]
-    atomic_write_text(target, content, 0o640)
-    print("MOJ_PROP_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
-
-
-def install_join_migration(source: Path, target: Path) -> None:
-    """Join actual live Django migration leaves after installing Moj Prop 0041.
-
-    Public GitHub 0042 joins 0040+0041. Private cPanel may instead have a
-    previously applied 0049 branch, and its 0040 filename may not match.
-    Never assume either topology: use actual validated DAG leaf nodes.
-    """
-    assert_regular(source, "staged join migration")
-    if target.exists() or target.is_symlink():
-        raise RuntimeError("Moj Prop join migration exists; inspect instead of overwriting")
-    leaves = live_core_migration_leaves(allow_moj_prop_parent=True)
-    if "0041_mojprop_request" not in leaves:
-        raise RuntimeError("Moj Prop intake must be a live migration leaf before join")
-    staged = source.read_text(encoding="utf-8")
-    if ('name="mojproprequest"' not in staged
-            or 'migrations.AlterField(' not in staged):
-        raise RuntimeError("Unrecognized Moj Prop join migration payload")
-    match = re.search(r"dependencies\\s*=\\s*\\[.*?\\]", staged, flags=re.S)
-    if match is None:
-        raise RuntimeError("Moj Prop join migration has no dependency list")
-    content = (
-        staged[:match.start()]
-        + format_core_migration_dependencies(
-            leaves, allow_moj_prop_parent=True,
-        )
-        + staged[match.end():]
+    if (not any(marker in staged for marker in (
+            '("core", "0040_commercefunnelevent")',
+            '("core", "0039_educationassessment_educationattempt_and_more")'
+        )) or 'name="MojPropRequest"' not in staged):
+        raise RuntimeError("Unexpected staged Moj Prop schema")
+    match = re.search(
+        r"dependencies\s*=\s*\[\s*\(\s*['\"]core['\"],\s*['\"][0-9]{4}_[A-Za-z0-9_]+['\"]\s*\),?\s*\]",
+        staged,
     )
-    atomic_write_text(target, content, 0o640)
-    print("MOJ_PROP_JOIN_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
+    if match is None:
+        raise RuntimeError("Staged Moj Prop migration graph is ambiguous")
+    written = (staged[:match.start()]
+               + format_core_migration_dependencies(leaves)
+               + staged[match.end():])
+    atomic_write_text(target, written, 0o640)
+    print("MOJ_PROP_MIGRATION_PARENTS=" + ",".join(sorted(leaves)))
 
 
 def patch_models(target: Path, source: Path) -> None:
@@ -295,30 +272,174 @@ def patch_admin(target: Path, source: Path) -> None:
 
 
 def patch_urlconf(target: Path) -> None:
-    """Install only the independent first-party API outside static /moj-prop/."""
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
+    # Apache serves /moj-prop/ as a static directory. The public intake API
+    # therefore needs a root-level WSGI path in addition to the legacy alias.
     if 'path("moj-prop-intake/"' in source:
-        print("MOJ_PROP_API_URLCONF_ALREADY_PATCHED")
+        print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
         raise RuntimeError("live URL configuration has no safe Django path anchor")
     import_line = next(
-        (line for line in source.splitlines() if line.startswith("from django.urls import ")), ""
+        (line for line in source.splitlines() if line.startswith("from django.urls import ")),
+        "",
     )
     if "path" not in import_line:
         raise RuntimeError("live URL configuration does not import path")
-    block = "\n\n# Moj Prop API outside static Passenger-disabled /moj-prop/.\n"
     if "from core.mojprop_views import mojprop_intake" not in source:
-        block += "from core.mojprop_views import mojprop_intake\n"
-    block += ('urlpatterns.insert(0, path("moj-prop-intake/", '
-              'mojprop_intake, name="mojprop_intake"))\n')
-    if 'path("moj-prop/intake/"' not in source:
-        block += ('urlpatterns += [path("moj-prop/intake/", '
-                  'mojprop_intake, name="mojprop_intake_legacy")]\n')
+        source = source.rstrip() + (
+            "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
+            "from core.mojprop_views import mojprop_intake\n"
+        )
+    route = 'urlpatterns += [path("moj-prop-intake/", mojprop_intake, name="mojprop_intake")]\n'
     mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, source.rstrip() + block, mode)
-    print("MOJ_PROP_API_URLCONF_PATCH=PASS")
+    atomic_write_text(target, source.rstrip() + "\n" + route, mode)
+    print("MOJ_PROP_URLCONF_PATCH=PASS")
+
+
+def _passenger_config() -> str | None:
+    candidates = []
+    on_path = shutil.which("passenger-config")
+    if on_path:
+        candidates.append(Path(on_path))
+    for pattern in (
+        "/opt/cpanel/ea-*/root/usr/bin/passenger-config",
+        "/opt/cpanel/ea-*/root/usr/local/bin/passenger-config",
+        "/usr/local/cpanel/3rdparty/**/passenger-config",
+        "/usr/local/bin/passenger-config",
+        "/usr/bin/passenger-config",
+    ):
+        candidates.extend(Path("/").glob(pattern.lstrip("/")))
+    seen = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return key
+    return None
+
+
+def _print_passenger_diagnostics() -> None:
+    for command in ("uapi", "whmapi1", "apachectl", "httpd", "cloudlinux-selector", "selectorctl"):
+        resolved = shutil.which(command)
+        print(f"MOJ_PROP_{command.upper()}=" + (resolved or "NOT_FOUND"))
+    selector = shutil.which("cloudlinux-selector")
+    if selector:
+        try:
+            result = subprocess.run(
+                [selector, "get", "--json", "--interpreter", "python", "--user", "zomorod2"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            print("MOJ_PROP_SELECTOR_GET_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_SELECTOR_GET_BYTES=" + str(len(result.stdout)))
+            if result.stderr:
+                print("MOJ_PROP_SELECTOR_GET_ERR_BYTES=" + str(len(result.stderr)))
+        except Exception as exc:
+            print("MOJ_PROP_SELECTOR_GET_ERROR=" + type(exc).__name__)
+    uapi = shutil.which("uapi")
+    if uapi:
+        try:
+            result = subprocess.run(
+                [uapi, "--output=json", "PassengerApps", "list_applications"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            print("MOJ_PROP_UAPI_LIST_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_UAPI_LIST_BYTES=" + str(len(result.stdout)))
+            if result.stderr:
+                print("MOJ_PROP_UAPI_LIST_ERR_BYTES=" + str(len(result.stderr)))
+        except Exception as exc:
+            print("MOJ_PROP_UAPI_LIST_ERROR=" + type(exc).__name__)
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid,user,comm,args"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        for line in result.stdout.splitlines():
+            lowered = line.lower()
+            if any(token in lowered for token in ("passenger", "passenger_wsgi", "saeit-staging", "mojplaywin.com")):
+                print("MOJ_PROP_PROCESS=" + " ".join(line.split(None, 3)[:3]))
+    except Exception as exc:
+        print("MOJ_PROP_PROCESS_DIAGNOSTIC_ERROR=" + type(exc).__name__)
+
+
+def _restart_public_lswsgi_workers() -> None:
+    marker = "/home/zomorod2/mojplaywin.com/passenger_wsgi.py"
+    pids = []
+    proc_root = Path("/proc")
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
+        if "lswsgi" in command and marker in command:
+            pids.append(int(entry.name))
+    print("MOJ_PROP_PUBLIC_LSWGI_TARGETS=" + ",".join(str(pid) for pid in sorted(pids)))
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except PermissionError as exc:
+            raise RuntimeError(f"Cannot restart MojPlayWin lswsgi worker {pid}") from exc
+    if pids:
+        time.sleep(2)
+    print("MOJ_PROP_PUBLIC_LSWGI_RESTART=PASS")
+
+
+def restart_passenger() -> None:
+    restart = DOCROOT / "tmp" / "restart.txt"
+    if restart.is_symlink():
+        raise RuntimeError("Passenger restart path is a symlink")
+    restart.parent.mkdir(parents=True, exist_ok=True)
+    restart.touch()
+    _print_passenger_diagnostics()
+    passenger_config = _passenger_config()
+    print("MOJ_PROP_PASSENGER_CONFIG=" + (passenger_config or "NOT_FOUND"))
+    if passenger_config:
+        result = subprocess.run(
+            [passenger_config, "restart-app", str(DOCROOT), "--ignore-app-not-running"],
+            check=False,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Passenger restart failed with exit code {result.returncode}")
+        print("MOJ_PROP_PASSENGER_RESTART=PASS")
+        _restart_public_lswsgi_workers()
+        return
+    selector = shutil.which("cloudlinux-selector")
+    if selector:
+        # CloudLinux registers the shared WSGI application under this root;
+        # MojPlayWin's Apache vhost points its passenger_wsgi.py at the same tree.
+        app_root = "Saeit-staging"
+        attempts = (
+            [selector, "restart", "--json", "--interpreter", "python", "--user", "zomorod2", "--app-root", app_root],
+            [selector, "restart", "--json", "--interpreter", "python", "--app-root", app_root],
+        )
+        for command in attempts:
+            result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=60)
+            print("MOJ_PROP_SELECTOR_RESTART_STATUS=" + str(result.returncode))
+            print("MOJ_PROP_SELECTOR_RESTART_BYTES=" + str(len(result.stdout)))
+            if result.returncode == 0:
+                print("MOJ_PROP_PASSENGER_RESTART=CLOUDLINUX_SELECTOR")
+                _restart_public_lswsgi_workers()
+                return
+        raise RuntimeError("CloudLinux Python Selector could not restart mojplaywin.com")
+    _restart_public_lswsgi_workers()
+    print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
 def restore(backup: Path) -> None:
@@ -337,11 +458,7 @@ def restore(backup: Path) -> None:
         elif target.exists():
             assert_regular(target, "unexpected target")
             target.unlink()
-    restart = DOCROOT / "tmp" / "restart.txt"
-    if restart.is_symlink():
-        raise RuntimeError("Passenger restart path is a symlink")
-    restart.parent.mkdir(parents=True, exist_ok=True)
-    restart.touch()
+    restart_passenger()
     print("MOJ_PROP_BACKEND_ROLLBACK=PASS")
 
 
@@ -383,8 +500,6 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
             target = ROOT / relative
             if relative == Path("core/migrations/0041_mojprop_request.py"):
                 install_migration(staged_root / relative, target)
-            elif relative == Path("core/migrations/0042_alter_mojproprequest_source.py"):
-                install_join_migration(staged_root / relative, target)
             else:
                 current_mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o640
                 atomic_replace(staged_root / relative, target, current_mode)
@@ -399,11 +514,7 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         run_checked([str(python), "manage.py", "migrate", "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
-        restart = DOCROOT / "tmp" / "restart.txt"
-        if restart.is_symlink():
-            raise RuntimeError("Passenger restart path is a symlink")
-        restart.parent.mkdir(parents=True, exist_ok=True)
-        restart.touch()
+        restart_passenger()
         print("MOJ_PROP_BACKEND_DEPLOY=PASS")
         print("MOJ_PROP_BACKEND_COMMIT=" + commit)
         print("MOJ_PROP_BACKUP=" + str(backup))
