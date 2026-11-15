@@ -639,6 +639,13 @@ class SQLiteCommercialLedger:
             row = self.connection.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
             if row is None:
                 raise CommercialGateError("order_not_found")
+            if target is CommercialState.VERIFIED_REVENUE and self.connection.execute(
+                "SELECT 1 FROM independently_confirmed_refunds WHERE order_id = ? LIMIT 1",
+                (order_id,),
+            ).fetchone():
+                # Source only knows the original settlement amount; a later
+                # refund makes that gross invoice an invalid revenue claim.
+                raise CommercialGateError("refund_reconciliation_required_before_revenue")
             prior = self.connection.execute(
                 "SELECT order_id, payload_digest, state FROM order_events WHERE event_id = ?", (event_id,)
             ).fetchone()
@@ -812,14 +819,6 @@ class SQLiteCommercialLedger:
         sun = int(amount * Decimal("1000000"))
         if sun > 9223372036854775807:
             raise CommercialGateError("refund_overflow")
-        if self._refund_verifier is None:
-            raise CommercialGateError("independent_refund_verifier_required")
-        try:
-            confirmed = self._refund_verifier(evidence)
-        except Exception:
-            raise CommercialGateError("independent_refund_verifier_failed") from None
-        if confirmed is not True:
-            raise CommercialGateError("independent_refund_unverified")
         with self.connection:
             self.connection.execute("BEGIN IMMEDIATE")
             row = self.connection.execute(
@@ -852,6 +851,16 @@ class SQLiteCommercialLedger:
             )
             if previous + sun > original_sun:
                 raise CommercialGateError("refund_exceeds_original_payment")
+            # Only plausible, authorized local order/transfer identities may
+            # reach the external settlement reviewer.
+            if self._refund_verifier is None:
+                raise CommercialGateError("independent_refund_verifier_required")
+            try:
+                confirmed = self._refund_verifier(evidence)
+            except Exception:
+                raise CommercialGateError("independent_refund_verifier_failed") from None
+            if confirmed is not True:
+                raise CommercialGateError("independent_refund_unverified")
             try:
                 self.connection.execute(
                     "INSERT INTO independently_confirmed_refunds VALUES (?, ?, ?, ?, ?)",
