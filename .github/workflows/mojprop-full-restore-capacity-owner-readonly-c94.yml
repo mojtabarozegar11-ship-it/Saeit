@@ -31,7 +31,7 @@ jobs:
           python3 -B -m py_compile scripts/mojprop_full_restore_capacity_readonly_c94.py
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.test_mojprop_full_restore_capacity_readonly_c94 -q
           test ! -L scripts/mojprop_full_restore_capacity_readonly_c94.py
-          test "$(git hash-object -- scripts/mojprop_full_restore_capacity_readonly_c94.py)" = "e3c30f263e3e0c2fda06b687795420cba795a807"
+          test "$(git hash-object -- scripts/mojprop_full_restore_capacity_readonly_c94.py)" = "477a619f161cbc293912bffd7cf95debb933f305"
       - name: Connect only through pinned factory runner to the existing cPanel
         shell: bash
         env:
