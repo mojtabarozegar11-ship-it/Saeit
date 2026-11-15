@@ -76,7 +76,7 @@ def test_live_observation_is_only_pinned_existing_readonly_allowlist():
 
 def test_reviewed_bridge_and_inventory_outputs_are_immutably_pinned():
     raw = WORKFLOW.read_text(encoding="utf-8")
-    assert _blob_sha(BRIDGE) == "e9614221871614981e4974760217093b58fa0a3f"
+    assert _blob_sha(BRIDGE) == "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
     assert _blob_sha(SANITIZER) == "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
     assert _blob_sha(BRIDGE) in raw
     assert _blob_sha(SANITIZER) in raw
@@ -146,7 +146,7 @@ def test_backup_readiness_script_and_vps_capability_are_source_pinned():
     assert _blob_sha(capability) == "70dcf0fabd4c581a41c6d01438c25faaa75df6bd"
     assert _blob_sha(backup) in workflow and _blob_sha(backup) in helper
     assert _blob_sha(capability) in workflow
-    assert _blob_sha(BRIDGE) == "e9614221871614981e4974760217093b58fa0a3f"
+    assert _blob_sha(BRIDGE) == "57a1c95c6a144b0e625ff1a45ba4e9b18f5afaa3"
     assert _blob_sha(BRIDGE) in workflow
     assert "mpw_backup_readiness_readonly)" in helper
     assert '"$operation" == "mpw_backup_readiness_readonly"' in helper
@@ -175,3 +175,38 @@ def test_independent_vps_mount_and_backup_destination_are_metadata_only():
     for forbidden in ("sudo ", "mount ", "umount ", "docker run", "rsync ",
                       "scp ", "tar -xf", "migrate", "curl -X POST", "chown ", "chmod "):
         assert forbidden not in step
+
+
+def test_existing_provider_backup_metadata_is_owner_gated_and_redacted():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    helper = BRIDGE.read_text(encoding="utf-8")
+    marker = "MPW-FACTORY-PROVIDER-BACKUPS-READONLY-20261115"
+    assert workflow.count("github.event.comment.body == '" + marker + "'") == 2
+    header = workflow.split("\npermissions:", 1)[0]
+    for forbidden in ("\n  push:", "\n  pull_request:", "\n  schedule:"):
+        assert forbidden not in header
+    step = workflow.split("      - name: Inspect provider backup registrations", 1)[1]
+    for expected in (
+        "github.event_name == 'issue_comment'",
+        "github.event.comment.body == '" + marker + "'",
+        'FACTORY_VPS_RUNNER: "1"',
+        "bash deploy/cpanel_direct_command.sh mpw_provider_backup_readonly",
+    ):
+        assert expected in step
+    provider = ROOT / "scripts/mojplaywin_cpanel_domains_backups_readonly.py"
+    db_hints = ROOT / "scripts/mojplaywin_db_backend_config_hints_readonly.py"
+    assert _blob_sha(provider) == "d0890b1f3d3081bead2b4ff65a52b512a4a99fc6"
+    assert _blob_sha(db_hints) == "5d0e687c93178d2bb84cc6aeca469bfd25a9a4a1"
+    assert _blob_sha(provider) in workflow and _blob_sha(provider) in helper
+    assert _blob_sha(db_hints) in workflow and _blob_sha(db_hints) in helper
+    assert _blob_sha(BRIDGE) in workflow
+    assert "mpw_provider_backup_readonly)" in helper
+    assert '"$operation" == "mpw_provider_backup_readonly"' in helper
+    assert "uapi --output=json Backup list_backups" in helper
+    assert 'python3 -B "$sanitizer" --kind backups' in helper
+    assert "PYTHONDONTWRITEBYTECODE=1" in helper
+    for forbidden in ("sudo ", "scp ", "rsync ", "tar -xf", "docker run",
+                      "curl -X POST", "restart.txt", "manage.py migrate", "chown ", "chmod "):
+        assert forbidden not in step
+    assert '"release_permitted": False' in provider.read_text()
+    assert '"release_permitted": False' in db_hints.read_text()

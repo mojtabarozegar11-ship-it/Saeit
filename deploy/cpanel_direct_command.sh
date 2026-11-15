@@ -5,11 +5,11 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|mpw_runtime_readonly|mpw_backup_readiness_readonly|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
+  relay_preflight|cpanel_version|passenger_inventory|mpw_runtime_readonly|mpw_backup_readiness_readonly|mpw_provider_backup_readonly|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
-if [[ ( "$operation" == "mpw_runtime_readonly" || "$operation" == "mpw_backup_readiness_readonly" ) && "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
+if [[ ( "$operation" == "mpw_runtime_readonly" || "$operation" == "mpw_backup_readiness_readonly" || "$operation" == "mpw_provider_backup_readonly" ) && "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
   echo "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" >&2
   exit 65
 fi
@@ -69,6 +69,22 @@ mpw_backup_readiness_readonly() {
     'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < "$script"
 }
 
+# UAPI provider backup metadata are classified on the trusted VPS; raw API
+# records never reach the GitHub job stdout or artifacts. No backup download.
+mpw_provider_backup_readonly() {
+  local sanitizer=scripts/mojplaywin_cpanel_domains_backups_readonly.py
+  local hints=scripts/mojplaywin_db_backend_config_hints_readonly.py
+  test -f "$sanitizer" && test ! -L "$sanitizer"
+  test -f "$hints" && test ! -L "$hints"
+  test "$(git hash-object -- "$sanitizer")" = "d0890b1f3d3081bead2b4ff65a52b512a4a99fc6"
+  test "$(git hash-object -- "$hints")" = "5d0e687c93178d2bb84cc6aeca469bfd25a9a4a1"
+  timeout 70s ssh -T -F "$work/config" saeit-cpanel \
+    'test "$(id -un)" = "zomorod2" && uapi --output=json Backup list_backups' |
+    PYTHONDONTWRITEBYTECODE=1 python3 -B "$sanitizer" --kind backups
+  timeout 70s ssh -T -F "$work/config" saeit-cpanel \
+    'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' < "$hints"
+}
+
 normalize_key() {
   local value="$1" destination="$2"
   printf '%s' "$value" | python3 -c 'import sys; s=sys.stdin.read(); s=s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n"; sys.stdout.write(s)' > "$destination"
@@ -120,6 +136,9 @@ EOF
       ;;
     mpw_backup_readiness_readonly)
       mpw_backup_readiness_readonly
+      ;;
+    mpw_provider_backup_readonly)
+      mpw_provider_backup_readonly
       ;;
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'
