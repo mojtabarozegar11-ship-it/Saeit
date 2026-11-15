@@ -2323,6 +2323,49 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_merchant_receipt_rejects_changed_offer_price_before_release_callback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger, original = self._bound_trx_merchant_ledger(directory)
+            changed = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.TRX_GATEWAY, price=Decimal("31"))
+            calls = []
+            with self.assertRaisesRegex(CommercialGateError, "bound_merchant_order_price_mismatch"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=changed,
+                    evidence=self.payment(amount=Decimal("31")), invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: calls.append("release") or True,
+                    independent_release_evidence_verifier=lambda offer, digest: calls.append("evidence") or True)
+            self.assertEqual(calls, [])
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+    def test_merchant_receipt_rejects_changed_digital_manifest_before_release_callback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            original = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.DIGITAL_PRODUCT, delivery_manifest_sha256="a" * 64)
+            ledger.bind_approved_merchant_order(
+                order_id="order-52", offer=original,
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                release_evidence_sha256="d" * 64,
+                independent_release_evidence_verifier=lambda offer, digest: True)
+            changed = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.DIGITAL_PRODUCT, delivery_manifest_sha256="b" * 64)
+            calls = []
+            with self.assertRaisesRegex(CommercialGateError, "bound_merchant_delivery_manifest_mismatch"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=changed,
+                    evidence=self.payment(), invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: calls.append("release") or True,
+                    independent_release_evidence_verifier=lambda offer, digest: calls.append("evidence") or True)
+            self.assertEqual(calls, [])
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
