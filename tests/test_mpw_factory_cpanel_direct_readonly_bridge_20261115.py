@@ -47,9 +47,12 @@ def test_issue_comment_never_reaches_untrusted_manual_operation():
     manual = raw.split("      - name: Execute selected read-only cPanel operation", 1)[1]
     manual = manual.split("      - name: Inspect existing cPanel", 1)[0]
     observed = raw.split("      - name: Inspect existing cPanel", 1)[1]
+    observed = observed.split("      - name: Audit current MojPlayWin", 1)[0]
     assert "if: github.event_name == 'workflow_dispatch'" in manual
     assert 'bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"' in manual
-    assert "if: github.event_name == 'issue_comment'" in observed
+    assert "if: >-" in observed
+    assert "github.event_name == 'issue_comment'" in observed
+    assert "github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'" in observed
     assert "inputs.operation" not in observed
     assert "FACTORY_VPS_RUNNER: \"1\"" in observed
     assert "persist-credentials: false" in raw
@@ -73,7 +76,7 @@ def test_live_observation_is_only_pinned_existing_readonly_allowlist():
 
 def test_reviewed_bridge_and_inventory_outputs_are_immutably_pinned():
     raw = WORKFLOW.read_text(encoding="utf-8")
-    assert _blob_sha(BRIDGE) == "1f01a2408e82101b1321a7cd682fe6714508586b"
+    assert _blob_sha(BRIDGE) == "c2b4a7040815369841000b63996e3126a3cd8804"
     assert _blob_sha(SANITIZER) == "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
     assert _blob_sha(BRIDGE) in raw
     assert _blob_sha(SANITIZER) in raw
@@ -81,3 +84,32 @@ def test_reviewed_bridge_and_inventory_outputs_are_immutably_pinned():
     assert "secrets_or_full_app_root_paths_printed" in parser
     assert '"release_permitted": False' in parser
     assert '"production_isolation_proven": False' in parser
+
+
+def test_second_exact_owner_marker_is_scoped_to_readonly_runtime():
+    raw = WORKFLOW.read_text(encoding="utf-8")
+    marker = "MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115"
+    assert raw.count("github.event.comment.body == '" + marker + "'") == 2
+    runtime_step = raw.split("      - name: Audit current MojPlayWin Passenger", 1)[1]
+    assert "if: >-" in runtime_step
+    assert "github.event_name == 'issue_comment'" in runtime_step
+    assert "github.event.comment.body == '" + marker + "'" in runtime_step
+    assert "FACTORY_VPS_RUNNER: \"1\"" in runtime_step
+    assert "timeout 130s bash deploy/cpanel_direct_command.sh mpw_runtime_readonly" in runtime_step
+    assert "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2" in runtime_step
+    for forbidden in ("sudo ", "rsync ", "scp ", "curl -X POST", "restart.txt", "manage.py migrate", "send_mail"):
+        assert forbidden not in runtime_step
+
+
+def test_new_runtime_helper_never_accepts_public_runner_or_unreviewed_script():
+    bridge = BRIDGE.read_text(encoding="utf-8")
+    source = ROOT / "scripts/mpw_public_passenger_runtime_readonly_20261102.py"
+    assert _blob_sha(source) == "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
+    assert "mpw_runtime_readonly)" in bridge
+    assert 'if [[ "$operation" == "mpw_runtime_readonly"' in bridge
+    assert 'FACTORY_VPS_RUNNER:-0' in bridge
+    assert "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" in bridge
+    assert 'test "$(git hash-object -- "$script")"' in bridge
+    assert 'PYTHONDONTWRITEBYTECODE=1' in bridge
+    assert 'python -B - inspect' in bridge
+    assert '"release_permitted": False' in source.read_text(encoding="utf-8")

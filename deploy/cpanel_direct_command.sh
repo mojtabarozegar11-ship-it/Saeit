@@ -5,9 +5,14 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
+  relay_preflight|cpanel_version|passenger_inventory|mpw_runtime_readonly|cpanel_preflight|django_check|django_migrations|zomorod_fields_audit_live|zomorod_fields_verify_stream) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
+
+if [[ "$operation" == "mpw_runtime_readonly" && "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
+  echo "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" >&2
+  exit 65
+fi
 
 : "${HOST_KEY:?HOST_KEY is required}"
 if [[ "${FACTORY_VPS_RUNNER:-0}" != "1" ]]; then
@@ -42,6 +47,17 @@ zomorod_fields_verify_stream() {
     return 65
   fi
   PYTHONDONTWRITEBYTECODE=1 python3 -B "$sender" "$work/config"
+}
+
+# Read existing, pre-reviewed source as SSH stdin on the *already authorized*
+# factory-VPS. The cPanel interpreter is -B (no bytecode) and the script
+# enumerates only safe summary flags, hashed roots and aggregate counts.
+mpw_runtime_readonly() {
+  local script=scripts/mpw_public_passenger_runtime_readonly_20261102.py
+  test -f "$script" && test ! -L "$script"
+  test "$(git hash-object -- "$script")" = "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
+  timeout 100s ssh -T -F "$work/config" saeit-cpanel \
+    'test "$(id -un)" = "zomorod2" && test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - inspect' < "$script"
 }
 
 normalize_key() {
@@ -89,6 +105,9 @@ EOF
       ;;
     passenger_inventory)
       timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+      ;;
+    mpw_runtime_readonly)
+      mpw_runtime_readonly
       ;;
     cpanel_preflight)
       timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; root=/home/zomorod2/Saeit; test -d "$root"; test -f "$root/manage.py"; test -f "$root/passenger_wsgi.py"; printf "CPANEL_ROOT=%s\\n" "$root"; for f in manage.py passenger_wsgi.py requirements.txt; do if test -f "$root/$f"; then printf "PRESENT=%s\\n" "$f"; else printf "MISSING=%s\\n" "$f"; fi; done; printf "CPANEL_PYTHON_CANDIDATE="; for p in "$root/.venv/bin/python" "$root/venv/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do if test -x "$p"; then printf "%s\\n" "$p"; break; fi; done'

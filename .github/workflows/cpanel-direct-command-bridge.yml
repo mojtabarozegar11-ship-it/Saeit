@@ -41,7 +41,10 @@ jobs:
           !github.event.issue.pull_request &&
           github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
           github.event.comment.author_association == 'OWNER' &&
-          github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'
+          (
+            github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115' ||
+            github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115'
+          )
         )
       )
     runs-on: [self-hosted, factory-vps]
@@ -65,7 +68,9 @@ jobs:
           bash deploy/cpanel_direct_command.sh "${{ inputs.operation }}"
 
       - name: Inspect existing cPanel over factory-VPS direct SSH without writes
-        if: github.event_name == 'issue_comment'
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-CPANEL-READONLY-20261115'
         shell: bash
         env:
           FACTORY_VPS_RUNNER: "1"
@@ -74,9 +79,24 @@ jobs:
           set -euo pipefail
           test -n "$HOST_KEY"
           # The bridge and output sanitizer are already-reviewed main sources.
-          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "1f01a2408e82101b1321a7cd682fe6714508586b"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "c2b4a7040815369841000b63996e3126a3cd8804"
           test "$(git hash-object -- scripts/mojplaywin_cpanel_readonly_inventory.py)" = "89a3ca61cf3919dd397b5cb2dd36194273f6ee98"
           # Read-only operations run *on* the authorized self-hosted VPS.
           # Never run a GitHub-hosted SSH hop to a possibly filtered VPS port.
           timeout 95s bash deploy/cpanel_direct_command.sh relay_preflight
           timeout 95s bash deploy/cpanel_direct_command.sh passenger_inventory
+
+      - name: Audit current MojPlayWin Passenger and store source without cPanel writes
+        if: >-
+          github.event_name == 'issue_comment' &&
+          github.event.comment.body == 'MPW-FACTORY-CPANEL-RUNTIME-READONLY-20261115'
+        shell: bash
+        env:
+          FACTORY_VPS_RUNNER: "1"
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST_KEY"
+          test "$(git hash-object -- deploy/cpanel_direct_command.sh)" = "c2b4a7040815369841000b63996e3126a3cd8804"
+          test "$(git hash-object -- scripts/mpw_public_passenger_runtime_readonly_20261102.py)" = "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
+          timeout 130s bash deploy/cpanel_direct_command.sh mpw_runtime_readonly
