@@ -141,6 +141,21 @@ def _canonical_amount(value: Decimal, currency: str) -> str:
     return canonical
 
 
+def _native_trx_sun(value: Decimal) -> int:
+    """Exact native TRX -> SUN conversion, independent of decimal context."""
+    canonical = _canonical_amount(value, "TRX")
+    whole, dot, fraction = canonical.partition(".")
+    return int(whole) * 1000000 + int(fraction.ljust(6, "0") or "0")
+
+
+def _trx_from_sun(sun: int) -> Decimal:
+    """Exact SUN -> TRX rendering without Decimal arithmetic rounding."""
+    if not isinstance(sun, int) or sun < 0:
+        raise CommercialGateError("sun_amount_invalid")
+    whole, fraction = divmod(sun, 1000000)
+    return Decimal(f"{whole}.{fraction:06d}")
+
+
 def _digest(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -851,7 +866,7 @@ class SQLiteCommercialLedger:
             raise CommercialGateError("refund_reuses_original_transaction")
         amount = _amount(evidence.amount)
         _validate_trx_sun_precision(amount, "TRX")
-        sun = int(amount * Decimal("1000000"))
+        sun = _native_trx_sun(amount)
         if sun > 9223372036854775807:
             raise CommercialGateError("refund_overflow")
         with self.connection:
@@ -877,7 +892,7 @@ class SQLiteCommercialLedger:
                 ("TRON", refund_tx),
             ).fetchone():
                 raise CommercialGateError("refund_transaction_collides_with_payment")
-            original_sun = int(Decimal(row["amount"]) * Decimal("1000000"))
+            original_sun = _native_trx_sun(Decimal(row["amount"]))
             previous = sum(
                 int(item["amount_sun"]) for item in self.connection.execute(
                     "SELECT amount_sun FROM independently_confirmed_refunds WHERE order_id = ?",
@@ -938,7 +953,10 @@ class SQLiteCommercialLedger:
                 (order_id,),
             )
         )
-        return Decimal(row["amount"]) - (Decimal(refunded) / Decimal("1000000"))
+        outstanding_sun = _native_trx_sun(Decimal(row["amount"])) - refunded
+        if outstanding_sun < 0:
+            raise CommercialGateError("refund_exceeds_original_payment")
+        return _trx_from_sun(outstanding_sun)
 
     def snapshot(self, order_id: str) -> Mapping[str, str]:
         order_id = _slug(order_id, "order_id")
