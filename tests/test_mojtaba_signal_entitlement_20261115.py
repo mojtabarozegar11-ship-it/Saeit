@@ -16,7 +16,6 @@ class SignalEntitlementTests(unittest.TestCase):
         state = advance_signal_entitlement(
             state, "delivery_acknowledged",
             evidence={"delivery_id": "delivery:2026:0001"},
-                                       delivery_verifier=lambda _: True,
             delivery_verifier=lambda stored: stored["delivery_id"] == "delivery:2026:0001",
         )
         self.assertEqual(state, "delivered")
