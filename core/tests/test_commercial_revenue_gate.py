@@ -1676,6 +1676,47 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_refund_exact_single_sun_under_low_decimal_precision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda evidence: True)
+            with localcontext() as context:
+                context.prec = 6
+                ledger.record_confirmed_refund(self._refund_proof(
+                    amount=Decimal("11.000001")))
+                self.assertEqual(ledger.outstanding_settled_trx("order-52"),
+                                 Decimal("18.999999"))
+                db_sun = ledger.connection.execute(
+                    "SELECT amount_sun FROM independently_confirmed_refunds WHERE order_id = ?",
+                    ("order-52",)).fetchone()["amount_sun"]
+                self.assertEqual(db_sun, 11000001)
+            ledger.close()
+
+    def test_exact_fractional_refund_is_not_overrounded_above_paid_total(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            with localcontext() as context:
+                context.prec = 6
+                ledger.record_confirmed_refund(self._refund_proof(
+                    amount=Decimal("29.999999")))
+                self.assertEqual(ledger.outstanding_settled_trx("order-52"),
+                                 Decimal("0.000001"))
+                with self.assertRaisesRegex(CommercialGateError, "refund_exceeds_original_payment"):
+                    ledger.record_confirmed_refund(self._refund_proof(
+                        amount=Decimal("0.000002"), refund_transaction_id="c" * 64))
+            ledger.close()
+
+    def test_refund_net_amount_remains_exact_with_large_trx_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda proof: True)
+            ledger.record_confirmed_refund(self._refund_proof(
+                amount=Decimal("0.000001")))
+            with localcontext() as context:
+                context.prec = 5
+                self.assertEqual(ledger.outstanding_settled_trx("order-52"),
+                                 Decimal("29.999999"))
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
