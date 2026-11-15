@@ -1,5 +1,6 @@
 """Genuine DB writes and tamper-proof contact-only signal funnel tests."""
 from urllib.parse import urlencode
+from types import SimpleNamespace
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
@@ -217,3 +218,25 @@ class SignalInterestIntakeTests(TestCase):
         self.assertIn("withdrawn_at", a.list_display)
         self.assertIn("withdrawn_at", a.readonly_fields)
         self.assertIn("withdrawn_at", a.fields)
+
+    def test_owner_counts_enquiries_without_fabricating_revenue(self):
+        from core.models import CommercialInterest
+        self.post()
+        self.post({**self.BASE, "brand": "zahra"})
+        first = CommercialInterest.objects.get(brand="saman")
+        first.status = "contacted"
+        first.save(update_fields=["status"])
+        a = site._registry[CommercialInterest]
+        user = SimpleNamespace(is_active=True, is_superuser=True, is_staff=True)
+        counts = a.lead_counts(SimpleNamespace(user=user))
+        self.assertEqual(counts["signals_new"], 1)
+        self.assertEqual(counts["signals_contacted"], 1)
+        self.assertEqual(counts["signals_withdrawn"], 0)
+        self.assertEqual(counts["moj_prop_new"], 0)
+        self.assertNotIn("revenue", counts)
+
+    def test_pipeline_metrics_are_not_available_to_nonowner(self):
+        a = site._registry[SignalInterest]
+        for u in (SimpleNamespace(is_active=True, is_superuser=False),
+                  SimpleNamespace(is_active=False, is_superuser=True)):
+            self.assertEqual(a.lead_counts(SimpleNamespace(user=u)), {})
