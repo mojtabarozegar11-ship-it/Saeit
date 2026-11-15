@@ -66,6 +66,28 @@ class Starter30PublicOfferTests(unittest.TestCase):
                      "SOLIDIFIED", "refund", "customer-specific invoice"):
             self.assertIn(term, text)
 
+    def test_downloadable_csv_and_guide_really_exist(self):
+        page = PUBLIC.read_text("utf-8")
+        for filename in ("journal-template.csv", "journal-guide.txt"):
+            self.assertIn('href="./' + filename + '"', page)
+            self.assertTrue((PUBLIC.parent / filename).is_file())
+
+    def test_customer_csv_has_ten_empty_sessions(self):
+        from scripts.mojprop_starter30_journal_csv import empty_journal_csv
+        expected = empty_journal_csv()
+        actual = (PUBLIC.parent / "journal-template.csv").read_text("utf-8")
+        self.assertEqual(actual, expected)
+
+    def test_journal_guide_contains_no_entitlement_to_real_funding(self):
+        guide = (PUBLIC.parent / "journal-guide.txt").read_text("utf-8").lower()
+        for phrase in ("not funded", "not withdrawable", "no", "payment"):
+            self.assertIn(phrase, guide)
+
+    def test_static_release_does_not_ship_account_or_payment_api(self):
+        from scripts.mojprop_starter30_static_release import FILES
+        self.assertEqual(set(FILES),
+                         {"index.html", "journal-template.csv", "journal-guide.txt"})
+
     def test_no_auto_published_sample_without_release(self):
         from scripts.update_mojplaywin_moj_prop_catalog import FILES
         self.assertNotIn(Path("starter-30-trx/index.html"), FILES)
