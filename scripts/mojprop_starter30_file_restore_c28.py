@@ -156,6 +156,8 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
     if root != home / "mojplaywin.com" or vault != home / ".mojprop-static-restore-evidence":
         raise ValueError("out-of-scope target")
     uid = os.geteuid()
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise RuntimeError("openat nofollow/directory capability unavailable")
     if pwd.getpwuid(uid).pw_name != owner:
         raise RuntimeError("unauthorized tenant identity")
 
@@ -176,11 +178,13 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                         raise RuntimeError("tenant quota not independently established")
                     # Pin the vault fd BEFORE any write; renamed/symlinked
                     # pathnames cannot redirect mkdir/openat to a live site.
+                    # Consume authorization in tenant HOME, outside the
+                    # swappable vault name. O_EXCL + fsync(home descriptor)
+                    # makes the marker durable across process/crash replay.
+                    _write(hfd, ".mojprop-c28-approval-" + approval_id + ".used", b"CONSUMED\n")
+                    os.fsync(hfd)
                     vfd = _mkdir(hfd, ".mojprop-static-restore-evidence", uid)
                     try:
-                        # Atomic single-use approval consumed across ALL run ids.
-                        # A failed attempt also consumes the approval deliberately.
-                        _write(vfd, "approval-" + approval_id + ".used", b"CONSUMED\n")
                         runfd = _mkdir(vfd, run_id, uid, unique=True)
                         try:
                             bfd = _mkdir(runfd, "backup", uid, unique=True)
