@@ -10,6 +10,11 @@ on:
       - "tests/test_mojprop_backend_receipts_release_20261115.py"
       - "tests/test_mojprop_backup_integrity_c84_20261115.py"
       - "tests/test_mojprop_legacy_upgrade_c84_20261115.py"
+      - "scripts/mojprop_db_release_evidence.py"
+      - "scripts/mojprop_live_database_identity_c85.py"
+      - "tests/test_mojprop_db_release_evidence_20261115.py"
+      - "tests/test_mojprop_live_db_identity_c85_20261115.py"
+      - "tests/test_mojprop_db_proof_release_gate_c85_20261115.py"
       - "scripts/fixtures/mojprop_legacy_*.py"
       - "core/migrations/004?_mojprop_*.py"
       - "core/mojprop_*.py"
@@ -29,7 +34,7 @@ jobs:
           python-version: "3.11"
       - name: Compile complete Moj Prop schema and backend release source
         run: |
-          python3 -m py_compile scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py
+          python3 -m py_compile scripts/deploy_mojplaywin_moj_prop_backend.py scripts/mojprop_schema_preflight_c83.py scripts/mojprop_db_release_evidence.py scripts/mojprop_live_database_identity_c85.py
           python3 scripts/deploy_mojplaywin_moj_prop_backend.py selftest
       - name: Verify commercial schema closure before live DB mutation
         run: python3 -m unittest discover -s tests -p 'test_mojprop_commercial_release_closure_c83_20261115.py' -v
@@ -39,6 +44,12 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_mojprop_backup_integrity_c84_20261115.py' -v
       - name: Verify byte-pinned intake-only legacy upgrade and owner-drift refusal
         run: python3 -m unittest discover -s tests -p 'test_mojprop_legacy_upgrade_c84_20261115.py' -v
+      - name: Verify independently signed restore receipt using synthetic offline data only
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_db_release_evidence_20261115.py' -v
+      - name: Check actual-MariaDB identity contract without connecting to database
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_live_db_identity_c85_20261115.py' -v
+      - name: Check runtime proof enforcement before any app or catalog write
+        run: python3 -m unittest discover -s tests -p 'test_mojprop_db_proof_release_gate_c85_20261115.py' -v
       - name: Assert this action cannot reach any production credential or publish
         run: |
           python3 - <<'PY'
