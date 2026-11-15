@@ -1,0 +1,22 @@
+name: Moj Prop Level 10 Safety
+
+on:
+  push:
+    branches: ["cycle54-moj-prop-level10-lock-20261115"]
+  pull_request:
+    branches: ["feature/prop-firm-policy-v11-20261114"]
+
+jobs:
+  level10-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+      - name: Run level 10 regression
+        run: python -m pytest tests/test_moj_prop_level10_lock.py -q
