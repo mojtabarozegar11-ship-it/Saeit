@@ -1,6 +1,6 @@
 Moj Prop Starter 30 | Ten-session educational journal
 ====================================================
-Reference only: 100 simulated USD, not funded or withdrawable.
+Reference only: 100 simulated USD, not funded and not withdrawable.
 
 Do not transmit real trading account credentials or personal financial records.
 Copy journal-template.csv into your own private file. Complete all 10 sessions.
