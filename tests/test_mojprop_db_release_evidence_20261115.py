@@ -133,6 +133,32 @@ class RestoreEvidenceContractTests(unittest.TestCase):
         with self.assertRaises(MissingDatabaseRestoreEvidence):
             self.check()
 
+    def test_group_writable_backup_directory_is_not_a_trusted_restore_source(self):
+        self.case.chmod(0o770)
+        with self.assertRaisesRegex(
+            MissingDatabaseRestoreEvidence, "directory is not private"
+        ):
+            self.check()
+
+    def test_world_writable_backup_root_is_not_a_trusted_restore_source(self):
+        self.root.chmod(0o707)
+        with self.assertRaisesRegex(
+            MissingDatabaseRestoreEvidence, "directory is not private"
+        ):
+            self.check()
+        self.root.chmod(0o700)
+
+    def test_symlink_ancestor_of_private_backup_root_is_rejected(self):
+        alias = self.root.parent / (self.root.name + "-alias")
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.addCleanup(lambda: alias.unlink(missing_ok=True))
+        nested = self.root / "nested"
+        nested.mkdir(mode=0o700)
+        with self.assertRaisesRegex(
+            MissingDatabaseRestoreEvidence, "symlink ancestor"
+        ):
+            self.check(root=alias / "nested")
+        
     def test_restore_target_cannot_be_live_database(self):
         self.data["restore_target"] = "production"
         self.write_proof()
