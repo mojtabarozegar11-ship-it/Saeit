@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import MojPropRequest
+from .mojprop_catalog_contract import public_service_catalog
 
 ROUTES = {choice[0] for choice in MojPropRequest.ROUTE_CHOICES}
 HORIZONS = {choice[0] for choice in MojPropRequest.HORIZON_CHOICES}
@@ -81,7 +82,8 @@ def _json(data, status=200):
 def mojprop_intake(request):
     """Return a CSRF token or create one manual-review request."""
     if request.method == "GET":
-        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake"})
+        return _json({"ok": True, "csrf_token": get_token(request), "service": "moj-prop-intake",
+                      "service_catalog": public_service_catalog()})
 
     payload = _payload(request)
     if payload is None:
