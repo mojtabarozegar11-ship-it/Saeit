@@ -181,8 +181,10 @@ def validate_signal_request(*, requested_action: str, financial_authorized: bool
     # instruction's letters. They do not change its economic meaning.
     for mark in ("\u200b", "\u200c", "\u200d", "\ufeff", "\u2060"):
         action = action.replace(mark, "")
+    collapsed = re.sub(r"[\\W_]+", "", action, flags=re.UNICODE)
     if (set(re.findall(r"[a-z]+", action)) & _BLOCKED_SIGNAL_WORDS
-            or any(phrase.replace("\u200c", "") in action for phrase in _BLOCKED_FINANCIAL_PHRASES)
+            or any(re.sub(r"[\\W_]+", "", phrase, flags=re.UNICODE) in collapsed
+                   for phrase in _BLOCKED_FINANCIAL_PHRASES)
             or financial_authorized):
         raise CommercialGateError("financial_signal_disabled")
 
