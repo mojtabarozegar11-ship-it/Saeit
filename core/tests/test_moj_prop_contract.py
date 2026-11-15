@@ -6,6 +6,9 @@ try:
         ChallengeDecision,
         ChallengeSnapshot,
         ChallengeState,
+        LEVEL_10_CAPACITY_USD,
+        LEVEL_10_LOCKED,
+        LEVEL_11_CAPACITY_USD,
         PropContractError,
         PropEnrollment,
         PropRules,
@@ -21,6 +24,9 @@ except ModuleNotFoundError:
         ChallengeDecision,
         ChallengeSnapshot,
         ChallengeState,
+        LEVEL_10_CAPACITY_USD,
+        LEVEL_10_LOCKED,
+        LEVEL_11_CAPACITY_USD,
         PropContractError,
         PropEnrollment,
         PropRules,
@@ -35,7 +41,7 @@ except ModuleNotFoundError:
 
 class MojPropContractTests(unittest.TestCase):
     def rules(self, **changes):
-        values = {"profit_target_pct": Decimal("10")}
+        values = {"profit_target_pct": Decimal("8")}
         values.update(changes)
         return PropRules(**values)
 
@@ -61,6 +67,15 @@ class MojPropContractTests(unittest.TestCase):
 
     def test_known_base_rules_are_valid(self):
         validate_rules(self.rules())
+
+    def test_published_rulebook_defaults_and_owner_lock_match(self):
+        rules = PropRules()
+        self.assertEqual(rules.profit_target_pct, Decimal("8"))
+        self.assertEqual(rules.daily_loss_limit_pct, Decimal("4"))
+        self.assertEqual(rules.max_drawdown_pct, Decimal("8"))
+        self.assertTrue(LEVEL_10_LOCKED)
+        self.assertIsNone(LEVEL_10_CAPACITY_USD)
+        self.assertEqual(LEVEL_11_CAPACITY_USD, Decimal("50000"))
 
     def test_fee_must_be_thirty_trx(self):
         with self.assertRaisesRegex(PropContractError, "challenge_fee_must_be_30_trx"):
@@ -88,8 +103,12 @@ class MojPropContractTests(unittest.TestCase):
     def test_next_tier_is_monotonic(self):
         self.assertEqual(next_funded_tier(Decimal("800")), Decimal("1500"))
 
-    def test_last_tier_has_no_next_tier(self):
-        self.assertIsNone(next_funded_tier(Decimal("20000")))
+    def test_level10_owner_lock_blocks_next_tier(self):
+        with self.assertRaisesRegex(PropContractError, "level10_owner_decision_required"):
+            next_funded_tier(Decimal("20000"))
+
+    def test_level11_last_tier_has_no_next_tier(self):
+        self.assertIsNone(next_funded_tier(Decimal("50000")))
 
     def test_unknown_tier_is_rejected(self):
         with self.assertRaisesRegex(PropContractError, "current_account_not_in_tier_ladder"):
@@ -217,26 +236,26 @@ class MojPropContractTests(unittest.TestCase):
     def test_daily_loss_just_below_boundary_not_failed_by_display_rounding(self):
         result = evaluate_challenge(self.rules(), self.snapshot(
             start_of_day_equity_usd=Decimal("100"),
-            current_equity_usd=Decimal("95.0001"),
+            current_equity_usd=Decimal("96.0001"),
             peak_equity_usd=Decimal("100"),
         ))
-        self.assertEqual(result.daily_loss_pct, Decimal("5.00"))
+        self.assertEqual(result.daily_loss_pct, Decimal("4.00"))
         self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
 
     def test_drawdown_just_below_boundary_not_failed_by_display_rounding(self):
         result = evaluate_challenge(self.rules(), self.snapshot(
             start_of_day_equity_usd=Decimal("90.0001"),
-            current_equity_usd=Decimal("90.0001"),
+            current_equity_usd=Decimal("92.0001"),
             peak_equity_usd=Decimal("100"),
         ))
-        self.assertEqual(result.drawdown_pct, Decimal("10.00"))
+        self.assertEqual(result.drawdown_pct, Decimal("8.00"))
         self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
 
     def test_profit_just_below_target_does_not_pass_by_display_rounding(self):
         result = evaluate_challenge(self.rules(), self.snapshot(
-            current_equity_usd=Decimal("109.9995"),
+            current_equity_usd=Decimal("107.9995"),
         ))
-        self.assertEqual(result.profit_pct, Decimal("10.00"))
+        self.assertEqual(result.profit_pct, Decimal("8.00"))
         self.assertEqual(result.decision, ChallengeDecision.ACTIVE)
 
     def test_state_transition_rejects_untyped_string(self):

@@ -47,7 +47,11 @@ TIER_LADDER_USD = (
     Decimal("5000"),
     Decimal("10000"),
     Decimal("20000"),
+    Decimal("50000"),
 )
+LEVEL_10_LOCKED = True
+LEVEL_10_CAPACITY_USD = None
+LEVEL_11_CAPACITY_USD = Decimal("50000")
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
 _TX = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -81,9 +85,9 @@ class PropRules:
     plan_id: str = "moj-prop-base"
     challenge_fee_trx: Decimal = Decimal("30")
     funded_account_usd: Decimal = Decimal("100")
-    profit_target_pct: Decimal = Decimal("10")
-    daily_loss_limit_pct: Decimal = Decimal("5")
-    max_drawdown_pct: Decimal = Decimal("10")
+    profit_target_pct: Decimal = Decimal("8")
+    daily_loss_limit_pct: Decimal = Decimal("4")
+    max_drawdown_pct: Decimal = Decimal("8")
     minimum_trading_days: int = 5
     maximum_trading_days: int = 30
     max_open_positions: int = 3
@@ -130,6 +134,8 @@ def validate_rules(rules: PropRules) -> None:
 
 def next_funded_tier(current_account_usd: object) -> Optional[Decimal]:
     current = _decimal(current_account_usd, "current_account_usd", positive=True)
+    if LEVEL_10_LOCKED and current == Decimal("20000"):
+        raise PropContractError("level10_owner_decision_required")
     try:
         index = TIER_LADDER_USD.index(current)
     except ValueError as exc:
