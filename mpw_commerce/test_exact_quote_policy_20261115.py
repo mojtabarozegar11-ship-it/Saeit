@@ -114,3 +114,25 @@ class ExactQuotePolicyTests(TestCase):
                 reserve_order_invoice(self.orders[0].pk, "TRX", buyer=buyer,
                                       quote=quote, now=self.now)
         self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_trusted_rate_requires_exact_decimal_not_float_coercion(self):
+        from mpw_commerce.invoicing import InvoiceRejected
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "valid-challenge-101", self.now)
+        for wrong in (0.2, "0.2", 2, None, True, [], {}):
+            with self.subTest(rate=repr(wrong)), self.assertRaises(InvoiceRejected):
+                reserve_order_invoice(
+                    self.orders[0].pk, "TRX", buyer=buyer,
+                    quote=TrustedRate(wrong, "coinbase", self.now),
+                    now=self.now,
+                )
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
+
+    def test_unknown_order_returns_domain_error_without_creating_invoice(self):
+        from mpw_commerce.invoicing import InvoiceRejected
+        buyer = VerifiedBuyer(RECEIVERS["TRX"][1], "valid-challenge-101", self.now)
+        quote = TrustedRate(Decimal("0.2"), "coinbase", self.now)
+        with self.assertRaisesRegex(InvoiceRejected, "Unknown order"):
+            reserve_order_invoice(
+                9999999, "TRX", buyer=buyer, quote=quote, now=self.now,
+            )
+        self.assertEqual(CommerceInvoice.objects.count(), 0)
