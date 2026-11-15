@@ -25,7 +25,9 @@ class SignalPlan:
     def __post_init__(self):
         if type(self.plan_id) is not str or not _PLAN_ID.fullmatch(self.plan_id):
             raise SignalCatalogError("invalid plan identifier")
-        if type(self.title) is not str or not 4 <= len(self.title.strip()) <= 180:
+        if (type(self.title) is not str or not 4 <= len(self.title.strip()) <= 180
+                or any(ord(ch) < 32 or 0xD800 <= ord(ch) <= 0xDFFF
+                       for ch in self.title)):
             raise SignalCatalogError("plan title is required")
         if type(self.cadence) is not str or self.cadence not in (
                 "weekly", "monthly", "quarterly"):
@@ -34,7 +36,8 @@ class SignalPlan:
                 or not 40 <= len(self.description.strip()) <= 800
                 or "risk" not in self.description.casefold()
                 or "guaranteed" in self.description.casefold()
-                or any(ord(ch) < 32 for ch in self.description)):
+                or any(ord(ch) < 32 or 0xD800 <= ord(ch) <= 0xDFFF
+                       for ch in self.description)):
             raise SignalCatalogError("plan must disclose risk without a promise of return")
         if type(self.price_usd) is not Decimal or not self.price_usd.is_finite() or self.price_usd <= 0:
             raise SignalCatalogError("finite positive price required")
@@ -66,7 +69,7 @@ def get_signal_plan(plan_id):
 
 def build_manual_signal_offer(plan_id, *, agent=_AGENT):
     """Create a quote-shaped product record without enabling a payment route."""
-    if agent != _AGENT:
+    if type(agent) is not str or agent != _AGENT:
         raise SignalCatalogError("only the single authorized agent may own this catalog")
     plan = get_signal_plan(plan_id)
     return {
