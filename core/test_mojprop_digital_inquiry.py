@@ -126,3 +126,15 @@ class DigitalBuyerRequestTests(TestCase):
                 self.assertNotIn("email", lookup.content.decode("utf-8"))
                 self.assertNotIn("notes", lookup.content.decode("utf-8"))
 
+
+    def test_duplicate_private_receipts_are_rejected_regardless_of_parameter_order(self):
+        import urllib.parse
+        receipt = self.submit(product_id=72).json()["receipt_token"]
+        for values in (("invalid", receipt), (receipt, "invalid"), (receipt, receipt)):
+            with self.subTest(order=values[0] == receipt):
+                url = "/moj-prop-status/?" + urllib.parse.urlencode([
+                    ("receipt_token", value) for value in values
+                ])
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.headers["Cache-Control"], "no-store")
