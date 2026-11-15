@@ -21,6 +21,10 @@ import subprocess
 import sys
 import tempfile
 
+# SSH executes this file by absolute path: insert the bundle root explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.mojprop_schema_preflight_c83 import check_schema_closure
+
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
@@ -41,6 +45,7 @@ FILES = (
     Path("core/migrations/0043_mojprop_digital_inquiry.py"),
     Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
     Path("core/migrations/0045_mojprop_delivery_evidence.py"),
+    Path("scripts/mojprop_schema_preflight_c83.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = tuple(path for path in FILES if path not in (
@@ -109,6 +114,7 @@ def selftest(repo_root: Path) -> None:
     missing = [marker for marker, text in required if marker not in text]
     if missing:
         raise RuntimeError(f"backend selftest missing markers: {missing}")
+    check_schema_closure(repo_root, repo_root)
     print("MOJ_PROP_BACKEND_SELFTEST=PASS")
 
 
@@ -472,6 +478,10 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
         raise RuntimeError("backend staging root is missing or unsafe")
     for relative in ALL_FILES:
         assert_regular(staged_root / relative, "backend staged file")
+    # Fail before touching live application files or its database schema.
+    closure = check_schema_closure(ROOT, staged_root)
+    print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
+    print("MOJ_PROP_DB_RESTORE_EVIDENCE=INDEPENDENTLY_REQUIRED")
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
