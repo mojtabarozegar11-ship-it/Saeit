@@ -32,5 +32,7 @@ jobs:
         run: python manage.py check
       - name: Check migration drift
         run: python manage.py makemigrations --check --dry-run
+      - name: Build static manifest for production-like template rendering
+        run: python manage.py collectstatic --noinput
       - name: Verify new-SKU catalog and existing three product detail pages
         run: pytest -q tests/test_mojplaywin_dynamic_catalog.py tests/test_mojplaywin_product_detail.py
