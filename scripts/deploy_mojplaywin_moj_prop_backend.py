@@ -142,6 +142,12 @@ def choose_python() -> Path:
 
 
 def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) -> None:
+    assert_safe_parent(target, ROOT)
+    # Path.exists() is False for a dangling symlink. Recording it as an
+    # absent original would make a subsequent rollback remove owner-owned
+    # routing state rather than restore it. Reject before creating a backup.
+    if target.is_symlink():
+        raise RuntimeError("unsafe live target symlink before backup")
     if target.exists():
         assert_regular(target, "live target")
         saved = backup / relative
