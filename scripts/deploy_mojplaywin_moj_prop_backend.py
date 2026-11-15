@@ -25,11 +25,13 @@ import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.mojprop_schema_preflight_c83 import (check_schema_closure, migration_operations_signature,
     has_reviewed_legacy_suffix, LEGACY_BASELINES)
+from scripts.mojprop_db_release_evidence import verify_database_restore_evidence
 
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
 DOCROOT = Path("/home/zomorod2/mojplaywin.com")
 BACKUP_ROOT = Path("/home/zomorod2/.mojplaywin-moj-prop-backups")
+INDEPENDENT_DB_EVIDENCE_ROOT = Path("/home/zomorod2/.mojprop-private-db-restore-evidence")
 URLCONF = Path("config/urls.py")
 FILES = (
     Path("core/models.py"),
@@ -49,12 +51,16 @@ FILES = (
     Path("scripts/mojprop_schema_preflight_c83.py"),
     Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
     Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
+    Path("scripts/mojprop_db_release_evidence.py"),
+    Path("scripts/mojprop_live_database_identity_c85.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = tuple(path for path in FILES if path not in (
     Path("core/models.py"), Path("core/admin.py"),
     Path("scripts/fixtures/mojprop_legacy_request_source_c84.py"),
     Path("scripts/fixtures/mojprop_legacy_admin_source_c84.py"),
+    Path("scripts/mojprop_db_release_evidence.py"),
+    Path("scripts/mojprop_live_database_identity_c85.py"),
 ))
 
 
@@ -559,6 +565,44 @@ def run_checked(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=str(cwd), check=True, timeout=300)
 
 
+def require_independent_db_restore(run_id: str, commit: str, staged_root: Path) -> dict:
+    """Deny release without a separate signed restore of the *connected* DB.
+
+    Read-only: a real target connection fingerprint and independent receipt
+    are necessary, but not sufficient for production launch authorization.
+    """
+    run_id, commit = validate_run_id(run_id), validate_commit(commit)
+    key = os.environ.get("MOJPROP_INDEPENDENT_RESTORE_VERIFIER_KEY", "")
+    evidence_root = os.environ.get("MOJPROP_PRIVATE_DB_RESTORE_ROOT", "")
+    if len(key.encode("utf-8")) < 32 or evidence_root != str(INDEPENDENT_DB_EVIDENCE_ROOT):
+        raise RuntimeError("independent DB restore proof and reviewer key required")
+    if ROOT.is_symlink() or not ROOT.is_dir():
+        raise RuntimeError("Django live application root is missing")
+    script = staged_root / "scripts/mojprop_live_database_identity_c85.py"
+    assert_regular(script, "staged connected MariaDB identity checker")
+    python = choose_python()
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT)
+    result = subprocess.run(
+        [str(python), str(script)], cwd=str(ROOT), env=env,
+        capture_output=True, text=True, timeout=45, check=False,
+    )
+    actual_identity = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{64}", actual_identity):
+        raise RuntimeError("actual connected MariaDB identity is unverified")
+    verified = verify_database_restore_evidence(
+        root=INDEPENDENT_DB_EVIDENCE_ROOT,
+        run_id=run_id, source_commit=commit,
+        database_identity_sha256=actual_identity,
+        verifier_key=key.encode("utf-8"),
+    )
+    if verified.get("rehearsal_receipt_verified") is not True:
+        raise RuntimeError("signed independent DB restore receipt was not verified")
+    # Do not print database credentials, reviewer signature or private backups.
+    print("MOJ_PROP_INDEPENDENT_DB_RESTORE_EVIDENCE=VERIFIED")
+    return verified
+
+
 def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     run_id = validate_run_id(run_id)
     commit = validate_commit(commit)
@@ -579,6 +623,8 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
     closure = check_schema_closure(ROOT, staged_root)
     print("MOJ_PROP_SCHEMA_CLOSURE=PASS; MIGRATIONS=" + ",".join(closure["source_chain"]))
     print("MOJ_PROP_DB_RESTORE_EVIDENCE=INDEPENDENTLY_REQUIRED")
+    # No source file, backup or schema mutation until independent proof.
+    require_independent_db_restore(run_id, commit, staged_root)
 
     backup = BACKUP_ROOT / run_id
     if backup.exists():
@@ -631,6 +677,9 @@ def main(argv: list[str]) -> int:
     action = argv[1]
     if action == "selftest":
         selftest(Path(argv[2]).resolve() if len(argv) > 2 else Path.cwd())
+        return 0
+    if action == "verify-db-restore" and len(argv) == 5:
+        require_independent_db_restore(argv[2], argv[3], Path(argv[4]).resolve())
         return 0
     if action == "deploy" and len(argv) == 5:
         deploy(argv[2], argv[3], Path(argv[4]).resolve())
