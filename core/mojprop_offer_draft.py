@@ -17,7 +17,7 @@ def _normalise_line_breaks(value: object) -> str:
 def _one_line(value: object) -> str:
     """Keep user-supplied contact fields from injecting forged proposal headers."""
     text = _normalise_line_breaks(value)
-    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029]+", " ", text).strip()
+    return re.sub(r"[\x00-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069]+", " ", text).strip()[:240]
 
 
 def _quoted_scope(text: str) -> str:
