@@ -179,7 +179,12 @@ def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
         and record.get("sku") == lease.sku
         and record.get("buyer_digest") == lease.buyer_digest
         and type(record.get("settled_sun")) is int
-        and record["settled_sun"] > 0
+        and type(record.get("invoice_amount_sun")) is int
+        and record["invoice_amount_sun"] > 0
+        # A confirmed transaction with one SUN is not a paid $12/$29/$59
+        # subscription. Confirm actual settled native TRX covers the
+        # immutable invoice quote from the protected merchant ledger.
+        and record["settled_sun"] >= record["invoice_amount_sun"]
         and record.get("finality_verified") is True
         and record.get("refund_pending") is False
         and record.get("charge_disputed") is False
