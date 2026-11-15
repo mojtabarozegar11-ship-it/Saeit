@@ -616,6 +616,7 @@ class SQLiteCommercialLedger:
                 tenant_id TEXT NOT NULL,
                 canonical_host TEXT NOT NULL,
                 offer_id TEXT NOT NULL,
+                offer_type TEXT NOT NULL,
                 release_evidence_sha256 TEXT NOT NULL,
                 recorded_at TEXT NOT NULL
             );
@@ -747,9 +748,9 @@ class SQLiteCommercialLedger:
                 raise CommercialGateError("merchant_binding_after_settlement_forbidden")
             try:
                 self.connection.execute(
-                    "INSERT INTO merchant_order_bindings VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO merchant_order_bindings VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (order_id, offer.tenant_id, offer.canonical_host,
-                     offer.offer_id, release_evidence_sha256,
+                     offer.offer_id, offer.offer_type.value, release_evidence_sha256,
                      datetime.now(timezone.utc).isoformat()),
                 )
             except sqlite3.IntegrityError:
@@ -768,14 +769,15 @@ class SQLiteCommercialLedger:
         if not isinstance(offer, OfferContract):
             raise CommercialGateError("trx_merchant_offer_required")
         row = self.connection.execute(
-            "SELECT tenant_id, canonical_host, offer_id, release_evidence_sha256 FROM merchant_order_bindings WHERE order_id = ?",
+            "SELECT tenant_id, canonical_host, offer_id, offer_type, release_evidence_sha256 FROM merchant_order_bindings WHERE order_id = ?",
             (order_id,),
         ).fetchone()
         if row is None:
             raise CommercialGateError("merchant_order_binding_required")
         if (row["tenant_id"] != offer.tenant_id or
                 row["canonical_host"] != offer.canonical_host or
-                row["offer_id"] != offer.offer_id):
+                row["offer_id"] != offer.offer_id or
+                row["offer_type"] != getattr(offer.offer_type, "value", None)):
             raise CommercialGateError("merchant_order_binding_mismatch")
         invoice_id = _slug(invoice_id, "invoice_id")
         registered = self.connection.execute(
