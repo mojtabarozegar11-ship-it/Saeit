@@ -20,4 +20,14 @@
 ## Success criteria and boundaries
 This diagnostic can tell whether an existing paid intent is a game cosmetic with account ownership, an unrelated digital/other product, or an owner/staff canary. It **cannot** prove an actual external buyer's consent, independent renewed TRON solidity finality, real net income, or receipt acknowledgment. If a true paid digital purchase is found without its rightful entitlement, fix only its scoped delivery path after independent DB/media backup and restore. Do not activate public canary or replay a TXID.
 
-No production checkout change, payment, on-chain transaction, monetary expense, live trading, customer outreach or deployment authorized by this source investigation.
+No production checkout change, payment, on-chain broadcast, monetary expense, live trading, customer outreach or deployment authorized by this source investigation.
+
+## Independent real-chain verification (read-only)
+
+- After the confirmed *existing* walletless TRX paid receipt and same-order READY fulfillment were observed, an additional source verifier was added, not an invoice or payment sender.
+- `scripts/mpw_tron_one_existing_payment_solidity_readonly_20261116.py` reads at most **one** existing paid non-staff walletless settlement on the previously verified owner recipient, then issues at most **two** independent HTTPS calls to **exactly** `api.trongrid.io`, querying `/walletsolidity/gettransactionbyid` (canonical solidified transaction body) and `/walletsolidity/gettransactioninfobyid` (solidified execution receipt). Public chain txid is submitted only to the provider, not printed into CI or the file.
+- Checks exactly one native TRX `TransferContract`, same sender, owner's Base58Check receiver, precise original `sun` amount, same txid, successful execution and positive solidified block/timestamp. No external customer ownership or download is inferred.
+- No redirect, no proxy, no user-supplied endpoint, no private key, no purchase/transfer/signature, no fees, no source file write, no database mutation; maximum payload 100kB, 9 seconds each request, no retry. If anonymous Mainnet RPC is rate-limited (e.g. 429), result stays **unknown** and is not falsely marked failed or paid.
+- This probe may be rate-limited by TronGrid and is run exactly once per reviewed PR workflow; only a redacted boolean result enters public logs.
+- Tests cover checksum lookalikes, invalid TXID, wrong sender/recipient/value, wrong asset/contract, multisend, revert/failed execution, incomplete finality, no redirect and strict endpoint lock.
+- Authoritative protocol: https://developers.tron.network/docs/confirmation-semantics and https://developers.tron.network/reference/gettransactioninfobyid-1 .
