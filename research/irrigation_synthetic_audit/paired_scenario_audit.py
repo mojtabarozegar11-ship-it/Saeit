@@ -217,7 +217,9 @@ def verify_paper(report: dict) -> None:
     for output, expected in (("mean_delta_water_m3", e["mean_delta_water"]),
                              ("mean_delta_q100", e["mean_delta_q"]),
                              ("case_crossing_lambda_median", e["crossing_median"])):
-        require(abs(report[output]-expected) <= 0.0000005,
+        value = report[output]
+        require(value is not None and math.isfinite(value)
+                and abs(value-expected) <= 0.0000005,
                 f"{report['family']}: manuscript checkpoint mismatch: {output}")
     row = report["weights"]["10"]
     expected = e["lambda_10"]
