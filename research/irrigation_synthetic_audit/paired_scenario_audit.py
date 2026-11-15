@@ -214,6 +214,19 @@ def analyze_family(records: list[dict], family: str) -> dict:
                   q_better_water_worse=0, water_better_q_worse=0)
     crossed = []
     all_deltas = []
+    # Supplementary outcomes are modeled events and depths, not measured
+    # farm outcomes; keep drainage in millimetres, never invent m3 volume.
+    supplementary_fields = {
+        "below_98_plot_days": ("q98", "simulated threshold plot-days"),
+        "irrigation_events": ("events", "simulated irrigation events"),
+        "drainage_sum_mm": ("drainage", "summed depth in mm"),
+    }
+    supplementary_deltas: dict[str, list[float]] = {
+        name: [] for name in supplementary_fields
+    }
+    supplementary_paths: dict[str, dict[tuple, list[float]]] = {
+        name: defaultdict(list) for name in supplementary_fields
+    }
     path_deltas: dict[tuple, list[tuple[float, int]]] = defaultdict(list)
     by_class: dict[str, dict[str, int]] = defaultdict(lambda: dict(v3=0, v2=0, tied=0))
     weights = {w: dict(v3=0, v2=0, tied=0) for w in WEIGHTS}
@@ -222,6 +235,10 @@ def analyze_family(records: list[dict], family: str) -> dict:
         dv, dq = v3["water"] - v2["water"], v3["q"] - v2["q"]
         all_deltas.append((dv, dq))
         path_deltas[key[:3]].append((dv, dq))
+        for name, (field, _unit) in supplementary_fields.items():
+            difference = v3[field] - v2[field]
+            supplementary_deltas[name].append(difference)
+            supplementary_paths[name][key[:3]].append(difference)
         counts["q_lower" if dq < 0 else "q_higher" if dq > 0 else "q_tied"] += 1
         counts["higher_water"] += dv > TOL
         counts["v3_dominates"] += dv <= TOL and dq <= 0 and (dv < -TOL or dq < 0)
@@ -262,10 +279,57 @@ def analyze_family(records: list[dict], family: str) -> dict:
     } for path, deltas in sorted(path_deltas.items())]
     mean_dv = statistics.fmean(x[0] for x in all_deltas)
     mean_dq = statistics.fmean(x[1] for x in all_deltas)
+    supplementary_results = {}
+    for name, values in supplementary_deltas.items():
+        path_means = [{
+            "cohort": path[0], "seed": path[1], "climate_class": path[2],
+            "matched_keys": len(path_values),
+            "mean_delta": statistics.fmean(path_values),
+        } for path, path_values in sorted(supplementary_paths[name].items())]
+        supplementary_results[name] = {
+            "unit": supplementary_fields[name][1],
+            "direction": "v3 minus v2",
+            "matched_keys": len(values),
+            "mean_delta": statistics.fmean(values),
+            "median_delta": statistics.median(values),
+            "range_delta": [min(values), max(values)],
+            "by_climate_path": path_means,
+            "by_climate_class": {
+                climate: {
+                    "matched_keys": len(filtered),
+                    "mean_delta": statistics.fmean(filtered),
+                }
+                for climate in ("dry", "medium", "wet")
+                for filtered in [[
+                    value for path, path_values in supplementary_paths[name].items()
+                    if path[2] == climate for value in path_values
+                ]]
+            },
+        }
+    # Drop one synthetic climate path at a time as a deterministic
+    # sensitivity diagnostic. This is NOT a cluster bootstrap or CI.
+    leave_one_path_out = []
+    water_total = sum(x[0] for x in all_deltas)
+    q_total = sum(x[1] for x in all_deltas)
+    for path, deltas in sorted(path_deltas.items()):
+        remaining = len(all_deltas) - len(deltas)
+        require(remaining == 495, f"{family}: invalid leave-one-path-out count")
+        omitted_water = sum(x[0] for x in deltas)
+        omitted_q = sum(x[1] for x in deltas)
+        leave_one_path_out.append({
+            "excluded_path": path[0],
+            "excluded_seed": path[1],
+            "climate_class": path[2],
+            "remaining_matched_keys": remaining,
+            "mean_delta_water_m3": (water_total - omitted_water) / remaining,
+            "mean_delta_q100": (q_total - omitted_q) / remaining,
+        })
     return {
         "family": family, "record_count": len(records), "matched_keys": len(matched),
         "climate_paths": len(paths), "climate_path_effects": climate_path_effects,
         "climate_class_effects": climate_class_effects,
+        "supplementary_paired_outcomes": supplementary_results,
+        "leave_one_climate_path_out": leave_one_path_out,
         "means": means, "comparisons": counts,
         "mean_delta_water_m3": mean_dv, "mean_delta_q100": mean_dq,
         "median_delta_water_m3": statistics.median(x[0] for x in all_deltas),
