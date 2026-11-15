@@ -525,7 +525,11 @@ def deploy(run_id: str, commit: str, staged_root: Path) -> None:
 
         python = choose_python()
         run_checked([str(python), "manage.py", "check", "--deploy"], ROOT)
-        run_checked([str(python), "manage.py", "migrate", "--noinput"], ROOT)
+        # Never run an unscoped 'migrate': that could apply other apps'
+        # unreviewed pending DDL on the commercial production database.
+        # Schema closure rejected any unknown core migration >=0041.
+        run_checked([str(python), "manage.py", "migrate",
+                     "core", "0045_mojprop_delivery_evidence", "--noinput"], ROOT)
         run_checked([str(python), "manage.py", "collectstatic", "--noinput"], ROOT)
 
         restart_passenger()
