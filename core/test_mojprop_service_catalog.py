@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from django.conf import settings
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 
 from core.models import MojPropRequest
 from core.mojprop_catalog_contract import public_service_catalog
@@ -27,6 +27,7 @@ class MojPropServiceOfferContractTests(TestCase):
                 self.assertFalse(row["automated_trading_enabled"])
                 self.assertGreater(row["indicative_from_usd"], 0)
 
+    @override_settings(ALLOWED_HOSTS=["localhost", "127.0.0.1", "mojplaywin.com"])
     def test_real_https_csrf_endpoint_advertises_only_approved_routes(self):
         response = Client().get(
             "/moj-prop-intake/", secure=True, HTTP_HOST="mojplaywin.com"
