@@ -9,7 +9,7 @@ from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
-from core.product_seo_views import product_detail
+from core.mojplaywin_product_detail import brand_product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml, persian_author_profile, indexnow_key
 from core.weather_views import weather
 from core.academy_views import (
@@ -58,7 +58,7 @@ urlpatterns = [
     path("<str:key>.txt", indexnow_key, name="indexnow_key"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
     path("store/", store_home, name="store"),
-    path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
+    path("store/product/<int:product_id>/", brand_product_detail, name="store_product_detail"),
     path("store/crown/<int:product_id>/checkout/", crown_cosmetic_checkout, name="crown_cosmetic_checkout"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
@@ -126,3 +126,12 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
+
+# Moj Prop is a MojPlayWin-only informational division. Checkout and broker execution are disabled.
+from core.moj_prop_views import moj_prop_landing, moj_prop_dashboard
+urlpatterns += [
+    path("moj-prop/", moj_prop_landing, name="moj_prop_landing"),
+    path("moj-prop/dashboard/", moj_prop_dashboard, name="moj_prop_dashboard"),
+    path("moj-prop/<str:lang>/dashboard/", moj_prop_dashboard, name="moj_prop_language_dashboard"),
+    path("moj-prop/<str:lang>/", moj_prop_landing, name="moj_prop_language"),
+]

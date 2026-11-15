@@ -1,0 +1,188 @@
+{% extends "mojplaywin/site_base.html" %}
+{% load static %}
+{% block html_lang %}{{ code }}{% endblock %}
+{% block html_dir %}{{ direction }}{% endblock %}
+{% block body_class %}mojplaywin-prop{% endblock %}
+{% block title %}MOJ PROP | MojPlayWin{% endblock %}
+{% block meta_description %}{{ hero.3 }}{% endblock %}
+{% block og_title %}MOJ PROP — MojPlayWin{% endblock %}
+{% block og_description %}{{ hero.3 }}{% endblock %}
+{% block page_head %}
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="{% static 'site/moj_prop.css' %}">
+{% for item in locale_links %}
+<link rel="alternate" hreflang="{{ item.code }}" href="https://mojplaywin.com{{ item.url }}">
+{% endfor %}
+<link rel="alternate" hreflang="x-default" href="https://mojplaywin.com/moj-prop/">
+{% endblock %}
+{% block content %}
+<div class="mp-prop" lang="{{ code }}" dir="{{ direction }}" data-policy="{{ policy_version }}" data-parent="MojPlayWin" data-availability="preview-only">
+  <nav class="mp-subnav" aria-label="Moj Prop">
+    <a class="mp-identity" href="/moj-prop/" aria-label="Moj Prop / MojPlayWin">
+      <span class="mp-identity-emblem" aria-hidden="true"><span>M</span></span>
+      <span class="mp-identity-copy"><strong>MOJ <i>PROP</i></strong><small>BY MOJPLAYWIN</small></span>
+    </a>
+    <div class="mp-menu">
+      <a href="#journey">{{ nav.0 }}</a>
+      <a href="#ladder">{{ nav.1 }}</a>
+      <a href="#rules">{{ nav.2 }}</a>
+      <a href="#faq">{{ nav.3 }}</a>
+    </div>
+    <details class="mp-language">
+      <summary aria-label="{{ lang_name }}"><span aria-hidden="true">◎</span> <span>{{ lang_name }}</span><span aria-hidden="true">⌄</span></summary>
+      <div class="mp-language-popup">
+        {% for item in locale_links %}
+        <a href="{{ item.url }}" lang="{{ item.code }}" dir="auto"{% if item.active %} aria-current="page"{% endif %}>{{ item.name }}{% if item.active %}<span aria-hidden="true">✓</span>{% endif %}</a>
+        {% endfor %}
+      </div>
+    </details>
+  </nav>
+
+  <section class="mp-hero" id="overview" aria-labelledby="mp-hero-title">
+    <div class="mp-hero-grain" aria-hidden="true"></div>
+    <div class="mp-hero-copy">
+      <p class="mp-eyebrow"><span class="mp-eyebrow-line"></span>{{ hero.0 }}</p>
+      <h1 id="mp-hero-title">{{ hero.1 }}<span>{{ hero.2 }}</span></h1>
+      <p class="mp-hero-lead">{{ hero.3 }}</p>
+      <div class="mp-hero-actions">
+        <a class="mp-button mp-button-gold" href="#rules">{{ hero.6 }}<span aria-hidden="true">↗</span></a>
+        <a class="mp-button mp-button-quiet" href="#ladder">{{ nav.1 }}<span aria-hidden="true">↘</span></a>
+      </div>
+      <div class="mp-availability" role="status">
+        <span class="mp-availability-mark" aria-hidden="true">●</span>
+        <div><strong>{{ hero.4 }}</strong><p>{{ hero.5 }}</p></div>
+      </div>
+    </div>
+    <div class="mp-hero-art" role="img" aria-label="{{ ladder.0 }}">
+      <div class="mp-orbit orbit-one" aria-hidden="true"></div>
+      <div class="mp-orbit orbit-two" aria-hidden="true"></div>
+      <div class="mp-orbit orbit-three" aria-hidden="true"></div>
+      <div class="mp-orbit-beacon" aria-hidden="true">M<span>✦</span>P</div>
+      <div class="mp-hero-art-caption"><small>{{ ladder.0 }}</small><strong>$100 <span aria-hidden="true">⟶</span> $100,000</strong><small>{{ ladder.3 }}</small></div>
+      <span class="mp-hero-art-index" aria-hidden="true">14 / 14</span>
+    </div>
+  </section>
+
+  <section class="mp-stats" aria-label="{{ nav.2 }}">
+    <article><span>{{ stats.0 }}</span><strong dir="ltr">{{ entry }}</strong><i>01</i></article>
+    <article><span>{{ stats.1 }}</span><strong dir="ltr">{{ share }}</strong><i>02</i></article>
+    <article><span>{{ stats.2 }}</span><strong dir="ltr">{{ range }}</strong><i>03</i></article>
+    <article><span>{{ stats.3 }}</span><strong dir="ltr">{{ phase_count }}</strong><i>04</i></article>
+  </section>
+
+  <section class="mp-section mp-journey" id="journey" aria-labelledby="mp-journey-title">
+    <div class="mp-section-head"><p class="mp-index">01 / {{ steps.0 }}</p><h2 id="mp-journey-title">{{ steps.0 }}</h2>
+    <p>{{ hero.3 }}</p></div>
+    <div class="mp-journey-grid">
+      {% for step in steps %}
+      {% if not forloop.first %}
+      <article class="mp-journey-step"><div class="mp-step-no">0{{ forloop.counter0 }}</div>
+        <p>{{ step }}</p><span class="mp-step-arrow" aria-hidden="true">↗</span></article>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="mp-section mp-ladder" id="ladder" aria-labelledby="mp-ladder-title">
+    <div class="mp-section-head">
+      <p class="mp-index">02 / {{ ladder.0 }}</p>
+      <h2 id="mp-ladder-title">{{ ladder.0 }}</h2><p>{{ ladder.1 }}</p>
+    </div>
+    <ol class="mp-levels">
+      {% for level in levels %}
+      <li class="mp-tier{% if forloop.last %} mp-tier-top{% endif %}">
+        <span class="mp-tier-index">{{ ladder.2 }} <b>{{ level.month|stringformat:"02d" }}</b></span>
+        <div class="mp-tier-track"><span class="mp-tier-fill" style="width:{{ level.bar }}"></span></div>
+        <strong dir="ltr">{{ level.capital }}</strong>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="mp-fineprint">{{ ladder.3 }}</p>
+  </section>
+
+  <section class="mp-section mp-plans" id="plans" aria-labelledby="mp-plans-title">
+    <div class="mp-section-head">
+      <p class="mp-index">10 OPTIONS / PRE-LAUNCH</p>
+      <h2 id="mp-plans-title">{{ plans_copy.title }}</h2>
+      <p>{{ plans_copy.body }}</p>
+    </div>
+    <p class="mp-fineprint">{{ plan_status_copy.owner_disclosure }}</p>
+    <div class="mp-plan-grid">
+      {% for plan in challenge_plans %}
+      <article class="mp-plan-card" aria-label="MOJ PROP {{ plan.code }}">
+        <div class="mp-plan-top"><span>MOJ PROP {{ plan.number|stringformat:"02d" }}</span>
+          <span class="mp-plan-code" dir="ltr">{{ plan.code }}</span>
+        </div>
+        <p class="mp-plan-business-status" role="status" data-plan-owner-state="{{ plan.business_status }}">
+          {% if plan.business_active_owner_declared %}
+            {{ plan_status_copy.owner_active }}
+          {% else %}
+            {{ plan_status_copy.funding_hold }}
+          {% endif %}
+        </p>
+        <p class="mp-plan-field">{{ plans_copy.starting }}</p>
+        <strong class="mp-plan-capital" dir="ltr">&#36;{{ plan.starting_capital_usd }}</strong>
+        <p class="mp-plan-field">{% if plan.entry_fee_owner_confirmed %}{{ plan_status_copy.owner_fee }}{% else %}{{ plans_copy.fee }}{% endif %}</p>
+        <strong class="mp-plan-fee" dir="ltr">{{ plan.fee_trx_proposed }} TRX</strong>
+        <p class="mp-plan-field">{{ plans_copy.maximum }}: <b dir="ltr">&#36;{{ plan.maximum_capital_usd }}</b></p>
+        <p class="mp-plan-meta" dir="ltr">{{ plan.duration_days }} DAYS · {{ plan.minimum_trades }} TRADES · 2 STAGES</p>
+        <span class="mp-plan-lock" role="status">{{ plans_copy.notice }}</span>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="mp-fineprint">{{ plans_copy.notice }}</p>
+  </section>
+
+  <section class="mp-section mp-rules" id="rules" aria-labelledby="mp-rules-title">
+    <div class="mp-section-head">
+      <p class="mp-index">03 / {{ rule_title }}</p>
+      <h2 id="mp-rules-title">{{ rule_title }}</h2><p>{{ hero.5 }}</p>
+    </div>
+    <div class="mp-rule-grid">
+      {% for rule in rules %}
+      <article class="mp-rule-card"><span class="mp-rule-caption">{{ rule.label }}</span><strong dir="ltr">{{ rule.value }}</strong><span class="mp-rule-index">{{ forloop.counter|stringformat:"02d" }}</span></article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="mp-section mp-trading-requirement" id="trading-rule" aria-labelledby="mp-trade-title">
+    <div class="mp-section-head">
+      <p class="mp-index">28 DAYS / BOTH STAGES</p>
+      <h2 id="mp-trade-title">{{ trading.title }}</h2>
+      <p>{{ trading.body }}</p>
+    </div>
+    <article class="mp-rule-card">
+      <span class="mp-rule-caption">Verified closed positions</span>
+      <strong dir="ltr">{{ minimum_closed_trades }} TOTAL / {{ challenge_days }} DAYS</strong>
+      <p>{{ trading.bots }}</p>
+    </article>
+  </section>
+
+  <section class="mp-section mp-social-requirement" id="social-rule" aria-labelledby="mp-social-title">
+    <div class="mp-section-head">
+      <p class="mp-index">NEW COHORT / V1.2</p>
+      <h2 id="mp-social-title">{{ social.title }}</h2>
+      <p>{{ social.body }}</p>
+    </div>
+    <article class="mp-rule-card">
+      <span class="mp-rule-caption">Instagram + Facebook</span>
+      <strong dir="ltr">{{ social_posts_per_platform_per_challenge }} Instagram + {{ social_posts_per_platform_per_challenge }} Facebook / ENTIRE 28-DAY CHALLENGE</strong>
+      <p>{{ social.disclosure }}</p>
+    </article>
+  </section>
+
+  <section class="mp-section mp-faq" id="faq" aria-labelledby="mp-faq-title">
+    <div class="mp-section-head"><p class="mp-index">04 / {{ faq.0 }}</p><h2 id="mp-faq-title">{{ faq.0 }}</h2></div>
+    <div class="mp-faq-grid">
+      <details><summary>{{ faq.1 }}<span aria-hidden="true">+</span></summary><p>{{ faq.2 }}</p></details>
+      <details><summary>{{ faq.3 }}<span aria-hidden="true">+</span></summary><p>{{ faq.4 }}</p></details>
+    </div>
+  </section>
+
+  <section class="mp-closing" aria-label="{{ hero.4 }}"><div><span>MOJ PROP / {{ hero.4 }}</span><h2>{{ hero.4 }}</h2><p>{{ footer.0 }}</p></div>
+    <a href="/" class="mp-back">MOJPLAYWIN <span aria-hidden="true">↗</span></a>
+  </section>
+  <div class="mp-local-footer"><span>MOJ PROP <b>×</b> MOJPLAYWIN</span><span>{{ footer.1 }}</span><span>{{ policy_version }}</span></div>
+</div>
+{% endblock %}
