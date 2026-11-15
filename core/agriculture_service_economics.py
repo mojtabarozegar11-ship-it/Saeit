@@ -7,7 +7,7 @@ profit guarantee. This standalone kernel is not a public paid service.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 
 TWO = Decimal("0.01")
 THREE = Decimal("0.001")
@@ -81,40 +81,44 @@ def assess_farm_enterprise(v: FarmEnterpriseInputs) -> FarmEnterpriseReport:
         raise FarmEconomicsInputError("farm_physical_scale_invalid")
     if any(v > Decimal("1000000000000") for v in (price, unit_cost, fixed)):
         raise FarmEconomicsInputError("farm_currency_scale_invalid")
-    revenue = area * yield_rate * price
-    variable = area * unit_cost
-    total = variable + fixed
-    surplus = revenue - total
-    tonnage = area * yield_rate
-    water = area * water_rate
-    # Per-tonne variable unit cost is undefined at zero production. In the
-    # zero-output case both contribution and break-even price require a hold.
-    contribution = (price - unit_cost / yield_rate) if yield_rate > 0 else None
-    break_even_yield = ((variable + fixed) / (area * price)
-                        if price > 0 else None)
-    water_productivity = tonnage * Decimal("1000") / water
-    price_down = revenue * Decimal("0.9") - total
-    # The variable costs and fixed costs are conservatively held constant
-    # for a one-period 10% yield shock; change requires a new buyer scenario.
-    yield_down = revenue * Decimal("0.9") - total
-    both_down = revenue * Decimal("0.81") - total
-    ratio = surplus / revenue * HUNDRED if revenue > 0 else None
-    return FarmEnterpriseReport(
-        currency_code=v.currency_code,
-        gross_revenue=_money(revenue),
-        variable_cost_total=_money(variable),
-        total_cost=_money(total),
-        operating_surplus=_money(surplus),
-        contribution_per_tonne=(_money(contribution) if contribution is not None else "undefined_no_production"),
-        break_even_yield_tonnes_per_hectare=(
-            format(break_even_yield.quantize(THREE, rounding=ROUND_HALF_UP), ".3f")
-            if break_even_yield is not None else None
-        ),
-        water_productivity_kg_per_m3=format(
-            water_productivity.quantize(THREE, rounding=ROUND_HALF_UP), ".3f"
-        ),
-        price_down_10pct_surplus=_money(price_down),
-        yield_down_10pct_surplus=_money(yield_down),
-        combined_price_and_yield_down_10pct_surplus=_money(both_down),
-        operating_margin_pct=(_money(ratio) if ratio is not None else None),
-    )
+    # Keep IRR-scale financial coefficients exactly representable, including
+    # cents, without rounding-overflow at the default 28-digit precision.
+    with localcontext() as ctx:
+        ctx.prec = 60
+        revenue = area * yield_rate * price
+        variable = area * unit_cost
+        total = variable + fixed
+        surplus = revenue - total
+        tonnage = area * yield_rate
+        water = area * water_rate
+        # Per-tonne variable unit cost is undefined at zero production. In the
+        # zero-output case both contribution and break-even price require a hold.
+        contribution = (price - unit_cost / yield_rate) if yield_rate > 0 else None
+        break_even_yield = ((variable + fixed) / (area * price)
+                            if price > 0 else None)
+        water_productivity = tonnage * Decimal("1000") / water
+        price_down = revenue * Decimal("0.9") - total
+        # The variable costs and fixed costs are conservatively held constant
+        # for a one-period 10% yield shock; change requires a new buyer scenario.
+        yield_down = revenue * Decimal("0.9") - total
+        both_down = revenue * Decimal("0.81") - total
+        ratio = surplus / revenue * HUNDRED if revenue > 0 else None
+        return FarmEnterpriseReport(
+            currency_code=v.currency_code,
+            gross_revenue=_money(revenue),
+            variable_cost_total=_money(variable),
+            total_cost=_money(total),
+            operating_surplus=_money(surplus),
+            contribution_per_tonne=(_money(contribution) if contribution is not None else "undefined_no_production"),
+            break_even_yield_tonnes_per_hectare=(
+                format(break_even_yield.quantize(THREE, rounding=ROUND_HALF_UP), ".3f")
+                if break_even_yield is not None else None
+            ),
+            water_productivity_kg_per_m3=format(
+                water_productivity.quantize(THREE, rounding=ROUND_HALF_UP), ".3f"
+            ),
+            price_down_10pct_surplus=_money(price_down),
+            yield_down_10pct_surplus=_money(yield_down),
+            combined_price_and_yield_down_10pct_surplus=_money(both_down),
+            operating_margin_pct=(_money(ratio) if ratio is not None else None),
+        )
