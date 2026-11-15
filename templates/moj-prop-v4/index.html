@@ -51,6 +51,12 @@
         brief:'Private market brief',
         audit:'mojtaba.bot.ai commercial-gate audit'
       };
+      // Financial-brand signal pages link here with ?service=signals.
+      // Honor only actual service codes; never write a URL string into the form.
+      const selectedRoute=new URLSearchParams(window.location.search).get('service');
+      if(Object.prototype.hasOwnProperty.call(labels,selectedRoute)){
+        document.getElementById('service').value=selectedRoute;
+      }
 
       async function csrf(){
         if(csrfToken) return csrfToken;
