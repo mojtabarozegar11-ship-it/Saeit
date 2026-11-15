@@ -29,7 +29,7 @@ class MojPropSalesQueueTests(TestCase):
         return row
 
     def _offer(self, lead, *, status="draft", created_hours=0,
-               expires_hours=48):
+               expires_hours=48, version=1):
         now = timezone.now()
         reviewed_at = now - timedelta(hours=72) if status != "draft" else None
         issued_at = now - timedelta(hours=48) if status in (
@@ -37,7 +37,7 @@ class MojPropSalesQueueTests(TestCase):
         ) else None
         accepted_at = now - timedelta(hours=30) if status == "accepted" else None
         row = MojPropOffer.objects.create(
-            lead=lead, title="Scoped research deliverable",
+            lead=lead, version=version, title="Scoped research deliverable",
             scope="A verifiable independent educational report with data and limitations.",
             amount=Decimal("125.00"), currency="USD", delivery_days=5,
             status=status, reviewed_at=reviewed_at, issued_at=issued_at,
@@ -66,7 +66,7 @@ class MojPropSalesQueueTests(TestCase):
 
     def test_empty_production_snapshot_never_claims_sales(self):
         data = action_queue_snapshot()
-        self.assertEqual(data["category_count"], 13)
+        self.assertEqual(data["category_count"], 14)
         self.assertEqual(data["total_queue_entries"], 0)
         self.assertIsNone(data["independent_customer_count"])
         self.assertIsNone(data["collected_revenue"])
@@ -126,6 +126,54 @@ class MojPropSalesQueueTests(TestCase):
         offer = self._offer(lead, status="accepted")
         self._delivery(offer, status="sent")
         self.assertEqual(self.categories()["sent_unacknowledged"]["count"], 1)
+
+    def test_latest_cancelled_offer_is_internal_review_without_outreach(self):
+        lead = self._lead("CANCELLED-REVIEW", route="signals", status="reviewing")
+        self._offer(lead, status="cancelled", expires_hours=-2)
+        entry = self.categories()["terminal_offer_internal_review"]
+        self.assertEqual(entry["count"], 1)
+        self.assertTrue(entry["operator_only"])
+        self.assertFalse(entry["customer_outreach_authorized"])
+
+    def test_latest_expired_offer_is_not_silently_lost(self):
+        lead = self._lead("EXPIRED-REVIEW", route="blueprint", status="offer_sent")
+        self._offer(lead, status="expired", expires_hours=-3)
+        self.assertEqual(self.categories()["terminal_offer_internal_review"]["count"], 1)
+
+    def test_superseding_new_offer_removes_terminal_internal_alert(self):
+        lead = self._lead("REVISED-REVIEW", route="signals")
+        self._offer(lead, status="cancelled", version=1)
+        self._offer(lead, status="approved", version=2)
+        self.assertEqual(self.categories()["terminal_offer_internal_review"]["count"], 0)
+
+    def test_only_latest_of_multiple_cancelled_versions_is_counted(self):
+        lead = self._lead("REVISED-CANCELLED", route="signals")
+        self._offer(lead, status="cancelled", version=1)
+        self._offer(lead, status="expired", version=2, expires_hours=-1)
+        self.assertEqual(self.categories()["terminal_offer_internal_review"]["count"], 1)
+
+    def test_terminal_internal_review_excludes_optout_and_closed_buyers(self):
+        for status in ("closed", "spam", "delivered"):
+            lead = self._lead("TERMINAL-"+status, route="signals", status=status)
+            self._offer(lead, status="cancelled")
+        opted_out = self._lead("OPTED-OUT", route="signals")
+        self._offer(opted_out, status="expired")
+        MojPropRequest.objects.filter(pk=opted_out.pk).update(consent=False)
+        entry = self.categories()["terminal_offer_internal_review"]
+        self.assertEqual(entry["count"], 0)
+
+    def test_terminal_internal_details_are_private_and_not_contact_authorization(self):
+        lead = self._lead("PRIVATE-TERMINAL", route="signals")
+        self._offer(lead, status="cancelled")
+        summary = action_queue_snapshot()
+        self.assertNotIn(lead.email, str(summary))
+        self.assertNotIn("request_refs", str(summary))
+        detail = action_queue_snapshot(detail_limit=2)
+        section = next(x for x in detail["categories"]
+                       if x["category"] == "terminal_offer_internal_review")
+        self.assertEqual(section["request_refs"], [lead.request_id])
+        self.assertFalse(section["customer_outreach_authorized"])
+        self.assertNotIn(lead.email, str(detail))
 
     def test_digital_and_signal_routes_have_separate_commercial_followups(self):
         self._lead("PRODUCT", route="digital", product_id=72)

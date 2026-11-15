@@ -28,6 +28,7 @@ ACTION_LABELS = {
     "digital_without_issued_quote": "Check catalog rights and stock/delivery before offering",
     "free_signals_awaiting_review": "Review one-off FREE educational example; never quote or send marketing without separate permission",
     "signals_without_issued_quote": "Route paid educational service via mojtaba.bot.ai only",
+    "terminal_offer_internal_review": "Internal-only review of latest cancelled or expired offer; do not contact buyer without independent reauthorization",
 }
 
 
@@ -59,6 +60,16 @@ def action_queue_snapshot(*, detail_limit=0):
         status="accepted", reviewed_at__isnull=False,
         issued_at__isnull=False, accepted_at__isnull=False,
     ).exclude(acceptance_reference="")
+    # Terminal latest offers remain internally actionable; cancellation does
+    # not authorize new outreach, even when the original lead once consented.
+    newer_offer = MojPropOffer.objects.filter(
+        lead_id=OuterRef("lead_id"), version__gt=OuterRef("version")
+    )
+    terminal_offer_review = MojPropOffer.objects.filter(
+        status__in=("cancelled", "expired"),
+        lead__consent=True,
+        lead__status__in=("new", "reviewing", "offer_sent", "approved"),
+    ).annotate(has_newer_offer=Exists(newer_offer)).filter(has_newer_offer=False)
     delivery_for_offer = MojPropDeliveryEvidence.objects.filter(
         offer_id=OuterRef("pk")
     )
@@ -125,6 +136,7 @@ def action_queue_snapshot(*, detail_limit=0):
         ).exclude(
             offer__lead__status__in=("spam", "closed", "delivered")
         ), "offer__lead__request_id"),
+        ("terminal_offer_internal_review", terminal_offer_review, "lead__request_id"),
         ("digital_without_issued_quote", lead_needing_issued.filter(
             route="digital", product_id__isnull=False,
         ), "request_id"),
@@ -140,6 +152,9 @@ def action_queue_snapshot(*, detail_limit=0):
             "count": query.count(),
             "next_action": ACTION_LABELS[name],
         }
+        if name == "terminal_offer_internal_review":
+            entry["operator_only"] = True
+            entry["customer_outreach_authorized"] = False
         if detail_limit:
             entry["request_refs"] = list(
                 query.order_by(ref_field).values_list(ref_field, flat=True)
