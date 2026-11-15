@@ -109,6 +109,7 @@ def main():
     try:
         recorded = _read_existing_receipt_state()
         db_state_available = True
+        db_error_type = None
     except Exception as exc:
         # The caller cannot treat an unavailable DB as zero paid customers.
         recorded = classify_payment_evidence(
@@ -116,7 +117,7 @@ def main():
             recorded_delivery_present=False, scope_exhaustive=False,
         )
         db_state_available = False
-        print("MPW_TRX_CANARY_RECEIPT_READONLY_DB_ERROR=" + type(exc).__name__)
+        db_error_type = type(exc).__name__
 
     report = {
         "schema": "mpw.trx.canary.existing_receipts.readonly.v1",
@@ -134,6 +135,7 @@ def main():
         "commercial_guard_source": analyze_gate_source(source),
         "commercial_guard_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         "db_state_available": db_state_available,
+        "db_error_type": db_error_type,
         "stored_paid_evidence": recorded,
         "no_wallet_or_customer_data_printed": True,
         "no_host_changes_or_financial_writes": True,
