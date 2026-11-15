@@ -55,7 +55,19 @@ class HistoricalWalletlessPaidDigitalAccessTests(SimpleTestCase):
         self.grant = Mock()
         self.grant._meta.get_field.return_value = field
         self.grant.objects.filter.return_value.exists.return_value = True
-        self.model = patch("django.apps.apps.get_model", return_value=self.grant)
+        self.invoice = Mock()
+        parent = SimpleNamespace(_meta=SimpleNamespace(label_lower="core.order"))
+        self.invoice._meta.get_field.return_value = SimpleNamespace(
+            related_model=parent
+        )
+        self.invoice.objects.filter.return_value.exists.return_value = False
+        self.model = patch(
+            "django.apps.apps.get_model",
+            side_effect=lambda app, name: {
+                "CommerceInvoice": self.invoice,
+                "CommerceFulfillment": self.grant,
+            }[name],
+        )
         self.model.start()
 
         self.credit = patch("services.mpw_walletless_existing_paid_access.verified_walletless_credit",
@@ -174,6 +186,17 @@ class HistoricalWalletlessPaidDigitalAccessTests(SimpleTestCase):
     def test_foreign_commerce_item_fk_not_core_orderitem_denied(self):
         other = SimpleNamespace(_meta=SimpleNamespace(label_lower="mpw_commerce.commerceitem"))
         self.grant._meta.get_field.return_value.related_model = other
+        self.assertFalse(self.allowed())
+
+    def test_existing_commerce_invoice_forces_standard_authorization_path(self):
+        self.invoice.objects.filter.return_value.exists.return_value = True
+        self.assertFalse(self.allowed())
+
+    def test_wrong_commerce_invoice_order_fk_denied(self):
+        foreign = SimpleNamespace(
+            _meta=SimpleNamespace(label_lower="mpw_commerce.commerceorder")
+        )
+        self.invoice._meta.get_field.return_value.related_model = foreign
         self.assertFalse(self.allowed())
 
     def test_private_file_unavailable_blocks_access(self):
