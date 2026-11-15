@@ -760,6 +760,7 @@ class SQLiteCommercialLedger:
         evidence: PaymentEvidence, invoice_id: str,
         tenant_registry: Mapping[str, str],
         independent_release_verifier: Callable[[OfferContract], bool],
+        independent_release_evidence_verifier: Callable[[OfferContract, str], bool],
         independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
     ) -> str:
         """Review a manual TRX receipt against its *durable* merchant binding."""
@@ -767,7 +768,7 @@ class SQLiteCommercialLedger:
         if not isinstance(offer, OfferContract):
             raise CommercialGateError("trx_merchant_offer_required")
         row = self.connection.execute(
-            "SELECT tenant_id, canonical_host, offer_id FROM merchant_order_bindings WHERE order_id = ?",
+            "SELECT tenant_id, canonical_host, offer_id, release_evidence_sha256 FROM merchant_order_bindings WHERE order_id = ?",
             (order_id,),
         ).fetchone()
         if row is None:
@@ -798,6 +799,16 @@ class SQLiteCommercialLedger:
             amount=Decimal(order["amount"]), currency=order["currency"],
         ):
             raise CommercialGateError("bound_merchant_invoice_corrupt")
+        if not callable(independent_release_evidence_verifier):
+            raise CommercialGateError("merchant_release_evidence_verifier_invalid")
+        try:
+            release_still_valid = independent_release_evidence_verifier(
+                offer, row["release_evidence_sha256"],
+            )
+        except Exception:
+            raise CommercialGateError("merchant_release_evidence_verifier_failed") from None
+        if release_still_valid is not True:
+            raise CommercialGateError("merchant_release_evidence_unverified")
         return validate_merchant_trx_receipt(
             offer=offer, tenant_registry=tenant_registry,
             independent_release_verifier=independent_release_verifier,
