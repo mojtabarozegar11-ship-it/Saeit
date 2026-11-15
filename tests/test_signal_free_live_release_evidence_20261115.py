@@ -104,7 +104,7 @@ class SignalFreeLiveReleaseEvidenceTests(unittest.TestCase):
         self.assertIn("SIGNAL_FREE_PUBLIC_PAGE=PASS", backend)
         self.assertIn("STARTER30_WITHOUT_SIGNAL_DESK_WRITE=PASS", static)
         self.assertIn("SIGNAL_DESK_OWNER_CONTENT_PRESERVED=PASS", static)
-        self.assertIn("STARTER30_THREE_FILES_PUBLIC_HTTP=PASS", static)
+        self.assertIn("STARTER30_THREE_FILES_PUBLIC_SHA256=PASS", static)
         self.assertNotIn("SIGNAL_FREE_ROOT_BACKEND_MISSING: BLOCK_STATIC_RELEASE", static)
         self.assertNotIn("moj_signal_free_stats --apply", backend)
 
