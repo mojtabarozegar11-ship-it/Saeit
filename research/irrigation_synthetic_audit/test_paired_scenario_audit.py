@@ -285,6 +285,16 @@ class AuditTests(unittest.TestCase):
         result = analyze_family(self.make_records("C", change), "C")
         self.assertEqual(result["means"]["v2"]["water_m3"], 320)
 
+    def test_undefined_crossing_fails_checkpoint_cleanly(self):
+        def dominate(rows):
+            for row in rows:
+                if row["policy"] == "v3":
+                    row["gross_water_m3"] = 90
+        report = analyze_family(self.make_records("C", dominate), "C")
+        self.assertIsNone(report["case_crossing_lambda_median"])
+        with self.assertRaises(AuditError):
+            verify_paper(report)
+
     def test_real_workbook_r_prefix_accepted(self):
         report = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual(report["matched_keys"], 540)
