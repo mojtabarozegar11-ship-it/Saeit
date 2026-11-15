@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -113,9 +114,22 @@ def _canonical_amount(value: Decimal, currency: str) -> str:
     amount = _amount(value)
     code = _currency(currency)
     _validate_trx_sun_precision(amount, code)
-    if amount.adjusted() < -24:
+    # Never let a permissive Decimal context silently round a commitment.
+    # Restrict input complexity before expanding exponent notation.
+    digits = amount.as_tuple().digits
+    if len(digits) > 128:
         raise CommercialGateError("amount_precision_exceeds_safe_limit")
-    return format(amount.normalize(), "f")
+    # Retain exactly the fractional precision of the actual amount; the
+    # canonical formatter below never uses Decimal.normalize (context-rounding).
+    raw = str(amount)
+    if len(raw) > 160:
+        raise CommercialGateError("amount_precision_exceeds_safe_limit")
+    canonical = format(amount, "f")
+    if "." in canonical:
+        canonical = canonical.rstrip("0").rstrip(".")
+    if len(canonical) > 128 or amount.adjusted() < -24:
+        raise CommercialGateError("amount_precision_exceeds_safe_limit")
+    return canonical
 
 
 def _digest(payload: Mapping[str, object]) -> str:
@@ -175,12 +189,25 @@ def validate_offer(
                 for part in parts)
         and host != "dr.mojtaba.rozegar"
         and not host.endswith(".dr.mojtaba.rozegar")
+        and not any(
+            host == blocked or host.endswith("." + blocked)
+            for blocked in ("facebook.com", "fb.com", "instagram.com", "metricool.com")
+        )
+        and not parts[-1].isdecimal()
     )
+    if valid_host:
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            valid_host = False
     if not valid_host:
         raise CommercialGateError("canonical_host_invalid")
     _currency(offer.currency)
     _amount(offer.price, "price")
     _validate_trx_sun_precision(offer.price, offer.currency)
+    _canonical_amount(offer.price, offer.currency)
     if offer.offer_type is OfferType.TRX_GATEWAY and offer.currency != "TRX":
         raise CommercialGateError("native_trx_gateway_currency_required")
     if not isinstance(offer.offer_type, OfferType):
@@ -198,6 +225,9 @@ def validate_offer(
         raise CommercialGateError("automatic_payment_disabled")
     if offer.offer_type is OfferType.SIGNAL and offer.financial_call_enabled:
         raise CommercialGateError("financial_signal_disabled")
+    if offer.financial_call_enabled:
+        # No live trading or financial execution via this source-only contract.
+        raise CommercialGateError("financial_execution_disabled")
     if offer.active:
         # Source-only readiness must never accept typed truthy strings, nor
         # let non-Prop paid offers bypass legal/KYC/rights release checks.
