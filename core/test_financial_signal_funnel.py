@@ -1,7 +1,20 @@
 """Every financial-brand signal subsite must feed the canonical Mojtaba.bot.ai intake."""
 from django.test import SimpleTestCase
 
-from core.financial_brand_pages import BRANDS
+from core.financial_brand_pages import BRANDS, SIGNAL_INTAKE_PATH
+
+    def test_catalog_and_signal_page_use_the_same_prefilled_route(self):
+        catalog = self.client.get("/moj-prop/catalog/")
+        self.assertEqual(catalog.status_code, 200)
+        self.assertIn(
+            'href="/moj-prop/?service=signals#request">Request a signal note',
+            catalog.content.decode("utf-8"),
+        )
+        signal_page = self.client.get("/moj-prop/signals/")
+        self.assertEqual(signal_page.status_code, 200)
+        self.assertEqual(
+            signal_page.content.decode("utf-8").count(SIGNAL_INTAKE_PATH), 2
+        )
 
 
 class FinancialBrandSignalFunnelTests(SimpleTestCase):
