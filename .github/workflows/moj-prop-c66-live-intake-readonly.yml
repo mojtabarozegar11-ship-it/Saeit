@@ -44,3 +44,27 @@ jobs:
           PY
             fi
           done
+
+      - name: Diagnose public DNS versus pinned cPanel origin after failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "PUBLIC_DNS_A_RECORDS:"
+          getent ahostsv4 mojplaywin.com | awk '{print $1}' | sort -u | head -10
+          echo "PUBLIC_DNS_AAAA_RECORDS:"
+          getent ahostsv6 mojplaywin.com | awk '{print $1}' | sort -u | head -10
+          for mode in public_ipv4 pinned_origin_ipv4; do
+            if [[ "$mode" == "pinned_origin_ipv4" ]]; then
+              # Pinned SSH host is already public in the current deploy workflow.
+              # TLS host/SNI remains mojplaywin.com; this is READ-ONLY HTTPS.
+              args=(--ipv4 --resolve mojplaywin.com:443:178.239.147.125)
+            else
+              args=(--ipv4)
+            fi
+            code="$(curl -sS --connect-timeout 4 --max-time 9 --retry 0 \
+              "${args[@]}" -o /dev/null -w '%{http_code}' \
+              'https://mojplaywin.com/moj-prop-intake/' 2>&1)"
+            printf 'PUBLIC_NETWORK_DIAGNOSTIC mode=%s outcome=%s\n' "$mode" "$code"
+          done
+          echo "NO_CUSTOMER_POST_NO_LOGIN_NO_DEPLOY_NO_PAYMENT"
