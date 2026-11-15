@@ -26,8 +26,15 @@ def quote_read_token(offer):
     if (type(offer) is not MojPropOffer
             or offer.pk is None or offer.status not in ("issued", "accepted")
             or offer.issued_at is None or offer.expires_at is None
+            or offer.reviewed_at is None or offer.reviewed_at > offer.issued_at
             or offer.expires_at <= timezone.now()):
         raise ValueError("quote is not available for buyer review")
+    if MojPropOffer.objects.filter(
+        lead_id=offer.lead_id, version__gt=offer.version,
+        status__in=("issued", "accepted"),
+        issued_at__isnull=False,
+    ).exists():
+        raise ValueError("a newer written proposal superseded this offer")
     return signing.dumps(
         {"pk": offer.pk, "version": offer.version},
         salt=SALT, compress=False,
@@ -55,7 +62,13 @@ def customer_quote(request, token):
             issued_at__isnull=False,
             expires_at__gt=timezone.now(),
         ).first()
-        if offer is None:
+        if (offer is None or offer.reviewed_at is None
+                or offer.reviewed_at > offer.issued_at
+                or MojPropOffer.objects.filter(
+                    lead_id=offer.lead_id, version__gt=offer.version,
+                    status__in=("issued", "accepted"),
+                    issued_at__isnull=False,
+                ).exists()):
             raise Http404
     except (signing.BadSignature, signing.SignatureExpired, TypeError, ValueError):
         raise Http404 from None
