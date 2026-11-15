@@ -203,13 +203,13 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                         runfd = None
                         bfd = None
                         restorefd = None
+                        created_entries = []
                         completed = False
                         try:
                             runfd = _mkdir(vfd, run_id, uid, unique=True)
                             bfd = _mkdir(runfd, "backup", uid, unique=True)
                             restorefd = _mkdir(runfd, "isolated-restore", uid, unique=True)
                             checksums = {}
-                            created_entries = []
                             for i, body in enumerate(originals):
                                 name = "file-" + str(i) + ".bin"
                                 identity = _write(bfd, name, body)
@@ -246,7 +246,7 @@ def audit_and_restore(*, home: Path = HOME, root: Path = ROOT,
                                 # returned a particular inode identity. A file
                                 # injected after directory creation but before
                                 # our O_EXCL is never eligible for deletion.
-                                for child_fd, filename, identity in reversed(locals().get("created_entries", [])):
+                                for child_fd, filename, identity in reversed(created_entries):
                                     try:
                                         current = os.stat(filename, dir_fd=child_fd, follow_symlinks=False)
                                     except FileNotFoundError:
