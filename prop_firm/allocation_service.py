@@ -48,6 +48,7 @@ def _verified_source(account, *, period_end):
         raise AllocationRejected("Unverified or unsigned brokerage execution")
     if any(
         mark.reconciliation_status != "verified"
+        or mark.data_source not in sources
         or not re.fullmatch("[0-9a-f]{64}", mark.evidence_digest or "")
         for mark in marks
     ):
