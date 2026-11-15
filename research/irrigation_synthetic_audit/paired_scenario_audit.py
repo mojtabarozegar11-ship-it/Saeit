@@ -78,6 +78,29 @@ EXPECTED_WEIGHT_GRID = {
 }
 
 
+# Exact (cohort ID, seed, class) paths observed in the author-controlled
+# native Sheets C and R1 tabs on 2026-11-15. This checks archive identity;
+# it DOES NOT authenticate weather inputs, generator correctness or field data.
+SOURCE_PATHS = {
+    "C": {
+        ("C-dry-1", 919, "dry"), ("C-dry-2", 1111, "dry"),
+        ("C-dry-3", 1212, "dry"), ("C-dry-4", 1313, "dry"),
+        ("C-medium-1", 1919, "medium"), ("C-medium-2", 2111, "medium"),
+        ("C-medium-3", 2212, "medium"), ("C-medium-4", 2313, "medium"),
+        ("C-wet-1", 2919, "wet"), ("C-wet-2", 3111, "wet"),
+        ("C-wet-3", 3212, "wet"), ("C-wet-4", 3313, "wet"),
+    },
+    "R1": {
+        ("R-dry-1", 173, "dry"), ("R-dry-2", 347, "dry"),
+        ("R-dry-3", 521, "dry"), ("R-dry-4", 695, "dry"),
+        ("R-medium-1", 2173, "medium"), ("R-medium-2", 2347, "medium"),
+        ("R-medium-3", 2521, "medium"), ("R-medium-4", 2695, "medium"),
+        ("R-wet-1", 4173, "wet"), ("R-wet-2", 4347, "wet"),
+        ("R-wet-3", 4521, "wet"), ("R-wet-4", 4695, "wet"),
+    },
+}
+
+
 class AuditError(ValueError):
     """Input or published-checkpoint discrepancy."""
 
@@ -237,6 +260,18 @@ def analyze_family(records: list[dict], family: str) -> dict:
     }
 
 
+def verify_source_paths(records: list[dict], family: str) -> None:
+    """Fail closed if the purported frozen archive has different path identities.
+
+    This checks source identifiers only; without signed frozen file hashes it
+    cannot establish that generated water/Q outputs have not been manipulated.
+    """
+    require(family in SOURCE_PATHS, f"Unknown family {family!r}")
+    observed = {row["key"][:3] for row in records}
+    require(observed == SOURCE_PATHS[family],
+            f"{family}: source climate-path/seed catalog mismatch")
+
+
 def verify_paper(report: dict) -> None:
     e = EXPECTED[report["family"]]
     c = report["comparisons"]
@@ -280,8 +315,10 @@ def main() -> int:
     try:
         reports = []
         for family, path in (("C", args.cohort_c), ("R1", args.regime_r1)):
-            data = analyze_family(load_records(path), family)
+            records = load_records(path)
+            data = analyze_family(records, family)
             if args.verify_paper:
+                verify_source_paths(records, family)
                 verify_paper(data)
             data["source_csv_sha256"] = file_sha256(path)
             reports.append(data)
