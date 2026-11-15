@@ -71,6 +71,20 @@ class MojPropLegacyUpgradeTests(unittest.TestCase):
             {"models": False, "admin": False},
         )
 
+    def test_duplicate_commercial_class_in_legacy_prefix_is_never_ignored(self):
+        for relative, name in (
+            ("core/models.py", "MojPropRequest"),
+            ("core/admin.py", "MojPropRequestAdmin"),
+        ):
+            with self.subTest(relative=relative):
+                dst = self.root / relative
+                original = dst.read_text(encoding="utf-8")
+                dst.write_text("class " + name + ":\n    pass\n\n" + original,
+                               encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "duplicate Moj Prop class"):
+                    check_schema_closure(self.root, SOURCE)
+                dst.write_text(original, encoding="utf-8")
+
     def test_reviewed_upgrade_is_idempotent(self):
         with patch.object(installer, "ROOT", self.root):
             with contextlib.redirect_stdout(io.StringIO()):
