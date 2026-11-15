@@ -171,6 +171,10 @@ def backup_target(target: Path, backup: Path, manifest: dict, relative: Path) ->
 def atomic_replace(source: Path, target: Path, mode: int) -> None:
     assert_regular(source, "staged source")
     assert_safe_parent(target, ROOT)
+    # A symlink appearing after initial backup/preflight is a race or
+    # unexpected owner edit, not a file we are authorized to overwrite.
+    if target.is_symlink():
+        raise RuntimeError("unsafe live target symlink before replacement")
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{target.name}.mojprop-", dir=str(target.parent)
