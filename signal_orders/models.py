@@ -21,3 +21,26 @@ class PendingSignalOrderRecord(models.Model):
 
     def __str__(self):
         return self.order_id
+
+
+class PendingSignalTrxQuote(models.Model):
+    """Unique quote proposal per order, not a chain invoice or settled receipt.
+
+    The signed token contains no raw buyer email or private signing key.
+    A unique FK stops concurrent quotes to multiple payment destinations.
+    """
+    order = models.OneToOneField(
+        PendingSignalOrderRecord, related_name="trx_quote",
+        on_delete=models.PROTECT,
+    )
+    invoice_id = models.CharField(max_length=64, unique=True, editable=False)
+    signed_token = models.TextField(editable=False)
+    token_digest = models.CharField(max_length=64, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+
+    class Meta:
+        db_table = "mojtaba_signal_trx_quote_proposals"
+        default_permissions = ("view",)
+
+    def __str__(self):
+        return self.invoice_id
