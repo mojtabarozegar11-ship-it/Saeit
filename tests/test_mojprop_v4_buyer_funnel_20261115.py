@@ -66,6 +66,14 @@ class MojPropV4ConversionTests(SimpleTestCase):
         self.assertIn("await csrf(abortController.signal)",self.html)
         self.assertIn("signal:abortController.signal",self.html)
 
+    def test_customer_research_plan_is_kept_in_confirmed_crm_submission(self):
+        for plan in ("education-weekly", "education-monthly", "education-quarterly"):
+            self.assertIn("'"+plan+"'", self.html)
+        self.assertIn(".get('plan')", self.html)
+        self.assertIn("Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)", self.html)
+        self.assertIn("A recurring subscription and payment have not been authorized.", self.html)
+        self.assertIn("body:JSON.stringify({name,email,service,horizon,notes,website,", self.html)
+
     def test_no_wallet_or_guaranteed_profit_path(self):
         self.assertIn("No payment was taken.", self.html)
         self.assertIn("This form sends a request", self.html)
