@@ -17,10 +17,12 @@ SITE_SOURCE = ROOT / "templates/moj-prop-v4"
 
 
 class MojPropCatalogSamplesContractTests(unittest.TestCase):
-    def test_two_complete_client_samples_are_valid_standalone_pages(self):
+    def test_four_client_samples_are_valid_standalone_pages(self):
         for path in (
             "samples/prop-blueprint/index.html",
             "samples/gold-market-brief/index.html",
+            "samples/educational-signal/index.html",
+            "samples/commercial-gate-audit/index.html",
         ):
             with self.subTest(path=path):
                 page = (SITE_SOURCE / path).read_text("utf-8")
@@ -49,10 +51,21 @@ class MojPropCatalogSamplesContractTests(unittest.TestCase):
 
     def test_catalog_links_to_both_real_sample_files(self):
         catalog = (SITE_SOURCE / "catalog/index.html").read_text("utf-8")
-        for slug in ("prop-blueprint", "gold-market-brief"):
+        for slug in ("prop-blueprint", "gold-market-brief",
+                     "educational-signal", "commercial-gate-audit"):
             path = SITE_SOURCE / ("samples/" + slug + "/index.html")
             self.assertTrue(path.is_file(), slug)
             self.assertIn('href="/moj-prop/samples/' + slug + '/"', catalog)
+
+
+    def test_every_catalog_offer_has_matching_sample_not_checkout(self):
+        catalog = (SITE_SOURCE / "catalog/index.html").read_text("utf-8")
+        for slug in ("prop-blueprint", "gold-market-brief", "educational-signal", "commercial-gate-audit"):
+            page = SITE_SOURCE / ("samples/" + slug + "/index.html")
+            self.assertTrue(page.is_file())
+            self.assertIn("/moj-prop/samples/" + slug + "/", catalog)
+            self.assertIn("/moj-prop/#request", page.read_text("utf-8"))
+            self.assertNotIn("onchain_checkout(", page.read_text("utf-8"))
 
     def test_source_control_keeps_both_old_baselines_immutable(self):
         for name in ("index-v4.html", "catalog-index-v4.html"):
@@ -113,6 +126,8 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         self.assertEqual((self.route / "catalog/index.html").read_bytes(), old_catalog)
         self.assertFalse((self.route / "samples/prop-blueprint/index.html").exists())
         self.assertFalse((self.route / "samples/gold-market-brief/index.html").exists())
+        self.assertFalse((self.route / "samples/educational-signal/index.html").exists())
+        self.assertFalse((self.route / "samples/commercial-gate-audit/index.html").exists())
 
     def test_idempotent_deploy_never_makes_second_backup(self):
         release.deploy("123", "a" * 40)
