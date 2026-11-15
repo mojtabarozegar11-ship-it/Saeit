@@ -172,7 +172,7 @@ class MerchantBindingTests(unittest.TestCase):
             with self.subTest(candidate=repr(candidate)), self.assertRaises(MerchantBindingRejected):
                 validate_tron_recipient(candidate)
 
-    def test_known_bad_network_prefix_rejected(self):
+    def test_non_tron_address_format_rejected(self):
         # Valid Base58-looking non-TRON address cannot become a TRON receiver.
         for candidate in ("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "0" * 34):
             with self.subTest(candidate=candidate), self.assertRaises(MerchantBindingRejected):
