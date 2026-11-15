@@ -175,12 +175,18 @@ def _reconciled_invoice_matches(lease, independently_reconciled_invoices):
     return (
         record.get("asset") == "TRX"
         and record.get("network") == "tron-mainnet"
+        and record.get("invoice_id") == lease.invoice_id
+        and type(record.get("tx_id")) is str
+        and re.fullmatch(r"[0-9a-f]{64}", record["tx_id"]) is not None
         and record.get("merchant_tenant_id") == lease.merchant_tenant_id
         and record.get("sku") == lease.sku
         and record.get("buyer_digest") == lease.buyer_digest
+        and type(record.get("expected_sun")) is int
+        and record["expected_sun"] > 0
         and type(record.get("settled_sun")) is int
-        and record["settled_sun"] > 0
+        and record["settled_sun"] == record["expected_sun"]
         and record.get("finality_verified") is True
+        and record.get("refunded") is False
         and record.get("refund_pending") is False
         and record.get("charge_disputed") is False
     )
