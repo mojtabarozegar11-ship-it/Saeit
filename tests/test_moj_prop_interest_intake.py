@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from prop_firm.models import PropInformationInquiry
+from prop_firm.models import PropInformationInquiry, PropInterestHourlyBucket
 from prop_firm.interest import (
     PropInterestError, canonical_inquiry_email, intake_enabled, submit_inquiry,
 )
@@ -21,12 +21,13 @@ class MojPropInformationIntakeTests(TestCase):
     def setUp(self):
         cache.clear()
 
-    def post(self, **kwargs):
+    def post(self, remote_addr="127.0.0.1", **kwargs):
         data = {"email": "interested@company.net", "privacy_consent": "yes"}
         data.update(kwargs)
         return self.client.post(
             "/moj-prop/interest/", data,
             secure=True, HTTP_HOST="mojplaywin.com",
+            REMOTE_ADDR=remote_addr,
         )
 
     @override_settings(**APPROVED_SETTINGS)
@@ -127,7 +128,9 @@ class MojPropInformationIntakeTests(TestCase):
     @override_settings(**APPROVED_SETTINGS)
     def test_rate_limit_failure_does_not_record_data(self):
         from unittest.mock import patch
-        with patch("prop_firm.interest.cache.add", side_effect=RuntimeError("outage")):
+        from django.db import DatabaseError
+        with patch("prop_firm.interest.PropInterestHourlyBucket.objects.select_for_update",
+                   side_effect=DatabaseError("rate ledger unavailable")):
             self.assertEqual(self.post().status_code, 503)
         self.assertEqual(PropInformationInquiry.objects.count(), 0)
 
@@ -184,3 +187,87 @@ class MojPropInformationIntakeTests(TestCase):
         request.user = Owner()
         self.assertTrue(model_admin.has_view_permission(request))
         self.assertTrue(model_admin.has_module_permission(request))
+    @override_settings(**APPROVED_SETTINGS)
+    def test_rate_counter_persisted_in_db_per_hour(self):
+        for i in range(3):
+            self.assertEqual(self.post(email=f"p{i}@company.net").status_code, 200)
+        bucket = PropInterestHourlyBucket.objects.get()
+        self.assertEqual(bucket.count, 3)
+        self.assertEqual(len(bucket.digest), 64)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_cache_flush_does_not_reset_database_rate_limit(self):
+        for i in range(6):
+            self.assertEqual(self.post(email=f"c{i}@company.net").status_code, 200)
+        cache.clear()
+        self.assertEqual(self.post(email="additional@company.net").status_code, 429)
+        self.assertEqual(PropInterestHourlyBucket.objects.get().count, 6)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_same_email_retries_use_quota_but_not_duplicate_record(self):
+        for _ in range(6):
+            self.assertEqual(self.post().status_code, 200)
+        self.assertEqual(self.post().status_code, 429)
+        self.assertEqual(PropInformationInquiry.objects.count(), 1)
+        self.assertEqual(PropInterestHourlyBucket.objects.get().count, 6)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_other_client_hour_bucket_is_independent(self):
+        for i in range(6):
+            self.post(email=f"b{i}@company.net")
+        response = self.post(email="another@company.net", remote_addr="127.0.0.2")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 2)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_invalid_remote_addr_fails_closed_without_record(self):
+        response = self.post(remote_addr="untrusted-ip")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PropInformationInquiry.objects.count(), 0)
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 0)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_hour_bucket_does_not_store_ip_or_mail_address(self):
+        self.post()
+        bucket = PropInterestHourlyBucket.objects.get()
+        self.assertEqual(
+            {f.name for f in bucket._meta.fields},
+            {"digest", "count", "expires_at"},
+        )
+        self.assertNotIn("127.0.0.1", str(bucket.__dict__))
+        self.assertNotIn("interested@company.net", str(bucket.__dict__))
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_failed_lead_database_write_rolls_back_rate_counter(self):
+        from unittest.mock import patch
+        from django.db import DatabaseError
+        with patch("prop_firm.interest.PropInformationInquiry.objects.select_for_update",
+                   side_effect=DatabaseError("order database down")):
+            response = self.post()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(PropInformationInquiry.objects.count(), 0)
+        self.assertEqual(PropInterestHourlyBucket.objects.count(), 0)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_expired_request_can_be_renewed_by_fresh_explicit_consent(self):
+        self.post()
+        row = PropInformationInquiry.objects.get()
+        row.expires_at = timezone.now() - timedelta(days=1)
+        row.status = "handled"
+        row.save(update_fields=["expires_at", "status"])
+        self.assertEqual(self.post().status_code, 200)
+        row.refresh_from_db()
+        self.assertGreater(row.expires_at, timezone.now() + timedelta(days=29))
+        self.assertEqual(row.status, "unreviewed")
+        self.assertEqual(PropInformationInquiry.objects.count(), 1)
+
+    @override_settings(**APPROVED_SETTINGS)
+    def test_expired_request_not_renewed_without_fresh_consent(self):
+        self.post()
+        row = PropInformationInquiry.objects.get()
+        past = timezone.now() - timedelta(days=1)
+        row.expires_at = past
+        row.save(update_fields=["expires_at"])
+        self.assertEqual(self.post(privacy_consent="").status_code, 400)
+        row.refresh_from_db()
+        self.assertEqual(row.expires_at, past)
