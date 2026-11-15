@@ -106,7 +106,8 @@ def test_new_runtime_helper_never_accepts_public_runner_or_unreviewed_script():
     source = ROOT / "scripts/mpw_public_passenger_runtime_readonly_20261102.py"
     assert _blob_sha(source) == "0e4d22460ee62ebf9f89c94a6fecf6f9a14531c2"
     assert "mpw_runtime_readonly)" in bridge
-    assert 'if [[ "$operation" == "mpw_runtime_readonly"' in bridge
+    assert '"$operation" == "mpw_runtime_readonly"' in bridge
+    assert '"$operation" == "mpw_backup_readiness_readonly"' in bridge
     assert 'FACTORY_VPS_RUNNER:-0' in bridge
     assert "MPW_RUNTIME_REQUIRES_LOCAL_FACTORY_VPS" in bridge
     assert 'test "$(git hash-object -- "$script")"' in bridge
