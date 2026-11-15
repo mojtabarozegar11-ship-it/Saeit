@@ -195,6 +195,7 @@ def validate_offer(
     *,
     tenant_registry: Optional[Mapping[str, str]] = None,
     independent_release_verifier: Optional[Callable[[OfferContract], bool]] = None,
+    independent_domain_delegation_verifier: Optional[Callable[[str], bool]] = None,
 ) -> None:
     """Validate an offer without making it public or payable."""
     if not isinstance(offer, OfferContract):
@@ -205,6 +206,8 @@ def validate_offer(
         raise CommercialGateError("tenant_registry_invalid")
     if independent_release_verifier is not None and not callable(independent_release_verifier):
         raise CommercialGateError("release_verifier_invalid")
+    if independent_domain_delegation_verifier is not None and not callable(independent_domain_delegation_verifier):
+        raise CommercialGateError("delegation_verifier_invalid")
     host = _text(offer.canonical_host, "canonical_host").lower()
     # Host isolation must use a real canonical DNS hostname, not a string
     # such as "shop..example" that loosely matches a broad character regex.
@@ -282,6 +285,17 @@ def validate_offer(
         # rights-reviewed deliverable before an offer may be active.
         if not _HEX64.fullmatch(offer.delivery_manifest_sha256):
             raise CommercialGateError("active_digital_delivery_manifest_required")
+    if offer.active and (host == "bot.ai" or host.endswith(".bot.ai")):
+        # A registry entry or brand name cannot establish delegation of the
+        # third-party bot.ai domain. No verifier is configured by default.
+        if independent_domain_delegation_verifier is None:
+            raise CommercialGateError("independent_domain_delegation_required")
+        try:
+            delegated = independent_domain_delegation_verifier(host)
+        except Exception:
+            raise CommercialGateError("domain_delegation_verifier_failed") from None
+        if delegated is not True:
+            raise CommercialGateError("domain_delegation_unverified")
     if offer.active:
         # Source booleans and a tenant lookup table cannot prove approval,
         # legal eligibility or customer-facing release by themselves.
