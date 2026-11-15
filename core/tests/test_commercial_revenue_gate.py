@@ -131,7 +131,19 @@ class CommercialGateTests(unittest.TestCase):
             offer_type=OfferType.DIGITAL_PRODUCT, active=True,
             owner_approved=True, legal_reviewed=True,
             kyc_ready=True, rights_cleared=True,
+            delivery_manifest_sha256="a" * 64,
         ), tenant_registry={"moj_prop": "mojplaywin.com"})
+
+    def test_active_digital_or_game_offer_requires_file_manifest(self):
+        for service in (OfferType.DIGITAL_PRODUCT, OfferType.GAME):
+            with self.subTest(service=service):
+                with self.assertRaisesRegex(CommercialGateError,
+                                            "active_digital_delivery_manifest_required"):
+                    validate_offer(self.offer(
+                        offer_type=service, active=True,
+                        owner_approved=True, legal_reviewed=True,
+                        kyc_ready=True, rights_cleared=True,
+                    ), tenant_registry={"moj_prop": "mojplaywin.com"})
 
     def test_active_offer_without_domain_registry_is_blocked(self):
         with self.assertRaisesRegex(CommercialGateError, "tenant_registry_required_for_activation"):
