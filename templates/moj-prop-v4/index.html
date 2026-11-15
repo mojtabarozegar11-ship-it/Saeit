@@ -88,7 +88,11 @@
         'education-quarterly':Object.freeze({label:'quarterly',usd:'79.90'})
       });
       const requestedPlan=new URLSearchParams(window.location.search).get('plan');
-      const selectedPlan=Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)
+      const freeTierRequested=requestedService==='signals' &&
+        new URLSearchParams(window.location.search).get('tier')==='free';
+      // A free research request must never inherit a paid SKU from a URL.
+      const selectedPlan=!freeTierRequested &&
+        Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)
         ? requestedPlan : '';
       const planSummary=document.getElementById('selected-signal-plan');
       const notesField=document.getElementById('notes');
@@ -96,19 +100,39 @@
         ? 'Requested educational plan: '+selectedPlan+
           ' (indicative USD '+signalPlans[selectedPlan].usd+'; written quote required)\n'
         : '';
-      if(requestedService==='signals' && selectedPlan && !notesField.value.trim()){
-        notesField.value='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+' market brief. A recurring subscription and payment have not been authorized.';
+      const freePrefix=freeTierRequested
+        ? 'Requested free educational example: one-off manual review; no subscription or payment.\n'
+        : '';
+      let signalPrefill='';
+      if(requestedService==='signals' && !notesField.value.trim()){
+        if(freeTierRequested){
+          signalPrefill='Please provide a FREE historical educational example through mojtaba.bot.ai. '+
+            'This is a one-off research request for manual review, not a live trading signal, subscription, or delivery guarantee.';
+        }else if(selectedPlan){
+          signalPrefill='Please provide a risk-disclosed educational '+signalPlans[selectedPlan].label+
+            ' market brief. A recurring subscription and payment have not been authorized.';
+        }
+        if(signalPrefill) notesField.value=signalPrefill;
       }
       function syncSignalPlan(){
-        const show=Boolean(selectedPlan && serviceSelector.value==='signals');
+        const show=serviceSelector.value==='signals' && Boolean(selectedPlan || freeTierRequested);
         planSummary.hidden=!show;
-        planSummary.textContent=show
-          ? 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+
-            signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.'
-          : '';
-        notesField.maxLength=5000-(show ? planPrefix.length : 0);
+        planSummary.textContent=!show ? ''
+          : freeTierRequested
+          ? 'FREE educational example request. No automatic newsletter, payment or signal delivery.'
+          : 'Selected '+signalPlans[selectedPlan].label+' brief — indicative USD '+
+            signalPlans[selectedPlan].usd+'. No payment or subscription is active; written quote required.';
+        notesField.maxLength=5000-(show ? (freeTierRequested ? freePrefix.length : planPrefix.length) : 0);
       }
       serviceSelector.addEventListener('change',syncSignalPlan);
+      serviceSelector.addEventListener('change',function(){
+        // Remove only system-authored text; preserve customer changes.
+        if(serviceSelector.value!=='signals' && signalPrefill && notesField.value===signalPrefill){
+          notesField.value='';
+          signalPrefill='';
+          syncDigitalProduct();
+        }
+      });
       syncSignalPlan();
 
       async function csrf(signal){
@@ -145,7 +169,7 @@
         const service=document.getElementById('service').value;
         const horizon=document.getElementById('horizon').value;
         const notes=document.getElementById('notes').value.trim();
-        const submittedNotes=service==='signals' ? planPrefix+notes : notes;
+        const submittedNotes=service==='signals' ? (freeTierRequested ? freePrefix : planPrefix)+notes : notes;
         const website=document.getElementById('website').value.trim();
         const selectedProduct=service==='digital'&&permittedProducts.has(productSelector.value)?Number(productSelector.value):null;
         submit.disabled=true;
