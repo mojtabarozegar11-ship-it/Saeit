@@ -39,7 +39,7 @@ class CommercialGateTests(unittest.TestCase):
             "asset": "TRX",
             "amount": Decimal("30"),
             "currency": "TRX",
-            "transaction_id": "txid-52-verified",
+            "transaction_id": "a" * 64,
             "chain_finalized": True,
             "amount_matches": True,
             "recipient_matches_private_invoice": True,
@@ -425,7 +425,7 @@ class CommercialGateTests(unittest.TestCase):
             )
             ledger.advance(
                 order_id="order-52", target=CommercialState.FULFILLED,
-                event_id="fulfilled-52", payload_digest="c" * 64,
+                event_id="fulfilled-52", payload_digest="d" * 64,
                 fulfillment_manifest_sha256="d" * 64,
             )
             with self.assertRaisesRegex(CommercialGateError, "settlement_evidence_required"):
@@ -493,12 +493,12 @@ class CommercialGateTests(unittest.TestCase):
             ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
                            event_id="fulfill-pending-52", payload_digest="b" * 64)
             ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
-                           event_id="fulfilled-52", payload_digest="c" * 64,
+                           event_id="fulfilled-52", payload_digest="d" * 64,
                            fulfillment_manifest_sha256="d" * 64)
             with self.assertRaisesRegex(CommercialGateError, "verified_revenue_settlement_mismatch"):
                 ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
                                event_id="verified-52", payload_digest="e" * 64,
-                               payment_evidence=self.payment(transaction_id="different-valid-transaction"),
+                               payment_evidence=self.payment(transaction_id="b" * 64),
                                verified_revenue=True)
             self.assertEqual(ledger.snapshot("order-52")["state"], "fulfilled")
             ledger.advance(order_id="order-52", target=CommercialState.VERIFIED_REVENUE,
@@ -524,6 +524,94 @@ class CommercialGateTests(unittest.TestCase):
             ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
                            event_id="quote-52", payload_digest="a" * 64)
             self.assertEqual(ledger.snapshot("order-52")["state"], "quoted")
+            ledger.close()
+
+
+    def test_personal_social_subdomains_are_not_merchant_hosts(self):
+        with self.assertRaisesRegex(CommercialGateError, "canonical_host_invalid"):
+            validate_offer(self.offer(canonical_host="store.dr.mojtaba.rozegar"))
+
+    def test_payment_evidence_must_be_correct_type(self):
+        with self.assertRaisesRegex(CommercialGateError, "payment_evidence_invalid"):
+            validate_payment_evidence(None, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+
+    def test_payment_provider_rejects_placeholders_and_invalid_identifiers(self):
+        for provider, expected in (("none", "payment_provider_not_configured"),
+                                   ("test", "payment_provider_not_configured"),
+                                   ("manual review", "provider_invalid")):
+            with self.subTest(provider=provider):
+                with self.assertRaisesRegex(CommercialGateError, expected):
+                    validate_payment_evidence(self.payment(provider=provider), expected_order_id="order-52",
+                        expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+
+    def test_native_trx_receipt_cannot_use_fiat_invoice_unit(self):
+        with self.assertRaisesRegex(CommercialGateError, "native_trx_currency_required"):
+            validate_payment_evidence(self.payment(currency="USD"), expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="USD")
+
+    def test_tron_hash_must_be_canonical_64_hex_digits(self):
+        with self.assertRaisesRegex(CommercialGateError, "transaction_id_invalid"):
+            validate_payment_evidence(self.payment(transaction_id="txid-52-verified"),
+                expected_order_id="order-52", expected_invoice_id="invoice-52",
+                expected_amount=Decimal("30"), expected_currency="TRX")
+
+    def test_tron_hash_case_cannot_create_another_receipt(self):
+        kwargs = dict(expected_order_id="order-52", expected_invoice_id="invoice-52",
+                      expected_amount=Decimal("30"), expected_currency="TRX")
+        self.assertEqual(
+            validate_payment_evidence(self.payment(transaction_id="A" * 64), **kwargs),
+            validate_payment_evidence(self.payment(transaction_id="a" * 64), **kwargs),
+        )
+
+    def test_rejects_overly_large_commercial_amounts(self):
+        with self.assertRaisesRegex(CommercialGateError, "price_exceeds_safety_cap"):
+            validate_offer(self.offer(price=Decimal("1000000000000001")))
+
+    def test_state_transition_rejects_fake_enum(self):
+        with self.assertRaisesRegex(CommercialGateError, "invalid_state_transition"):
+            transition_state(CommercialState.ORDERED, "quoted")
+
+    def test_verified_revenue_attestation_requires_boolean_true(self):
+        with self.assertRaisesRegex(CommercialGateError, "verified_revenue_attestation_required"):
+            transition_state(CommercialState.FULFILLED, CommercialState.VERIFIED_REVENUE,
+                payment_evidence=self.payment(), verified_revenue="true")
+
+    def test_fulfillment_manifest_rejects_malformed_input_type(self):
+        with self.assertRaisesRegex(CommercialGateError, "fulfillment_manifest_required"):
+            transition_state(CommercialState.FULFILLMENT_PENDING, CommercialState.FULFILLED,
+                fulfillment_manifest_sha256=None)
+
+    def test_staged_ledger_rejects_nonstring_payload_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "payload_digest_invalid"):
+                ledger.advance(order_id="order-52", target=CommercialState.QUOTED,
+                               event_id="quote-52", payload_digest=None)
+            ledger.close()
+
+    def test_fulfillment_is_immutably_bound_to_manifest_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04", amount=Decimal("30"), currency="TRX")
+            for target, key in ((CommercialState.QUOTED, "quote-52"),
+                                (CommercialState.INVOICED, "invoice-52"),
+                                (CommercialState.PAYMENT_PENDING, "pending-52")):
+                ledger.advance(order_id="order-52", target=target, event_id=key, payload_digest="a" * 64)
+            ev = self.payment()
+            digest = validate_payment_evidence(ev, expected_order_id="order-52",
+                expected_invoice_id="invoice-52", expected_amount=Decimal("30"), expected_currency="TRX")
+            ledger.advance(order_id="order-52", target=CommercialState.SETTLED,
+                           event_id="settle-52", payload_digest=digest, payment_evidence=ev)
+            ledger.advance(order_id="order-52", target=CommercialState.FULFILLMENT_PENDING,
+                           event_id="fulfillment-pending-52", payload_digest="b" * 64)
+            with self.assertRaisesRegex(CommercialGateError, "fulfillment_payload_mismatch"):
+                ledger.advance(order_id="order-52", target=CommercialState.FULFILLED,
+                               event_id="fulfilled-52", payload_digest="c" * 64,
+                               fulfillment_manifest_sha256="d" * 64)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "fulfillment_pending")
             ledger.close()
 
 
