@@ -29,7 +29,9 @@ class SignalOrderContractError(ValueError):
     pass
 
 
-_ALLOWED_STATES = frozenset({"unpaid", "pending_external_settlement"})
+_ALLOWED_STATES = frozenset({"unpaid"})
+_MAX_ORDER_AGE = timedelta(hours=24)
+_MAX_BATCH_SIZE = 500
 _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{1,63}$")
 _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
@@ -55,7 +57,7 @@ def _id(value, field):
 
 
 def _timestamp(value):
-    if not isinstance(value, str) or not value.endswith("Z"):
+    if type(value) is not str or not value.endswith("Z"):
         raise SignalOrderContractError("requested_at_invalid")
     try:
         parsed = datetime.fromisoformat(value[:-1] + "+00:00")
@@ -91,20 +93,28 @@ def validate_order_intent(
     _id(intent.order_id, "order_id")
     if not isinstance(intent.price, Decimal) or not intent.price.is_finite():
         raise SignalOrderContractError("order_price_must_be_decimal")
+    if intent.price <= 0 or intent.price >= Decimal("1000000000"):
+        raise SignalOrderContractError("order_price_out_of_bounds")
+    max_places = 6 if intent.currency == "TRX" else 2
+    if intent.price.normalize().as_tuple().exponent < -max_places:
+        raise SignalOrderContractError("order_price_precision_exceeded")
     if intent.price != offer.price:
         raise SignalOrderContractError("order_price_mismatch")
     if intent.currency != offer.currency:
         raise SignalOrderContractError("order_currency_mismatch")
-    if not isinstance(intent.customer_ref_digest, str) or not _DIGEST.fullmatch(
-        intent.customer_ref_digest
-    ):
+    if (type(intent.customer_ref_digest) is not str
+            or not _DIGEST.fullmatch(intent.customer_ref_digest)
+            or intent.customer_ref_digest == "0" * 64):
         raise SignalOrderContractError("customer_ref_digest_invalid")
     requested = _timestamp(intent.requested_at)
     if now is not None:
-        if now.tzinfo is None:
+        if not isinstance(now, datetime) or now.tzinfo is None:
             raise SignalOrderContractError("order_clock_must_be_timezone_aware")
-        if requested > now.astimezone(timezone.utc) + timedelta(seconds=30):
+        server_now = now.astimezone(timezone.utc)
+        if requested > server_now + timedelta(seconds=30):
             raise SignalOrderContractError("order_requested_in_future")
+        if server_now - requested > _MAX_ORDER_AGE:
+            raise SignalOrderContractError("stale_order_intent")
     if intent.state not in _ALLOWED_STATES:
         raise SignalOrderContractError("settlement_required_before_paid_state")
 
@@ -121,6 +131,9 @@ def build_pending_order_record(
     return {
         "order_id": intent.order_id,
         "tenant_id": intent.tenant_id,
+        "canonical_host": route.canonical_host,
+        "path_prefix": route.path_prefix,
+        "requested_at": intent.requested_at,
         "offer_id": intent.offer_id,
         "bot_identity": BOT_IDENTITY,
         "language": intent.language,
@@ -130,6 +143,9 @@ def build_pending_order_record(
         "state": "awaiting_external_settlement",
         "payment_required": True,
         "entitlement_granted": False,
+        "receipt_issued": False,
+        "delivery_verified": False,
+        "settlement_verified": False,
         "financial_signal": False,
     }
 
@@ -137,9 +153,13 @@ def build_pending_order_record(
 def validate_order_batch(intents) -> tuple[SignalOrderIntent, ...]:
     if not isinstance(intents, (list, tuple)):
         raise SignalOrderContractError("order_batch_required")
+    if len(intents) > _MAX_BATCH_SIZE:
+        raise SignalOrderContractError("order_batch_too_large")
     seen = set()
     normalized = []
     for intent in intents:
+        if not isinstance(intent, SignalOrderIntent):
+            raise SignalOrderContractError("order_intent_required")
         _id(intent.order_id, "order_id")
         if intent.order_id in seen:
             raise SignalOrderContractError("duplicate_order_id")
