@@ -37,7 +37,7 @@ class LegacySignalRootRealSubmissionTests(SimpleTestCase):
         self.assertIn("const endpoint='/moj-prop-intake/';", self.html)
         self.assertIn("method:'POST'", self.html)
         self.assertIn("response.status!==201", self.html)
-        self.assertIn("body.request_id.startsWith('MOJPROP-')", self.html)
+        self.assertIn("!/^MOJPROP-[0-9]{8}-[A-F0-9]{8}$/.test(body.request_id)", self.html)
         self.assertIn("X-CSRFToken", self.html)
         self.assertIn("credentials:'same-origin'", self.html)
 
