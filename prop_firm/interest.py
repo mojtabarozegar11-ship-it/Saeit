@@ -5,19 +5,18 @@ payment authorization, regulated marketing campaign or permission to email.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import timedelta, timezone as utc_timezone
 from hashlib import sha256
 import hmac
 import ipaddress
 
 from django.conf import settings
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from django.utils import timezone
 
-from .models import PropInformationInquiry
+from .models import PropInformationInquiry, PropInterestHourlyBucket
 
 
 CONSENT_VERSION = "moj-prop-interest-2026-11-15-v1"
@@ -74,26 +73,34 @@ def intake_enabled():
     )
 
 
-def _rate_limit(ip, secret):
+def _rate_limit(ip, secret, when):
+    """Use a UNIQUE database row and row lock, not per-worker LocMemCache."""
     try:
         canonical_ip = ipaddress.ip_address(ip).compressed
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         raise PropInterestError("invalid_request_origin") from exc
-    # Do not persist the raw address in a lead table or log.
-    hour = timezone.now().strftime("%Y%m%d%H")
-    digest = _digest(hour + ":" + canonical_ip, secret)
-    key = "mojprop:interest:" + digest
+    if when.tzinfo is None:
+        raise PropInterestError("timezone_aware_clock_required")
+    hour = when.astimezone(utc_timezone.utc).replace(
+        minute=0, second=0, microsecond=0,
+    )
+    digest = _digest(hour.isoformat() + ":" + canonical_ip, secret)
     try:
-        if cache.add(key, 1, timeout=3600):
-            return
-        count = cache.incr(key)
-        if count > MAX_HOURLY_REQUESTS:
+        bucket, _ = PropInterestHourlyBucket.objects.select_for_update().get_or_create(
+            digest=digest,
+            defaults={
+                "count": 0,
+                "expires_at": hour + timedelta(hours=36),
+            },
+        )
+        if type(bucket.count) is not int or bucket.count >= MAX_HOURLY_REQUESTS:
             raise PropInterestError("interest_rate_limited")
+        bucket.count += 1
+        bucket.save(update_fields=["count"])
     except PropInterestError:
         raise
-    except Exception as exc:
+    except DatabaseError as exc:
         raise PropInterestError("interest_rate_check_unavailable") from exc
-
 
 @transaction.atomic
 def submit_inquiry(*, email, consent, remote_addr, now=None):
@@ -104,10 +111,10 @@ def submit_inquiry(*, email, consent, remote_addr, now=None):
         raise PropInterestError("explicit_privacy_consent_required")
     secret = _secret()
     canonical = canonical_inquiry_email(email)
-    _rate_limit(remote_addr, secret)
     timestamp = timezone.now() if now is None else now
     if timestamp.tzinfo is None:
         raise PropInterestError("timezone_aware_clock_required")
+    _rate_limit(remote_addr, secret, timestamp)
     digest = _digest(canonical, secret)
     row, created = PropInformationInquiry.objects.get_or_create(
         email_digest=digest,
