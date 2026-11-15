@@ -30,11 +30,13 @@ FILES = (
     Path("core/models.py"),
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
+    Path("core/mojprop_receipts.py"),
     Path("core/migrations/0041_mojprop_request.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
 REPLACE_FILES = (
     Path("core/mojprop_views.py"),
+    Path("core/mojprop_receipts.py"),
     Path("core/migrations/0041_mojprop_request.py"),
 )
 
@@ -89,8 +91,11 @@ def selftest(repo_root: Path) -> None:
     model = (repo_root / "core/models.py").read_text(encoding="utf-8")
     required = (
         ("mojprop_intake", view),
+        ("mojprop_receipt_status", view),
+        ("from .mojprop_receipts import", view),
         ("MojPropRequest", model),
         ('path("moj-prop-intake/"', urls),
+        ('path("moj-prop-status/"', urls),
         ("get_token", view),
         ("_ip_hash", view),
     )
@@ -233,11 +238,12 @@ def patch_admin(target: Path, source: Path) -> None:
 
 
 def patch_urlconf(target: Path) -> None:
+    """Install both API routes, repairing an older intake-only deployment."""
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
-    # Apache serves /moj-prop/ as a static directory. The public intake API
-    # therefore needs a root-level WSGI path in addition to the legacy alias.
-    if 'path("moj-prop-intake/"' in source:
+    intake_exists = 'path("moj-prop-intake/"' in source
+    status_exists = 'path("moj-prop-status/"' in source
+    if intake_exists and status_exists:
         print("MOJ_PROP_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
@@ -248,16 +254,22 @@ def patch_urlconf(target: Path) -> None:
     )
     if "path" not in import_line:
         raise RuntimeError("live URL configuration does not import path")
-    if "from core.mojprop_views import mojprop_intake" not in source:
-        source = source.rstrip() + (
-            "\n\n# Moj Prop public request intake; payment remains a separate system.\n"
-            "from core.mojprop_views import mojprop_intake\n"
-        )
-    route = 'urlpatterns += [path("moj-prop-intake/", mojprop_intake, name="mojprop_intake")]\n'
+    missing_imports = []
+    routes = []
+    if not intake_exists:
+        missing_imports.append("mojprop_intake")
+        routes.append('path("moj-prop-intake/", mojprop_intake, name="mojprop_intake")')
+    if not status_exists:
+        missing_imports.append("mojprop_receipt_status")
+        routes.append('path("moj-prop-status/", mojprop_receipt_status, name="mojprop_receipt_status")')
+    additions = (
+        "\n\n# Moj Prop public lead intake/status, not a payment system.\n"
+        + "from core.mojprop_views import " + ", ".join(missing_imports) + "\n"
+        + "urlpatterns += [" + ", ".join(routes) + "]\n"
+    )
     mode = stat.S_IMODE(target.stat().st_mode)
-    atomic_write_text(target, source.rstrip() + "\n" + route, mode)
+    atomic_write_text(target, source.rstrip() + additions, mode)
     print("MOJ_PROP_URLCONF_PATCH=PASS")
-
 
 def _passenger_config() -> str | None:
     candidates = []

@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [main]
 
-# Keep the latest push CI result; never cancel an in-progress PR review check.
+# Conserve included CI minutes: only the latest commit of each PR/ref needs a review result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: true
 
 jobs:
   test:
