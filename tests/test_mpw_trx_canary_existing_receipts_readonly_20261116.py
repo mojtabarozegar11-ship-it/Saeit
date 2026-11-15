@@ -83,6 +83,16 @@ class InvoiceGateReadOnlyTests(unittest.TestCase):
         self.assertIn('paid.select_related("order").order_by("pk")[:MAX_REVIEW]', script)
         self.assertIn('no_host_changes_or_financial_writes', script)
 
+    def test_host_missing_verifier_does_not_hide_paid_intent_query(self):
+        script = (ROOT / "scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py").read_text()
+        index_paid = script.index('from core.models import PaymentIntent')
+        index_validator = script.index('from core.crown_tron_receipts import verified_walletless_credit')
+        self.assertLess(index_paid, index_validator)
+        self.assertIn('receipt_validator_available = False', script)
+        self.assertIn('record["stored_receipt_validator_available"]', script)
+        self.assertIn('record["paid_intent_model_available"] = True', script)
+        self.assertIn('except ImportError as exc:', script)
+
     def test_live_runner_workflow_cannot_send_payment_or_change_cpanel(self):
         wf = (ROOT / ".github/workflows/mpw-trx-safe-flags-evidence-20261115.yml").read_text()
         self.assertIn("scripts/mpw_trx_canary_existing_receipts_readonly_20261116.py", wf)
