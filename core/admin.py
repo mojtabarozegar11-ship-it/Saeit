@@ -310,10 +310,22 @@ class MojPropRequestStatusForm(forms.ModelForm):
         return cleaned
 
 
+@admin.action(
+    description="Start manual review of consented new Moj Prop requests",
+    permissions=["change"],
+)
+def start_mojprop_review(modeladmin, request, queryset):
+    """Review only brand-new consented leads; never alter offered cases."""
+    updated = queryset.filter(status="new", consent=True).update(
+        status="reviewing", reviewed_at=timezone.now()
+    )
+    modeladmin.message_user(request, f"{updated} new request(s) moved to reviewing.")
+
+
 @admin.register(MojPropRequest)
 class MojPropRequestAdmin(ModelAdmin):
     form = MojPropRequestStatusForm
-    actions = ("download_offer_drafts",)
+    actions = ("download_offer_drafts", "start_mojprop_review")
     list_display = ("request_id", "name", "email", "route", "status", "offer_stage", "created_at")
     list_filter = ("status", "route", "horizon", "created_at")
     search_fields = ("request_id", "name", "email", "notes")
