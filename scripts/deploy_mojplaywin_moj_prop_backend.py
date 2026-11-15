@@ -31,14 +31,21 @@ FILES = (
     Path("core/admin.py"),
     Path("core/mojprop_views.py"),
     Path("core/mojprop_receipts.py"),
+    Path("core/mojprop_catalog_contract.py"),
+    Path("core/mojprop_workflow.py"),
+    Path("core/mojprop_offer_draft.py"),
+    Path("core/mojprop_quote_contract.py"),
+    Path("core/mojprop_quote_views.py"),
     Path("core/migrations/0041_mojprop_request.py"),
+    Path("core/migrations/0042_mojprop_offer.py"),
+    Path("core/migrations/0043_mojprop_digital_inquiry.py"),
+    Path("core/migrations/0044_mojprop_acceptance_evidence.py"),
+    Path("core/migrations/0045_mojprop_delivery_evidence.py"),
 )
 ALL_FILES = (URLCONF,) + FILES
-REPLACE_FILES = (
-    Path("core/mojprop_views.py"),
-    Path("core/mojprop_receipts.py"),
-    Path("core/migrations/0041_mojprop_request.py"),
-)
+REPLACE_FILES = tuple(path for path in FILES if path not in (
+    Path("core/models.py"), Path("core/admin.py"),
+))
 
 
 def digest(path: Path) -> str:
