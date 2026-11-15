@@ -196,6 +196,40 @@ jobs:
           assert "From US$249" in catalog
           print("Moj Prop catalog is live; MojPlayWin home and admin login still return HTTP 200.")
           PY
+      - name: Diagnose Moj Prop intake before rollback
+        if: failure() && steps.backend.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-moj-prop-catalog-ssh"
+          timeout 120s ssh -F "$WORK/config" saeit-host /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os, sys, traceback
+          from pathlib import Path
+          root = Path('/home/zomorod2/Saeit-staging')
+          sys.path.insert(0, str(root))
+          os.chdir(root)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+          try:
+              import django
+              django.setup()
+              from django.test import RequestFactory, Client
+              from django.urls import resolve
+              from core.mojprop_views import mojprop_intake
+              request = RequestFactory().get('/moj-prop/intake/', HTTP_HOST='mojplaywin.com')
+              direct = mojprop_intake(request)
+              print('MOJ_PROP_DIRECT_STATUS=' + str(direct.status_code))
+              print('MOJ_PROP_DIRECT_BODY=' + direct.content[:300].decode('utf-8', 'replace'))
+              print('MOJ_PROP_RESOLVED=' + repr(resolve('/moj-prop/intake/').func))
+              client = Client(HTTP_HOST='mojplaywin.com', secure=True)
+              client.raise_request_exception = False
+              response = client.get('/moj-prop/intake/')
+              print('MOJ_PROP_CLIENT_STATUS=' + str(response.status_code))
+              print('MOJ_PROP_CLIENT_BODY=' + response.content[:300].decode('utf-8', 'replace'))
+              if getattr(response, 'exc_info', None):
+                  traceback.print_exception(*response.exc_info)
+          except Exception:
+              traceback.print_exc()
+          PY
       - name: Roll back Moj Prop backend if verification fails
         if: failure() && steps.backend.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
