@@ -6,12 +6,11 @@ endpoint. No merchant-wallet signature or per-sale approval is necessary.
 """
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
-import secrets
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 import re
 
 from django.conf import settings
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from django.utils import timezone
 from core.models import Order
 
@@ -90,33 +89,16 @@ def reserve_order_invoice(order_id,asset,*,buyer,quote,now=None):
         amount=int(atomic)
         if amount<=0 or len(str(amount))>50:
             raise InvoiceRejected("Unrepresentable smallest-unit amount")
-        # Every invoice has one unique smallest-unit amount on the same receiver.
-        # Otherwise two simultaneous purchases of the same priced item would
-        # be indistinguishable. Bounded sub-cent native-coin adjustment is shown
-        # to the buyer in the exact ETH/TRX quote, never hidden at settlement.
-        max_extra=(Decimal("0.0049")/rate*Decimal(10)**decimals)
-        maximum=min(100000,int(max_extra.to_integral_value(rounding=ROUND_FLOOR)))
-        if maximum<1:
-            raise InvoiceRejected("Quote cannot encode a distinct micro-amount")
-        for attempt in range(24):
-            smallest=str(amount+secrets.randbelow(maximum+1))
-            if len(smallest)>50:
-                raise InvoiceRejected("Quote smallest-unit text too long")
-            if CommerceInvoice.objects.filter(
-                network=network,recipient=recipient,amount_atomic=smallest
-            ).exists():
-                continue
-            try:
-                with transaction.atomic():
-                    return CommerceInvoice.objects.create(
-                        order=order,asset=asset,network=network,recipient=recipient,
-                        expected_sender=address,amount_atomic=smallest,total_usd=total,
-                        quote_usd_per_asset=rate,quote_source=quote.source,
-                        quote_observed_at=quote.observed_at,
-                        sender_challenge_id=buyer.challenge_id,
-                        sender_signature_verified_at=buyer.verified_at,
-                        issued_at=now,expires_at=now+timedelta(minutes=10),
-                    )
-            except IntegrityError:
-                continue
-        raise InvoiceRejected("No unique exact-amount quote available; retry later")
+        # Two independent orders may have the same final price. A verified
+        # blockchain transaction is unique by (network, tx_hash), and its
+        # sender, recipient, exact amount, finality and order binding are all
+        # revalidated at settlement. Never add random micro-amounts.
+        return CommerceInvoice.objects.create(
+            order=order,asset=asset,network=network,recipient=recipient,
+            expected_sender=address,amount_atomic=str(amount),total_usd=total,
+            quote_usd_per_asset=rate,quote_source=quote.source,
+            quote_observed_at=quote.observed_at,
+            sender_challenge_id=buyer.challenge_id,
+            sender_signature_verified_at=buyer.verified_at,
+            issued_at=now,expires_at=now+timedelta(minutes=10),
+        )
