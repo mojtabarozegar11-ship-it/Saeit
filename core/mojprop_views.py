@@ -191,7 +191,11 @@ def mojprop_intake(request):
         return _json({"ok": False, "detail": "Consent must be an explicit choice."}, status=400)
 
     # Honeypot field: real forms never display or populate this value.
-    if _text(payload, "website", 120):
+    try:
+        honeypot = _text(payload, "website", 120)
+    except ValueError:
+        return _json({"ok": False, "detail": "Malformed request fields."}, status=400)
+    if honeypot:
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
     # Reject rather than silently truncate buyer identity or requested scope.
