@@ -8,7 +8,7 @@ import hmac
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from .contact_intake import canonical_contact_email
 from django.db import transaction
 from django.http import Http404, HttpResponse
 from django.views.decorators.cache import never_cache
@@ -55,7 +55,8 @@ def signal_interest(request):
         return HttpResponse("Invalid form", status=400)
     if set(request.POST) != EXPECTED_FIELDS | {"csrfmiddlewaretoken"}:
         return HttpResponse("Unexpected form fields", status=400)
-    if any(len(request.POST.getlist(k)) != 1 for k in EXPECTED_FIELDS):
+    if (any(len(request.POST.getlist(k)) != 1 for k in EXPECTED_FIELDS)
+            or len(request.POST.getlist("csrfmiddlewaretoken")) != 1):
         return HttpResponse("Duplicate form fields", status=400)
 
     brand = request.POST["brand"]
@@ -66,12 +67,8 @@ def signal_interest(request):
             or request.POST["contact_consent"] != "yes"
             or request.POST["consent_version"] != "mojtaba-signals-interest-v1"):
         return HttpResponse("Invalid plan or consent", status=400)
-    raw = request.POST["email"]
-    if not isinstance(raw, str) or not raw or len(raw) > 254 or raw != raw.strip():
-        return HttpResponse("Invalid email", status=400)
-    email = raw.lower()
     try:
-        validate_email(email)
+        email = canonical_contact_email(request.POST["email"])
     except ValidationError:
         return HttpResponse("Invalid email", status=400)
     ip = request.META.get("REMOTE_ADDR", "")

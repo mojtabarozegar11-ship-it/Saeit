@@ -12,7 +12,7 @@ from prop_firm.models import PropAccount, PropChallengeEnrollment
 class PropInterestIntakeTests(TestCase):
     PATH = "/moj-prop/interest/"
     VALID = {
-        "email": "Buyer@Example.com",
+        "email": "Buyer@farmco.org",
         "plan_code": "MOJ-PROP-01",
         "consent_version": "moj-prop-interest-v1",
         "contact_consent": "yes",
@@ -33,7 +33,7 @@ class PropInterestIntakeTests(TestCase):
         response = self.post()
         self.assertEqual(response.status_code, 202)
         lead = PropInterest.objects.get()
-        self.assertEqual(lead.email, "buyer@example.com")
+        self.assertEqual(lead.email, "buyer@farmco.org")
         self.assertEqual(lead.plan_code, "MOJ-PROP-01")
         self.assertEqual(lead.status, "new")
         self.assertEqual(lead.source_language, "en")
@@ -51,7 +51,7 @@ class PropInterestIntakeTests(TestCase):
         lead = PropInterest.objects.get()
         lead.status = "withdrawn"
         lead.save(update_fields=["status", "updated_at"])
-        self.assertEqual(self.post(dict(self.VALID,email="buyer@example.com")).status_code, 202)
+        self.assertEqual(self.post(dict(self.VALID,email="buyer@farmco.org")).status_code, 202)
         lead.refresh_from_db()
         self.assertEqual(lead.status, "withdrawn")
         self.assertEqual(PropInterest.objects.count(), 1)
@@ -123,6 +123,61 @@ class PropInterestIntakeTests(TestCase):
             self.assertEqual(self.post().status_code,202)
         self.assertEqual(self.post().status_code,429)
         self.assertEqual(PropInterest.objects.count(),1)
+
+    def test_query_set_cannot_bulk_reactivate_withdrawn_prop_consent(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        with self.assertRaises(ValidationError):
+            PropInterest.objects.filter(pk=lead.pk).update(status="contacted")
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_prop_bulk_update_cannot_revive_withdrawn_lead(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = PropInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.status = "new"
+        with self.assertRaises(ValidationError):
+            PropInterest.objects.bulk_update([lead], ["status"])
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, "withdrawn")
+
+    def test_bulk_withdrawal_can_only_mark_status_without_rewriting_identity(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        self.assertEqual(PropInterest.objects.all().update(status="withdrawn"), 1)
+        lead = PropInterest.objects.get()
+        self.assertEqual(lead.status, "withdrawn")
+        with self.assertRaises(ValidationError):
+            PropInterest.objects.filter(pk=lead.pk).update(
+                status="withdrawn", email="somebody@farmco.org",
+            )
+        self.assertEqual(PropInterest.objects.get().email, "buyer@farmco.org")
+
+    def test_reserved_email_domains_never_enter_prop_lead_inbox(self):
+        for value in ("Buyer@Example.com", "buyer@example.org", "a@example.net",
+                      "a@guest.mojplaywin.com", "a@host.invalid",
+                      "a@internal.local", "a@host.test", "a@fake.example"):
+            with self.subTest(address=value):
+                self.assertEqual(self.post({**self.VALID, "email": value}).status_code, 400)
+        self.assertEqual(PropInterest.objects.count(), 0)
+
+    def test_unexpected_form_keys_and_duplicate_csrf_are_rejected(self):
+        cases = [
+            list(self.VALID.items()) + [("is_paid", "true")],
+            list(self.VALID.items()) + [("csrfmiddlewaretoken", "a"),
+                                        ("csrfmiddlewaretoken", "b")],
+            list(self.VALID.items()) + [("email", "other@farmco.org")],
+        ]
+        for fields in cases:
+            with self.subTest(fields=fields[-1]):
+                self.assertEqual(self.post(fields).status_code, 400)
+        self.assertEqual(PropInterest.objects.count(), 0)
 
     def test_critical_duplicate_fields_are_rejected(self):
         form = urlencode(list(self.VALID.items()) + [("plan_code","MOJ-PROP-02")])

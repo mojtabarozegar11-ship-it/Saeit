@@ -1,10 +1,12 @@
 """One canonical opt-in CRM for Mojtaba.bot.ai signal interest, not subscriptions."""
 from django.core.exceptions import ValidationError
 from django.db import models
+from .consent_guard_queryset import ConsentStatusQuerySet
 
 
 class SignalInterest(models.Model):
     """A genuine enquiry; creating this row NEVER charges a card or wallet."""
+    objects = ConsentStatusQuerySet.as_manager()
     email = models.EmailField(max_length=254)
     brand = models.CharField(max_length=24)
     plan_code = models.CharField(max_length=40)

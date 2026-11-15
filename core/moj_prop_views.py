@@ -110,7 +110,7 @@ def moj_prop_interest(request):
     from django.conf import settings
     from django.core.cache import cache
     from django.core.exceptions import ValidationError
-    from django.core.validators import validate_email
+    from core.contact_intake import canonical_contact_email
     from django.db import transaction
     from django.http import HttpResponse
     from prop_firm.models import PropInterest
@@ -132,7 +132,11 @@ def moj_prop_interest(request):
     # Django QueryDict.get returns the last value on duplicate keys. Reject
     # duplicate critical fields so an intermediate proxy cannot reinterpret them.
     required = ("email", "plan_code", "contact_consent", "consent_version", "source_language")
-    if any(len(request.POST.getlist(field)) != 1 for field in required):
+    fields = set(request.POST)
+    if (fields not in (set(required), set(required) | {"csrfmiddlewaretoken"})
+            or any(len(request.POST.getlist(field)) != 1 for field in required)
+            or ("csrfmiddlewaretoken" in fields
+                and len(request.POST.getlist("csrfmiddlewaretoken")) != 1)):
         return HttpResponse("Invalid form fields", status=400)
     if (request.POST["plan_code"] != "MOJ-PROP-01"
             or request.POST["contact_consent"] != "yes"
@@ -141,12 +145,8 @@ def moj_prop_interest(request):
     language = request.POST["source_language"]
     if language not in SUPPORTED_CODES:
         return HttpResponse("Unsupported language", status=400)
-    raw = request.POST["email"]
-    if len(raw) > 254 or raw != raw.strip():
-        return HttpResponse("Valid email required", status=400)
-    email = raw.lower()
     try:
-        validate_email(email)
+        email = canonical_contact_email(request.POST["email"])
     except ValidationError:
         return HttpResponse("Valid email required", status=400)
     # Rate-limit BEFORE database writes. Store only an IP HMAC bucket, never raw IP.

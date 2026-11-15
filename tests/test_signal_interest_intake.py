@@ -16,7 +16,7 @@ from core.models import Order, PaymentIntent
 class SignalInterestIntakeTests(TestCase):
     URL = "/market-signals/interest/"
     BASE = {
-        "email":"Client@Example.org",
+        "email":"Client@farmco.org",
         "brand":"saman",
         "plan_code":"moj-signals-standard",
         "source_language":"en",
@@ -38,7 +38,7 @@ class SignalInterestIntakeTests(TestCase):
         response = self.post()
         self.assertEqual(response.status_code,202)
         lead = SignalInterest.objects.get()
-        self.assertEqual(lead.email,"client@example.org")
+        self.assertEqual(lead.email,"client@farmco.org")
         self.assertEqual(lead.brand,"saman")
         self.assertEqual(lead.plan_code,"moj-signals-standard")
         self.assertEqual(lead.status,"new")
@@ -142,6 +142,48 @@ class SignalInterestIntakeTests(TestCase):
             with self.subTest(field=field,value=value):
                 self.assertEqual(self.post({**self.BASE,field:value}).status_code,400)
         self.assertEqual(SignalInterest.objects.count(),0)
+
+    def test_query_set_update_cannot_restore_opted_out_signal_lead(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        with self.assertRaises(ValidationError):
+            SignalInterest.objects.filter(pk=lead.pk).update(status="new")
+        self.assertEqual(SignalInterest.objects.get().status, "withdrawn")
+
+    def test_signal_bulk_update_rejects_hidden_reactivation(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        lead = SignalInterest.objects.get()
+        lead.status = "withdrawn"
+        lead.save(update_fields=["status"])
+        lead.status = "contacted"
+        with self.assertRaises(ValidationError):
+            SignalInterest.objects.bulk_update([lead], ["status"])
+        self.assertEqual(SignalInterest.objects.get().status, "withdrawn")
+
+    def test_bulk_withdrawal_is_permitted_but_identity_rewriting_is_not(self):
+        from django.core.exceptions import ValidationError
+        self.assertEqual(self.post().status_code, 202)
+        self.assertEqual(SignalInterest.objects.all().update(status="withdrawn"), 1)
+        with self.assertRaises(ValidationError):
+            SignalInterest.objects.all().update(status="withdrawn", brand="zahra")
+        self.assertEqual(SignalInterest.objects.get().brand, "saman")
+
+    def test_reserved_addresses_cannot_create_salable_signal_leads(self):
+        for email in ("a@example.com", "a@example.org", "a@example.net",
+                      "a@guest.mojplaywin.com", "a@somewhere.test",
+                      "a@somewhere.invalid", "a@somewhere.example"):
+            with self.subTest(email=email):
+                self.assertEqual(self.post({**self.BASE, "email": email}).status_code, 400)
+        self.assertEqual(SignalInterest.objects.count(), 0)
+
+    def test_duplicate_csrf_form_field_is_rejected(self):
+        fields = list(self.BASE.items()) + [("csrfmiddlewaretoken", "another")]
+        self.assertEqual(self.post(fields).status_code, 400)
+        self.assertEqual(SignalInterest.objects.count(), 0)
 
     def test_duplicate_sensitive_field_rejected(self):
         data=list(self.BASE.items())+[("brand","zahra")]
