@@ -66,7 +66,15 @@ def _atomic(path: Path, data: bytes, mode: int = 0o644) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(temporary, mode)
-        os.replace(temporary, path)
+        # Atomic create-if-absent: os.replace would clobber a file added
+        # between preflight and publication (TOCTOU). Both files share one
+        # directory/filesystem, so hard-link creation fails when it exists.
+        os.link(temporary, path, follow_symlinks=False)
+        directory_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         if temporary.exists():
             temporary.unlink()
