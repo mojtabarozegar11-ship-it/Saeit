@@ -4,6 +4,7 @@ import unittest
 
 from scripts.mojprop_live_sales_queue_boolean_readonly_20261116 import (
     CATEGORIES, git_blob_sha256_legacy_sha1, sanitize_action_queue,
+    inspect_minimal_intake_presence,
 )
 
 
@@ -71,6 +72,62 @@ class LiveMojPropQueuePrivacyTests(unittest.TestCase):
             with self.subTest(report=report):
                 with self.assertRaises(ValueError):
                     sanitize_action_queue(report)
+
+
+class MinimalIntakeFallbackTests(unittest.TestCase):
+    def simulate(self, *results):
+        class Cursor:
+            def __init__(self):
+                self.queries = []
+                self.answers = iter(results)
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def execute(self, query):
+                if not query.lstrip().upper().startswith("SELECT "):
+                    raise AssertionError("mutation attempted")
+                self.queries.append(query)
+            def fetchone(self):
+                return (next(self.answers),)
+        class DB:
+            def __init__(self):
+                self.cursor_instance = Cursor()
+            def cursor(self):
+                return self.cursor_instance
+        db = DB()
+        out = inspect_minimal_intake_presence(db)
+        self.assertTrue(all("SELECT" in q for q in db.cursor_instance.queries))
+        self.assertFalse(out["exact_lead_counts_or_personal_data_emitted"])
+        self.assertFalse(out["offer_or_payment_created"])
+        return out, len(db.cursor_instance.queries)
+
+    def test_missing_live_table_is_unknown_not_zero_leads(self):
+        out, queries = self.simulate(0)
+        self.assertIsNone(out["any_actionable_consent_scoped_lead"])
+        self.assertFalse(out["limited_intake_presence_checked"])
+        self.assertEqual(queries, 1)
+
+    def test_missing_consent_column_is_unknown_not_zero_leads(self):
+        out, queries = self.simulate(1, 1)
+        self.assertIsNone(out["any_actionable_consent_scoped_lead"])
+        self.assertFalse(out["limited_intake_presence_checked"])
+        self.assertEqual(queries, 2)
+
+    def test_live_consented_inquiry_exists_without_revealing_identity(self):
+        out, queries = self.simulate(1, 2, 1)
+        self.assertTrue(out["any_actionable_consent_scoped_lead"])
+        self.assertEqual(out["categories_with_work_pending"], ["consented_active_intake"])
+        self.assertEqual(queries, 3)
+        self.assertNotIn("private@example", json.dumps(out))
+
+    def test_verified_empty_table_is_false_but_no_revenue_claim(self):
+        out, queries = self.simulate(1, 2, 0)
+        self.assertFalse(out["any_actionable_consent_scoped_lead"])
+        self.assertEqual(out["categories_with_work_pending"], [])
+        self.assertTrue(out["limited_intake_presence_checked"])
+        self.assertFalse(out["revenue_recognized"])
+        self.assertEqual(queries, 3)
 
 
 if __name__ == "__main__":
