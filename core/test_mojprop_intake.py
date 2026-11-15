@@ -318,6 +318,102 @@ class MojPropIntakeTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(MojPropRequest.objects.count(), 0)
 
+    def test_new_client_uuidv4_submission_has_an_opaque_receipt(self):
+        import uuid
+        submission_id = str(uuid.uuid4())
+        reply = self.post(self.payload(submission_id=submission_id))
+        self.assertEqual(reply.status_code, 201)
+        self.assertFalse(reply.json()["replayed"])
+        request_id = reply.json()["request_id"]
+        self.assertTrue(request_id.startswith("MOJPROP-I-"))
+        self.assertNotIn(submission_id, request_id)
+        self.assertLessEqual(len(request_id), 40)
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_same_browser_retry_recovers_receipt_without_duplicate_lead(self):
+        import uuid
+        form = self.payload(submission_id=str(uuid.uuid4()))
+        original = self.post(form)
+        self.assertEqual(original.status_code, 201)
+        retry = self.post(form)
+        self.assertEqual(retry.status_code, 200)
+        self.assertTrue(retry.json()["replayed"])
+        self.assertEqual(retry.json()["request_id"], original.json()["request_id"])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_exact_retry_remains_recoverable_after_new_request_throttle(self):
+        import uuid
+        form = self.payload(submission_id=str(uuid.uuid4()))
+        original = self.post(form)
+        self.assertEqual(original.status_code, 201)
+        for index in range(4):
+            response = self.post(self.payload(email=f"buyer{index}@farmco.org"))
+            self.assertEqual(response.status_code, 201)
+        limited = self.post(self.payload(
+            email="new@farmco.org", submission_id=str(uuid.uuid4()),
+        ))
+        self.assertEqual(limited.status_code, 429)
+        retry = self.post(form)
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json()["request_id"], original.json()["request_id"])
+        self.assertEqual(MojPropRequest.objects.count(), 5)
+
+    def test_reusing_client_uuid_for_changed_buyer_or_service_returns_conflict(self):
+        import uuid
+        token = str(uuid.uuid4())
+        self.assertEqual(self.post(self.payload(submission_id=token)).status_code, 201)
+        for change in (
+            {"name": "Different Client"},
+            {"email": "new@farmco.org"},
+            {"service": "audit"},
+            {"horizon": "month"},
+            {"notes": "A different valid research request for customers."},
+        ):
+            with self.subTest(change=change):
+                answer = self.post(self.payload(submission_id=token, **change))
+                self.assertEqual(answer.status_code, 409)
+                self.assertFalse(answer.json()["ok"])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_invalid_or_non_random_retry_keys_do_not_create_leads(self):
+        import uuid
+        for bad in ("", "123", "x" * 36, str(uuid.uuid1()), str(uuid.uuid4()) + "X",
+                    123, None, False, {"id": "fake"}):
+            with self.subTest(bad=repr(bad)):
+                result = self.post(self.payload(submission_id=bad))
+                self.assertEqual(result.status_code, 400)
+                self.assertIn("submission_id", result.json().get("fields", {}))
+        self.assertEqual(MojPropRequest.objects.count(), 0)
+
+    def test_unique_new_browser_keys_can_submit_distinct_real_requests(self):
+        import uuid
+        numbers = []
+        for index in range(2):
+            result = self.post(self.payload(submission_id=str(uuid.uuid4())))
+            self.assertEqual(result.status_code, 201)
+            numbers.append(result.json()["request_id"])
+        self.assertEqual(len(set(numbers)), 2)
+        self.assertEqual(MojPropRequest.objects.count(), 2)
+
+    def test_existing_live_legacy_browser_without_retry_key_still_works(self):
+        result = self.post(self.payload())
+        self.assertEqual(result.status_code, 201)
+        self.assertFalse(result.json()["replayed"])
+        self.assertEqual(MojPropRequest.objects.count(), 1)
+
+    def test_actual_html_has_stable_retry_and_real_contact_permission(self):
+        source = (Path(settings.BASE_DIR) /
+                  "templates/moj-prop-v4/index.html").read_text("utf-8")
+        self.assertIn("submission_id:submissionId", source)
+        self.assertIn("crypto.randomUUID()", source)
+        self.assertIn("crypto.getRandomValues", source)
+        self.assertIn("if(!submissionId) submissionId=secureSubmissionId()", source)
+        self.assertIn('minlength="20" maxlength="5000"', source)
+        self.assertIn('maxlength="254"', source)
+        self.assertIn("I agree to be contacted at this email about this request only", source)
+        self.assertIn('role="status" aria-live="polite"', source)
+        self.assertIn("Submission may have arrived.", source)
+
     def test_owner_only_status_not_a_payment_or_trade(self):
         from core.models import Order, PaymentIntent
         answer = self.post(self.payload())
