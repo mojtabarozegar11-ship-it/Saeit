@@ -104,8 +104,16 @@ class Starter30PublicOfferTests(unittest.TestCase):
         self.assertEqual(PRESERVED_LIVE_FILES, (Path("signals/index.html"),))
         self.assertNotIn(Path("signals/index.html"), FILES)
         workflow = (ROOT / ".github/workflows/mojplaywin-moj-prop-deploy.yml").read_text("utf-8")
-        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.owner_approved_static_release == true", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("MOJ_PROP_API_PREFLIGHT=PASS", workflow)
+        for required in (
+            "inputs.owner_approved_static_release == true",
+            "MOJPROP_FULL_DB_APP_MEDIA_RESTORE_VERIFIED",
+            "MOJPROP_PASSENGER_TENANT_ISOLATION_VERIFIED",
+            "MOJPROP_STATIC_ROLLBACK_VERIFIED",
+            "MOJPROP_STATIC_APPROVED_MAIN_SHA == github.sha",
+        ):
+            self.assertIn(required, workflow)
         self.assertIn("MOJ_PROP_STATUS_API_PREFLIGHT=PASS", workflow)
 
 
