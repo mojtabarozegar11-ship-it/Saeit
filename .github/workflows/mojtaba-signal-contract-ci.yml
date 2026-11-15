@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "core/mojtaba_signal_service_contract.py"
+      - "core/mojtaba_signal_order_contract.py"
       - "core/tests/test_mojtaba_signal_service_contract.py"
+      - "core/tests/test_mojtaba_signal_order_contract.py"
       - ".github/workflows/mojtaba-signal-contract-ci.yml"
   push:
     branches:
@@ -24,4 +26,4 @@ jobs:
       - name: Run signal contract tests
         env:
           PYTHONPATH: core
-        run: python -m unittest discover -v -s core/tests -p 'test_mojtaba_signal_service_contract.py'
+        run: python -m unittest discover -v -s core/tests -p 'test_mojtaba_signal*_contract.py'
