@@ -432,6 +432,23 @@ class CommercialGateTests(unittest.TestCase):
             ledger.close()
 
 
+    def test_multilingual_financial_signal_instructions_are_rejected(self):
+        for action in ("سیگنال خرید بیت کوین", "سیگنال فروش طلا",
+                       "ورود به معامله", "حد ضرر ۵ درصد", "حد سود",
+                       "إشارة شراء الذهب", "إشارة بيع", "توصية تداول",
+                       "ＢＵＹ ETH", "b\u200buy TRX", "سیگنال‌فروش"):
+            with self.subTest(action=action), self.assertRaisesRegex(
+                    CommercialGateError, "financial_signal_disabled"):
+                validate_signal_request(requested_action=action)
+
+    def test_nonfinancial_multilingual_market_research_is_allowed(self):
+        for action in ("تحلیل بازار کشاورزی", "گزارش علمی زعفران",
+                       "ملخص اقتصادي عربي", "research_summary",
+                       "گزارش فروش محصولات کشاورزی"):
+            with self.subTest(action=action):
+                validate_signal_request(requested_action=action)
+
+
 if __name__ == "__main__":
     unittest.main()
 
