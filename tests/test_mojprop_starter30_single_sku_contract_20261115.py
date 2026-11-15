@@ -31,7 +31,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
         self.assertIn("deterministic risk report", self.contract)
         self.assertIn("30 native TRX", self.contract)
         self.assertIn("10 self-reported simulated sessions", self.catalog)
-        self.assertIn("ten-session simulated risk journal", self.home)
+        self.assertIn("10-session self-reported simulation journal", self.home)
         self.assertIn("Ten-session journal template", self.detail)
         self.assertNotIn("two-page", self.home.lower())
         self.assertNotIn("two-page", self.catalog.lower())
