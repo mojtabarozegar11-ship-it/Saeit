@@ -118,6 +118,29 @@ class CommercialGateTests(unittest.TestCase):
         with self.assertRaisesRegex(CommercialGateError, "moj_prop_release_gates_incomplete"):
             validate_offer(self.offer(active=True, owner_approved=True, rights_cleared=True))
 
+    def test_active_non_prop_service_requires_legal_kyc_and_rights(self):
+        for service in (OfferType.SIGNAL, OfferType.TRX_GATEWAY,
+                        OfferType.DIGITAL_PRODUCT, OfferType.GAME):
+            with self.subTest(service=service):
+                with self.assertRaisesRegex(CommercialGateError, "offer_release_gates_incomplete"):
+                    validate_offer(self.offer(offer_type=service, active=True,
+                                              owner_approved=True))
+
+    def test_active_non_prop_service_can_pass_source_validation_with_all_gates(self):
+        validate_offer(self.offer(
+            offer_type=OfferType.DIGITAL_PRODUCT, active=True,
+            owner_approved=True, legal_reviewed=True,
+            kyc_ready=True, rights_cleared=True,
+        ))
+
+    def test_string_boolean_gate_spoofing_is_rejected(self):
+        for field in ("active", "owner_approved", "legal_reviewed",
+                      "kyc_ready", "rights_cleared",
+                      "public_wallet_published", "automatic_payment_enabled"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(CommercialGateError, "offer_gates_must_be_boolean"):
+                    validate_offer(self.offer(**{field: "false"}))
+
     def test_signal_cannot_enable_financial_calls(self):
         with self.assertRaisesRegex(CommercialGateError, "financial_signal_disabled"):
             validate_offer(self.offer(offer_type=OfferType.SIGNAL, financial_call_enabled=True))
