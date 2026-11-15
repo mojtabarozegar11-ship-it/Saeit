@@ -68,7 +68,10 @@ def sanitize_action_queue(raw: object) -> dict:
 def main() -> None:
     if ROOT.is_symlink() or not ROOT.is_dir() or not COMMAND.is_file():
         raise SystemExit("MOJPROP_LIVE_ROOT_NOT_VERIFIED")
-    if COMMAND.is_symlink() or ROOT.resolve() != ROOT:
+    if ROOT.resolve() != ROOT or any(
+        ancestor.is_symlink() for ancestor in
+        (COMMAND, COMMAND.parent, COMMAND.parent.parent, COMMAND.parent.parent.parent)
+    ):
         raise SystemExit("MOJPROP_UNSAFE_QUEUE_SOURCE")
     try:
         source = COMMAND.read_bytes()
@@ -76,16 +79,25 @@ def main() -> None:
             raise SystemExit("MOJPROP_QUEUE_LIVE_SOURCE_DIFFERS_FROM_REVIEWED")
         os.chdir(ROOT)
         sys.path.insert(0, str(ROOT))
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+        os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
         import django
         django.setup()
+        from django.db import connection
         from core.management.commands.mojprop_sales_action_queue import (
             action_queue_snapshot,
         )
-        # detail_limit=0 is mandatory. Neither IDs nor customer fields are read
-        # into the JSON report; query predicates use consent-scoped ORM counts.
-        summary = sanitize_action_queue(action_queue_snapshot(detail_limit=0))
-    except (ImportError, OSError, ValueError, TypeError, KeyError) as exc:
+        if connection.vendor != "mysql":
+            raise ValueError("unexpected database vendor")
+        # Enforce SELECT-only on the connection during ORM execution, even if
+        # the current main source or a helper were to regress unexpectedly.
+        def select_only(execute, sql, params, many, context):
+            if type(sql) is not str or not sql.lstrip().upper().startswith("SELECT "):
+                raise PermissionError("read-only SQL guard")
+            return execute(sql, params, many, context)
+        with connection.execute_wrapper(select_only):
+            # detail_limit=0: no IDs are collected for the JSON report.
+            summary = sanitize_action_queue(action_queue_snapshot(detail_limit=0))
+    except Exception as exc:
         # Only the class is logged, never exception messages or customer data.
         raise SystemExit("MOJPROP_QUEUE_INSPECTION_BLOCKED_" + type(exc).__name__)
     print("MOJPROP_PRIVATE_SALES_QUEUE_GATE=" + json.dumps(summary, sort_keys=True))
