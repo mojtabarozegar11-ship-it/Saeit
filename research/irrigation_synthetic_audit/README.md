@@ -68,3 +68,42 @@ hashes of the original Google Sheets backend or an already-submitted journal fil
   external redistribution, public release, licensing and revised submission
   remain separate author/editorial decisions.
 
+
+## Independent educational enterprise-budget tool (not an R01 result)
+
+A separate, dependency-free companion in this repository offers **transparent
+farm-economics arithmetic from user-entered inputs**:
+
+- `farm_enterprise_budget.py` — gross return, water and electricity cost,
+  gross margin, net return *after entered allocated fixed costs*, break-even
+  crop price/yield, physical irrigation-water productivity, and controlled
+  same-crop/season/currency/area comparisons.
+- `farm_enterprise_report_cli.py` — offline report generator accepting one
+  local JSON baseline and an optional local JSON alternative. Duplicate JSON
+  keys, nonfinite values, malformed decimals, unapproved currencies, symlink
+  inputs and oversized files are rejected.
+- `test_farm_enterprise_budget.py` and `test_farm_enterprise_report_cli.py`
+  — standalone Python standard-library regressions.
+- `FARM_ENTERPRISE_WATER_ECONOMICS_CHAPTER_FA_EN_20261115.md` — bilingual
+  teaching chapter with explicitly fictional calculations and scientific limits.
+
+**This utility does not ingest R01's 3,780 synthetic policy records as
+measured farm costs or profits. No live farm input, contract, payment,
+published journal submission, website deployment or verified customer sale is
+implied.**
+
+For a locally authorized scenario file with exact fields specified in
+`FarmScenario`:
+
+```bash
+python3 -m research.irrigation_synthetic_audit.farm_enterprise_report_cli \
+  --baseline /secure/input/scenario.json > /secure/output/enterprise-report.json
+python3 -m unittest -v \
+  research.irrigation_synthetic_audit.test_farm_enterprise_budget \
+  research.irrigation_synthetic_audit.test_farm_enterprise_report_cli
+```
+
+A report may be offered as educational modeling **only after** legal rights,
+input provenance, quotation terms, supported delivery and payment permissions
+are separately approved. Its `payment_collected` and
+`source_inputs_verified` fields are always false.
