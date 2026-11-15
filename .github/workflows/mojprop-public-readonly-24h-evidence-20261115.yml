@@ -33,16 +33,43 @@ jobs:
             "signal_desk|https://mojplaywin.com/moj-prop/signals/"
             "single_bot_root|https://mojtaba.bot.ai/"
           )
+          unhealthy=0
           for item in "${targets[@]}"; do
             name="${item%%|*}"
             url="${item#*|}"
-            code="$(curl --proto '=https' --tlsv1.2 -L --max-redirs 1 \
+            # -w emits diagnostics even when curl cannot complete HTTP.
+            # Do not print response bodies, resolved IPs, secrets or buyer data.
+            # Exit codes are curl transport errors, never HTTP status codes.
+            metrics="$(curl --proto '=https' --tlsv1.2 -L --max-redirs 1 \
               --connect-timeout 6 --max-time 15 --silent --show-error \
               -H 'Cache-Control: no-cache' \
-              -o "$check_dir/$name.body" -w '%{http_code}' "$url" 2>/dev/null || true)"
+              -o "$check_dir/$name.body" \
+              -w '%{http_code}|%{exitcode}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_starttransfer}' \
+              "$url" 2>/dev/null || true)"
+            IFS='|' read -r code curl_exit dns_time connect_time tls_time ttfb <<< "$metrics"
             [[ "$code" =~ ^[0-9]{3}$ ]] || code="000"
+            [[ "$curl_exit" =~ ^[0-9]+$ ]] || curl_exit="unknown"
+            case "$curl_exit" in
+              0) class="http_response" ;;
+              6) class="dns_resolution_failed" ;;
+              7) class="tcp_connection_failed" ;;
+              28) class="timeout" ;;
+              35|60) class="tls_certificate_or_handshake_failed" ;;
+              47) class="redirect_limit" ;;
+              52|56) class="empty_or_interrupted_response" ;;
+              *) class="other_transport_error" ;;
+            esac
+            if [[ "$code" != "200" || "$curl_exit" != "0" ]]; then
+              unhealthy=$((unhealthy+1))
+            fi
             echo "GET_ONLY_${name}_HTTP=$code"
-            printf '%s\n' "- $name : HTTP $code (GET only)" >> "$GITHUB_STEP_SUMMARY"
+            echo "GET_ONLY_${name}_CURL_EXIT=$curl_exit"
+            echo "GET_ONLY_${name}_TRANSPORT_CLASS=$class"
+            echo "GET_ONLY_${name}_DNS_SECONDS=${dns_time:-unknown}"
+            echo "GET_ONLY_${name}_TCP_SECONDS=${connect_time:-unknown}"
+            echo "GET_ONLY_${name}_TLS_SECONDS=${tls_time:-unknown}"
+            echo "GET_ONLY_${name}_TTFB_SECONDS=${ttfb:-unknown}"
+            printf '%s\n' "- $name : HTTP $code; curl exit $curl_exit ($class); DNS ${dns_time:-?}s; TCP ${connect_time:-?}s; TLS ${tls_time:-?}s; TTFB ${ttfb:-?}s — GET only" >> "$GITHUB_STEP_SUMMARY"
             if [[ "$code" == "200" && "$name" == "mojprop_root" ]]; then
               if grep -Fq 'starter-30-trx' "$check_dir/$name.body"; then
                 echo "PUBLIC_STARTER_IN_ROOT=yes"
@@ -71,6 +98,51 @@ jobs:
           PY
             fi
           done
+          if [[ "$unhealthy" == "0" ]]; then
+            echo "PUBLIC_BUYER_ROUTE_GATE=PASS"
+          else
+            echo "PUBLIC_BUYER_ROUTE_GATE=DEGRADED"
+          fi
+          echo "PUBLIC_UNHEALTHY_ROUTE_COUNT=$unhealthy"
+          # Cross-check the public bot hostname against independent HTTPS DNS
+          # resolvers. Never print returned A records or raw DNS JSON; only
+          # the DNS response code and record count are needed for diagnosis.
+          for provider in google cloudflare; do
+            if [[ "$provider" == "google" ]]; then
+              doh_url='https://dns.google/resolve?name=mojtaba.bot.ai&type=A'
+            else
+              doh_url='https://cloudflare-dns.com/dns-query?name=mojtaba.bot.ai&type=A'
+            fi
+            json_path="$check_dir/doh-$provider.json"
+            doh_http="$(curl --proto '=https' --tlsv1.2 --max-redirs 0 \
+              --connect-timeout 5 --max-time 10 --silent --show-error \
+              -H 'Accept: application/dns-json' \
+              -o "$json_path" -w '%{http_code}' "$doh_url" 2>/dev/null || true)"
+            [[ "$doh_http" =~ ^[0-9]{3}$ ]] || doh_http="000"
+            echo "BOT_DOH_${provider}_HTTP=$doh_http"
+            if [[ "$doh_http" == "200" ]]; then
+              python3 - "$provider" "$json_path" <<'PY'
+          import json
+          import sys
+          provider, source = sys.argv[1:]
+          try:
+              with open(source, encoding="utf-8") as handle:
+                  info = json.load(handle)
+              status = info.get("Status")
+              answers = info.get("Answer", [])
+              if type(status) is not int or type(answers) is not list:
+                  raise ValueError("Unexpected DNS response shape")
+              print(f"BOT_DOH_{provider}_DNS_RCODE={status}")
+              print(f"BOT_DOH_{provider}_ANSWER_COUNT={len(answers)}")
+          except (OSError, ValueError, TypeError):
+              print(f"BOT_DOH_{provider}_DNS_RCODE=unavailable")
+          PY
+            else
+              echo "BOT_DOH_${provider}_DNS_RCODE=unavailable"
+            fi
+          done
+          # This read-only diagnostic job reports an observation and must not
+          # be mistaken for a launch authorization, irrespective of exit code.
           echo "PUBLIC_CHECK_IS_READ_ONLY=true"
           echo "NO_POST_NO_PAYMENT_NO_RELEASE=true"
           echo "HTTP evidence does not prove a persisted buyer lead, payment, merchant custody, or a restore plan."
