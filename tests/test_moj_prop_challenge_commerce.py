@@ -87,6 +87,31 @@ class MojPropChallengeCheckoutSafetyTests(SimpleTestCase):
         self.assertEqual(x.maximum_initial_funded_accounts, 0)
         self.assertEqual(x.capital_shortfall_usd, 50)
 
+    def test_operating_buffer_is_not_represented_as_trader_funding(self):
+        # Cash = 500, reserve = 100, existing = 250, operations = 100.
+        # Only 50 USD is left, so even Plan 1's first 100 USD is unfunded.
+        x = self.ready(free_treasury_usd="500", protected_reserves_usd="100",
+                       existing_commitments_usd="250",
+                       operating_buffer_usd="100")
+        self.assertEqual(x.audited_cash_free_usd, 50)
+        self.assertEqual(x.maximum_initial_funded_accounts, 0)
+        self.assertEqual(x.capital_shortfall_usd, 50)
+        self.assertFalse(x.eligible_for_external_legal_review)
+        self.assertIn("real_initial_account_capital_shortfall", x.blockers)
+
+    def test_operating_buffer_does_not_block_fully_backed_capital(self):
+        x = self.ready(free_treasury_usd="500", protected_reserves_usd="100",
+                       existing_commitments_usd="200",
+                       operating_buffer_usd="50")
+        self.assertEqual(x.audited_cash_free_usd, 150)
+        self.assertEqual(x.maximum_initial_funded_accounts, 1)
+        self.assertEqual(x.capital_shortfall_usd, 0)
+
+    def test_operating_cash_negative_float_and_boolean_are_refused(self):
+        for malformed in ("-1", -1, 2.0, True, False, "NaN", "Infinity"):
+            with self.subTest(value=repr(malformed)), self.assertRaises(ValueError):
+                self.ready(operating_buffer_usd=malformed)
+
     def test_existing_funded_commitments_reduced_before_new_offer(self):
         x = self.ready(free_treasury_usd=1000, protected_reserves_usd=100,
                        existing_commitments_usd=850)
