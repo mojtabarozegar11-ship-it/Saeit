@@ -11,11 +11,13 @@ class SignalEntitlementTests(unittest.TestCase):
         state = advance_signal_entitlement(
             state, "payment_verified",
             evidence={"verified": True, "receipt_id": "receipt:2026:0001"},
+                    payment_verifier=lambda _: True,
             payment_verifier=lambda stored: stored["receipt_id"] == "receipt:2026:0001",
         )
         state = advance_signal_entitlement(
             state, "delivery_acknowledged",
             evidence={"delivery_id": "delivery:2026:0001"},
+                                       delivery_verifier=lambda _: True,
             delivery_verifier=lambda stored: stored["delivery_id"] == "delivery:2026:0001",
         )
         self.assertEqual(state, "delivered")
@@ -72,6 +74,7 @@ if __name__ == "__main__":
                 advance_signal_entitlement(
                     "paid", "delivery_acknowledged",
                     evidence={"delivery_id": value},
+                    delivery_verifier=lambda _: True,
                 )
 
     def test_malformed_states_and_evidence_return_domain_error(self):
