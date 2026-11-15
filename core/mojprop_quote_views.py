@@ -106,7 +106,8 @@ def customer_quote(request, token):
         # Signed links must not bypass the independently validated commercial
         # terms, currency, acceptance evidence or current quote validity.
         make_quote_snapshot(offer)
-    except (signing.BadSignature, signing.SignatureExpired, TypeError, ValueError):
+    except (signing.BadSignature, signing.SignatureExpired, QuoteContractError,
+            TypeError, ValueError):
         raise Http404 from None
     # This intentionally excludes name, email, internal notes and IP metadata.
     response = HttpResponse(
