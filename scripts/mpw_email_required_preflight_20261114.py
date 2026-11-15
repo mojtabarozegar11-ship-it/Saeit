@@ -157,12 +157,23 @@ def _has_raise_string(node, value):
         return False
     # A message in a comment, assignment or dead string is not a denial.
     # Only count the expected diagnostic when attached to a raise statement.
+    def reachable_raises(current):
+        # A raise inside an explicitly disabled branch cannot enforce ownership.
+        if isinstance(current, ast.If) and isinstance(current.test, ast.Constant):
+            branch = current.body if bool(current.test.value) else current.orelse
+            for child in branch:
+                yield from reachable_raises(child)
+            return
+        if isinstance(current, ast.Raise):
+            yield current
+        for child in ast.iter_child_nodes(current):
+            yield from reachable_raises(child)
+
     return any(
-        isinstance(item, ast.Raise)
-        and item.exc is not None
+        item.exc is not None
         and any(isinstance(part, ast.Constant) and part.value == value
                 for part in ast.walk(item.exc))
-        for item in ast.walk(node)
+        for item in reachable_raises(node)
     )
 
 
