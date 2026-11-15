@@ -40,7 +40,9 @@ def action_queue_snapshot(*, detail_limit=0):
         raise ValueError("detail_limit must be 0..25")
 
     now = timezone.now()
-    active = MojPropRequest.objects.exclude(
+    # Queue entries may become customer contact instructions. Do not surface
+    # a lead without its documented consent or after its lifecycle closes.
+    active = MojPropRequest.objects.filter(consent=True).exclude(
         status__in=("spam", "closed", "delivered")
     )
     valid_issued = MojPropOffer.objects.filter(
@@ -52,6 +54,7 @@ def action_queue_snapshot(*, detail_limit=0):
         lead_id=OuterRef("pk"), status__in=("draft", "approved")
     )
     accepted = MojPropOffer.objects.filter(
+        lead__consent=True,
         status="accepted", reviewed_at__isnull=False,
         issued_at__isnull=False, accepted_at__isnull=False,
     ).exclude(acceptance_reference="")
@@ -75,30 +78,44 @@ def action_queue_snapshot(*, detail_limit=0):
         ), "request_id"),
         ("draft_over_24h", MojPropOffer.objects.filter(
             status="draft", created_at__lte=now - timedelta(days=1)
-        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")).filter(
+            lead__consent=True
+        ), "lead__request_id"),
         ("approved_not_issued", MojPropOffer.objects.filter(
             status="approved", reviewed_at__isnull=False,
             issued_at__isnull=True,
-        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")).filter(
+            lead__consent=True
+        ), "lead__request_id"),
         ("issued_expires_soon", MojPropOffer.objects.filter(
             status="issued", issued_at__isnull=False,
             expires_at__gt=now,
             expires_at__lte=now + timedelta(days=1),
-        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
+        ).exclude(lead__status__in=("spam", "closed", "delivered")).filter(
+            lead__consent=True
+        ), "lead__request_id"),
         ("issued_already_expired", MojPropOffer.objects.filter(
             status="issued", issued_at__isnull=False,
             expires_at__lte=now,
-        ).exclude(lead__status__in=("spam", "closed", "delivered")), "lead__request_id"),
-        ("accepted_no_artifact", accepted.annotate(
+        ).exclude(lead__status__in=("spam", "closed", "delivered")).filter(
+            lead__consent=True
+        ), "lead__request_id"),
+        ("accepted_no_artifact", accepted.exclude(
+            lead__status__in=("spam", "closed", "delivered")
+        ).annotate(
             has_delivery=Exists(delivery_for_offer)
         ).filter(has_delivery=False), "lead__request_id"),
         ("prepared_not_dispatched", MojPropDeliveryEvidence.objects.filter(
-            status="prepared", offer__status="accepted",
+            status="prepared", offer__status="accepted", offer__lead__consent=True,
+        ).exclude(
+            offer__lead__status__in=("spam", "closed", "delivered")
         ), "offer__lead__request_id"),
         ("sent_unacknowledged", MojPropDeliveryEvidence.objects.filter(
             status="sent", handed_off_at__lte=now - timedelta(days=1),
             handoff_reference__gt="", clearance_reference__gt="",
-            offer__status="accepted",
+            offer__status="accepted", offer__lead__consent=True,
+        ).exclude(
+            offer__lead__status__in=("spam", "closed", "delivered")
         ), "offer__lead__request_id"),
         ("digital_without_issued_quote", lead_needing_issued.filter(
             route="digital", product_id__isnull=False,
