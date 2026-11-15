@@ -3,7 +3,7 @@ from decimal import Decimal
 import unittest
 
 from services.mojtaba_signal_catalog import (
-    PLANS, SignalCatalogError, build_manual_signal_offer, get_signal_plan,
+    PLANS, SignalCatalogError, SignalPlan, build_manual_signal_offer, get_signal_plan,
 )
 
 class SignalCatalogTests(unittest.TestCase):
@@ -44,6 +44,28 @@ class SignalCatalogTests(unittest.TestCase):
         for plan in PLANS.values():
             self.assertNotIn("guaranteed", plan.description.casefold())
             self.assertIn("risk", plan.description.casefold())
+
+    def test_future_plans_cannot_hide_market_risk_or_promise_profit(self):
+        for description in (
+            "Twelve individually reviewed briefs with provenance and limitations.",
+            "Guaranteed market returns with no risk under any economic scenario.",
+            "a" * 801,
+            "",
+        ):
+            with self.subTest(description=description), self.assertRaises(SignalCatalogError):
+                SignalPlan(
+                    "education-extended", "Extended market research",
+                    "monthly", Decimal("19.90"), description,
+                )
+
+    def test_new_plan_requires_known_cadence_and_canonical_identifier(self):
+        description = "Twelve reviewed educational reports, with market-risk disclosure and independent source records."
+        for plan_id, cadence in (
+            ("INVALID PLAN", "monthly"), ("education-extended", "continuous"),
+            (None, "weekly"), ("education-extended", 7),
+        ):
+            with self.subTest(plan_id=plan_id, cadence=cadence), self.assertRaises(SignalCatalogError):
+                SignalPlan(plan_id, "Research plan", cadence, Decimal("19.90"), description)
 
 if __name__ == "__main__":
     unittest.main()
