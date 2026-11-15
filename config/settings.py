@@ -106,6 +106,14 @@ from services.mojtaba_tron_owner_receiver import (
 )
 MPW_TRX_INVOICE_RELEASE_VERIFIED = env.bool("MPW_TRX_INVOICE_RELEASE_VERIFIED", default=False)
 MPW_TRX_SOLIDITY_RELEASE_VERIFIED = env.bool("MPW_TRX_SOLIDITY_RELEASE_VERIFIED", default=False)
+
+# Historical, already-paid core-walletless digital entitlement bridge.
+# SOURCE ONLY until independent DB/media restore + authenticated buyer/download
+# adapter are reviewed. Never enable based solely on a paid flag or QR alone.
+MPW_WALLETLESS_EXISTING_PAID_DIGITAL_ACCESS_ENABLED = env.bool(
+    "MPW_WALLETLESS_EXISTING_PAID_DIGITAL_ACCESS_ENABLED", default=False
+)
+
 MPW_TRX_MERCHANT_BINDINGS = owner_merchant_registry(
     invoice_enabled=MPW_TRX_INVOICE_RELEASE_VERIFIED,
     finality_enabled=MPW_TRX_SOLIDITY_RELEASE_VERIFIED,
