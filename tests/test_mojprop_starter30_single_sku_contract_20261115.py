@@ -61,7 +61,7 @@ class Starter30SingleSkuTests(unittest.TestCase):
     def test_archived_two_page_plan_is_never_canonical_30_trx(self):
         self.assertTrue(self.archived.startswith("# ⚠️ ARCHIVED NONCANONICAL DESIGN"))
         self.assertIn("NOT FOR BUYER OFFER OR FULFILMENT", self.archived)
-        self.assertIn("not the unique sellable 30 TRX Starter30", self.archived)
+        self.assertIn("**not** the unique sellable 30 TRX Starter30", self.archived)
         self.assertIn("as historical research", self.archived)
         self.assertIn("10-session simulated trading journal", self.archived)
 
