@@ -14,7 +14,9 @@ import os
 import re
 from pathlib import Path
 import shutil
+import signal
 import stat
+import time
 import subprocess
 import sys
 import tempfile
@@ -329,6 +331,32 @@ def _print_passenger_diagnostics() -> None:
         print("MOJ_PROP_PROCESS_DIAGNOSTIC_ERROR=" + type(exc).__name__)
 
 
+def _restart_public_lswsgi_workers() -> None:
+    marker = "/home/zomorod2/mojplaywin.com/passenger_wsgi.py"
+    pids = []
+    proc_root = Path("/proc")
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
+        if "lswsgi" in command and marker in command:
+            pids.append(int(entry.name))
+    print("MOJ_PROP_PUBLIC_LSWGI_TARGETS=" + ",".join(str(pid) for pid in sorted(pids)))
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except PermissionError as exc:
+            raise RuntimeError(f"Cannot restart MojPlayWin lswsgi worker {pid}") from exc
+    if pids:
+        time.sleep(2)
+    print("MOJ_PROP_PUBLIC_LSWGI_RESTART=PASS")
+
+
 def restart_passenger() -> None:
     restart = DOCROOT / "tmp" / "restart.txt"
     if restart.is_symlink():
@@ -347,6 +375,7 @@ def restart_passenger() -> None:
         if result.returncode != 0:
             raise RuntimeError(f"Passenger restart failed with exit code {result.returncode}")
         print("MOJ_PROP_PASSENGER_RESTART=PASS")
+        _restart_public_lswsgi_workers()
         return
     selector = shutil.which("cloudlinux-selector")
     if selector:
@@ -363,8 +392,10 @@ def restart_passenger() -> None:
             print("MOJ_PROP_SELECTOR_RESTART=" + result.stdout[:2000].replace("\n", " "))
             if result.returncode == 0:
                 print("MOJ_PROP_PASSENGER_RESTART=CLOUDLINUX_SELECTOR")
+                _restart_public_lswsgi_workers()
                 return
         raise RuntimeError("CloudLinux Python Selector could not restart mojplaywin.com")
+    _restart_public_lswsgi_workers()
     print("MOJ_PROP_PASSENGER_RESTART=TOUCH_ONLY")
 
 
