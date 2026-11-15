@@ -84,7 +84,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — funded and active (owner declaration)",
         "funding_hold": "Funding in progress — temporarily inactive",
-        "owner_disclosure": "Owner-declared status is not independently verified bank, broker or TRON settlement evidence. Checkout on this site remains unavailable."
+        "owner_disclosure": "Owner-declared status is not independently verified bank, broker or TRON settlement evidence. Checkout on this site remains unavailable.",
+        "owner_fee": "Owner-confirmed entry fee"
       }
     },
     "fa": {
@@ -169,7 +170,8 @@
       "plan_status": {
         "owner_active": "پلن ۱ — فعال و تأمین سرمایه‌شده (طبق اعلام مالک)",
         "funding_hold": "در حال تأمین سرمایه — موقتاً غیرفعال",
-        "owner_disclosure": "وضعیت اعلامی مالک به معنی احراز مستقل موجودی بانکی، کارگزار یا تسویه ترون نیست. پرداخت از این صفحه همچنان غیرفعال است."
+        "owner_disclosure": "وضعیت اعلامی مالک به معنی احراز مستقل موجودی بانکی، کارگزار یا تسویه ترون نیست. پرداخت از این صفحه همچنان غیرفعال است.",
+        "owner_fee": "ورودیه تأییدشده توسط مالک"
       }
     },
     "ar": {
@@ -254,7 +256,8 @@
       "plan_status": {
         "owner_active": "الخطة 1 — ممولة ونشطة حسب تصريح المالك",
         "funding_hold": "التمويل قيد التنفيذ — غير نشطة مؤقتاً",
-        "owner_disclosure": "تصريح المالك ليس دليلاً مستقلاً على رصيد البنك أو الوسيط أو تسوية TRX. الدفع من هذه الصفحة غير متاح."
+        "owner_disclosure": "تصريح المالك ليس دليلاً مستقلاً على رصيد البنك أو الوسيط أو تسوية TRX. الدفع من هذه الصفحة غير متاح.",
+        "owner_fee": "رسوم الدخول المعتمدة من المالك"
       }
     },
     "de": {
@@ -339,7 +342,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — laut Eigentümer finanziert und aktiv",
         "funding_hold": "Finanzierung läuft — vorübergehend inaktiv",
-        "owner_disclosure": "Die Angabe des Eigentümers ist kein unabhängiger Bank-, Broker- oder TRX-Zahlungsnachweis. Der Checkout bleibt hier deaktiviert."
+        "owner_disclosure": "Die Angabe des Eigentümers ist kein unabhängiger Bank-, Broker- oder TRX-Zahlungsnachweis. Der Checkout bleibt hier deaktiviert.",
+        "owner_fee": "Vom Eigentümer bestätigte Teilnahmegebühr"
       }
     },
     "fr": {
@@ -424,7 +428,8 @@
       "plan_status": {
         "owner_active": "Formule 1 — financée et active selon le propriétaire",
         "funding_hold": "Financement en cours — temporairement inactive",
-        "owner_disclosure": "La déclaration du propriétaire ne prouve pas indépendamment les fonds bancaires, le courtier ou le règlement TRX. Le paiement reste désactivé ici."
+        "owner_disclosure": "La déclaration du propriétaire ne prouve pas indépendamment les fonds bancaires, le courtier ou le règlement TRX. Le paiement reste désactivé ici.",
+        "owner_fee": "Frais d'entrée confirmés par le propriétaire"
       }
     },
     "es": {
@@ -509,7 +514,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — financiado y activo según el propietario",
         "funding_hold": "Financiación en curso — temporalmente inactivo",
-        "owner_disclosure": "La declaración del propietario no verifica por sí sola fondos bancarios, bróker ni liquidación TRX. El pago en esta página sigue deshabilitado."
+        "owner_disclosure": "La declaración del propietario no verifica por sí sola fondos bancarios, bróker ni liquidación TRX. El pago en esta página sigue deshabilitado.",
+        "owner_fee": "Cuota de entrada confirmada por el propietario"
       }
     },
     "pt": {
@@ -594,7 +600,8 @@
       "plan_status": {
         "owner_active": "Plano 1 — financiado e ativo segundo o proprietário",
         "funding_hold": "Financiamento em andamento — temporariamente inativo",
-        "owner_disclosure": "A declaração do proprietário não comprova de forma independente fundos, corretora ou liquidação TRX. O pagamento nesta página permanece desativado."
+        "owner_disclosure": "A declaração do proprietário não comprova de forma independente fundos, corretora ou liquidação TRX. O pagamento nesta página permanece desativado.",
+        "owner_fee": "Taxa de entrada confirmada pelo proprietário"
       }
     },
     "it": {
@@ -679,7 +686,8 @@
       "plan_status": {
         "owner_active": "Piano 1 — finanziato e attivo secondo il titolare",
         "funding_hold": "Finanziamento in corso — temporaneamente inattivo",
-        "owner_disclosure": "La dichiarazione del titolare non è prova bancaria, del broker o di regolamento TRX indipendente. Il pagamento qui resta disattivato."
+        "owner_disclosure": "La dichiarazione del titolare non è prova bancaria, del broker o di regolamento TRX indipendente. Il pagamento qui resta disattivato.",
+        "owner_fee": "Quota d'ingresso confermata dal titolare"
       }
     },
     "tr": {
@@ -764,7 +772,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — sahibinin beyanına göre finanse edilmiş ve aktif",
         "funding_hold": "Finansman sürüyor — geçici olarak pasif",
-        "owner_disclosure": "Sahibin beyanı banka, aracı kurum veya TRX ödeme doğrulamasının bağımsız kanıtı değildir. Bu sayfada ödeme kapalıdır."
+        "owner_disclosure": "Sahibin beyanı banka, aracı kurum veya TRX ödeme doğrulamasının bağımsız kanıtı değildir. Bu sayfada ödeme kapalıdır.",
+        "owner_fee": "Sahibin onayladığı giriş ücreti"
       }
     },
     "ru": {
@@ -849,7 +858,8 @@
       "plan_status": {
         "owner_active": "План 1 — обеспечен и активен по заявлению владельца",
         "funding_hold": "Финансирование продолжается — временно неактивен",
-        "owner_disclosure": "Заявление владельца не заменяет независимую проверку банка, брокера или расчёта TRX. Оплата на этой странице отключена."
+        "owner_disclosure": "Заявление владельца не заменяет независимую проверку банка, брокера или расчёта TRX. Оплата на этой странице отключена.",
+        "owner_fee": "Вступительный взнос, подтверждённый владельцем"
       }
     },
     "zh": {
@@ -934,7 +944,8 @@
       "plan_status": {
         "owner_active": "方案1 — 所有人声明已出资并运营",
         "funding_hold": "融资进行中 — 暂时停用",
-        "owner_disclosure": "所有人声明不是银行资金、经纪商或 TRX 结算的独立证明。本页面暂不提供支付。"
+        "owner_disclosure": "所有人声明不是银行资金、经纪商或 TRX 结算的独立证明。本页面暂不提供支付。",
+        "owner_fee": "所有人确认的报名费"
       }
     },
     "ja": {
@@ -1019,7 +1030,8 @@
       "plan_status": {
         "owner_active": "プラン1 — 所有者申告では資金確保済み・稼働中",
         "funding_hold": "資金調達中 — 一時停止",
-        "owner_disclosure": "所有者の申告は銀行残高、ブローカー、TRX決済の独立した証明ではありません。このページの決済は無効です。"
+        "owner_disclosure": "所有者の申告は銀行残高、ブローカー、TRX決済の独立した証明ではありません。このページの決済は無効です。",
+        "owner_fee": "所有者承認済みの参加費"
       }
     },
     "ko": {
@@ -1104,7 +1116,8 @@
       "plan_status": {
         "owner_active": "플랜 1 — 소유자 신고상 자금 확보 및 운영 중",
         "funding_hold": "자금 조달 중 — 임시 비활성",
-        "owner_disclosure": "소유자의 신고는 은행 잔고, 중개사 또는 TRX 결제의 독립 검증이 아닙니다. 이 페이지의 결제는 비활성입니다."
+        "owner_disclosure": "소유자의 신고는 은행 잔고, 중개사 또는 TRX 결제의 독립 검증이 아닙니다. 이 페이지의 결제는 비활성입니다.",
+        "owner_fee": "소유자가 확인한 참가비"
       }
     },
     "hi": {
@@ -1189,7 +1202,8 @@
       "plan_status": {
         "owner_active": "प्लान 1 — मालिक के अनुसार वित्तपोषित और सक्रिय",
         "funding_hold": "वित्तपोषण जारी — अस्थायी रूप से निष्क्रिय",
-        "owner_disclosure": "मालिक का दावा बैंक, ब्रोकर या TRX सेटलमेंट का स्वतंत्र सत्यापन नहीं है। इस पेज पर भुगतान अभी बंद है।"
+        "owner_disclosure": "मालिक का दावा बैंक, ब्रोकर या TRX सेटलमेंट का स्वतंत्र सत्यापन नहीं है। इस पेज पर भुगतान अभी बंद है।",
+        "owner_fee": "मालिक द्वारा पुष्टि किया गया प्रवेश शुल्क"
       }
     },
     "id": {
@@ -1274,7 +1288,8 @@
       "plan_status": {
         "owner_active": "Paket 1 — didanai dan aktif menurut pemilik",
         "funding_hold": "Pendanaan berlangsung — sementara tidak aktif",
-        "owner_disclosure": "Pernyataan pemilik bukan bukti independen dana bank, broker, atau penyelesaian TRX. Pembayaran pada halaman ini tetap nonaktif."
+        "owner_disclosure": "Pernyataan pemilik bukan bukti independen dana bank, broker, atau penyelesaian TRX. Pembayaran pada halaman ini tetap nonaktif.",
+        "owner_fee": "Biaya masuk yang dikonfirmasi pemilik"
       }
     },
     "vi": {
@@ -1359,7 +1374,8 @@
       "plan_status": {
         "owner_active": "Gói 1 — đã có vốn và hoạt động theo công bố của chủ sở hữu",
         "funding_hold": "Đang huy động vốn — tạm ngừng hoạt động",
-        "owner_disclosure": "Công bố của chủ sở hữu không thay cho xác minh độc lập ngân hàng, môi giới hoặc thanh toán TRX. Thanh toán tại trang này vẫn tắt."
+        "owner_disclosure": "Công bố của chủ sở hữu không thay cho xác minh độc lập ngân hàng, môi giới hoặc thanh toán TRX. Thanh toán tại trang này vẫn tắt.",
+        "owner_fee": "Phí tham gia được chủ sở hữu xác nhận"
       }
     },
     "th": {
@@ -1444,7 +1460,8 @@
       "plan_status": {
         "owner_active": "แผน 1 — เจ้าของแจ้งว่ามีทุนและเปิดดำเนินการ",
         "funding_hold": "อยู่ระหว่างจัดหาทุน — ปิดชั่วคราว",
-        "owner_disclosure": "คำยืนยันจากเจ้าของไม่ใช่หลักฐานอิสระของเงินธนาคาร โบรกเกอร์ หรือการชำระ TRX ระบบชำระเงินหน้านี้ยังปิด"
+        "owner_disclosure": "คำยืนยันจากเจ้าของไม่ใช่หลักฐานอิสระของเงินธนาคาร โบรกเกอร์ หรือการชำระ TRX ระบบชำระเงินหน้านี้ยังปิด",
+        "owner_fee": "ค่าธรรมเนียมที่เจ้าของยืนยัน"
       }
     },
     "nl": {
@@ -1529,7 +1546,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — volgens eigenaar gefinancierd en actief",
         "funding_hold": "Financiering loopt — tijdelijk inactief",
-        "owner_disclosure": "De verklaring van de eigenaar is geen onafhankelijk bewijs van bankkapitaal, broker of TRX-afwikkeling. Betaling via deze pagina blijft uitgeschakeld."
+        "owner_disclosure": "De verklaring van de eigenaar is geen onafhankelijk bewijs van bankkapitaal, broker of TRX-afwikkeling. Betaling via deze pagina blijft uitgeschakeld.",
+        "owner_fee": "Door eigenaar bevestigde deelnameprijs"
       }
     },
     "pl": {
@@ -1614,7 +1632,8 @@
       "plan_status": {
         "owner_active": "Plan 1 — finansowany i aktywny według właściciela",
         "funding_hold": "Finansowanie w toku — czasowo nieaktywny",
-        "owner_disclosure": "Deklaracja właściciela nie jest niezależnym dowodem bankowym, brokerskim ani rozliczenia TRX. Płatność na tej stronie jest wyłączona."
+        "owner_disclosure": "Deklaracja właściciela nie jest niezależnym dowodem bankowym, brokerskim ani rozliczenia TRX. Płatność na tej stronie jest wyłączona.",
+        "owner_fee": "Opłata zatwierdzona przez właściciela"
       }
     },
     "ur": {
@@ -1699,7 +1718,8 @@
       "plan_status": {
         "owner_active": "پلان ۱ — مالک کے مطابق سرمایہ فراہم اور فعال",
         "funding_hold": "سرمائے کی فراہمی جاری — عارضی طور پر غیر فعال",
-        "owner_disclosure": "مالک کا بیان بینک، بروکر یا TRX تصفیے کی آزاد تصدیق نہیں ہے۔ اس صفحے پر ادائیگی بند ہے۔"
+        "owner_disclosure": "مالک کا بیان بینک، بروکر یا TRX تصفیے کی آزاد تصدیق نہیں ہے۔ اس صفحے پر ادائیگی بند ہے۔",
+        "owner_fee": "مالک کی تصدیق شدہ داخلہ فیس"
       }
     }
   }
