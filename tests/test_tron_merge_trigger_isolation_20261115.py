@@ -8,6 +8,7 @@ from __future__ import annotations
 import fnmatch
 import re
 from pathlib import Path
+import sys
 
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 SENSITIVE_SOURCE = (
@@ -196,7 +197,7 @@ def test_unrelated_workflow_run_does_not_trigger_unwanted_release(tmp_path, monk
         'jobs:\n  deploy:\n    runs-on: ubuntu-latest\n'
         '    steps:\n      - run: ssh host destructive-operation\n'
     )
-    monkeypatch.setattr(__import__(__name__), "WORKFLOWS", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOWS", tmp_path)
     assert find_unapproved_release_paths() == []
 
 
@@ -211,7 +212,7 @@ def test_ci_followup_with_ssh_is_detected(tmp_path, monkeypatch):
         'jobs:\n  ship:\n    runs-on: ubuntu-latest\n'
         '    steps:\n      - run: ssh host deploy\n'
     )
-    monkeypatch.setattr(__import__(__name__), "WORKFLOWS", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOWS", tmp_path)
     assert find_unapproved_release_paths() == [
         ("deploy.yml", "downstream-workflow-run", ["ship"])
     ]
@@ -223,7 +224,7 @@ def test_path_limited_push_cannot_infer_other_files(tmp_path, monkeypatch):
         'jobs:\n  deploy:\n    runs-on: ubuntu-latest\n'
         '    steps:\n      - run: ssh host deploy\n'
     )
-    monkeypatch.setattr(__import__(__name__), "WORKFLOWS", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOWS", tmp_path)
     assert find_unapproved_release_paths() == []
 
 
@@ -233,7 +234,7 @@ def test_unfiltered_push_with_ssh_cannot_escape_guard(tmp_path, monkeypatch):
         'jobs:\n  deploy:\n    runs-on: ubuntu-latest\n'
         '    steps:\n      - run: ssh host deploy\n'
     )
-    monkeypatch.setattr(__import__(__name__), "WORKFLOWS", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOWS", tmp_path)
     assert find_unapproved_release_paths() == [
         ("unsafe.yml", "source-pr-or-main", ["deploy"])
     ]
@@ -247,7 +248,7 @@ def test_dispatch_only_job_does_not_deploy_on_main_push(tmp_path, monkeypatch):
         '    runs-on: ubuntu-latest\n'
         '    steps:\n      - run: ssh host deploy\n'
     )
-    monkeypatch.setattr(__import__(__name__), "WORKFLOWS", tmp_path)
+    monkeypatch.setattr(sys.modules[__name__], "WORKFLOWS", tmp_path)
     assert find_unapproved_release_paths() == []
 
 
