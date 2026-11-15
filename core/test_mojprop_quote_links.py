@@ -153,3 +153,39 @@ class CustomerQuoteTokenTests(TestCase):
                 with self.assertRaises(ValueError):
                     quote_read_token(self.quote)
                 self.assertEqual(self.view().status_code, 404)
+
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_future_issued_quote_cannot_be_read_by_customer(self):
+        self.quote.issued_at = timezone.now() + timedelta(minutes=5)
+        self.quote.reviewed_at = self.quote.issued_at - timedelta(minutes=10)
+        self.quote.save(update_fields=["issued_at", "reviewed_at"])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+        self.assertEqual(self.view().status_code, 404)
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_future_accepted_quote_does_not_count_as_customer_signed(self):
+        self.quote.status = "accepted"
+        self.quote.accepted_at = timezone.now() + timedelta(minutes=2)
+        self.quote.acceptance_reference = "buyer-consent:validated-document-001"
+        self.quote.save(update_fields=[
+            "status", "accepted_at", "acceptance_reference",
+        ])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+        self.assertEqual(self.view().status_code, 404)
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_quote_from_past_issue_keeps_existing_read_access(self):
+        self.assertEqual(self.view().status_code, 200)
+        self.assertIn("NOT A PAYMENT INVOICE", self.view().content.decode("utf-8"))
+
+    @override_settings(MOJPROP_PUBLIC_QUOTES_ENABLED=True)
+    def test_future_review_timestamp_cannot_backdate_written_offer(self):
+        self.quote.reviewed_at = timezone.now() + timedelta(hours=1)
+        self.quote.issued_at = timezone.now() + timedelta(hours=2)
+        self.quote.save(update_fields=["reviewed_at", "issued_at"])
+        with self.assertRaises(ValueError):
+            quote_read_token(self.quote)
+        self.assertEqual(self.view().status_code, 404)
