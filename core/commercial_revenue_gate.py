@@ -185,6 +185,11 @@ def validate_offer(
             raise CommercialGateError("tenant_scope_mismatch")
     if offer.delivery_manifest_sha256 and not _HEX64.fullmatch(offer.delivery_manifest_sha256):
         raise CommercialGateError("delivery_manifest_hash_invalid")
+    if offer.active and offer.offer_type in (OfferType.DIGITAL_PRODUCT, OfferType.GAME):
+        # Customer-facing digital items must resolve to an immutable,
+        # rights-reviewed deliverable before an offer may be active.
+        if not _HEX64.fullmatch(offer.delivery_manifest_sha256):
+            raise CommercialGateError("active_digital_delivery_manifest_required")
     if offer_id == "" or tenant_id == "":  # defensive; _slug already rejects these
         raise CommercialGateError("offer_identity_invalid")
 
