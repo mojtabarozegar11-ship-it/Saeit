@@ -10,9 +10,14 @@ from .plans import CHALLENGE_PLANS
 def render_site():
     p = POLICY
     rows = "".join(
-        '<tr><th scope="row" dir="ltr">'+escape(plan.code)+'</th>'
-        '<td dir="ltr"> "".join(
-        f'<li><span>ماه {i}</span><b dir="ltr">${int(v):,}</b></li>'
+        f'<tr><th scope="row" dir="ltr">{escape(plan.code)}</th>'
+        f'<td dir="ltr">$' f'{int(plan.starting_capital_usd):,}</td>'
+        f'<td dir="ltr">{escape(str(plan.entry_fee_trx))} TRX</td>'
+        f'<td>{"فعال و تأمین سرمایه‌شده طبق اعلام مالک" if plan.business_active_owner_declared else "در حال تأمین سرمایه؛ موقتاً غیرفعال"}</td></tr>'
+        for plan in CHALLENGE_PLANS
+    )
+    levels = "".join(
+        f'<li><span>ماه {i}</span><b dir="ltr">$' f'{int(v):,}</b></li>'
         for i, v in enumerate(LEVELS, 1)
     )
     metrics = (
