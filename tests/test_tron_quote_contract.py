@@ -48,6 +48,7 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                     "usd_price": "12",
                     "payment_state": "pending",
                     "cancelled": False,
+                    "expires_at_utc": NOW + timedelta(minutes=10),
                 },
             },
         }
@@ -67,6 +68,7 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                     "usd_price": "12",
                     "payment_state": "pending",
                     "cancelled": False,
+                    "expires_at_utc": NOW + timedelta(minutes=10),
                 },
             },
         }
@@ -86,12 +88,14 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                 "tenant_id": "signal_saman", "sku": "moj-signals-standard",
                 "usd_price": "0.0000001", "payment_state": "pending",
                 "cancelled": False,
+                "expires_at_utc": NOW + timedelta(minutes=10),
             }},
         )
         self.assertEqual(q.exact_amount_sun, 1)
         self.assertTrue(self.valid(quote=q, trusted_order_registry={"order-10001": {
             "tenant_id": "signal_saman", "sku": "moj-signals-standard",
             "usd_price": "0.0000001", "payment_state": "pending", "cancelled": False,
+            "expires_at_utc": NOW + timedelta(minutes=10),
         }}))
 
     def test_quote_cannot_be_reused_for_different_sku_or_order(self):
@@ -195,13 +199,47 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                 self.quote(trusted_order_registry={"order-10001": {
                     "tenant_id": "signal_saman", "sku": "moj-signals-standard",
                     "usd_price": "12", "payment_state": "pending",
-                    "cancelled": False, **corrupted
+                    "cancelled": False, "expires_at_utc": NOW + timedelta(minutes=10),
+                    **corrupted
                 }})
 
     def test_cancellation_in_live_order_registry_invalidates_old_quote(self):
         record = {"tenant_id": "signal_saman", "sku": "moj-signals-standard",
                   "usd_price": "12", "payment_state": "pending", "cancelled": True}
         self.assertFalse(self.valid(trusted_order_registry={"order-10001": record}))
+
+    def test_pending_order_without_future_utc_deadline_cannot_be_quoted(self):
+        base = {
+            "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+            "usd_price": "12", "payment_state": "pending", "cancelled": False,
+        }
+        for expires in (None, NOW, NOW - timedelta(seconds=1),
+                        datetime(2026, 11, 15, 12, 10)):
+            with self.subTest(expires=repr(expires)), self.assertRaisesRegex(
+                NativeTrxQuoteError, "trusted_order_missing_or_mismatched"
+            ):
+                self.quote(trusted_order_registry={
+                    "order-10001": {**base, "expires_at_utc": expires}
+                })
+
+    def test_order_can_expire_before_signature_quote_does(self):
+        record = {
+            "tenant_id": "signal_saman", "sku": "moj-signals-standard",
+            "usd_price": "12", "payment_state": "pending", "cancelled": False,
+            "expires_at_utc": NOW + timedelta(minutes=2),
+        }
+        q = self.quote(
+            expires_at_utc=NOW + timedelta(minutes=4),
+            trusted_order_registry={"order-10001": record},
+        )
+        self.assertTrue(self.valid(
+            quote=q, now_utc=NOW + timedelta(minutes=1),
+            trusted_order_registry={"order-10001": record},
+        ))
+        self.assertFalse(self.valid(
+            quote=q, now_utc=NOW + timedelta(minutes=3),
+            trusted_order_registry={"order-10001": record},
+        ))
 
     def test_invoice_or_receipt_never_created_by_quote_function(self):
         q = self.quote()
