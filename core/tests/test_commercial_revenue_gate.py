@@ -2046,7 +2046,8 @@ class CommercialGateTests(unittest.TestCase):
                 order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
                 tenant_registry={"moj_prop": "mojplaywin.com"},
                 independent_release_verifier=lambda offer: True,
-                release_evidence_sha256="d" * 64)
+                release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.close()
             restored = SQLiteCommercialLedger(path)
             binding = restored.connection.execute(
@@ -2069,7 +2070,8 @@ class CommercialGateTests(unittest.TestCase):
                     offer=self._approved_merchant_offer_for_binding(price=Decimal("31")),
                     tenant_registry={"moj_prop": "mojplaywin.com"},
                     independent_release_verifier=lambda offer: True,
-                    release_evidence_sha256="d" * 64)
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             self.assertIsNone(ledger.connection.execute(
                 "SELECT 1 FROM merchant_order_bindings WHERE order_id = ?", ("order-52",)
             ).fetchone())
@@ -2085,7 +2087,8 @@ class CommercialGateTests(unittest.TestCase):
                     order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
                     tenant_registry={"moj_prop": "mojplaywin.com"},
                     independent_release_verifier=lambda offer: False,
-                    release_evidence_sha256="d" * 64)
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.close()
 
     def test_merchant_binding_is_immutable_and_single_use(self):
@@ -2096,7 +2099,8 @@ class CommercialGateTests(unittest.TestCase):
             kw = dict(order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
                       tenant_registry={"moj_prop": "mojplaywin.com"},
                       independent_release_verifier=lambda offer: True,
-                      release_evidence_sha256="d" * 64)
+                      release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.bind_approved_merchant_order(**kw)
             with self.assertRaisesRegex(CommercialGateError, "merchant_order_already_bound"):
                 ledger.bind_approved_merchant_order(**kw)
@@ -2115,7 +2119,8 @@ class CommercialGateTests(unittest.TestCase):
                     order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
                     tenant_registry={"moj_prop": "mojplaywin.com"},
                     independent_release_verifier=lambda offer: True,
-                    release_evidence_sha256="d" * 64)
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             ledger.close()
 
 
@@ -2127,7 +2132,8 @@ class CommercialGateTests(unittest.TestCase):
             order_id="order-52", offer=offer,
             tenant_registry={"moj_prop": "mojplaywin.com"},
             independent_release_verifier=lambda offer: True,
-            release_evidence_sha256="d" * 64)
+            release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
         return ledger, offer
 
     def test_merchant_trx_review_requires_durable_merchant_binding(self):
@@ -2167,7 +2173,8 @@ class CommercialGateTests(unittest.TestCase):
                 order_id="order-52", offer=offer,
                 tenant_registry={"moj_prop": "mojplaywin.com"},
                 independent_release_verifier=lambda offer: True,
-                release_evidence_sha256="d" * 64)
+                release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             calls = []
             with self.assertRaisesRegex(CommercialGateError, "bound_merchant_invoice_required"):
                 ledger.verify_bound_merchant_receipt(
@@ -2188,6 +2195,38 @@ class CommercialGateTests(unittest.TestCase):
                 independent_release_verifier=lambda offer: True)
             self.assertEqual(len(digest), 64)
             self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+
+    def test_merchant_release_evidence_hash_requires_independent_attestation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "merchant_release_evidence_unverified"):
+                ledger.bind_approved_merchant_order(
+                    order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: True,
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier=lambda offer, digest: False)
+            self.assertIsNone(ledger.connection.execute(
+                "SELECT 1 FROM merchant_order_bindings WHERE order_id = ?", ("order-52",)
+            ).fetchone())
+            ledger.close()
+
+    def test_merchant_release_evidence_verifier_must_be_callable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            ledger.create_order(order_id="order-52", offer_id="moj-s04",
+                                amount=Decimal("30"), currency="TRX")
+            with self.assertRaisesRegex(CommercialGateError, "merchant_release_evidence_verifier_invalid"):
+                ledger.bind_approved_merchant_order(
+                    order_id="order-52", offer=self._approved_merchant_offer_for_binding(),
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: True,
+                    release_evidence_sha256="d" * 64,
+                    independent_release_evidence_verifier="yes")
             ledger.close()
 
 
