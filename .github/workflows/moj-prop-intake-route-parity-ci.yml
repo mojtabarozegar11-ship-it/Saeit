@@ -1,0 +1,26 @@
+name: P0 Moj Prop public intake route parity
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - "templates/moj-prop-v4/index.html"
+      - ".github/workflows/mojplaywin-moj-prop-deploy.yml"
+      - "scripts/deploy_mojplaywin_moj_prop_backend.py"
+      - "tests/test_moj_prop_intake_route_parity_c65.py"
+      - ".github/workflows/moj-prop-intake-route-parity-ci.yml"
+permissions:
+  contents: read
+jobs:
+  no-deployment-intake-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify full form to Django intake path
+        run: python -m unittest discover -s tests -p "test_moj_prop_intake_route_parity_c65.py" -v
+      - name: Check deploy installer source without touching cPanel
+        run: python scripts/deploy_mojplaywin_moj_prop_backend.py selftest
