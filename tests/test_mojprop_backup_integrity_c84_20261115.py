@@ -124,6 +124,17 @@ class MojPropBackupIntegrityTests(unittest.TestCase):
             self.assertEqual((self.live / rel).read_bytes(), b"new-live-bytes")
         self.restart.assert_not_called()
 
+    def test_backup_refuses_dangling_live_symlink_before_manifest_creation(self):
+        rel = FILES[0]
+        target = self.live / rel
+        target.unlink()
+        target.symlink_to(self.base / "unrelated-missing-owner-file")
+        manifest = {"run_id": RUN, "commit": SHA, "files": list(map(str, FILES))}
+        with self.assertRaisesRegex(RuntimeError, "unsafe live target symlink"):
+            backend.backup_target(target, self.backup, manifest, rel)
+        self.assertNotIn(str(rel), manifest)
+        self.assertTrue(target.is_symlink())
+
     def test_backup_creation_rejects_symlinked_parent(self):
         core = self.backup / "core"
         relocated = self.base / "elsewhere"
