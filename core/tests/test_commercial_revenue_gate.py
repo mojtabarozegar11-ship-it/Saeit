@@ -2056,6 +2056,7 @@ class CommercialGateTests(unittest.TestCase):
             self.assertEqual(binding["tenant_id"], "moj_prop")
             self.assertEqual(binding["canonical_host"], "mojplaywin.com")
             self.assertEqual(binding["offer_id"], "moj-s04")
+            self.assertEqual(binding["offer_type"], OfferType.MOJ_PROP.value)
             self.assertEqual(binding["release_evidence_sha256"], "d" * 64)
             restored.close()
 
@@ -2244,6 +2245,30 @@ class CommercialGateTests(unittest.TestCase):
                     tenant_registry={"moj_prop": "mojplaywin.com"},
                     independent_release_verifier=lambda offer: True,
                     independent_release_evidence_verifier=lambda offer, digest: False)
+            self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
+            ledger.close()
+
+
+    def test_trx_receipt_cannot_reinterpret_bound_prop_offer_as_payment_gateway(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = SQLiteCommercialLedger(str(Path(directory) / "ledger.sqlite3"))
+            self._prepare_private_invoice(ledger, "order-52")
+            prop = self._approved_merchant_offer_for_binding()
+            ledger.bind_approved_merchant_order(
+                order_id="order-52", offer=prop,
+                tenant_registry={"moj_prop": "mojplaywin.com"},
+                independent_release_verifier=lambda offer: True,
+                release_evidence_sha256="d" * 64,
+                independent_release_evidence_verifier=lambda offer, digest: True)
+            disguised = self._approved_merchant_offer_for_binding(
+                offer_type=OfferType.TRX_GATEWAY)
+            with self.assertRaisesRegex(CommercialGateError, "merchant_order_binding_mismatch"):
+                ledger.verify_bound_merchant_receipt(
+                    order_id="order-52", offer=disguised,
+                    evidence=self.payment(), invoice_id="invoice-52",
+                    tenant_registry={"moj_prop": "mojplaywin.com"},
+                    independent_release_verifier=lambda offer: True,
+                    independent_release_evidence_verifier=lambda offer, digest: True)
             self.assertEqual(ledger.snapshot("order-52")["state"], "payment_pending")
             ledger.close()
 
