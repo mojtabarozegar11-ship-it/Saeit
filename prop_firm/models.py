@@ -504,3 +504,21 @@ class PropInformationInquiry(models.Model):
 
     def __str__(self):
         return f"MOJ PROP inquiry #{self.pk}"
+
+
+class PropInterestHourlyBucket(models.Model):
+    """Private keyed IP/hour aggregate, never a raw IP or user-agent log.
+
+    A unique database row with SELECT FOR UPDATE limits inquiry rate
+    consistently across cPanel workers without a paid Redis service.
+    """
+    digest = models.CharField(max_length=64, primary_key=True, editable=False)
+    count = models.PositiveSmallIntegerField(default=0, editable=False)
+    expires_at = models.DateTimeField(editable=False)
+
+    class Meta:
+        db_table = "moj_prop_inquiry_hour_buckets"
+        default_permissions = ("view",)
+
+    def __str__(self):
+        return "MOJ PROP non-identifying rate bucket"
