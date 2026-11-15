@@ -1653,6 +1653,29 @@ class CommercialGateTests(unittest.TestCase):
                 folder.chmod(0o700)
 
 
+    def test_external_refund_source_whitespace_cannot_bypass_single_use(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda evidence: True)
+            ledger.record_confirmed_refund(self._refund_proof(
+                amount=Decimal("10"), source_id="ref-one"))
+            with self.assertRaisesRegex(CommercialGateError, "refund_source_already_used"):
+                ledger.record_confirmed_refund(self._refund_proof(
+                    amount=Decimal("10"), source_id=" ref-one ",
+                    refund_transaction_id="c" * 64))
+            self.assertEqual(ledger.outstanding_settled_trx("order-52"), Decimal("20"))
+            ledger.close()
+
+    def test_refund_external_source_is_stored_without_padding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = self._refundable_ledger(directory, refund_verifier=lambda evidence: True)
+            ledger.record_confirmed_refund(self._refund_proof(source_id=" ref-one "))
+            record = ledger.connection.execute(
+                "SELECT source_id FROM independently_confirmed_refunds WHERE order_id = ?",
+                ("order-52",)).fetchone()
+            self.assertEqual(record["source_id"], "ref-one")
+            ledger.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
