@@ -52,7 +52,7 @@ def verify(manifest_path):
         if check(isinstance(role, str) and role in ROLES, tag + " invalid role"):
             roles.add(role)
         path = item.get("path")
-        if not check(isinstance(path, str) and bool(path) and "\\x00" not in path,
+        if not check(isinstance(path, str) and bool(path) and "\x00" not in path,
                      tag + " invalid path"):
             continue
         relative = Path(path)
@@ -68,7 +68,7 @@ def verify(manifest_path):
             continue
         if not check(resolved.is_file(), tag + " missing/non-file artifact"):
             continue
-        if not check(not resolved.is_symlink(), tag + " symlink forbidden"):
+        if not check(not (root / relative).is_symlink(), tag + " symlink forbidden"):
             continue
         size = item.get("bytes")
         if not check(type(size) is int and size >= 0, tag + " invalid byte count"):
