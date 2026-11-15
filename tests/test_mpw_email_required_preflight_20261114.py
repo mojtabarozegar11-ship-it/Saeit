@@ -287,5 +287,8 @@ class SourcePathContainmentRegression(unittest.TestCase):
     def test_valid_bounded_relative_source_still_parses(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "safe.py").write_text("VALUE = 1\\n", encoding="utf-8")
-            self.assertIsInstance(m._load(root, "safe.py"), ast.Module)
+            (root / "safe.py").write_text("VALUE = 1\n", encoding="utf-8")
+            tree = m._load(root, "safe.py")
+            self.assertIsInstance(tree, ast.Module)
+            self.assertEqual(len(tree.body), 1)
+            self.assertIsInstance(tree.body[0], ast.Assign)
