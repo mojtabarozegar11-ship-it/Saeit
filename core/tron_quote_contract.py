@@ -49,7 +49,10 @@ def _amount(value, name):
     if type(value) not in (str, int, Decimal):
         raise NativeTrxQuoteError(name + "_type")
     # Bound input BEFORE Decimal parsing or expansion to avoid oversized quotes.
-    encoded = str(value)
+    try:
+        encoded = str(value)
+    except (ValueError, OverflowError, ArithmeticError):
+        raise NativeTrxQuoteError(name + "_input_too_long") from None
     if not 0 < len(encoded) <= MAX_MONEY_INPUT_CHARS:
         raise NativeTrxQuoteError(name + "_input_too_long")
     try:

@@ -211,6 +211,8 @@ class NativeTrxQuoteContractTests(SimpleTestCase):
                 self.quote(usd_price=usd)
         with self.assertRaisesRegex(NativeTrxQuoteError, "trx_rate_input_too_long"):
             self.quote(trx_usd_rate="0." + "0" * 200 + "1")
+        with self.assertRaisesRegex(NativeTrxQuoteError, "usd_price_input_too_long"):
+            self.quote(usd_price=10 ** 5000)
 
     def test_exponent_bombs_and_absurd_small_order_prices_rejected(self):
         for price in ("1e-100000", Decimal("1e-5000"), "0.0000000000001"):
