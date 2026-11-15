@@ -181,6 +181,33 @@ class FullRestoreCapacityPreflightTests(unittest.TestCase):
         self.assertNotIn('"set_quota"', text)
         self.assertNotIn('"create"', text)
 
+    def test_cpanel_owner_authenticated_self_context_is_read_only_fallback(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import subprocess
+        import json
+        from scripts.mojprop_full_restore_capacity_readonly_c94 import (
+            _cpanel_uapi_quota_result, ACCOUNT,
+        )
+        doc = {"result": {"status": 1, "data": {
+            "under_quota_overall": 1, "under_megabyte_limit": 1,
+            "under_inode_limit": 1, "megabyte_limit": 900,
+            "megabytes_remain": 500, "inode_limit": 0,
+            "inodes_remain": 0,
+        }}}
+        with patch("subprocess.run", side_effect=[
+                subprocess.CalledProcessError(1, "uapi"),
+                SimpleNamespace(stdout=json.dumps(doc)),
+        ]) as run:
+            allowed, reason = _cpanel_uapi_quota_result(200_000_000)
+            self.assertTrue(allowed)
+            self.assertEqual(reason, "cpanel_uapi_quota_verified")
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args_list[0].args[0][-3:],
+                             ["--user=" + ACCOUNT, "Quota", "get_quota_info"])
+            self.assertEqual(run.call_args_list[1].args[0][-2:],
+                             ["Quota", "get_quota_info"])
+
 
 if __name__ == "__main__":
     unittest.main()
