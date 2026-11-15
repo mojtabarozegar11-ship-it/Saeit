@@ -106,7 +106,9 @@ class CommercialReleasePreflightTests(TestCase):
         with patch("sys.stdout") as stream:
             status = cli(["--repo-root", str(self.root)])
         self.assertEqual(status, 0)
-        report = json.loads(stream.write.call_args.args[0].rstrip())
+        report = json.loads("".join(
+            call.args[0] for call in stream.write.call_args_list
+        ).strip())
         self.assertFalse(report["production_release_ready"])
 
 
