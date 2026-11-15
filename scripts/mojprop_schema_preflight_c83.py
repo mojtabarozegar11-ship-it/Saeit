@@ -82,7 +82,22 @@ def migration_operations_signature(path):
         raise RuntimeError("Moj Prop migration missing or ambiguous operations/dependencies")
     if len(parents[0].targets) != 1 or not isinstance(parents[0].targets[0], ast.Name):
         raise RuntimeError("Moj Prop migration has unsafe dependency assignment")
-    parents[0].value = ast.Constant(value="__INSTALLER_SELECTED_PARENT__")
+    deps = parents[0].value
+    if not isinstance(deps, (ast.List, ast.Tuple)):
+        raise RuntimeError("Moj Prop migration dependencies must be explicit")
+    core_parents = [
+        entry for entry in deps.elts
+        if (isinstance(entry, ast.Tuple) and len(entry.elts) == 2
+            and isinstance(entry.elts[0], ast.Constant)
+            and entry.elts[0].value == "core"
+            and isinstance(entry.elts[1], ast.Constant)
+            and isinstance(entry.elts[1].value, str))
+    ]
+    if len(core_parents) != 1:
+        raise RuntimeError("Moj Prop migration has ambiguous core parent")
+    # Only the one core predecessor is installer-selectable. Keep swappable
+    # user dependencies and every other dependency byte-for-byte reviewable.
+    core_parents[0].elts[1] = ast.Constant(value="__INSTALLER_SELECTED_PARENT__")
     return ast.dump(root, include_attributes=False)
 
 
