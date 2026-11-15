@@ -314,13 +314,13 @@ class C28ScopedRealRestore(unittest.TestCase):
         source = root / "scripts/mojprop_starter30_file_restore_c28.py"
         wf = (root / ".github/workflows/mojprop-starter30-isolated-file-restore-c28.yml").read_text("utf-8")
         raw = source.read_bytes()
-        git_blob = hashlib.sha1(("blob %d\\0" % len(raw)).encode() + raw).hexdigest()
+        git_blob = hashlib.sha1(("blob %d\0" % len(raw)).encode() + raw).hexdigest()
         self.assertIn('test "$(git hash-object -- scripts/mojprop_starter30_file_restore_c28.py)" = "' + git_blob + '"', wf)
         self.assertIn("github.event.comment.author_association == 'OWNER'", wf)
         self.assertIn("vars.MOJPROP_C28_REHEARSAL_ALLOWED == 'true'", wf)
         self.assertIn("vars.MOJPROP_C28_SECURITY_APPROVED_SHA == github.sha", wf)
-        self.assertNotIn("\\n  push:", wf)
-        self.assertNotIn("\\n  schedule:", wf)
+        self.assertNotIn("\n  push:", wf)
+        self.assertNotIn("\n  schedule:", wf)
 
 
 if __name__ == "__main__":
