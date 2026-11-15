@@ -15,7 +15,7 @@ class MojPropIntakeTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
         response = self.client.get(
-            "/api/moj-prop/intake/", secure=True, HTTP_HOST="mojplaywin.com",
+            "/moj-prop-intake/", secure=True, HTTP_HOST="mojplaywin.com",
         )
         self.assertEqual(response.status_code, 200)
         self.csrf_token = response.json()["csrf_token"]
@@ -35,7 +35,7 @@ class MojPropIntakeTests(TestCase):
 
     def post(self, value):
         return self.client.post(
-            "/api/moj-prop/intake/",
+            "/moj-prop-intake/",
             data=json.dumps(value),
             content_type="application/json",
             HTTP_X_CSRFTOKEN=self.csrf_token,
@@ -75,11 +75,11 @@ class MojPropIntakeTests(TestCase):
     def test_real_api_route_outside_passenger_disabled_static_directory(self):
         from django.urls import resolve, reverse
         from core.mojprop_views import mojprop_intake
-        self.assertEqual(reverse("mojprop_intake"), "/api/moj-prop/intake/")
-        self.assertIs(resolve("/api/moj-prop/intake/").func, mojprop_intake)
+        self.assertEqual(reverse("mojprop_intake"), "/moj-prop-intake/")
+        self.assertIs(resolve("/moj-prop-intake/").func, mojprop_intake)
         self.assertIs(resolve("/moj-prop/intake/").func, mojprop_intake)
         source = (Path(settings.BASE_DIR) / "templates/moj-prop-v4/index.html").read_text("utf-8")
-        self.assertIn("const endpoint='/api/moj-prop/intake/';", source)
+        self.assertIn("const endpoint='/moj-prop-intake/';", source)
         self.assertNotIn("const endpoint='/moj-prop/intake/';", source)
         installer = (Path(settings.BASE_DIR) / "scripts/deploy_mojplaywin_moj_prop.py").read_text("utf-8")
         self.assertIn('PUBLIC_HTACCESS = "PassengerEnabled off', installer)
@@ -95,7 +95,7 @@ class MojPropIntakeTests(TestCase):
         self.assertLess(backend, preflight)
         self.assertLess(preflight, static)
         self.assertIn("core/migrations/0042_alter_mojproprequest_source.py", workflow)
-        self.assertIn("https://mojplaywin.com/api/moj-prop/intake/", workflow)
+        self.assertIn("https://mojplaywin.com/moj-prop-intake/", workflow)
         self.assertIn("MOJ_PROP_LIVE_INTAKE_API_PREFLIGHT=PASS", workflow)
         self.assertIn('response.get("service") != "moj-prop-intake"', workflow)
 
@@ -160,10 +160,10 @@ class MojPropIntakeTests(TestCase):
                              ("mojplaywin.com", False)):
             with self.subTest(host=host, secure=secure):
                 self.assertEqual(self.client.get(
-                    "/api/moj-prop/intake/", HTTP_HOST=host, secure=secure,
+                    "/moj-prop-intake/", HTTP_HOST=host, secure=secure,
                 ).status_code, 404)
                 self.assertEqual(unguarded.post(
-                    "/api/moj-prop/intake/", data=json.dumps(self.payload()),
+                    "/moj-prop-intake/", data=json.dumps(self.payload()),
                     content_type="application/json", HTTP_HOST=host,
                     HTTP_X_CSRFTOKEN=self.csrf_token, secure=secure,
                 ).status_code, 404)
@@ -172,7 +172,7 @@ class MojPropIntakeTests(TestCase):
     def test_x_real_ip_forgery_does_not_reset_ip_rate_limit(self):
         for i in range(5):
             response = self.client.post(
-                "/api/moj-prop/intake/", data=json.dumps(self.payload(
+                "/moj-prop-intake/", data=json.dumps(self.payload(
                     email=f"client{i}@farmco.org",
                 )),
                 content_type="application/json",
@@ -183,7 +183,7 @@ class MojPropIntakeTests(TestCase):
             )
             self.assertEqual(response.status_code, 201)
         blocked = self.client.post(
-            "/api/moj-prop/intake/", data=json.dumps(self.payload(email="new@farmco.org")),
+            "/moj-prop-intake/", data=json.dumps(self.payload(email="new@farmco.org")),
             content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf_token,
             HTTP_HOST="mojplaywin.com", HTTP_ORIGIN="https://mojplaywin.com",
             REMOTE_ADDR="203.0.113.48", HTTP_X_REAL_IP="198.51.100.200",
@@ -222,7 +222,7 @@ class MojPropIntakeTests(TestCase):
         document = document.replace('"horizon": "week"',
                                     '"horizon": "urgent", "horizon": "week"')
         answer = self.client.post(
-            "/api/moj-prop/intake/", data=document,
+            "/moj-prop-intake/", data=document,
             content_type="application/json", HTTP_X_CSRFTOKEN=self.csrf_token,
             HTTP_HOST="mojplaywin.com", HTTP_ORIGIN="https://mojplaywin.com",
             REMOTE_ADDR="198.51.100.40", secure=True,
@@ -245,7 +245,7 @@ class MojPropIntakeTests(TestCase):
     def test_no_csrf_header_no_manual_review_row(self):
         c = Client(enforce_csrf_checks=True)
         response = c.post(
-            "/api/moj-prop/intake/", data=json.dumps(self.payload()),
+            "/moj-prop-intake/", data=json.dumps(self.payload()),
             content_type="application/json", HTTP_HOST="mojplaywin.com",
             secure=True,
         )
@@ -263,7 +263,7 @@ class MojPropIntakeTests(TestCase):
 
     def test_csrf_and_receipt_response_are_private_not_cached(self):
         response = self.client.get(
-            "/api/moj-prop/intake/", secure=True, HTTP_HOST="mojplaywin.com",
+            "/moj-prop-intake/", secure=True, HTTP_HOST="mojplaywin.com",
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn("private, no-store", response["Cache-Control"])

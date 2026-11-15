@@ -90,7 +90,7 @@ def selftest(repo_root: Path) -> None:
     required = (
         ("mojprop_intake", view),
         ("MojPropRequest", model),
-        ('path("api/moj-prop/intake/"', urls),
+        ('path("moj-prop-intake/"', urls),
         ("get_token", view),
         ("_ip_hash", view),
     )
@@ -265,7 +265,7 @@ def patch_urlconf(target: Path) -> None:
     """Install only the independent first-party API outside static /moj-prop/."""
     assert_regular(target, "live URL configuration")
     source = target.read_text(encoding="utf-8")
-    if 'path("api/moj-prop/intake/"' in source:
+    if 'path("moj-prop-intake/"' in source:
         print("MOJ_PROP_API_URLCONF_ALREADY_PATCHED")
         return
     if "from django.urls import" not in source or "urlpatterns" not in source:
@@ -278,7 +278,7 @@ def patch_urlconf(target: Path) -> None:
     block = "\n\n# Moj Prop API outside static Passenger-disabled /moj-prop/.\n"
     if "from core.mojprop_views import mojprop_intake" not in source:
         block += "from core.mojprop_views import mojprop_intake\n"
-    block += ('urlpatterns.insert(0, path("api/moj-prop/intake/", '
+    block += ('urlpatterns.insert(0, path("moj-prop-intake/", '
               'mojprop_intake, name="mojprop_intake"))\n')
     if 'path("moj-prop/intake/"' not in source:
         block += ('urlpatterns += [path("moj-prop/intake/", '

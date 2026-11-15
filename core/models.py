@@ -539,7 +539,7 @@ class MojPropRequest(T):
     class Meta:
         ordering = ("-created_at",)
         indexes = [
-            models.Index(fields=("status", "created_at")),
-            models.Index(fields=("email", "created_at")),
-            models.Index(fields=("ip_hash", "created_at")),
+            models.Index(fields=("status", "created_at"), name="mojprop_status_created_idx"),
+            models.Index(fields=("email", "created_at"), name="mojprop_email_created_idx"),
+            models.Index(fields=("ip_hash", "created_at"), name="mojprop_ip_created_idx"),
         ]

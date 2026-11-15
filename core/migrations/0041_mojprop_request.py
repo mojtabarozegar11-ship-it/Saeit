@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "0040_commercefunnelevent"),
+        ("core", "0039_educationassessment_educationattempt_and_more"),
     ]
 
     operations = [
@@ -31,14 +31,14 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="mojproprequest",
-            index=models.Index(fields=["status", "created_at"], name="core_mojprop_status_created_idx"),
+            index=models.Index(fields=["status", "created_at"], name="mojprop_status_created_idx"),
         ),
         migrations.AddIndex(
             model_name="mojproprequest",
-            index=models.Index(fields=["email", "created_at"], name="core_mojprop_email_created_idx"),
+            index=models.Index(fields=["email", "created_at"], name="mojprop_email_created_idx"),
         ),
         migrations.AddIndex(
             model_name="mojproprequest",
-            index=models.Index(fields=["ip_hash", "created_at"], name="core_mojprop_ip_created_idx"),
+            index=models.Index(fields=["ip_hash", "created_at"], name="mojprop_ip_created_idx"),
         ),
     ]
