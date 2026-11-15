@@ -244,7 +244,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (root / "services/mpw_trx_guest_commerce.py").write_bytes(
                 SAFE_GUEST_EMAIL_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", root):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_RECOVERY_SOURCE_MISSING"):
                     check_actual_staging_store()
 
     @staticmethod
@@ -270,6 +270,16 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             ),
         )
         return model, connection
+
+    def test_owner_cutover_still_fails_closed_without_case_approval(self):
+        from scripts import mpw_dynamic_store_cutover_20261108 as module
+        with patch.object(module, "PUBLIC", self.public):
+            with patch.object(module, "atomic_replace") as modify:
+                with self.assertRaisesRegex(
+                    RuntimeError, "OWNER_BUYER_EMAIL_REQUIRED_STORE_CUTOVER_DENIED"
+                ):
+                    perform_cutover(self.public, self.backups, "42425162112", lambda: True)
+        modify.assert_not_called()
 
     def test_guest_order_claim_requires_real_schema_in_default_db(self):
         model, connection = self._guest_order_schema()
@@ -308,7 +318,7 @@ class DynamicStoreCutoverTests(unittest.TestCase):
             (app / "services/mpw_trx_email_recovery.py").write_bytes(
                 SAFE_RECOVERY_CHECKOUT_SOURCE)
             with patch("scripts.mpw_dynamic_store_cutover_20261108.APP", app):
-                with self.assertRaisesRegex(RuntimeError, "STAGING_EMAIL_FREE_IDENTITY_NOT_PROVEN"):
+                with self.assertRaisesRegex(RuntimeError, "STAGING_GUEST_EMAIL_OWNERSHIP_NOT_PROVEN"):
                     check_actual_staging_store()
 
     def setUp(self):
