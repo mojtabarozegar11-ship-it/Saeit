@@ -53,6 +53,7 @@ def assess_moj_prop_release(
     required_first_tier_accounts=1,
     challenge_attestations=None,
     sector_attestations=None,
+    trusted_merchant_registry=None,
     plan_code=DEFAULT_PLAN_CODE,
 ) -> MojPropReleaseDecision:
     """Evaluate one canonical plan without producing a live commercial side effect.
@@ -73,6 +74,7 @@ def assess_moj_prop_release(
         required_first_tier_accounts=required_first_tier_accounts,
         attestations=challenge_attestations,
         plan_code=plan.code,
+        trusted_merchant_registry=trusted_merchant_registry,
     )
     sector = assess_sector("moj_prop", sector_attestations)
 
