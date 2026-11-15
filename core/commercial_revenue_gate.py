@@ -771,7 +771,7 @@ class SQLiteCommercialLedger:
         if not isinstance(offer, OfferContract):
             raise CommercialGateError("trx_merchant_offer_required")
         row = self.connection.execute(
-            "SELECT tenant_id, canonical_host, offer_id, offer_type, release_evidence_sha256 FROM merchant_order_bindings WHERE order_id = ?",
+            "SELECT tenant_id, canonical_host, offer_id, offer_type, delivery_manifest_sha256, release_evidence_sha256 FROM merchant_order_bindings WHERE order_id = ?",
             (order_id,),
         ).fetchone()
         if row is None:
@@ -798,6 +798,13 @@ class SQLiteCommercialLedger:
             CommercialState.VERIFIED_REVENUE.value,
         ):
             raise CommercialGateError("bound_merchant_order_not_payable")
+        # The offer returned at review time must still represent the exact
+        # immutable order and digital rights manifest originally approved.
+        if (order["amount"] != _canonical_amount(offer.price, offer.currency)
+                or order["currency"] != offer.currency):
+            raise CommercialGateError("bound_merchant_order_price_mismatch")
+        if row["delivery_manifest_sha256"] != offer.delivery_manifest_sha256:
+            raise CommercialGateError("bound_merchant_delivery_manifest_mismatch")
         if registered["payload_digest"] != invoice_commitment(
             order_id=order_id, invoice_id=invoice_id,
             amount=Decimal(order["amount"]), currency=order["currency"],
