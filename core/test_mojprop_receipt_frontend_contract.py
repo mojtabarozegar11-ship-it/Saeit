@@ -21,11 +21,12 @@ class MojPropReceiptFrontendContract(SimpleTestCase):
 
     def test_bearer_lookup_is_read_only_and_never_sends_contact_pii(self):
         html = self.html()
-        self.assertIn("credentials:'omit'", html)
-        self.assertIn("referrerPolicy:'no-referrer'", html)
-        self.assertIn("cache:'no-store'", html)
-        self.assertIn("encodeURIComponent(token)", html)
-        self.assertIn("'/moj-prop-status/?receipt_token='", html)
+        self.assertIn("method:'POST',credentials:'same-origin',cache:'no-store'", html)
+        self.assertIn("'X-CSRFToken':csrfValue", html)
+        self.assertIn("body:JSON.stringify({receipt_token:receiptToken})", html)
+        self.assertIn("const statusEndpoint='/moj-prop-status/'", html)
+        self.assertNotIn("'/moj-prop-status/?receipt_token='", html)
+        self.assertNotIn("localStorage.setItem('receipt_token'", html)
         self.assertEqual(reverse("mojprop_receipt_status"), "/moj-prop-status/")
         self.assertIs(resolve("/moj-prop-status/").func, mojprop_receipt_status)
 

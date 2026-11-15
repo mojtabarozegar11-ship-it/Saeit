@@ -506,6 +506,7 @@ class MojPropRequest(T):
         ("signals", "Educational signals and market brief"),
         ("brief", "Private market brief"),
         ("audit", "mojtaba.bot.ai commercial-gate audit"),
+        ("digital", "Digital product purchase inquiry"),
     )
     HORIZON_CHOICES = (
         ("urgent", "Today / urgent"),
@@ -528,6 +529,8 @@ class MojPropRequest(T):
     route = models.CharField(max_length=30, choices=ROUTE_CHOICES)
     horizon = models.CharField(max_length=20, choices=HORIZON_CHOICES)
     notes = models.TextField()
+    # Product inquiry is a lead only, never a paid order.
+    product_id = models.PositiveBigIntegerField(null=True, blank=True)
     consent = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
     source = models.CharField(max_length=80, default="moj-prop")
@@ -543,3 +546,246 @@ class MojPropRequest(T):
             models.Index(fields=("email", "created_at"), name="mojprop_email_created_idx"),
             models.Index(fields=("ip_hash", "created_at"), name="mojprop_ip_created_idx"),
         ]
+
+class MojPropOffer(T):
+    """A priced manual-service proposal, never a paid order or delivered signal.
+
+    This record cannot charge a buyer, send an email or mark an order paid.
+    Buyers receive a quote only through an explicitly authorised channel.
+    """
+    STATUS_CHOICES = (
+        ("draft", "Draft - not issued"),
+        ("approved", "Reviewed for manual issuance"),
+        ("issued", "Manually issued - delivery not promised"),
+        ("accepted", "Acceptance recorded - not paid"),
+        ("cancelled", "Cancelled"),
+        ("expired", "Expired"),
+    )
+    CURRENCIES = (("USD", "US dollar"), ("IRR", "Iranian rial"))
+    lead = models.ForeignKey(
+        MojPropRequest, on_delete=models.PROTECT, related_name="commercial_offers"
+    )
+    version = models.PositiveSmallIntegerField(default=1)
+    title = models.CharField(max_length=180)
+    scope = models.TextField()
+    exclusions = models.TextField(
+        default="No live funded account, live trading, guaranteed returns or subscriptions."
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, choices=CURRENCIES, default="USD")
+    delivery_days = models.PositiveSmallIntegerField(default=7)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    issued_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    acceptance_reference = models.CharField(max_length=180, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="mojprop_offers", null=True, blank=True,
+    )
+    internal_note = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("lead", "version"), name="mojprop_one_offer_per_version"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(version__gte=1) & models.Q(version__lte=999),
+                name="mojprop_valid_offer_version",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="mojprop_offer_positive_amount",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(delivery_days__gte=1) & models.Q(delivery_days__lte=90),
+                name="mojprop_offer_delivery_days_range",
+            ),
+        ]
+
+    def clean(self):
+        from decimal import Decimal, InvalidOperation
+        from django.utils import timezone
+        super().clean()
+        errors = {}
+        if not self.title or not self.title.strip():
+            errors["title"] = "A concrete deliverable title is required."
+        if not self.scope or len(self.scope.strip()) < 50:
+            errors["scope"] = "Specify at least 50 characters of real scope."
+        try:
+            value = self.amount
+            if (type(value) is not Decimal or not value.is_finite()
+                    or value <= 0 or value != value.quantize(Decimal("0.01"))):
+                errors["amount"] = "A finite, positive, two-decimal quote is required."
+        except (InvalidOperation, TypeError, ValueError):
+            errors["amount"] = "Invalid quote."
+        if (type(self.delivery_days) is not int
+                or not 1 <= self.delivery_days <= 90):
+            errors["delivery_days"] = "Delivery must be between 1 and 90 days."
+        if type(self.version) is not int or not 1 <= self.version <= 999:
+            errors["version"] = "Proposal version must be 1-999."
+        if self.lead_id and self.lead.route not in ("blueprint", "signals", "brief", "audit", "digital"):
+            errors["lead"] = "Unsupported commercial request."
+        if self.pk:
+            prior = type(self).objects.filter(pk=self.pk).first()
+            if prior:
+                # An issued/accepted/terminal quote is an immutable commercial
+                # snapshot. Price negotiation must create a higher version.
+                if prior.status in ("issued", "accepted", "cancelled", "expired"):
+                    protected = ("lead_id", "version", "title", "scope",
+                                 "exclusions", "amount", "currency",
+                                 "delivery_days", "issued_at", "reviewed_at", "expires_at")
+                    if any(getattr(prior, field) != getattr(self, field) for field in protected):
+                        errors["status"] = "Frozen quote terms cannot be rewritten; issue a new version."
+                transitions = {
+                    "draft": ("draft", "approved", "cancelled"),
+                    "approved": ("approved", "draft", "issued", "cancelled"),
+                    "issued": ("issued", "accepted", "cancelled", "expired"),
+                    "accepted": ("accepted", "cancelled"),
+                    "cancelled": ("cancelled",),
+                    "expired": ("expired",),
+                }
+                if self.status not in transitions.get(prior.status, ()):
+                    errors["status"] = "Quote status transition is not permitted."
+
+        if self.status in ("approved", "issued", "accepted") and self.reviewed_at is None:
+            errors["reviewed_at"] = "A manual review timestamp is required."
+        if self.status in ("issued", "accepted"):
+            if self.issued_at is None:
+                errors["issued_at"] = "Only manually issued written offers can be tracked."
+            if self.expires_at is None:
+                errors["expires_at"] = "A written offer must have an expiry date."
+        now = timezone.now()
+        if self.reviewed_at and self.reviewed_at > now:
+            errors["reviewed_at"] = "Manual review cannot be recorded in the future."
+        if self.issued_at and self.issued_at > now:
+            errors["issued_at"] = "A written quote cannot be marked issued in the future."
+        if self.issued_at and self.reviewed_at and self.issued_at < self.reviewed_at:
+            errors["issued_at"] = "Issuance cannot precede manual review."
+        if self.status in ("draft", "approved") and self.issued_at is not None:
+            errors["issued_at"] = "An unissued proposal must not carry issuance evidence."
+        has_acceptance_reference = (
+            isinstance(self.acceptance_reference, str)
+            and bool(self.acceptance_reference.strip())
+        )
+        if self.status in ("draft", "approved", "issued") and (
+            self.accepted_at is not None or has_acceptance_reference
+        ):
+            errors["accepted_at"] = "Unaccepted offers must not include acceptance evidence."
+        if self.issued_at and self.expires_at and self.expires_at <= self.issued_at:
+            errors["expires_at"] = "Expiry must follow issuance."
+        if self.status == "accepted":
+            if not self.accepted_at or not has_acceptance_reference:
+                errors["acceptance_reference"] = "Record verifiable customer acceptance before calling a quote accepted."
+            if (self.accepted_at and self.issued_at and self.accepted_at < self.issued_at):
+                errors["accepted_at"] = "Customer cannot accept before a quote was issued."
+            if (self.accepted_at and self.expires_at and self.accepted_at > self.expires_at):
+                errors["accepted_at"] = "An expired proposal cannot be accepted."
+        if self.accepted_at and self.accepted_at > timezone.now():
+            errors["accepted_at"] = "Customer acceptance cannot be in the future."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def manual_quote_text(self):
+        """Copyable draft text; intentionally not an invoice or a payment request."""
+        return (
+            f"MOJ PROP / mojtaba.bot.ai - MANUAL PROPOSAL (NOT A PAYMENT INVOICE)\n"
+            f"Reference: {self.lead.request_id} / version {self.version}\n"
+            f"Service: {self.get_lead_route_display()}\n"
+            f"Catalog product ID: {self.lead.product_id or 'n/a'}\n"
+            f"Deliverable: {self.title}\n"
+            f"Scope: {self.scope}\n"
+            f"Exclusions: {self.exclusions}\n"
+            f"Quoted amount: {self.amount} {self.currency}\n"
+            f"Target delivery: {self.delivery_days} day(s) after a separate agreement.\n"
+            f"Proposal status: {self.status}; expires: {self.expires_at.isoformat() if self.expires_at else 'not issued'}\n"
+            "No payment has been collected; a lawful payment route and written agreement are required."
+        )
+
+    def get_lead_route_display(self):
+        return dict(MojPropRequest.ROUTE_CHOICES).get(self.lead.route, "Unknown")
+
+
+class MojPropDeliveryEvidence(T):
+    """Auditable handoff of one accepted proposal's private deliverable.
+
+    No message is sent here, no download is exposed, and a written reference
+    alone is never treated as proof of a blockchain/card payment.
+    """
+    STATUS_CHOICES = (
+        ("prepared", "Artifact prepared privately"),
+        ("sent", "External handoff recorded"),
+        ("acknowledged", "Customer acknowledgement recorded"),
+    )
+    offer = models.OneToOneField(
+        MojPropOffer, on_delete=models.PROTECT, related_name="delivery_evidence"
+    )
+    artifact_sha256 = models.CharField(max_length=64)
+    artifact_name = models.CharField(max_length=180)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="prepared")
+    # An actual legal clearance/credit term must be recorded before dispatch;
+    # this field does not assert a payment or an amount was received.
+    clearance_reference = models.CharField(max_length=180, blank=True, default="")
+    handoff_reference = models.CharField(max_length=180, blank=True, default="")
+    handed_off_at = models.DateTimeField(null=True, blank=True)
+    acknowledgment_reference = models.CharField(max_length=180, blank=True, default="")
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        import re
+        from django.utils import timezone
+        super().clean()
+        errors = {}
+        if (type(self.artifact_sha256) is not str or re.fullmatch(
+                r"[0-9a-f]{64}", self.artifact_sha256) is None
+                or self.artifact_sha256 == "0" * 64):
+            errors["artifact_sha256"] = "A real private deliverable SHA256 is required."
+        if not self.artifact_name or not self.artifact_name.strip():
+            errors["artifact_name"] = "Name the prepared deliverable."
+        if self.offer_id and self.offer.status != "accepted":
+            errors["offer"] = "Deliverables require an accepted written offer."
+        if self.status in ("sent", "acknowledged"):
+            if (not self.clearance_reference.strip()
+                    or not self.handoff_reference.strip()
+                    or self.handed_off_at is None):
+                errors["handoff_reference"] = "Handoff requires a clearance, timestamp and delivery reference."
+            if (self.offer_id and self.offer.accepted_at
+                    and self.handed_off_at and self.handed_off_at < self.offer.accepted_at):
+                errors["handed_off_at"] = "A service cannot be handed off before customer acceptance."
+        elif (self.handed_off_at is not None or self.handoff_reference.strip()
+              or self.clearance_reference.strip()):
+            errors["handoff_reference"] = "Prepared-only artifacts cannot claim dispatch or payment clearance."
+        if self.status == "acknowledged":
+            if not self.acknowledgment_reference.strip() or self.acknowledged_at is None:
+                errors["acknowledgment_reference"] = "The customer acknowledgment must be independently recorded."
+        elif self.acknowledged_at or self.acknowledgment_reference.strip():
+            errors["acknowledgment_reference"] = "Unacknowledged deliveries cannot carry buyer acknowledgment."
+        if self.handed_off_at and self.handed_off_at > timezone.now():
+            errors["handed_off_at"] = "Cannot dispatch a deliverable in the future."
+        if self.acknowledged_at and (self.acknowledged_at > timezone.now()
+                                    or (self.handed_off_at and
+                                        self.acknowledged_at < self.handed_off_at)):
+            errors["acknowledged_at"] = "Acknowledgment must follow handoff."
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).first()
+            if previous:
+                allowed = {
+                    "prepared": ("prepared", "sent"),
+                    "sent": ("sent", "acknowledged"),
+                    "acknowledged": ("acknowledged",),
+                }
+                if self.status not in allowed.get(previous.status, ()):
+                    errors["status"] = "Delivery lifecycle cannot be reversed."
+                if previous.status in ("sent", "acknowledged"):
+                    protected = ("offer_id", "artifact_sha256", "artifact_name",
+                                 "clearance_reference", "handoff_reference",
+                                 "handed_off_at")
+                    if any(getattr(self, field) != getattr(previous, field)
+                           for field in protected):
+                        errors["status"] = "Dispatched deliverable evidence is immutable."
+        if errors:
+            raise ValidationError(errors)

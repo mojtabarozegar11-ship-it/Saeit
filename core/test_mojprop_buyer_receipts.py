@@ -43,7 +43,8 @@ class MojPropBuyerReceiptTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "reviewing")
-        self.assertEqual(response.json()["stage"], "Being reviewed")
+        self.assertIn("Being reviewed", response.json()["stage"])
+        self.assertEqual(response.json()["payment_status"], "not_collected_by_this_service")
         self.assertNotIn("email", response.json())
         self.assertNotIn("notes", response.json())
         self.assertEqual(response["Cache-Control"], "no-store")
@@ -81,14 +82,27 @@ class MojPropBuyerReceiptTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("email", response.json())
 
-    def test_status_endpoint_will_not_accept_post_or_modify_lead(self):
+    def test_private_post_receipt_is_read_only_and_requires_json(self):
         result = self.make_lead()
-        response = self.browser.post(
+        # A browser-encoded form is not a trusted bearer JSON envelope.
+        malformed = self.browser.post(
             "/moj-prop-status/", {"receipt_token": result["receipt_token"]},
             HTTP_X_CSRFTOKEN=self.token,
         )
-        self.assertEqual(response.status_code, 405)
-        self.assertEqual(MojPropRequest.objects.get(request_id=result["request_id"]).status, "new")
+        self.assertEqual(malformed.status_code, 400)
+        response = self.browser.post(
+            "/moj-prop-status/",
+            data=json.dumps({"receipt_token": result["receipt_token"]}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=self.token,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["payment_status"], "not_collected_by_this_service")
+        self.assertEqual(
+            MojPropRequest.objects.get(request_id=result["request_id"]).status,
+            "new",
+        )
+
 
     def test_same_receipt_is_bound_to_one_actual_request(self):
         result = self.make_lead()

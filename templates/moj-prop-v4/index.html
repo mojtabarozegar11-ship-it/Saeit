@@ -25,7 +25,7 @@
       <div class="strip"><div class="strip-item"><b>01 / CLARITY</b><span>Rules are visible before commitment.</span></div><div class="strip-item"><b>02 / RISK</b><span>Drawdown and invalidation come first.</span></div><div class="strip-item"><b>03 / CONTROL</b><span>No collection without invoice and approval.</span></div><div class="strip-item"><b>04 / MOJ</b><span>One bot, one operating identity, one route.</span></div></div>
       <section class="section" id="model"><div class="section-head"><div><div class="eyebrow">COMMERCIAL MODEL</div><h2>What can be sold responsibly?</h2></div><p class="intro">Each route is defined by a deliverable and a gate. A visible page is not treated as a ready-to-sell product until its owner, evidence and next action are clear.</p></div><div class="grid"><article class="card"><span class="num">01 / BLUEPRINT</span><h3>Prop-program design</h3><p>Rulebook, evaluation model, risk gates, capacity ladder and an execution map for a credible product.</p><span class="status">Manual request ready</span></article><article class="card" id="signals"><span class="num">02 / SIGNAL DESK</span><h3>Educational signals</h3><p>Structured market scenarios with rationale, invalidation and risk context — never a profit promise or auto-execution.</p><span class="status">Connecting to mojtaba.bot.ai</span></article><article class="card"><span class="num">03 / MARKET BRIEF</span><h3>Private market brief</h3><p>Daily or weekly research for gold, FX or crypto with bullish, bearish and no-trade scenarios.</p><span class="status">Manual request ready</span></article><article class="card"><span class="num">04 / LIVE PROP</span><h3>Challenge and live account</h3><p>Account access or fee collection stays disabled until legal identity, contract, payment and risk infrastructure are approved.</p><span class="status locked">Legal / technical lock</span></article></div></section>
       <section class="section" id="rules"><div class="section-head"><div><div class="eyebrow">RULEBOOK GATES</div><h2>Rules before scale.</h2></div><p class="intro">Before any paid financial route, these gates must be written, reviewed, published and auditable.</p></div><div class="steps"><div class="step"><b>1. Define</b><span>Product, output, audience and responsibility boundaries.</span></div><div class="step"><b>2. Risk</b><span>Daily loss, total drawdown, invalidation and stop conditions.</span></div><div class="step"><b>3. Identity</b><span>Country, entity, KYC and support responsibilities.</span></div><div class="step"><b>4. Payment</b><span>Lawful method, invoice, final amount and refunds.</span></div><div class="step"><b>5. Receipt</b><span>Order ID, transaction evidence and documented delivery.</span></div></div><div class="actions"><a class="btn primary" href="/moj-prop/rules/">Open the full rulebook</a><a class="btn soft" href="/moj-prop/payment/">Payment status and gates</a></div></section>
-      <section class="section"><div class="section-head"><div><div class="eyebrow">MOJTABA.BOT.AI OPERATING LOOP</div><h2>One centre for every request.</h2></div><p class="intro">The single operating identity records the request, exposes the lock, and moves it toward a deliverable only after the relevant gates are passed.</p></div><div class="wide"><article class="manifesto"><span class="num">OPERATING PROMISE</span><h3>A report is not a result. A deliverable is.</h3><p>Every request needs an ID, owner, status, next action, evidence and completion rule. If payment or publication is not authorised, the lock stays visible.</p><div class="checks"><div class="check">Unique request ID and local draft</div><div class="check">Clear state: ready, review or locked</div><div class="check">No guaranteed-return language</div><div class="check">Manual route that can be audited</div></div></article><article class="form-card" id="request"><span class="num">REQUEST DESK</span><h3>Start your request</h3><p>This form sends a request to the Moj Prop intake endpoint for manual review. It does not charge, submit payment or create a live account.</p><form id="request-form"><div class="form-grid"><div class="field"><label for="name">Name</label><input id="name" required minlength="2" maxlength="200" autocomplete="name"></div><div class="field"><label for="email">Email</label><input id="email" type="email" required maxlength="254" autocomplete="email"></div><div class="field"><label for="service">Requested route</label><select id="service"><option value="blueprint">Prop-program design</option><option value="signals">Educational signals and market brief</option><option value="brief">Private market brief</option><option value="audit">mojtaba.bot.ai commercial-gate audit</option></select></div><div class="field"><label for="horizon">Time horizon</label><select id="horizon"><option value="urgent">Today / urgent</option><option value="week">This week</option><option value="month">This month</option><option value="review">Initial review only</option></select></div><div class="field full"><label for="notes">Goal, market and notes</label><textarea id="notes" required minlength="20" maxlength="5000" placeholder="For example: a gold market brief for education, or a prop-program rulebook..."></textarea></div></div><input id="website" name="website" maxlength="120" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;width:1px;height:1px"><label class="consent"><input id="consent" type="checkbox" required><span>I understand this is a request draft, not a confirmed order, payment or profit promise.</span></label><div class="form-actions"><button class="btn primary" type="submit">Send request for review</button><button class="btn soft" type="button" id="copy" disabled>Copy receipt</button><button class="btn soft" type="button" id="download" disabled>Save private receipt (.txt)</button><span class="btn soft" id="email-link">No payment is taken</span></div><div class="result" id="result" role="status" aria-live="polite">Complete the form to send a review-ready request. No payment is taken.</div><div class="field full"><label for="receipt-token">Private receipt token (copy and keep securely)</label><input id="receipt-token" type="text" autocomplete="off" spellcheck="false" placeholder="Paste your saved receipt token to check progress"><button class="btn soft" type="button" id="status-check">Check request progress</button><div class="result" id="status-result" role="status" aria-live="polite">Request progress is private; a receipt token is required. No payment data is shown.</div></div></form></article></div></section>
+      <section class="section"><div class="section-head"><div><div class="eyebrow">MOJTABA.BOT.AI OPERATING LOOP</div><h2>One centre for every request.</h2></div><p class="intro">The single operating identity records the request, exposes the lock, and moves it toward a deliverable only after the relevant gates are passed.</p></div><div class="wide"><article class="manifesto"><span class="num">OPERATING PROMISE</span><h3>A report is not a result. A deliverable is.</h3><p>Every request needs an ID, owner, status, next action, evidence and completion rule. If payment or publication is not authorised, the lock stays visible.</p><div class="checks"><div class="check">Unique request ID and local draft</div><div class="check">Clear state: ready, review or locked</div><div class="check">No guaranteed-return language</div><div class="check">Manual route that can be audited</div></div></article><article class="form-card" id="request"><span class="num">REQUEST DESK</span><h3>Start your request</h3><p>This form sends a request to the Moj Prop intake endpoint for manual review. It does not charge, submit payment or create a live account.</p><form id="request-form"><div class="form-grid"><div class="field"><label for="name">Name</label><input id="name" required minlength="2" maxlength="200" autocomplete="name"></div><div class="field"><label for="email">Email</label><input id="email" type="email" required maxlength="254" autocomplete="email"></div><div class="field"><label for="service">Requested route</label><select id="service"><option value="blueprint">Prop-program design</option><option value="signals">Educational signals and market brief</option><option value="brief">Private market brief</option><option value="audit">mojtaba.bot.ai commercial-gate audit</option><option value="digital">Digital product purchase inquiry</option></select><div class="field" id="digital-product-field" hidden style="display:none"><label for="digital-product">Digital product</label><select id="digital-product" name="digital-product" disabled><option value="">Select a product</option><option value="72">Digital product #72</option><option value="225">Digital product #225</option><option value="879">Digital product #879</option></select></div></div><div class="field"><label for="horizon">Time horizon</label><select id="horizon"><option value="urgent">Today / urgent</option><option value="week">This week</option><option value="month">This month</option><option value="review">Initial review only</option></select></div><div class="field full"><label for="notes">Goal, market and notes</label><textarea id="notes" required minlength="20" maxlength="5000" placeholder="For example: a gold market brief for education, or a prop-program rulebook..."></textarea></div></div><input id="website" name="website" maxlength="120" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;width:1px;height:1px"><label class="consent"><input id="consent" type="checkbox" required><span>I understand this is a request draft, not a confirmed order, payment or profit promise.</span></label><div class="form-actions"><button class="btn primary" type="submit">Send request for review</button><button class="btn soft" type="button" id="copy" disabled>Copy receipt</button><button class="btn soft" type="button" id="download" disabled>Save private receipt (.txt)</button><span class="btn soft" id="email-link">No payment is taken</span></div><div class="result" id="result" role="status" aria-live="polite">Complete the form to send a review-ready request. No payment is taken.</div><div class="field full"><label for="receipt-token">Private status token (keep secret) — copy and save securely</label><input id="receipt-token" type="text" readonly maxlength="256" autocomplete="off" spellcheck="false" placeholder="Your verified private receipt token appears here"></div></form><form id="status-form" autocomplete="off"><div class="field"><label for="status-token">Track your request with your private receipt token</label><input id="status-token" type="text" required maxlength="256" autocomplete="off" spellcheck="false" placeholder="Paste your private token to check progress"></div><div class="form-actions"><button class="btn soft" type="submit" id="status-check">Check request progress</button></div><div class="result" id="status-result" role="status" aria-live="polite">Private request status does not confirm payment, settlement or delivery.</div></form></article></div></section>
       <section class="section"><div class="section-head"><div><div class="eyebrow">FAQ / NO SURPRISES</div><h2>Hard answers first.</h2></div><p class="intro">Trust starts when the difficult answer is clear before money is requested.</p></div><div class="faq"><div><details open><summary>Does Moj Prop currently sell a live account or paid challenge?</summary><p>No. Live accounts, paid challenges and automatic payment remain locked until legal identity, contracts, KYC and risk infrastructure are approved.</p></details><details><summary>Are the signals guaranteed to make money?</summary><p>No. Educational signals describe scenarios, rationale, invalidation and risk context. The user makes their own decision.</p></details></div><div><details><summary>How can revenue start now?</summary><p>Through deliverables such as prop-program design, private market briefs, educational research and commercial-gate audits, using a manual review route.</p></details><details><summary>Is TRX payment active?</summary><p>No public wallet address is displayed. If a lawful route is approved, the method and amount are disclosed only in a written invoice.</p></details></div></div></section>
     </main>
     <footer class="footer"><span>© 2026 Moj Prop · MojPlayWin risk desk</span><span><a href="/moj-prop/catalog/">Catalog</a> · <a href="/moj-prop/signals/">Signal Desk</a> · <a href="/moj-prop/rules/">Rulebook</a> · <a href="/moj-prop/payment/">Payment</a> · <a href="/moj-prop/contact/">Contact</a></span></footer>
@@ -39,6 +39,9 @@
       const download=document.getElementById('download');
       const receiptTokenInput=document.getElementById('receipt-token');
       const statusCheck=document.getElementById('status-check');
+      const statusForm=document.getElementById('status-form');
+      const statusInput=document.getElementById('status-token');
+      const statusEndpoint='/moj-prop-status/';
       const statusResult=document.getElementById('status-result');
       const submit=form.querySelector('button[type="submit"]');
       const endpoint='/moj-prop-intake/';
@@ -49,26 +52,55 @@
         blueprint:'Prop-program design',
         signals:'Educational signals and market brief',
         brief:'Private market brief',
-        audit:'mojtaba.bot.ai commercial-gate audit'
+        audit:'mojtaba.bot.ai commercial-gate audit',
+        digital:'Digital product purchase inquiry'
       };
       // Financial-brand signal pages link here with ?service=signals.
       // Honor only actual service codes; never write a URL string into the form.
       const serviceSelect=document.getElementById('service');
+      const serviceSelector=serviceSelect;
       const requestedService=new URLSearchParams(window.location.search).get('service');
       if(Object.prototype.hasOwnProperty.call(labels,requestedService)){
         serviceSelect.value=requestedService;
+        document.getElementById('service').value=requestedService;
+      }
+      const productSelector=document.getElementById('digital-product');
+      const productField=document.getElementById('digital-product-field');
+      const permittedProducts=new Set(['72','225','879']);
+      const productFromURL=new URLSearchParams(window.location.search).get('product')||'';
+      if(permittedProducts.has(productFromURL)) productSelector.value=productFromURL;
+      function syncDigitalProduct(){
+        const isDigital=serviceSelector.value==='digital';
+        productField.hidden=!isDigital;
+        productField.style.display=isDigital?'':'none';
+        productSelector.disabled=!isDigital;
+        productSelector.required=isDigital;
+        if(isDigital && !document.getElementById('notes').value.trim()){
+          document.getElementById('notes').value='Please confirm the product license, exact price, delivery method and lawful payment route before invoicing.';
+        }
+      }
+      serviceSelector.addEventListener('change',syncDigitalProduct);
+      syncDigitalProduct();
+      const signalPlans={
+        'education-weekly':'weekly',
+        'education-monthly':'monthly',
+        'education-quarterly':'quarterly'
+      };
+      const requestedPlan=new URLSearchParams(window.location.search).get('plan');
+      if(requestedService==='signals' && Object.prototype.hasOwnProperty.call(signalPlans,requestedPlan)){
+        document.getElementById('notes').value='Please provide a risk-disclosed educational '+signalPlans[requestedPlan]+' market brief. A recurring subscription and payment have not been authorized.';
       }
 
-      async function csrf(){
+      async function csrf(signal){
         if(csrfToken) return csrfToken;
-        const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store'});
+        const response=await fetch(endpoint,{credentials:'same-origin',headers:{Accept:'application/json'},cache:'no-store',signal});
         const data=await response.json();
         if(!response.ok || !data.csrf_token) throw new Error(data.detail||'Intake service is unavailable.');
         csrfToken=data.csrf_token;
         return csrfToken;
       }
 
-      function draft(name,email,service,horizon,notes,status,requestId,receiptToken){
+      function draft(name,email,service,horizon,notes,status,requestId,receiptToken,selectedProduct){
         return [
           'Moj Prop / mojtaba.bot.ai request',
           '',
@@ -78,6 +110,7 @@
           'Email: '+email,
           'Route: '+labels[service],
           'Time horizon: '+horizon,
+          'Catalog product ID: '+(selectedProduct||'n/a'),
           'Notes: '+notes,
           '',
           'Status: '+status,
@@ -93,6 +126,7 @@
         const horizon=document.getElementById('horizon').value;
         const notes=document.getElementById('notes').value.trim();
         const website=document.getElementById('website').value.trim();
+        const selectedProduct=service==='digital'&&permittedProducts.has(productSelector.value)?Number(productSelector.value):null;
         submit.disabled=true;
         form.setAttribute('aria-busy','true');
         copy.disabled=true;
@@ -101,14 +135,19 @@
         if(receiptTokenInput.value.trim()) statusResult.textContent='The token shown belongs to a previous saved request until a new one is accepted.';
         submit.textContent='Sending securely…';
         result.textContent='Connecting to the Moj Prop intake desk…';
+        const abortController=new AbortController();
+        const timeout=setTimeout(()=>abortController.abort(),15000);
         try{
-          const token=await csrf();
+          const token=await csrf(abortController.signal);
           const response=await fetch(endpoint,{
             method:'POST',
             credentials:'same-origin',
+            signal:abortController.signal,
             headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRFToken':token},
-            body:JSON.stringify({name,email,service,horizon,notes,website,consent:document.getElementById('consent').checked})
+            body:JSON.stringify({name,email,service,horizon,notes,website,
+              product_id:selectedProduct,consent:document.getElementById('consent').checked})
           });
+          if(response.status===403) csrfToken='';
           const data=await response.json().catch(()=>({}));
           // A successful HTTP 200, or an unrelated HTML proxy response, is
           // not a persistent commercial lead. The server must issue HTTP 201
@@ -122,8 +161,11 @@
              const retry=response.status===429 ? ' Wait before resubmitting; no new request was recorded.' : '';
              throw new Error((data.detail||'The request could not be received.')+(problems?' '+problems:'')+retry);
            }
-          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,data.receipt_token||'');
+          receipt=draft(name,email,service,horizon,notes,'received for manual review',data.request_id,data.receipt_token||'',selectedProduct);
           receiptTokenInput.value=data.receipt_token||'';
+          if(data.receipt_token!==undefined && typeof data.receipt_token==='string' && data.receipt_token.length<=256){
+            statusInput.value=data.receipt_token;
+          }
           statusResult.textContent=data.receipt_token ? 'Save the receipt securely; you can check review progress here.' : 'Request received; save your request ID for manual follow-up.';
           result.textContent=receipt;
           copy.disabled=false;
@@ -132,35 +174,50 @@
           // A failed request is NOT a buyer receipt and must never enable
           // copy/download controls suggesting a customer was registered.
           receipt='';
-          result.textContent='Request NOT submitted. '+error.message+' No ID or payment was created.';
+          result.textContent='Request NOT submitted. '+(error.name==='AbortError'?'The service timed out. Verify with support before resubmitting.':error.message)+' No ID or payment was created.';
           copy.disabled=true;
           download.disabled=true;
         }finally{
+          clearTimeout(timeout);
           submit.disabled=false;
           form.removeAttribute('aria-busy');
           submit.textContent='Send request for review';
         }
       });
 
-      statusCheck.addEventListener('click',async function(){
-        const token=receiptTokenInput.value.trim();
-        if(!token || token.length>256){
-          statusResult.textContent='Enter a valid private receipt token; no request was changed.';
+      statusForm.addEventListener('submit',async function(event){
+        event.preventDefault();
+        const receiptToken=statusInput.value.trim();
+        if(!receiptToken || receiptToken.length>256){
+          statusResult.textContent='Enter a valid private receipt token.';
           return;
         }
         statusCheck.disabled=true;
-        statusResult.textContent='Checking this receipt without requesting any payment…';
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),15000);
         try{
-          const response=await fetch('/moj-prop-status/?receipt_token='+encodeURIComponent(token),{
-            credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer',
-            headers:{Accept:'application/json'}
+          const csrfValue=await csrf(controller.signal);
+          const response=await fetch(statusEndpoint,{
+            method:'POST',credentials:'same-origin',cache:'no-store',
+            signal:controller.signal,
+            headers:{'Accept':'application/json','Content-Type':'application/json',
+                     'X-CSRFToken':csrfValue},
+            body:JSON.stringify({receipt_token:receiptToken})
           });
-          const data=await response.json();
-          if(!response.ok || !data.ok) throw new Error('Receipt invalid or expired; use your original contact channel.');
-          statusResult.textContent='Request '+data.request_id+': '+data.stage+'. No payment is collected here.';
+          if(response.status===403) csrfToken='';
+          const data=await response.json().catch(()=>({}));
+          if(!response.ok || data.ok!==true ||
+             typeof data.stage!=='string' || typeof data.request_id!=='string'){
+            throw new Error('Receipt unavailable or expired.');
+          }
+          statusResult.textContent='Request '+data.request_id+': '+data.stage+
+            '. This does not confirm payment, settlement or delivery.';
         }catch(error){
-          statusResult.textContent=error.message;
+          statusResult.textContent=error.name==='AbortError'?
+            'Status lookup timed out. No request or payment was resubmitted.':
+            'Status unavailable. Verify your private token or contact support.';
         }finally{
+          clearTimeout(timeout);
           statusCheck.disabled=false;
         }
       });
