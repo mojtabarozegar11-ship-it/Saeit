@@ -159,6 +159,18 @@ def mojprop_intake(request):
     if _text(payload, "website", 120):
         return _json({"ok": False, "detail": "Request rejected."}, status=400)
 
+    # Reject rather than silently truncate buyer identity or requested scope.
+    # Truncation can convert two distinct contacts into the same CRM address,
+    # or create a quote for a materially different scope than the buyer sent.
+    limits = {"name": 200, "email": 254, "service": 30,
+              "horizon": 20, "notes": 5000, "website": 120}
+    oversized = {key: "Field exceeds maximum length."
+                 for key, maximum in limits.items()
+                 if len(payload.get(key, "")) > maximum}
+    if oversized:
+        return _json({"ok": False, "detail": "Request fields are too long.",
+                      "fields": oversized}, status=400)
+
     name = _text(payload, "name", 200)
     email = _text(payload, "email", 254).lower()
     route = _text(payload, "service", 30)
