@@ -5,6 +5,7 @@ on:
     branches:
       - "feature/prop-firm-policy-v11-20261114"
       - "cycle59-moj-prop-level10-decision-lock-20261115"
+      - "cycle60-moj-prop-public-intake-storage-20261115"
   pull_request:
     branches:
       - "main"
