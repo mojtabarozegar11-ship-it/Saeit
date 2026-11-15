@@ -27,7 +27,6 @@ class SignalEvidenceTypeTests(unittest.TestCase):
             advance_signal_entitlement(
                 "offered", "payment_verified",
                 evidence={"verified": True, "receipt_id": "receipt:2026:0001"},
-                    payment_verifier=lambda _: True,
                 payment_verifier=lambda item: item["receipt_id"] == "receipt:2026:0001",
             ),
             "paid",
