@@ -55,6 +55,8 @@ def _base():
         "no_money_or_customer_messages": True,
         "same_order_candidate_found": False,
         "candidate_product_kind": None,
+        "candidate_account_kind": None,
+        "guest_outbox_missing_for_guest": None,
         "paid_scan_exhaustive": None,
         "item_scan_exhaustive": None,
         "ready_fulfillment_model_fk_verified": None,
@@ -152,6 +154,15 @@ def inspect_one():
 
             result["same_order_candidate_found"] = True
             result["candidate_product_kind"] = kind
+            try:
+                from services.mpw_trx_guest_delivery import _guest_user
+                result["candidate_account_kind"] = (
+                    "guest" if _guest_user(order.customer) is True
+                    else "registered_or_other"
+                )
+            except (ImportError, AttributeError):
+                # No conclusion if the actual guest-account classifier is absent.
+                result["candidate_account_kind"] = None
             result["item_scan_exhaustive"] = within_limit
             result["same_item_ready_digital_fulfillment"] = True
             result["private_item_file_accessible"] = _asset_exists(item)
@@ -188,6 +199,10 @@ def inspect_one():
             if result["guest_delivery_core_order_fk_verified"]:
                 outbox = Guest.objects.filter(order_id=order.pk).first()
                 result["same_order_guest_outbox_present"] = outbox is not None
+                if result["candidate_account_kind"] is not None:
+                    result["guest_outbox_missing_for_guest"] = (
+                        result["candidate_account_kind"] == "guest" and outbox is None
+                    )
                 result["same_order_guest_receipt_mail_sent"] = (
                     outbox.receipt_state == "sent" if outbox is not None else False
                 )
