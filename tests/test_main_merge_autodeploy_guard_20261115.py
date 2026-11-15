@@ -33,6 +33,26 @@ class MainMergeCannotPublishTests(unittest.TestCase):
                 self.assertIn(clause, publish)
         self.assertNotIn("github.event_name == 'push'", publish)
 
+    def test_manual_release_fail_closed_before_any_ssh_or_host_change(self):
+        text = (ROOT / "zomorod-app-pages-deploy.yml").read_text(encoding="utf-8")
+        # A dispatch has no permission to access hosting credentials until
+        # the pinned commit and all safety attestations have been checked.
+        first_guard = text.index("- name: Reject unreviewed or unpinned Zomorod production release")
+        check_end = text.index('[[ "$TENANT_ISOLATION_VERIFIED" == "true" ]]')
+        ssh_step = text.index("- name: Prepare pinned VPS relay and cPanel SSH")
+        self.assertLess(first_guard, check_end)
+        self.assertLess(check_end, ssh_step)
+        for required in (
+            "owner_approved_live_deploy:",
+            "approved_release_sha:",
+            "required: true",
+            "default: false",
+            "OWNER_APPROVED_SHA: ${{ inputs.approved_release_sha }}",
+            '[[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]',
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, text)
+
     def test_mojprop_catalog_job_remains_manual_only(self):
         text = (ROOT / "mojplaywin-moj-prop-deploy.yml").read_text(encoding="utf-8")
         self.assertIn("\n  deploy:\n", text)
