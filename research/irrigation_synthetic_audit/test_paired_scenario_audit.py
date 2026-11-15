@@ -494,6 +494,44 @@ class AuditTests(unittest.TestCase):
         with self.assertRaisesRegex(AuditError, "catalog mismatch"):
             verify_source_paths(self.make_records("C"), "C")
 
+    def test_water_median_and_range_are_descriptive_not_intervals(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(report["median_delta_water_m3"], 10)
+        self.assertEqual(report["range_delta_water_m3"], [10, 10])
+
+    def test_q_median_and_range_are_descriptive_not_intervals(self):
+        report = analyze_family(self.make_records("C"), "C")
+        self.assertEqual(report["median_delta_q100"], -2)
+        self.assertEqual(report["range_delta_q100"], [-2, -2])
+
+    def test_even_sample_median_uses_both_middle_scenario_values(self):
+        def split(rows):
+            changed = 0
+            for row in rows:
+                if row["policy"] == "v3":
+                    if changed < 270:
+                        row["gross_water_m3"] = 120
+                    changed += 1
+        report = analyze_family(self.make_records("C", split), "C")
+        self.assertEqual(report["median_delta_water_m3"], 15)
+        self.assertEqual(report["range_delta_water_m3"], [10, 20])
+
+    def test_path_outlier_does_not_turn_median_into_mean(self):
+        def inject(rows):
+            for row in rows:
+                if row["policy"] == "v3" and row["seed"] == 1000:
+                    row["gross_water_m3"] = 130
+        report = analyze_family(self.make_records("C", inject), "C")
+        self.assertAlmostEqual(report["mean_delta_water_m3"], 10+20/12)
+        self.assertEqual(report["median_delta_water_m3"], 10)
+        self.assertEqual(report["range_delta_water_m3"], [10, 30])
+
+    def test_r1_paired_medians_and_extrema_have_defined_units(self):
+        report = analyze_family(self.make_records("R1"), "R1")
+        self.assertEqual(report["median_delta_water_m3"], 10)
+        self.assertEqual(report["median_delta_q100"], -2)
+        self.assertEqual(report["range_delta_q100"], [-2, -2])
+
     def test_r1_reports_twelve_climate_paths(self):
         report = analyze_family(self.make_records("R1"), "R1")
         self.assertEqual(len(report["climate_path_effects"]), 12)
