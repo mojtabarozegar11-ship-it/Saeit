@@ -328,6 +328,40 @@ class MojPropReleaseIsolatedBehaviorTests(unittest.TestCase):
         release.restore(path.parent)
         self.assertEqual(live.read_bytes(), b"customer signal changes are protected")
 
+    def test_symlinked_backup_root_cannot_redirect_starter30_publication(self):
+        foreign = self.home / "unrelated-tenant-private"
+        foreign.mkdir()
+        self.backups.symlink_to(foreign, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Symlinked Moj Prop backup root"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(list(foreign.iterdir()), [])
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_preexisting_untrusted_backup_root_is_not_chmod_repaired(self):
+        self.backups.mkdir()
+        self.backups.chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError, "Untrusted Moj Prop backup root owner or mode"):
+            release.deploy("123", "a" * 40)
+        self.assertEqual(self.backups.stat().st_mode & 0o777, 0o755)
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_world_writable_backup_parent_blocks_release_without_public_writes(self):
+        self.home.chmod(0o777)
+        with self.assertRaisesRegex(RuntimeError, "Untrusted Moj Prop backup parent owner or mode"):
+            release.deploy("123", "a" * 40)
+        self.assertFalse(self.backups.exists())
+        self.assertFalse((self.route / "starter-30-trx/index.html").exists())
+
+    def test_backup_root_replacement_cannot_redirect_rollback(self):
+        release.deploy("123", "a" * 40)
+        moved = self.home / "unrelated-existing-vault"
+        self.backups.rename(moved)
+        self.backups.symlink_to(moved, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "Symlinked Moj Prop backup root"):
+            release.restore(self.backups / "moj-prop-catalog-123")
+        self.assertTrue((self.route / "starter-30-trx/index.html").exists())
+        self.assertTrue((moved / "moj-prop-catalog-123/manifest.json").is_file())
+
     def test_readonly_preflight_proves_no_backup_or_live_write(self):
         before_home = (self.route / "index.html").read_bytes()
         before_catalog = (self.route / "catalog/index.html").read_bytes()
