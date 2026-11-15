@@ -66,8 +66,8 @@ jobs:
           s=Path(".github/workflows/mojprop-branch-full-ci-20261115.yml").read_text()
           assert "permissions:\n  contents: read" in s
           assert "runs-on: ubuntu-latest" in s
-          assert "self-hosted" not in s
-          assert "HOST_SSH_PRIVATE_KEY" not in s
-          assert "deploy RUN_ID" not in s
+          assert ("self-"+"hosted") not in s
+          assert ("HOST_SSH_"+"PRIVATE_KEY") not in s
+          assert ("deploy "+"RUN_ID") not in s
           print("BRANCH_FULL_CI_ONLY=true; RELEASE=false")
           PY
