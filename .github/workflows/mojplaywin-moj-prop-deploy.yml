@@ -162,7 +162,7 @@ jobs:
           [[ "$catalog_status" == "200" ]]
           intake_status="000"
           for intake_attempt in {1..10}; do
-            intake_status="$(curl -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop/intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
+            intake_status="$(curl -L --max-redirs 3 -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/moj-prop-intake.json" -w '%{http_code}' "https://mojplaywin.com/moj-prop/intake/?_moj_prop_backend_deploy=$GITHUB_RUN_ID" || true)"
             [[ "$intake_status" == "200" ]] && break
             echo "Moj Prop intake not ready (HTTP $intake_status, attempt $intake_attempt)."
             sleep 3
@@ -206,6 +206,11 @@ jobs:
           import os, sys, traceback
           from pathlib import Path
           root = Path('/home/zomorod2/Saeit-staging')
+          htaccess = Path('/home/zomorod2/mojplaywin.com/.htaccess')
+          if htaccess.is_file() and not htaccess.is_symlink():
+              for line in htaccess.read_text(encoding='utf-8', errors='replace').splitlines():
+                  if any(token in line.lower() for token in ('passenger', 'rewrite', 'moj-prop', 'directoryindex')):
+                      print('MOJ_PROP_HTACCESS=' + line[:300])
           sys.path.insert(0, str(root))
           os.chdir(root)
           os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -222,8 +227,9 @@ jobs:
               print('MOJ_PROP_RESOLVED=' + repr(resolve('/moj-prop/intake/').func))
               client = Client(HTTP_HOST='mojplaywin.com', secure=True)
               client.raise_request_exception = False
-              response = client.get('/moj-prop/intake/')
+              response = client.get('/moj-prop/intake/', follow=True)
               print('MOJ_PROP_CLIENT_STATUS=' + str(response.status_code))
+              print('MOJ_PROP_CLIENT_LOCATION=' + str(response.headers.get('Location', '')))
               print('MOJ_PROP_CLIENT_BODY=' + response.content[:300].decode('utf-8', 'replace'))
               if getattr(response, 'exc_info', None):
                   traceback.print_exception(*response.exc_info)
