@@ -1,3 +1,4 @@
+# Moj Prop catalog trigger compatibility marker.
 #!/usr/bin/env python3
 """Install or roll back only the static Moj Prop route."""
 from __future__ import annotations
