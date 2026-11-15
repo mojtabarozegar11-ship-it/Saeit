@@ -36,11 +36,15 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
         lease = lease or self.lease()
         record = {
             "network": "tron-mainnet", "asset": "TRX",
+            "invoice_id": lease.invoice_id,
+            "tx_id": "a" * 64,
             "merchant_tenant_id": lease.merchant_tenant_id,
             "sku": lease.sku,
             "buyer_digest": lease.buyer_digest,
+            "expected_sun": 12000000,
             "settled_sun": 12000000,
             "finality_verified": True,
+            "refunded": False,
             "refund_pending": False,
             "charge_disputed": False,
         }
@@ -133,6 +137,11 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
             {"sku": "moj-signals-professional"},
             {"buyer_digest": "0" * 64},
             {"settled_sun": 0}, {"settled_sun": True},
+            {"settled_sun": 1}, {"expected_sun": 12000001},
+            {"expected_sun": True}, {"expected_sun": 0},
+            {"tx_id": "z" * 64}, {"tx_id": "A" * 64},
+            {"invoice_id": "mpw:trx:invoice:10002"},
+            {"refunded": True},
             {"asset": "USDT"}, {"network": "tron-testnet"},
             {"finality_verified": "yes"}, {"finality_verified": False},
             {"refund_pending": True}, {"charge_disputed": True},
@@ -142,6 +151,20 @@ class SingleGlobalSignalEntitlementTests(SimpleTestCase):
                 self.assertFalse(self.access(
                     independently_reconciled_invoices=self.paid_invoice_record(**corrupted)
                 ))
+
+    def test_underpaid_invoice_with_matching_customer_cannot_unlock_signal(self):
+        self.assertFalse(self.access(
+            independently_reconciled_invoices=self.paid_invoice_record(
+                settled_sun=1, expected_sun=12000000
+            )
+        ))
+
+    def test_refunded_invoice_revokes_access_even_if_hmac_still_valid(self):
+        self.assertFalse(self.access(
+            independently_reconciled_invoices=self.paid_invoice_record(
+                refunded=True, finality_verified=True
+            )
+        ))
 
     def test_invoice_id_set_alone_no_longer_grants_signal_access(self):
         self.assertFalse(self.access(independently_reconciled_invoices={"mpw:trx:invoice:10001"}))
