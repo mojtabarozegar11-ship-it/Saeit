@@ -260,7 +260,7 @@ class C28ScopedRealRestore(unittest.TestCase):
         self.assertTrue((self.home / ".mojprop-c28-approval-9873211.used").exists())
         self.assertFalse((self.root / "moj-prop" / "backup").exists())
 
-    def test_quota_exception_cleans_only_this_private_run_and_consumes_nonce(self):
+    def test_quota_exception_retains_bounded_private_partial_and_consumes_nonce(self):
         originals = [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES]
         real_write = mod._write
         triggered = {"count": 0}
@@ -275,7 +275,9 @@ class C28ScopedRealRestore(unittest.TestCase):
         with patch.object(mod, "_write", side_effect=fail_one_copy):
             with self.assertRaises(OSError):
                 mod.audit_and_restore(**self.params)
-        self.assertFalse((self.vault / "172900101").exists())
+        # Fail closed: do not unlink a potentially racing same-UID writer's bytes.
+        # The partially written isolated private run is intentionally retained.
+        self.assertTrue((self.vault / "172900101").is_dir())
         self.assertTrue((self.home / ".mojprop-c28-approval-9873211.used").exists())
         self.assertEqual(originals, [(self.root / Path(*x)).read_bytes() for x in mod.PUBLIC_FILES])
         self.params["run_id"] = "172900102"
@@ -291,7 +293,10 @@ class C28ScopedRealRestore(unittest.TestCase):
         with patch.object(mod, "_write", side_effect=fail_manifest):
             with self.assertRaises(OSError):
                 mod.audit_and_restore(**self.params)
-        self.assertFalse((self.vault / "172900101").exists())
+        # Failed manifest remains a private, NON-authorizing partial run.
+        # Removing by pathname here risks unlinking a concurrent writer's data.
+        self.assertTrue((self.vault / "172900101").is_dir())
+        self.assertFalse((self.vault / "172900101" / "manifest.json").exists())
         self.assertEqual((self.root / "moj-prop/index.html").read_bytes(), b"A" * 150)
         self.assertEqual((self.root / "moj-prop/catalog/index.html").read_bytes(), b"B" * 170)
 
