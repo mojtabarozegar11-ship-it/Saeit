@@ -13,7 +13,6 @@ on:
       - "core/mojprop_views.py"
       - "core/migrations/0041_mojprop_request.py"
       - "core/migrations/0042_merge_commercefunnel_mojprop.py"
-      - "core/migrations/0043_alter_mojproprequest_source.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   push:
     branches: [main]
@@ -28,7 +27,6 @@ on:
       - "core/mojprop_views.py"
       - "core/migrations/0041_mojprop_request.py"
       - "core/migrations/0042_merge_commercefunnel_mojprop.py"
-      - "core/migrations/0043_alter_mojproprequest_source.py"
       - "scripts/deploy_mojplaywin_moj_prop_backend.py"
   workflow_dispatch:
     inputs:
@@ -129,7 +127,7 @@ jobs:
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-moj-prop-catalog-$GITHUB_RUN_ID"
       - name: Package only Moj Prop installer and page
-        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_merge_commercefunnel_mojprop.py core/migrations/0043_alter_mojproprequest_source.py
+        run: tar -cf "$RUNNER_TEMP/moj-prop-catalog.tar" scripts/update_mojplaywin_moj_prop_catalog.py scripts/deploy_mojplaywin_moj_prop_backend.py templates/moj-prop-v4 config/urls.py core/models.py core/admin.py core/mojprop_views.py core/migrations/0041_mojprop_request.py core/migrations/0042_merge_commercefunnel_mojprop.py
       - name: Upload isolated Moj Prop package
         shell: bash
         run: |
