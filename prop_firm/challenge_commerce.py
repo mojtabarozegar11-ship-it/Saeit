@@ -8,7 +8,7 @@ This is an offline arithmetic readiness gate, NOT a checkout implementation.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from core.tron_tenant_policy import TenantDecision
+from core.tron_tenant_policy import TenantDecision, registered_scope
 from .economics import funded_capacity
 from .rules import POLICY, LEVELS
 from .plans import DEFAULT_PLAN_CODE, plan_for_code
@@ -51,7 +51,8 @@ class ChallengeOfferDecision:
 def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
                               protected_reserves_usd, existing_commitments_usd=0,
                               required_first_tier_accounts=1, attestations=None,
-                              plan_code=DEFAULT_PLAN_CODE):
+                              plan_code=DEFAULT_PLAN_CODE,
+                              trusted_merchant_registry=None):
     plan = plan_for_code(plan_code)
     if not isinstance(merchant_tenant, TenantDecision):
         raise ValueError("Trusted merchant scope needed")
@@ -88,6 +89,21 @@ def assess_challenge_checkout(*, merchant_tenant, free_treasury_usd,
             or merchant_tenant.payment_enabled is not False
             or merchant_tenant.invoice_created is not False):
         blockers.append("dedicated_moj_prop_tron_merchant_not_verified")
+    # Business-plan approval booleans and a tenant DTO can be stale/forged.
+    # Resolve the exact brand+host from independently protected configuration
+    # again before declaring even legal-review eligibility.
+    if type(trusted_merchant_registry) is not dict:
+        blockers.append("protected_prop_merchant_registry_missing")
+    else:
+        try:
+            actual_tenant = registered_scope(
+                host=merchant_tenant.host, brand=merchant_tenant.brand,
+                registry=trusted_merchant_registry,
+            )
+            if actual_tenant != merchant_tenant:
+                blockers.append("prop_merchant_registration_changed_or_forged")
+        except (ValueError, TypeError, AttributeError):
+            blockers.append("prop_merchant_registration_changed_or_forged")
     capacity = funded_capacity(
         tier_index=plan.starting_tier_index, unencumbered_cash_usd=free_treasury_usd,
         protected_reserve_usd=protected_reserves_usd,
