@@ -67,5 +67,29 @@ class SignalCatalogTests(unittest.TestCase):
             with self.subTest(plan_id=plan_id, cadence=cadence), self.assertRaises(SignalCatalogError):
                 SignalPlan(plan_id, "Research plan", cadence, Decimal("19.90"), description)
 
+
+    def test_catalog_rejects_malformed_unicode_before_publication(self):
+        description = "Reviewed educational market report with explicit capital risk and sources."
+        for field in ("title", "description"):
+            for surrogate in (chr(0xD800), chr(0xDFFF)):
+                with self.subTest(field=field, surrogate=hex(ord(surrogate))):
+                    values = {
+                        "plan_id": "education-extended",
+                        "title": "Research plan",
+                        "cadence": "monthly",
+                        "price_usd": Decimal("19.90"),
+                        "description": description,
+                    }
+                    values[field] += surrogate
+                    with self.assertRaises(SignalCatalogError):
+                        SignalPlan(**values)
+
+    def test_single_bot_identity_requires_a_literal_string(self):
+        class Impersonator:
+            def __eq__(self, value):
+                return value == "mojtaba.bot.ai"
+        with self.assertRaises(SignalCatalogError):
+            build_manual_signal_offer("education-weekly", agent=Impersonator())
+
 if __name__ == "__main__":
     unittest.main()
