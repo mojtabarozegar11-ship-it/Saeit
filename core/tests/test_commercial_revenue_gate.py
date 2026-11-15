@@ -131,7 +131,21 @@ class CommercialGateTests(unittest.TestCase):
             offer_type=OfferType.DIGITAL_PRODUCT, active=True,
             owner_approved=True, legal_reviewed=True,
             kyc_ready=True, rights_cleared=True,
-        ))
+        ), tenant_registry={"moj_prop": "mojplaywin.com"})
+
+    def test_active_offer_without_domain_registry_is_blocked(self):
+        with self.assertRaisesRegex(CommercialGateError, "tenant_registry_required_for_activation"):
+            validate_offer(self.offer(
+                active=True, owner_approved=True, legal_reviewed=True,
+                kyc_ready=True, rights_cleared=True,
+            ))
+
+    def test_active_offer_cross_tenant_host_is_blocked(self):
+        with self.assertRaisesRegex(CommercialGateError, "tenant_scope_mismatch"):
+            validate_offer(self.offer(
+                active=True, owner_approved=True, legal_reviewed=True,
+                kyc_ready=True, rights_cleared=True,
+            ), tenant_registry={"moj_prop": "other.example"})
 
     def test_string_boolean_gate_spoofing_is_rejected(self):
         for field in ("active", "owner_approved", "legal_reviewed",
