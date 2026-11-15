@@ -25,7 +25,8 @@ PUBLIC_HOSTS = frozenset((
 def _accepted_offer_evidence_is_safe(offer):
     if (offer.accepted_at is None
             or offer.accepted_at < offer.issued_at
-            or offer.accepted_at >= offer.expires_at):
+            or offer.accepted_at >= offer.expires_at
+            or offer.accepted_at > timezone.now()):
         return False
     try:
         validate_acceptance_reference(offer.acceptance_reference)
@@ -41,6 +42,7 @@ def quote_read_token(offer):
             or offer.issued_at is None or offer.expires_at is None
             or offer.reviewed_at is None or offer.reviewed_at > offer.issued_at
             or offer.expires_at <= timezone.now()
+            or offer.issued_at > timezone.now()
             or (offer.status == "accepted"
                 and not _accepted_offer_evidence_is_safe(offer))):
         raise ValueError("quote is not available for buyer review")
@@ -79,10 +81,12 @@ def customer_quote(request, token):
         ).first()
         if (offer is None or offer.reviewed_at is None
                 or offer.reviewed_at > offer.issued_at
+                or offer.issued_at > timezone.now()
                 or (offer.status == "accepted"
                     and (offer.accepted_at is None
                          or offer.accepted_at < offer.issued_at
                          or offer.accepted_at >= offer.expires_at
+                         or offer.accepted_at > timezone.now()
                          or not isinstance(offer.acceptance_reference, str)
                          or not offer.acceptance_reference.strip()))
                 or MojPropOffer.objects.filter(
