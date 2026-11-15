@@ -1,0 +1,46 @@
+name: C66 public Moj Prop intake read-only acceptance
+on:
+  push:
+    branches: ["cycle65-moj-prop-intake-route-smoke-p0-20261115"]
+  pull_request:
+    paths:
+      - ".github/workflows/moj-prop-c66-live-intake-readonly.yml"
+      - "core/mojprop_views.py"
+      - "templates/moj-prop-v4/index.html"
+permissions:
+  contents: read
+jobs:
+  public-customer-get-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read public Moj Prop main and actual customer intake GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          for path in / /moj-prop/ /moj-prop-intake/; do
+            status="$(curl -sS --max-time 20 --retry 0 --location --max-redirs 2               --output "$tmp/body" --write-out '%{http_code}'               --header 'Cache-Control: no-cache' "https://mojplaywin.com$path" || true)"
+            printf 'PUBLIC_MOJPROP_GET path=%s http=%s\n' "$path" "$status"
+            if [[ "$path" == "/moj-prop-intake/" ]]; then
+              [[ "$status" == "200" ]] || {
+                echo "BLOCKED: canonical public buyer intake is not reachable"; exit 2;
+              }
+              # Do not print the CSRF token or customer information into logs.
+              python3 - "$tmp/body" <<'PY'
+          import json,sys
+          from pathlib import Path
+          try:
+              payload=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          except (ValueError, UnicodeError) as exc:
+              raise SystemExit("PUBLIC_INTAKE_CONTENT_NOT_JSON") from exc
+          if (payload.get("ok") is not True or
+                  payload.get("service") != "moj-prop-intake" or
+                  not isinstance(payload.get("csrf_token"),str) or
+                  not payload["csrf_token"]):
+              raise SystemExit("PUBLIC_INTAKE_GET_CONTRACT_MISMATCH")
+          print("PUBLIC_INTAKE_GET_CONTRACT=PASS; REQUESTS_CREATED=0; PAYMENTS=0")
+          PY
+            fi
+          done
